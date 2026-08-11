@@ -39,6 +39,17 @@ def main() -> None:
     parser.add_argument("--bind", default="0.0.0.0", help="Adress för lokal webb och MQTT")
     parser.add_argument("--http-port", type=int, default=8787)
     parser.add_argument("--mqtt-port", type=int, default=1883)
+    parser.add_argument(
+        "--mqtt-host",
+        default=os.environ.get("TRAINMEET_MQTT_HOST", "127.0.0.1"),
+        help="Adress till extern MQTT-broker (standard: localhost)",
+    )
+    parser.add_argument(
+        "--broker-wait-seconds",
+        type=float,
+        default=15,
+        help="Hur länge servern väntar på en extern MQTT-broker",
+    )
     parser.add_argument("--gateway-id", default=socket.gethostname().split(".")[0])
     parser.add_argument("--state-dir", default="data/local")
     parser.add_argument("--pairing-code", help=argparse.SUPPRESS)
@@ -65,10 +76,14 @@ def main() -> None:
 
     broker: subprocess.Popen[bytes] | None = None
     if args.external_broker:
-        if not _port_is_open("127.0.0.1", args.mqtt_port):
-            raise SystemExit("Den externa MQTT-tjänsten är inte startad")
+        broker_host = args.mqtt_host
+        if not _wait_for_port(broker_host, args.mqtt_port, args.broker_wait_seconds):
+            raise SystemExit(
+                f"Den externa MQTT-tjänsten på {broker_host}:{args.mqtt_port} är inte startad"
+            )
     else:
         broker = _start_broker(args.bind, args.mqtt_port, state_directory)
+        broker_host = "127.0.0.1"
     database_path = state_directory / "tambox.db"
     runtime_store = SQLiteRuntimeStore(database_path)
     local_configuration_store = SQLiteLocalConfigurationStore(database_path)
@@ -106,12 +121,12 @@ def main() -> None:
 
     gateway = MQTTGatewayAdapter(
         engine,
-        host="127.0.0.1",
+        host=broker_host,
         port=args.mqtt_port,
         gateway_id=args.gateway_id,
         identities=identities,
     )
-    gateway.client.connect("127.0.0.1", args.mqtt_port, keepalive=10, clean_start=True)
+    gateway.client.connect(broker_host, args.mqtt_port, keepalive=10, clean_start=True)
     gateway.client.loop_start()
     discovery_advertiser = _start_discovery_advertiser(args.mqtt_port)
 
@@ -262,6 +277,15 @@ def _port_is_open(host: str, port: int) -> bool:
             return True
     except OSError:
         return False
+
+
+def _wait_for_port(host: str, port: int, timeout: float) -> bool:
+    deadline = time.monotonic() + max(timeout, 0)
+    while time.monotonic() < deadline:
+        if _port_is_open(host, port):
+            return True
+        time.sleep(0.1)
+    return _port_is_open(host, port)
 
 
 def _local_ip() -> str:

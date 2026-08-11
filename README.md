@@ -22,6 +22,72 @@ Installationen lägger in Python, Mosquitto och mDNS/Bonjour, skapar systemtjän
 
 Öppna därefter `http://trainmeet.local:8787` eller den IP-adress som installationsprogrammet skriver ut.
 
+## Samma paket på Mac, Raspberry Pi och Kubernetes
+
+Servern publiceras som en versionsmärkt OCI-image för både `linux/amd64` och
+`linux/arm64`. Det är samma program och datamodell i alla miljöer.
+
+### Mac eller annan dator med Docker
+
+```sh
+git clone https://github.com/beahead-ab/trainmeet-server.git
+cd trainmeet-server
+docker compose up --build --detach
+```
+
+Öppna `http://127.0.0.1:8787`. Compose startar TrainMeet Server och Mosquitto
+som två tjänster med beständiga volymer. Stoppa utan att ta bort data med
+`docker compose down`; lägg till `--volumes` endast när även den lokala
+konfigurationen och trafikhistoriken ska raderas.
+
+Homebrew installerar på vissa Macar kommandot som `docker-compose`; det kan
+användas på exakt samma sätt om `docker compose` inte hittas.
+
+Om den vanliga Mac-servern redan använder portarna kan containerversionen
+provas parallellt:
+
+```sh
+TRAINMEET_HTTP_PORT=18787 TRAINMEET_MQTT_PORT=11883 \
+  docker compose up --build --detach
+```
+
+Öppna då `http://127.0.0.1:18787`.
+
+På en Raspberry Pi med Docker används exakt samma kommando. GitHub-imagen är
+byggd för ARM64. Det vanliga installationsskriptet ovan finns kvar för den som
+inte vill installera en container-runtime på sin Pi.
+
+### Centrera eller annan Kubernetesmiljö
+
+```sh
+helm upgrade --install trainmeet \
+  ./deploy/helm/trainmeet-server \
+  --namespace trainmeet \
+  --create-namespace
+```
+
+Helm-chartet skapar ett StatefulSet med exakt en auktoritativ server, en
+Mosquitto-sidecar och två PersistentVolumeClaims. För en K3s-installation på
+det lokala nätet kan HTTP och MQTT exponeras med:
+
+```sh
+helm upgrade --install trainmeet ./deploy/helm/trainmeet-server \
+  --namespace trainmeet --create-namespace \
+  --set service.type=LoadBalancer
+```
+
+För ett centralt kluster bör bara webbgränssnittet exponeras via Ingress. Den
+lösenordsfria MQTT-porten är avsedd för träffens lokala nät, inte internet.
+
+Så länge GitHub-repot och GHCR-paketet är privata behöver driftmiljön ett
+GitHub registry pull secret. När paketet görs publikt behövs ingen sådan
+inloggning.
+
+Automatisk mDNS/Bonjour-upptäckt går inte genom ett vanligt container- eller
+molnnät. Vid Compose-test på Mac anges därför datorns lokala IP-adress i den
+fysiska boxens Wi-Fi-portal. På en lokal K3s-nod kan `server.hostNetwork=true`
+användas när nätmiljön kräver direkt åtkomst till nodens portar.
+
 ## Två tydligt separerade webbdelar
 
 - **TrainMeet Server** är administrationen. Här definieras träffen, stationernas ordning, enkel- och dubbelspår, körsätt, paneler A–D, boxkopplingar, aktiv tidtabell och lokal klocka.
@@ -79,4 +145,3 @@ PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
 
 Den fysiska boxens firmware finns i [trainmeet-tambox](https://github.com/beahead-ab/trainmeet-tambox). Den nativa appen finns separat i [trainmeet-iphone](https://github.com/beahead-ab/trainmeet-iphone).
-

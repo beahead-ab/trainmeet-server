@@ -1,0 +1,36 @@
+name: trainmeet
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    user: "1883:1883"
+    restart: unless-stopped
+    ports:
+      - "${TRAINMEET_MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./deploy/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mqtt-data:/mosquitto/data
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-h", "127.0.0.1", "-t", "$$SYS/broker/version", "-C", "1", "-W", "3"]
+      interval: 5s
+      timeout: 4s
+      retries: 10
+
+  server:
+    image: ghcr.io/beahead-ab/trainmeet-server:main
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      TRAINMEET_MQTT_HOST: mosquitto
+    ports:
+      - "${TRAINMEET_HTTP_PORT:-8787}:8787"
+    volumes:
+      - server-data:/var/lib/trainmeet-server
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+
+volumes:
+  server-data:
+  mqtt-data:

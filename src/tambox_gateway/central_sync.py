@@ -29,7 +29,7 @@ def fetch_runtime_package(
     separator = "&" if "?" in endpoint_url else "?"
     request = Request(
         f"{endpoint_url}{separator}{urlencode({'code': code})}",
-        headers={"Accept": "application/json", "User-Agent": "TrainMeet-Raspberry/0.3"},
+        headers={"Accept": "application/json", "User-Agent": "TrainMeet-Server/0.4"},
     )
     try:
         with urlopen(request, timeout=timeout) as response:

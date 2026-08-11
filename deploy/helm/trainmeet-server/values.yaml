@@ -1,0 +1,58 @@
+image:
+  repository: ghcr.io/beahead-ab/trainmeet-server
+  tag: "0.4.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+server:
+  gatewayId: ""
+  centralRuntimeUrl: ""
+  hostNetwork: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+mosquitto:
+  image:
+    repository: eclipse-mosquitto
+    tag: "2.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+service:
+  type: ClusterIP
+  annotations: {}
+  httpPort: 8787
+  mqttPort: 1883
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: trainmeet.example.local
+  tls: []
+
+persistence:
+  storageClass: ""
+  server:
+    size: 1Gi
+  mqtt:
+    size: 256Mi
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,10 @@
+TrainMeet Server är installerad.
+
+Lokal åtkomst för test:
+  kubectl port-forward service/{{ include "trainmeet-server.fullname" . }} 8787:{{ .Values.service.httpPort }} 1883:{{ .Values.service.mqttPort }}
+
+Öppna sedan http://127.0.0.1:8787
+
+För K3s på det lokala nätet kan tjänsten exponeras med:
+  --set service.type=LoadBalancer
+
