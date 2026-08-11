@@ -73,6 +73,55 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn("TrainMeet Server", html)
         self.assertIn("Tambox-simulering", html)
         self.assertIn("Lokal konfiguration", html)
+        self.assertIn("Extern admininloggning", html)
+        self.assertIn('id="login-form"', html)
+
+    def test_local_admin_opens_directly_and_external_admin_uses_login_cookie(self):
+        local = self._json_request("/v1/local-configuration")
+        self.assertIn("draft", local)
+
+        access = self._json_request(
+            "/v1/admin/access",
+            {"username": "traffadmin", "password": "enkel-lokal-kod"},
+        )
+        self.assertEqual(access["username"], "traffadmin")
+        self.assertTrue(access["password_configured"])
+
+        self.application.config = HTTPServerConfig(
+            local_development=True,
+            force_external_auth=True,
+        )
+        status = self._json_request("/v1/auth/status")
+        self.assertFalse(status["authenticated"])
+        self.assertEqual(status["access_mode"], "external")
+
+        with self.assertRaises(HTTPError) as denied:
+            self._json_request("/v1/local-configuration")
+        self.assertEqual(denied.exception.code, 401)
+
+        with self.assertRaises(HTTPError) as invalid:
+            self._json_request(
+                "/v1/auth/login",
+                {"username": "traffadmin", "password": "fel-losenord"},
+            )
+        self.assertEqual(invalid.exception.code, 401)
+
+        request = Request(
+            f"{self.base_url}/v1/auth/login",
+            data=json.dumps(
+                {"username": "traffadmin", "password": "enkel-lokal-kod"}
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(request, timeout=2) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+        authenticated = Request(
+            f"{self.base_url}/v1/admin/access",
+            headers={"Cookie": cookie, "Accept": "application/json"},
+        )
+        with urlopen(authenticated, timeout=2) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(payload["username"], "traffadmin")
 
     def test_swift_admin_gets_automatic_http_token_but_no_mqtt_password(self):
         paired = self._json_request(

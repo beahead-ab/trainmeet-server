@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <meta name="theme-color" content="#203b73">
     <title>TrainMeet Server</title>
-    <link rel="stylesheet" href="/assets/app.css?v=20260811-4">
+    <link rel="stylesheet" href="/assets/app.css?v=20260811-5">
   </head>
   <body>
     <main class="page-shell">
@@ -20,18 +20,18 @@
         <div id="connection" class="status offline"><span></span><b>Ej ansluten</b></div>
       </header>
 
-      <section id="pairing" class="card pairing-card">
-        <div class="pairing-icon">↔</div>
-        <p class="eyebrow">FÖRSTA ANSLUTNINGEN</p>
-        <h2>Öppna den lokala servern</h2>
-        <p>Ange den sexsiffriga anslutningskoden som visas när TrainMeet Server startar.</p>
-        <form id="pair-form">
-          <label for="display-name">Namn på den här enheten</label>
-          <input id="display-name" name="display-name" value="TrainMeet webb" maxlength="80" autocomplete="name">
-          <label for="pairing-code">Anslutningskod</label>
-          <input id="pairing-code" name="pairing-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123 456" required>
-          <button type="submit" class="primary">Anslut</button>
-          <p id="pair-error" class="form-message error" role="alert"></p>
+      <section id="login" class="card pairing-card hidden">
+        <div class="pairing-icon">TM</div>
+        <p class="eyebrow">EXTERN ADMIN</p>
+        <h2>Logga in på TrainMeet Server</h2>
+        <p>Lokalt på träffens nätverk öppnas admin automatiskt. Extern åtkomst kräver inloggning.</p>
+        <form id="login-form">
+          <label for="login-username">Användarnamn</label>
+          <input id="login-username" name="username" value="admin" maxlength="64" autocomplete="username" required>
+          <label for="login-password">Lösenord</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+          <button type="submit" class="primary">Logga in</button>
+          <p id="login-error" class="form-message error" role="alert"></p>
         </form>
       </section>
 
@@ -39,7 +39,7 @@
         <nav class="view-tabs card" aria-label="Huvudvyer">
           <button type="button" class="view-tab active" data-view="server">TrainMeet Server</button>
           <button type="button" class="view-tab" data-view="simulator">Tambox-simulering</button>
-          <button id="forget" type="button" class="quiet tab-action">Glöm enheten</button>
+          <button id="logout" type="button" class="quiet tab-action hidden">Logga ut</button>
         </nav>
 
         <section id="server-view" class="view-panel">
@@ -131,6 +131,32 @@
             </form>
           </section>
 
+          <section class="card section-card">
+            <div class="section-heading compact-heading">
+              <div>
+                <p class="eyebrow">ÅTKOMST</p>
+                <h2>Extern admininloggning</h2>
+                <p>På serverdatorn öppnas admin utan inloggning. Andra enheter på träffens nät och internet använder uppgifterna här.</p>
+              </div>
+              <span id="access-mode" class="revision-badge">Lokal åtkomst</span>
+            </div>
+            <form id="admin-access-form" class="form-grid access-grid">
+              <label>Användarnamn
+                <input id="admin-username" maxlength="64" autocomplete="username" required>
+              </label>
+              <label>Nytt lösenord
+                <input id="admin-password" type="password" minlength="8" autocomplete="new-password" placeholder="Lämna tomt för att behålla">
+              </label>
+              <label>Upprepa nytt lösenord
+                <input id="admin-password-confirm" type="password" minlength="8" autocomplete="new-password">
+              </label>
+              <div class="config-actions access-actions">
+                <p id="admin-access-message" class="form-message" role="status"></p>
+                <button type="submit" class="primary">Spara inloggning</button>
+              </div>
+            </form>
+          </section>
+
           <div class="two-column">
             <section class="card section-card">
               <div class="section-heading compact-heading">
@@ -196,6 +222,6 @@
         </section>
       </section>
     </main>
-    <script src="/assets/app.js?v=20260811-4" defer></script>
+    <script src="/assets/app.js?v=20260811-5" defer></script>
   </body>
 </html>

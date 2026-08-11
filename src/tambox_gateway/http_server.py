@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import logging
 import mimetypes
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
@@ -20,7 +22,14 @@ from .central_sync import (
     CentralSyncError,
     fetch_runtime_package,
 )
-from .identity import DeviceKind, IdentityStore, PairingError, PairingService, PairedClient
+from .identity import (
+    AdminAccessError,
+    DeviceKind,
+    IdentityStore,
+    PairingError,
+    PairingService,
+    PairedClient,
+)
 from .local_config import (
     ConfigurationRevisionConflict,
     LocalConfigurationError,
@@ -32,6 +41,8 @@ from .runtime import RuntimePublicationError, SQLiteRuntimeStore
 
 LOGGER = logging.getLogger("tambox_gateway.http")
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
+ADMIN_COOKIE_NAME = "trainmeet_admin"
+ADMIN_COOKIE_MAX_AGE = 12 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -42,6 +53,7 @@ class HTTPServerConfig:
     local_development: bool = False
     central_runtime_url: str = DEFAULT_RUNTIME_PUBLICATION_URL
     allow_restart: bool = False
+    force_external_auth: bool = False
 
 
 class TamboxHTTPApplication:
@@ -65,6 +77,38 @@ class TamboxHTTPApplication:
             lambda code, url: fetch_runtime_package(code, url)
         )
         self.web_root = files("tambox_gateway").joinpath("web")
+
+    def local_admin(self) -> PairedClient:
+        return PairedClient(
+            client_id="local-web-admin",
+            display_name="Lokal administratör",
+            kind=DeviceKind.WEB_ADMIN,
+            panel_ids=tuple(sorted(self.engine.config.panels)),
+        )
+
+    def admin_access(self, client: PairedClient) -> dict[str, object]:
+        self._require_admin(client)
+        return self.identities.admin_access_summary()
+
+    def configure_admin_access(
+        self,
+        client: PairedClient,
+        payload: dict[str, Any],
+    ) -> dict[str, object]:
+        self._require_admin(client)
+        password_value = payload.get("password")
+        password = None if password_value in {None, ""} else str(password_value)
+        try:
+            return self.identities.configure_admin_access(
+                str(payload.get("username", "")),
+                password,
+            )
+        except AdminAccessError as error:
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST,
+                "invalid_admin_access",
+                str(error),
+            ) from error
 
     def pair(self, payload: dict[str, Any], request_host: str) -> dict[str, Any]:
         try:
@@ -405,7 +449,38 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path == "/v1/auth/status":
+                client = self._optional_authenticated_client()
+                access = self.server.application.identities.admin_access_summary()
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "authenticated": client is not None,
+                        "access_mode": "local" if self._has_automatic_local_admin() else "external",
+                        "username": access["username"],
+                        "password_configured": access["password_configured"],
+                    },
+                )
+                return
+            if path == "/v1/admin/access":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.admin_access(client),
+                )
+                return
             if path == "/v1/info":
+                client = self._optional_authenticated_client()
+                if client is None:
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {
+                            "protocol_version": 1,
+                            "gateway_id": self.server.application.config.gateway_id,
+                            "authentication_required": True,
+                        },
+                    )
+                    return
                 self._send_json(
                     HTTPStatus.OK,
                     {
@@ -467,6 +542,58 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             payload = self._read_json()
+            if path == "/v1/auth/login":
+                access = self.server.application.identities.admin_access_summary()
+                if not access["password_configured"]:
+                    raise HTTPAPIError(
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                        "admin_password_not_configured",
+                        "Extern inloggning är inte konfigurerad. Öppna servern lokalt och välj ett lösenord först.",
+                    )
+                token = self.server.application.identities.create_admin_session(
+                    str(payload.get("username", "")),
+                    str(payload.get("password", "")),
+                )
+                if token is None:
+                    raise HTTPAPIError(
+                        HTTPStatus.UNAUTHORIZED,
+                        "invalid_login",
+                        "Fel användarnamn eller lösenord",
+                    )
+                self._send_json(
+                    HTTPStatus.OK,
+                    {"authenticated": True, "access_mode": "external"},
+                    headers={"Set-Cookie": self._admin_cookie(token)},
+                )
+                return
+            if path == "/v1/auth/logout":
+                token = self._admin_session_token()
+                if token:
+                    self.server.application.identities.revoke_admin_session(token)
+                self._send_json(
+                    HTTPStatus.OK,
+                    {"authenticated": False},
+                    headers={"Set-Cookie": self._admin_cookie("", max_age=0)},
+                )
+                return
+            if path == "/v1/admin/access":
+                client = self._authenticated_client()
+                configured = self.server.application.configure_admin_access(client, payload)
+                response_headers: dict[str, str] = {}
+                password = str(payload.get("password", ""))
+                if password and not self._is_direct_local_request():
+                    token = self.server.application.identities.create_admin_session(
+                        str(configured["username"]),
+                        password,
+                    )
+                    if token:
+                        response_headers["Set-Cookie"] = self._admin_cookie(token)
+                self._send_json(
+                    HTTPStatus.OK,
+                    configured,
+                    headers=response_headers,
+                )
+                return
             if path == "/v1/pair":
                 response = self.server.application.pair(payload, self.headers.get("Host", "localhost"))
                 self._send_json(HTTPStatus.CREATED, response)
@@ -545,21 +672,113 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
     def _authenticated_client(self) -> PairedClient:
         authorization = self.headers.get("Authorization", "")
         prefix = "Bearer "
-        if not authorization.startswith(prefix):
-            raise HTTPAPIError(HTTPStatus.UNAUTHORIZED, "authentication_required", "Parkoppling krävs")
-        client = self.server.application.identities.authenticate(authorization[len(prefix) :])
+        if authorization.startswith(prefix):
+            client = self.server.application.identities.authenticate(authorization[len(prefix) :])
+            if client is None:
+                raise HTTPAPIError(
+                    HTTPStatus.UNAUTHORIZED,
+                    "invalid_credential",
+                    "Parkopplingen gäller inte längre",
+                )
+            return client
+        client = self._optional_authenticated_client()
         if client is None:
-            raise HTTPAPIError(HTTPStatus.UNAUTHORIZED, "invalid_credential", "Parkopplingen gäller inte längre")
+            raise HTTPAPIError(
+                HTTPStatus.UNAUTHORIZED,
+                "authentication_required",
+                "Administratörsinloggning krävs",
+            )
         return client
+
+    def _optional_authenticated_client(self) -> PairedClient | None:
+        authorization = self.headers.get("Authorization", "")
+        prefix = "Bearer "
+        if authorization.startswith(prefix):
+            return self.server.application.identities.authenticate(authorization[len(prefix) :])
+        if self._has_automatic_local_admin():
+            return self.server.application.local_admin()
+        token = self._admin_session_token()
+        if token and self.server.application.identities.authenticate_admin_session(token):
+            return self.server.application.local_admin()
+        return None
+
+    def _has_automatic_local_admin(self) -> bool:
+        if self.server.application.config.force_external_auth:
+            return False
+        if self._is_direct_local_request():
+            return True
+        access = self.server.application.identities.admin_access_summary()
+        return not access["password_configured"] and self._client_address_is_private()
+
+    def _is_direct_local_request(self) -> bool:
+        if self._client_address_is_loopback():
+            return True
+        host = _hostname_without_port(self.headers.get("Host", "")).strip("[]").lower()
+        if host == "localhost":
+            return True
+        try:
+            return ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            return False
+
+    def _client_address_is_loopback(self) -> bool:
+        try:
+            address = ipaddress.ip_address(self.client_address[0])
+        except ValueError:
+            return False
+        return address.is_loopback
+
+    def _client_address_is_private(self) -> bool:
+        try:
+            address = ipaddress.ip_address(self.client_address[0])
+        except ValueError:
+            return False
+        return address.is_loopback or address.is_private or address.is_link_local
+
+    def _admin_session_token(self) -> str | None:
+        cookie_header = self.headers.get("Cookie")
+        if not cookie_header:
+            return None
+        cookies = SimpleCookie()
+        try:
+            cookies.load(cookie_header)
+        except Exception:
+            return None
+        morsel = cookies.get(ADMIN_COOKIE_NAME)
+        return morsel.value if morsel is not None else None
+
+    def _admin_cookie(self, token: str, *, max_age: int = ADMIN_COOKIE_MAX_AGE) -> str:
+        cookie = SimpleCookie()
+        cookie[ADMIN_COOKIE_NAME] = token
+        cookie[ADMIN_COOKIE_NAME]["path"] = "/"
+        cookie[ADMIN_COOKIE_NAME]["httponly"] = True
+        cookie[ADMIN_COOKIE_NAME]["samesite"] = "Strict"
+        cookie[ADMIN_COOKIE_NAME]["max-age"] = max_age
+        if self.headers.get("X-Forwarded-Proto", "").split(",", 1)[0].strip().lower() == "https":
+            cookie[ADMIN_COOKIE_NAME]["secure"] = True
+        return cookie.output(header="").strip()
 
     def _send_api_error(self, error: HTTPAPIError) -> None:
         self._send_json(error.status, {"error": error.code, "message": str(error)})
 
-    def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
+    def _send_json(
+        self,
+        status: HTTPStatus,
+        payload: dict[str, Any],
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         data = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        self._send_bytes(status, data, "application/json; charset=utf-8")
+        self._send_bytes(status, data, "application/json; charset=utf-8", headers=headers)
 
-    def _send_bytes(self, status: HTTPStatus, data: bytes, content_type: str) -> None:
+    def _send_bytes(
+        self,
+        status: HTTPStatus,
+        data: bytes,
+        content_type: str,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
@@ -570,6 +789,8 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
             "Content-Security-Policy",
             "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'",
         )
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(data)
 

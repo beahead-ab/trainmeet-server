@@ -14,12 +14,13 @@ const state = {
   configRevision: 0,
   restartRequired: false,
   restarting: false,
+  authStatus: null,
 };
 
-const pairing = document.querySelector("#pairing");
+const login = document.querySelector("#login");
 const appView = document.querySelector("#app-view");
-const pairForm = document.querySelector("#pair-form");
-const pairError = document.querySelector("#pair-error");
+const loginForm = document.querySelector("#login-form");
+const loginError = document.querySelector("#login-error");
 const panelSelect = document.querySelector("#panel-select");
 const connectionStatus = document.querySelector("#connection");
 const commandMessage = document.querySelector("#command-message");
@@ -35,6 +36,9 @@ const stationEditor = document.querySelector("#station-editor");
 const connectionEditor = document.querySelector("#connection-editor");
 const panelEditor = document.querySelector("#panel-editor");
 const restartButton = document.querySelector("#restart-server");
+const logoutButton = document.querySelector("#logout");
+const adminAccessForm = document.querySelector("#admin-access-form");
+const adminAccessMessage = document.querySelector("#admin-access-message");
 
 for (const key of keypadKeys) {
   const button = document.createElement("button");
@@ -46,30 +50,27 @@ for (const key of keypadKeys) {
   keypad.append(button);
 }
 
-pairForm.addEventListener("submit", async (event) => {
+loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  setMessage(pairError, "");
-  const button = pairForm.querySelector("button");
+  setMessage(loginError, "");
+  const button = loginForm.querySelector("button");
   button.disabled = true;
   try {
-    const response = await fetch("/v1/pair", {
+    const response = await fetch("/v1/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        pairing_code: document.querySelector("#pairing-code").value,
-        client_id: state.clientID,
-        display_name: document.querySelector("#display-name").value,
-        device_kind: "web_admin",
+        username: document.querySelector("#login-username").value,
+        password: document.querySelector("#login-password").value,
       }),
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message || "Anslutningen misslyckades");
-    state.token = payload.access_token;
-    localStorage.setItem("tambox.accessToken", state.token);
-    localStorage.setItem("tambox.clientID", state.clientID);
+    if (!response.ok) throw new Error(payload.message || "Inloggningen misslyckades");
+    document.querySelector("#login-password").value = "";
+    await refreshAuthStatus();
     await openApplication();
   } catch (error) {
-    setMessage(pairError, error.message, "error");
+    setMessage(loginError, error.message, "error");
   } finally {
     button.disabled = false;
   }
@@ -79,7 +80,12 @@ document.querySelectorAll(".view-tab").forEach((button) => {
   button.addEventListener("click", () => selectView(button.dataset.view));
 });
 
-document.querySelector("#forget").addEventListener("click", () => {
+logoutButton.addEventListener("click", async () => {
+  await fetch("/v1/auth/logout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
   localStorage.removeItem("tambox.accessToken");
   localStorage.removeItem("tambox.panelID");
   state.token = null;
@@ -87,8 +93,49 @@ document.querySelector("#forget").addEventListener("click", () => {
   clearTimeout(state.snapshotTimer);
   clearTimeout(state.adminTimer);
   setConnection("offline", "Ej ansluten");
-  pairing.classList.remove("hidden");
   appView.classList.add("hidden");
+  await bootstrap();
+});
+
+adminAccessForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setMessage(adminAccessMessage, "");
+  const password = document.querySelector("#admin-password").value;
+  const confirmation = document.querySelector("#admin-password-confirm").value;
+  if (password !== confirmation) {
+    setMessage(adminAccessMessage, "Lösenorden är inte likadana.", "error");
+    return;
+  }
+  const button = adminAccessForm.querySelector("button");
+  button.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/admin/access", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.querySelector("#admin-username").value,
+        password,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Inloggningen kunde inte sparas");
+    document.querySelector("#admin-password").value = "";
+    document.querySelector("#admin-password-confirm").value = "";
+    setMessage(
+      adminAccessMessage,
+      payload.password_configured
+        ? "Extern admininloggning är klar."
+        : "Användarnamnet är sparat. Välj även ett lösenord för extern åtkomst.",
+      payload.password_configured ? "success" : "notice",
+    );
+    await refreshAuthStatus();
+    logoutButton.classList.toggle("hidden", state.authStatus?.access_mode !== "external");
+    await refreshAdminAccess();
+  } catch (error) {
+    setMessage(adminAccessMessage, error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
 });
 
 panelSelect.addEventListener("change", () => {
@@ -211,18 +258,23 @@ panelEditor.addEventListener("change", (event) => {
 });
 
 async function openApplication() {
-  pairing.classList.add("hidden");
+  login.classList.add("hidden");
   appView.classList.remove("hidden");
+  logoutButton.classList.toggle("hidden", state.authStatus?.access_mode !== "external");
   selectView(state.selectedView);
   try {
     await Promise.all([
       refreshInfo(),
+      refreshAdminAccess(),
       loadLocalConfiguration(),
       refreshDevices(),
       refreshRuntime(),
       refreshSnapshots(),
     ]);
-    setConnection("online", "Lokalt ansluten");
+    setConnection(
+      "online",
+      state.authStatus?.access_mode === "external" ? "Externt ansluten" : "Lokalt ansluten",
+    );
     scheduleAdminRefresh();
   } catch (error) {
     handleConnectionError(error);
@@ -247,7 +299,8 @@ async function refreshSnapshots() {
     if (response.status === 401) {
       localStorage.removeItem("tambox.accessToken");
       state.token = null;
-      throw new Error("Anslutningen gäller inte längre");
+      await showLogin();
+      throw new Error("Inloggningen gäller inte längre");
     }
     if (!response.ok) throw new Error("Servern svarade inte korrekt");
     const payload = await response.json();
@@ -257,10 +310,13 @@ async function refreshSnapshots() {
     }
     updatePanelOptions();
     renderTambox();
-    setConnection("online", "Lokalt ansluten");
+    setConnection(
+      "online",
+      state.authStatus?.access_mode === "external" ? "Externt ansluten" : "Lokalt ansluten",
+    );
   } catch (error) {
     handleConnectionError(error);
-    if (!state.token) return;
+    if (!state.authStatus?.authenticated) return;
   }
   state.snapshotTimer = setTimeout(refreshSnapshots, 750);
 }
@@ -268,8 +324,8 @@ async function refreshSnapshots() {
 function scheduleAdminRefresh() {
   clearTimeout(state.adminTimer);
   state.adminTimer = setTimeout(async () => {
-    if (!state.token) return;
-    await Promise.allSettled([refreshInfo(), refreshDevices(), refreshRuntime()]);
+    if (!state.authStatus?.authenticated) return;
+    await Promise.allSettled([refreshInfo(), refreshDevices(), refreshRuntime(), refreshAdminAccess()]);
     scheduleAdminRefresh();
   }, 5000);
 }
@@ -307,7 +363,7 @@ async function pressKey(key) {
 }
 
 async function refreshInfo() {
-  const response = await fetch("/v1/info");
+  const response = await authorizedFetch("/v1/info");
   if (!response.ok) return;
   const info = await response.json();
   document.querySelector("#server-name").textContent = info.gateway_id || "TrainMeet Server";
@@ -322,6 +378,16 @@ async function refreshInfo() {
     pill.classList.remove("active");
   }
   updateRestartButton(Boolean(info.restart_required));
+}
+
+async function refreshAdminAccess() {
+  const response = await authorizedFetch("/v1/admin/access");
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || "Åtkomstinställningen kunde inte läsas");
+  document.querySelector("#admin-username").value = payload.username || "admin";
+  const badge = document.querySelector("#access-mode");
+  badge.textContent = payload.password_configured ? "Extern inloggning klar" : "Lösenord saknas";
+  badge.classList.toggle("active", payload.password_configured);
 }
 
 async function loadLocalConfiguration() {
@@ -686,16 +752,54 @@ function renderTambox() {
 
 function authorizedFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
-  headers.set("Authorization", `Bearer ${state.token}`);
-  return fetch(path, { ...options, headers });
+  if (state.token) headers.set("Authorization", `Bearer ${state.token}`);
+  return fetch(path, { ...options, headers, credentials: "same-origin" });
 }
 
 function handleConnectionError(error) {
   setConnection("waiting", "Återansluter");
   setMessage(commandMessage, error.message, "error");
-  if (!state.token) {
-    pairing.classList.remove("hidden");
-    appView.classList.add("hidden");
+  if (!state.authStatus?.authenticated) showLogin();
+}
+
+async function refreshAuthStatus() {
+  const response = await fetch("/v1/auth/status", { cache: "no-store", credentials: "same-origin" });
+  if (!response.ok) throw new Error("Serverns åtkomstläge kunde inte läsas");
+  state.authStatus = await response.json();
+  state.token = null;
+  localStorage.removeItem("tambox.accessToken");
+  document.querySelector("#login-username").value = state.authStatus.username || "admin";
+  return state.authStatus;
+}
+
+async function showLogin() {
+  clearTimeout(state.snapshotTimer);
+  clearTimeout(state.adminTimer);
+  state.authStatus = { ...(state.authStatus || {}), authenticated: false };
+  appView.classList.add("hidden");
+  login.classList.remove("hidden");
+  setConnection("offline", "Inloggning krävs");
+}
+
+async function bootstrap() {
+  try {
+    const status = await refreshAuthStatus();
+    if (status.authenticated) {
+      await openApplication();
+      return;
+    }
+    showLogin();
+    if (!status.password_configured) {
+      setMessage(
+        loginError,
+        "Extern inloggning är inte konfigurerad. Öppna servern från det lokala nätverket och välj ett lösenord först.",
+        "notice",
+      );
+    }
+  } catch (error) {
+    setConnection("waiting", "Servern svarar inte");
+    login.classList.remove("hidden");
+    setMessage(loginError, error.message, "error");
   }
 }
 
@@ -751,4 +855,4 @@ function reasonText(reason) {
   })[reason] || "Kommandot nekades av TrainMeet Server";
 }
 
-if (state.token) openApplication();
+bootstrap();

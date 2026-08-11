@@ -51,6 +51,9 @@ spec:
             - 0.0.0.0
             - --state-dir
             - /var/lib/trainmeet-server
+            {{- if or .Values.server.forceExternalAuth .Values.ingress.enabled }}
+            - --force-external-auth
+            {{- end }}
             {{- if .Values.server.gatewayId }}
             - --gateway-id
             - {{ .Values.server.gatewayId | quote }}

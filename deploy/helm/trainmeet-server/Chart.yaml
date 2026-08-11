@@ -2,5 +2,5 @@ apiVersion: v2
 name: trainmeet-server
 description: Local-first TrainMeet runtime with Mosquitto sidecar
 type: application
-version: 0.2.0
-appVersion: "0.4.0"
+version: 0.3.0
+appVersion: "0.5.0"

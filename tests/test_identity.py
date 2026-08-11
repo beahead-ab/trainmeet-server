@@ -126,6 +126,28 @@ class IdentityTests(unittest.TestCase):
             ("panel-b",),
         )
 
+    def test_admin_password_creates_a_temporary_session(self):
+        before = self.store.admin_access_summary()
+        self.assertEqual(before["username"], "admin")
+        self.assertFalse(before["password_configured"])
+
+        configured = self.store.configure_admin_access("traffadmin", "lokalt-losenord")
+        self.assertTrue(configured["password_configured"])
+        self.assertIsNone(self.store.create_admin_session("traffadmin", "felaktigt"))
+
+        now = datetime(2026, 8, 11, 10, 0, tzinfo=timezone.utc)
+        token = self.store.create_admin_session(
+            "traffadmin",
+            "lokalt-losenord",
+            now=now,
+            ttl=timedelta(minutes=30),
+        )
+        self.assertIsNotNone(token)
+        self.assertTrue(self.store.authenticate_admin_session(token, now=now))
+        self.assertFalse(
+            self.store.authenticate_admin_session(token, now=now + timedelta(minutes=31))
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

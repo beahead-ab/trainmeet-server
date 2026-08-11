@@ -15,6 +15,8 @@ from pathlib import Path
 
 PAIRING_HASH_ITERATIONS = 210_000
 CLIENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{3,64}$")
+ADMIN_USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9._@+-]{3,64}$")
+ADMIN_SESSION_TTL = timedelta(hours=12)
 
 
 class DeviceKind(StrEnum):
@@ -38,6 +40,10 @@ class InvalidClientError(PairingError):
 
 class ProvisioningError(PairingError):
     code = "provisioning_failed"
+
+
+class AdminAccessError(ValueError):
+    """Invalid local administrator configuration or credentials."""
 
 
 @dataclass(frozen=True)
@@ -127,7 +133,30 @@ class IdentityStore:
                 first_seen_at TEXT NOT NULL,
                 last_seen_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS admin_access (
+                singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                username TEXT NOT NULL,
+                password_salt BLOB,
+                password_digest BLOB,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS admin_sessions (
+                session_digest BLOB PRIMARY KEY,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             """
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        self._connection.execute(
+            """
+            INSERT INTO admin_access(singleton, username, updated_at)
+            VALUES (1, 'admin', ?)
+            ON CONFLICT(singleton) DO NOTHING
+            """,
+            (now,),
         )
 
     def issue_pairing_code(
@@ -497,6 +526,133 @@ class IdentityStore:
             now=now,
         )
 
+    def admin_access_summary(self) -> dict[str, object]:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT username, password_digest IS NOT NULL, updated_at
+                FROM admin_access WHERE singleton = 1
+                """
+            ).fetchone()
+        return {
+            "username": row[0],
+            "password_configured": bool(row[1]),
+            "updated_at": row[2],
+        }
+
+    def configure_admin_access(
+        self,
+        username: str,
+        password: str | None = None,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, object]:
+        username = username.strip()
+        if not ADMIN_USERNAME_PATTERN.fullmatch(username):
+            raise AdminAccessError(
+                "Användarnamnet måste vara 3–64 tecken och får innehålla bokstäver, siffror, punkt, bindestreck och @"
+            )
+        if password is not None and not 8 <= len(password) <= 256:
+            raise AdminAccessError("Lösenordet måste vara 8–256 tecken")
+
+        now = now or datetime.now(timezone.utc)
+        salt = secrets.token_bytes(16) if password is not None else None
+        digest = _admin_password_digest(password, salt) if password is not None else None
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                if password is None:
+                    self._connection.execute(
+                        """
+                        UPDATE admin_access
+                        SET username = ?, updated_at = ?
+                        WHERE singleton = 1
+                        """,
+                        (username, now.isoformat()),
+                    )
+                else:
+                    self._connection.execute(
+                        """
+                        UPDATE admin_access
+                        SET username = ?, password_salt = ?, password_digest = ?, updated_at = ?
+                        WHERE singleton = 1
+                        """,
+                        (username, salt, digest, now.isoformat()),
+                    )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return self.admin_access_summary()
+
+    def create_admin_session(
+        self,
+        username: str,
+        password: str,
+        *,
+        now: datetime | None = None,
+        ttl: timedelta = ADMIN_SESSION_TTL,
+    ) -> str | None:
+        username = str(username).strip()
+        if not ADMIN_USERNAME_PATTERN.fullmatch(username) or len(password) > 256:
+            return None
+        now = now or datetime.now(timezone.utc)
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT username, password_salt, password_digest
+                FROM admin_access WHERE singleton = 1
+                """
+            ).fetchone()
+            if (
+                row is None
+                or row[1] is None
+                or row[2] is None
+                or not hmac.compare_digest(username.encode("utf-8"), row[0].encode("utf-8"))
+                or not hmac.compare_digest(_admin_password_digest(password, row[1]), row[2])
+            ):
+                return None
+            token = secrets.token_urlsafe(32)
+            self._connection.execute(
+                """
+                INSERT INTO admin_sessions(session_digest, expires_at, created_at)
+                VALUES (?, ?, ?)
+                """,
+                (_credential_digest(token), (now + ttl).isoformat(), now.isoformat()),
+            )
+        return token
+
+    def authenticate_admin_session(
+        self,
+        token: str,
+        *,
+        now: datetime | None = None,
+    ) -> bool:
+        now = now or datetime.now(timezone.utc)
+        digest = _credential_digest(token)
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT expires_at FROM admin_sessions WHERE session_digest = ?",
+                (digest,),
+            ).fetchone()
+            if row is None:
+                return False
+            if datetime.fromisoformat(row[0]) < now:
+                self._connection.execute(
+                    "DELETE FROM admin_sessions WHERE session_digest = ?",
+                    (digest,),
+                )
+                return False
+        return True
+
+    def revoke_admin_session(self, token: str) -> None:
+        with self._lock:
+            self._connection.execute(
+                "DELETE FROM admin_sessions WHERE session_digest = ?",
+                (_credential_digest(token),),
+            )
+
     def close(self) -> None:
         with self._lock:
             self._connection.close()
@@ -580,6 +736,17 @@ def _pairing_digest(code: str, salt: bytes) -> bytes:
 
 def _credential_digest(credential: str) -> bytes:
     return hashlib.sha256(credential.encode("utf-8")).digest()
+
+
+def _admin_password_digest(password: str, salt: bytes) -> bytes:
+    return hashlib.scrypt(
+        password.encode("utf-8"),
+        salt=salt,
+        n=2**14,
+        r=8,
+        p=1,
+        dklen=32,
+    )
 
 
 def _normalize_device_code(code: str) -> str:

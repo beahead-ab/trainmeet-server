@@ -64,6 +64,12 @@ def main() -> None:
         help="Use an already running Mosquitto service instead of starting one",
     )
     parser.add_argument(
+        "--force-external-auth",
+        action="store_true",
+        default=os.environ.get("TRAINMEET_FORCE_EXTERNAL_AUTH", "").lower() in {"1", "true", "yes"},
+        help="Require admin login for every web request (use behind a proxy or Kubernetes ingress)",
+    )
+    parser.add_argument(
         "--mode",
         choices=[mode.value for mode in DispatchMode],
         default=DispatchMode.CLEARANCE.value,
@@ -140,6 +146,7 @@ def main() -> None:
             local_development=sys.platform == "darwin",
             central_runtime_url=args.central_url,
             allow_restart=True,
+            force_external_auth=args.force_external_auth,
         ),
         runtime_store=runtime_store,
         local_configuration_store=local_configuration_store,
