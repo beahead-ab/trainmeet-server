@@ -1,0 +1,86 @@
+#!/bin/zsh
+set -euo pipefail
+
+SCRIPT_DIR=${0:A:h}
+SERVER_DIR=${SCRIPT_DIR:h}
+APP_DIR="$HOME/Library/Application Support/TrainMeet Server"
+INSTALL_DIR="$APP_DIR/server"
+STATE_DIR="$APP_DIR/state"
+LOG_DIR="$APP_DIR/logs"
+VENV_DIR="$APP_DIR/venv"
+LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+PLIST_PATH="$LAUNCH_AGENTS_DIR/com.beahead.trainmeet-server.plist"
+LABEL="com.beahead.trainmeet-server"
+
+if ! command -v mosquitto >/dev/null 2>&1; then
+  echo "Mosquitto saknas. Installera det först med: brew install mosquitto"
+  exit 1
+fi
+
+mkdir -p "$INSTALL_DIR" "$STATE_DIR" "$LOG_DIR" "$LAUNCH_AGENTS_DIR"
+ditto "$SERVER_DIR/src" "$INSTALL_DIR/src"
+cp "$SERVER_DIR/pyproject.toml" "$INSTALL_DIR/pyproject.toml"
+cp "$SERVER_DIR/README.md" "$INSTALL_DIR/README.md"
+
+if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+  python3 -m venv "$VENV_DIR"
+fi
+"$VENV_DIR/bin/pip" install --quiet --disable-pip-version-check "${INSTALL_DIR}[mqtt]"
+
+cat > "$PLIST_PATH" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$VENV_DIR/bin/python</string>
+    <string>-m</string>
+    <string>tambox_gateway.local_server</string>
+    <string>--bind</string>
+    <string>0.0.0.0</string>
+    <string>--state-dir</string>
+    <string>$STATE_DIR</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>$INSTALL_DIR</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>$LOG_DIR/server.log</string>
+  <key>StandardErrorPath</key>
+  <string>$LOG_DIR/server-error.log</string>
+</dict>
+</plist>
+PLIST
+
+chmod 600 "$PLIST_PATH"
+launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
+sleep 1
+launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH"
+launchctl kickstart -k "gui/$(id -u)/$LABEL"
+
+sleep 2
+if ! curl --silent --fail http://127.0.0.1:8787/v1/info >/dev/null; then
+  echo "Tjänsten startade inte. Loggen finns i: $LOG_DIR/server-error.log"
+  exit 1
+fi
+
+LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "din-macs-ip")
+CONNECTION_CODE=$(tr -cd '0-9' < "$STATE_DIR/connection-code.txt")
+echo
+echo "TrainMeet Server är installerad och startar automatiskt."
+echo "På denna Mac: http://127.0.0.1:8787"
+echo "Från iPhone:  http://${LOCAL_IP}:8787"
+echo "Anslutningskod: ${CONNECTION_CODE}"

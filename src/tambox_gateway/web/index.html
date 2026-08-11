@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="theme-color" content="#203b73">
+    <title>TrainMeet Server</title>
+    <link rel="stylesheet" href="/assets/app.css?v=20260811-4">
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">TM</div>
+          <div>
+            <p class="eyebrow">LOKAL DRIFT</p>
+            <h1>TrainMeet Server</h1>
+          </div>
+        </div>
+        <div id="connection" class="status offline"><span></span><b>Ej ansluten</b></div>
+      </header>
+
+      <section id="pairing" class="card pairing-card">
+        <div class="pairing-icon">↔</div>
+        <p class="eyebrow">FÖRSTA ANSLUTNINGEN</p>
+        <h2>Öppna den lokala servern</h2>
+        <p>Ange den sexsiffriga anslutningskoden som visas när TrainMeet Server startar.</p>
+        <form id="pair-form">
+          <label for="display-name">Namn på den här enheten</label>
+          <input id="display-name" name="display-name" value="TrainMeet webb" maxlength="80" autocomplete="name">
+          <label for="pairing-code">Anslutningskod</label>
+          <input id="pairing-code" name="pairing-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123 456" required>
+          <button type="submit" class="primary">Anslut</button>
+          <p id="pair-error" class="form-message error" role="alert"></p>
+        </form>
+      </section>
+
+      <section id="app-view" class="app-view hidden">
+        <nav class="view-tabs card" aria-label="Huvudvyer">
+          <button type="button" class="view-tab active" data-view="server">TrainMeet Server</button>
+          <button type="button" class="view-tab" data-view="simulator">Tambox-simulering</button>
+          <button id="forget" type="button" class="quiet tab-action">Glöm enheten</button>
+        </nav>
+
+        <section id="server-view" class="view-panel">
+          <div class="server-hero card">
+            <div>
+              <p class="eyebrow">DEN HÄR RASPBERRY PI:N</p>
+              <h2 id="server-name">Lokal trafikserver</h2>
+              <p id="server-detail">Läser in serverstatus …</p>
+            </div>
+            <div id="runtime-pill" class="runtime-pill">Ingen lokal träff vald</div>
+          </div>
+
+          <section class="card section-card configuration-card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">TRÄFF OCH STATIONSPLAN</p>
+                <h2>Lokal konfiguration</h2>
+                <p>Bygg en fristående körning direkt på servern. Stationer, sträckor och A–D-paneler sparas lokalt.</p>
+              </div>
+              <span id="draft-revision" class="revision-badge">Utkast</span>
+            </div>
+
+            <form id="config-form" class="config-form">
+              <div class="form-grid basics-grid">
+                <label>Träffens namn
+                  <input id="meet-name" maxlength="100" placeholder="Höstträffen">
+                </label>
+                <label>Trafikläge
+                  <select id="dispatch-mode">
+                    <option value="clearance">Begär och bekräfta</option>
+                    <option value="direct">Direkt om sträckan är ledig</option>
+                  </select>
+                </label>
+                <label>Starttid på träffklockan
+                  <input id="clock-time" type="time" value="12:00">
+                </label>
+                <label>Trafikdag
+                  <input id="active-day" maxlength="20" value="Dagl" placeholder="Dagl eller Lör">
+                </label>
+              </div>
+
+              <div class="editor-section">
+                <div class="editor-heading">
+                  <div>
+                    <h3>1. Stationer i ordning</h3>
+                    <p>Ordningen används när servern bygger en enkel stationskedja.</p>
+                  </div>
+                  <button type="button" class="secondary compact" data-action="add-station">Lägg till station</button>
+                </div>
+                <div id="station-editor" class="editor-list"></div>
+              </div>
+
+              <div class="chain-builder">
+                <div>
+                  <b>Snabbaste vägen till en körbar träff</b>
+                  <span>Bygg sträckor mellan stationerna och en A–D-panel per station.</span>
+                </div>
+                <button type="button" class="secondary" data-action="build-chain">Bygg från stationsordningen</button>
+              </div>
+
+              <div class="editor-section">
+                <div class="editor-heading">
+                  <div>
+                    <h3>2. Sträckor</h3>
+                    <p>Välj ändstationer, enkel- eller dubbelspår och eventuellt eget trafikläge.</p>
+                  </div>
+                  <button type="button" class="secondary compact" data-action="add-connection">Lägg till sträcka</button>
+                </div>
+                <div id="connection-editor" class="editor-list"></div>
+              </div>
+
+              <div class="editor-section">
+                <div class="editor-heading">
+                  <div>
+                    <h3>3. Tambox-paneler</h3>
+                    <p>Varje panel tillhör en station. Tangenterna A–D kopplas direkt till stationens sträckor.</p>
+                  </div>
+                  <button type="button" class="secondary compact" data-action="add-panel">Lägg till panel</button>
+                </div>
+                <div id="panel-editor" class="editor-list"></div>
+              </div>
+
+              <div class="config-actions">
+                <p id="config-message" class="form-message" role="status"></p>
+                <button type="submit" class="secondary">Spara utkast</button>
+                <button id="activate-config" type="button" class="primary">Spara och aktivera</button>
+                <button id="restart-server" type="button" class="restart hidden">Starta om servern</button>
+              </div>
+            </form>
+          </section>
+
+          <div class="two-column">
+            <section class="card section-card">
+              <div class="section-heading compact-heading">
+                <div>
+                  <p class="eyebrow">CENTRAL TRAINMEET</p>
+                  <h2>Hämta färdig träff</h2>
+                  <p>PDF-import och tidtabellsbearbetning kan göras centralt och hämtas hit med en synkkod.</p>
+                </div>
+              </div>
+              <form id="runtime-sync-form" class="inline-form">
+                <label for="runtime-sync-code">Synkkod</label>
+                <input id="runtime-sync-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123 456" required>
+                <button class="primary" type="submit">Hämta</button>
+                <p id="runtime-message" class="form-message" role="status"></p>
+              </form>
+              <div id="runtime-status" class="status-list"></div>
+            </section>
+
+            <section class="card section-card">
+              <div class="section-heading compact-heading">
+                <div>
+                  <p class="eyebrow">FYSISKA ENHETER</p>
+                  <h2>Koppla en Tambox</h2>
+                  <p>Skriv koden på lådan och välj vilken lokal panel den ska använda.</p>
+                </div>
+              </div>
+              <form id="device-form" class="inline-form device-form">
+                <label for="device-code">Kod på lådan</label>
+                <input id="device-code" placeholder="TBX-A7K2" autocapitalize="characters" required>
+                <label for="device-panel">Panel</label>
+                <select id="device-panel"></select>
+                <button class="primary" type="submit">Koppla</button>
+                <p id="device-message" class="form-message" role="status"></p>
+              </form>
+              <div id="device-list" class="status-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="simulator-view" class="view-panel simulator-view hidden" aria-live="polite">
+          <div class="simulator-intro">
+            <div>
+              <p class="eyebrow">TESTKLIENT</p>
+              <h2>Tambox-simulering</h2>
+              <p>Samma 16×2-display, tangenter och serverstyrda trafiklogik som de fysiska boxarna.</p>
+            </div>
+            <div class="panel-picker card">
+              <label for="panel-select">Panel</label>
+              <select id="panel-select"></select>
+            </div>
+          </div>
+
+          <article class="tambox-case">
+            <div class="lcd-module">
+              <div class="lcd" aria-label="Tambox display">
+                <div id="lcd-line-1">STARTAR...</div>
+                <div id="lcd-line-2">VÄNTA</div>
+              </div>
+            </div>
+            <div id="keypad" class="keypad" aria-label="Tambox tangentbord"></div>
+          </article>
+          <p id="command-message" class="command-message" role="status"></p>
+        </section>
+      </section>
+    </main>
+    <script src="/assets/app.js?v=20260811-4" defer></script>
+  </body>
+</html>
