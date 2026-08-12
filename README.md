@@ -4,10 +4,26 @@ TrainMeet Server är den lokala, självständiga driftsmiljön för en TrainMeet
 
 Den centrala [TrainMeet-applikationen](https://github.com/beahead-ab/trainmeet) används längre fram för att bygga och publicera konfigurationer och bearbeta importerade tidtabeller. Själva träffen körs lokalt här.
 
-## Installera på en ren Raspberry Pi eller Ubuntu-server
+## Välj installation
 
-På en ny Raspberry Pi med Raspberry Pi OS (64-bit) eller en Ubuntu-server kan
-hela installationen startas med en rad:
+| Plattform | Rekommenderad metod | När den passar |
+| --- | --- | --- |
+| Raspberry Pi OS 64-bit | Enradaren nedan | Normal lokal drift på en träff |
+| Ubuntu/Debian-server | Enradaren nedan | DigitalOcean, VPS eller annan fristående Linuxserver |
+| Mac | Docker med Colima | Lokal utveckling och test med samma containerupplägg som i drift |
+| Linux med Docker | Docker Compose | Server eller dator där Docker redan finns |
+| Raspberry Pi med Docker | Docker Compose | När all lokal drift ska vara containerbaserad |
+| Kubernetes/K3s | Helm | Centrera eller annan klustermiljö |
+| Mac utan Docker | Native reservinstallation | Felsökning och äldre lokala installationer |
+
+Servern använder port `8787` för webben och `1883` för MQTT. Driftsdata är
+beständig och ska överleva både uppdateringar och omstarter.
+
+## Raspberry Pi OS 64-bit
+
+Det här är den rekommenderade installationen för en fysisk TrainMeet-server på
+träffens lokala nätverk. Börja med en ren Raspberry Pi OS 64-bit-installation,
+anslut Pi:n till nätverket och kör i terminalen:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh
@@ -16,6 +32,22 @@ curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/in
 Samma kommando kan köras igen för att uppdatera installationen till aktuell
 version. Befintlig träffkonfiguration och trafikhistorik ligger kvar.
 
+Installationen lägger in Python, Mosquitto och mDNS/Bonjour, skapar
+systemtjänsten `trainmeet-server` och lagrar driftsdata i
+`/var/lib/trainmeet-server`. Allt startar automatiskt efter en omstart.
+
+Öppna därefter `http://trainmeet.local:8787` eller den IP-adress som
+installationsprogrammet skriver ut. Installationsprogrammet visar även serverns
+sexsiffriga anslutningskod.
+
+## Ubuntu, Debian, DigitalOcean eller annan VPS
+
+Samma enradare fungerar på en ren Ubuntu- eller Debianbaserad server:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh
+```
+
 Installationen frågar efter ditt vanliga `sudo`-lösenord när det behövs. På en
 molnserver där du redan är inloggad som `root` kan `sudo` utelämnas:
 
@@ -23,30 +55,27 @@ molnserver där du redan är inloggad som `root` kan `sudo` utelämnas:
 curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sh
 ```
 
-Så länge repot är privat klonar man det i stället med ett GitHub-konto som har
-åtkomst och kör:
+Öppna sedan `http://SERVERNS-IP:8787`. På en molnserver ska webbport `8787`
+tillåtas i leverantörens brandvägg. Exponera inte MQTT-port `1883` publikt;
+den lösenordsfria MQTT-trafiken är gjord för ett betrott lokalt nät.
+
+Manuell installation från en klon används främst vid utveckling:
 
 ```sh
+git clone https://github.com/beahead-ab/trainmeet-server.git
+cd trainmeet-server
 sudo ./scripts/install-raspberry-pi.sh
 ```
 
-Installationen lägger in Python, Mosquitto och mDNS/Bonjour, skapar systemtjänsten `trainmeet-server` och lagrar driftsdata i `/var/lib/trainmeet-server`. Efter omstart startar allt automatiskt.
+## Mac med Docker och Colima
 
-Öppna därefter `http://trainmeet.local:8787` eller den IP-adress som installationsprogrammet skriver ut.
-
-## Samma paket på Mac, Raspberry Pi och Kubernetes
-
-Servern publiceras som en versionsmärkt OCI-image för både `linux/amd64` och
-`linux/arm64`. Det är samma program och datamodell i alla miljöer.
-
-### Mac eller annan dator med Docker
-
-På Mac är Docker/Colima den rekommenderade miljön, eftersom samma image sedan
-kan köras på Raspberry Pi och Kubernetes. Installera verktygen en gång och kör
-installationskommandot:
+Det här är den rekommenderade Mac-miljön. Installera först Homebrew om det inte
+redan finns. Klona sedan repot och kör:
 
 ```sh
 brew install colima docker docker-compose
+git clone https://github.com/beahead-ab/trainmeet-server.git
+cd trainmeet-server
 ./scripts/install-docker-mac.command
 ```
 
@@ -73,13 +102,37 @@ TRAINMEET_HTTP_PORT=18787 TRAINMEET_MQTT_PORT=11883 \
 
 Öppna då `http://127.0.0.1:18787`.
 
-På en Raspberry Pi med Docker används exakt samma kommando. GitHub-imagen är
-byggd för ARM64. Det vanliga installationsskriptet ovan finns kvar för den som
-inte vill installera en container-runtime på sin Pi.
+## Linux eller Raspberry Pi med Docker
 
-### Centrera eller annan Kubernetesmiljö
+När Docker Engine och Docker Compose redan finns:
 
 ```sh
+git clone https://github.com/beahead-ab/trainmeet-server.git
+cd trainmeet-server
+docker compose up --detach
+```
+
+Compose hämtar den publicerade TrainMeet-imagen och Mosquitto, exponerar
+webben på `8787` och MQTT på `1883` samt skapar beständiga volymer. Om en
+publicerad image ännu inte finns för den aktuella versionen kan den byggas från
+källkoden med:
+
+```sh
+docker compose up --build --detach
+```
+
+Visa status med `docker compose ps`. Uppdatera med `git pull` följt av samma
+startkommando. Stoppa utan att radera data med `docker compose down`. Använd
+inte `--volumes` om träffkonfigurationen ska sparas.
+
+## Kubernetes, K3s eller Centrera
+
+Klustret behöver Kubernetes, `kubectl` och Helm. Klona repot på den dator som
+har åtkomst till klustret och installera chartet:
+
+```sh
+git clone https://github.com/beahead-ab/trainmeet-server.git
+cd trainmeet-server
 helm upgrade --install trainmeet \
   ./deploy/helm/trainmeet-server \
   --namespace trainmeet \
@@ -103,14 +156,41 @@ så att proxyns interna IP-adress aldrig ger automatisk adminbehörighet. Konfig
 först användarnamn och lösenord via lokal åtkomst eller `kubectl port-forward`,
 och aktivera sedan Ingress. Använd TLS för all extern trafik.
 
-Så länge GitHub-repot och GHCR-paketet är privata behöver driftmiljön ett
-GitHub registry pull secret. När paketet görs publikt behövs ingen sådan
-inloggning.
-
 Automatisk mDNS/Bonjour-upptäckt går inte genom ett vanligt container- eller
 molnnät. Vid Compose-test på Mac anges därför datorns lokala IP-adress i den
 fysiska boxens Wi-Fi-portal. På en lokal K3s-nod kan `server.hostNetwork=true`
 användas när nätmiljön kräver direkt åtkomst till nodens portar.
+
+## Mac native – reserv utan Docker
+
+Docker är huvudmiljön på Mac. För felsökning utan container-runtime:
+
+```sh
+brew install python mosquitto
+git clone https://github.com/beahead-ab/trainmeet-server.git
+cd trainmeet-server
+./scripts/install-mac.command
+```
+
+Installationen skapar en LaunchAgent och startar servern automatiskt vid
+inloggning. Öppna `http://127.0.0.1:8787`. Från en iPhone på samma Wi-Fi används
+Macens lokala IP-adress, exempelvis `http://192.168.1.20:8787`.
+
+Kör inte native-versionen och Docker samtidigt på standardportarna.
+`install-docker-mac.command` stänger därför av den native LaunchAgent som
+skriptet känner till.
+
+## Klienter och fysisk Tambox
+
+Serverinstallationen ovan innehåller webbadmin, skärmvyer och
+Tambox-simulering. De andra delarna installeras separat:
+
+- Den fysiska ESP32/Arduino-boxens firmware finns i
+  [trainmeet-tambox](https://github.com/beahead-ab/trainmeet-tambox).
+- Den nativa iPhone-appen finns i
+  [trainmeet-iphone](https://github.com/beahead-ab/trainmeet-iphone).
+- TrainMeet TKL är den separata stationsapplikationen och ansluter till denna
+  server när dess publika paket är färdigt.
 
 ## Två tydligt separerade webbdelar
 
@@ -157,19 +237,6 @@ pågår. Den tillfälliga panelinteraktionen rensas vid serveromstart, medan
 begäran, reservationer och belagda sträckor återställs från SQLite.
 
 MQTT är avsiktligt lösenordsfritt på träffens lokala nät. Servern ska inte exponeras direkt mot internet.
-
-## Native Mac-installation som reserv
-
-Docker är huvudmiljön på Mac. Den tidigare native-installationen finns kvar som
-en enkel reserv för felsökning utan container-runtime:
-
-```sh
-brew install mosquitto
-./scripts/start-mac.command
-```
-
-Kör aldrig native-versionen och Docker samtidigt på standardportarna. Skriptet
-`install-docker-mac.command` stänger därför av native LaunchAgent automatiskt.
 
 ## Lokal konfiguration och tidtabell
 
