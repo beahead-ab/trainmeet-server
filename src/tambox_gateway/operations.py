@@ -300,6 +300,18 @@ class SQLiteOperationsStore:
                 """,
                 (publication_id, active_day, station_id),
             ).fetchone()
+            previous_shift_row = self._connection.execute(
+                """
+                SELECT shift_id, operator_name, terminal_name, status, started_at,
+                       ended_at, handover_note, updated_at
+                FROM tkl_shifts
+                WHERE publication_id = ? AND active_day = ? AND station_id = ?
+                  AND status != 'active'
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (publication_id, active_day, station_id),
+            ).fetchone()
             movement_rows = self._connection.execute(
                 """
                 SELECT movement_id, arrival_status, departure_status, actual_track,
@@ -312,6 +324,7 @@ class SQLiteOperationsStore:
             ).fetchall()
         return {
             "shift": _shift_from_row(shift_row),
+            "previous_shift": _shift_from_row(previous_shift_row),
             "movements": {
                 row[0]: {
                     "arrival": row[1],

@@ -354,6 +354,7 @@ class TamboxHTTPApplication:
                 "open_connection_count": sum(1 for state in connection_states if state.get("state") != "free"),
             },
             "shift": state["shift"],
+            "previous_shift": state["previous_shift"],
             "movements": state["movements"],
             "connection_states": connection_states,
         }

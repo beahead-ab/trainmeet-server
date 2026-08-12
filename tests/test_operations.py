@@ -91,13 +91,25 @@ class OperationsStoreTests(unittest.TestCase):
                 )
                 self.assertEqual(movement["departure"], "ready")
 
+                handed_over = store.finish_tkl_shift(
+                    first["shift_id"],
+                    status="handover",
+                    note="Tåg 101 väntar på klarering",
+                )
+                self.assertEqual(handed_over["status"], "handover")
+                waiting = store.tkl_station_state("publication-a", "Dagl", "station-a")
+                self.assertIsNone(waiting["shift"])
+                self.assertEqual(
+                    waiting["previous_shift"]["handover_note"],
+                    "Tåg 101 väntar på klarering",
+                )
+
                 second = store.start_tkl_shift(
                     "publication-a",
                     "Dagl",
                     "station-a",
                     "Bertil",
                     "CDA TKL 2",
-                    take_over=True,
                 )
                 state = store.tkl_station_state("publication-a", "Dagl", "station-a")
                 self.assertNotEqual(first["shift_id"], second["shift_id"])
