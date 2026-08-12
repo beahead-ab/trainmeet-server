@@ -354,7 +354,11 @@ class TamboxHTTPApplication:
                 latest = latest_version(channel)
                 result["latest_version"] = latest["version"]
                 result["published_at"] = latest["published_at"]
-                result["update_available"] = result["latest_version"] != result["installed_version"]
+                if channel == "stable" and not str(result["installed_version"]).startswith("v"):
+                    result["update_available"] = False
+                    result["channel_notice"] = "Testversion är installerad. Stabil kanal används inte för nedgradering."
+                else:
+                    result["update_available"] = result["latest_version"] != result["installed_version"]
             except SoftwareUpdateError as error:
                 result["check_error"] = str(error)
         return result

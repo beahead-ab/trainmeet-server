@@ -113,6 +113,9 @@ loginForm.addEventListener("submit", async (event) => {
     if (state.authStatus.must_change_password) {
       loginForm.classList.add("hidden");
       firstPasswordForm.classList.remove("hidden");
+    } else if (payload.channel_notice) {
+      softwareInstall.classList.add("hidden");
+      setMessage(softwareUpdateMessage, payload.channel_notice, "notice");
     } else {
       await openApplication();
     }
@@ -376,6 +379,7 @@ softwareInstall.addEventListener("click", async () => {
   softwareInstall.disabled = true;
   setMessage(softwareUpdateMessage, "Startar uppdateringen …", "notice");
   try {
+    const previousVersion = softwareVersion.dataset.version || "";
     const response = await authorizedFetch("/v1/server/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -384,7 +388,7 @@ softwareInstall.addEventListener("click", async () => {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Uppdateringen kunde inte startas");
     setMessage(softwareUpdateMessage, "Uppdaterar i bakgrunden. Sidan ansluter igen efter omstart.", "notice");
-    await waitForServerRestart();
+    await waitForSoftwareUpdate(previousVersion);
     await checkSoftwareUpdate();
   } catch (error) {
     setMessage(softwareUpdateMessage, error.message, "error");
@@ -393,6 +397,30 @@ softwareInstall.addEventListener("click", async () => {
   }
 });
 
+async function waitForSoftwareUpdate(previousVersion) {
+  let serverWasUnavailable = false;
+  for (let attempt = 0; attempt < 180; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const response = await authorizedFetch(`/v1/server/update?channel=${encodeURIComponent(softwareChannel.value)}`);
+      if (!response.ok) continue;
+      const payload = await response.json();
+      if (payload.status === "failed") {
+        throw new Error(payload.message || "Uppdateringen misslyckades");
+      }
+      const versionChanged = previousVersion && payload.installed_version !== previousVersion;
+      if ((serverWasUnavailable || versionChanged) && payload.status === "complete") {
+        window.location.reload();
+        return;
+      }
+    } catch (error) {
+      if (error.message && /misslyckades/i.test(error.message)) throw error;
+      serverWasUnavailable = true;
+    }
+  }
+  throw new Error("Uppdateringen tar längre tid än väntat. Ladda om sidan om en stund.");
+}
+
 async function checkSoftwareUpdate() {
   softwareCheck.disabled = true;
   try {
@@ -400,6 +428,7 @@ async function checkSoftwareUpdate() {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Versionskontrollen misslyckades");
     softwareVersion.textContent = `Installerad ${payload.installed_version}`;
+    softwareVersion.dataset.version = payload.installed_version;
     if (!payload.supported) {
       softwareInstall.classList.add("hidden");
       setMessage(softwareUpdateMessage, "Den här miljön uppdateras via Docker eller driftplattformen.", "notice");
