@@ -83,7 +83,9 @@ git pull
 
 ### Raspberry Pi
 
-1. Installera Raspberry Pi OS 64-bit och anslut Pi:n till nätverket.
+1. Installera Raspberry Pi OS 64-bit och anslut Pi:n till nätverket. Välj
+   **Raspberry Pi OS med skrivbord** om Pi:ns egen skärm automatiskt ska visa
+   TrainMeet Server. Lite-versionen passar en skärmlös server.
 2. Öppna Terminal på Pi:n. Från Mac, Linux eller Windows PowerShell kan du i
    stället ansluta med SSH:
 
@@ -100,6 +102,8 @@ curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/in
 ```
 
 4. Öppna `http://trainmeet.local:8787` eller adressen som installationen visar.
+   På Raspberry Pi OS Desktop öppnas TrainMeet Server automatiskt i Chromium
+   efter omstart. Webbläsaren väntar på servern och återstartas om den stängs.
 5. Uppdatera genom SSH genom att köra exakt samma installationskommando igen.
    Data i `/var/lib/trainmeet-server` bevaras.
 6. Kontrollera med `systemctl status trainmeet-server`, tryck `q` och avsluta
@@ -181,6 +185,11 @@ version. Befintlig träffkonfiguration och trafikhistorik ligger kvar.
 Installationen lägger in Python, Mosquitto och mDNS/Bonjour, skapar
 systemtjänsten `trainmeet-server` och lagrar driftsdata i
 `/var/lib/trainmeet-server`. Allt startar automatiskt efter en omstart.
+
+På Raspberry Pi OS Desktop konfigurerar installationen dessutom automatisk
+inloggning och startar Chromium med `http://127.0.0.1:8787/` som en maximerad
+serverapplikation. Den lokala sidan öppnas direkt utan extern admininloggning.
+På Raspberry Pi OS Lite görs ingen skrivbords- eller webbläsarinstallation.
 
 Öppna därefter `http://trainmeet.local:8787` eller den IP-adress som
 installationsprogrammet skriver ut. Installationsprogrammet visar även serverns

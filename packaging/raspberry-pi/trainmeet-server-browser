@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+
+exec 9>/tmp/trainmeet-server-browser.lock
+flock -n 9 || exit 0
+
+wait_for_server() {
+  until curl -fsS --max-time 2 http://127.0.0.1:8787/v1/display >/dev/null 2>&1; do
+    sleep 1
+  done
+}
+
+wait_for_server
+
+while true; do
+  chromium \
+    --app=http://127.0.0.1:8787/ \
+    --noerrdialogs \
+    --no-first-run \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --overscroll-history-navigation=0 \
+    --password-store=basic \
+    --start-maximized &
+  browser_pid=$!
+  while kill -0 "$browser_pid" 2>/dev/null; do
+    sleep 5
+  done
+  wait "$browser_pid" || true
+  sleep 2
+  wait_for_server
+done

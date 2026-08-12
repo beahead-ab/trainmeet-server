@@ -11,6 +11,7 @@ SERVER_DIR=$(dirname "$SCRIPT_DIR")
 INSTALL_DIR=/opt/trainmeet-server
 STATE_DIR=/var/lib/trainmeet-server
 VENV_DIR="$INSTALL_DIR/venv"
+DESKTOP_USER=${TRAINMEET_SERVER_DESKTOP_USER:-${SUDO_USER:-}}
 
 echo "Installerar TrainMeet Server …"
 apt-get update
@@ -31,8 +32,37 @@ install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server.service" /e
 install -m 0755 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server-update" /usr/local/sbin/trainmeet-server-update
 install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server-update@.service" /etc/systemd/system/trainmeet-server-update@.service
 install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/50-trainmeet-server-update.rules" /etc/polkit-1/rules.d/50-trainmeet-server-update.rules
+install -m 0755 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server-browser" /usr/local/bin/trainmeet-server-browser
 rm -f /etc/sudoers.d/trainmeet-server-update
 install -d -o trainmeet-server -g trainmeet-server -m 0750 "$STATE_DIR"
+
+BROWSER_ENABLED=false
+if [ -z "$DESKTOP_USER" ] || [ "$DESKTOP_USER" = root ]; then
+  DESKTOP_USER=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 {print $1; exit}')
+fi
+if command -v labwc >/dev/null 2>&1 \
+  && [ -n "${DESKTOP_USER:-}" ] \
+  && id "$DESKTOP_USER" >/dev/null 2>&1; then
+  DESKTOP_HOME=$(getent passwd "$DESKTOP_USER" | cut -d: -f6)
+  apt-get install -y chromium curl util-linux
+  AUTOSTART_DIR="$DESKTOP_HOME/.config/labwc"
+  AUTOSTART_FILE="$AUTOSTART_DIR/autostart"
+  install -d -o "$DESKTOP_USER" -g "$DESKTOP_USER" -m 0755 "$AUTOSTART_DIR"
+  touch "$AUTOSTART_FILE"
+  if ! grep -q 'trainmeet-server-browser' "$AUTOSTART_FILE"; then
+    printf '\n# TrainMeet Server\n/usr/local/bin/trainmeet-server-browser &\n' >> "$AUTOSTART_FILE"
+  fi
+  chown "$DESKTOP_USER:$DESKTOP_USER" "$AUTOSTART_FILE"
+  chmod 0644 "$AUTOSTART_FILE"
+  systemctl set-default graphical.target
+  if command -v raspi-config >/dev/null 2>&1; then
+    raspi-config nonint do_wayland W3 || true
+    raspi-config nonint do_boot_behaviour B4 || true
+    raspi-config nonint do_boot_wait 0 || true
+    raspi-config nonint do_blanking 1 || true
+  fi
+  BROWSER_ENABLED=true
+fi
 
 systemctl daemon-reload
 systemctl enable --now avahi-daemon.service
@@ -53,3 +83,8 @@ echo
 echo "TrainMeet Server är installerad och startar automatiskt."
 echo "Öppna: http://${PI_ADDRESS}:8787"
 echo "Anslutningskod: ${CONNECTION_CODE}"
+if [ "$BROWSER_ENABLED" = true ]; then
+  echo "Chromium öppnar TrainMeet Server automatiskt efter nästa omstart."
+else
+  echo "Ingen Raspberry Pi Desktop hittades; servern körs utan lokal webbläsare."
+fi
