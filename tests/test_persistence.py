@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from tambox_gateway.demo import demo_session
+from session_fixture import sample_session
 from tambox_gateway.engine import TrafficEngine
 from tambox_gateway.models import Command, ConnectionState, DispatchMode
 from tambox_gateway.storage import ConfigurationMismatchError, SQLiteStateStore
@@ -24,7 +24,7 @@ def command_for(
     return Command(
         command_id=command_id,
         client_id=client_id or f"client-{panel_id}",
-        traffic_session_id="demo-session",
+        traffic_session_id="test-session",
         panel_id=panel_id,
         expected_revision=engine.revision,
         key=key,
@@ -43,7 +43,7 @@ class PersistenceTests(unittest.TestCase):
             path = Path(directory) / "tambox.db"
             first_store = SQLiteStateStore(path)
             engine = TrafficEngine(
-                demo_session(DispatchMode.CLEARANCE),
+                sample_session(DispatchMode.CLEARANCE),
                 state_store=first_store,
             )
             for sequence, key in enumerate(["A", "2", "1", "2", "3", "#"], start=1):
@@ -56,7 +56,7 @@ class PersistenceTests(unittest.TestCase):
             second_store = SQLiteStateStore(path)
             try:
                 restored = TrafficEngine(
-                    demo_session(DispatchMode.CLEARANCE),
+                    sample_session(DispatchMode.CLEARANCE),
                     state_store=second_store,
                 )
                 self.assertEqual(restored.revision, expected_revision)
@@ -78,7 +78,7 @@ class PersistenceTests(unittest.TestCase):
             path = Path(directory) / "tambox.db"
             first_store = SQLiteStateStore(path)
             engine = TrafficEngine(
-                demo_session(DispatchMode.DIRECT),
+                sample_session(DispatchMode.DIRECT),
                 state_store=first_store,
             )
             for sequence, key in enumerate(["A", "7", "7", "#", "A", "A"], start=1):
@@ -96,7 +96,7 @@ class PersistenceTests(unittest.TestCase):
             second_store = SQLiteStateStore(path)
             try:
                 restored = TrafficEngine(
-                    demo_session(DispatchMode.DIRECT),
+                    sample_session(DispatchMode.DIRECT),
                     state_store=second_store,
                 )
                 self.assertEqual(
@@ -117,7 +117,7 @@ class PersistenceTests(unittest.TestCase):
             path = Path(directory) / "tambox.db"
             first_store = SQLiteStateStore(path)
             engine = TrafficEngine(
-                demo_session(DispatchMode.DIRECT),
+                sample_session(DispatchMode.DIRECT),
                 state_store=first_store,
             )
             for sequence, key in enumerate(["A", "4", "2", "#"], start=1):
@@ -128,7 +128,7 @@ class PersistenceTests(unittest.TestCase):
             second_store = SQLiteStateStore(path)
             try:
                 restored = TrafficEngine(
-                    demo_session(DispatchMode.DIRECT),
+                    sample_session(DispatchMode.DIRECT),
                     state_store=second_store,
                 )
                 self.assertEqual(
@@ -146,7 +146,7 @@ class PersistenceTests(unittest.TestCase):
     def test_changed_configuration_cannot_open_active_run(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "tambox.db"
-            original = demo_session(DispatchMode.CLEARANCE)
+            original = sample_session(DispatchMode.CLEARANCE)
             first_store = SQLiteStateStore(path)
             engine = TrafficEngine(original, state_store=first_store)
             press(engine, "panel-a", "A", 1)
@@ -169,7 +169,7 @@ class PersistenceTests(unittest.TestCase):
                 raise OSError("simulated disk failure")
 
         engine = TrafficEngine(
-            demo_session(DispatchMode.CLEARANCE),
+            sample_session(DispatchMode.CLEARANCE),
             state_store=FailingStore(),
         )
         with self.assertRaises(OSError):

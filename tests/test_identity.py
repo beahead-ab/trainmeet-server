@@ -128,7 +128,7 @@ class IdentityTests(unittest.TestCase):
 
     def test_admin_password_creates_a_temporary_session(self):
         before = self.store.admin_access_summary()
-        self.assertEqual(before["username"], "admin")
+        self.assertEqual(before["username"], "")
         self.assertFalse(before["password_configured"])
 
         configured = self.store.configure_admin_access("traffadmin", "lokalt-losenord")

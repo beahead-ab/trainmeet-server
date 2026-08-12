@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/assets/app.css?v=20260811-14">
+    <link rel="stylesheet" href="/assets/app.css?v=20260813-1">
   </head>
   <body>
     <main class="page-shell">
@@ -23,6 +23,88 @@
         <div id="connection" class="status offline"><span></span><b>Ej ansluten</b></div>
       </header>
 
+      <section id="setup" class="card setup-card hidden">
+        <div class="setup-heading">
+          <div class="pairing-icon">TM</div>
+          <div>
+            <p class="eyebrow">FÖRSTA STARTEN</p>
+            <h2>Installera TrainMeet Server</h2>
+            <p>Vi tar det steg för steg. Inga exempelstationer eller förvalda inloggningsuppgifter finns på servern.</p>
+          </div>
+        </div>
+        <ol class="setup-progress" aria-label="Installationssteg">
+          <li data-setup-progress="admin"><span>1</span>Administratör</li>
+          <li data-setup-progress="server"><span>2</span>Server</li>
+          <li data-setup-progress="central"><span>3</span>Träff</li>
+          <li data-setup-progress="finish"><span>4</span>Klart</li>
+        </ol>
+
+        <form id="setup-admin-form" class="setup-step hidden">
+          <p class="eyebrow">STEG 1 AV 4</p>
+          <h3>Skapa administratören</h3>
+          <p>Välj uppgifterna som ska användas när servern administreras från andra enheter.</p>
+          <div class="form-grid setup-fields">
+            <label>Användarnamn
+              <input id="setup-username" maxlength="64" autocomplete="username" required>
+            </label>
+            <label>Lösenord
+              <input id="setup-password" type="password" minlength="8" autocomplete="new-password" required>
+            </label>
+            <label>Upprepa lösenord
+              <input id="setup-password-confirm" type="password" minlength="8" autocomplete="new-password" required>
+            </label>
+          </div>
+          <div class="setup-actions">
+            <p id="setup-admin-message" class="form-message" role="status"></p>
+            <button type="submit" class="primary">Skapa och fortsätt</button>
+          </div>
+        </form>
+
+        <form id="setup-server-form" class="setup-step hidden">
+          <p class="eyebrow">STEG 2 AV 4</p>
+          <h3>Ge servern ett namn</h3>
+          <p>Namnet visas i admin och hjälper er att skilja flera servrar åt.</p>
+          <label>Servernamn
+            <input id="setup-server-name" maxlength="80" placeholder="Exempel: Hela huset 2026" required>
+          </label>
+          <div class="setup-actions">
+            <p id="setup-server-message" class="form-message" role="status"></p>
+            <button type="submit" class="primary">Spara och fortsätt</button>
+          </div>
+        </form>
+
+        <form id="setup-central-form" class="setup-step hidden">
+          <p class="eyebrow">STEG 3 AV 4</p>
+          <h3>Hämta träffen</h3>
+          <p>Ange konfigurationsservern och den sex tecken långa kod som visas där. Ingen lång nyckel behöver hanteras.</p>
+          <div class="form-grid setup-fields central-fields">
+            <label>Konfigurationsserver
+              <input id="setup-central-url" type="url" value="https://trainmeet.app/konfig" placeholder="https://trainmeet.app/konfig" required>
+            </label>
+            <label>Träffkod
+              <input id="setup-sync-code" class="sync-code-input" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" placeholder="123456" required>
+            </label>
+          </div>
+          <div class="setup-actions">
+            <p id="setup-central-message" class="form-message" role="status"></p>
+            <button type="submit" class="primary">Koppla och hämta</button>
+          </div>
+        </form>
+
+        <form id="setup-finish-form" class="setup-step hidden">
+          <p class="eyebrow">STEG 4 AV 4</p>
+          <h3>Färdigställ installationen</h3>
+          <div id="setup-runtime-summary" class="setup-runtime-summary"></div>
+          <label>Trafikdag
+            <input id="setup-active-day" maxlength="20" placeholder="Dagl" required>
+          </label>
+          <div class="setup-actions">
+            <p id="setup-finish-message" class="form-message" role="status"></p>
+            <button type="submit" class="primary">Slutför och starta om</button>
+          </div>
+        </form>
+      </section>
+
       <section id="login" class="card pairing-card hidden">
         <div class="pairing-icon">TM</div>
         <p class="eyebrow">EXTERN ADMIN</p>
@@ -30,21 +112,11 @@
         <p>Lokalt på träffens nätverk öppnas admin automatiskt. Extern åtkomst kräver inloggning.</p>
         <form id="login-form">
           <label for="login-username">Användarnamn</label>
-          <input id="login-username" name="username" value="admin" maxlength="64" autocomplete="username" required>
+          <input id="login-username" name="username" maxlength="64" autocomplete="username" required>
           <label for="login-password">Lösenord</label>
           <input id="login-password" name="password" type="password" autocomplete="current-password" required>
           <button type="submit" class="primary">Logga in</button>
           <p id="login-error" class="form-message error" role="alert"></p>
-        </form>
-        <form id="first-password-form" class="hidden">
-          <p><strong>Byt installationslösenordet</strong></p>
-          <p>Det tillfälliga lösenordet får inte användas vidare.</p>
-          <label for="first-password">Nytt lösenord</label>
-          <input id="first-password" type="password" minlength="8" autocomplete="new-password" required>
-          <label for="first-password-confirm">Upprepa nytt lösenord</label>
-          <input id="first-password-confirm" type="password" minlength="8" autocomplete="new-password" required>
-          <button type="submit" class="primary">Byt lösenord och fortsätt</button>
-          <p id="first-password-error" class="form-message error" role="alert"></p>
         </form>
       </section>
 
@@ -54,7 +126,6 @@
           <button type="button" class="view-tab" data-view="admin">Administration</button>
           <button type="button" class="view-tab" data-view="simulator">Tambox-simulering</button>
           <button type="button" class="view-tab" data-view="displays">Skärmar</button>
-          <a class="view-tab tkl-tab-link" href="/tkl/">TKL</a>
           <button id="logout" type="button" class="quiet tab-action hidden">Logga ut</button>
         </nav>
 
@@ -331,12 +402,14 @@
                 <div>
                   <p class="eyebrow">CENTRAL TRAINMEET</p>
                   <h2>Hämta färdig träff</h2>
-                  <p>Skapa en träffnyckel i TrainMeet och klistra in den här. Nyckeln sparas endast på servern.</p>
+                  <p>Ange en konfigurationsserver och den sexsiffriga träffkoden. Den permanenta kopplingen sparas osynligt på servern.</p>
                 </div>
               </div>
               <form id="runtime-sync-form" class="inline-form">
-                <label for="runtime-api-key">API-nyckel</label>
-                <input id="runtime-api-key" type="password" autocomplete="off" placeholder="tm_live_…" required>
+                <label for="runtime-central-url">Konfigurationsserver</label>
+                <input id="runtime-central-url" type="url" value="https://trainmeet.app/konfig" required>
+                <label for="runtime-sync-code">Träffkod</label>
+                <input id="runtime-sync-code" class="sync-code-input" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" placeholder="123456" required>
                 <button class="primary" type="submit">Koppla och hämta</button>
                 <p id="runtime-message" class="form-message" role="status"></p>
               </form>
@@ -477,6 +550,6 @@
         </div>
       </section>
     </main>
-    <script src="/assets/app.js?v=20260812-15" defer></script>
+    <script src="/assets/app.js?v=20260813-1" defer></script>
   </body>
 </html>

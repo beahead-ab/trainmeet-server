@@ -11,7 +11,7 @@ def command_payload() -> dict:
         "protocol_version": 1,
         "command_id": "esp32-aabbcc-1234",
         "client_id": "esp32-aabbcc",
-        "traffic_session_id": "demo-session",
+        "traffic_session_id": "test-session",
         "panel_id": "panel-a",
         "expected_revision": 7,
         "action": "key_press",

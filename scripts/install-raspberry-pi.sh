@@ -54,6 +54,14 @@ if command -v labwc >/dev/null 2>&1 \
   fi
   chown "$DESKTOP_USER:$DESKTOP_USER" "$AUTOSTART_FILE"
   chmod 0644 "$AUTOSTART_FILE"
+  if command -v xdg-user-dir >/dev/null 2>&1; then
+    DESKTOP_DIR=$(runuser -u "$DESKTOP_USER" -- xdg-user-dir DESKTOP 2>/dev/null || true)
+  fi
+  DESKTOP_DIR=${DESKTOP_DIR:-$DESKTOP_HOME/Desktop}
+  install -d -o "$DESKTOP_USER" -g "$DESKTOP_USER" -m 0755 "$DESKTOP_DIR"
+  install -o "$DESKTOP_USER" -g "$DESKTOP_USER" -m 0755 \
+    "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server.desktop" \
+    "$DESKTOP_DIR/Starta-TrainMeet-Server.desktop"
   systemctl set-default graphical.target
   if command -v raspi-config >/dev/null 2>&1; then
     raspi-config nonint do_wayland W2 || true
@@ -85,6 +93,7 @@ echo "Öppna: http://${PI_ADDRESS}:8787"
 echo "Anslutningskod: ${CONNECTION_CODE}"
 if [ "$BROWSER_ENABLED" = true ]; then
   echo "Chromium öppnar TrainMeet Server automatiskt efter nästa omstart."
+  echo "Genvägen 'Starta TrainMeet Server' finns också på skrivbordet."
 else
   echo "Ingen Raspberry Pi Desktop hittades; servern körs utan lokal webbläsare."
 fi

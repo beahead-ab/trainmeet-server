@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from tambox_gateway.demo import demo_session
+from session_fixture import sample_session
 from tambox_gateway.engine import TrafficEngine
 from tambox_gateway.models import (
     Command,
@@ -18,7 +18,7 @@ from tambox_gateway.models import (
 
 class EngineDriver:
     def __init__(self, mode: DispatchMode = DispatchMode.CLEARANCE):
-        self.engine = TrafficEngine(demo_session(mode))
+        self.engine = TrafficEngine(sample_session(mode))
         self.sequence = 0
 
     def press(self, panel_id: str, key: str, client_id: str | None = None, command_id: str | None = None):
@@ -27,7 +27,7 @@ class EngineDriver:
         command = Command(
             command_id=command_id or f"command-{self.sequence}",
             client_id=client_id or f"client-{panel_id}",
-            traffic_session_id="demo-session",
+            traffic_session_id="test-session",
             panel_id=panel_id,
             expected_revision=self.engine.revision,
             key=key,
@@ -75,7 +75,7 @@ class MultiConnectionDriver(EngineDriver):
             ),
         }
         self.engine = TrafficEngine(SessionConfig(
-            id="demo-session",
+            id="test-session",
             name="Flera samtidiga tåg",
             default_dispatch_mode=DispatchMode.CLEARANCE,
             stations=stations,
@@ -205,7 +205,7 @@ class TrafficEngineTests(unittest.TestCase):
         command = Command(
             command_id="departure-once",
             client_id="client-panel-a",
-            traffic_session_id="demo-session",
+            traffic_session_id="test-session",
             panel_id="panel-a",
             expected_revision=driver.engine.revision,
             key="#",
@@ -226,7 +226,7 @@ class TrafficEngineTests(unittest.TestCase):
         expired = Command(
             command_id="expired",
             client_id="client-a",
-            traffic_session_id="demo-session",
+            traffic_session_id="test-session",
             panel_id="panel-a",
             expected_revision=0,
             key="A",
@@ -239,7 +239,7 @@ class TrafficEngineTests(unittest.TestCase):
         stale = Command(
             command_id="stale",
             client_id="client-a",
-            traffic_session_id="demo-session",
+            traffic_session_id="test-session",
             panel_id="panel-a",
             expected_revision=0,
             key="1",

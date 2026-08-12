@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 
 
 DEFAULT_RUNTIME_PUBLICATION_URL = (
-    "https://cjpghcjpqaxzqhxpwmjf.supabase.co/functions/v1/runtime-publication"
+    "https://trainmeet.app/konfig"
 )
 
 
@@ -110,42 +110,6 @@ def fetch_linked_runtime(
     if not isinstance(package, dict):
         raise CentralSyncError("TrainMeet skickade inget driftpaket")
     return CentralRuntimeDownload(package=package, link_token=token)
-
-
-def fetch_api_key_runtime(
-    api_key: str,
-    endpoint_url: str = DEFAULT_RUNTIME_PUBLICATION_URL,
-    *,
-    manifest_only: bool = False,
-    timeout: float = 20,
-) -> CentralRuntimeDownload | CentralRuntimeManifest:
-    key = api_key.strip()
-    if not key:
-        raise CentralSyncError("API-nyckeln saknas")
-    separator = "&" if "?" in endpoint_url else "?"
-    url = f"{endpoint_url}{separator}manifest=1" if manifest_only else endpoint_url
-    request = Request(
-        url,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "TrainMeet-Server/0.7",
-            "X-TrainMeet-Key": key,
-        },
-    )
-    payload = _read_json(request, timeout=timeout)
-    if manifest_only:
-        try:
-            return CentralRuntimeManifest(
-                publication_id=str(payload["publication_id"]),
-                published_at=str(payload["published_at"]),
-                package_checksum=str(payload.get("package_checksum") or ""),
-            )
-        except (KeyError, TypeError) as error:
-            raise CentralSyncError("TrainMeet skickade inget versionsbesked") from error
-    package = payload.get("package") if isinstance(payload, dict) else None
-    if not isinstance(package, dict):
-        raise CentralSyncError("TrainMeet skickade inget driftpaket")
-    return CentralRuntimeDownload(package=package)
 
 
 def _read_json(request: Request, *, timeout: float) -> dict[str, Any]:

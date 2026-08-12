@@ -26,14 +26,10 @@ TrainMeet består av två installationer. **TrainMeet Server** körs på PC, Mac
 Raspberry Pi eller Linuxserver. **TrainMeet Tambox** installeras på varje
 ESP32/Arduino-enhet. Installera servern först.
 
-> **Första inloggningen på en ny server**
->
-> Användarnamn: **`admin`**
->
-> Tillfälligt lösenord: **`TrainMeet2026!`**
->
-> Lösenordet måste bytas direkt. En uppdatering ersätter aldrig ett redan valt
-> lösenord.
+> **En ny server är helt tom.** Den innehåller inga exempelstationer, ingen
+> demoträff och inget förvalt administratörskonto. Vid första öppningen leder en
+> installationsguide genom administratör, servernamn, konfigurationsserver,
+> sexsiffrig träffkod och trafikdag.
 
 ### Windows-PC
 
@@ -49,7 +45,7 @@ cd trainmeet-server
 docker compose up --detach
 ```
 
-4. Öppna `http://127.0.0.1:8787` och logga in med uppgifterna ovan.
+4. Öppna `http://127.0.0.1:8787` och följ installationsguiden.
 5. Uppdatera senare från samma mapp:
 
 ```powershell
@@ -104,6 +100,7 @@ curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/in
 4. Öppna `http://trainmeet.local:8787` eller adressen som installationen visar.
    På Raspberry Pi OS Desktop öppnas TrainMeet Server automatiskt i Chromium
    efter omstart. Webbläsaren väntar på servern och återstartas om den stängs.
+   Genvägen **Starta TrainMeet Server** läggs också på skrivbordet.
 5. Uppdatera genom SSH genom att köra exakt samma installationskommando igen.
    Data i `/var/lib/trainmeet-server` bevaras.
 6. Kontrollera med `systemctl status trainmeet-server`, tryck `q` och avsluta
@@ -356,15 +353,12 @@ Tambox-simulering. De andra delarna installeras separat:
 
 ## Lokal och extern adminåtkomst
 
-Webbadmin öppnas direkt när anropet kommer från datorn eller Raspberry Pi:n
-som kör servern. En annan telefon eller dator, även på träffens Wi-Fi, får
-inloggningsvyn. Vid en helt ny installation tillåts den första uppsättningen
-från det privata nätet tills ett lösenord har valts. Under
-**Extern admininloggning** väljer den lokala administratören ett användarnamn
-och ett lösenord på minst åtta tecken. En ny installation har kontot `admin`
-med det tillfälliga lösenordet `TrainMeet2026!` och kräver omedelbart byte vid
-första inloggningen. Lösenordet lagras saltat och hashat;
-externa webbläsare får en tidsbegränsad HttpOnly-session efter inloggning.
+Webbadmin öppnas direkt på datorn eller Raspberry Pi:n som kör servern. Vid en
+helt ny installation får den första administratören skapas från servern eller
+dess privata nätverk. Det finns inget förvalt användarnamn eller lösenord.
+Installationsguiden kräver ett eget användarnamn och ett lösenord på minst åtta
+tecken. Lösenordet lagras saltat och hashat; externa webbläsare får en
+tidsbegränsad HttpOnly-session efter inloggning.
 
 Bakom en reverse proxy eller Kubernetes Ingress ska servern startas med
 `--force-external-auth` eller `TRAINMEET_FORCE_EXTERNAL_AUTH=true`. Annars ser
@@ -413,7 +407,12 @@ MQTT är avsiktligt lösenordsfritt på träffens lokala nät. Servern ska inte 
 
 ## Lokal konfiguration och tidtabell
 
-Servern kan skapa och aktivera en träff helt lokalt. Den kan också installera ett normaliserat, versionsmärkt runtime-paket från centrala TrainMeet. PDF-import, tolkning och manuell kontroll ligger kvar centralt; den färdiga tidtabellen körs lokalt i SQLite.
+Servern kan skapa och aktivera en träff helt lokalt. Den kan också installera
+ett normaliserat, versionsmärkt runtime-paket från valfri kompatibel
+konfigurationsserver. Standardadressen är `https://trainmeet.app/konfig`.
+Användaren anger bara serveradressen och en sexsiffrig kod. Den permanenta
+länkidentiteten returneras av konfigurationsservern och lagras osynligt lokalt;
+ingen lång API-nyckel behöver kopieras eller visas.
 
 Under den nuvarande utvecklingsfasen stöds endast runtime-schema 2. Vi håller inte
 ett kompatibilitetslager för äldre testformat innan den första externa releasen;
@@ -424,6 +423,10 @@ stabila schemaversioner.
 Viktiga API:er:
 
 - `GET/POST /v1/local-configuration`
+- `GET /v1/setup`
+- `POST /v1/setup/admin`
+- `POST /v1/setup/server`
+- `POST /v1/setup/complete`
 - `POST /v1/local-configuration/activate`
 - `POST /v1/server/restart`
 - `POST /v1/runtime/install`

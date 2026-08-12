@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from tambox_gateway.demo import demo_session
+from session_fixture import sample_session
 from tambox_gateway.central_sync import CentralRuntimeDownload, CentralRuntimeManifest
 from tambox_gateway.engine import TrafficEngine
 from tambox_gateway.http_server import (
@@ -33,7 +33,7 @@ class HTTPServerTests(unittest.TestCase):
         self.local_configuration_store = SQLiteLocalConfigurationStore(
             Path(self.temporary_directory.name) / "runtime.db"
         )
-        self.engine = TrafficEngine(demo_session(DispatchMode.CLEARANCE))
+        self.engine = TrafficEngine(sample_session(DispatchMode.CLEARANCE))
         pairing = PairingService(
             self.identities,
             set(self.engine.config.panels),
@@ -91,6 +91,45 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn("Extern admininloggning", html)
         self.assertIn('id="login-form"', html)
         self.assertIn("Skärmar", html)
+
+    def test_clean_server_runs_the_complete_first_start_flow(self):
+        self.runtime_store.begin_installation()
+
+        initial = self._json_request("/v1/setup")
+        self.assertTrue(initial["required"])
+        self.assertEqual(initial["step"], "admin")
+        self.assertFalse(initial["runtime"]["configured"])
+
+        created = self._json_request(
+            "/v1/setup/admin",
+            {"username": "trafikledare", "password": "ett-eget-losenord"},
+            expected_status=201,
+        )
+        self.assertTrue(created["authenticated"])
+
+        named = self._json_request(
+            "/v1/setup/server",
+            {"server_name": "Testanläggningen"},
+        )
+        self.assertEqual(named["server_name"], "Testanläggningen")
+
+        synced = self._json_request(
+            "/v1/runtime/sync",
+            {
+                "central_url": "https://config.example.test/runtime",
+                "sync_code": "654321",
+            },
+            expected_status=201,
+        )
+        self.assertTrue(synced["configured"])
+        self.assertEqual(self.runtime_store.central_url(), "https://config.example.test/runtime")
+
+        finished = self._json_request(
+            "/v1/setup/complete",
+            {"active_day": "Lör"},
+        )
+        self.assertTrue(finished["completed"])
+        self.assertFalse(self._json_request("/v1/setup")["required"])
 
     def test_public_display_exposes_runtime_clock_services_and_live_state(self):
         publication = self.runtime_store.install(runtime_package_v2())

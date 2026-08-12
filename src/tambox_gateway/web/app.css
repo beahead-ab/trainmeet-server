@@ -240,6 +240,67 @@ p { line-height: 1.5; }
 }
 
 .pairing-card > p:not(.eyebrow) { color: var(--muted); }
+.setup-card {
+  width: min(100%, 720px);
+  margin: 5vh auto 0;
+  padding: 24px;
+}
+.setup-heading { display: flex; gap: 15px; align-items: flex-start; }
+.setup-heading .pairing-icon { flex: 0 0 auto; margin: 0; }
+.setup-heading p:not(.eyebrow), .setup-step > p { color: var(--muted); }
+.setup-progress {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 22px 0;
+  padding: 0;
+  list-style: none;
+}
+.setup-progress li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+.setup-progress span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--v2-bg);
+}
+.setup-progress li.active { color: var(--trainmeet); }
+.setup-progress li.active span { color: var(--primary-foreground); background: var(--trainmeet); }
+.setup-progress li.done span { color: var(--success); background: color-mix(in srgb, var(--success) 12%, var(--surface)); }
+.setup-step {
+  padding: 19px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--v2-bg);
+}
+.setup-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.setup-fields label:first-child { grid-column: 1 / -1; }
+.central-fields { grid-template-columns: minmax(0, 1fr) 150px; }
+.central-fields label:first-child { grid-column: auto; }
+.setup-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 8px; }
+.setup-actions .form-message { flex: 1; }
+.setup-runtime-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 10px 0;
+  padding: 14px;
+  border-radius: 14px;
+  color: var(--ink);
+  background: var(--surface);
+}
+.setup-runtime-summary span { color: var(--muted); font-size: 11px; }
+.sync-code-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; font-weight: 700; letter-spacing: .22em; }
 .pairing-icon {
   display: grid;
   width: 44px;
@@ -294,6 +355,15 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .form-message.error { color: var(--danger); }
 .form-message.success { color: var(--success); }
 .form-message.notice { color: var(--warning); }
+
+@media (max-width: 640px) {
+  .setup-card { margin-top: 18px; padding: 18px; }
+  .setup-progress li { justify-content: center; font-size: 0; }
+  .setup-progress li span { font-size: 10px; }
+  .setup-fields, .central-fields { grid-template-columns: 1fr; }
+  .setup-fields label:first-child { grid-column: auto; }
+  .setup-actions { align-items: stretch; flex-direction: column; }
+}
 
 .view-tabs {
   display: flex;

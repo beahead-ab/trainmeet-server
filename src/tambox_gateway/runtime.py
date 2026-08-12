@@ -475,24 +475,54 @@ class SQLiteRuntimeStore:
             ).fetchone()
         return str(row[0]) if row else None
 
-    def save_api_key(self, api_key: str) -> None:
-        api_key = api_key.strip()
-        if not api_key:
-            raise RuntimePublicationError("API-nyckeln saknas")
+    def save_server_name(self, name: str) -> str:
+        value = name.strip()
+        if not 2 <= len(value) <= 80:
+            raise RuntimePublicationError("Servernamnet måste vara 2–80 tecken")
+        self._save_setting("server_name", value)
+        return value
+
+    def server_name(self) -> str | None:
+        return self._setting("server_name")
+
+    def save_central_url(self, url: str) -> str:
+        value = url.strip().rstrip("/")
+        if not value:
+            raise RuntimePublicationError("Adressen till centrala TrainMeet saknas")
+        self._save_setting("central_runtime_url", value)
+        return value
+
+    def central_url(self) -> str | None:
+        return self._setting("central_runtime_url")
+
+    def begin_installation(self) -> None:
+        if self._setting("installation_required") is None:
+            self._save_setting("installation_required", "1")
+
+    def installation_required(self) -> bool:
+        return self._setting("installation_required") == "1"
+
+    def complete_installation(self) -> None:
+        self._save_setting("installation_required", "0")
+
+    def _save_setting(self, key: str, value: str) -> None:
         with self._lock:
             self._connection.execute(
                 """
                 INSERT INTO runtime_settings(key, value, updated_at)
-                VALUES ('central_api_key', ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = CURRENT_TIMESTAMP
                 """,
-                (api_key,),
+                (key, value),
             )
 
-    def api_key(self) -> str | None:
+    def _setting(self, key: str) -> str | None:
         with self._lock:
             row = self._connection.execute(
-                "SELECT value FROM runtime_settings WHERE key = 'central_api_key'"
+                "SELECT value FROM runtime_settings WHERE key = ?",
+                (key,),
             ).fetchone()
         return str(row[0]) if row else None
 
@@ -541,7 +571,11 @@ class SQLiteRuntimeStore:
     def summary(self) -> dict[str, Any]:
         publication = self.active()
         if publication is None:
-            return {"configured": False, "linked": self.link_token() is not None}
+            return {
+                "configured": False,
+                "linked": self.link_token() is not None,
+                "server_name": self.server_name(),
+            }
         staged = self.latest_staged()
         return {
             "configured": True,
@@ -556,6 +590,7 @@ class SQLiteRuntimeStore:
             "train_count": len(publication.payload["trains"]),
             "station_count": len(publication.payload["stations"]),
             "linked": self.link_token() is not None,
+            "server_name": self.server_name(),
             "available_publication_id": (
                 staged.publication_id
                 if staged is not None and staged.publication_id != publication.publication_id

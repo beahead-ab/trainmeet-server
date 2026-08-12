@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Starta TrainMeet Server
+Comment=Öppna den lokala TrainMeet-servern
+Exec=chromium --app=http://127.0.0.1:8787/ --noerrdialogs --no-first-run --disable-infobars --start-maximized
+Icon=web-browser
+Terminal=false
+Categories=Utility;
+StartupNotify=true

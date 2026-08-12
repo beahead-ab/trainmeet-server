@@ -160,7 +160,7 @@ const stopReasons = (meetStopReasons.length
 const publishedAt = new Date().toISOString();
 const runtimePackage = {
   schema_version: 2,
-  publication_id: `demo-${meet.id}-${randomUUID()}`,
+  publication_id: `publication-${meet.id}-${randomUUID()}`,
   published_at: publishedAt,
   meet: {
     id: meet.id,

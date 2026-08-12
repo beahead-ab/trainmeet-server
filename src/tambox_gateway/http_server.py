@@ -21,7 +21,6 @@ from .central_sync import (
     DEFAULT_RUNTIME_PUBLICATION_URL,
     CentralRuntimeDownload,
     CentralRuntimeManifest,
-    fetch_api_key_runtime,
     CentralSyncError,
     fetch_linked_runtime,
     fetch_runtime_download,
@@ -143,6 +142,101 @@ class TamboxHTTPApplication:
                 "invalid_admin_access",
                 str(error),
             ) from error
+
+    def installation_status(self) -> dict[str, Any]:
+        access = self.identities.admin_access_summary()
+        runtime = self.runtime_store.summary() if self.runtime_store is not None else {"configured": False}
+        required = (
+            not bool(access["password_configured"])
+            or bool(self.runtime_store and self.runtime_store.installation_required())
+        )
+        server_name = self.runtime_store.server_name() if self.runtime_store is not None else None
+        if not access["password_configured"]:
+            step = "admin"
+        elif not server_name:
+            step = "server"
+        elif not runtime.get("configured"):
+            step = "central"
+        else:
+            step = "finish"
+        return {
+            "required": required,
+            "step": step,
+            "admin_configured": bool(access["password_configured"]),
+            "username": access["username"],
+            "server_name": server_name,
+            "central_url": (
+                self.runtime_store.central_url()
+                if self.runtime_store is not None and self.runtime_store.central_url()
+                else self.config.central_runtime_url
+            ),
+            "runtime": runtime,
+        }
+
+    def create_initial_admin(self, payload: dict[str, Any]) -> dict[str, object]:
+        if self.identities.admin_access_summary()["password_configured"]:
+            raise HTTPAPIError(
+                HTTPStatus.CONFLICT,
+                "admin_already_configured",
+                "Administratören är redan skapad",
+            )
+        password = str(payload.get("password", ""))
+        try:
+            return self.identities.configure_admin_access(
+                str(payload.get("username", "")),
+                password,
+            )
+        except AdminAccessError as error:
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST,
+                "invalid_admin_access",
+                str(error),
+            ) from error
+
+    def save_initial_server_name(
+        self,
+        client: PairedClient,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal lagring saknas")
+        try:
+            name = self.runtime_store.save_server_name(str(payload.get("server_name", "")))
+        except RuntimePublicationError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_server_name", str(error)) from error
+        return {"server_name": name, "installation": self.installation_status()}
+
+    def complete_installation(
+        self,
+        client: PairedClient,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        self._require_admin(client)
+        if self.runtime_store is None or self.runtime_store.active() is None:
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST,
+                "runtime_not_configured",
+                "Hämta och aktivera en träff innan installationen avslutas",
+            )
+        if not self.runtime_store.server_name():
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST,
+                "server_name_missing",
+                "Ge servern ett namn innan installationen avslutas",
+            )
+        active_day = str(payload.get("active_day") or self.runtime_store.active_day() or "").strip()
+        try:
+            self.runtime_store.set_active_day(active_day)
+        except RuntimePublicationError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_active_day", str(error)) from error
+        self.runtime_store.complete_installation()
+        return {
+            "completed": True,
+            "active_day": active_day,
+            "restart_required": self.runtime_store.active().session_config() != self.engine.config,
+            "message": "Grundinstallationen är klar. Starta om servern för att börja köra träffen.",
+        }
 
     def pair(self, payload: dict[str, Any], request_host: str) -> dict[str, Any]:
         try:
@@ -766,8 +860,20 @@ class TamboxHTTPApplication:
     def sync_runtime(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
         code = str(payload.get("sync_code", ""))
+        central_url = str(payload.get("central_url", "")).strip()
+        if self.runtime_store is not None:
+            central_url = central_url or self.runtime_store.central_url() or self.config.central_runtime_url
+        else:
+            central_url = central_url or self.config.central_runtime_url
+        parsed_url = urlparse(central_url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST,
+                "invalid_central_url",
+                "Ange en fullständig http- eller https-adress till centrala TrainMeet",
+            )
         try:
-            result = self.runtime_fetcher(code, self.config.central_runtime_url)
+            result = self.runtime_fetcher(code, central_url)
         except CentralSyncError as error:
             raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
         if isinstance(result, CentralRuntimeDownload):
@@ -782,45 +888,25 @@ class TamboxHTTPApplication:
                 "central_sync_failed",
                 "TrainMeet skickade inget driftpaket",
             )
+        if self.runtime_store is not None:
+            try:
+                self.runtime_store.save_central_url(central_url)
+            except RuntimePublicationError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_central_url", str(error)) from error
         response = self.install_runtime(client, {"package": package})
         response["linked"] = self.runtime_store.link_token() is not None if self.runtime_store else False
         return response
-
-    def connect_runtime_api(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        self._require_admin(client)
-        if self.runtime_store is None:
-            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal tidtabellslagring saknas")
-        api_key = str(payload.get("api_key", "")).strip()
-        try:
-            result = fetch_api_key_runtime(api_key, self.config.central_runtime_url)
-        except CentralSyncError as error:
-            raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
-        if not isinstance(result, CentralRuntimeDownload):
-            raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", "TrainMeet skickade inget driftpaket")
-        try:
-            publication = self.runtime_store.install(result.package, activate=False)
-            self.runtime_store.save_api_key(api_key)
-        except RuntimePublicationError as error:
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_runtime", str(error)) from error
-        return {
-            **self.runtime_store.summary(),
-            "linked": True,
-            "downloaded_publication_id": publication.publication_id,
-            "message": "Träffen är kopplad. Driftpaketet är hämtat och väntar på aktivering.",
-        }
 
     def check_runtime_update(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
         if self.runtime_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal tidtabellslagring saknas")
-        api_key = self.runtime_store.api_key()
         token = self.runtime_store.link_token()
-        credential = api_key or token
-        if not credential:
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla först servern med en API-nyckel")
+        if not token:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla först servern med en sexsiffrig träffkod")
         try:
-            result = (fetch_api_key_runtime(api_key, self.config.central_runtime_url, manifest_only=True)
-                      if api_key else self.linked_runtime_fetcher(token, self.config.central_runtime_url, True))
+            central_url = self.runtime_store.central_url() or self.config.central_runtime_url
+            result = self.linked_runtime_fetcher(token, central_url, True)
         except CentralSyncError as error:
             raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
         if not isinstance(result, CentralRuntimeManifest):
@@ -839,14 +925,12 @@ class TamboxHTTPApplication:
         self._require_admin(client)
         if self.runtime_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal tidtabellslagring saknas")
-        api_key = self.runtime_store.api_key()
         token = self.runtime_store.link_token()
-        credential = api_key or token
-        if not credential:
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla först servern med en API-nyckel")
+        if not token:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla först servern med en sexsiffrig träffkod")
         try:
-            result = (fetch_api_key_runtime(api_key, self.config.central_runtime_url)
-                      if api_key else self.linked_runtime_fetcher(token, self.config.central_runtime_url, False))
+            central_url = self.runtime_store.central_url() or self.config.central_runtime_url
+            result = self.linked_runtime_fetcher(token, central_url, False)
         except CentralSyncError as error:
             raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
         if not isinstance(result, CentralRuntimeDownload):
@@ -992,6 +1076,12 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                     },
                 )
                 return
+            if path == "/v1/setup":
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.installation_status(),
+                )
+                return
             if path == "/v1/admin/access":
                 client = self._authenticated_client()
                 self._send_json(
@@ -1006,7 +1096,11 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                         HTTPStatus.OK,
                         {
                             "protocol_version": 1,
-                            "gateway_id": self.server.application.config.gateway_id,
+                            "gateway_id": (
+                                self.server.application.runtime_store.server_name()
+                                if self.server.application.runtime_store is not None
+                                else None
+                            ) or self.server.application.config.gateway_id,
                             "authentication_required": True,
                         },
                     )
@@ -1015,7 +1109,11 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     {
                         "protocol_version": 1,
-                        "gateway_id": self.server.application.config.gateway_id,
+                        "gateway_id": (
+                            self.server.application.runtime_store.server_name()
+                            if self.server.application.runtime_store is not None
+                            else None
+                        ) or self.server.application.config.gateway_id,
                         "traffic_session_id": self.server.application.engine.config.id,
                         "traffic_session_name": self.server.application.engine.config.name,
                         "local_development": self.server.application.config.local_development,
@@ -1081,6 +1179,31 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             payload = self._read_json()
+            if path == "/v1/setup/admin":
+                if not self._client_address_is_private():
+                    raise HTTPAPIError(
+                        HTTPStatus.FORBIDDEN,
+                        "local_setup_required",
+                        "Den första administratören måste skapas från servern eller dess lokala nätverk",
+                    )
+                configured = self.server.application.create_initial_admin(payload)
+                password = str(payload.get("password", ""))
+                token = self.server.application.identities.create_admin_session(
+                    str(configured["username"]),
+                    password,
+                )
+                if token is None:
+                    raise HTTPAPIError(
+                        HTTPStatus.INTERNAL_SERVER_ERROR,
+                        "admin_session_failed",
+                        "Administratören skapades men inloggningen kunde inte startas",
+                    )
+                self._send_json(
+                    HTTPStatus.CREATED,
+                    {"authenticated": True, "installation": self.server.application.installation_status()},
+                    headers={"Set-Cookie": self._admin_cookie(token)},
+                )
+                return
             if path == "/v1/auth/login":
                 access = self.server.application.identities.admin_access_summary()
                 if not access["password_configured"]:
@@ -1137,6 +1260,20 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                     headers=response_headers,
                 )
                 return
+            if path == "/v1/setup/server":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.save_initial_server_name(client, payload),
+                )
+                return
+            if path == "/v1/setup/complete":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.complete_installation(client, payload),
+                )
+                return
             if path == "/v1/pair":
                 response = self.server.application.pair(payload, self.headers.get("Host", "localhost"))
                 self._send_json(HTTPStatus.CREATED, response)
@@ -1185,10 +1322,6 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.CREATED,
                     self.server.application.sync_runtime(client, payload),
                 )
-                return
-            if path == "/v1/runtime/connect":
-                client = self._authenticated_client()
-                self._send_json(HTTPStatus.OK, self.server.application.connect_runtime_api(client, payload))
                 return
             if path == "/v1/runtime/update":
                 client = self._authenticated_client()

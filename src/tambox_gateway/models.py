@@ -87,6 +87,19 @@ class SessionConfig:
     clock_time: str = "12:00"
 
 
+def unconfigured_session() -> SessionConfig:
+    """Return the deliberately empty state used before first installation."""
+    return SessionConfig(
+        id="unconfigured",
+        name="Ingen träff konfigurerad",
+        default_dispatch_mode=DispatchMode.CLEARANCE,
+        stations={},
+        connections={},
+        panels={},
+        clock_time="12:00",
+    )
+
+
 @dataclass
 class ConnectionRuntime:
     state: ConnectionState = ConnectionState.FREE
@@ -149,4 +162,3 @@ class CommandAck:
             "revision": self.revision,
             "snapshots": self.snapshots,
         }
-

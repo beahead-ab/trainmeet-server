@@ -6,10 +6,9 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from .demo import demo_session
 from .engine import TrafficEngine
 from .identity import DeviceKind, IdentityStore
-from .models import Command, CommandAck, DispatchMode
+from .models import Command, CommandAck, unconfigured_session
 from .storage import SQLiteStateStore
 
 
@@ -255,17 +254,12 @@ def main() -> None:
         default="data/tambox-state.db",
         help="SQLite database used to restore the active run after restart",
     )
-    parser.add_argument(
-        "--mode",
-        choices=[mode.value for mode in DispatchMode],
-        default=DispatchMode.CLEARANCE.value,
-    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     state_store = SQLiteStateStore(args.state_db)
     engine = TrafficEngine(
-        demo_session(DispatchMode(args.mode)),
+        unconfigured_session(),
         state_store=state_store,
     )
     adapter = MQTTGatewayAdapter(

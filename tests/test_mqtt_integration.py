@@ -13,7 +13,7 @@ from pathlib import Path
 
 import paho.mqtt.client as mqtt
 
-from tambox_gateway.demo import demo_session
+from session_fixture import sample_session
 from tambox_gateway.engine import TrafficEngine
 from tambox_gateway.identity import DeviceKind, IdentityStore
 from tambox_gateway.models import DispatchMode
@@ -53,7 +53,7 @@ class MQTTIntegrationTests(unittest.TestCase):
         cls.broker.wait(timeout=5)
 
     def test_qos1_command_returns_ack_and_retained_snapshot(self):
-        engine = TrafficEngine(demo_session(DispatchMode.CLEARANCE))
+        engine = TrafficEngine(sample_session(DispatchMode.CLEARANCE))
         temporary_directory = tempfile.TemporaryDirectory()
         identities = IdentityStore(Path(temporary_directory.name) / "identity.db")
         client_id = "integration-swift"
@@ -116,7 +116,7 @@ class MQTTIntegrationTests(unittest.TestCase):
                 "protocol_version": 1,
                 "command_id": "integration-command-1",
                 "client_id": client_id,
-                "traffic_session_id": "demo-session",
+                "traffic_session_id": "test-session",
                 "panel_id": "panel-a",
                 "expected_revision": received["snapshot"]["revision"],
                 "action": "key_press",
@@ -181,7 +181,7 @@ class MQTTIntegrationTests(unittest.TestCase):
             temporary_directory.cleanup()
 
     def test_physical_box_needs_only_its_printed_code_and_device_id(self):
-        engine = TrafficEngine(demo_session(DispatchMode.CLEARANCE))
+        engine = TrafficEngine(sample_session(DispatchMode.CLEARANCE))
         temporary_directory = tempfile.TemporaryDirectory()
         identities = IdentityStore(Path(temporary_directory.name) / "identity.db")
         gateway = MQTTGatewayAdapter(

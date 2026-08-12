@@ -13,13 +13,12 @@ import time
 from datetime import timedelta
 from pathlib import Path
 
-from .demo import demo_session
 from .central_sync import DEFAULT_RUNTIME_PUBLICATION_URL
 from .engine import TrafficEngine
 from .http_server import HTTPServerConfig, TamboxHTTPApplication, TamboxHTTPServer
 from .identity import DeviceKind, IdentityStore, PairingService
 from .local_config import SQLiteLocalConfigurationStore
-from .models import DispatchMode
+from .models import unconfigured_session
 from .mqtt_adapter import MQTTGatewayAdapter
 from .operations import SQLiteOperationsStore
 from .runtime import SQLiteRuntimeStore
@@ -70,11 +69,6 @@ def main() -> None:
         default=os.environ.get("TRAINMEET_FORCE_EXTERNAL_AUTH", "").lower() in {"1", "true", "yes"},
         help="Require admin login for every web request (use behind a proxy or Kubernetes ingress)",
     )
-    parser.add_argument(
-        "--mode",
-        choices=[mode.value for mode in DispatchMode],
-        default=DispatchMode.CLEARANCE.value,
-    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -99,16 +93,12 @@ def main() -> None:
     session_config = (
         active_publication.session_config()
         if active_publication is not None
-        else demo_session(DispatchMode(args.mode))
+        else unconfigured_session()
     )
     state_store = SQLiteStateStore(database_path)
     identities = IdentityStore(database_path)
-    initial_admin_password = os.environ.get("TRAINMEET_INITIAL_ADMIN_PASSWORD")
-    if initial_admin_password:
-        identities.initialize_admin_access(
-            os.environ.get("TRAINMEET_INITIAL_ADMIN_USERNAME", "admin"),
-            initial_admin_password,
-        )
+    if not identities.admin_access_summary()["password_configured"]:
+        runtime_store.begin_installation()
     identities.reconcile_panels(set(session_config.panels))
     engine = TrafficEngine(
         session_config,
@@ -120,19 +110,21 @@ def main() -> None:
     )
     connection_code = args.pairing_code or _load_or_create_connection_code(state_directory)
     identities.revoke_pairing_codes(label="Lokal enkel parkoppling")
-    pairing_code = identities.issue_pairing_code(
-        list(engine.config.panels),
-        allowed_kinds=[
-            DeviceKind.SWIFT_PANEL,
-            DeviceKind.SWIFT_ADMIN,
-            DeviceKind.WEB_ADMIN,
-            DeviceKind.TKL_TERMINAL,
-        ],
-        ttl=timedelta(hours=24),
-        max_uses=50,
-        label="Lokal enkel parkoppling",
-        code=connection_code,
-    )
+    pairing_code = connection_code
+    if engine.config.panels:
+        pairing_code = identities.issue_pairing_code(
+            list(engine.config.panels),
+            allowed_kinds=[
+                DeviceKind.SWIFT_PANEL,
+                DeviceKind.SWIFT_ADMIN,
+                DeviceKind.WEB_ADMIN,
+                DeviceKind.TKL_TERMINAL,
+            ],
+            ttl=timedelta(hours=24),
+            max_uses=50,
+            label="Lokal enkel parkoppling",
+            code=connection_code,
+        )
 
     gateway = MQTTGatewayAdapter(
         engine,

@@ -118,16 +118,5 @@ class RuntimeStoreTests(unittest.TestCase):
             finally:
                 store.close()
 
-    def test_central_api_key_is_stored_separately_from_runtime_summary(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
-            try:
-                store.save_api_key("tm_live_test-secret")
-                self.assertEqual(store.api_key(), "tm_live_test-secret")
-                self.assertNotIn("tm_live_test-secret", str(store.summary()))
-            finally:
-                store.close()
-
-
 if __name__ == "__main__":
     unittest.main()

@@ -39,14 +39,18 @@ const state = {
   displaySelectedTrainNumber: null,
   displaySelectedStationID: null,
   displayHoveredTrainNumber: null,
+  setupStatus: null,
 };
 
+const setup = document.querySelector("#setup");
 const login = document.querySelector("#login");
 const appView = document.querySelector("#app-view");
 const loginForm = document.querySelector("#login-form");
 const loginError = document.querySelector("#login-error");
-const firstPasswordForm = document.querySelector("#first-password-form");
-const firstPasswordError = document.querySelector("#first-password-error");
+const setupAdminForm = document.querySelector("#setup-admin-form");
+const setupServerForm = document.querySelector("#setup-server-form");
+const setupCentralForm = document.querySelector("#setup-central-form");
+const setupFinishForm = document.querySelector("#setup-finish-form");
 const panelSelect = document.querySelector("#panel-select");
 const connectionStatus = document.querySelector("#connection");
 const commandMessage = document.querySelector("#command-message");
@@ -110,9 +114,9 @@ loginForm.addEventListener("submit", async (event) => {
     if (!response.ok) throw new Error(payload.message || "Inloggningen misslyckades");
     document.querySelector("#login-password").value = "";
     await refreshAuthStatus();
-    if (state.authStatus.must_change_password) {
-      loginForm.classList.add("hidden");
-      firstPasswordForm.classList.remove("hidden");
+    const installation = await refreshSetupStatus();
+    if (installation.required) {
+      showSetup(installation);
     } else if (payload.channel_notice) {
       softwareInstall.classList.add("hidden");
       setMessage(softwareUpdateMessage, payload.channel_notice, "notice");
@@ -126,30 +130,119 @@ loginForm.addEventListener("submit", async (event) => {
   }
 });
 
-firstPasswordForm.addEventListener("submit", async (event) => {
+setupAdminForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  setMessage(firstPasswordError, "");
-  const password = document.querySelector("#first-password").value;
-  if (password !== document.querySelector("#first-password-confirm").value) {
-    setMessage(firstPasswordError, "Lösenorden är inte likadana.", "error");
+  const message = document.querySelector("#setup-admin-message");
+  setMessage(message, "");
+  const password = document.querySelector("#setup-password").value;
+  if (password !== document.querySelector("#setup-password-confirm").value) {
+    setMessage(message, "Lösenorden är inte likadana.", "error");
     return;
   }
-  const response = await fetch("/v1/admin/access", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: state.authStatus.username || "admin", password }),
-  });
-  const payload = await response.json();
-  if (!response.ok) {
-    setMessage(firstPasswordError, payload.message || "Lösenordet kunde inte sparas", "error");
-    return;
+  const button = setupAdminForm.querySelector("button");
+  button.disabled = true;
+  try {
+    const response = await fetch("/v1/setup/admin", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.querySelector("#setup-username").value,
+        password,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Administratören kunde inte skapas");
+    document.querySelector("#setup-password").value = "";
+    document.querySelector("#setup-password-confirm").value = "";
+    await refreshAuthStatus();
+    showSetup(await refreshSetupStatus());
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  } finally {
+    button.disabled = false;
   }
-  document.querySelector("#first-password").value = "";
-  document.querySelector("#first-password-confirm").value = "";
-  firstPasswordForm.classList.add("hidden");
-  await refreshAuthStatus();
-  await openApplication();
+});
+
+setupServerForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const message = document.querySelector("#setup-server-message");
+  const button = setupServerForm.querySelector("button");
+  button.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/setup/server", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ server_name: document.querySelector("#setup-server-name").value }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Servernamnet kunde inte sparas");
+    showSetup(await refreshSetupStatus());
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+setupCentralForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const message = document.querySelector("#setup-central-message");
+  const button = setupCentralForm.querySelector("button");
+  setMessage(message, "Hämtar träffen …", "notice");
+  button.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/runtime/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        central_url: document.querySelector("#setup-central-url").value,
+        sync_code: document.querySelector("#setup-sync-code").value,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
+    document.querySelector("#setup-sync-code").value = "";
+    showSetup(await refreshSetupStatus());
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+setupFinishForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const message = document.querySelector("#setup-finish-message");
+  const button = setupFinishForm.querySelector("button");
+  button.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/setup/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active_day: document.querySelector("#setup-active-day").value }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Installationen kunde inte slutföras");
+    setMessage(message, payload.message, "success");
+    state.restartRequired = true;
+    state.restarting = true;
+    setConnection("waiting", "Startar om");
+    const restart = await authorizedFetch("/v1/server/restart", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    if (!restart.ok) {
+      const restartPayload = await restart.json();
+      throw new Error(restartPayload.message || "Servern kunde inte startas om");
+    }
+    await waitForServerReturn();
+  } catch (error) {
+    state.restarting = false;
+    setMessage(message, error.message, "error");
+    button.disabled = false;
+  }
 });
 
 document.querySelectorAll(".view-tab").forEach((button) => {
@@ -293,15 +386,18 @@ runtimeForm.addEventListener("submit", async (event) => {
   const button = runtimeForm.querySelector("button");
   button.disabled = true;
   try {
-    const response = await authorizedFetch("/v1/runtime/connect", {
+    const response = await authorizedFetch("/v1/runtime/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: document.querySelector("#runtime-api-key").value }),
+      body: JSON.stringify({
+        central_url: document.querySelector("#runtime-central-url").value,
+        sync_code: document.querySelector("#runtime-sync-code").value,
+      }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
     setMessage(runtimeMessage, payload.message, payload.restart_required ? "notice" : "success");
-    document.querySelector("#runtime-api-key").value = "";
+    document.querySelector("#runtime-sync-code").value = "";
     await Promise.all([refreshRuntime(), refreshInfo()]);
   } catch (error) {
     setMessage(runtimeMessage, error.message, "error");
@@ -513,6 +609,7 @@ panelEditor.addEventListener("change", (event) => {
 });
 
 async function openApplication() {
+  setup.classList.add("hidden");
   login.classList.add("hidden");
   appView.classList.remove("hidden");
   logoutButton.classList.toggle("hidden", state.authStatus?.access_mode !== "external");
@@ -635,9 +732,9 @@ async function refreshInfo() {
     pill.classList.add("active");
     document.querySelector("#overview-runtime-state").textContent = "Lokalt aktiv";
   } else {
-    pill.textContent = "Demoläge – ingen träff aktiverad";
+    pill.textContent = "Ingen träff aktiverad";
     pill.classList.remove("active");
-    document.querySelector("#overview-runtime-state").textContent = "Demoläge";
+    document.querySelector("#overview-runtime-state").textContent = "Ej konfigurerad";
   }
   updateRestartButton(Boolean(info.restart_required));
 }
@@ -646,7 +743,7 @@ async function refreshAdminAccess() {
   const response = await authorizedFetch("/v1/admin/access");
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || "Åtkomstinställningen kunde inte läsas");
-  document.querySelector("#admin-username").value = payload.username || "admin";
+  document.querySelector("#admin-username").value = payload.username || "";
   const badge = document.querySelector("#access-mode");
   badge.textContent = payload.password_configured ? "Extern inloggning klar" : "Lösenord saknas";
   badge.classList.toggle("active", payload.password_configured);
@@ -972,7 +1069,7 @@ async function refreshRuntime() {
     detail.textContent = `${runtime.station_count} stationer · ${runtime.train_count} tågrörelser`;
   } else {
     title.textContent = "Ingen träff aktiverad";
-    detail.textContent = "Servern kör den inbyggda demonstrationen";
+    detail.textContent = "Koppla en konfigurationsserver eller bygg en lokal träff";
   }
   runtimeCheckUpdate.classList.toggle("hidden", !runtime.linked);
   if (runtime.available_publication_id) {
@@ -1288,7 +1385,7 @@ function renderOverview(snapshot) {
   document.querySelector("#overview-route-count").textContent = services.length;
   updateRuntimeDataViews(snapshot, services);
 
-  const signature = `${snapshot.publication_id || "demo"}:${snapshot.active_day || ""}:${services.length}:${stations.length}`;
+  const signature = `${snapshot.publication_id || "unconfigured"}:${snapshot.active_day || ""}:${services.length}:${stations.length}`;
   if (state.overviewDataSignature !== signature) {
     state.overviewDataSignature = signature;
     renderRouteExplorer();
@@ -1388,28 +1485,78 @@ async function refreshAuthStatus() {
   state.authStatus = await response.json();
   state.token = null;
   localStorage.removeItem("tambox.accessToken");
-  document.querySelector("#login-username").value = state.authStatus.username || "admin";
+  document.querySelector("#login-username").value = state.authStatus.username || "";
   return state.authStatus;
+}
+
+async function refreshSetupStatus() {
+  const response = await fetch("/v1/setup", { cache: "no-store", credentials: "same-origin" });
+  if (!response.ok) throw new Error("Installationsläget kunde inte läsas");
+  state.setupStatus = await response.json();
+  return state.setupStatus;
+}
+
+function showSetup(installation) {
+  clearTimeout(state.snapshotTimer);
+  clearTimeout(state.adminTimer);
+  login.classList.add("hidden");
+  appView.classList.add("hidden");
+  setup.classList.remove("hidden");
+  const order = ["admin", "server", "central", "finish"];
+  const activeIndex = Math.max(0, order.indexOf(installation.step));
+  for (const item of document.querySelectorAll("[data-setup-progress]")) {
+    const index = order.indexOf(item.dataset.setupProgress);
+    item.classList.toggle("active", index === activeIndex);
+    item.classList.toggle("done", index < activeIndex);
+  }
+  for (const form of [setupAdminForm, setupServerForm, setupCentralForm, setupFinishForm]) {
+    form.classList.add("hidden");
+  }
+  const current = {
+    admin: setupAdminForm,
+    server: setupServerForm,
+    central: setupCentralForm,
+    finish: setupFinishForm,
+  }[installation.step] || setupAdminForm;
+  current.classList.remove("hidden");
+  if (installation.server_name) {
+    document.querySelector("#setup-server-name").value = installation.server_name;
+  }
+  if (installation.central_url) {
+    document.querySelector("#setup-central-url").value = installation.central_url;
+    document.querySelector("#runtime-central-url").value = installation.central_url;
+  }
+  if (installation.runtime?.configured) {
+    document.querySelector("#setup-active-day").value = installation.runtime.active_day || "Dagl";
+    document.querySelector("#setup-runtime-summary").innerHTML = `
+      <b>${escapeHTML(installation.runtime.meet_name)}</b>
+      <span>${Number(installation.runtime.station_count || 0)} stationer · ${Number(installation.runtime.train_count || 0)} tågrörelser</span>
+    `;
+  }
+  setConnection("waiting", "Installation pågår");
 }
 
 async function showLogin() {
   clearTimeout(state.snapshotTimer);
   clearTimeout(state.adminTimer);
   state.authStatus = { ...(state.authStatus || {}), authenticated: false };
+  setup.classList.add("hidden");
   appView.classList.add("hidden");
   login.classList.remove("hidden");
   loginForm.classList.remove("hidden");
-  firstPasswordForm.classList.add("hidden");
   setConnection("offline", "Inloggning krävs");
 }
 
 async function bootstrap() {
   try {
+    const installation = await refreshSetupStatus();
     const status = await refreshAuthStatus();
-    if (status.authenticated && status.must_change_password) {
-      login.classList.remove("hidden");
-      loginForm.classList.add("hidden");
-      firstPasswordForm.classList.remove("hidden");
+    if (installation.required && !installation.admin_configured) {
+      showSetup(installation);
+      return;
+    }
+    if (installation.required && status.authenticated) {
+      showSetup(installation);
       return;
     }
     if (status.authenticated) {
@@ -1417,15 +1564,16 @@ async function bootstrap() {
       return;
     }
     showLogin();
-    if (!status.password_configured) {
+    if (installation.required) {
       setMessage(
         loginError,
-        "Extern inloggning är inte konfigurerad. Öppna servern från det lokala nätverket och välj ett lösenord först.",
+        "Logga in för att fortsätta den påbörjade installationen.",
         "notice",
       );
     }
   } catch (error) {
     setConnection("waiting", "Servern svarar inte");
+    setup.classList.add("hidden");
     login.classList.remove("hidden");
     setMessage(loginError, error.message, "error");
   }

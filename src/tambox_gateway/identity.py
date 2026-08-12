@@ -162,7 +162,7 @@ class IdentityStore:
         self._connection.execute(
             """
             INSERT INTO admin_access(singleton, username, updated_at)
-            VALUES (1, 'admin', ?)
+            VALUES (1, '', ?)
             ON CONFLICT(singleton) DO NOTHING
             """,
             (now,),
