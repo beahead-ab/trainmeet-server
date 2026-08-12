@@ -40,6 +40,15 @@ systemtjänsten `trainmeet-server` och lagrar driftsdata i
 installationsprogrammet skriver ut. Installationsprogrammet visar även serverns
 sexsiffriga anslutningskod.
 
+> **Inloggning direkt efter installation**
+>
+> Användarnamn: **`admin`**
+>
+> Tillfälligt lösenord: **`TrainMeet2026!`**
+>
+> Vid den första inloggningen måste lösenordet bytas innan administrationen öppnas.
+> Uppgraderingar ändrar aldrig ett lösenord som redan har valts.
+
 ## Ubuntu, Debian, DigitalOcean eller annan VPS
 
 Samma enradare fungerar på en ren Ubuntu- eller Debianbaserad server:
@@ -206,7 +215,9 @@ som kör servern. En annan telefon eller dator, även på träffens Wi-Fi, får
 inloggningsvyn. Vid en helt ny installation tillåts den första uppsättningen
 från det privata nätet tills ett lösenord har valts. Under
 **Extern admininloggning** väljer den lokala administratören ett användarnamn
-och ett lösenord på minst åtta tecken. Lösenordet lagras saltat och hashat;
+och ett lösenord på minst åtta tecken. En ny installation har kontot `admin`
+med det tillfälliga lösenordet `TrainMeet2026!` och kräver omedelbart byte vid
+första inloggningen. Lösenordet lagras saltat och hashat;
 externa webbläsare får en tidsbegränsad HttpOnly-session efter inloggning.
 
 Bakom en reverse proxy eller Kubernetes Ingress ska servern startas med

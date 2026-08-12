@@ -667,6 +667,7 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                         "access_mode": "local" if self._has_automatic_local_admin() else "external",
                         "username": access["username"],
                         "password_configured": access["password_configured"],
+                        "must_change_password": access["must_change_password"],
                     },
                 )
                 return
@@ -774,7 +775,11 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                     )
                 self._send_json(
                     HTTPStatus.OK,
-                    {"authenticated": True, "access_mode": "external"},
+                    {
+                        "authenticated": True,
+                        "access_mode": "external",
+                        "must_change_password": access["must_change_password"],
+                    },
                     headers={"Set-Cookie": self._admin_cookie(token)},
                 )
                 return

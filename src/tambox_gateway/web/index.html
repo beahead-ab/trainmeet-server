@@ -36,6 +36,16 @@
           <button type="submit" class="primary">Logga in</button>
           <p id="login-error" class="form-message error" role="alert"></p>
         </form>
+        <form id="first-password-form" class="hidden">
+          <p><strong>Byt installationslösenordet</strong></p>
+          <p>Det tillfälliga lösenordet får inte användas vidare.</p>
+          <label for="first-password">Nytt lösenord</label>
+          <input id="first-password" type="password" minlength="8" autocomplete="new-password" required>
+          <label for="first-password-confirm">Upprepa nytt lösenord</label>
+          <input id="first-password-confirm" type="password" minlength="8" autocomplete="new-password" required>
+          <button type="submit" class="primary">Byt lösenord och fortsätt</button>
+          <p id="first-password-error" class="form-message error" role="alert"></p>
+        </form>
       </section>
 
       <section id="app-view" class="app-view hidden">

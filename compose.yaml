@@ -23,6 +23,8 @@ services:
     restart: unless-stopped
     environment:
       TRAINMEET_MQTT_HOST: mosquitto
+      TRAINMEET_INITIAL_ADMIN_USERNAME: "${TRAINMEET_INITIAL_ADMIN_USERNAME:-admin}"
+      TRAINMEET_INITIAL_ADMIN_PASSWORD: "${TRAINMEET_INITIAL_ADMIN_PASSWORD:-TrainMeet2026!}"
     ports:
       - "${TRAINMEET_HTTP_PORT:-8787}:8787"
     volumes:

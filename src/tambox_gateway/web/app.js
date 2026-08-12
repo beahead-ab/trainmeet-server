@@ -45,6 +45,8 @@ const login = document.querySelector("#login");
 const appView = document.querySelector("#app-view");
 const loginForm = document.querySelector("#login-form");
 const loginError = document.querySelector("#login-error");
+const firstPasswordForm = document.querySelector("#first-password-form");
+const firstPasswordError = document.querySelector("#first-password-error");
 const panelSelect = document.querySelector("#panel-select");
 const connectionStatus = document.querySelector("#connection");
 const commandMessage = document.querySelector("#command-message");
@@ -103,12 +105,43 @@ loginForm.addEventListener("submit", async (event) => {
     if (!response.ok) throw new Error(payload.message || "Inloggningen misslyckades");
     document.querySelector("#login-password").value = "";
     await refreshAuthStatus();
-    await openApplication();
+    if (state.authStatus.must_change_password) {
+      loginForm.classList.add("hidden");
+      firstPasswordForm.classList.remove("hidden");
+    } else {
+      await openApplication();
+    }
   } catch (error) {
     setMessage(loginError, error.message, "error");
   } finally {
     button.disabled = false;
   }
+});
+
+firstPasswordForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setMessage(firstPasswordError, "");
+  const password = document.querySelector("#first-password").value;
+  if (password !== document.querySelector("#first-password-confirm").value) {
+    setMessage(firstPasswordError, "Lösenorden är inte likadana.", "error");
+    return;
+  }
+  const response = await fetch("/v1/admin/access", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: state.authStatus.username || "admin", password }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    setMessage(firstPasswordError, payload.message || "Lösenordet kunde inte sparas", "error");
+    return;
+  }
+  document.querySelector("#first-password").value = "";
+  document.querySelector("#first-password-confirm").value = "";
+  firstPasswordForm.classList.add("hidden");
+  await refreshAuthStatus();
+  await openApplication();
 });
 
 document.querySelectorAll(".view-tab").forEach((button) => {
@@ -1280,12 +1313,20 @@ async function showLogin() {
   state.authStatus = { ...(state.authStatus || {}), authenticated: false };
   appView.classList.add("hidden");
   login.classList.remove("hidden");
+  loginForm.classList.remove("hidden");
+  firstPasswordForm.classList.add("hidden");
   setConnection("offline", "Inloggning krävs");
 }
 
 async function bootstrap() {
   try {
     const status = await refreshAuthStatus();
+    if (status.authenticated && status.must_change_password) {
+      login.classList.remove("hidden");
+      loginForm.classList.add("hidden");
+      firstPasswordForm.classList.remove("hidden");
+      return;
+    }
     if (status.authenticated) {
       await openApplication();
       return;

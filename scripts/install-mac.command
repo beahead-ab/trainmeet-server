@@ -55,6 +55,10 @@ cat > "$PLIST_PATH" <<PLIST
     <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin</string>
     <key>PYTHONUNBUFFERED</key>
     <string>1</string>
+    <key>TRAINMEET_INITIAL_ADMIN_USERNAME</key>
+    <string>admin</string>
+    <key>TRAINMEET_INITIAL_ADMIN_PASSWORD</key>
+    <string>TrainMeet2026!</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

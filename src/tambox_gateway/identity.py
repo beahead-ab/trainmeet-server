@@ -139,7 +139,8 @@ class IdentityStore:
                 username TEXT NOT NULL,
                 password_salt BLOB,
                 password_digest BLOB,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                must_change_password INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS admin_sessions (
@@ -149,6 +150,13 @@ class IdentityStore:
             );
             """
         )
+        columns = {
+            row[1] for row in self._connection.execute("PRAGMA table_info(admin_access)").fetchall()
+        }
+        if "must_change_password" not in columns:
+            self._connection.execute(
+                "ALTER TABLE admin_access ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0"
+            )
         now = datetime.now(timezone.utc).isoformat()
         self._connection.execute(
             """
@@ -530,7 +538,7 @@ class IdentityStore:
         with self._lock:
             row = self._connection.execute(
                 """
-                SELECT username, password_digest IS NOT NULL, updated_at
+                SELECT username, password_digest IS NOT NULL, updated_at, must_change_password
                 FROM admin_access WHERE singleton = 1
                 """
             ).fetchone()
@@ -538,7 +546,14 @@ class IdentityStore:
             "username": row[0],
             "password_configured": bool(row[1]),
             "updated_at": row[2],
+            "must_change_password": bool(row[3]),
         }
+
+    def initialize_admin_access(self, username: str, password: str) -> dict[str, object]:
+        """Create installation credentials once, without replacing an existing password."""
+        if self.admin_access_summary()["password_configured"]:
+            return self.admin_access_summary()
+        return self.configure_admin_access(username, password, must_change_password=True)
 
     def configure_admin_access(
         self,
@@ -546,6 +561,7 @@ class IdentityStore:
         password: str | None = None,
         *,
         now: datetime | None = None,
+        must_change_password: bool = False,
     ) -> dict[str, object]:
         username = username.strip()
         if not ADMIN_USERNAME_PATTERN.fullmatch(username):
@@ -574,10 +590,11 @@ class IdentityStore:
                     self._connection.execute(
                         """
                         UPDATE admin_access
-                        SET username = ?, password_salt = ?, password_digest = ?, updated_at = ?
+                        SET username = ?, password_salt = ?, password_digest = ?, updated_at = ?,
+                            must_change_password = ?
                         WHERE singleton = 1
                         """,
-                        (username, salt, digest, now.isoformat()),
+                        (username, salt, digest, now.isoformat(), int(must_change_password)),
                     )
                 self._connection.execute("COMMIT")
             except Exception:

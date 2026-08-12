@@ -103,6 +103,12 @@ def main() -> None:
     )
     state_store = SQLiteStateStore(database_path)
     identities = IdentityStore(database_path)
+    initial_admin_password = os.environ.get("TRAINMEET_INITIAL_ADMIN_PASSWORD")
+    if initial_admin_password:
+        identities.initialize_admin_access(
+            os.environ.get("TRAINMEET_INITIAL_ADMIN_USERNAME", "admin"),
+            initial_admin_password,
+        )
     identities.reconcile_panels(set(session_config.panels))
     engine = TrafficEngine(
         session_config,
