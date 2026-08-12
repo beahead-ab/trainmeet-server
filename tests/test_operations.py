@@ -66,6 +66,54 @@ class OperationsStoreTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_tkl_shift_and_movement_survive_new_operator_handover(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                first = store.start_tkl_shift(
+                    "publication-a",
+                    "Dagl",
+                    "station-a",
+                    "Anna",
+                    "CDA TKL 1",
+                )
+                movement = store.update_tkl_movement(
+                    "publication-a",
+                    "Dagl",
+                    "station-a",
+                    "movement-101-a",
+                    arrival="none",
+                    departure="ready",
+                    actual_track="2",
+                    updated_by="Anna",
+                    shift_id=first["shift_id"],
+                    event_type="ready_departure",
+                )
+                self.assertEqual(movement["departure"], "ready")
+
+                second = store.start_tkl_shift(
+                    "publication-a",
+                    "Dagl",
+                    "station-a",
+                    "Bertil",
+                    "CDA TKL 2",
+                    take_over=True,
+                )
+                state = store.tkl_station_state("publication-a", "Dagl", "station-a")
+                self.assertNotEqual(first["shift_id"], second["shift_id"])
+                self.assertEqual(state["shift"]["operator_name"], "Bertil")
+                self.assertEqual(state["movements"]["movement-101-a"]["departure"], "ready")
+
+                ended = store.finish_tkl_shift(
+                    second["shift_id"],
+                    status="closed",
+                    note="Klart för dagen",
+                )
+                self.assertEqual(ended["status"], "closed")
+                self.assertIsNone(store.tkl_station_state("publication-a", "Dagl", "station-a")["shift"])
+            finally:
+                store.close()
+
 
 if __name__ == "__main__":
     unittest.main()

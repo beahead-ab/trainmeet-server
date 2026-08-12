@@ -6,6 +6,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from .runtime import AVAILABLE_CLOCK_STYLES, RuntimePublication
 
@@ -47,6 +48,45 @@ class SQLiteOperationsStore:
                 from_station_id TEXT,
                 to_station_id TEXT,
                 updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS tkl_shifts (
+                shift_id TEXT PRIMARY KEY,
+                publication_id TEXT NOT NULL,
+                active_day TEXT NOT NULL,
+                station_id TEXT NOT NULL,
+                operator_name TEXT NOT NULL,
+                terminal_name TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('active', 'handover', 'closed')),
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                handover_note TEXT,
+                updated_at TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS one_active_tkl_shift_per_station
+                ON tkl_shifts(publication_id, active_day, station_id)
+                WHERE status = 'active';
+            CREATE TABLE IF NOT EXISTS tkl_movement_states (
+                publication_id TEXT NOT NULL,
+                active_day TEXT NOT NULL,
+                movement_id TEXT NOT NULL,
+                station_id TEXT NOT NULL,
+                arrival_status TEXT NOT NULL CHECK(arrival_status IN ('none', 'approaching', 'arrived')),
+                departure_status TEXT NOT NULL CHECK(departure_status IN ('none', 'positioned', 'ready', 'departed')),
+                actual_track TEXT,
+                updated_by TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(publication_id, active_day, movement_id)
+            );
+            CREATE TABLE IF NOT EXISTS tkl_events (
+                event_id TEXT PRIMARY KEY,
+                publication_id TEXT NOT NULL,
+                active_day TEXT NOT NULL,
+                station_id TEXT NOT NULL,
+                shift_id TEXT,
+                movement_id TEXT,
+                event_type TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                recorded_at TEXT NOT NULL
             );
             """
         )
@@ -242,6 +282,283 @@ class SQLiteOperationsStore:
             for row in rows
         ]
 
+    def tkl_station_state(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+    ) -> dict[str, Any]:
+        with self._lock:
+            shift_row = self._connection.execute(
+                """
+                SELECT shift_id, operator_name, terminal_name, status, started_at,
+                       ended_at, handover_note, updated_at
+                FROM tkl_shifts
+                WHERE publication_id = ? AND active_day = ? AND station_id = ?
+                  AND status = 'active'
+                LIMIT 1
+                """,
+                (publication_id, active_day, station_id),
+            ).fetchone()
+            movement_rows = self._connection.execute(
+                """
+                SELECT movement_id, arrival_status, departure_status, actual_track,
+                       updated_by, updated_at
+                FROM tkl_movement_states
+                WHERE publication_id = ? AND active_day = ? AND station_id = ?
+                ORDER BY updated_at
+                """,
+                (publication_id, active_day, station_id),
+            ).fetchall()
+        return {
+            "shift": _shift_from_row(shift_row),
+            "movements": {
+                row[0]: {
+                    "arrival": row[1],
+                    "departure": row[2],
+                    "actualTrack": row[3],
+                    "updated_by": row[4],
+                    "updated_at": row[5],
+                }
+                for row in movement_rows
+            },
+        }
+
+    def start_tkl_shift(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+        operator_name: str,
+        terminal_name: str,
+        *,
+        take_over: bool = False,
+    ) -> dict[str, Any]:
+        operator_name = operator_name.strip()
+        terminal_name = terminal_name.strip()
+        if not operator_name or len(operator_name) > 80:
+            raise ValueError("Operatörens namn måste anges")
+        if not terminal_name or len(terminal_name) > 80:
+            raise ValueError("Terminalens namn måste anges")
+        now = _now_iso()
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                current = self._connection.execute(
+                    """
+                    SELECT shift_id, operator_name, terminal_name, status, started_at,
+                           ended_at, handover_note, updated_at
+                    FROM tkl_shifts
+                    WHERE publication_id = ? AND active_day = ? AND station_id = ?
+                      AND status = 'active'
+                    LIMIT 1
+                    """,
+                    (publication_id, active_day, station_id),
+                ).fetchone()
+                if current is not None and not take_over:
+                    self._connection.execute("COMMIT")
+                    return _shift_from_row(current) or {}
+                if current is not None:
+                    self._connection.execute(
+                        """
+                        UPDATE tkl_shifts
+                        SET status = 'handover', ended_at = ?, updated_at = ?
+                        WHERE shift_id = ?
+                        """,
+                        (now, now, current[0]),
+                    )
+                shift_id = str(uuid4())
+                self._connection.execute(
+                    """
+                    INSERT INTO tkl_shifts(
+                        shift_id, publication_id, active_day, station_id,
+                        operator_name, terminal_name, status, started_at,
+                        ended_at, handover_note, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, NULL, NULL, ?)
+                    """,
+                    (
+                        shift_id,
+                        publication_id,
+                        active_day,
+                        station_id,
+                        operator_name,
+                        terminal_name,
+                        now,
+                        now,
+                    ),
+                )
+                self._insert_tkl_event_locked(
+                    publication_id,
+                    active_day,
+                    station_id,
+                    "shift_started" if current is None else "shift_taken_over",
+                    {"operator_name": operator_name, "terminal_name": terminal_name},
+                    shift_id=shift_id,
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return self.tkl_station_state(publication_id, active_day, station_id)["shift"]
+
+    def finish_tkl_shift(
+        self,
+        shift_id: str,
+        *,
+        status: str,
+        note: str = "",
+    ) -> dict[str, Any]:
+        if status not in {"handover", "closed"}:
+            raise ValueError("Trafikpasset måste lämnas över eller avslutas")
+        note = note.strip()
+        if len(note) > 1000:
+            raise ValueError("Överlämningsanteckningen är för lång")
+        now = _now_iso()
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._connection.execute(
+                    """
+                    SELECT publication_id, active_day, station_id
+                    FROM tkl_shifts WHERE shift_id = ? AND status = 'active'
+                    """,
+                    (shift_id,),
+                ).fetchone()
+                if row is None:
+                    raise ValueError("Trafikpasset är inte längre aktivt")
+                self._connection.execute(
+                    """
+                    UPDATE tkl_shifts
+                    SET status = ?, ended_at = ?, handover_note = ?, updated_at = ?
+                    WHERE shift_id = ?
+                    """,
+                    (status, now, note or None, now, shift_id),
+                )
+                self._insert_tkl_event_locked(
+                    row[0],
+                    row[1],
+                    row[2],
+                    "shift_handed_over" if status == "handover" else "shift_closed",
+                    {"note": note},
+                    shift_id=shift_id,
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return {"shift_id": shift_id, "status": status, "ended_at": now, "handover_note": note or None}
+
+    def update_tkl_movement(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+        movement_id: str,
+        *,
+        arrival: str,
+        departure: str,
+        actual_track: str | None,
+        updated_by: str,
+        shift_id: str | None,
+        event_type: str,
+    ) -> dict[str, Any]:
+        if arrival not in {"none", "approaching", "arrived"}:
+            raise ValueError("Ogiltigt ankomstläge")
+        if departure not in {"none", "positioned", "ready", "departed"}:
+            raise ValueError("Ogiltigt avgångsläge")
+        track = (actual_track or "").strip() or None
+        now = _now_iso()
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    """
+                    INSERT INTO tkl_movement_states(
+                        publication_id, active_day, movement_id, station_id,
+                        arrival_status, departure_status, actual_track,
+                        updated_by, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(publication_id, active_day, movement_id) DO UPDATE SET
+                        station_id = excluded.station_id,
+                        arrival_status = excluded.arrival_status,
+                        departure_status = excluded.departure_status,
+                        actual_track = excluded.actual_track,
+                        updated_by = excluded.updated_by,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        publication_id,
+                        active_day,
+                        movement_id,
+                        station_id,
+                        arrival,
+                        departure,
+                        track,
+                        updated_by,
+                        now,
+                    ),
+                )
+                self._insert_tkl_event_locked(
+                    publication_id,
+                    active_day,
+                    station_id,
+                    event_type,
+                    {
+                        "arrival": arrival,
+                        "departure": departure,
+                        "actual_track": track,
+                        "updated_by": updated_by,
+                    },
+                    shift_id=shift_id,
+                    movement_id=movement_id,
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return {
+            "movement_id": movement_id,
+            "arrival": arrival,
+            "departure": departure,
+            "actualTrack": track,
+            "updated_by": updated_by,
+            "updated_at": now,
+        }
+
+    def _insert_tkl_event_locked(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+        event_type: str,
+        payload: dict[str, Any],
+        *,
+        shift_id: str | None = None,
+        movement_id: str | None = None,
+    ) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO tkl_events(
+                event_id, publication_id, active_day, station_id, shift_id,
+                movement_id, event_type, payload_json, recorded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid4()),
+                publication_id,
+                active_day,
+                station_id,
+                shift_id,
+                movement_id,
+                event_type,
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                _now_iso(),
+            ),
+        )
+
     def close(self) -> None:
         with self._lock:
             self._connection.close()
@@ -294,6 +611,21 @@ def _time_to_seconds(value: str | None) -> float:
     if not 0 <= hour <= 23 or not 0 <= minute <= 59 or not 0 <= second <= 59:
         raise ValueError("Klocktiden ska anges som TT:MM eller TT:MM:SS")
     return float(hour * 3600 + minute * 60 + second)
+
+
+def _shift_from_row(row: tuple[Any, ...] | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "shift_id": row[0],
+        "operator_name": row[1],
+        "terminal_name": row[2],
+        "status": row[3],
+        "started_at": row[4],
+        "ended_at": row[5],
+        "handover_note": row[6],
+        "updated_at": row[7],
+    }
 
 
 def _seconds_to_time(value: float) -> str:

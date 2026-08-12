@@ -51,6 +51,16 @@ ADMIN_COOKIE_NAME = "trainmeet_admin"
 ADMIN_COOKIE_MAX_AGE = 12 * 60 * 60
 
 
+def _tkl_engine_reason(reason: str) -> str:
+    return {
+        "connection_busy": "Sträckan är redan upptagen",
+        "departure_not_reserved": "Tåget saknar beviljad klarering",
+        "train_not_departed": "Tåget finns inte registrerat på sträckan",
+        "request_no_longer_pending": "Klareringsförfrågan gäller inte längre",
+        "interaction_owned": "En annan terminal arbetar redan med samma A–D-panel",
+    }.get(reason, "Sträckåtgärden kunde inte genomföras")
+
+
 @dataclass(frozen=True)
 class HTTPServerConfig:
     gateway_id: str = "gateway-local"
@@ -163,7 +173,7 @@ class TamboxHTTPApplication:
                 "tls": False,
             },
         }
-        if result.client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
+        if result.client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN, DeviceKind.TKL_TERMINAL}:
             response["access_token"] = result.access_token
         return response
 
@@ -304,6 +314,227 @@ class TamboxHTTPApplication:
             "train_positions": positions,
             "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
+
+    def tkl_context(self, client: PairedClient, station_id: str) -> dict[str, Any]:
+        if self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
+        snapshot = self.display_snapshot()
+        station = next((item for item in snapshot["stations"] if item["id"] == station_id), None)
+        if station is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "station_not_found", "Stationen finns inte i den aktiva träffen")
+        self._require_station_access(client, station_id)
+        related_connection_ids = {
+            connection["id"]
+            for connection in snapshot["connections"]
+            if station_id in {connection["station_a_id"], connection["station_b_id"]}
+        }
+        connection_states = [
+            state for state in snapshot["connection_states"] if state["id"] in related_connection_ids
+        ]
+        trains = [train for train in snapshot["trains"] if train.get("station_id") == station_id]
+        state = self.operations_store.tkl_station_state(
+            snapshot["publication_id"],
+            snapshot["active_day"],
+            station_id,
+        )
+        return {
+            "protocol_version": 1,
+            "publication_id": snapshot["publication_id"],
+            "meet": snapshot["meet"],
+            "active_day": snapshot["active_day"],
+            "station": station,
+            "terminal": {"client_id": client.client_id, "display_name": client.display_name, "kind": client.kind.value},
+            "preflight": {
+                "server_online": True,
+                "clock_configured": bool(snapshot["clock"].get("configured", True)),
+                "clock_running": bool(snapshot["clock"].get("running", False)),
+                "track_count": len({str(train.get("track") or "") for train in trains if train.get("track")}),
+                "connection_count": len(related_connection_ids),
+                "train_count": len(trains),
+                "open_connection_count": sum(1 for state in connection_states if state.get("state") != "free"),
+            },
+            "shift": state["shift"],
+            "movements": state["movements"],
+            "connection_states": connection_states,
+        }
+
+    def start_tkl_shift(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
+        station_id = str(payload.get("station_id") or "")
+        self._require_station_access(client, station_id)
+        snapshot = self.display_snapshot()
+        if not any(station["id"] == station_id for station in snapshot["stations"]):
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "station_not_found", "Stationen finns inte i den aktiva träffen")
+        try:
+            shift = self.operations_store.start_tkl_shift(
+                snapshot["publication_id"],
+                snapshot["active_day"],
+                station_id,
+                str(payload.get("operator_name") or ""),
+                str(payload.get("terminal_name") or client.display_name),
+                take_over=bool(payload.get("take_over", False)),
+            )
+        except ValueError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_shift", str(error)) from error
+        return {"shift": shift}
+
+    def finish_tkl_shift(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
+        station_id = str(payload.get("station_id") or "")
+        self._require_station_access(client, station_id)
+        snapshot = self.display_snapshot()
+        current_shift = self.operations_store.tkl_station_state(
+            snapshot["publication_id"], snapshot["active_day"], station_id
+        )["shift"]
+        if current_shift is None or current_shift["shift_id"] != str(payload.get("shift_id") or ""):
+            raise HTTPAPIError(
+                HTTPStatus.CONFLICT,
+                "tkl_shift_not_active",
+                "Trafikpasset är inte längre aktivt på den här stationen",
+            )
+        status = str(payload.get("status") or "")
+        if status == "closed":
+            related_ids = {
+                connection["id"]
+                for connection in snapshot["connections"]
+                if station_id in {connection["station_a_id"], connection["station_b_id"]}
+            }
+            blockers = [
+                state for state in snapshot["connection_states"]
+                if state["id"] in related_ids and state.get("state") != "free"
+            ]
+            if blockers:
+                raise HTTPAPIError(
+                    HTTPStatus.CONFLICT,
+                    "tkl_shift_has_open_connections",
+                    "Stationen har pågående klareringar eller tåg på linjen och kan inte avslutas",
+                )
+        try:
+            result = self.operations_store.finish_tkl_shift(
+                str(payload.get("shift_id") or ""),
+                status=status,
+                note=str(payload.get("note") or ""),
+            )
+        except ValueError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_shift", str(error)) from error
+        return {"shift": result}
+
+    def update_tkl_movement(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
+        station_id = str(payload.get("station_id") or "")
+        movement_id = str(payload.get("movement_id") or "")
+        self._require_station_access(client, station_id)
+        snapshot = self.display_snapshot()
+        movement = next(
+            (
+                train for train in snapshot["trains"]
+                if train.get("id") == movement_id and train.get("station_id") == station_id
+            ),
+            None,
+        )
+        if movement is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "movement_not_found", "Tågrörelsen finns inte på stationen")
+        current_shift = self.operations_store.tkl_station_state(
+            snapshot["publication_id"], snapshot["active_day"], station_id
+        )["shift"]
+        if current_shift is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan tågrörelser hanteras")
+        try:
+            result = self.operations_store.update_tkl_movement(
+                snapshot["publication_id"],
+                snapshot["active_day"],
+                station_id,
+                movement_id,
+                arrival=str(payload.get("arrival") or "none"),
+                departure=str(payload.get("departure") or "none"),
+                actual_track=str(payload.get("actual_track") or "") or None,
+                updated_by=current_shift["operator_name"],
+                shift_id=current_shift["shift_id"],
+                event_type=str(payload.get("event_type") or "movement_updated")[:80],
+            )
+        except ValueError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_movement", str(error)) from error
+        return {"movement": result}
+
+    def tkl_line_action(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
+        station_id = str(payload.get("station_id") or "")
+        connection_id = str(payload.get("connection_id") or "")
+        train_number = str(payload.get("train_number") or "").strip()
+        action = str(payload.get("action") or "")
+        self._require_station_access(client, station_id)
+        snapshot = self.display_snapshot()
+        current_shift = self.operations_store.tkl_station_state(
+            snapshot["publication_id"], snapshot["active_day"], station_id
+        )["shift"]
+        if current_shift is None:
+            raise HTTPAPIError(
+                HTTPStatus.CONFLICT,
+                "tkl_shift_not_started",
+                "Starta trafikpasset innan en tågklarering hanteras",
+            )
+        panel = next(
+            (
+                candidate for candidate in self.engine.config.panels.values()
+                if candidate.station_id == station_id and connection_id in candidate.slots.values()
+            ),
+            None,
+        )
+        if panel is None or (
+            panel.id not in client.panel_ids
+            and client.kind not in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}
+        ):
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "connection_not_assigned", "Terminalen har inte tillgång till sträckan")
+        slot = next((key for key, value in panel.slots.items() if value == connection_id), None)
+        if slot is None:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "connection_not_mapped", "Sträckan saknar en A–D-plats på stationen")
+        sequences = {
+            "request": [slot, *list(train_number), "#"],
+            "accept": [slot, "#"],
+            "reject": [slot, "*"],
+            "cancel": [slot, "*"],
+            "depart": [slot, slot, "#"],
+            "arrive": [slot, "#"],
+        }
+        keys = sequences.get(action)
+        if keys is None or action == "request" and (not train_number or not train_number.isdigit()):
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_line_action", "Ogiltig sträckåtgärd eller tågnummer")
+        acknowledgements = []
+        for key in keys:
+            acknowledgement = self.engine.press(
+                Command(
+                    command_id=str(uuid4()),
+                    client_id=client.client_id,
+                    traffic_session_id=self.engine.config.id,
+                    panel_id=panel.id,
+                    expected_revision=self.engine.revision,
+                    key=key,
+                    expires_at=datetime.now(timezone.utc) + timedelta(seconds=5),
+                )
+            ).to_dict()
+            acknowledgements.append(acknowledgement)
+            if acknowledgement["status"] != "accepted":
+                raise HTTPAPIError(
+                    HTTPStatus.CONFLICT,
+                    "tkl_line_action_rejected",
+                    _tkl_engine_reason(str(acknowledgement.get("reason") or "")),
+                )
+        snapshot = self.display_snapshot()
+        state = next((item for item in snapshot["connection_states"] if item["id"] == connection_id), None)
+        return {"action": action, "connection": state, "revision": self.engine.revision}
+
+    def _require_station_access(self, client: PairedClient, station_id: str) -> None:
+        if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
+            return
+        station_panels = {
+            panel.id for panel in self.engine.config.panels.values() if panel.station_id == station_id
+        }
+        if not station_panels.intersection(client.panel_ids):
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "station_not_assigned", "Terminalen har inte tillgång till stationen")
 
     def control_clock(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
@@ -741,6 +972,11 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/display":
                 self._send_json(HTTPStatus.OK, self.server.application.display_snapshot())
                 return
+            if path == "/v1/tkl/context":
+                client = self._authenticated_client()
+                station_id = parse_qs(parsed.query).get("station_id", [""])[0]
+                self._send_json(HTTPStatus.OK, self.server.application.tkl_context(client, station_id))
+                return
             if path == "/v1/auth/status":
                 client = self._optional_authenticated_client()
                 access = self.server.application.identities.admin_access_summary()
@@ -907,6 +1143,22 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/command":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.command(client, payload))
+                return
+            if path == "/v1/tkl/shift/start":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.start_tkl_shift(client, payload))
+                return
+            if path == "/v1/tkl/shift/finish":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.finish_tkl_shift(client, payload))
+                return
+            if path == "/v1/tkl/movement":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.update_tkl_movement(client, payload))
+                return
+            if path == "/v1/tkl/line":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.tkl_line_action(client, payload))
                 return
             if path == "/v1/devices/assign":
                 client = self._authenticated_client()

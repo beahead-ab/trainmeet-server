@@ -126,6 +126,7 @@ def main() -> None:
             DeviceKind.SWIFT_PANEL,
             DeviceKind.SWIFT_ADMIN,
             DeviceKind.WEB_ADMIN,
+            DeviceKind.TKL_TERMINAL,
         ],
         ttl=timedelta(hours=24),
         max_uses=50,

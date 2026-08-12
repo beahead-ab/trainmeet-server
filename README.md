@@ -335,8 +335,8 @@ Tambox-simulering. De andra delarna installeras separat:
   [trainmeet-tambox](https://github.com/beahead-ab/trainmeet-tambox).
 - Den nativa iPhone-appen finns i
   [trainmeet-iphone](https://github.com/beahead-ab/trainmeet-iphone).
-- TrainMeet TKL är den separata stationsapplikationen och ansluter till denna
-  server när dess publika paket är färdigt.
+- [TrainMeet TKL](https://github.com/beahead-ab/trainmeet-tkl) är den separata
+  stationsapplikationen. Samma UI ingår även under `/tkl/` på servern.
 
 ## Två tydligt separerade webbdelar
 
@@ -385,9 +385,9 @@ TrainMeet centralt (konfiguration och import, valfritt)
                          |
                          v
 Raspberry Pi: TrainMeet Server + SQLite + Mosquitto
-             |                 |                 |
-             v                 v                 v
-       fysisk ESP32       Swift-klient      webbsimulering
+        |              |              |              |
+        v              v              v              v
+  fysisk ESP32    Swift-klient   webbsimulering   TKL-terminal/webb
 ```
 
 Raspberry Pi:n är alltid auktoritativ. MQTT används som transport med QoS 1, retained snapshots och idempotenta kommandon. En klient som tappar nätet återansluter, presenterar sig igen och får hela det aktuella läget. Klienterna avgör aldrig själva om ett tåg får skickas.
@@ -425,6 +425,17 @@ Viktiga API:er:
 - `GET /v1/timetable?station_id=...`
 - `GET /v1/display`
 - `POST /v1/clock`
+- `GET /v1/tkl/context?station_id=...`
+- `POST /v1/tkl/shift/start`
+- `POST /v1/tkl/shift/finish`
+- `POST /v1/tkl/movement`
+- `POST /v1/tkl/line`
+
+TKL-terminalen kopplas en gång med en lokal sexsiffrig kod, eller använder
+adminsessionen när `/tkl/` öppnas i en extern webbläsare. Före varje körning tar
+en namngiven operatör stationen i tjänst. Pågående trafikärenden överlever
+överlämning, terminalbyte och serveromstart. Tågklarering, avgång och ankomst går
+via samma auktoritativa trafikmotor som de fysiska Tamboxarna.
 
 Den första sexsiffriga synkkoden kopplar servern permanent till träffen. Därefter
 kan admin söka efter en ny central publicering och hämta den till ett lokalt

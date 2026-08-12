@@ -24,6 +24,7 @@ class DeviceKind(StrEnum):
     SWIFT_ADMIN = "swift_admin"
     WEB_ADMIN = "web_admin"
     ESP32_PANEL = "esp32_panel"
+    TKL_TERMINAL = "tkl_terminal"
 
 
 class PairingError(RuntimeError):

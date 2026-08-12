@@ -111,6 +111,105 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(started["speed"], 2)
         self.assertTrue(started["time"].startswith("10:30:"))
 
+    def test_tkl_context_persists_shift_and_train_progress(self):
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+
+        before = self.application.tkl_context(client, "station-a")
+        self.assertIsNone(before["shift"])
+        self.assertEqual(before["preflight"]["train_count"], 1)
+
+        started = self.application.start_tkl_shift(
+            client,
+            {
+                "station_id": "station-a",
+                "operator_name": "Anna",
+                "terminal_name": "CDA TKL 1",
+            },
+        )
+        self.assertEqual(started["shift"]["operator_name"], "Anna")
+
+        updated = self.application.update_tkl_movement(
+            client,
+            {
+                "station_id": "station-a",
+                "movement_id": "movement-101-a",
+                "arrival": "none",
+                "departure": "positioned",
+                "actual_track": "2",
+                "event_type": "positioned",
+            },
+        )
+        self.assertEqual(updated["movement"]["actualTrack"], "2")
+        after = self.application.tkl_context(client, "station-a")
+        self.assertEqual(after["movements"]["movement-101-a"]["departure"], "positioned")
+
+        finished = self.application.finish_tkl_shift(
+            client,
+            {
+                "station_id": "station-a",
+                "shift_id": started["shift"]["shift_id"],
+                "status": "closed",
+            },
+        )
+        self.assertEqual(finished["shift"]["status"], "closed")
+
+    def test_tkl_line_actions_use_the_authoritative_traffic_engine(self):
+        client = self.application.local_admin()
+        for station_id, operator_name in (("station-a", "Anna"), ("station-b", "Bertil")):
+            self.application.start_tkl_shift(
+                client,
+                {
+                    "station_id": station_id,
+                    "operator_name": operator_name,
+                    "terminal_name": f"{station_id} TKL",
+                },
+            )
+        requested = self.application.tkl_line_action(
+            client,
+            {
+                "station_id": "station-a",
+                "connection_id": "connection-a-b",
+                "train_number": "101",
+                "action": "request",
+            },
+        )
+        self.assertEqual(requested["connection"]["state"], "requested")
+
+        accepted = self.application.tkl_line_action(
+            client,
+            {
+                "station_id": "station-b",
+                "connection_id": "connection-a-b",
+                "train_number": "101",
+                "action": "accept",
+            },
+        )
+        self.assertEqual(accepted["connection"]["state"], "reserved")
+
+        departed = self.application.tkl_line_action(
+            client,
+            {
+                "station_id": "station-a",
+                "connection_id": "connection-a-b",
+                "train_number": "101",
+                "action": "depart",
+            },
+        )
+        self.assertEqual(departed["connection"]["state"], "occupied")
+
+        arrived = self.application.tkl_line_action(
+            client,
+            {
+                "station_id": "station-b",
+                "connection_id": "connection-a-b",
+                "train_number": "101",
+                "action": "arrive",
+            },
+        )
+        self.assertEqual(arrived["connection"]["state"], "free")
+
     def test_linked_runtime_update_is_downloaded_before_activation(self):
         self.runtime_store.install(runtime_package_v2(publication_id="publication-v2-first"))
         self.runtime_store.save_link_token("central-test-link")
