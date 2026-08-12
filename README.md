@@ -10,6 +10,7 @@ Den centrala [TrainMeet-applikationen](https://github.com/beahead-ab/trainmeet) 
 | --- | --- | --- |
 | Raspberry Pi OS 64-bit | Enradaren nedan | Normal lokal drift på en träff |
 | Ubuntu/Debian-server | Enradaren nedan | DigitalOcean, VPS eller annan fristående Linuxserver |
+| Windows 10/11-PC | Docker Desktop | Lokal testserver på en vanlig PC |
 | Mac | Docker med Colima | Lokal utveckling och test med samma containerupplägg som i drift |
 | Linux med Docker | Docker Compose | Server eller dator där Docker redan finns |
 | Raspberry Pi med Docker | Docker Compose | När all lokal drift ska vara containerbaserad |
@@ -18,6 +19,151 @@ Den centrala [TrainMeet-applikationen](https://github.com/beahead-ab/trainmeet) 
 
 Servern använder port `8787` för webben och `1883` för MQTT. Driftsdata är
 beständig och ska överleva både uppdateringar och omstarter.
+
+## Snabbstart för första installationen
+
+TrainMeet består av två installationer. **TrainMeet Server** körs på PC, Mac,
+Raspberry Pi eller Linuxserver. **TrainMeet Tambox** installeras på varje
+ESP32/Arduino-enhet. Installera servern först.
+
+> **Första inloggningen på en ny server**
+>
+> Användarnamn: **`admin`**
+>
+> Tillfälligt lösenord: **`TrainMeet2026!`**
+>
+> Lösenordet måste bytas direkt. En uppdatering ersätter aldrig ett redan valt
+> lösenord.
+
+### Windows-PC
+
+1. Installera [Git för Windows](https://git-scm.com/download/win) och
+   [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+2. Starta Docker Desktop. Öppna sedan **Start**, skriv `PowerShell` och starta
+   Windows PowerShell.
+3. Kör ett kommando i taget:
+
+```powershell
+git clone https://github.com/beahead-ab/trainmeet-server.git
+cd trainmeet-server
+docker compose up --detach
+```
+
+4. Öppna `http://127.0.0.1:8787` och logga in med uppgifterna ovan.
+5. Uppdatera senare från samma mapp:
+
+```powershell
+git pull
+docker compose pull
+docker compose up --detach
+```
+
+Visa status med `docker compose ps`. Stoppa utan att radera data med
+`docker compose down`. Använd inte `--volumes` om data ska behållas.
+
+### Mac
+
+1. Öppna **Terminal** via Spotlight (`⌘` + mellanslag, skriv `Terminal`).
+2. Installera [Homebrew](https://brew.sh/) om det saknas.
+3. Kör ett kommando i taget:
+
+```sh
+brew install colima docker docker-compose git
+git clone https://github.com/beahead-ab/trainmeet-server.git
+cd trainmeet-server
+./scripts/install-docker-mac.command
+```
+
+4. Öppna `http://127.0.0.1:8787`. Uppdatera senare från samma mapp:
+
+```sh
+git pull
+./scripts/install-docker-mac.command
+```
+
+### Raspberry Pi
+
+1. Installera Raspberry Pi OS 64-bit och anslut Pi:n till nätverket.
+2. Öppna Terminal på Pi:n. Från Mac, Linux eller Windows PowerShell kan du i
+   stället ansluta med SSH:
+
+```sh
+ssh pi@RASPBERRY-PI-IP
+```
+
+   Ersätt adressen, exempelvis med `192.168.1.50`. Svara `yes` första gången
+   och skriv sedan Pi-användarens lösenord.
+3. Installera servern:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh
+```
+
+4. Öppna `http://trainmeet.local:8787` eller adressen som installationen visar.
+5. Uppdatera genom SSH genom att köra exakt samma installationskommando igen.
+   Data i `/var/lib/trainmeet-server` bevaras.
+6. Kontrollera med `systemctl status trainmeet-server`, tryck `q` och avsluta
+   SSH med `exit`.
+
+### DigitalOcean eller annan Linuxserver via SSH
+
+Öppna Terminal på Mac/Linux eller PowerShell i Windows och kör:
+
+```sh
+ssh -i SÖKVÄG-TILL-NYCKEL root@SERVERNS-IP
+```
+
+Exempel:
+
+```sh
+ssh -i ~/.ssh/trainmeet_digitalocean root@157.230.109.13
+```
+
+Svara `yes` första gången. När prompten visar exempelvis
+`root@trainmeet-server:~#` är du inne. Installera eller uppdatera med:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sh
+systemctl status trainmeet-server
+```
+
+Tryck `q` och avsluta med `exit`. På en publik server ska HTTPS/reverse proxy
+användas och MQTT-port `1883` får inte exponeras mot internet.
+
+### ESP32/Arduino Tambox
+
+Firmware finns i [trainmeet-tambox](https://github.com/beahead-ab/trainmeet-tambox).
+En Arduino Uno räcker inte eftersom boxen behöver Wi-Fi; lösningen är byggd för
+ESP32 och ESP32-S3.
+
+1. Installera [Visual Studio Code](https://code.visualstudio.com/) och tillägget
+   **PlatformIO IDE** på PC eller Mac.
+2. Hämta firmware:
+
+```sh
+git clone https://github.com/beahead-ab/trainmeet-tambox.git
+cd trainmeet-tambox/firmware/esp32
+```
+
+3. Anslut ESP32 med USB och kontrollera först
+   [kopplingsguiden](https://github.com/beahead-ab/trainmeet-tambox/blob/main/firmware/esp32/WIRING.md).
+4. För Bennys befintliga box, bygg och ladda:
+
+```sh
+pio run -e esp32-benny
+pio run -e esp32-benny -t upload
+```
+
+   För ny kabeldragning används `esp32-classic-safe`; för ESP32-S3 används
+   `esp32-s3`. Kontrollera alltid kort, displayadress och kablage innan en
+   befintlig box programmeras.
+5. Vid första start visar displayen boxkoden. Om Wi-Fi saknas skapas nätverket
+   `TrainMeet-XXXX`. Anslut telefonen, välj träffens Wi-Fi och ange vid behov
+   serverns lokala IP-adress.
+6. Tilldela boxkoden till rätt station och panel A–D i serverns webbadmin.
+   Tamboxen behöver inget eget lösenord.
+7. Uppdatera firmware med `git pull` och kör sedan samma upload-kommando igen.
+   Boxens permanenta hårdvaru-id ändras inte.
 
 ## Raspberry Pi OS 64-bit
 
@@ -39,15 +185,6 @@ systemtjänsten `trainmeet-server` och lagrar driftsdata i
 Öppna därefter `http://trainmeet.local:8787` eller den IP-adress som
 installationsprogrammet skriver ut. Installationsprogrammet visar även serverns
 sexsiffriga anslutningskod.
-
-> **Inloggning direkt efter installation**
->
-> Användarnamn: **`admin`**
->
-> Tillfälligt lösenord: **`TrainMeet2026!`**
->
-> Vid den första inloggningen måste lösenordet bytas innan administrationen öppnas.
-> Uppgraderingar ändrar aldrig ett lösenord som redan har valts.
 
 ## Ubuntu, Debian, DigitalOcean eller annan VPS
 
