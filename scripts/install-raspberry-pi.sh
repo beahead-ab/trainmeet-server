@@ -56,7 +56,7 @@ if command -v labwc >/dev/null 2>&1 \
   chmod 0644 "$AUTOSTART_FILE"
   systemctl set-default graphical.target
   if command -v raspi-config >/dev/null 2>&1; then
-    raspi-config nonint do_wayland W3 || true
+    raspi-config nonint do_wayland W2 || true
     raspi-config nonint do_boot_behaviour B4 || true
     raspi-config nonint do_boot_wait 0 || true
     raspi-config nonint do_blanking 1 || true
