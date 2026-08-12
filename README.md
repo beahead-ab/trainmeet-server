@@ -13,6 +13,9 @@ hela installationen startas med en rad:
 curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh
 ```
 
+Samma kommando kan köras igen för att uppdatera installationen till aktuell
+version. Befintlig träffkonfiguration och trafikhistorik ligger kvar.
+
 Installationen frågar efter ditt vanliga `sudo`-lösenord när det behövs. På en
 molnserver där du redan är inloggad som `root` kan `sudo` utelämnas:
 
