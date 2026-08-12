@@ -1,1 +1,0 @@
-trainmeet-server ALL=(root) NOPASSWD: /bin/systemctl start --no-block trainmeet-server-update@stable.service, /bin/systemctl start --no-block trainmeet-server-update@test.service

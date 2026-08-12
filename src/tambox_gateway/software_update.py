@@ -48,6 +48,6 @@ def start_update(channel: str) -> None:
     if channel not in {"stable", "test"}:
         raise SoftwareUpdateError("Okänd uppdateringskanal")
     try:
-        subprocess.run(["sudo", "-n", "/bin/systemctl", "start", "--no-block", f"trainmeet-server-update@{channel}.service"], check=True, timeout=5)
+        subprocess.run(["/bin/systemctl", "start", "--no-block", f"trainmeet-server-update@{channel}.service"], check=True, timeout=5)
     except (OSError, subprocess.SubprocessError) as error:
         raise SoftwareUpdateError("Uppdateringstjänsten kunde inte startas") from error
