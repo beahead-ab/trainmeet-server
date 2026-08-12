@@ -9,7 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from .models import DispatchMode, TrackType
-from .runtime import RUNTIME_SCHEMA_VERSION, RuntimePublication, RuntimePublicationError
+from .runtime import (
+    AVAILABLE_CLOCK_STYLES,
+    RUNTIME_SCHEMA_VERSION,
+    RuntimePublication,
+    RuntimePublicationError,
+)
 
 
 LOCAL_CONFIGURATION_SCHEMA_VERSION = 1
@@ -178,11 +183,38 @@ def local_configuration_runtime_package(
             "default_dispatch_mode": normalized["default_dispatch_mode"],
             "clock_time": normalized["clock_time"],
         },
-        "stations": normalized["stations"],
+        "clock": {
+            "source": "local",
+            "start_time": normalized["clock_time"],
+            "speed": 1,
+            "show_seconds": True,
+            "available_styles": list(AVAILABLE_CLOCK_STYLES),
+            "stop_reasons": [
+                {"key": "trafikstopp", "label": "Trafikstopp"},
+                {"key": "rast", "label": "Rast"},
+                {"key": "tekniskt", "label": "Tekniskt stopp"},
+            ],
+        },
+        "stations": [
+            {
+                **station,
+                "diagram_order": index,
+                "is_autonomous": False,
+                "is_topology_branch": False,
+            }
+            for index, station in enumerate(normalized["stations"])
+        ],
         "connections": normalized["connections"],
+        "autonomous_links": [],
         "panels": normalized["panels"],
         "trains": [],
         "routes": [],
+        "services": [],
+        "display": {
+            "graph_station_order": [station["id"] for station in normalized["stations"]],
+            "topology_branch_station_ids": [],
+            "default_theme": "dark",
+        },
     }
     try:
         RuntimePublication.parse(runtime_package)

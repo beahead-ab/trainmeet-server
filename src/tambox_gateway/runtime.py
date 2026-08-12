@@ -19,14 +19,30 @@ from .models import (
 )
 
 
-RUNTIME_SCHEMA_VERSION = 1
+RUNTIME_SCHEMA_VERSION = 2
+AVAILABLE_CLOCK_STYLES = (
+    "swiss",
+    "swedish",
+    "norwegian",
+    "danish",
+    "german",
+    "finnish",
+    "polish",
+    "dutch",
+    "french",
+    "italian",
+    "american",
+    "digital",
+)
 DAY_ORDER = ("Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön")
 SHORT_DAYS = {
     "M": "Mån",
     "Ti": "Tis",
+    "On": "Ons",
     "O": "Ons",
     "To": "Tor",
     "Fr": "Fre",
+    "Lö": "Lör",
     "L": "Lör",
     "Sö": "Sön",
 }
@@ -38,6 +54,7 @@ class RuntimePublicationError(ValueError):
 
 @dataclass(frozen=True)
 class RuntimePublication:
+    schema_version: int
     publication_id: str
     published_at: str
     meet_id: str
@@ -49,8 +66,11 @@ class RuntimePublication:
 
     @classmethod
     def parse(cls, payload: dict[str, Any]) -> "RuntimePublication":
-        if payload.get("schema_version") != RUNTIME_SCHEMA_VERSION:
-            raise RuntimePublicationError("Driftpaketet har en version som inte stöds")
+        schema_version = payload.get("schema_version")
+        if schema_version != RUNTIME_SCHEMA_VERSION:
+            raise RuntimePublicationError(
+                f"Driftpaketet måste ha schema_version {RUNTIME_SCHEMA_VERSION}"
+            )
 
         publication_id = _required_text(payload, "publication_id")
         published_at = _required_text(payload, "published_at")
@@ -129,6 +149,51 @@ class RuntimePublication:
             except (KeyError, TypeError, ValueError) as error:
                 raise RuntimePublicationError("Ett ruttstopp saknar giltig ordning") from error
 
+        clock = _required_object(payload, "clock")
+        _required_text(clock, "source")
+        _required_text(clock, "start_time")
+        try:
+            speed = float(clock.get("speed", 1))
+        except (TypeError, ValueError) as error:
+            raise RuntimePublicationError("Klockhastigheten är ogiltig") from error
+        if speed <= 0:
+            raise RuntimePublicationError("Klockhastigheten måste vara större än noll")
+
+        services = _required_list(payload, "services")
+        service_ids = _unique_ids(services, "tågtur")
+        for service in services:
+            _required_text(service, "train_number")
+            _required_text(service, "days")
+            stops = _required_list(service, "stops")
+            for stop in stops:
+                if _required_text(stop, "station_id") not in station_ids:
+                    raise RuntimePublicationError("En tågtur hänvisar till en okänd station")
+                try:
+                    int(stop["stop_order"])
+                    int(stop["service_minute"])
+                except (KeyError, TypeError, ValueError) as error:
+                    raise RuntimePublicationError("En tågtur saknar giltig stopptid eller ordning") from error
+        for train in trains:
+            linked_service = _required_text(train, "service_id")
+            if linked_service not in service_ids:
+                raise RuntimePublicationError("En tågrad hänvisar till en okänd tågtur")
+
+        display = _required_object(payload, "display")
+        graph_order = display.get("graph_station_order", [])
+        if (
+            not isinstance(graph_order, list)
+            or len(graph_order) != len(station_ids)
+            or set(graph_order) != station_ids
+        ):
+            raise RuntimePublicationError("Diagrammets stationsordning är ofullständig")
+
+        autonomous_links = _required_list(payload, "autonomous_links")
+        for link in autonomous_links:
+            if _required_text(link, "autonomous_station_id") not in station_ids:
+                raise RuntimePublicationError("En autonom koppling hänvisar till en okänd station")
+            if _required_text(link, "related_station_id") not in station_ids:
+                raise RuntimePublicationError("En autonom koppling hänvisar till en okänd station")
+
         default_mode = meet.get("default_dispatch_mode", DispatchMode.CLEARANCE.value)
         _enum_value(default_mode, DispatchMode, "default_dispatch_mode")
 
@@ -139,6 +204,7 @@ class RuntimePublication:
             sort_keys=True,
         ).encode("utf-8")
         return cls(
+            schema_version=int(schema_version),
             publication_id=publication_id,
             published_at=published_at,
             meet_id=meet_id,
@@ -217,14 +283,28 @@ class RuntimePublication:
             if str(route["train_number"]) in train_numbers
         ]
         routes.sort(key=lambda value: (str(value["train_number"]), int(value["stop_order"])))
+        services = [
+            service
+            for service in self.payload["services"]
+            if matches_active_day(str(service.get("days", "Dagl")), active_day)
+            and (
+                station_id is None
+                or any(stop.get("station_id") == station_id for stop in service.get("stops", []))
+            )
+        ]
         return {
-            "schema_version": RUNTIME_SCHEMA_VERSION,
+            "schema_version": self.schema_version,
             "publication_id": self.publication_id,
             "meet": self.payload["meet"],
             "active_day": active_day,
             "stations": self.payload["stations"],
             "trains": trains,
             "routes": routes,
+            "services": services,
+            "connections": self.payload["connections"],
+            "autonomous_links": self.payload["autonomous_links"],
+            "display": self.payload["display"],
+            "clock": self.payload["clock"],
         }
 
 
@@ -332,6 +412,84 @@ class SQLiteRuntimeStore:
             raise RuntimePublicationError("Det aktiva driftpaketet är skadat") from error
         return RuntimePublication.parse(payload)
 
+    def publication(self, publication_id: str) -> RuntimePublication | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT payload_json FROM runtime_publications WHERE publication_id = ?",
+                (publication_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            return RuntimePublication.parse(json.loads(row[0]))
+        except json.JSONDecodeError as error:
+            raise RuntimePublicationError("Det hämtade driftpaketet är skadat") from error
+
+    def activate(self, publication_id: str) -> RuntimePublication:
+        publication = self.publication(publication_id)
+        if publication is None:
+            raise RuntimePublicationError("Den hämtade versionen finns inte")
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute("UPDATE runtime_publications SET active = 0 WHERE active = 1")
+                updated = self._connection.execute(
+                    "UPDATE runtime_publications SET active = 1 WHERE publication_id = ?",
+                    (publication_id,),
+                )
+                if updated.rowcount != 1:
+                    raise RuntimePublicationError("Den hämtade versionen finns inte")
+                self._connection.execute(
+                    """
+                    INSERT INTO runtime_settings(key, value, updated_at)
+                    VALUES ('active_day', ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (publication.active_day,),
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return publication
+
+    def save_link_token(self, token: str) -> None:
+        token = token.strip()
+        if not token:
+            return
+        with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO runtime_settings(key, value, updated_at)
+                VALUES ('central_link_token', ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """,
+                (token,),
+            )
+
+    def link_token(self) -> str | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT value FROM runtime_settings WHERE key = 'central_link_token'"
+            ).fetchone()
+        return str(row[0]) if row else None
+
+    def latest_staged(self) -> RuntimePublication | None:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT payload_json FROM runtime_publications
+                WHERE active = 0 ORDER BY installed_at DESC LIMIT 1
+                """
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            return RuntimePublication.parse(json.loads(row[0]))
+        except json.JSONDecodeError as error:
+            raise RuntimePublicationError("Det hämtade driftpaketet är skadat") from error
+
     def active_day(self) -> str | None:
         with self._lock:
             row = self._connection.execute(
@@ -362,9 +520,11 @@ class SQLiteRuntimeStore:
     def summary(self) -> dict[str, Any]:
         publication = self.active()
         if publication is None:
-            return {"configured": False}
+            return {"configured": False, "linked": self.link_token() is not None}
+        staged = self.latest_staged()
         return {
             "configured": True,
+            "schema_version": publication.schema_version,
             "publication_id": publication.publication_id,
             "published_at": publication.published_at,
             "checksum": publication.checksum,
@@ -374,6 +534,12 @@ class SQLiteRuntimeStore:
             "timezone": publication.timezone,
             "train_count": len(publication.payload["trains"]),
             "station_count": len(publication.payload["stations"]),
+            "linked": self.link_token() is not None,
+            "available_publication_id": (
+                staged.publication_id
+                if staged is not None and staged.publication_id != publication.publication_id
+                else None
+            ),
         }
 
     def close(self) -> None:

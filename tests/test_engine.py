@@ -5,7 +5,15 @@ from datetime import datetime, timedelta, timezone
 
 from tambox_gateway.demo import demo_session
 from tambox_gateway.engine import TrafficEngine
-from tambox_gateway.models import Command, ConnectionState, DispatchMode
+from tambox_gateway.models import (
+    Command,
+    ConnectionConfig,
+    ConnectionState,
+    DispatchMode,
+    PanelConfig,
+    SessionConfig,
+    StationConfig,
+)
 
 
 class EngineDriver:
@@ -35,6 +43,55 @@ class EngineDriver:
         return self.press(panel_id, "#")
 
 
+class MultiConnectionDriver(EngineDriver):
+    def __init__(self):
+        stations = {
+            "center": StationConfig("center", "CDA", "Charlottendal"),
+            "left": StationConfig("left", "LEK", "Lekby"),
+            "right": StationConfig("right", "VST", "Vagnsta"),
+        }
+        connections = {
+            "left-center": ConnectionConfig("left-center", "left", "center"),
+            "center-right": ConnectionConfig("center-right", "center", "right"),
+        }
+        panels = {
+            "panel-center": PanelConfig(
+                "panel-center",
+                "center",
+                "Charlottendal",
+                {"A": "left-center", "B": "center-right", "C": None, "D": None},
+            ),
+            "panel-left": PanelConfig(
+                "panel-left",
+                "left",
+                "Lekby",
+                {"A": "left-center", "B": None, "C": None, "D": None},
+            ),
+            "panel-right": PanelConfig(
+                "panel-right",
+                "right",
+                "Vagnsta",
+                {"A": "center-right", "B": None, "C": None, "D": None},
+            ),
+        }
+        self.engine = TrafficEngine(SessionConfig(
+            id="demo-session",
+            name="Flera samtidiga tåg",
+            default_dispatch_mode=DispatchMode.CLEARANCE,
+            stations=stations,
+            connections=connections,
+            panels=panels,
+            clock_time="12:34",
+        ))
+        self.sequence = 0
+
+    def enter_train(self, panel_id: str, slot: str = "A", train_number: str = "2123"):
+        self.press(panel_id, slot)
+        for digit in train_number:
+            self.press(panel_id, digit)
+        return self.press(panel_id, "#")
+
+
 class TrafficEngineTests(unittest.TestCase):
     def test_clearance_full_flow(self):
         driver = EngineDriver()
@@ -42,15 +99,20 @@ class TrafficEngineTests(unittest.TestCase):
         request_ack = driver.enter_train("panel-a")
         self.assertEqual(request_ack.status, "accepted")
         self.assertEqual(driver.engine.connections["connection-a-b"].state, ConnectionState.REQUESTED)
-        self.assertEqual(driver.engine.snapshot("panel-a")["interaction"]["mode"], "awaiting_permission")
-        self.assertEqual(driver.engine.snapshot("panel-b")["interaction"]["mode"], "incoming_request")
-        self.assertEqual(driver.engine.snapshot("panel-a")["display"]["line1"], "2123->LEK       ")
-        self.assertEqual(driver.engine.snapshot("panel-a")["display"]["line2"], "Väntar svar*=Avb")
+        self.assertEqual(driver.engine.snapshot("panel-a")["interaction"]["mode"], "idle")
+        self.assertEqual(driver.engine.snapshot("panel-b")["interaction"]["mode"], "idle")
+        self.assertEqual(driver.engine.snapshot("panel-a")["display"]["line1"], "A~2123          ")
+        self.assertEqual(driver.engine.snapshot("panel-b")["display"]["line1"], "A!2123          ")
 
+        driver.press("panel-b", "A")
         driver.press("panel-b", "#")
         self.assertEqual(driver.engine.connections["connection-a-b"].state, ConnectionState.RESERVED)
-        self.assertEqual(driver.engine.snapshot("panel-a")["interaction"]["mode"], "ready_departure")
+        self.assertEqual(driver.engine.snapshot("panel-a")["interaction"]["mode"], "idle")
+        self.assertEqual(driver.engine.snapshot("panel-a")["slots"]["A"]["action"], "depart")
+        self.assertEqual(driver.engine.snapshot("panel-a")["attention"], {"count": 1, "slots": ["A"]})
 
+        driver.press("panel-a", "A")
+        self.assertEqual(driver.engine.snapshot("panel-a")["interaction"]["mode"], "ready_departure")
         driver.press("panel-a", "A")
         departure = driver.press("panel-a", "#")
         self.assertEqual(departure.status, "accepted")
@@ -83,7 +145,14 @@ class TrafficEngineTests(unittest.TestCase):
         })
 
         driver.press("panel-a", "#")
+        driver.press("panel-b", "A")
         driver.press("panel-b", "#")
+        self.assertEqual(driver.engine.snapshot("panel-a")["display"], {
+            "line1": "A!2123          ",
+            "line2": "           12:34",
+        })
+
+        driver.press("panel-a", "A")
         self.assertEqual(driver.engine.snapshot("panel-a")["display"], {
             "line1": "2123◀LEK    KLAR",
             "line2": "A=Avg      *=Avb",
@@ -98,6 +167,7 @@ class TrafficEngineTests(unittest.TestCase):
     def test_rejected_request_releases_connection(self):
         driver = EngineDriver()
         driver.enter_train("panel-a", "42")
+        driver.press("panel-b", "A")
         driver.press("panel-b", "*")
 
         self.assertEqual(driver.engine.connections["connection-a-b"].state, ConnectionState.FREE)
@@ -107,6 +177,7 @@ class TrafficEngineTests(unittest.TestCase):
     def test_sender_can_cancel_pending_request(self):
         driver = EngineDriver()
         driver.enter_train("panel-a", "42")
+        driver.press("panel-a", "A")
         driver.press("panel-a", "*")
 
         self.assertEqual(driver.engine.connections["connection-a-b"].state, ConnectionState.FREE)
@@ -117,7 +188,7 @@ class TrafficEngineTests(unittest.TestCase):
         driver.enter_train("panel-a", "77")
 
         self.assertEqual(driver.engine.connections["connection-a-b"].state, ConnectionState.RESERVED)
-        self.assertEqual(driver.engine.snapshot("panel-a")["interaction"]["mode"], "ready_departure")
+        self.assertEqual(driver.engine.snapshot("panel-a")["interaction"]["mode"], "idle")
         self.assertEqual(driver.engine.snapshot("panel-b")["interaction"]["mode"], "idle")
 
         blocked = driver.press("panel-b", "A")
@@ -127,6 +198,7 @@ class TrafficEngineTests(unittest.TestCase):
     def test_duplicate_departure_command_does_not_duplicate_transition(self):
         driver = EngineDriver(DispatchMode.DIRECT)
         driver.enter_train("panel-a", "77")
+        driver.press("panel-a", "A")
         driver.press("panel-a", "A")
 
         now = datetime.now(timezone.utc)
@@ -184,6 +256,50 @@ class TrafficEngineTests(unittest.TestCase):
         self.assertEqual(blocked.status, "rejected")
         self.assertEqual(blocked.reason, "interaction_owned")
         self.assertEqual(driver.engine.snapshot("panel-a")["interaction"]["train_number"], "")
+
+    def test_approval_does_not_interrupt_another_train_entry(self):
+        driver = MultiConnectionDriver()
+        driver.enter_train("panel-center", "A", "101")
+
+        driver.press("panel-center", "B")
+        driver.press("panel-center", "2")
+        driver.press("panel-left", "A")
+        driver.press("panel-left", "#")
+
+        center = driver.engine.snapshot("panel-center")
+        self.assertEqual(center["interaction"]["mode"], "enter_train")
+        self.assertEqual(center["interaction"]["selected_slot"], "B")
+        self.assertEqual(center["interaction"]["train_number"], "2")
+        self.assertEqual(center["slots"]["A"]["action"], "depart")
+
+        driver.press("panel-center", "0")
+        driver.press("panel-center", "2")
+        driver.press("panel-center", "#")
+        center = driver.engine.snapshot("panel-center")
+        self.assertEqual(center["interaction"]["mode"], "idle")
+        self.assertEqual(center["slots"]["A"]["state"], "reserved")
+        self.assertEqual(center["slots"]["B"]["state"], "requested")
+
+    def test_incoming_request_waits_in_slot_without_taking_over_input(self):
+        driver = MultiConnectionDriver()
+        driver.press("panel-center", "B")
+        driver.press("panel-center", "9")
+
+        driver.enter_train("panel-left", "A", "303")
+
+        center = driver.engine.snapshot("panel-center")
+        self.assertEqual(center["interaction"]["mode"], "enter_train")
+        self.assertEqual(center["interaction"]["selected_slot"], "B")
+        self.assertEqual(center["interaction"]["train_number"], "9")
+        self.assertEqual(center["slots"]["A"]["action"], "answer_request")
+        self.assertEqual(center["attention"], {"count": 1, "slots": ["A"]})
+
+        driver.press("panel-center", "*")
+        driver.press("panel-center", "A")
+        self.assertEqual(
+            driver.engine.snapshot("panel-center")["interaction"]["mode"],
+            "incoming_request",
+        )
 
     def test_display_rows_are_always_exactly_sixteen_characters(self):
         driver = EngineDriver()

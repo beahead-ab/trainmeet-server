@@ -11,6 +11,9 @@ VENV_DIR="$APP_DIR/venv"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 PLIST_PATH="$LAUNCH_AGENTS_DIR/com.beahead.trainmeet-server.plist"
 LABEL="com.beahead.trainmeet-server"
+LEGACY_LABEL="com.beahead.trainmeet-tambox"
+LEGACY_PLIST="$LAUNCH_AGENTS_DIR/$LEGACY_LABEL.plist"
+LEGACY_DISABLED_PLIST="$LEGACY_PLIST.disabled"
 
 if ! command -v mosquitto >/dev/null 2>&1; then
   echo "Mosquitto saknas. Installera det först med: brew install mosquitto"
@@ -66,6 +69,15 @@ cat > "$PLIST_PATH" <<PLIST
 PLIST
 
 chmod 600 "$PLIST_PATH"
+
+# Version 0.6 uses a new service name and a separate state directory. Stop the
+# pre-release Tambox service so it cannot compete for HTTP/MQTT ports. Its
+# complete Application Support directory is intentionally left untouched.
+launchctl bootout "gui/$(id -u)/$LEGACY_LABEL" >/dev/null 2>&1 || true
+if [[ -f "$LEGACY_PLIST" ]]; then
+  mv "$LEGACY_PLIST" "$LEGACY_DISABLED_PLIST"
+fi
+
 launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
 sleep 1
 launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH"
@@ -84,3 +96,6 @@ echo "TrainMeet Server är installerad och startar automatiskt."
 echo "På denna Mac: http://127.0.0.1:8787"
 echo "Från iPhone:  http://${LOCAL_IP}:8787"
 echo "Anslutningskod: ${CONNECTION_CODE}"
+if [[ -d "$HOME/Library/Application Support/TrainMeet Tambox" ]]; then
+  echo "Äldre testdata är bevarad i: $HOME/Library/Application Support/TrainMeet Tambox"
+fi

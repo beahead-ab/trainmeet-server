@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <meta name="theme-color" content="#203b73">
     <title>TrainMeet Server</title>
-    <link rel="stylesheet" href="/assets/app.css?v=20260811-5">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/app.css?v=20260811-14">
   </head>
   <body>
     <main class="page-shell">
@@ -37,12 +40,99 @@
 
       <section id="app-view" class="app-view hidden">
         <nav class="view-tabs card" aria-label="Huvudvyer">
-          <button type="button" class="view-tab active" data-view="server">TrainMeet Server</button>
+          <button type="button" class="view-tab active" data-view="overview">Översikt</button>
+          <button type="button" class="view-tab" data-view="admin">Administration</button>
           <button type="button" class="view-tab" data-view="simulator">Tambox-simulering</button>
+          <button type="button" class="view-tab" data-view="displays">Skärmar</button>
           <button id="logout" type="button" class="quiet tab-action hidden">Logga ut</button>
         </nav>
 
-        <section id="server-view" class="view-panel">
+        <section id="overview-view" class="view-panel meet-overview">
+          <article class="card meet-summary-card">
+            <div class="meet-summary-main">
+              <div class="meet-logo" aria-hidden="true">TM</div>
+              <div>
+                <h2 id="overview-meet-name">Läser in träffen …</h2>
+                <div class="meet-meta">
+                  <span id="overview-runtime-meta">Lokal TrainMeet Server</span>
+                  <span id="overview-station-meta">– stationer · – tåg</span>
+                </div>
+              </div>
+            </div>
+            <span id="overview-runtime-state" class="meet-active-chip">Lokalt aktiv</span>
+          </article>
+
+          <div class="overview-actions">
+            <button type="button" class="overview-action" data-open-view="admin" aria-label="Öppna administration">⚙ <span>Inställningar</span></button>
+            <button type="button" class="overview-action" data-open-view="displays">▣ <span>Skärmar</span></button>
+            <div class="overview-live-meta">
+              <span id="overview-clock">--:--</span>
+              <span id="overview-day">Dagl</span>
+              <span class="overview-online"><i></i> Lokal drift</span>
+            </div>
+          </div>
+
+          <section class="card overview-section topology-overview-card">
+            <header class="overview-section-heading">
+              <div>
+                <h3>Banöversikt</h3>
+                <p class="overview-kicker">BANÖVERSIKT</p>
+              </div>
+              <a href="/display/topology" target="_blank" rel="noopener">⛶ Fullskärm</a>
+            </header>
+            <div class="topology-preview">
+              <svg id="overview-topology" role="img" aria-label="Banöversikt"></svg>
+              <aside id="overview-station-inspector" class="station-inspector hidden" aria-live="polite">
+                <button id="close-station-inspector" type="button" aria-label="Stäng stationsinformationen">×</button>
+                <p class="overview-kicker">STATION</p>
+                <h4 id="station-inspector-name">Station</h4>
+                <p id="station-inspector-meta"></p>
+                <div id="station-inspector-connections" class="station-inspector-connections"></div>
+                <ol id="station-inspector-trains" class="station-inspector-trains"></ol>
+              </aside>
+            </div>
+            <div id="overview-route-badge" class="overview-route-badge hidden"></div>
+          </section>
+
+          <section class="overview-routes-section">
+            <header class="overview-routes-heading">
+              <p class="overview-kicker">TÅGRUTTER (<span id="overview-route-count">0</span> TÅG)</p>
+              <a href="/display/graph" target="_blank" rel="noopener">Öppna tågdiagram →</a>
+            </header>
+            <div class="card route-explorer">
+              <aside class="route-picker">
+                <label class="route-search-label" for="overview-route-search">Sök tåg</label>
+                <input id="overview-route-search" type="search" placeholder="Sök…" autocomplete="off">
+                <div id="overview-route-list" class="route-list" aria-label="Tågrutter"></div>
+              </aside>
+              <div id="overview-route-detail" class="route-detail"></div>
+              <aside class="station-traffic">
+                <p class="overview-kicker">STATIONER</p>
+                <div id="overview-station-counts"></div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="card overview-section overview-graph-card">
+            <header class="overview-section-heading">
+              <div>
+                <h3>Tågdiagram</h3>
+                <p class="overview-kicker">KLICKA PÅ ETT TÅG FÖR ATT TÄNDA RUTTEN</p>
+              </div>
+              <a href="/display/graph" target="_blank" rel="noopener">⛶ Fullskärm</a>
+            </header>
+            <div id="overview-graph-scroll" class="overview-graph-scroll">
+              <div id="overview-graph-canvas" class="overview-graph-canvas">
+                <svg id="overview-graph" role="img" aria-label="Tågdiagram"></svg>
+                <div class="overview-graph-stations" aria-hidden="true">
+                  <svg id="overview-graph-station-labels"></svg>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section id="admin-view" class="view-panel hidden">
           <div class="server-hero card">
             <div>
               <p class="eyebrow">DEN HÄR RASPBERRY PI:N</p>
@@ -52,12 +142,57 @@
             <div id="runtime-pill" class="runtime-pill">Ingen lokal träff vald</div>
           </div>
 
-          <section class="card section-card configuration-card">
+          <nav class="admin-jump-nav card" aria-label="Administrationsdelar">
+            <a href="#active-runtime-config">Aktiv träff</a>
+            <a href="#local-runtime-draft">Lokalt utkast</a>
+            <a href="#admin-access-settings">Åtkomst</a>
+            <a href="#sync-and-devices">Synk och enheter</a>
+          </nav>
+
+          <section id="active-runtime-config" class="card section-card active-runtime-card">
+            <div class="section-heading compact-heading">
+              <div>
+                <p class="eyebrow">AKTIV RUNTIME</p>
+                <h2 id="admin-active-meet">Läser aktiv träff …</h2>
+                <p id="admin-active-detail">Serverns körande stationsplan och tidtabell.</p>
+              </div>
+              <span id="admin-active-day" class="revision-badge">–</span>
+            </div>
+            <div class="runtime-facts">
+              <div><b id="admin-active-stations">–</b><span>stationer</span></div>
+              <div><b id="admin-active-connections">–</b><span>sträckor</span></div>
+              <div><b id="admin-active-trains">–</b><span>tåg</span></div>
+              <div><b id="admin-active-clock">–</b><span>träffklocka</span></div>
+            </div>
+            <div id="admin-active-station-list" class="runtime-station-list"></div>
+            <div class="runtime-plan-grid">
+              <section class="runtime-plan-section">
+                <div class="runtime-plan-heading">
+                  <h3>Aktiva sträckor</h3>
+                  <span id="admin-active-connection-label">Serverns stationsplan</span>
+                </div>
+                <div id="admin-active-connection-list" class="runtime-plan-list"></div>
+              </section>
+              <section class="runtime-plan-section">
+                <div class="runtime-plan-heading">
+                  <h3>Aktiva Tambox-paneler</h3>
+                  <span>A–D från körande runtime</span>
+                </div>
+                <div id="admin-active-panel-list" class="runtime-plan-list"></div>
+              </section>
+            </div>
+            <div class="active-runtime-actions">
+              <p>Den aktiva träffen ovan är serverns körande konfiguration. Kopiera den om du vill ändra den lokalt.</p>
+              <button id="copy-active-runtime" type="button" class="secondary">Kopiera till lokalt utkast</button>
+            </div>
+          </section>
+
+          <section id="local-runtime-draft" class="card section-card configuration-card">
             <div class="section-heading">
               <div>
                 <p class="eyebrow">TRÄFF OCH STATIONSPLAN</p>
-                <h2>Lokal konfiguration</h2>
-                <p>Bygg en fristående körning direkt på servern. Stationer, sträckor och A–D-paneler sparas lokalt.</p>
+                <h2 id="local-draft-title">Nytt lokalt utkast</h2>
+                <p>Bygg eller ersätt en fristående körning direkt på servern. Den aktiva träffen ovan fortsätter att gå tills utkastet aktiveras.</p>
               </div>
               <span id="draft-revision" class="revision-badge">Utkast</span>
             </div>
@@ -131,7 +266,7 @@
             </form>
           </section>
 
-          <section class="card section-card">
+          <section id="admin-access-settings" class="card section-card">
             <div class="section-heading compact-heading">
               <div>
                 <p class="eyebrow">ÅTKOMST</p>
@@ -157,7 +292,7 @@
             </form>
           </section>
 
-          <div class="two-column">
+          <div id="sync-and-devices" class="two-column">
             <section class="card section-card">
               <div class="section-heading compact-heading">
                 <div>
@@ -172,6 +307,11 @@
                 <button class="primary" type="submit">Hämta</button>
                 <p id="runtime-message" class="form-message" role="status"></p>
               </form>
+              <div class="runtime-update-actions">
+                <button id="runtime-check-update" class="secondary" type="button">Sök efter uppdatering</button>
+                <button id="runtime-download-update" class="secondary hidden" type="button">Hämta versionen</button>
+                <button id="runtime-activate-update" class="primary hidden" type="button">Aktivera hämtad version</button>
+              </div>
               <div id="runtime-status" class="status-list"></div>
             </section>
 
@@ -220,8 +360,90 @@
           </article>
           <p id="command-message" class="command-message" role="status"></p>
         </section>
+
+        <section id="displays-view" class="view-panel hidden">
+          <div class="server-hero card">
+            <div>
+              <p class="eyebrow">FULLSKÄRMSVYER</p>
+              <h2>Skärmar på träffen</h2>
+              <p>Öppna varje vy på en egen TV, dator eller surfplatta. De läser samma lokala lägesbild och återansluter automatiskt.</p>
+            </div>
+          </div>
+          <div class="display-launcher-grid">
+            <a class="display-launch-card" href="/display/topology" target="_blank" rel="noopener">
+              <span class="display-launch-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h5m8 0h5M8 6a2 2 0 1 0 4 0 2 2 0 1 0-4 0Zm4 0h4M3 18h5m8 0h5m-13 0a2 2 0 1 0 4 0 2 2 0 1 0-4 0Zm4 0h4M10 8v8"/></svg></span><b>Banöversikt</b><small id="display-card-topology">Läser stationsplanen …</small>
+            </a>
+            <a class="display-launch-card" href="/display/graph" target="_blank" rel="noopener">
+              <span class="display-launch-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h16M7 15l4-5 3 3 5-7"/></svg></span><b>Tågdiagram</b><small id="display-card-graph">Läser tidtabellen …</small>
+            </a>
+            <a class="display-launch-card" href="/display/clock" target="_blank" rel="noopener">
+              <span class="display-launch-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b>Träffklocka</b><small id="display-card-clock">Läser klockan …</small>
+            </a>
+            <a class="display-launch-card" href="/display/dashboard" target="_blank" rel="noopener">
+              <span class="display-launch-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><b>Översikt</b><small id="display-card-dashboard">Läser trafikläget …</small>
+            </a>
+          </div>
+          <section class="card section-card clock-control-card">
+            <div class="section-heading compact-heading">
+              <div>
+                <p class="eyebrow">LOKAL TRÄFFKLOCKA</p>
+                <h2>Styr klockan</h2>
+                <p>Klockan körs och sparas på TrainMeet Server. Alla skärmar använder samma tid även när internet saknas.</p>
+              </div>
+              <span id="clock-state" class="revision-badge">Läser klockan …</span>
+            </div>
+            <form id="clock-control-form" class="clock-control-form">
+              <label>Klockslag
+                <input id="local-clock-time" type="time" step="1" value="12:00:00">
+              </label>
+              <label>Hastighet
+                <input id="local-clock-speed" type="number" min="0.01" max="100" step="0.25" value="1">
+              </label>
+              <label>Orsak när klockan stoppas
+                <input id="local-clock-reason" maxlength="100" placeholder="Till exempel tekniskt stopp">
+              </label>
+              <div class="clock-control-actions">
+                <button class="primary" type="submit">Ställ och starta</button>
+                <button id="stop-local-clock" class="secondary" type="button">Stoppa</button>
+              </div>
+              <p id="clock-control-message" class="form-message" role="status"></p>
+            </form>
+          </section>
+        </section>
+      </section>
+
+      <section id="display-app" class="display-app hidden">
+        <header id="display-toolbar" class="display-toolbar">
+          <a href="/" class="display-back">← TrainMeet Server</a>
+          <strong id="display-title">Lokal trafik</strong>
+          <div class="display-toolbar-actions">
+            <span id="display-speed" class="display-badge hidden">1×</span>
+            <select id="display-train-select" class="display-select hidden" aria-label="Välj tåg"><option value="">Alla tåg</option></select>
+            <select id="display-clock-style" class="display-select hidden" aria-label="Klockstil"></select>
+            <button id="display-seconds" class="hidden" type="button" aria-label="Visa eller dölj sekundvisaren">Sekunder</button>
+            <span id="display-day" class="display-badge">Dagl</span>
+            <span id="display-live" class="display-live"><i></i> Ansluten</span>
+            <button id="display-theme" type="button">Ljust</button>
+            <button id="display-fullscreen" type="button">Helskärm</button>
+          </div>
+        </header>
+        <div id="display-stage" class="display-stage" role="main">
+          <div id="display-loading" class="display-loading">Ansluter till TrainMeet Server …</div>
+          <svg id="topology-svg" class="display-visual hidden" role="img" aria-label="Banöversikt"></svg>
+          <aside id="display-selection" class="display-selection hidden" aria-live="polite"></aside>
+          <div id="graph-scroll" class="graph-scroll hidden">
+            <div id="graph-canvas" class="graph-canvas">
+              <svg id="graph-svg" class="display-visual" role="img" aria-label="Tågdiagram"></svg>
+              <div id="graph-station-overlay" class="graph-station-overlay" aria-hidden="true">
+                <svg id="graph-station-labels"></svg>
+              </div>
+            </div>
+          </div>
+          <div id="clock-view" class="clock-view hidden"></div>
+          <div id="dashboard-view" class="dashboard-view hidden"></div>
+        </div>
       </section>
     </main>
-    <script src="/assets/app.js?v=20260811-5" defer></script>
+    <script src="/assets/app.js?v=20260812-14" defer></script>
   </body>
 </html>

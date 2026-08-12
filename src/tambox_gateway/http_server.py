@@ -19,8 +19,11 @@ from uuid import uuid4
 from .engine import TrafficEngine
 from .central_sync import (
     DEFAULT_RUNTIME_PUBLICATION_URL,
+    CentralRuntimeDownload,
+    CentralRuntimeManifest,
     CentralSyncError,
-    fetch_runtime_package,
+    fetch_linked_runtime,
+    fetch_runtime_download,
 )
 from .identity import (
     AdminAccessError,
@@ -36,7 +39,8 @@ from .local_config import (
     SQLiteLocalConfigurationStore,
 )
 from .models import Command
-from .runtime import RuntimePublicationError, SQLiteRuntimeStore
+from .operations import SQLiteOperationsStore
+from .runtime import AVAILABLE_CLOCK_STYLES, RuntimePublicationError, SQLiteRuntimeStore
 
 
 LOGGER = logging.getLogger("tambox_gateway.http")
@@ -65,7 +69,9 @@ class TamboxHTTPApplication:
         config: HTTPServerConfig,
         runtime_store: SQLiteRuntimeStore | None = None,
         local_configuration_store: SQLiteLocalConfigurationStore | None = None,
-        runtime_fetcher: Callable[[str, str], dict[str, Any]] | None = None,
+        runtime_fetcher: Callable[[str, str], Any] | None = None,
+        linked_runtime_fetcher: Callable[[str, str, bool], Any] | None = None,
+        operations_store: SQLiteOperationsStore | None = None,
     ):
         self.engine = engine
         self.identities = identities
@@ -73,10 +79,23 @@ class TamboxHTTPApplication:
         self.config = config
         self.runtime_store = runtime_store
         self.local_configuration_store = local_configuration_store
+        self.operations_store = operations_store
         self.runtime_fetcher = runtime_fetcher or (
-            lambda code, url: fetch_runtime_package(code, url)
+            lambda code, url: fetch_runtime_download(code, url)
+        )
+        self.linked_runtime_fetcher = linked_runtime_fetcher or (
+            lambda token, url, manifest_only: fetch_linked_runtime(
+                token, url, manifest_only=manifest_only
+            )
         )
         self.web_root = files("tambox_gateway").joinpath("web")
+
+        if self.operations_store is not None:
+            self.engine.set_transition_observer(self.operations_store.record_engine_transition)
+            if self.runtime_store is not None:
+                active = self.runtime_store.active()
+                if active is not None:
+                    self.operations_store.ensure_publication(active)
 
     def local_admin(self) -> PairedClient:
         return PairedClient(
@@ -211,6 +230,94 @@ class TamboxHTTPApplication:
             return {"configured": False}
         return self.runtime_store.summary()
 
+    def display_snapshot(self) -> dict[str, Any]:
+        publication = self.runtime_store.active() if self.runtime_store is not None else None
+        if publication is not None:
+            active_day = self.runtime_store.active_day() or publication.active_day
+            timetable = publication.timetable(active_day=active_day)
+            stations = publication.payload["stations"]
+            connections = publication.payload["connections"]
+            autonomous_links = publication.payload.get("autonomous_links", [])
+            display = publication.payload.get("display", {})
+            meet = publication.payload["meet"]
+            publication_id = publication.publication_id
+        else:
+            active_day = "Dagl"
+            timetable = {"trains": [], "routes": [], "services": []}
+            stations = [
+                {"id": station.id, "code": station.code, "name": station.name, "diagram_order": index}
+                for index, station in enumerate(self.engine.config.stations.values())
+            ]
+            connections = [
+                {
+                    "id": connection.id,
+                    "station_a_id": connection.station_a_id,
+                    "station_b_id": connection.station_b_id,
+                    "track_type": connection.track_type.value,
+                }
+                for connection in self.engine.config.connections.values()
+            ]
+            autonomous_links = []
+            display = {"graph_station_order": [station["id"] for station in stations], "default_theme": "dark"}
+            meet = {"id": self.engine.config.id, "name": self.engine.config.name, "active_day": active_day}
+            publication_id = self.engine.config.id
+
+        runtime_connections = self.engine.export_state()["connections"]
+        connection_states = [
+            {"id": connection["id"], **runtime_connections.get(connection["id"], {"state": "free"})}
+            for connection in connections
+        ]
+        if self.operations_store is not None:
+            clock = self.operations_store.clock_status()
+            positions = self.operations_store.positions()
+        else:
+            clock = {
+                "configured": True,
+                "time": f"{self.engine.config.clock_time[:5]}:00",
+                "speed": 1,
+                "running": True,
+                "stopped_reason": None,
+                "show_seconds": True,
+                "available_styles": list(AVAILABLE_CLOCK_STYLES),
+            }
+            positions = []
+        return {
+            "protocol_version": 1,
+            "revision": self.engine.revision,
+            "publication_id": publication_id,
+            "meet": meet,
+            "active_day": active_day,
+            "stations": stations,
+            "connections": connections,
+            "connection_states": connection_states,
+            "autonomous_links": autonomous_links,
+            "trains": timetable.get("trains", []),
+            "routes": timetable.get("routes", []),
+            "services": timetable.get("services", []),
+            "display": display,
+            "clock": clock,
+            "train_positions": positions,
+            "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+
+    def control_clock(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_admin(client)
+        if self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "clock_unavailable", "Den lokala klockan är inte tillgänglig")
+        action = str(payload.get("action") or "")
+        try:
+            if action == "start":
+                if payload.get("speed") is not None:
+                    self.operations_store.set_speed(float(payload["speed"]))
+                return self.operations_store.start_clock(time_value=payload.get("time"))
+            if action == "stop":
+                return self.operations_store.stop_clock(str(payload.get("reason") or "") or None)
+            if action == "speed":
+                return self.operations_store.set_speed(float(payload.get("speed", 1)))
+        except (TypeError, ValueError) as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock", str(error)) from error
+        raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_action", "Okänt klockkommando")
+
     def restart_required(self) -> bool:
         if self.runtime_store is None:
             return False
@@ -303,6 +410,8 @@ class TamboxHTTPApplication:
                 str(error),
             ) from error
 
+        if self.operations_store is not None:
+            self.operations_store.ensure_publication(publication)
         restart_required = publication.session_config() != self.engine.config
         return {
             **self.runtime_store.summary(),
@@ -357,6 +466,8 @@ class TamboxHTTPApplication:
             publication = self.runtime_store.install(package)
         except RuntimePublicationError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_runtime", str(error)) from error
+        if self.operations_store is not None:
+            self.operations_store.ensure_publication(publication)
         restart_required = publication.session_config() != self.engine.config
         return {
             **self.runtime_store.summary(),
@@ -386,10 +497,96 @@ class TamboxHTTPApplication:
         self._require_admin(client)
         code = str(payload.get("sync_code", ""))
         try:
-            package = self.runtime_fetcher(code, self.config.central_runtime_url)
+            result = self.runtime_fetcher(code, self.config.central_runtime_url)
         except CentralSyncError as error:
             raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
-        return self.install_runtime(client, {"package": package})
+        if isinstance(result, CentralRuntimeDownload):
+            package = result.package
+            if self.runtime_store is not None and result.link_token:
+                self.runtime_store.save_link_token(result.link_token)
+        elif isinstance(result, dict):
+            package = result
+        else:
+            raise HTTPAPIError(
+                HTTPStatus.BAD_GATEWAY,
+                "central_sync_failed",
+                "TrainMeet skickade inget driftpaket",
+            )
+        response = self.install_runtime(client, {"package": package})
+        response["linked"] = self.runtime_store.link_token() is not None if self.runtime_store else False
+        return response
+
+    def check_runtime_update(self, client: PairedClient) -> dict[str, Any]:
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal tidtabellslagring saknas")
+        token = self.runtime_store.link_token()
+        if not token:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla först servern med en sexsiffrig synkkod")
+        try:
+            result = self.linked_runtime_fetcher(token, self.config.central_runtime_url, True)
+        except CentralSyncError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
+        if not isinstance(result, CentralRuntimeManifest):
+            raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", "TrainMeet skickade inget versionsbesked")
+        active = self.runtime_store.active()
+        return {
+            "linked": True,
+            "update_available": active is None or active.publication_id != result.publication_id,
+            "current_publication_id": active.publication_id if active else None,
+            "publication_id": result.publication_id,
+            "published_at": result.published_at,
+            "package_checksum": result.package_checksum,
+        }
+
+    def download_runtime_update(self, client: PairedClient) -> dict[str, Any]:
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal tidtabellslagring saknas")
+        token = self.runtime_store.link_token()
+        if not token:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla först servern med en sexsiffrig synkkod")
+        try:
+            result = self.linked_runtime_fetcher(token, self.config.central_runtime_url, False)
+        except CentralSyncError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
+        if not isinstance(result, CentralRuntimeDownload):
+            raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", "TrainMeet skickade inget driftpaket")
+        try:
+            publication = self.runtime_store.install(result.package, activate=False)
+        except RuntimePublicationError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_runtime", str(error)) from error
+        active = self.runtime_store.active()
+        return {
+            **self.runtime_store.summary(),
+            "downloaded_publication_id": publication.publication_id,
+            "update_available": active is None or active.publication_id != publication.publication_id,
+            "message": "Den nya versionen är hämtad och väntar på aktivering.",
+        }
+
+    def activate_runtime_update(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal tidtabellslagring saknas")
+        publication_id = str(payload.get("publication_id") or "")
+        if not publication_id:
+            staged = self.runtime_store.latest_staged()
+            publication_id = staged.publication_id if staged else ""
+        try:
+            publication = self.runtime_store.activate(publication_id)
+        except RuntimePublicationError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_runtime", str(error)) from error
+        if self.operations_store is not None:
+            self.operations_store.ensure_publication(publication)
+        restart_required = publication.session_config() != self.engine.config
+        return {
+            **self.runtime_store.summary(),
+            "restart_required": restart_required,
+            "message": (
+                "Versionen är aktiverad. Starta om TrainMeet Server för att börja använda den nya stationsplanen."
+                if restart_required else "Versionen är aktiverad."
+            ),
+        }
 
     def assign_device(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
@@ -424,6 +621,14 @@ class TamboxHTTPApplication:
             "/assets/app.css": "app.css",
             "/assets/app.js": "app.js",
         }.get(path)
+        if relative is None and path in {
+            "/display",
+            "/display/topology",
+            "/display/graph",
+            "/display/clock",
+            "/display/dashboard",
+        }:
+            relative = "index.html"
         if relative is None:
             return None
         asset = self.web_root.joinpath(relative)
@@ -449,6 +654,9 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path == "/v1/display":
+                self._send_json(HTTPStatus.OK, self.server.application.display_snapshot())
+                return
             if path == "/v1/auth/status":
                 client = self._optional_authenticated_client()
                 access = self.server.application.identities.admin_access_summary()
@@ -514,6 +722,10 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/runtime":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.runtime_summary(client))
+                return
+            if path == "/v1/runtime/update":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.check_runtime_update(client))
                 return
             if path == "/v1/local-configuration":
                 client = self._authenticated_client()
@@ -627,6 +839,20 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                     self.server.application.sync_runtime(client, payload),
                 )
                 return
+            if path == "/v1/runtime/update":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.CREATED,
+                    self.server.application.download_runtime_update(client),
+                )
+                return
+            if path == "/v1/runtime/activate":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.CREATED,
+                    self.server.application.activate_runtime_update(client, payload),
+                )
+                return
             if path == "/v1/local-configuration":
                 client = self._authenticated_client()
                 self._send_json(
@@ -646,6 +872,13 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                 response = self.server.application.restart_server(client)
                 self._send_json(HTTPStatus.ACCEPTED, response)
                 self.server.request_restart()
+                return
+            if path == "/v1/clock":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.control_clock(client, payload),
+                )
                 return
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
         except HTTPAPIError as error:

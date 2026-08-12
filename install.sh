@@ -14,8 +14,14 @@ trap cleanup EXIT INT TERM
 
 echo "Hämtar TrainMeet Server …"
 if ! curl -fsSL "$ARCHIVE_URL" -o "$ARCHIVE_PATH"; then
-  echo "Ingen paketerad release hittades; använder senaste main."
-  curl -fsSL "$SOURCE_URL" -o "$ARCHIVE_PATH"
+  echo "Ingen paketerad release hittades; provar senaste main."
+  if ! curl -fsSL "$SOURCE_URL" -o "$ARCHIVE_PATH"; then
+    echo
+    echo "Kunde inte hämta TrainMeet Server från GitHub."
+    echo "Kontrollera internetanslutningen och att repot är publikt:"
+    echo "  https://github.com/${REPOSITORY}"
+    exit 1
+  fi
 fi
 
 tar -xzf "$ARCHIVE_PATH" -C "$TEMP_DIR"
@@ -31,4 +37,3 @@ if [ -z "${SOURCE_DIR:-}" ] || [ ! -x "$SOURCE_DIR/scripts/install-raspberry-pi.
 fi
 
 exec "$SOURCE_DIR/scripts/install-raspberry-pi.sh"
-

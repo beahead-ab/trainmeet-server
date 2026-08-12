@@ -21,8 +21,11 @@ USER trainmeet
 EXPOSE 8787
 VOLUME ["/var/lib/trainmeet-server"]
 
-HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/v1/info', timeout=2)" || exit 1
+# A Raspberry Pi may be rendering several timetable views at once. Give the
+# lightweight info request enough time to share CPU with those clients rather
+# than declaring a responsive server unhealthy during a short load peak.
+HEALTHCHECK --interval=20s --timeout=12s --start-period=30s --retries=5 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/v1/info', timeout=10)" || exit 1
 
 ENTRYPOINT ["python", "-m", "tambox_gateway.local_server"]
 CMD ["--external-broker", "--bind", "0.0.0.0", "--state-dir", "/var/lib/trainmeet-server"]

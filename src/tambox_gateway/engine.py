@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timezone
 from threading import RLock
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from .display import allowed_keys, render_panel
@@ -18,7 +18,6 @@ from .models import (
     PanelRuntime,
     RequestStatus,
     SessionConfig,
-    SlotKey,
 )
 from .storage import CorruptStateError, StateStore, session_config_fingerprint
 
@@ -46,6 +45,7 @@ class TrafficEngine:
         }
         self.processed_commands: dict[str, CommandAck] = {}
         self.audit: list[dict[str, Any]] = []
+        self.transition_observer: Callable[[dict[str, Any], dict[str, Any], datetime], None] | None = None
         self._validate_config()
         if self.state_store is not None:
             state = self.state_store.load(self.config.id, self.config_fingerprint)
@@ -55,6 +55,12 @@ class TrafficEngine:
     def press(self, command: Command, *, now: datetime | None = None) -> CommandAck:
         with self._lock:
             return self._press_locked(command, now=now)
+
+    def set_transition_observer(
+        self,
+        observer: Callable[[dict[str, Any], dict[str, Any], datetime], None] | None,
+    ) -> None:
+        self.transition_observer = observer
 
     def _press_locked(self, command: Command, *, now: datetime | None = None) -> CommandAck:
         now = now or datetime.now(timezone.utc)
@@ -80,6 +86,7 @@ class TrafficEngine:
             return ack
 
         checkpoint = self._checkpoint()
+        before_state = self.export_state()
         panel = self.config.panels[command.panel_id]
         runtime = self.panels[command.panel_id]
         accepted, reason = self._handle_key(panel, runtime, command)
@@ -104,6 +111,13 @@ class TrafficEngine:
         ack = self._ack(command, "accepted", None, previous)
         self.processed_commands[command.command_id] = ack
         self._persist_or_rollback(checkpoint)
+        if self.transition_observer is not None:
+            try:
+                self.transition_observer(before_state, self.export_state(), now)
+            except Exception:
+                # Display telemetry must never make an otherwise valid traffic
+                # command fail. The next full snapshot repairs display state.
+                pass
         return ack
 
     def export_state(self) -> dict[str, Any]:
@@ -162,20 +176,14 @@ class TrafficEngine:
             except (KeyError, TypeError, ValueError) as error:
                 raise CorruptStateError(f"Invalid connection state for {connection_id}") from error
 
-        restored_panels: dict[str, PanelRuntime] = {}
-        for panel_id, value in panels.items():
-            try:
-                selected_slot = value.get("selected_slot")
-                if selected_slot is not None and selected_slot not in {"A", "B", "C", "D"}:
-                    raise ValueError("invalid selected slot")
-                restored_panels[panel_id] = PanelRuntime(
-                    mode=InteractionMode(value["mode"]),
-                    selected_slot=selected_slot,
-                    train_number=str(value.get("train_number", "")),
-                    owner_client_id=value.get("owner_client_id"),
-                )
-            except (KeyError, TypeError, ValueError) as error:
-                raise CorruptStateError(f"Invalid panel state for {panel_id}") from error
+        # Panel interaction is deliberately ephemeral. A restart restores the
+        # authoritative traffic state below, but never strands a physical box
+        # in an old input, waiting or confirmation screen. Every client can
+        # reconstruct the next available action from the connection snapshot.
+        restored_panels = {
+            panel_id: PanelRuntime()
+            for panel_id in panels
+        }
 
         processed = state.get("processed_commands", {})
         if not isinstance(processed, dict):
@@ -277,7 +285,15 @@ class TrafficEngine:
                 "from_station_id": connection_state.from_station_id,
                 "to_station_id": connection_state.to_station_id,
                 "train_number": connection_state.train_number,
+                "action": self._slot_action(panel.station_id, connection_state),
+                "needs_attention": self._slot_needs_attention(panel.station_id, connection_state),
             }
+
+        attention_slots = [
+            key
+            for key, slot in slots.items()
+            if slot.get("needs_attention")
+        ]
 
         return {
             "protocol_version": 1,
@@ -296,6 +312,10 @@ class TrafficEngine:
                 "allowed_keys": allowed_keys(runtime, panel),
             },
             "slots": slots,
+            "attention": {
+                "count": len(attention_slots),
+                "slots": attention_slots,
+            },
             "display": {"line1": line1, "line2": line2},
             "clock": {"time": self.config.clock_time[:5], "running": True, "source": "pi_internal"},
         }
@@ -472,19 +492,13 @@ class TrafficEngine:
         if mode == DispatchMode.CLEARANCE:
             line.state = ConnectionState.REQUESTED
             line.request_status = RequestStatus.PENDING
-            runtime.mode = InteractionMode.AWAITING_PERMISSION
-            runtime.owner_client_id = None
-            receiving = self._panel_for_station_and_connection(other_station_id, connection_id)
-            receiving_runtime = self.panels[receiving.id]
-            receiving_runtime.mode = InteractionMode.INCOMING_REQUEST
-            receiving_runtime.selected_slot = self._slot_for_connection(receiving, connection_id)
-            receiving_runtime.train_number = line.train_number or ""
-            receiving_runtime.owner_client_id = None
         else:
             line.state = ConnectionState.RESERVED
             line.request_status = RequestStatus.ACCEPTED
-            runtime.mode = InteractionMode.READY_DEPARTURE
-            runtime.owner_client_id = None
+        # The request/reservation now belongs to the connection, not to the
+        # foreground screen. Return immediately so this panel can handle other
+        # trains while the traffic case remains visible in its A-D slot.
+        runtime.reset()
         return True, None
 
     def _respond_request(
@@ -499,19 +513,12 @@ class TrafficEngine:
         if line.state != ConnectionState.REQUESTED or line.to_station_id != panel.station_id:
             return False, "request_no_longer_pending"
 
-        sending_panel = self._panel_for_station_and_connection(line.from_station_id or "", connection_id)
-        sending_runtime = self.panels[sending_panel.id]
         if accept:
             line.state = ConnectionState.RESERVED
             line.request_status = RequestStatus.ACCEPTED
-            sending_runtime.mode = InteractionMode.READY_DEPARTURE
-            sending_runtime.selected_slot = self._slot_for_connection(sending_panel, connection_id)
-            sending_runtime.train_number = line.train_number or ""
-            sending_runtime.owner_client_id = None
         else:
             line.request_status = RequestStatus.REJECTED
             line.clear()
-            sending_runtime.reset()
         runtime.reset()
         return True, None
 
@@ -524,11 +531,9 @@ class TrafficEngine:
         line = self.connections[connection_id]
         if line.state != ConnectionState.REQUESTED or line.from_station_id != panel.station_id:
             return False, "request_no_longer_pending"
-        receiving_panel = self._panel_for_station_and_connection(line.to_station_id or "", connection_id)
         line.request_status = RequestStatus.CANCELED
         line.clear()
         runtime.reset()
-        self.panels[receiving_panel.id].reset()
         return True, None
 
     def _cancel_reservation(
@@ -540,11 +545,9 @@ class TrafficEngine:
         line = self.connections[connection_id]
         if line.state != ConnectionState.RESERVED or line.from_station_id != panel.station_id:
             return False, "reservation_no_longer_active"
-        receiving_panel = self._panel_for_station_and_connection(line.to_station_id or "", connection_id)
         line.request_status = RequestStatus.CANCELED
         line.clear()
         runtime.reset()
-        self.panels[receiving_panel.id].reset()
         return True, None
 
     def _depart(
@@ -558,8 +561,6 @@ class TrafficEngine:
             return False, "departure_not_reserved"
         line.state = ConnectionState.OCCUPIED
         runtime.reset()
-        receiving_panel = self._panel_for_station_and_connection(line.to_station_id or "", connection_id)
-        self.panels[receiving_panel.id].reset()
         return True, None
 
     def _arrive(
@@ -571,11 +572,30 @@ class TrafficEngine:
         line = self.connections[connection_id]
         if line.state != ConnectionState.OCCUPIED or line.to_station_id != panel.station_id:
             return False, "train_not_departed"
-        sending_panel = self._panel_for_station_and_connection(line.from_station_id or "", connection_id)
         line.clear()
         runtime.reset()
-        self.panels[sending_panel.id].reset()
         return True, None
+
+    @staticmethod
+    def _slot_action(station_id: str, runtime: ConnectionRuntime) -> str:
+        if runtime.state == ConnectionState.FREE:
+            return "request_departure"
+        outgoing = runtime.from_station_id == station_id
+        if runtime.state == ConnectionState.REQUESTED:
+            return "wait_permission" if outgoing else "answer_request"
+        if runtime.state == ConnectionState.RESERVED:
+            return "depart" if outgoing else "await_departure"
+        if runtime.state == ConnectionState.OCCUPIED:
+            return "in_transit" if outgoing else "confirm_arrival"
+        return "view"
+
+    @staticmethod
+    def _slot_needs_attention(station_id: str, runtime: ConnectionRuntime) -> bool:
+        if runtime.state == ConnectionState.REQUESTED:
+            return runtime.to_station_id == station_id
+        if runtime.state == ConnectionState.RESERVED:
+            return runtime.from_station_id == station_id
+        return False
 
     def _selected_connection(self, panel: PanelConfig, runtime: PanelRuntime) -> str:
         if runtime.selected_slot is None:
@@ -584,25 +604,6 @@ class TrafficEngine:
         if connection_id is None:
             raise RuntimeError("Selected slot is not configured")
         return connection_id
-
-    def _panel_for_station_and_connection(self, station_id: str, connection_id: str) -> PanelConfig:
-        matches = [
-            panel
-            for panel in self.config.panels.values()
-            if panel.station_id == station_id and connection_id in panel.slots.values()
-        ]
-        if len(matches) != 1:
-            raise RuntimeError(
-                f"Expected exactly one panel for station {station_id} and connection {connection_id}"
-            )
-        return matches[0]
-
-    @staticmethod
-    def _slot_for_connection(panel: PanelConfig, connection_id: str) -> SlotKey:
-        for key, value in panel.slots.items():
-            if value == connection_id:
-                return key
-        raise RuntimeError(f"Panel {panel.id} does not expose {connection_id}")
 
     def _ack(
         self,

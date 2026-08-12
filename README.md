@@ -4,15 +4,24 @@ TrainMeet Server är den lokala, självständiga driftsmiljön för en TrainMeet
 
 Den centrala [TrainMeet-applikationen](https://github.com/beahead-ab/trainmeet) används längre fram för att bygga och publicera konfigurationer och bearbeta importerade tidtabeller. Själva träffen körs lokalt här.
 
-## Installera på en ren Raspberry Pi
+## Installera på en ren Raspberry Pi eller Ubuntu-server
 
-När repot är publikt kan hela installationen startas med en rad:
+På en ny Raspberry Pi med Raspberry Pi OS (64-bit) eller en Ubuntu-server kan
+hela installationen startas med en rad:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh
 ```
 
-Under den privata utvecklingsfasen klonar man repot med ett GitHub-konto som har åtkomst och kör:
+Installationen frågar efter ditt vanliga `sudo`-lösenord när det behövs. På en
+molnserver där du redan är inloggad som `root` kan `sudo` utelämnas:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sh
+```
+
+Så länge repot är privat klonar man det i stället med ett GitHub-konto som har
+åtkomst och kör:
 
 ```sh
 sudo ./scripts/install-raspberry-pi.sh
@@ -29,16 +38,24 @@ Servern publiceras som en versionsmärkt OCI-image för både `linux/amd64` och
 
 ### Mac eller annan dator med Docker
 
+På Mac är Docker/Colima den rekommenderade miljön, eftersom samma image sedan
+kan köras på Raspberry Pi och Kubernetes. Installera verktygen en gång och kör
+installationskommandot:
+
 ```sh
-git clone https://github.com/beahead-ab/trainmeet-server.git
-cd trainmeet-server
-docker compose up --build --detach
+brew install colima docker docker-compose
+./scripts/install-docker-mac.command
 ```
 
 Öppna `http://127.0.0.1:8787`. Compose startar TrainMeet Server och Mosquitto
-som två tjänster med beständiga volymer. Stoppa utan att ta bort data med
-`docker compose down`; lägg till `--volumes` endast när även den lokala
-konfigurationen och trafikhistoriken ska raderas.
+som två tjänster med beständiga volymer. Colima startas automatiskt vid
+inloggning och containrarna använder `restart: unless-stopped`.
+
+För en manuell start används `docker compose up --build --detach`, eller
+`docker-compose up --build --detach` när Homebrew har installerat det fristående
+kommandot. Stoppa utan att ta bort data med `docker compose down`; lägg till
+`--volumes` endast när även den lokala konfigurationen och trafikhistoriken ska
+raderas.
 
 Homebrew installerar på vissa Macar kommandot som `docker-compose`; det kan
 användas på exakt samma sätt om `docker compose` inte hittas.
@@ -128,22 +145,38 @@ Raspberry Pi: TrainMeet Server + SQLite + Mosquitto
 
 Raspberry Pi:n är alltid auktoritativ. MQTT används som transport med QoS 1, retained snapshots och idempotenta kommandon. En klient som tappar nätet återansluter, presenterar sig igen och får hela det aktuella läget. Klienterna avgör aldrig själva om ett tåg får skickas.
 
+Ett trafikärende tillhör sträckan på servern, inte Tamboxens aktuella skärm.
+När en operatör har begärt ett tåg återgår panelen därför direkt till sin
+A–D-översikt och kan hantera nästa tåg. Väntande, inkommande och godkända
+ärenden markeras i respektive A–D-position och öppnas med samma riktningsknapp.
+Ett svar från en annan station avbryter aldrig en tågnummerinmatning som redan
+pågår. Den tillfälliga panelinteraktionen rensas vid serveromstart, medan
+begäran, reservationer och belagda sträckor återställs från SQLite.
+
 MQTT är avsiktligt lösenordsfritt på träffens lokala nät. Servern ska inte exponeras direkt mot internet.
 
-## Kör på Mac under utveckling
+## Native Mac-installation som reserv
 
-Installera Mosquitto en gång och starta servern:
+Docker är huvudmiljön på Mac. Den tidigare native-installationen finns kvar som
+en enkel reserv för felsökning utan container-runtime:
 
 ```sh
 brew install mosquitto
 ./scripts/start-mac.command
 ```
 
-Öppna `http://127.0.0.1:8787`. För automatisk start vid inloggning kör man `./scripts/install-mac.command` en gång.
+Kör aldrig native-versionen och Docker samtidigt på standardportarna. Skriptet
+`install-docker-mac.command` stänger därför av native LaunchAgent automatiskt.
 
 ## Lokal konfiguration och tidtabell
 
 Servern kan skapa och aktivera en träff helt lokalt. Den kan också installera ett normaliserat, versionsmärkt runtime-paket från centrala TrainMeet. PDF-import, tolkning och manuell kontroll ligger kvar centralt; den färdiga tidtabellen körs lokalt i SQLite.
+
+Under den nuvarande utvecklingsfasen stöds endast runtime-schema 2. Vi håller inte
+ett kompatibilitetslager för äldre testformat innan den första externa releasen;
+det gör att stations-, tidtabells- och skärmmodellen kan utvecklas utan onödig
+komplexitet. Före en publik release införs dokumenterade migreringar mellan
+stabila schemaversioner.
 
 Viktiga API:er:
 
@@ -152,8 +185,26 @@ Viktiga API:er:
 - `POST /v1/server/restart`
 - `POST /v1/runtime/install`
 - `POST /v1/runtime/sync`
+- `GET/POST /v1/runtime/update`
+- `POST /v1/runtime/activate`
 - `GET /v1/runtime`
 - `GET /v1/timetable?station_id=...`
+- `GET /v1/display`
+- `POST /v1/clock`
+
+Den första sexsiffriga synkkoden kopplar servern permanent till träffen. Därefter
+kan admin söka efter en ny central publicering och hämta den till ett lokalt
+vänteläge. Den aktiva körningen ändras först när administratören väljer
+**Aktivera hämtad version**. Internetavbrott påverkar därför aldrig en redan
+aktiv träff.
+
+Under fliken **Skärmar** finns lokala helskärmsvyer för banöversikt, tågdiagram,
+träffklocka och en kombinerad översikt. De hämtar lägesbilden från Raspberry
+Pi:n, inte från molnet, och återansluter automatiskt efter nätavbrott. Där finns
+också klockstyrning för starttid, hastighet och stopporsak. Samtliga elva
+analoga TrainMeet-klockor samt den digitala klockan kan användas. Färger,
+typografi, kort, fullskärmsuttryck och Tamboxens särskilda proportioner beskrivs
+i [den grafiska identiteten](docs/GRAPHIC_IDENTITY.md).
 
 ## Utveckling och test
 

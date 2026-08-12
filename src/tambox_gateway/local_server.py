@@ -21,6 +21,7 @@ from .identity import DeviceKind, IdentityStore, PairingService
 from .local_config import SQLiteLocalConfigurationStore
 from .models import DispatchMode
 from .mqtt_adapter import MQTTGatewayAdapter
+from .operations import SQLiteOperationsStore
 from .runtime import SQLiteRuntimeStore
 from .storage import SQLiteStateStore
 
@@ -92,6 +93,7 @@ def main() -> None:
         broker_host = "127.0.0.1"
     database_path = state_directory / "tambox.db"
     runtime_store = SQLiteRuntimeStore(database_path)
+    operations_store = SQLiteOperationsStore(database_path)
     local_configuration_store = SQLiteLocalConfigurationStore(database_path)
     active_publication = runtime_store.active()
     session_config = (
@@ -150,6 +152,7 @@ def main() -> None:
         ),
         runtime_store=runtime_store,
         local_configuration_store=local_configuration_store,
+        operations_store=operations_store,
     )
     server = TamboxHTTPServer((args.bind, args.http_port), application)
     signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
@@ -171,6 +174,7 @@ def main() -> None:
         state_store.close()
         runtime_store.close()
         local_configuration_store.close()
+        operations_store.close()
         if broker is not None:
             broker.terminate()
             try:

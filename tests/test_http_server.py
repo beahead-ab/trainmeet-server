@@ -9,6 +9,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from tambox_gateway.demo import demo_session
+from tambox_gateway.central_sync import CentralRuntimeDownload, CentralRuntimeManifest
 from tambox_gateway.engine import TrafficEngine
 from tambox_gateway.http_server import (
     HTTPServerConfig,
@@ -18,8 +19,9 @@ from tambox_gateway.http_server import (
 from tambox_gateway.identity import IdentityStore, PairingService
 from tambox_gateway.local_config import SQLiteLocalConfigurationStore
 from tambox_gateway.models import DispatchMode
+from tambox_gateway.operations import SQLiteOperationsStore
 from tambox_gateway.runtime import SQLiteRuntimeStore
-from runtime_fixture import runtime_package
+from runtime_fixture import runtime_package, runtime_package_v2
 
 
 class HTTPServerTests(unittest.TestCase):
@@ -27,6 +29,7 @@ class HTTPServerTests(unittest.TestCase):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.identities = IdentityStore(Path(self.temporary_directory.name) / "identity.db")
         self.runtime_store = SQLiteRuntimeStore(Path(self.temporary_directory.name) / "runtime.db")
+        self.operations_store = SQLiteOperationsStore(Path(self.temporary_directory.name) / "runtime.db")
         self.local_configuration_store = SQLiteLocalConfigurationStore(
             Path(self.temporary_directory.name) / "runtime.db"
         )
@@ -51,6 +54,8 @@ class HTTPServerTests(unittest.TestCase):
                 if "".join(character for character in code if character.isdigit()) == "654321"
                 else (_ for _ in ()).throw(ValueError("unexpected sync code"))
             ),
+            linked_runtime_fetcher=self._linked_runtime,
+            operations_store=self.operations_store,
         )
         self.application = application
         self.server = TamboxHTTPServer(("127.0.0.1", 0), application)
@@ -64,6 +69,7 @@ class HTTPServerTests(unittest.TestCase):
         self.thread.join(timeout=5)
         self.identities.close()
         self.runtime_store.close()
+        self.operations_store.close()
         self.local_configuration_store.close()
         self.temporary_directory.cleanup()
 
@@ -71,10 +77,59 @@ class HTTPServerTests(unittest.TestCase):
         with urlopen(f"{self.base_url}/", timeout=2) as response:
             html = response.read().decode("utf-8")
         self.assertIn("TrainMeet Server", html)
+        self.assertIn('id="overview-view"', html)
+        self.assertIn('id="overview-topology"', html)
+        self.assertIn('id="overview-route-list"', html)
+        self.assertIn("TÅGRUTTER", html)
+        self.assertIn("Administration", html)
         self.assertIn("Tambox-simulering", html)
-        self.assertIn("Lokal konfiguration", html)
+        self.assertIn("AKTIV RUNTIME", html)
+        self.assertIn("Aktiva sträckor", html)
+        self.assertIn('id="copy-active-runtime"', html)
+        self.assertIn("Nytt lokalt utkast", html)
+        self.assertIn('id="overview-graph"', html)
         self.assertIn("Extern admininloggning", html)
         self.assertIn('id="login-form"', html)
+        self.assertIn("Skärmar", html)
+
+    def test_public_display_exposes_runtime_clock_services_and_live_state(self):
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+
+        display = self._json_request("/v1/display")
+
+        self.assertEqual(display["publication_id"], publication.publication_id)
+        self.assertEqual(display["clock"]["time"], "09:15:00")
+        self.assertEqual(display["services"][0]["train_number"], "101")
+        self.assertEqual(display["display"]["graph_station_order"], ["station-a", "station-b"])
+
+        started = self._json_request(
+            "/v1/clock",
+            {"action": "start", "time": "10:30:00", "speed": 2},
+        )
+        self.assertTrue(started["running"])
+        self.assertEqual(started["speed"], 2)
+        self.assertTrue(started["time"].startswith("10:30:"))
+
+    def test_linked_runtime_update_is_downloaded_before_activation(self):
+        self.runtime_store.install(runtime_package_v2(publication_id="publication-v2-first"))
+        self.runtime_store.save_link_token("central-test-link")
+
+        manifest = self._json_request("/v1/runtime/update")
+        self.assertTrue(manifest["update_available"])
+        self.assertEqual(manifest["publication_id"], "publication-v2-second")
+
+        downloaded = self._json_request("/v1/runtime/update", {}, expected_status=201)
+        self.assertEqual(downloaded["downloaded_publication_id"], "publication-v2-second")
+        self.assertEqual(self.runtime_store.active().publication_id, "publication-v2-first")
+
+        activated = self._json_request(
+            "/v1/runtime/activate",
+            {"publication_id": "publication-v2-second"},
+            expected_status=201,
+        )
+        self.assertEqual(activated["publication_id"], "publication-v2-second")
+        self.assertEqual(self.runtime_store.active().publication_id, "publication-v2-second")
 
     def test_local_admin_opens_directly_and_external_admin_uses_login_cookie(self):
         local = self._json_request("/v1/local-configuration")
@@ -388,6 +443,19 @@ class HTTPServerTests(unittest.TestCase):
         with urlopen(request, timeout=2) as response:
             self.assertEqual(response.status, expected_status)
             return json.loads(response.read().decode("utf-8"))
+
+    @staticmethod
+    def _linked_runtime(token: str, _url: str, manifest_only: bool):
+        if token != "central-test-link":
+            raise ValueError("unexpected runtime link")
+        package = runtime_package_v2(publication_id="publication-v2-second")
+        if manifest_only:
+            return CentralRuntimeManifest(
+                publication_id=package["publication_id"],
+                published_at=package["published_at"],
+                package_checksum="fixture-checksum",
+            )
+        return CentralRuntimeDownload(package=package, link_token=token)
 
 
 if __name__ == "__main__":

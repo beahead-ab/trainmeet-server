@@ -1,10 +1,24 @@
 const keypadKeys = ["1", "2", "3", "A", "4", "5", "6", "B", "7", "8", "9", "C", "*", "0", "#", "D"];
 const slotKeys = ["A", "B", "C", "D"];
 
+function createWebClientID() {
+  const browserCrypto = globalThis.crypto;
+  if (typeof browserCrypto?.randomUUID === "function") {
+    return `web-${browserCrypto.randomUUID()}`;
+  }
+  if (typeof browserCrypto?.getRandomValues === "function") {
+    const bytes = browserCrypto.getRandomValues(new Uint8Array(12));
+    return `web-${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
+  }
+  return `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
 const state = {
   token: localStorage.getItem("tambox.accessToken"),
-  clientID: localStorage.getItem("tambox.clientID") || `web-${crypto.randomUUID()}`,
-  selectedView: localStorage.getItem("trainmeet.view") || "server",
+  clientID: localStorage.getItem("tambox.clientID") || createWebClientID(),
+  selectedView: localStorage.getItem("trainmeet.view") === "server"
+    ? "overview"
+    : (localStorage.getItem("trainmeet.view") || "overview"),
   snapshots: new Map(),
   selectedPanelID: localStorage.getItem("tambox.panelID"),
   snapshotTimer: null,
@@ -15,6 +29,16 @@ const state = {
   restartRequired: false,
   restarting: false,
   authStatus: null,
+  pendingPublicationID: null,
+  overviewSnapshot: null,
+  selectedTrainNumber: null,
+  selectedStationID: null,
+  hoveredOverviewTrainNumber: null,
+  overviewDataSignature: null,
+  overviewSelectionInitialized: false,
+  displaySelectedTrainNumber: null,
+  displaySelectedStationID: null,
+  displayHoveredTrainNumber: null,
 };
 
 const login = document.querySelector("#login");
@@ -30,6 +54,9 @@ const deviceMessage = document.querySelector("#device-message");
 const devicePanel = document.querySelector("#device-panel");
 const runtimeForm = document.querySelector("#runtime-sync-form");
 const runtimeMessage = document.querySelector("#runtime-message");
+const runtimeCheckUpdate = document.querySelector("#runtime-check-update");
+const runtimeDownloadUpdate = document.querySelector("#runtime-download-update");
+const runtimeActivateUpdate = document.querySelector("#runtime-activate-update");
 const configForm = document.querySelector("#config-form");
 const configMessage = document.querySelector("#config-message");
 const stationEditor = document.querySelector("#station-editor");
@@ -39,6 +66,14 @@ const restartButton = document.querySelector("#restart-server");
 const logoutButton = document.querySelector("#logout");
 const adminAccessForm = document.querySelector("#admin-access-form");
 const adminAccessMessage = document.querySelector("#admin-access-message");
+const clockControlForm = document.querySelector("#clock-control-form");
+const clockControlMessage = document.querySelector("#clock-control-message");
+const overviewRouteSearch = document.querySelector("#overview-route-search");
+const overviewRouteList = document.querySelector("#overview-route-list");
+const overviewRouteDetail = document.querySelector("#overview-route-detail");
+const overviewStationCounts = document.querySelector("#overview-station-counts");
+const closeStationInspector = document.querySelector("#close-station-inspector");
+const copyActiveRuntimeButton = document.querySelector("#copy-active-runtime");
 
 for (const key of keypadKeys) {
   const button = document.createElement("button");
@@ -79,6 +114,31 @@ loginForm.addEventListener("submit", async (event) => {
 document.querySelectorAll(".view-tab").forEach((button) => {
   button.addEventListener("click", () => selectView(button.dataset.view));
 });
+
+document.querySelectorAll("[data-open-view]").forEach((button) => {
+  button.addEventListener("click", () => selectView(button.dataset.openView));
+});
+
+overviewRouteSearch.addEventListener("input", renderRouteExplorer);
+overviewRouteList.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-train-number]");
+  if (!button) return;
+  selectOverviewTrain(button.dataset.trainNumber);
+});
+
+overviewRouteDetail.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-station-id]");
+  if (button) selectOverviewStation(button.dataset.stationId, true);
+});
+
+overviewStationCounts.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-station-id]");
+  if (button) selectOverviewStation(button.dataset.stationId, false);
+});
+
+closeStationInspector.addEventListener("click", () => selectOverviewStation(null, true));
+
+copyActiveRuntimeButton.addEventListener("click", () => copyActiveRuntimeToDraft());
 
 logoutButton.addEventListener("click", async () => {
   await fetch("/v1/auth/logout", {
@@ -138,6 +198,22 @@ adminAccessForm.addEventListener("submit", async (event) => {
   }
 });
 
+clockControlForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await controlLocalClock({
+    action: "start",
+    time: document.querySelector("#local-clock-time").value,
+    speed: Number(document.querySelector("#local-clock-speed").value),
+  });
+});
+
+document.querySelector("#stop-local-clock").addEventListener("click", async () => {
+  await controlLocalClock({
+    action: "stop",
+    reason: document.querySelector("#local-clock-reason").value.trim(),
+  });
+});
+
 panelSelect.addEventListener("change", () => {
   state.selectedPanelID = panelSelect.value;
   localStorage.setItem("tambox.panelID", state.selectedPanelID);
@@ -190,6 +266,68 @@ runtimeForm.addEventListener("submit", async (event) => {
     setMessage(runtimeMessage, error.message, "error");
   } finally {
     button.disabled = false;
+  }
+});
+
+runtimeCheckUpdate.addEventListener("click", async () => {
+  setMessage(runtimeMessage, "Söker efter en ny publicerad version …");
+  runtimeCheckUpdate.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/runtime/update");
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Uppdateringen kunde inte kontrolleras");
+    state.pendingPublicationID = payload.publication_id;
+    runtimeDownloadUpdate.classList.toggle("hidden", !payload.update_available);
+    runtimeActivateUpdate.classList.add("hidden");
+    setMessage(runtimeMessage, payload.update_available
+      ? "En ny version finns. Hämta den för att granska och aktivera lokalt."
+      : "Servern har redan den senaste publicerade versionen.", payload.update_available ? "notice" : "success");
+  } catch (error) {
+    setMessage(runtimeMessage, error.message, "error");
+  } finally {
+    runtimeCheckUpdate.disabled = false;
+  }
+});
+
+runtimeDownloadUpdate.addEventListener("click", async () => {
+  setMessage(runtimeMessage, "Hämtar den nya versionen …");
+  runtimeDownloadUpdate.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/runtime/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Versionen kunde inte hämtas");
+    state.pendingPublicationID = payload.downloaded_publication_id;
+    runtimeDownloadUpdate.classList.add("hidden");
+    runtimeActivateUpdate.classList.remove("hidden");
+    setMessage(runtimeMessage, payload.message, "notice");
+    await refreshRuntime();
+  } catch (error) {
+    setMessage(runtimeMessage, error.message, "error");
+  } finally {
+    runtimeDownloadUpdate.disabled = false;
+  }
+});
+
+runtimeActivateUpdate.addEventListener("click", async () => {
+  setMessage(runtimeMessage, "Aktiverar den hämtade versionen …");
+  runtimeActivateUpdate.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/runtime/activate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publication_id: state.pendingPublicationID }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Versionen kunde inte aktiveras");
+    runtimeActivateUpdate.classList.add("hidden");
+    state.pendingPublicationID = null;
+    state.restartRequired = !!payload.restart_required;
+    restartButton.classList.toggle("hidden", !state.restartRequired);
+    setMessage(runtimeMessage, payload.message, payload.restart_required ? "notice" : "success");
+    await Promise.all([refreshRuntime(), refreshInfo()]);
+  } catch (error) {
+    setMessage(runtimeMessage, error.message, "error");
+  } finally {
+    runtimeActivateUpdate.disabled = false;
   }
 });
 
@@ -269,6 +407,7 @@ async function openApplication() {
       loadLocalConfiguration(),
       refreshDevices(),
       refreshRuntime(),
+      refreshLocalClock(),
       refreshSnapshots(),
     ]);
     setConnection(
@@ -282,11 +421,13 @@ async function openApplication() {
 }
 
 function selectView(view) {
-  const selected = view === "simulator" ? "simulator" : "server";
+  const selected = ["overview", "admin", "simulator", "displays"].includes(view) ? view : "overview";
   state.selectedView = selected;
   localStorage.setItem("trainmeet.view", selected);
-  document.querySelector("#server-view").classList.toggle("hidden", selected !== "server");
+  document.querySelector("#overview-view").classList.toggle("hidden", selected !== "overview");
+  document.querySelector("#admin-view").classList.toggle("hidden", selected !== "admin");
   document.querySelector("#simulator-view").classList.toggle("hidden", selected !== "simulator");
+  document.querySelector("#displays-view").classList.toggle("hidden", selected !== "displays");
   document.querySelectorAll(".view-tab").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === selected);
   });
@@ -310,6 +451,7 @@ async function refreshSnapshots() {
     }
     updatePanelOptions();
     renderTambox();
+    renderActiveRuntimePlan(state.overviewSnapshot);
     setConnection(
       "online",
       state.authStatus?.access_mode === "external" ? "Externt ansluten" : "Lokalt ansluten",
@@ -325,7 +467,7 @@ function scheduleAdminRefresh() {
   clearTimeout(state.adminTimer);
   state.adminTimer = setTimeout(async () => {
     if (!state.authStatus?.authenticated) return;
-    await Promise.allSettled([refreshInfo(), refreshDevices(), refreshRuntime(), refreshAdminAccess()]);
+    await Promise.allSettled([refreshInfo(), refreshDevices(), refreshRuntime(), refreshAdminAccess(), refreshLocalClock()]);
     scheduleAdminRefresh();
   }, 5000);
 }
@@ -373,9 +515,11 @@ async function refreshInfo() {
   if (info.runtime?.configured) {
     pill.textContent = `${info.runtime.meet_name} · ${info.runtime.active_day}`;
     pill.classList.add("active");
+    document.querySelector("#overview-runtime-state").textContent = "Lokalt aktiv";
   } else {
     pill.textContent = "Demoläge – ingen träff aktiverad";
     pill.classList.remove("active");
+    document.querySelector("#overview-runtime-state").textContent = "Demoläge";
   }
   updateRestartButton(Boolean(info.restart_required));
 }
@@ -712,11 +856,57 @@ async function refreshRuntime() {
     title.textContent = "Ingen träff aktiverad";
     detail.textContent = "Servern kör den inbyggda demonstrationen";
   }
+  runtimeCheckUpdate.classList.toggle("hidden", !runtime.linked);
+  if (runtime.available_publication_id) {
+    state.pendingPublicationID = runtime.available_publication_id;
+    runtimeActivateUpdate.classList.remove("hidden");
+  }
   identity.append(title, detail);
   const day = document.createElement("span");
   day.textContent = runtime.active_day || "–";
   row.append(identity, day);
   status.append(row);
+}
+
+async function refreshLocalClock() {
+  const response = await fetch("/v1/display", { cache: "no-store" });
+  if (!response.ok) return;
+  const payload = await response.json();
+  state.overviewSnapshot = payload;
+  renderOverview(payload);
+  const clock = payload.clock || {};
+  const timeInput = document.querySelector("#local-clock-time");
+  if (document.activeElement !== timeInput) timeInput.value = clock.time || "12:00:00";
+  const speedInput = document.querySelector("#local-clock-speed");
+  if (document.activeElement !== speedInput) speedInput.value = Number(clock.speed || 1);
+  const stateLabel = document.querySelector("#clock-state");
+  stateLabel.textContent = clock.running ? `Går · ${Number(clock.speed || 1)}×` : "Stoppad";
+  stateLabel.classList.toggle("clock-running", Boolean(clock.running));
+}
+
+async function controlLocalClock(command) {
+  const buttons = [...clockControlForm.querySelectorAll("button")];
+  buttons.forEach((button) => { button.disabled = true; });
+  setMessage(clockControlMessage, "Uppdaterar den lokala klockan …", "notice");
+  try {
+    const response = await authorizedFetch("/v1/clock", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(command),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Klockan kunde inte uppdateras");
+    setMessage(
+      clockControlMessage,
+      payload.running ? `Klockan går från ${payload.time.slice(0, 5)} i ${Number(payload.speed)}×.` : "Klockan är stoppad.",
+      "success",
+    );
+    await refreshLocalClock();
+  } catch (error) {
+    setMessage(clockControlMessage, error.message, "error");
+  } finally {
+    buttons.forEach((button) => { button.disabled = false; });
+  }
 }
 
 function updatePanelOptions() {
@@ -748,6 +938,318 @@ function renderTambox() {
   for (const button of keypad.querySelectorAll("button")) {
     button.disabled = state.sending || !allowed.has(button.dataset.key);
   }
+}
+
+function uniqueOverviewServices(snapshot) {
+  const byTrainNumber = new Map();
+  for (const service of snapshot?.services || []) {
+    const trainNumber = String(service.train_number || "").trim();
+    if (!trainNumber) continue;
+    const existing = byTrainNumber.get(trainNumber);
+    if (!existing || (service.stops?.length || 0) > (existing.stops?.length || 0)) {
+      byTrainNumber.set(trainNumber, service);
+    }
+  }
+  return [...byTrainNumber.values()].sort((a, b) =>
+    String(a.train_number).localeCompare(String(b.train_number), "sv", { numeric: true })
+  );
+}
+
+function serviceForTrain(snapshot, trainNumber) {
+  if (!trainNumber) return null;
+  return uniqueOverviewServices(snapshot).find((service) => String(service.train_number) === String(trainNumber)) || null;
+}
+
+function selectOverviewTrain(trainNumber) {
+  state.selectedTrainNumber = trainNumber ? String(trainNumber) : null;
+  state.selectedStationID = null;
+  renderRouteExplorer();
+  renderOverviewTopology();
+  renderOverviewGraph(state.overviewSnapshot);
+}
+
+function selectOverviewStation(stationID, preserveTrain = false) {
+  state.selectedStationID = stationID || null;
+  if (!preserveTrain && stationID) state.selectedTrainNumber = null;
+  renderRouteExplorer();
+  renderOverviewTopology();
+  renderOverviewGraph(state.overviewSnapshot);
+  renderStationInspector();
+}
+
+function renderOverviewTopology() {
+  if (!state.overviewSnapshot) return;
+  renderTopology(state.overviewSnapshot, document.querySelector("#overview-topology"), {
+    selectedTrainNumber: state.selectedTrainNumber,
+    selectedStationID: state.selectedStationID,
+    showBadge: false,
+    onTrainSelect: (trainNumber) => selectOverviewTrain(trainNumber),
+    onStationSelect: (stationID) => selectOverviewStation(stationID, Boolean(state.selectedTrainNumber)),
+    onClear: () => {
+      state.selectedTrainNumber = null;
+      state.selectedStationID = null;
+      renderRouteExplorer();
+      renderOverviewTopology();
+      renderOverviewGraph(state.overviewSnapshot);
+      renderStationInspector();
+    },
+  });
+}
+
+function stationTrafficRows(snapshot, stationID) {
+  const currentMinute = minuteValue(snapshot.clock?.time) ?? 0;
+  return uniqueOverviewServices(snapshot).flatMap((service) => {
+    const stop = (service.stops || []).find((item) => item.station_id === stationID);
+    if (!stop) return [];
+    const time = stop.departure_time || stop.arrival_time;
+    const minute = minuteValue(time);
+    return [{
+      trainNumber: String(service.train_number),
+      time: time ? String(time).slice(0, 5) : "–",
+      kind: stop.departure_time ? "avg" : "ank",
+      sort: minute === null ? 2880 : (minute < currentMinute ? minute + 1440 : minute),
+    }];
+  }).sort((a, b) => a.sort - b.sort || a.trainNumber.localeCompare(b.trainNumber, "sv", { numeric: true }));
+}
+
+function renderStationInspector() {
+  const inspector = document.querySelector("#overview-station-inspector");
+  const snapshot = state.overviewSnapshot;
+  const station = snapshot?.stations?.find((item) => item.id === state.selectedStationID);
+  inspector.classList.toggle("hidden", !station);
+  if (!station) return;
+  const connections = (snapshot.connections || []).filter((connection) =>
+    connection.station_a_id === station.id || connection.station_b_id === station.id
+  );
+  const stationByID = new Map((snapshot.stations || []).map((item) => [item.id, item]));
+  const neighbors = connections.map((connection) => {
+    const otherID = connection.station_a_id === station.id ? connection.station_b_id : connection.station_a_id;
+    return { station: stationByID.get(otherID), connection };
+  }).filter((item) => item.station);
+  const trains = stationTrafficRows(snapshot, station.id);
+  document.querySelector("#station-inspector-name").textContent = station.name;
+  document.querySelector("#station-inspector-meta").textContent = `${station.code || "–"} · ${trains.length} tåg · ${connections.length} anslutna sträckor`;
+  document.querySelector("#station-inspector-connections").innerHTML = neighbors.length
+    ? neighbors.map(({ station: neighbor, connection }) => `<span>${escapeHTML(neighbor.name)} · ${connection.track_type === "double" ? "dubbelspår" : "enkelspår"}</span>`).join("")
+    : "<span>Fristående station</span>";
+  document.querySelector("#station-inspector-trains").innerHTML = trains.length
+    ? trains.slice(0, 5).map((train) => `<li><button type="button" data-train-number="${escapeHTML(train.trainNumber)}"><b>${escapeHTML(train.trainNumber)}</b><span>${escapeHTML(train.kind)} ${escapeHTML(train.time)}</span></button></li>`).join("")
+    : "<li>Inga tåg i tidtabellen.</li>";
+  document.querySelector("#station-inspector-trains").querySelectorAll("button[data-train-number]").forEach((button) => {
+    button.addEventListener("click", () => selectOverviewTrain(button.dataset.trainNumber));
+  });
+}
+
+function updateRuntimeDataViews(snapshot, services) {
+  const stations = snapshot.stations || [];
+  const connections = snapshot.connections || [];
+  const activeConnections = (snapshot.connection_states || []).filter((item) => item.state !== "free").length;
+  const activeTrains = (snapshot.train_positions || []).length;
+  const clockTime = String(snapshot.clock?.time || "--:--").slice(0, 5);
+  const clockState = snapshot.clock?.running ? `${clockTime} · ${Number(snapshot.clock?.speed || 1)}×` : `${clockTime} · stoppad`;
+
+  document.querySelector("#admin-active-meet").textContent = snapshot.meet?.name || "Lokal träff";
+  document.querySelector("#admin-active-detail").textContent = `${snapshot.meet?.default_dispatch_mode === "direct" ? "Direkttrafik" : "Tåganmälan"} · ${services.length} tågrutter från den aktiva tidtabellen`;
+  document.querySelector("#admin-active-day").textContent = snapshot.active_day || "Dagl";
+  document.querySelector("#admin-active-stations").textContent = stations.length;
+  document.querySelector("#admin-active-connections").textContent = connections.length;
+  document.querySelector("#admin-active-trains").textContent = services.length;
+  document.querySelector("#admin-active-clock").textContent = clockTime;
+  document.querySelector("#admin-active-station-list").innerHTML = orderedStations(snapshot).map((station) => `<span><b>${escapeHTML(station.code || "–")}</b>${escapeHTML(station.name)}</span>`).join("");
+  renderActiveRuntimePlan(snapshot);
+
+  document.querySelector("#display-card-topology").textContent = `${stations.length} stationer · ${connections.length} sträckor`;
+  document.querySelector("#display-card-graph").textContent = `${services.length} tåg · ${snapshot.active_day || "Dagl"}`;
+  document.querySelector("#display-card-clock").textContent = clockState;
+  document.querySelector("#display-card-dashboard").textContent = `${activeTrains} aktiva tåg · ${activeConnections} upptagna sträckor`;
+}
+
+function renderActiveRuntimePlan(snapshot) {
+  if (!snapshot) return;
+  const stations = snapshot.stations || [];
+  const connections = snapshot.connections || [];
+  const stationByID = new Map(stations.map((station) => [station.id, station]));
+  const connectionList = document.querySelector("#admin-active-connection-list");
+  const panelList = document.querySelector("#admin-active-panel-list");
+
+  connectionList.innerHTML = connections.length
+    ? connections.map((connection) => {
+      const stationA = stationByID.get(connection.station_a_id);
+      const stationB = stationByID.get(connection.station_b_id);
+      const endpointA = stationA?.code || stationA?.name || "?";
+      const endpointB = stationB?.code || stationB?.name || "?";
+      const keys = [connection.tambox_key_a, connection.tambox_key_b].filter(Boolean).join(" / ");
+      const detail = `${connection.track_type === "double" ? "Dubbelspår" : "Enkelspår"}${keys ? ` · ${keys}` : ""}`;
+      return `<div class="runtime-plan-row"><b>${escapeHTML(endpointA)} ↔ ${escapeHTML(endpointB)}</b><span>${escapeHTML(detail)}</span></div>`;
+    }).join("")
+    : '<div class="runtime-plan-empty">Inga aktiva sträckor.</div>';
+
+  const stationIDs = new Set(stations.map((station) => station.id));
+  const panels = [...state.snapshots.values()]
+    .filter((panel) => stationIDs.has(panel.station_id))
+    .sort((a, b) => String(a.panel_name).localeCompare(String(b.panel_name), "sv"));
+  panelList.innerHTML = panels.length
+    ? panels.map((panel) => {
+      const assignments = slotKeys.flatMap((key) => {
+        const slot = panel.slots?.[key];
+        return slot?.connection_id ? [`${key}→${slot.station_code || "?"}`] : [];
+      }).join(" · ");
+      return `<div class="runtime-plan-row"><b>${escapeHTML(panel.panel_name)}</b><span>${escapeHTML(assignments || "Ingen A–D-koppling")}</span></div>`;
+    }).join("")
+    : '<div class="runtime-plan-empty">Panelerna läses in …</div>';
+
+  document.querySelector("#admin-active-connection-label").textContent = `${connections.length} konfigurerade`;
+  copyActiveRuntimeButton.disabled = stations.length === 0;
+}
+
+function copyActiveRuntimeToDraft() {
+  const snapshot = state.overviewSnapshot;
+  if (!snapshot?.stations?.length) {
+    setMessage(configMessage, "Det finns ingen aktiv stationsplan att kopiera.", "error");
+    return;
+  }
+  const currentHasContent = Boolean(
+    state.config?.stations?.length
+    || state.config?.connections?.length
+    || state.config?.panels?.length
+  );
+  if (currentHasContent && !window.confirm("Ersätt det lokala utkastet i formuläret med den aktiva träffen? Inget sparas förrän du väljer Spara utkast.")) return;
+
+  const stationIDs = new Set(snapshot.stations.map((station) => station.id));
+  const panels = [...state.snapshots.values()]
+    .filter((panel) => stationIDs.has(panel.station_id))
+    .map((panel) => ({
+      id: panel.panel_id,
+      station_id: panel.station_id,
+      name: panel.panel_name,
+      slots: Object.fromEntries(slotKeys.map((key) => [key, panel.slots?.[key]?.connection_id || null])),
+    }));
+
+  state.config = {
+    schema_version: 1,
+    id: `local-${snapshot.meet?.id || slugify(snapshot.meet?.name || "trainmeet")}`,
+    name: snapshot.meet?.name || "Lokal träff",
+    timezone: snapshot.meet?.timezone || "Europe/Stockholm",
+    active_day: snapshot.active_day || snapshot.meet?.active_day || "Dagl",
+    default_dispatch_mode: snapshot.meet?.default_dispatch_mode === "direct" ? "direct" : "clearance",
+    clock_time: String(snapshot.meet?.clock_time || snapshot.clock?.time || "12:00").slice(0, 5),
+    stations: orderedStations(snapshot).map((station) => ({
+      id: station.id,
+      code: station.code,
+      name: station.name,
+    })),
+    connections: (snapshot.connections || []).map((connection) => ({
+      id: connection.id,
+      station_a_id: connection.station_a_id,
+      station_b_id: connection.station_b_id,
+      track_type: connection.track_type === "double" ? "double" : "single",
+      dispatch_mode_override: connection.dispatch_mode_override || null,
+      display_side_a: String(connection.display_side_a || "right").startsWith("left") ? "left" : "right",
+      display_side_b: String(connection.display_side_b || "left").startsWith("right") ? "right" : "left",
+      display_order_a: Number(connection.display_order_a || 0),
+      display_order_b: Number(connection.display_order_b || 0),
+    })),
+    panels,
+  };
+  document.querySelector("#local-draft-title").textContent = "Lokalt utkast från aktiv träff";
+  renderConfiguration();
+  setMessage(configMessage, "Den aktiva stationsplanen är kopierad till formuläret. Granska den och välj Spara utkast när du är nöjd.", "success");
+  configForm.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderOverview(snapshot) {
+  if (!snapshot) return;
+  const services = uniqueOverviewServices(snapshot);
+  const stations = snapshot.stations || [];
+  const mode = snapshot.meet?.default_dispatch_mode === "direct" ? "Direkttrafik" : "Tåganmälan";
+  document.querySelector("#overview-meet-name").textContent = snapshot.meet?.name || "TrainMeet Server";
+  document.querySelector("#overview-runtime-meta").textContent = `${snapshot.active_day || "Dagl"} · ${mode} · lokal runtime`;
+  document.querySelector("#overview-station-meta").textContent = `${stations.length} stationer · ${services.length} tåg`;
+  document.querySelector("#overview-clock").textContent = String(snapshot.clock?.time || "--:--").slice(0, 5);
+  document.querySelector("#overview-day").textContent = snapshot.active_day || "Dagl";
+  document.querySelector("#overview-route-count").textContent = services.length;
+  updateRuntimeDataViews(snapshot, services);
+
+  const signature = `${snapshot.publication_id || "demo"}:${snapshot.active_day || ""}:${services.length}:${stations.length}`;
+  if (state.overviewDataSignature !== signature) {
+    state.overviewDataSignature = signature;
+    renderRouteExplorer();
+  }
+  renderOverviewTopology();
+  renderStationInspector();
+  renderOverviewGraph(snapshot);
+}
+
+function renderRouteExplorer() {
+  const snapshot = state.overviewSnapshot;
+  if (!snapshot) return;
+  const services = uniqueOverviewServices(snapshot);
+  const stationByID = new Map((snapshot.stations || []).map((station) => [station.id, station]));
+  const query = overviewRouteSearch.value.trim().toLocaleLowerCase("sv");
+  const visibleServices = services.filter((service) =>
+    String(service.train_number).toLocaleLowerCase("sv").includes(query)
+  );
+  if (!state.overviewSelectionInitialized && services.length) {
+    state.selectedTrainNumber = String(services[0].train_number);
+    state.overviewSelectionInitialized = true;
+  } else if (state.selectedTrainNumber !== null && !services.some((service) => String(service.train_number) === state.selectedTrainNumber)) {
+    state.selectedTrainNumber = services[0] ? String(services[0].train_number) : null;
+  }
+
+  overviewRouteList.innerHTML = visibleServices.length
+    ? visibleServices.map((service) => {
+        const trainNumber = String(service.train_number);
+        return `<button type="button" data-train-number="${escapeHTML(trainNumber)}" class="route-number${trainNumber === state.selectedTrainNumber ? " active" : ""}">${escapeHTML(trainNumber)}</button>`;
+      }).join("")
+    : '<p class="route-empty">Inga tåg hittades.</p>';
+
+  const selected = services.find((service) => String(service.train_number) === state.selectedTrainNumber);
+  const detail = document.querySelector("#overview-route-detail");
+  if (!selected) {
+    detail.innerHTML = services.length
+      ? '<div class="route-detail-empty">Välj ett tåg i listan, banöversikten eller tågdiagrammet.</div>'
+      : '<div class="route-detail-empty">Tidtabellen saknar tågrutter.</div>';
+  } else {
+    const stops = [...(selected.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
+    detail.innerHTML = `
+      <div class="route-detail-heading">
+        <h3>${escapeHTML(selected.train_number)}</h3>
+        <span>${stops.length} stopp</span>
+      </div>
+      <ol class="route-stops">
+        ${stops.map((stop, index) => {
+          const station = stationByID.get(stop.station_id);
+          const arrival = stop.arrival_time ? `ank ${String(stop.arrival_time).slice(0, 5)}` : "";
+          const departure = stop.departure_time ? `avg ${String(stop.departure_time).slice(0, 5)}` : "";
+          const times = [arrival, departure].filter(Boolean).join(" · ") || "tid saknas";
+          const positionClass = index === 0 ? " first" : (index === stops.length - 1 ? " last" : "");
+          return `<li class="route-stop${positionClass}${stop.station_id === state.selectedStationID ? " selected" : ""}">
+            <i></i>
+            <button type="button" data-station-id="${escapeHTML(stop.station_id)}"><b>${escapeHTML(station?.name || stop.station_name || "Okänd station")}</b><span>${escapeHTML(times)}</span></button>
+          </li>`;
+        }).join("")}
+      </ol>`;
+  }
+
+  const counts = new Map((snapshot.stations || []).map((station) => [station.id, 0]));
+  for (const service of services) {
+    const visited = new Set((service.stops || []).map((stop) => stop.station_id));
+    for (const stationID of visited) counts.set(stationID, (counts.get(stationID) || 0) + 1);
+  }
+  const stationCounts = [...(snapshot.stations || [])]
+    .map((station) => ({ station, count: counts.get(station.id) || 0 }))
+    .sort((a, b) => b.count - a.count || a.station.name.localeCompare(b.station.name, "sv"));
+  const maximum = Math.max(...stationCounts.map((item) => item.count), 1);
+  const selectedRouteStationIDs = new Set((selected?.stops || []).map((stop) => stop.station_id));
+  document.querySelector("#overview-station-counts").innerHTML = stationCounts.map(({ station, count }) => `
+    <button type="button" data-station-id="${escapeHTML(station.id)}" class="station-count-row${station.id === state.selectedStationID ? " selected" : ""}${selectedRouteStationIDs.has(station.id) ? " on-route" : ""}">
+      <div><b>${escapeHTML(station.name)}</b><span>${count}</span></div>
+      <i><span style="width:${Math.round(count / maximum * 100)}%"></span></i>
+    </button>`).join("");
+
+  const badge = document.querySelector("#overview-route-badge");
+  badge.classList.toggle("hidden", !selected);
+  if (selected) badge.textContent = `Tåg ${selected.train_number} · ${(selected.stops || []).length} stopp`;
 }
 
 function authorizedFetch(path, options = {}) {
@@ -855,4 +1357,825 @@ function reasonText(reason) {
   })[reason] || "Kommandot nekades av TrainMeet Server";
 }
 
-bootstrap();
+const displayKind = location.pathname.startsWith("/display/")
+  ? location.pathname.split("/").filter(Boolean).pop()
+  : null;
+
+const svgNS = "http://www.w3.org/2000/svg";
+let displaySnapshot = null;
+let displaySnapshotReceivedAt = null;
+let displayPollTimer = null;
+let displayToolbarTimer = null;
+let displayTickTimer = null;
+
+function svgElement(name, attrs = {}, textValue = null) {
+  const element = document.createElementNS(svgNS, name);
+  for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, String(value));
+  if (textValue !== null) element.textContent = String(textValue);
+  return element;
+}
+
+function orderedStations(snapshot) {
+  const byID = new Map(snapshot.stations.map((station) => [station.id, station]));
+  const explicit = snapshot.display?.graph_station_order || [];
+  const result = explicit.map((id) => byID.get(id)).filter(Boolean);
+  for (const station of snapshot.stations) if (!result.some((value) => value.id === station.id)) result.push(station);
+  return result;
+}
+
+function topologyLayout(snapshot) {
+  const stations = snapshot.stations || [];
+  const stationIDs = new Set(stations.map((station) => station.id));
+  const branchIDs = new Set(snapshot.display?.topology_branch_station_ids
+    || stations.filter((station) => station.is_topology_branch).map((station) => station.id));
+  const adjacency = new Map(stations.map((station) => [station.id, new Set()]));
+  const edges = [];
+  const addEdge = (from, to, source = null, autonomous = false) => {
+    if (!stationIDs.has(from) || !stationIDs.has(to) || from === to) return;
+    adjacency.get(from).add(to);
+    adjacency.get(to).add(from);
+    if (!edges.some((edge) => (edge.from === from && edge.to === to) || (edge.from === to && edge.to === from))) {
+      edges.push({ from, to, source, autonomous });
+    }
+  };
+  for (const connection of snapshot.connections || []) {
+    addEdge(connection.station_a_id, connection.station_b_id, connection, false);
+  }
+  for (const link of snapshot.autonomous_links || []) {
+    addEdge(link.autonomous_station_id, link.related_station_id, link, true);
+  }
+
+  const connectedIDs = stations.map((station) => station.id).filter((id) => adjacency.get(id)?.size);
+  if (!connectedIDs.length) {
+    const positions = new Map(stations.map((station, index) => [station.id, { x: index * 100, y: 0 }]));
+    return topologyBounds(positions, edges);
+  }
+
+  const bfsFarthest = (start, excluded) => {
+    const parent = new Map([[start, null]]);
+    const queue = [start];
+    let farthest = start;
+    while (queue.length) {
+      const node = queue.shift();
+      for (const neighbor of adjacency.get(node) || []) {
+        if (parent.has(neighbor) || excluded.has(neighbor)) continue;
+        parent.set(neighbor, node);
+        queue.push(neighbor);
+        farthest = neighbor;
+      }
+    }
+    return { farthest, parent };
+  };
+
+  const start = connectedIDs.find((id) => !branchIDs.has(id)) || connectedIDs[0];
+  const endA = bfsFarthest(start, branchIDs).farthest;
+  const secondPass = bfsFarthest(endA, branchIDs);
+  const spine = [];
+  let current = secondPass.farthest;
+  while (current !== null && current !== undefined) {
+    spine.push(current);
+    current = secondPass.parent.get(current) ?? null;
+  }
+  spine.reverse();
+
+  const positions = new Map();
+  spine.forEach((id, index) => positions.set(id, { x: index * 100, y: 0 }));
+  let sideFlip = -1;
+  const placeBranch = (id, parentID, x, y, horizontalDirection, verticalDirection) => {
+    if (positions.has(id)) return;
+    positions.set(id, { x, y });
+    const children = [...(adjacency.get(id) || [])].filter((neighbor) => !positions.has(neighbor));
+    children.forEach((child, index) => {
+      if (index === 0) placeBranch(child, id, x + 100 * horizontalDirection, y, horizontalDirection, verticalDirection);
+      else placeBranch(child, id, x, y + 65 * verticalDirection, horizontalDirection, verticalDirection);
+    });
+  };
+  spine.forEach((id, index) => {
+    const roots = [...(adjacency.get(id) || [])].filter((neighbor) => !positions.has(neighbor));
+    const horizontalDirection = index < spine.length / 2 ? -1 : 1;
+    for (const root of roots) {
+      const side = sideFlip;
+      sideFlip *= -1;
+      const junction = positions.get(id);
+      placeBranch(root, id, junction.x, junction.y + 65 * side, horizontalDirection, side);
+    }
+  });
+  let isolatedX = Math.max(spine.length, 1) * 100;
+  for (const station of stations) {
+    if (!positions.has(station.id)) {
+      positions.set(station.id, { x: isolatedX, y: 0 });
+      isolatedX += 100;
+    }
+  }
+  return topologyBounds(positions, edges);
+}
+
+function topologyBounds(sourcePositions, edges) {
+  const portrait = innerHeight > innerWidth * 1.2;
+  const positions = new Map([...sourcePositions].map(([id, point]) => [
+    id,
+    portrait ? { x: point.y, y: point.x } : point,
+  ]));
+  const xs = [...positions.values()].map((point) => point.x);
+  const ys = [...positions.values()].map((point) => point.y);
+  const minX = Math.min(...xs, 0), maxX = Math.max(...xs, 0);
+  const minY = Math.min(...ys, 0), maxY = Math.max(...ys, 0);
+  const padding = 50;
+  const contentWidth = maxX - minX + padding * 2;
+  const contentHeight = maxY - minY + padding * 2;
+  const width = Math.max(contentWidth, portrait ? 300 : 700);
+  const height = Math.max(contentHeight, portrait ? 700 : 300);
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  return {
+    positions,
+    edges,
+    viewBox: `${centerX - width / 2} ${centerY - height / 2} ${width} ${height}`,
+  };
+}
+
+function appendLocomotive(target, point, trainNumber, direction = 1, options = {}) {
+  const group = svgElement("g", {
+    transform: `translate(${point.x},${point.y})`,
+    class: `topology-train${options.selected ? " selected" : ""}${options.dimmed ? " dimmed" : ""}${options.clickable ? " clickable" : ""}`,
+    role: options.clickable ? "button" : "img",
+    tabindex: options.clickable ? "0" : "-1",
+    "aria-label": `Tåg ${trainNumber}`,
+  });
+  if (options.selected) group.append(svgElement("circle", { r: 17, cy: -2, class: "topology-train-ring" }));
+  group.append(svgElement("text", { y: -14, class: "train-number" }, trainNumber));
+  const locomotive = svgElement("g", { transform: `scale(${direction},1)` });
+  locomotive.append(svgElement("rect", { x: -6, y: -4, width: 12, height: 7, rx: 3, fill: "hsl(0 72% 51%)" }));
+  locomotive.append(svgElement("rect", { x: -9, y: -6, width: 5, height: 9, rx: 1, fill: "hsl(0 72% 51%)", opacity: .9 }));
+  locomotive.append(svgElement("rect", { x: 4, y: -8, width: 2.5, height: 4, rx: 1, fill: "hsl(0 72% 51%)", opacity: .85 }));
+  locomotive.append(svgElement("circle", { cx: 5.25, cy: -10, r: 2, fill: "var(--display-muted)", opacity: .5 }));
+  locomotive.append(svgElement("polygon", { points: "6,3 9,1 9,3", fill: "hsl(0 72% 51%)", opacity: .8 }));
+  locomotive.append(svgElement("circle", { cx: -5, cy: 4, r: 2, fill: "var(--display-fg)", opacity: .7 }));
+  locomotive.append(svgElement("circle", { cx: 0, cy: 4, r: 2, fill: "var(--display-fg)", opacity: .7 }));
+  locomotive.append(svgElement("circle", { cx: 5, cy: 4, r: 1.5, fill: "var(--display-fg)", opacity: .7 }));
+  group.append(locomotive);
+  if (options.clickable) {
+    const activate = (event) => {
+      event.stopPropagation();
+      options.onSelect?.(String(trainNumber));
+    };
+    group.addEventListener("click", activate);
+    group.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") activate(event);
+    });
+  }
+  target.append(group);
+  return group;
+}
+
+function topologyEdgeKey(a, b) {
+  return [String(a), String(b)].sort().join("::");
+}
+
+function renderTopology(snapshot, target = document.querySelector("#topology-svg"), options = {}) {
+  if (!target) return;
+  const { positions, edges, viewBox } = topologyLayout(snapshot);
+  target.setAttribute("viewBox", viewBox);
+  target.replaceChildren();
+  target.onclick = (event) => {
+    if (event.target === target) options.onClear?.();
+  };
+  const stateByID = new Map((snapshot.connection_states || []).map((state) => [state.id, state]));
+  const activeStationIDs = new Set((snapshot.train_positions || []).filter((p) => p.status === "station").map((p) => p.station_id));
+  const selectedService = serviceForTrain(snapshot, options.selectedTrainNumber);
+  const routeStops = [...(selectedService?.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
+  const routeStationIDs = new Set(routeStops.map((stop) => stop.station_id));
+  const routeEdgeKeys = new Set(routeStops.slice(1).map((stop, index) => topologyEdgeKey(routeStops[index].station_id, stop.station_id)));
+  const stationEdgeKeys = new Set();
+  const stationNeighborIDs = new Set(options.selectedStationID ? [options.selectedStationID] : []);
+  if (!selectedService && options.selectedStationID) {
+    for (const edge of edges) {
+      if (edge.from === options.selectedStationID || edge.to === options.selectedStationID) {
+        stationEdgeKeys.add(topologyEdgeKey(edge.from, edge.to));
+        stationNeighborIDs.add(edge.from);
+        stationNeighborIDs.add(edge.to);
+      }
+    }
+  }
+  const hasSelection = Boolean(selectedService || options.selectedStationID);
+  for (const edge of edges) {
+    const from = positions.get(edge.from);
+    const to = positions.get(edge.to);
+    if (!from || !to) continue;
+    const state = stateByID.get(edge.source?.id);
+    const active = state && state.state !== "free";
+    const key = topologyEdgeKey(edge.from, edge.to);
+    const routeHighlighted = routeEdgeKeys.has(key);
+    const stationHighlighted = stationEdgeKeys.has(key);
+    const dimmed = hasSelection && !routeHighlighted && !stationHighlighted;
+    const lineClass = `topology-track${active ? " active" : ""}${routeHighlighted ? " route-highlight" : ""}${stationHighlighted ? " station-highlight" : ""}${dimmed ? " dimmed" : ""}`;
+    if (edge.source?.track_type === "double") {
+      const dx = to.x - from.x, dy = to.y - from.y, length = Math.hypot(dx, dy) || 1;
+      const ox = -dy / length * 2.5, oy = dx / length * 2.5;
+      target.append(svgElement("line", { x1: from.x + ox, y1: from.y + oy, x2: to.x + ox, y2: to.y + oy, class: lineClass }));
+      target.append(svgElement("line", { x1: from.x - ox, y1: from.y - oy, x2: to.x - ox, y2: to.y - oy, class: lineClass }));
+    } else {
+      target.append(svgElement("line", { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: lineClass, "stroke-dasharray": edge.autonomous ? "4 3" : "none" }));
+    }
+  }
+  for (const station of snapshot.stations || []) {
+    const point = positions.get(station.id);
+    if (!point) continue;
+    const autonomous = Boolean(station.is_autonomous);
+    const radius = autonomous ? 5 : 7;
+    const onRoute = routeStationIDs.has(station.id);
+    const inNeighborhood = stationNeighborIDs.has(station.id);
+    const selected = station.id === options.selectedStationID;
+    const dimmed = hasSelection && !onRoute && !inNeighborhood && !selected;
+    const stationClickable = Boolean(options.onStationSelect);
+    const group = svgElement("g", {
+      class: `topology-node${stationClickable ? " clickable" : ""}${onRoute ? " on-route" : ""}${selected ? " selected" : ""}${dimmed ? " dimmed" : ""}`,
+      role: stationClickable ? "button" : "img",
+      tabindex: stationClickable ? "0" : "-1",
+      "aria-label": `${station.name}, ${station.code || "station"}`,
+    });
+    if (onRoute || selected) group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + 5, class: "topology-station-ring" }));
+    group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + 1, class: "topology-mask" }));
+    group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius, class: `topology-station${autonomous ? " autonomous" : ""}${activeStationIDs.has(station.id) ? " active" : ""}${onRoute || selected ? " highlighted" : ""}` }));
+    group.append(svgElement("text", { x: point.x, y: point.y + (autonomous ? 16 : 20), class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name));
+    const activate = (event) => {
+      event.stopPropagation();
+      options.onStationSelect?.(station.id);
+    };
+    if (stationClickable) {
+      group.addEventListener("click", activate);
+      group.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") activate(event);
+      });
+    }
+    target.append(group);
+  }
+  for (const position of snapshot.train_positions || []) {
+    let point = null;
+    if (position.status === "station") point = positions.get(position.station_id);
+    else {
+      const from = positions.get(position.from_station_id), to = positions.get(position.to_station_id);
+      if (from && to) point = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+    }
+    if (!point) continue;
+    const direction = position.from_station_id && position.to_station_id
+      ? ((positions.get(position.to_station_id)?.x || 0) >= (positions.get(position.from_station_id)?.x || 0) ? 1 : -1)
+      : 1;
+    appendLocomotive(target, { x: point.x, y: point.y - 17 }, position.train_number, direction, {
+      selected: String(position.train_number) === String(options.selectedTrainNumber),
+      dimmed: Boolean(selectedService && String(position.train_number) !== String(options.selectedTrainNumber)),
+      clickable: Boolean(options.onTrainSelect),
+      onSelect: options.onTrainSelect,
+    });
+  }
+  if (selectedService && options.showBadge !== false) {
+    const [boxX, boxY, boxWidth, boxHeight] = viewBox.split(" ").map(Number);
+    const label = `Tåg ${selectedService.train_number} · ${routeStops.length} stopp`;
+    const badgeWidth = Math.max(118, label.length * 6.5 + 24);
+    const badge = svgElement("g", { class: "topology-route-badge", transform: `translate(${boxX + boxWidth / 2},${boxY + boxHeight - 24})` });
+    badge.append(svgElement("rect", { x: -badgeWidth / 2, y: -13, width: badgeWidth, height: 26, rx: 13 }));
+    badge.append(svgElement("text", { y: 4, "text-anchor": "middle" }, label));
+    target.append(badge);
+  }
+}
+
+function minuteValue(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+function graphServices(snapshot) {
+  if (snapshot.services?.length) return snapshot.services;
+  const groups = new Map();
+  for (const route of snapshot.routes || []) {
+    const id = route.service_id || route.train_number;
+    if (!groups.has(id)) groups.set(id, { id, train_number: route.train_number, stops: [] });
+    groups.get(id).stops.push({ ...route, service_minute: minuteValue(route.departure_time || route.arrival_time) });
+  }
+  return [...groups.values()];
+}
+
+const trainPalette = [
+  "hsl(220 70% 55%)", "hsl(350 70% 55%)", "hsl(140 60% 40%)", "hsl(30 80% 50%)",
+  "hsl(270 60% 55%)", "hsl(180 60% 40%)", "hsl(45 90% 50%)", "hsl(0 0% 50%)",
+];
+
+let graphLastCenteredMinute = null;
+let graphLastCenteredSelection = null;
+let overviewGraphLastCenteredMinute = null;
+
+function servicePoints(service, stationIndex) {
+  const points = [];
+  for (const stop of [...(service.stops || [])].sort((a, b) => a.stop_order - b.stop_order)) {
+    const index = stationIndex.get(stop.station_id);
+    if (index === undefined) continue;
+    const offset = Number(stop.service_day_offset || 0) * 1440;
+    let arrival = minuteValue(stop.arrival_time);
+    let departure = minuteValue(stop.departure_time);
+    if (arrival !== null) arrival += offset;
+    if (departure !== null) {
+      departure += offset;
+      if (arrival !== null && departure < arrival) departure += 1440;
+    }
+    if (arrival !== null) points.push({ minute: arrival, station: index });
+    if (departure !== null && departure !== arrival) points.push({ minute: departure, station: index });
+    if (arrival === null && departure === null && Number.isFinite(Number(stop.service_minute))) {
+      points.push({ minute: Number(stop.service_minute), station: index });
+    }
+  }
+  return points;
+}
+
+function updateOverviewGraphSelection() {
+  const active = state.hoveredOverviewTrainNumber || state.selectedTrainNumber;
+  document.querySelectorAll("#overview-graph .overview-train-group").forEach((group) => {
+    const selected = group.dataset.trainNumber === state.selectedTrainNumber;
+    group.classList.toggle("selected", selected);
+    group.classList.toggle("dimmed", Boolean(active && group.dataset.trainNumber !== active));
+  });
+}
+
+function renderOverviewGraph(snapshot) {
+  if (!snapshot) return;
+  const svg = document.querySelector("#overview-graph");
+  const canvas = document.querySelector("#overview-graph-canvas");
+  const stationLabels = document.querySelector("#overview-graph-station-labels");
+  const stationOverlay = document.querySelector(".overview-graph-stations");
+  if (!svg || !canvas || !stationLabels || !stationOverlay) return;
+  const stations = orderedStations(snapshot);
+  const stationIndex = new Map(stations.map((station, index) => [station.id, index]));
+  const lines = uniqueOverviewServices(snapshot).map((service, index) => ({
+    service,
+    points: servicePoints(service, stationIndex),
+    color: trainPalette[index % trainPalette.length],
+  })).filter((line) => line.points.length >= 2);
+  const minutes = lines.flatMap((line) => line.points.map((point) => point.minute));
+  const minMinute = minutes.length ? Math.floor(Math.min(...minutes) / 60) * 60 : 0;
+  const maxMinute = minutes.length ? Math.max(minMinute + 60, Math.ceil(Math.max(...minutes) / 60) * 60) : 24 * 60;
+  const left = 60, right = 16, top = 22, bottom = 28, stationStep = 26;
+  const width = Math.max(1200, left + (maxMinute - minMinute) * 2.2 + right);
+  const height = top + Math.max(stations.length - 1, 1) * stationStep + bottom;
+  const x = (minute) => left + (minute - minMinute) / (maxMinute - minMinute) * (width - left - right);
+  const y = (index) => top + index * stationStep;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  stationOverlay.style.height = `${height}px`;
+  stationOverlay.style.marginTop = `-${height}px`;
+  stationLabels.setAttribute("viewBox", `0 0 ${left} ${height}`);
+  stationLabels.setAttribute("width", left);
+  stationLabels.setAttribute("height", height);
+  svg.replaceChildren();
+  stationLabels.replaceChildren();
+  stationLabels.append(svgElement("rect", { x: 0, y: 0, width: left, height, class: "overview-graph-label-bg" }));
+  for (let minute = minMinute; minute <= maxMinute; minute += 60) {
+    svg.append(svgElement("line", { x1: x(minute), y1: top - 5, x2: x(minute), y2: height - bottom + 3, class: "overview-graph-grid" }));
+    svg.append(svgElement("text", { x: x(minute), y: height - 6, "text-anchor": "middle", class: "overview-graph-time" }, `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:00`));
+  }
+  stations.forEach((station, index) => {
+    svg.append(svgElement("line", { x1: left, y1: y(index), x2: width - right, y2: y(index), class: "overview-graph-axis" }));
+    stationLabels.append(svgElement("text", { x: left - 9, y: y(index) + 4, "text-anchor": "end", class: "overview-graph-station" }, station.code));
+  });
+  for (const { service, points: rawPoints, color } of lines) {
+    const trainNumber = String(service.train_number);
+    const points = rawPoints.map((point) => ({ x: x(point.minute), y: y(point.station) }));
+    const pointText = points.map((point) => `${point.x},${point.y}`).join(" ");
+    const group = svgElement("g", {
+      class: "overview-train-group",
+      "data-train-number": trainNumber,
+      role: "button",
+      tabindex: "0",
+      "aria-label": `Tåg ${trainNumber}`,
+    });
+    group.dataset.trainNumber = trainNumber;
+    group.append(svgElement("polyline", { points: pointText, class: "overview-train-line", stroke: color }));
+    group.append(svgElement("polyline", { points: pointText, class: "overview-train-hit" }));
+    const first = points[0], second = points[1];
+    const labelX = first.x + (second.x - first.x) * .22;
+    const labelY = first.y + (second.y - first.y) * .22;
+    let angle = Math.atan2(second.y - first.y, second.x - first.x) * 180 / Math.PI;
+    if (angle > 90) angle -= 180;
+    if (angle < -90) angle += 180;
+    group.append(svgElement("text", { x: labelX, y: labelY - 3, transform: `rotate(${angle} ${labelX} ${labelY})`, fill: color, class: "overview-train-label" }, trainNumber));
+    const activate = (event) => {
+      event.stopPropagation();
+      selectOverviewTrain(trainNumber);
+    };
+    group.addEventListener("mouseenter", () => { state.hoveredOverviewTrainNumber = trainNumber; updateOverviewGraphSelection(); });
+    group.addEventListener("mouseleave", () => { state.hoveredOverviewTrainNumber = null; updateOverviewGraphSelection(); });
+    group.addEventListener("click", activate);
+    group.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") activate(event); });
+    svg.append(group);
+  }
+  let current = minuteValue(snapshot.clock?.time);
+  if (current !== null && current < minMinute && current + 1440 <= maxMinute) current += 1440;
+  if (current !== null && current >= minMinute && current <= maxMinute) {
+    const currentX = x(current);
+    svg.append(svgElement("line", { x1: currentX, y1: top - 7, x2: currentX, y2: height - bottom + 3, class: "overview-graph-now" }));
+    svg.append(svgElement("circle", { cx: currentX, cy: top - 7, r: 4, fill: "#ef4444" }));
+    if (overviewGraphLastCenteredMinute === null || Math.abs(current - overviewGraphLastCenteredMinute) >= 5) {
+      const scroller = document.querySelector("#overview-graph-scroll");
+      scroller.scrollTo({ left: Math.max(0, currentX - scroller.clientWidth / 2), behavior: overviewGraphLastCenteredMinute === null ? "auto" : "smooth" });
+      overviewGraphLastCenteredMinute = current;
+    }
+  }
+  updateOverviewGraphSelection();
+}
+
+function updateDisplayGraphSelection() {
+  const active = state.displayHoveredTrainNumber || state.displaySelectedTrainNumber;
+  document.querySelectorAll("#graph-svg .graph-train-group").forEach((group) => {
+    const selected = group.dataset.trainNumber === state.displaySelectedTrainNumber;
+    group.classList.toggle("selected", selected);
+    group.classList.toggle("dimmed", Boolean(active && group.dataset.trainNumber !== active));
+  });
+}
+
+function renderDisplaySelection(snapshot) {
+  const panel = document.querySelector("#display-selection");
+  if (!panel) return;
+  const service = serviceForTrain(snapshot, state.displaySelectedTrainNumber);
+  const station = (snapshot.stations || []).find((item) => item.id === state.displaySelectedStationID);
+  panel.classList.toggle("hidden", !service && !station);
+  if (service) {
+    const stops = [...(service.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
+    panel.innerHTML = `<p>TÅG</p><b>${escapeHTML(service.train_number)}</b><span>${stops.length} stopp</span><small>${stops.map((stop) => escapeHTML((snapshot.stations || []).find((item) => item.id === stop.station_id)?.name || "?")).join(" → ")}</small>`;
+  } else if (station) {
+    const rows = stationTrafficRows(snapshot, station.id);
+    const connected = (snapshot.connections || []).filter((connection) => connection.station_a_id === station.id || connection.station_b_id === station.id).length;
+    panel.innerHTML = `<p>STATION</p><b>${escapeHTML(station.name)}</b><span>${escapeHTML(station.code || "–")} · ${rows.length} tåg · ${connected} sträckor</span><small>${rows.slice(0, 4).map((row) => `${escapeHTML(row.trainNumber)} ${escapeHTML(row.kind)} ${escapeHTML(row.time)}`).join(" · ") || "Inga tidtabellslag"}</small>`;
+  }
+}
+
+function renderGraph(snapshot) {
+  const svg = document.querySelector("#graph-svg");
+  const canvas = document.querySelector("#graph-canvas");
+  const stationOverlay = document.querySelector("#graph-station-overlay");
+  const stationLabels = document.querySelector("#graph-station-labels");
+  const stations = orderedStations(snapshot);
+  const stationIndex = new Map(stations.map((station, index) => [station.id, index]));
+  const services = graphServices(snapshot).map((service) => ({ ...service, stops: [...service.stops].sort((a, b) => a.stop_order - b.stop_order) }));
+  const lines = services.map((service, index) => ({
+    service,
+    points: servicePoints(service, stationIndex),
+    color: trainPalette[index % trainPalette.length],
+  })).filter((line) => line.points.length >= 2);
+  const minutes = lines.flatMap((line) => line.points.map((point) => point.minute));
+  const minMinute = minutes.length ? Math.floor(Math.min(...minutes) / 60) * 60 : 0;
+  const maxMinute = minutes.length ? Math.max(minMinute + 60, Math.ceil(Math.max(...minutes) / 60) * 60) : 24 * 60;
+  const left = 70, right = 20, top = 30, bottom = 35;
+  const width = Math.max(1000, left + (maxMinute - minMinute) * 5 + right);
+  const height = Math.max(innerHeight - 50, top + Math.max(stations.length, 1) * 60 + bottom);
+  const x = (minute) => left + (minute - minMinute) / (maxMinute - minMinute) * (width - left - right);
+  const y = (index) => top + index * 60;
+  let selectedStartX = null;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  stationOverlay.style.height = `${height}px`;
+  stationOverlay.style.marginTop = `-${height}px`;
+  stationLabels.setAttribute("viewBox", `0 0 ${left} ${height}`);
+  stationLabels.setAttribute("width", left);
+  stationLabels.setAttribute("height", height);
+  svg.replaceChildren();
+  stationLabels.replaceChildren();
+  stationLabels.append(svgElement("rect", { x: 0, y: 0, width: left, height, class: "graph-station-label-bg" }));
+  for (let minute = minMinute + 30; minute < maxMinute; minute += 60) {
+    svg.append(svgElement("line", { x1: x(minute), y1: top - 5, x2: x(minute), y2: height - bottom, class: "graph-grid-half" }));
+  }
+  for (let minute = minMinute; minute <= maxMinute; minute += 60) {
+    const lineX = x(minute);
+    svg.append(svgElement("line", { x1: lineX, y1: top - 5, x2: lineX, y2: height - bottom, class: "graph-grid" }));
+    svg.append(svgElement("text", { x: lineX, y: height - bottom + 18, "text-anchor": "middle", class: "graph-label" }, `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:00`));
+  }
+  stations.forEach((station, index) => {
+    const lineY = y(index);
+    svg.append(svgElement("line", { x1: left - 5, y1: lineY, x2: width - right, y2: lineY, class: "graph-axis" }));
+    stationLabels.append(svgElement("text", { x: left - 12, y: lineY + 5, "text-anchor": "end", class: "graph-station-label" }, station.code));
+  });
+  for (const { service, points: rawPoints, color } of lines) {
+    const points = rawPoints.map((point) => ({ x: x(point.minute), y: y(point.station) }));
+    const trainNumber = String(service.train_number);
+    const pointText = points.map((point) => `${point.x},${point.y}`).join(" ");
+    if (trainNumber === state.displaySelectedTrainNumber) selectedStartX = points[0]?.x ?? null;
+    const trainGroup = svgElement("g", {
+      class: "graph-train-group",
+      "data-train-number": trainNumber,
+      role: "button",
+      tabindex: "0",
+      "aria-label": `Tåg ${trainNumber}`,
+    });
+    trainGroup.dataset.trainNumber = trainNumber;
+    trainGroup.append(svgElement("polyline", { points: pointText, class: "graph-train-line", stroke: color }));
+    trainGroup.append(svgElement("polyline", { points: pointText, class: "graph-train-hit" }));
+    const first = points[0], second = points[1];
+    const labelX = first.x + (second.x - first.x) * .2;
+    const labelY = first.y + (second.y - first.y) * .2;
+    let angle = Math.atan2(second.y - first.y, second.x - first.x) * 180 / Math.PI;
+    if (angle > 90) angle -= 180;
+    if (angle < -90) angle += 180;
+    const label = String(service.train_number);
+    const labelGroup = svgElement("g", { transform: `translate(${labelX},${labelY}) rotate(${angle})` });
+    labelGroup.append(svgElement("rect", { x: -(label.length * 6 + 4) / 2, y: -12, width: label.length * 6 + 4, height: 12, rx: 2, class: "graph-label-bg" }));
+    labelGroup.append(svgElement("text", { x: 0, y: -2, "text-anchor": "middle", fill: color, class: "graph-train-label" }, label));
+    trainGroup.append(labelGroup);
+    const activate = (event) => {
+      event.stopPropagation();
+      state.displaySelectedTrainNumber = state.displaySelectedTrainNumber === trainNumber ? null : trainNumber;
+      state.displaySelectedStationID = null;
+      const selector = document.querySelector("#display-train-select");
+      if (selector) selector.value = state.displaySelectedTrainNumber || "";
+      updateDisplayGraphSelection();
+      renderDisplaySelection(snapshot);
+    };
+    trainGroup.addEventListener("mouseenter", () => { state.displayHoveredTrainNumber = trainNumber; updateDisplayGraphSelection(); });
+    trainGroup.addEventListener("mouseleave", () => { state.displayHoveredTrainNumber = null; updateDisplayGraphSelection(); });
+    trainGroup.addEventListener("click", activate);
+    trainGroup.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") activate(event); });
+    svg.append(trainGroup);
+  }
+  let current = minuteValue(snapshot.clock?.time);
+  if (current !== null && current < minMinute && current + 1440 <= maxMinute) current += 1440;
+  if (current !== null && current >= minMinute && current <= maxMinute) {
+    const currentX = x(current);
+    svg.append(svgElement("line", { x1: currentX, y1: top - 8, x2: currentX, y2: height - bottom, class: "graph-now" }));
+    svg.append(svgElement("circle", { cx: currentX, cy: top - 8, r: 5, fill: "#ef4444" }));
+    if (graphLastCenteredMinute === null || Math.abs(current - graphLastCenteredMinute) >= 5) {
+      const scroller = document.querySelector("#graph-scroll");
+      scroller.scrollTo({ left: Math.max(0, currentX - scroller.clientWidth / 2), behavior: graphLastCenteredMinute === null ? "auto" : "smooth" });
+      graphLastCenteredMinute = current;
+    }
+  }
+  if (selectedStartX !== null && graphLastCenteredSelection !== state.displaySelectedTrainNumber) {
+    const scroller = document.querySelector("#graph-scroll");
+    scroller.scrollTo({ left: Math.max(0, selectedStartX - scroller.clientWidth / 2), behavior: "smooth" });
+    graphLastCenteredSelection = state.displaySelectedTrainNumber;
+  }
+  if (!state.displaySelectedTrainNumber) graphLastCenteredSelection = null;
+  updateDisplayGraphSelection();
+  renderDisplaySelection(snapshot);
+}
+
+const clockStyleConfig = {
+  swiss: { hourMarkerWidth: 6, hourMarkerLength: 18, minuteMarkerWidth: 2, minuteMarkerLength: 8, hourHandWidth: 8, hourHandLength: 55, minuteHandWidth: 6, minuteHandLength: 78, secondHandColor: "#e2000a", secondHandWidth: 2, secondHandLength: 70, secondBallRadius: 7, secondBallOffset: 62, hasNumbers: false, centerDotRadius: 5, bezelWidth: 4 },
+  swedish: { hourMarkerWidth: 4, hourMarkerLength: 14, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#1a5276", secondHandWidth: 1.5, secondHandLength: 72, secondBallRadius: 0, secondBallOffset: 0, hasNumbers: true, centerDotRadius: 4, bezelWidth: 3 },
+  norwegian: { hourMarkerWidth: 5, hourMarkerLength: 16, minuteMarkerWidth: 1.5, minuteMarkerLength: 7, hourHandWidth: 7, hourHandLength: 50, minuteHandWidth: 5, minuteHandLength: 75, secondHandColor: "#ba2025", secondHandWidth: 1.5, secondHandLength: 68, secondBallRadius: 5, secondBallOffset: 60, hasNumbers: false, centerDotRadius: 5, bezelWidth: 5 },
+  danish: { hourMarkerWidth: 5, hourMarkerLength: 15, minuteMarkerWidth: 2, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#c1272d", secondHandWidth: 1.5, secondHandLength: 70, secondBallRadius: 4, secondBallOffset: 62, hasNumbers: false, centerDotRadius: 5, bezelWidth: 4 },
+  german: { hourMarkerWidth: 5, hourMarkerLength: 16, minuteMarkerWidth: 1.5, minuteMarkerLength: 7, hourHandWidth: 7, hourHandLength: 50, minuteHandWidth: 5, minuteHandLength: 74, secondHandColor: "#e30613", secondHandWidth: 1.5, secondHandLength: 68, secondBallRadius: 0, secondBallOffset: 0, hasNumbers: true, centerDotRadius: 4, bezelWidth: 4 },
+  finnish: { hourMarkerWidth: 3, hourMarkerLength: 14, minuteMarkerWidth: 1, minuteMarkerLength: 5, hourHandWidth: 6, hourHandLength: 48, minuteHandWidth: 4, minuteHandLength: 74, secondHandColor: "#003580", secondHandWidth: 1, secondHandLength: 70, secondBallRadius: 0, secondBallOffset: 0, hasNumbers: false, centerDotRadius: 3, bezelWidth: 3 },
+  polish: { hourMarkerWidth: 5, hourMarkerLength: 16, minuteMarkerWidth: 2, minuteMarkerLength: 7, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#d4213d", secondHandWidth: 1.5, secondHandLength: 68, secondBallRadius: 3, secondBallOffset: 60, hasNumbers: true, centerDotRadius: 5, bezelWidth: 4 },
+  dutch: { hourMarkerWidth: 4, hourMarkerLength: 14, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 6, hourHandLength: 50, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#ffc917", secondHandWidth: 2, secondHandLength: 70, secondBallRadius: 4, secondBallOffset: 62, hasNumbers: false, centerDotRadius: 4, bezelWidth: 3 },
+  french: { hourMarkerWidth: 5, hourMarkerLength: 16, minuteMarkerWidth: 1.5, minuteMarkerLength: 7, hourHandWidth: 7, hourHandLength: 50, minuteHandWidth: 5, minuteHandLength: 74, secondHandColor: "#1a237e", secondHandWidth: 1.5, secondHandLength: 68, secondBallRadius: 0, secondBallOffset: 0, hasNumbers: true, centerDotRadius: 5, bezelWidth: 5 },
+  italian: { hourMarkerWidth: 5, hourMarkerLength: 15, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#006633", secondHandWidth: 1.5, secondHandLength: 70, secondBallRadius: 4, secondBallOffset: 62, hasNumbers: false, centerDotRadius: 5, bezelWidth: 4 },
+  american: { hourMarkerWidth: 4, hourMarkerLength: 14, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#c8102e", secondHandWidth: 1.5, secondHandLength: 72, secondBallRadius: 0, secondBallOffset: 0, hasNumbers: true, centerDotRadius: 4, bezelWidth: 4 },
+};
+
+const clockStyleLabels = {
+  swiss: "Schweizisk (SBB)", swedish: "Svensk (SJ)", norwegian: "Norsk (NSB)",
+  danish: "Dansk (DSB)", german: "Tysk (DB)", finnish: "Finsk (VR)",
+  polish: "Polsk (PKP)", dutch: "Nederländsk (NS)", french: "Fransk (SNCF)",
+  italian: "Italiensk (FS)", american: "Amerikansk", digital: "Digital",
+};
+
+function clockSVG(time, style, darkBackground, showSeconds, stopped) {
+  const [hour, minute, second] = String(time || "12:00:00").split(":").map(Number);
+  const config = clockStyleConfig[style] || clockStyleConfig.swiss;
+  const isSwiss = style === "swiss";
+  const hourAngle = (hour % 12 + minute / 60) * 30;
+  const minuteAngle = isSwiss ? minute * 6 : (minute + second / 60) * 6;
+  const secondAngle = isSwiss ? Math.min(second / 58.5, 1) * 360 : second * 6;
+  const faceColor = darkBackground ? "#1a1a1a" : "#fff";
+  const handColor = darkBackground ? "#e0e0e0" : "#1a1a1a";
+  const markerColor = darkBackground ? "#d0d0d0" : "#1a1a1a";
+  const bezelColor = darkBackground ? "#444" : "#333";
+  const numberColor = darkBackground ? "#ccc" : "#333";
+  const marks = Array.from({ length: 60 }, (_, index) => {
+    const major = index % 5 === 0;
+    const length = major ? config.hourMarkerLength : config.minuteMarkerLength;
+    const width = major ? config.hourMarkerWidth : config.minuteMarkerWidth;
+    const start = 8 + config.bezelWidth;
+    return `<line x1="100" y1="${start}" x2="100" y2="${start + length}" stroke="${markerColor}" stroke-width="${width}" transform="rotate(${index * 6} 100 100)"/>`;
+  }).join("");
+  const numbers = config.hasNumbers ? Array.from({ length: 12 }, (_, index) => {
+    const value = index === 0 ? 12 : index;
+    const angle = (index * 30 - 90) * Math.PI / 180;
+    return `<text x="${100 + 68 * Math.cos(angle)}" y="${100 + 68 * Math.sin(angle)}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="bold" fill="${numberColor}" font-family="sans-serif">${value}</text>`;
+  }).join("") : "";
+  const secondHand = showSeconds ? `<g transform="rotate(${secondAngle} 100 100)">
+    <line x1="100" y1="118" x2="100" y2="${100 - config.secondHandLength}" stroke="${config.secondHandColor}" stroke-width="${config.secondHandWidth}" stroke-linecap="round"/>
+    ${config.secondBallRadius > 0 ? `<circle cx="100" cy="${100 - config.secondBallOffset}" r="${config.secondBallRadius}" fill="${config.secondHandColor}"/>` : ""}
+  </g>` : "";
+  return `<svg class="clock-face${stopped ? " stopped" : ""}" viewBox="0 0 200 200">
+    <circle cx="100" cy="100" r="96" fill="none" stroke="${bezelColor}" stroke-width="${config.bezelWidth}"/>
+    <circle cx="100" cy="100" r="${94 - config.bezelWidth / 2}" fill="${faceColor}"/>
+    ${marks}
+    ${numbers}
+    <line x1="100" y1="100" x2="100" y2="${100 - config.hourHandLength}" stroke="${handColor}" stroke-width="${config.hourHandWidth}" stroke-linecap="round" transform="rotate(${hourAngle} 100 100)"/>
+    <line x1="100" y1="100" x2="100" y2="${100 - config.minuteHandLength}" stroke="${handColor}" stroke-width="${config.minuteHandWidth}" stroke-linecap="round" transform="rotate(${minuteAngle} 100 100)"/>
+    ${secondHand}
+    <circle cx="100" cy="100" r="${config.centerDotRadius}" fill="${handColor}"/>
+  </svg>`;
+}
+
+function currentClockTime(snapshot) {
+  const raw = String(snapshot.clock?.time || "12:00:00");
+  const parts = raw.split(":").map(Number);
+  let seconds = (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+  if (snapshot.clock?.running && displaySnapshotReceivedAt !== null) {
+    seconds += (performance.now() - displaySnapshotReceivedAt) / 1000 * Number(snapshot.clock?.speed || 1);
+  }
+  seconds = Math.floor(seconds) % 86400;
+  const hour = Math.floor(seconds / 3600);
+  const minute = Math.floor((seconds % 3600) / 60);
+  const second = seconds % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
+}
+
+function renderClock(snapshot) {
+  const target = document.querySelector("#clock-view");
+  const available = snapshot.clock?.available_styles?.length ? snapshot.clock.available_styles : ["swiss", "swedish", "digital"];
+  let style = new URLSearchParams(location.search).get("style") || localStorage.getItem("trainmeet.clockStyle") || available[0];
+  if (!available.includes(style)) style = available[0];
+  const styleSelect = document.querySelector("#display-clock-style");
+  const signature = available.join("|");
+  if (styleSelect.dataset.signature !== signature) {
+    styleSelect.dataset.signature = signature;
+    styleSelect.innerHTML = available.map((value) => `<option value="${escapeHTML(value)}">${escapeHTML(clockStyleLabels[value] || value)}</option>`).join("");
+  }
+  styleSelect.value = style;
+  const time = currentClockTime(snapshot);
+  const localSeconds = localStorage.getItem("trainmeet.showSeconds");
+  const showSeconds = localSeconds === null ? snapshot.clock?.show_seconds !== false : localSeconds === "true";
+  const displayTime = showSeconds ? time : time.slice(0, 5);
+  const darkBackground = !document.querySelector("#display-app").classList.contains("light");
+  const stopped = !snapshot.clock?.running;
+  const face = style === "digital"
+    ? `<div class="clock-digital${stopped ? " stopped" : ""}">${escapeHTML(displayTime)}</div>`
+    : clockSVG(time, style, darkBackground, showSeconds, stopped);
+  const reason = snapshot.clock?.running ? "" : `<div class="clock-stopped">STOPPAD${snapshot.clock?.stopped_reason ? ` · ${escapeHTML(snapshot.clock.stopped_reason)}` : ""}</div>`;
+  target.innerHTML = `<div class="clock-shell">${face}${reason}</div>`;
+}
+
+function renderDashboard(snapshot) {
+  const target = document.querySelector("#dashboard-view");
+  const activeConnections = (snapshot.connection_states || []).filter((state) => state.state !== "free").length;
+  const activeTrains = (snapshot.train_positions || []).length;
+  target.innerHTML = `<div class="dashboard-column">
+    <section class="display-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><p class="clock-meta">${Number(snapshot.clock?.speed || 1)}× · ${snapshot.clock?.running ? "Klockan går" : "Klockan är stoppad"}</p></section>
+    <section class="display-card dashboard-stats">
+      <div class="dashboard-stat"><b>${activeTrains}</b><span>aktiva tåg</span></div>
+      <div class="dashboard-stat"><b>${activeConnections}</b><span>upptagna sträckor</span></div>
+      <div class="dashboard-stat"><b>${snapshot.stations?.length || 0}</b><span>stationer</span></div>
+      <div class="dashboard-stat"><b>${uniqueOverviewServices(snapshot).length}</b><span>tågturer idag</span></div>
+    </section>
+  </div><section class="display-card"><svg id="dashboard-topology" class="display-visual" role="img" aria-label="Banöversikt"></svg></section>`;
+  renderTopology(snapshot, document.querySelector("#dashboard-topology"));
+}
+
+function renderDisplayTopology(snapshot) {
+  renderTopology(snapshot, document.querySelector("#topology-svg"), {
+    selectedTrainNumber: state.displaySelectedTrainNumber,
+    selectedStationID: state.displaySelectedStationID,
+    onTrainSelect: (trainNumber) => {
+      state.displaySelectedTrainNumber = state.displaySelectedTrainNumber === String(trainNumber) ? null : String(trainNumber);
+      state.displaySelectedStationID = null;
+      document.querySelector("#display-train-select").value = state.displaySelectedTrainNumber || "";
+      renderDisplayTopology(snapshot);
+    },
+    onStationSelect: (stationID) => {
+      state.displaySelectedStationID = state.displaySelectedStationID === stationID ? null : stationID;
+      state.displaySelectedTrainNumber = null;
+      document.querySelector("#display-train-select").value = "";
+      renderDisplayTopology(snapshot);
+    },
+    onClear: () => {
+      state.displaySelectedTrainNumber = null;
+      state.displaySelectedStationID = null;
+      document.querySelector("#display-train-select").value = "";
+      renderDisplayTopology(snapshot);
+    },
+  });
+  renderDisplaySelection(snapshot);
+}
+
+function renderDisplay(snapshot) {
+  displaySnapshot = snapshot;
+  document.querySelector("#display-loading").classList.add("hidden");
+  document.querySelector("#display-title").textContent = `${snapshot.meet?.name || "TrainMeet"} · ${({ topology: "Banöversikt", graph: "Tågdiagram", clock: "Träffklocka", dashboard: "Översikt" })[displayKind]}`;
+  document.querySelector("#display-day").textContent = snapshot.active_day || "Dagl";
+  const isClock = displayKind === "clock";
+  document.querySelector("#display-speed").classList.toggle("hidden", !isClock);
+  document.querySelector("#display-speed").textContent = `${Number(snapshot.clock?.speed || 1)}×`;
+  document.querySelector("#display-clock-style").classList.toggle("hidden", !isClock || (snapshot.clock?.available_styles?.length || 0) < 2);
+  document.querySelector("#display-seconds").classList.toggle("hidden", !isClock);
+  const trainSelect = document.querySelector("#display-train-select");
+  const trainSelectable = displayKind === "topology" || displayKind === "graph";
+  const services = uniqueOverviewServices(snapshot);
+  const trainSignature = services.map((service) => service.train_number).join("|");
+  trainSelect.classList.toggle("hidden", !trainSelectable);
+  if (trainSelect.dataset.signature !== trainSignature) {
+    trainSelect.dataset.signature = trainSignature;
+    trainSelect.innerHTML = `<option value="">Alla tåg</option>${services.map((service) => `<option value="${escapeHTML(service.train_number)}">Tåg ${escapeHTML(service.train_number)}</option>`).join("")}`;
+  }
+  if (!services.some((service) => String(service.train_number) === state.displaySelectedTrainNumber)) state.displaySelectedTrainNumber = null;
+  trainSelect.value = state.displaySelectedTrainNumber || "";
+  const ids = { topology: "topology-svg", graph: "graph-scroll", clock: "clock-view", dashboard: "dashboard-view" };
+  for (const id of Object.values(ids)) document.querySelector(`#${id}`).classList.toggle("hidden", id !== ids[displayKind]);
+  if (displayKind === "topology") renderDisplayTopology(snapshot);
+  if (displayKind === "graph") renderGraph(snapshot);
+  if (displayKind === "clock") {
+    document.querySelector("#display-selection").classList.add("hidden");
+    renderClock(snapshot);
+  }
+  if (displayKind === "dashboard") {
+    document.querySelector("#display-selection").classList.add("hidden");
+    renderDashboard(snapshot);
+  }
+}
+
+async function pollDisplay() {
+  clearTimeout(displayPollTimer);
+  const live = document.querySelector("#display-live");
+  try {
+    const response = await fetch("/v1/display", { cache: "no-store" });
+    if (!response.ok) throw new Error("Servern svarade inte");
+    const payload = await response.json();
+    displaySnapshotReceivedAt = performance.now();
+    live.classList.remove("offline");
+    live.lastChild.textContent = " Ansluten";
+    renderDisplay(payload);
+  } catch {
+    live.classList.add("offline");
+    live.lastChild.textContent = " Återansluter";
+  }
+  displayPollTimer = setTimeout(pollDisplay, 1000);
+}
+
+async function initDisplay() {
+  const displayApp = document.querySelector("#display-app");
+  displayApp.classList.remove("hidden");
+  const light = localStorage.getItem("trainmeet.displayTheme") === "light";
+  displayApp.classList.toggle("light", light);
+  document.querySelector("#display-theme").textContent = light ? "Mörkt" : "Ljust";
+  document.title = "TrainMeet · Skärm";
+  document.querySelector("#display-theme").addEventListener("click", () => {
+    displayApp.classList.toggle("light");
+    const isLight = displayApp.classList.contains("light");
+    localStorage.setItem("trainmeet.displayTheme", isLight ? "light" : "dark");
+    document.querySelector("#display-theme").textContent = isLight ? "Mörkt" : "Ljust";
+    if (displaySnapshot) renderDisplay(displaySnapshot);
+  });
+  document.querySelector("#display-clock-style").addEventListener("change", (event) => {
+    localStorage.setItem("trainmeet.clockStyle", event.target.value);
+    if (displaySnapshot) renderClock(displaySnapshot);
+  });
+  document.querySelector("#display-train-select").addEventListener("change", (event) => {
+    state.displaySelectedTrainNumber = event.target.value || null;
+    state.displaySelectedStationID = null;
+    if (!displaySnapshot) return;
+    if (displayKind === "topology") renderDisplayTopology(displaySnapshot);
+    if (displayKind === "graph") {
+      graphLastCenteredSelection = null;
+      renderGraph(displaySnapshot);
+    }
+  });
+  document.querySelector("#display-seconds").addEventListener("click", () => {
+    const current = localStorage.getItem("trainmeet.showSeconds");
+    const serverDefault = displaySnapshot?.clock?.show_seconds !== false;
+    const next = current === null ? !serverDefault : current !== "true";
+    localStorage.setItem("trainmeet.showSeconds", String(next));
+    if (displaySnapshot) renderClock(displaySnapshot);
+  });
+  document.querySelector("#display-fullscreen").addEventListener("click", async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await displayApp.requestFullscreen();
+    } catch {}
+  });
+  const showToolbar = () => {
+    clearTimeout(displayToolbarTimer);
+    document.querySelector("#display-toolbar").classList.remove("hidden-toolbar");
+    document.querySelector("#display-stage").classList.remove("toolbar-hidden");
+    displayToolbarTimer = setTimeout(() => {
+      document.querySelector("#display-toolbar").classList.add("hidden-toolbar");
+      document.querySelector("#display-stage").classList.add("toolbar-hidden");
+    }, 4000);
+  };
+  displayApp.addEventListener("mousemove", showToolbar);
+  displayApp.addEventListener("click", showToolbar);
+  showToolbar();
+  try { await navigator.wakeLock?.request("screen"); } catch {}
+  displayTickTimer = setInterval(() => {
+    if (!displaySnapshot) return;
+    if (displayKind === "clock") renderClock(displaySnapshot);
+    if (displayKind === "dashboard") renderDashboard(displaySnapshot);
+  }, 200);
+  pollDisplay();
+}
+
+if (displayKind && ["topology", "graph", "clock", "dashboard"].includes(displayKind)) initDisplay();
+else bootstrap();

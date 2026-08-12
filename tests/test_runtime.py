@@ -5,7 +5,7 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 
-from runtime_fixture import runtime_package
+from runtime_fixture import runtime_package, runtime_package_v2
 from tambox_gateway.runtime import (
     RuntimePublication,
     RuntimePublicationError,
@@ -43,6 +43,31 @@ class RuntimePublicationTests(unittest.TestCase):
         self.assertTrue(matches_active_day("Lör,Sön", "Sön"))
         self.assertFalse(matches_active_day("M-Fr", "Lör"))
 
+    def test_v2_publication_contains_clock_services_and_display_order(self):
+        publication = RuntimePublication.parse(runtime_package_v2())
+
+        timetable = publication.timetable(active_day="Lör")
+
+        self.assertEqual(publication.schema_version, 2)
+        self.assertEqual(timetable["clock"]["speed"], 4)
+        self.assertEqual([service["train_number"] for service in timetable["services"]], ["101"])
+        self.assertEqual(
+            timetable["display"]["graph_station_order"],
+            ["station-a", "station-b"],
+        )
+
+    def test_v2_rejects_incomplete_graph_station_order(self):
+        payload = runtime_package_v2()
+        payload["display"]["graph_station_order"] = ["station-a"]
+        with self.assertRaises(RuntimePublicationError):
+            RuntimePublication.parse(payload)
+
+    def test_v1_is_rejected_during_the_pre_release_schema_phase(self):
+        payload = runtime_package_v2()
+        payload["schema_version"] = 1
+        with self.assertRaisesRegex(RuntimePublicationError, "schema_version 2"):
+            RuntimePublication.parse(payload)
+
 
 class RuntimeStoreTests(unittest.TestCase):
     def test_install_is_atomic_and_active_day_is_local(self):
@@ -70,6 +95,26 @@ class RuntimeStoreTests(unittest.TestCase):
                 changed["meet"]["name"] = "Ändrad utan ny version"
                 with self.assertRaises(RuntimePublicationError):
                     store.install(changed)
+            finally:
+                store.close()
+
+    def test_linked_update_is_staged_until_explicit_activation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
+            try:
+                first = runtime_package_v2(publication_id="publication-v2-first")
+                second = runtime_package_v2(publication_id="publication-v2-second")
+                store.install(first)
+                store.save_link_token("local-link-token")
+                store.install(second, activate=False)
+
+                self.assertEqual(store.active().publication_id, "publication-v2-first")
+                self.assertEqual(store.latest_staged().publication_id, "publication-v2-second")
+                self.assertEqual(store.summary()["available_publication_id"], "publication-v2-second")
+                self.assertEqual(store.link_token(), "local-link-token")
+
+                store.activate("publication-v2-second")
+                self.assertEqual(store.active().publication_id, "publication-v2-second")
             finally:
                 store.close()
 

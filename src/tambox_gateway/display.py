@@ -123,6 +123,11 @@ def _slot_token(
         marker = _arrow(key, outgoing=outgoing)
         if runtime.state == ConnectionState.REQUESTED:
             marker = "~" if outgoing else "!"
+        elif runtime.state == ConnectionState.RESERVED:
+            # Approval is an actionable item for the sending station. It is
+            # deliberately shown in the idle overview instead of taking over
+            # the foreground display.
+            marker = "!" if outgoing else "~"
         label = runtime.train_number or other_code
 
     if key in {"A", "C"}:

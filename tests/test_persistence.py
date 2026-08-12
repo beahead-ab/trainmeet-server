@@ -68,7 +68,7 @@ class PersistenceTests(unittest.TestCase):
                 self.assertEqual(restored.snapshot("panel-b")["display"], expected_receiver_display)
                 self.assertEqual(
                     restored.snapshot("panel-b")["interaction"]["mode"],
-                    "incoming_request",
+                    "idle",
                 )
             finally:
                 second_store.close()
@@ -81,7 +81,7 @@ class PersistenceTests(unittest.TestCase):
                 demo_session(DispatchMode.DIRECT),
                 state_store=first_store,
             )
-            for sequence, key in enumerate(["A", "7", "7", "#", "A"], start=1):
+            for sequence, key in enumerate(["A", "7", "7", "#", "A", "A"], start=1):
                 press(engine, "panel-a", key, sequence)
             departure = command_for(
                 engine,
@@ -137,7 +137,7 @@ class PersistenceTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     restored.snapshot("panel-a")["interaction"]["mode"],
-                    "ready_departure",
+                    "idle",
                 )
                 self.assertEqual(restored.snapshot("panel-a")["display"], expected_display)
             finally:
