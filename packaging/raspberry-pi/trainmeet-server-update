@@ -1,0 +1,50 @@
+#!/bin/sh
+set -eu
+
+STATE_DIR=/var/lib/trainmeet-server
+STATUS_FILE="$STATE_DIR/update-status.json"
+BACKUP_DIR="$STATE_DIR/backups"
+CHANNEL=${1:-stable}
+
+status() {
+  stage=$1
+  message=$2
+  printf '{"status":"%s","message":"%s","updated_at":"%s"}\n' \
+    "$stage" "$message" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS_FILE"
+  chown trainmeet-server:trainmeet-server "$STATUS_FILE"
+  chmod 0640 "$STATUS_FILE"
+}
+
+mkdir -p "$BACKUP_DIR"
+status downloading "Hämtar TrainMeet Server från GitHub"
+
+if [ -f "$STATE_DIR/tambox.db" ]; then
+  cp "$STATE_DIR/tambox.db" "$BACKUP_DIR/tambox-$(date -u +%Y%m%d-%H%M%S).db"
+  chown trainmeet-server:trainmeet-server "$BACKUP_DIR"/*.db
+fi
+
+case "$CHANNEL" in
+  stable)
+    RELEASE=$(curl -fsSL https://api.github.com/repos/beahead-ab/trainmeet-server/releases/latest)
+    URL=$(printf '%s' "$RELEASE" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tarball_url"])')
+    VERSION=$(printf '%s' "$RELEASE" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
+    ;;
+  test)
+    URL=https://github.com/beahead-ab/trainmeet-server/archive/refs/heads/main.tar.gz
+    VERSION=$(curl -fsSL https://api.github.com/repos/beahead-ab/trainmeet-server/commits/main | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"][:8])')
+    ;;
+  *) status failed "Okänd uppdateringskanal"; exit 1 ;;
+esac
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT INT TERM
+curl -fsSL "$URL" -o "$TMP/source.tar.gz"
+tar -xzf "$TMP/source.tar.gz" -C "$TMP"
+SOURCE=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+
+status installing "Installerar version $VERSION"
+TRAINMEET_INSTALL_VERSION="$VERSION" "$SOURCE/scripts/install-raspberry-pi.sh"
+printf '%s\n' "$VERSION" > /opt/trainmeet-server/VERSION
+chmod 0644 /opt/trainmeet-server/VERSION
+status complete "Version $VERSION installerades. Servern startar om."
+

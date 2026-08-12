@@ -302,6 +302,27 @@
             </form>
           </section>
 
+          <section class="card section-card">
+            <div class="section-heading compact-heading">
+              <div>
+                <p class="eyebrow">PROGRAMVARA</p>
+                <h2>Uppdatera TrainMeet Server</h2>
+                <p>Kontrollera GitHub, säkerhetskopiera databasen och installera en ny version automatiskt.</p>
+              </div>
+              <span id="software-version" class="revision-badge">Läser version …</span>
+            </div>
+            <div class="inline-form">
+              <label for="software-channel">Kanal</label>
+              <select id="software-channel">
+                <option value="stable">Stabil</option>
+                <option value="test">Test (senaste main)</option>
+              </select>
+              <button id="software-check" class="secondary" type="button">Sök efter uppdatering</button>
+              <button id="software-install" class="restart hidden" type="button">Installera och starta om</button>
+              <p id="software-update-message" class="form-message" role="status"></p>
+            </div>
+          </section>
+
           <div id="sync-and-devices" class="two-column">
             <section class="card section-card">
               <div class="section-heading compact-heading">

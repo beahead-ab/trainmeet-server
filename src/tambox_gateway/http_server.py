@@ -42,6 +42,7 @@ from .local_config import (
 from .models import Command
 from .operations import SQLiteOperationsStore
 from .runtime import AVAILABLE_CLOCK_STYLES, RuntimePublicationError, SQLiteRuntimeStore
+from .software_update import SoftwareUpdateError, installed_version, latest_version, read_update_status, start_update
 
 
 LOGGER = logging.getLogger("tambox_gateway.http")
@@ -58,6 +59,8 @@ class HTTPServerConfig:
     local_development: bool = False
     central_runtime_url: str = DEFAULT_RUNTIME_PUBLICATION_URL
     allow_restart: bool = False
+    allow_software_update: bool = False
+    state_dir: str = "data/local"
     force_external_auth: bool = False
 
 
@@ -337,6 +340,35 @@ class TamboxHTTPApplication:
             "status": "restarting",
             "message": "TrainMeet Server startar om. Sidan ansluter igen automatiskt.",
         }
+
+    def software_update_status(self, client: PairedClient, channel: str = "stable") -> dict[str, Any]:
+        self._require_admin(client)
+        result: dict[str, Any] = {
+            "supported": self.config.allow_software_update,
+            "channel": channel,
+            "installed_version": installed_version(),
+            **read_update_status(Path(self.config.state_dir)),
+        }
+        if self.config.allow_software_update:
+            try:
+                latest = latest_version(channel)
+                result["latest_version"] = latest["version"]
+                result["published_at"] = latest["published_at"]
+                result["update_available"] = result["latest_version"] != result["installed_version"]
+            except SoftwareUpdateError as error:
+                result["check_error"] = str(error)
+        return result
+
+    def update_software(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_admin(client)
+        if not self.config.allow_software_update:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "update_unavailable", "Programuppdatering hanteras av Docker eller driftmiljön")
+        channel = str(payload.get("channel") or "stable")
+        try:
+            start_update(channel)
+        except SoftwareUpdateError as error:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "update_failed", str(error)) from error
+        return {"status": "started", "message": "Uppdateringen har startat i bakgrunden.", "channel": channel}
 
     def local_configuration(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
@@ -742,6 +774,11 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                     },
                 )
                 return
+            if path == "/v1/server/update":
+                client = self._authenticated_client()
+                channel = parse_qs(parsed.query).get("channel", ["stable"])[0]
+                self._send_json(HTTPStatus.OK, self.server.application.software_update_status(client, channel))
+                return
             if path == "/v1/snapshots":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.snapshots(client))
@@ -911,6 +948,10 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                 response = self.server.application.restart_server(client)
                 self._send_json(HTTPStatus.ACCEPTED, response)
                 self.server.request_restart()
+                return
+            if path == "/v1/server/update":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.ACCEPTED, self.server.application.update_software(client, payload))
                 return
             if path == "/v1/clock":
                 client = self._authenticated_client()

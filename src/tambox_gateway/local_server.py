@@ -154,6 +154,8 @@ def main() -> None:
             local_development=sys.platform == "darwin",
             central_runtime_url=args.central_url,
             allow_restart=True,
+            allow_software_update=(sys.platform.startswith("linux") and Path("/usr/local/sbin/trainmeet-server-update").exists()),
+            state_dir=str(state_directory),
             force_external_auth=args.force_external_auth,
         ),
         runtime_store=runtime_store,

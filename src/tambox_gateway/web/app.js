@@ -70,6 +70,11 @@ const adminAccessForm = document.querySelector("#admin-access-form");
 const adminAccessMessage = document.querySelector("#admin-access-message");
 const clockControlForm = document.querySelector("#clock-control-form");
 const clockControlMessage = document.querySelector("#clock-control-message");
+const softwareChannel = document.querySelector("#software-channel");
+const softwareCheck = document.querySelector("#software-check");
+const softwareInstall = document.querySelector("#software-install");
+const softwareUpdateMessage = document.querySelector("#software-update-message");
+const softwareVersion = document.querySelector("#software-version");
 const overviewRouteSearch = document.querySelector("#overview-route-search");
 const overviewRouteList = document.querySelector("#overview-route-list");
 const overviewRouteDetail = document.querySelector("#overview-route-detail");
@@ -364,6 +369,56 @@ runtimeActivateUpdate.addEventListener("click", async () => {
   }
 });
 
+softwareCheck.addEventListener("click", checkSoftwareUpdate);
+softwareChannel.addEventListener("change", checkSoftwareUpdate);
+softwareInstall.addEventListener("click", async () => {
+  if (!confirm("Uppdateringen säkerhetskopierar databasen och startar om servern. Pågående trafik avbryts. Fortsätta?")) return;
+  softwareInstall.disabled = true;
+  setMessage(softwareUpdateMessage, "Startar uppdateringen …", "notice");
+  try {
+    const response = await authorizedFetch("/v1/server/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channel: softwareChannel.value }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Uppdateringen kunde inte startas");
+    setMessage(softwareUpdateMessage, "Uppdaterar i bakgrunden. Sidan ansluter igen efter omstart.", "notice");
+    await waitForServerRestart();
+    await checkSoftwareUpdate();
+  } catch (error) {
+    setMessage(softwareUpdateMessage, error.message, "error");
+  } finally {
+    softwareInstall.disabled = false;
+  }
+});
+
+async function checkSoftwareUpdate() {
+  softwareCheck.disabled = true;
+  try {
+    const response = await authorizedFetch(`/v1/server/update?channel=${encodeURIComponent(softwareChannel.value)}`);
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Versionskontrollen misslyckades");
+    softwareVersion.textContent = `Installerad ${payload.installed_version}`;
+    if (!payload.supported) {
+      softwareInstall.classList.add("hidden");
+      setMessage(softwareUpdateMessage, "Den här miljön uppdateras via Docker eller driftplattformen.", "notice");
+    } else if (payload.check_error) {
+      softwareInstall.classList.add("hidden");
+      setMessage(softwareUpdateMessage, payload.check_error, "error");
+    } else {
+      softwareInstall.classList.toggle("hidden", !payload.update_available);
+      setMessage(softwareUpdateMessage, payload.update_available
+        ? `Ny version ${payload.latest_version} finns tillgänglig.`
+        : `Servern har senaste versionen (${payload.latest_version}).`, payload.update_available ? "notice" : "success");
+    }
+  } catch (error) {
+    setMessage(softwareUpdateMessage, error.message, "error");
+  } finally {
+    softwareCheck.disabled = false;
+  }
+}
+
 configForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   await saveConfiguration(false);
@@ -464,6 +519,7 @@ function selectView(view) {
   document.querySelectorAll(".view-tab").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === selected);
   });
+  if (selected === "admin") checkSoftwareUpdate();
 }
 
 async function refreshSnapshots() {

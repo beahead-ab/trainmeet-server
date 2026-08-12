@@ -362,6 +362,22 @@ Bakom en reverse proxy eller Kubernetes Ingress ska servern startas med
 servern proxyhoppets privata adress i stället för slutanvändarens externa adress.
 Helm-chartet gör detta automatiskt när `ingress.enabled=true`.
 
+## Uppdatera från webbadmin
+
+På Raspberry Pi, Ubuntu och Debian kan en administratör öppna
+**Administration → Uppdatera TrainMeet Server**. Servern kan kontrollera två
+kanaler:
+
+- **Stabil** hämtar den senaste märkta GitHub-releasen och är avsedd för träffar.
+- **Test** hämtar senaste versionen från `main` och är avsedd för testservrar.
+
+Före installationen säkerhetskopieras SQLite-databasen till
+`/var/lib/trainmeet-server/backups`. Uppdateringen körs av en separat root-ägd
+systemd-tjänst; webbservern har ingen generell sudo-behörighet. Efter
+installationen startar TrainMeet Server om och webbsidan ansluter automatiskt
+igen. Docker- och Kubernetesinstallationer uppdateras i stället genom ny image
+respektive Helm-deployment.
+
 ## Arkitektur
 
 ```text
