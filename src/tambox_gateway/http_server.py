@@ -93,6 +93,7 @@ class TamboxHTTPApplication:
             )
         )
         self.web_root = files("tambox_gateway").joinpath("web")
+        self.tkl_web_root = files("tambox_gateway").joinpath("tkl")
 
         if self.operations_store is not None:
             self.engine.set_transition_observer(self.operations_store.record_engine_transition)
@@ -681,6 +682,17 @@ class TamboxHTTPApplication:
             )
 
     def static_asset(self, path: str) -> tuple[bytes, str] | None:
+        if path.startswith("/tkl/"):
+            relative_tkl = path.removeprefix("/tkl/") or "index.html"
+            if ".." in Path(relative_tkl).parts:
+                return None
+            asset = self.tkl_web_root.joinpath(relative_tkl)
+            try:
+                data = asset.read_bytes()
+            except (FileNotFoundError, IsADirectoryError):
+                return None
+            mime_type = mimetypes.guess_type(relative_tkl)[0] or "application/octet-stream"
+            return data, mime_type
         relative = {
             "/": "index.html",
             "/index.html": "index.html",
@@ -720,6 +732,12 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path == "/tkl":
+                self.send_response(HTTPStatus.PERMANENT_REDIRECT)
+                self.send_header("Location", "/tkl/")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             if path == "/v1/display":
                 self._send_json(HTTPStatus.OK, self.server.application.display_snapshot())
                 return

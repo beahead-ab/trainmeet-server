@@ -1,0 +1,18 @@
+{
+  "name": "TrainMeet TKL",
+  "short_name": "TKL",
+  "description": "Lokal tågklarering för TrainMeet Server",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fbfaf8",
+  "theme_color": "#fbfaf8",
+  "icons": [
+    {
+      "src": "./tkl-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+
