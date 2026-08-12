@@ -308,13 +308,13 @@
                 <div>
                   <p class="eyebrow">CENTRAL TRAINMEET</p>
                   <h2>Hämta färdig träff</h2>
-                  <p>PDF-import och tidtabellsbearbetning kan göras centralt och hämtas hit med en synkkod.</p>
+                  <p>Skapa en träffnyckel i TrainMeet och klistra in den här. Nyckeln sparas endast på servern.</p>
                 </div>
               </div>
               <form id="runtime-sync-form" class="inline-form">
-                <label for="runtime-sync-code">Synkkod</label>
-                <input id="runtime-sync-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123 456" required>
-                <button class="primary" type="submit">Hämta</button>
+                <label for="runtime-api-key">API-nyckel</label>
+                <input id="runtime-api-key" type="password" autocomplete="off" placeholder="tm_live_…" required>
+                <button class="primary" type="submit">Koppla och hämta</button>
                 <p id="runtime-message" class="form-message" role="status"></p>
               </form>
               <div class="runtime-update-actions">

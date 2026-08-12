@@ -285,15 +285,15 @@ runtimeForm.addEventListener("submit", async (event) => {
   const button = runtimeForm.querySelector("button");
   button.disabled = true;
   try {
-    const response = await authorizedFetch("/v1/runtime/sync", {
+    const response = await authorizedFetch("/v1/runtime/connect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sync_code: document.querySelector("#runtime-sync-code").value }),
+      body: JSON.stringify({ api_key: document.querySelector("#runtime-api-key").value }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
     setMessage(runtimeMessage, payload.message, payload.restart_required ? "notice" : "success");
-    document.querySelector("#runtime-sync-code").value = "";
+    document.querySelector("#runtime-api-key").value = "";
     await Promise.all([refreshRuntime(), refreshInfo()]);
   } catch (error) {
     setMessage(runtimeMessage, error.message, "error");

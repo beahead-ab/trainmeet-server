@@ -21,6 +21,7 @@ from .central_sync import (
     DEFAULT_RUNTIME_PUBLICATION_URL,
     CentralRuntimeDownload,
     CentralRuntimeManifest,
+    fetch_api_key_runtime,
     CentralSyncError,
     fetch_linked_runtime,
     fetch_runtime_download,
@@ -516,15 +517,41 @@ class TamboxHTTPApplication:
         response["linked"] = self.runtime_store.link_token() is not None if self.runtime_store else False
         return response
 
+    def connect_runtime_api(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal tidtabellslagring saknas")
+        api_key = str(payload.get("api_key", "")).strip()
+        try:
+            result = fetch_api_key_runtime(api_key, self.config.central_runtime_url)
+        except CentralSyncError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
+        if not isinstance(result, CentralRuntimeDownload):
+            raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", "TrainMeet skickade inget driftpaket")
+        try:
+            publication = self.runtime_store.install(result.package, activate=False)
+            self.runtime_store.save_api_key(api_key)
+        except RuntimePublicationError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_runtime", str(error)) from error
+        return {
+            **self.runtime_store.summary(),
+            "linked": True,
+            "downloaded_publication_id": publication.publication_id,
+            "message": "Träffen är kopplad. Driftpaketet är hämtat och väntar på aktivering.",
+        }
+
     def check_runtime_update(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
         if self.runtime_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal tidtabellslagring saknas")
+        api_key = self.runtime_store.api_key()
         token = self.runtime_store.link_token()
-        if not token:
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla först servern med en sexsiffrig synkkod")
+        credential = api_key or token
+        if not credential:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla först servern med en API-nyckel")
         try:
-            result = self.linked_runtime_fetcher(token, self.config.central_runtime_url, True)
+            result = (fetch_api_key_runtime(api_key, self.config.central_runtime_url, manifest_only=True)
+                      if api_key else self.linked_runtime_fetcher(token, self.config.central_runtime_url, True))
         except CentralSyncError as error:
             raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
         if not isinstance(result, CentralRuntimeManifest):
@@ -543,11 +570,14 @@ class TamboxHTTPApplication:
         self._require_admin(client)
         if self.runtime_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal tidtabellslagring saknas")
+        api_key = self.runtime_store.api_key()
         token = self.runtime_store.link_token()
-        if not token:
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla först servern med en sexsiffrig synkkod")
+        credential = api_key or token
+        if not credential:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla först servern med en API-nyckel")
         try:
-            result = self.linked_runtime_fetcher(token, self.config.central_runtime_url, False)
+            result = (fetch_api_key_runtime(api_key, self.config.central_runtime_url)
+                      if api_key else self.linked_runtime_fetcher(token, self.config.central_runtime_url, False))
         except CentralSyncError as error:
             raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
         if not isinstance(result, CentralRuntimeDownload):
@@ -843,6 +873,10 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.CREATED,
                     self.server.application.sync_runtime(client, payload),
                 )
+                return
+            if path == "/v1/runtime/connect":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.connect_runtime_api(client, payload))
                 return
             if path == "/v1/runtime/update":
                 client = self._authenticated_client()

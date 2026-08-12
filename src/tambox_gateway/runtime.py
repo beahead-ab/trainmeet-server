@@ -475,6 +475,27 @@ class SQLiteRuntimeStore:
             ).fetchone()
         return str(row[0]) if row else None
 
+    def save_api_key(self, api_key: str) -> None:
+        api_key = api_key.strip()
+        if not api_key:
+            raise RuntimePublicationError("API-nyckeln saknas")
+        with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO runtime_settings(key, value, updated_at)
+                VALUES ('central_api_key', ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """,
+                (api_key,),
+            )
+
+    def api_key(self) -> str | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT value FROM runtime_settings WHERE key = 'central_api_key'"
+            ).fetchone()
+        return str(row[0]) if row else None
+
     def latest_staged(self) -> RuntimePublication | None:
         with self._lock:
             row = self._connection.execute(
