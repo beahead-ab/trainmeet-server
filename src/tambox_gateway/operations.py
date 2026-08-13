@@ -88,6 +88,25 @@ class SQLiteOperationsStore:
                 payload_json TEXT NOT NULL,
                 recorded_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS train_readiness (
+                publication_id TEXT NOT NULL,
+                active_day TEXT NOT NULL,
+                movement_id TEXT NOT NULL,
+                station_id TEXT NOT NULL,
+                operating_point_id TEXT,
+                status TEXT NOT NULL CHECK(status IN ('ready', 'acknowledged', 'revoked')),
+                prepared_by_role TEXT NOT NULL CHECK(prepared_by_role IN ('tkl', 'ranger')),
+                prepared_by TEXT NOT NULL,
+                prepared_at TEXT NOT NULL,
+                acknowledged_by TEXT,
+                acknowledged_at TEXT,
+                revoked_by TEXT,
+                revoked_at TEXT,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(publication_id, active_day, movement_id)
+            );
+            CREATE INDEX IF NOT EXISTS train_readiness_for_station
+                ON train_readiness(publication_id, active_day, station_id, status);
             """
         )
 
@@ -541,6 +560,154 @@ class SQLiteOperationsStore:
             "updated_at": now,
         }
 
+    def train_readiness(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT movement_id, operating_point_id, status, prepared_by_role,
+                       prepared_by, prepared_at, acknowledged_by, acknowledged_at,
+                       revoked_by, revoked_at, updated_at
+                FROM train_readiness
+                WHERE publication_id = ? AND active_day = ? AND station_id = ?
+                ORDER BY updated_at
+                """,
+                (publication_id, active_day, station_id),
+            ).fetchall()
+        return [_train_readiness_from_row(row, station_id) for row in rows]
+
+    def set_train_readiness(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+        movement_id: str,
+        operating_point_id: str | None,
+        *,
+        action: str,
+        actor: str,
+        actor_role: str,
+        shift_id: str | None,
+    ) -> dict[str, Any]:
+        if action not in {"ready", "acknowledge", "revoke"}:
+            raise ValueError("Ogiltig ändring av Tåg klart")
+        actor = actor.strip()
+        if not actor:
+            raise ValueError("Operatörens namn måste anges")
+        if actor_role not in {"tkl", "ranger"}:
+            raise ValueError("Tåg klart måste registreras av TKL eller rangerare")
+        now = _now_iso()
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                current = self._connection.execute(
+                    """
+                    SELECT status, prepared_by_role FROM train_readiness
+                    WHERE publication_id = ? AND active_day = ? AND movement_id = ?
+                    """,
+                    (publication_id, active_day, movement_id),
+                ).fetchone()
+                if action == "ready":
+                    self._connection.execute(
+                        """
+                        INSERT INTO train_readiness(
+                            publication_id, active_day, movement_id, station_id,
+                            operating_point_id, status, prepared_by_role, prepared_by, prepared_at,
+                            acknowledged_by, acknowledged_at, revoked_by, revoked_at,
+                            updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)
+                        ON CONFLICT(publication_id, active_day, movement_id) DO UPDATE SET
+                            station_id = excluded.station_id,
+                            operating_point_id = excluded.operating_point_id,
+                            status = excluded.status,
+                            prepared_by_role = excluded.prepared_by_role,
+                            prepared_by = excluded.prepared_by,
+                            prepared_at = excluded.prepared_at,
+                            acknowledged_by = NULL,
+                            acknowledged_at = NULL,
+                            revoked_by = NULL,
+                            revoked_at = NULL,
+                            updated_at = excluded.updated_at
+                        """,
+                        (
+                            publication_id,
+                            active_day,
+                            movement_id,
+                            station_id,
+                            operating_point_id,
+                            "acknowledged" if actor_role == "tkl" else "ready",
+                            actor_role,
+                            actor,
+                            now,
+                            actor if actor_role == "tkl" else None,
+                            now if actor_role == "tkl" else None,
+                            now,
+                        ),
+                    )
+                    event_type = "train_ready_by_tkl" if actor_role == "tkl" else "train_ready_by_ranger"
+                elif action == "acknowledge":
+                    if actor_role != "tkl":
+                        raise ValueError("Endast TKL kan kvittera Tåg klart")
+                    if current is None or current[0] != "ready":
+                        raise ValueError("Tåget är inte längre väntande för TKL")
+                    self._connection.execute(
+                        """
+                        UPDATE train_readiness
+                        SET status = 'acknowledged', acknowledged_by = ?,
+                            acknowledged_at = ?, updated_at = ?
+                        WHERE publication_id = ? AND active_day = ? AND movement_id = ?
+                        """,
+                        (actor, now, now, publication_id, active_day, movement_id),
+                    )
+                    event_type = "train_ready_acknowledged"
+                else:
+                    if current is None or current[0] != "ready":
+                        raise ValueError("Endast ett väntande Tåg klart kan återkallas")
+                    if actor_role == "ranger" and current[1] != "ranger":
+                        raise ValueError("Rangeraren kan endast återkalla sin egen Tåg klart-status")
+                    self._connection.execute(
+                        """
+                        UPDATE train_readiness
+                        SET status = 'revoked', revoked_by = ?, revoked_at = ?, updated_at = ?
+                        WHERE publication_id = ? AND active_day = ? AND movement_id = ?
+                        """,
+                        (actor, now, now, publication_id, active_day, movement_id),
+                    )
+                    event_type = "train_ready_revoked"
+                self._insert_tkl_event_locked(
+                    publication_id,
+                    active_day,
+                    station_id,
+                    event_type,
+                    {
+                        "operating_point_id": operating_point_id,
+                        "actor": actor,
+                        "actor_role": actor_role,
+                    },
+                    shift_id=shift_id,
+                    movement_id=movement_id,
+                )
+                row = self._connection.execute(
+                    """
+                    SELECT movement_id, operating_point_id, status, prepared_by_role,
+                           prepared_by, prepared_at, acknowledged_by, acknowledged_at,
+                           revoked_by, revoked_at, updated_at
+                    FROM train_readiness
+                    WHERE publication_id = ? AND active_day = ? AND movement_id = ?
+                    """,
+                    (publication_id, active_day, movement_id),
+                ).fetchone()
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return _train_readiness_from_row(row, station_id)
+
     def _insert_tkl_event_locked(
         self,
         publication_id: str,
@@ -638,6 +805,23 @@ def _shift_from_row(row: tuple[Any, ...] | None) -> dict[str, Any] | None:
         "ended_at": row[5],
         "handover_note": row[6],
         "updated_at": row[7],
+    }
+
+
+def _train_readiness_from_row(row: tuple[Any, ...], station_id: str) -> dict[str, Any]:
+    return {
+        "movement_id": row[0],
+        "station_id": station_id,
+        "operating_point_id": row[1],
+        "status": row[2],
+        "prepared_by_role": row[3],
+        "prepared_by": row[4],
+        "prepared_at": row[5],
+        "acknowledged_by": row[6],
+        "acknowledged_at": row[7],
+        "revoked_by": row[8],
+        "revoked_at": row[9],
+        "updated_at": row[10],
     }
 
 

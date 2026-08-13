@@ -126,6 +126,55 @@ class OperationsStoreTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_tkl_and_ranger_share_tåg_klart_but_only_ranger_requires_acknowledgement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                ranger_ready = store.set_train_readiness(
+                    "publication-a",
+                    "Dagl",
+                    "station-a",
+                    "movement-freight",
+                    "station-a-rbg",
+                    action="ready",
+                    actor="Bertil",
+                    actor_role="ranger",
+                    shift_id=None,
+                )
+                self.assertEqual(ranger_ready["status"], "ready")
+                self.assertEqual(ranger_ready["prepared_by_role"], "ranger")
+
+                acknowledged = store.set_train_readiness(
+                    "publication-a",
+                    "Dagl",
+                    "station-a",
+                    "movement-freight",
+                    "station-a-rbg",
+                    action="acknowledge",
+                    actor="Anna",
+                    actor_role="tkl",
+                    shift_id=None,
+                )
+                self.assertEqual(acknowledged["status"], "acknowledged")
+                self.assertEqual(acknowledged["acknowledged_by"], "Anna")
+
+                passenger_ready = store.set_train_readiness(
+                    "publication-a",
+                    "Dagl",
+                    "station-a",
+                    "movement-passenger",
+                    "station-a-main",
+                    action="ready",
+                    actor="Anna",
+                    actor_role="tkl",
+                    shift_id=None,
+                )
+                self.assertEqual(passenger_ready["status"], "acknowledged")
+                self.assertEqual(passenger_ready["prepared_by_role"], "tkl")
+                self.assertEqual(len(store.train_readiness("publication-a", "Dagl", "station-a")), 2)
+            finally:
+                store.close()
+
 
 if __name__ == "__main__":
     unittest.main()

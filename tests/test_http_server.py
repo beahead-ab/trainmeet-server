@@ -86,6 +86,8 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn("AKTIV RUNTIME", html)
         self.assertIn("Aktiva sträckor", html)
         self.assertIn('id="copy-active-runtime"', html)
+        self.assertIn('id="runtime-import"', html)
+        self.assertIn('id="runtime-import-file"', html)
         self.assertIn("Nytt lokalt utkast", html)
         self.assertIn('id="overview-graph"', html)
         self.assertIn("Extern admininloggning", html)
@@ -435,6 +437,19 @@ class HTTPServerTests(unittest.TestCase):
             token=token,
         )
         self.assertEqual([train["train_number"] for train in sunday["trains"]], ["101", "202"])
+
+    def test_admin_validates_runtime_without_installing_it(self):
+        validation = self._json_request(
+            "/v1/runtime/validate",
+            {"package": runtime_package_v2()},
+        )
+
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["meet"]["name"], "Sommarträffen")
+        self.assertEqual(validation["counts"]["stations"], 2)
+        self.assertEqual(validation["counts"]["services"], 2)
+        self.assertEqual(validation["stations"][0]["code"], "CDA")
+        self.assertFalse(self.runtime_store.summary()["configured"])
 
     def test_admin_syncs_published_runtime_with_six_digit_code(self):
         paired = self._json_request(

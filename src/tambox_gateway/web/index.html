@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/assets/app.css?v=20260813-1">
+    <link rel="stylesheet" href="/assets/app.css?v=20260813-3">
   </head>
   <body>
     <main class="page-shell">
@@ -121,13 +121,40 @@
       </section>
 
       <section id="app-view" class="app-view hidden">
-        <nav class="view-tabs card" aria-label="Huvudvyer">
-          <button type="button" class="view-tab active" data-view="overview">Översikt</button>
-          <button type="button" class="view-tab" data-view="admin">Administration</button>
-          <button type="button" class="view-tab" data-view="simulator">Tambox-simulering</button>
-          <button type="button" class="view-tab" data-view="displays">Skärmar</button>
-          <button id="logout" type="button" class="quiet tab-action hidden">Logga ut</button>
-        </nav>
+        <button id="server-sidebar-toggle" class="server-sidebar-toggle" type="button" aria-label="Öppna servermenyn">☰</button>
+        <button id="server-sidebar-overlay" class="server-sidebar-overlay" type="button" aria-label="Stäng servermenyn"></button>
+        <div class="server-admin-shell">
+          <aside class="server-sidebar card" aria-label="Administration och funktioner">
+            <div class="server-sidebar-title">
+              <div class="brand-mark" aria-hidden="true">TM</div>
+              <div><b>TrainMeet</b><span>Server</span></div>
+            </div>
+            <nav class="server-sidebar-nav" aria-label="Huvudvyer">
+              <p>Drift</p>
+              <button type="button" class="view-tab server-nav-item active" data-view="overview"><span aria-hidden="true">⌂</span>Översikt</button>
+              <button type="button" class="view-tab server-nav-item" data-view="admin"><span aria-hidden="true">◉</span>Aktiv träff</button>
+
+              <p>Konfiguration</p>
+              <a class="server-nav-link" href="#runtime-import" data-admin-target="runtime-import"><span aria-hidden="true">⇧</span>Importera driftpaket</a>
+              <a class="server-nav-link" href="#local-runtime-draft" data-admin-target="local-runtime-draft"><span aria-hidden="true">⌘</span>Stationer och sträckor</a>
+              <a class="server-nav-link" href="#sync-and-devices" data-admin-target="sync-and-devices"><span aria-hidden="true">↻</span>Konfigurationssynk</a>
+
+              <p>Enheter</p>
+              <button type="button" class="view-tab server-nav-item" data-view="simulator"><span aria-hidden="true">▦</span>Tambox-simulering</button>
+              <a class="server-nav-link" href="/tkl/"><span aria-hidden="true">▤</span>TKL-terminal</a>
+              <button type="button" class="view-tab server-nav-item" data-view="displays"><span aria-hidden="true">▣</span>Skärmar och klocka</button>
+
+              <p>System</p>
+              <a class="server-nav-link" href="#admin-access-settings" data-admin-target="admin-access-settings"><span aria-hidden="true">♙</span>Användare och åtkomst</a>
+              <a class="server-nav-link" href="#software-update-settings" data-admin-target="software-update-settings"><span aria-hidden="true">↓</span>Programuppdatering</a>
+            </nav>
+            <div class="server-sidebar-footer">
+              <i></i><span><b id="sidebar-runtime-name">Ingen aktiv träff</b><small id="sidebar-runtime-status">Lokal server</small></span>
+            </div>
+            <button id="logout" type="button" class="quiet tab-action hidden">Logga ut</button>
+          </aside>
+
+          <div class="server-workspace">
 
         <section id="overview-view" class="view-panel meet-overview">
           <article class="card meet-summary-card">
@@ -225,13 +252,6 @@
             <div id="runtime-pill" class="runtime-pill">Ingen lokal träff vald</div>
           </div>
 
-          <nav class="admin-jump-nav card" aria-label="Administrationsdelar">
-            <a href="#active-runtime-config">Aktiv träff</a>
-            <a href="#local-runtime-draft">Lokalt utkast</a>
-            <a href="#admin-access-settings">Åtkomst</a>
-            <a href="#sync-and-devices">Synk och enheter</a>
-          </nav>
-
           <section id="active-runtime-config" class="card section-card active-runtime-card">
             <div class="section-heading compact-heading">
               <div>
@@ -267,6 +287,34 @@
             <div class="active-runtime-actions">
               <p>Den aktiva träffen ovan är serverns körande konfiguration. Kopiera den om du vill ändra den lokalt.</p>
               <button id="copy-active-runtime" type="button" class="secondary">Kopiera till lokalt utkast</button>
+            </div>
+          </section>
+
+          <section id="runtime-import" class="card section-card runtime-import-card">
+            <div class="section-heading compact-heading">
+              <div>
+                <p class="eyebrow">IMPORT OCH PUBLICERING</p>
+                <h2>Granska ett komplett driftpaket</h2>
+                <p>Läs in en exporterad TrainMeet-fil, validera hela träffen och aktivera den först när stationsplan och tidtabell ser rätt ut.</p>
+              </div>
+              <span id="runtime-import-state" class="revision-badge">Ingen fil vald</span>
+            </div>
+            <div class="runtime-import-picker">
+              <label for="runtime-import-file">TrainMeet runtime (.json)</label>
+              <input id="runtime-import-file" type="file" accept="application/json,.json">
+              <button id="runtime-import-validate" class="secondary" type="button" disabled>Validera filen</button>
+              <button id="runtime-import-activate" class="primary hidden" type="button">Importera och aktivera</button>
+            </div>
+            <p id="runtime-import-message" class="form-message" role="status"></p>
+            <div id="runtime-import-review" class="runtime-import-review hidden" aria-live="polite">
+              <div id="runtime-import-facts" class="runtime-facts"></div>
+              <div id="runtime-import-warnings" class="runtime-import-warnings hidden"></div>
+              <div class="runtime-table-wrap">
+                <table class="runtime-review-table">
+                  <thead><tr><th>Station</th><th>Spår</th><th>Sträckor</th><th>Paneler</th><th>Tågrörelser</th></tr></thead>
+                  <tbody id="runtime-import-stations"></tbody>
+                </table>
+              </div>
             </div>
           </section>
 
@@ -375,7 +423,7 @@
             </form>
           </section>
 
-          <section class="card section-card">
+          <section id="software-update-settings" class="card section-card">
             <div class="section-heading compact-heading">
               <div>
                 <p class="eyebrow">PROGRAMVARA</p>
@@ -516,6 +564,8 @@
             </form>
           </section>
         </section>
+          </div>
+        </div>
       </section>
 
       <section id="display-app" class="display-app hidden">
@@ -550,6 +600,6 @@
         </div>
       </section>
     </main>
-    <script src="/assets/app.js?v=20260813-1" defer></script>
+    <script src="/assets/app.js?v=20260813-3" defer></script>
   </body>
 </html>

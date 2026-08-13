@@ -62,6 +62,83 @@ class RuntimePublicationTests(unittest.TestCase):
         with self.assertRaises(RuntimePublicationError):
             RuntimePublication.parse(payload)
 
+    def test_multi_operating_point_station_preserves_the_source_location(self):
+        payload = runtime_package_v2()
+        payload["stations"][0]["operating_points"] = [
+            {
+                "id": "station-a-main",
+                "code": "C",
+                "name": "C",
+                "aliases": ["Charlottendal C"],
+            },
+            {
+                "id": "station-a-rbg",
+                "code": "RBG",
+                "name": "Rbg",
+                "aliases": ["Charlottendal Rbg"],
+            },
+        ]
+        for train in payload["trains"]:
+            if train["station_id"] == "station-a":
+                train["operating_point_id"] = "station-a-main"
+
+        publication = RuntimePublication.parse(payload)
+        timetable = publication.timetable(active_day="Lör", station_id="station-a")
+
+        self.assertEqual(
+            timetable["stations"][0]["operating_points"][1]["name"],
+            "Rbg",
+        )
+        self.assertEqual(
+            timetable["trains"][0]["operating_point_id"],
+            "station-a-main",
+        )
+
+    def test_multi_operating_point_station_requires_a_location_on_each_train_row(self):
+        payload = runtime_package_v2()
+        payload["stations"][0]["operating_points"] = [
+            {"id": "station-a-main", "code": "C", "name": "C", "aliases": []},
+            {"id": "station-a-rbg", "code": "RBG", "name": "Rbg", "aliases": []},
+        ]
+
+        with self.assertRaisesRegex(RuntimePublicationError, "saknar operating_point_id"):
+            RuntimePublication.parse(payload)
+
+    def test_train_row_cannot_use_an_operating_point_from_another_station(self):
+        payload = runtime_package_v2()
+        payload["stations"][1]["operating_points"] = [
+            {"id": "station-b-main", "code": "LEK", "name": "Lekby", "aliases": []}
+        ]
+        payload["trains"][0]["operating_point_id"] = "station-b-main"
+
+        with self.assertRaisesRegex(RuntimePublicationError, "driftplats på fel station"):
+            RuntimePublication.parse(payload)
+
+    def test_rejects_duplicate_movements_even_when_notes_differ(self):
+        payload = runtime_package_v2()
+        duplicate = deepcopy(payload["trains"][0])
+        duplicate["id"] = "train-movement-duplicate"
+        duplicate["note"] = "Kompletterande anteckning från en annan källfil"
+        payload["trains"].append(duplicate)
+
+        with self.assertRaisesRegex(RuntimePublicationError, "samma tågrörelse"):
+            RuntimePublication.parse(payload)
+
+    def test_operating_point_kind_is_station_or_yard(self):
+        payload = runtime_package_v2()
+        payload["stations"][0]["operating_points"] = [
+            {
+                "id": "station-a-main",
+                "code": "C",
+                "name": "C",
+                "kind": "depot",
+                "aliases": ["Charlottendal C"],
+            }
+        ]
+
+        with self.assertRaisesRegex(RuntimePublicationError, "ogiltig typ"):
+            RuntimePublication.parse(payload)
+
     def test_v1_is_rejected_during_the_pre_release_schema_phase(self):
         payload = runtime_package_v2()
         payload["schema_version"] = 1

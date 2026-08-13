@@ -420,6 +420,21 @@ det gör att stations-, tidtabells- och skärmmodellen kan utvecklas utan onödi
 komplexitet. Före en publik release införs dokumenterade migreringar mellan
 stabila schemaversioner.
 
+En station kan innehålla flera driftplatser utan att delas upp i flera noder i
+banöversikten. Driftpaketet anger då `operating_points` under stationen och
+varje importerad tågrad anger `operating_point_id`. Alias används för att
+matcha PDF-rubriker till rätt driftplats, inte för att kasta bort skillnaden
+mellan dem. Referensfallet Charlottendal publiceras därför som en station med
+driftplatserna C och Rbg: stationens topologi och Tambox är gemensamma, medan
+spår och tågrörelser behåller sin driftplats.
+
+TKL och rangerare är två olika operativa roller. TKL ansvarar för hela
+stationen, klarering och avgång. Rangeraren arbetar på rangerdriftplatsen,
+färdigställer tåget och aviserar TKL, men kan aldrig skicka tåget. TKL
+kvitterar överlämningen och väljer avgångstid. Denna ansvarsfördelning ska
+upprätthållas av serverns arbetsflöde och inte bara av vilka knappar klienten
+råkar visa.
+
 Viktiga API:er:
 
 - `GET/POST /v1/local-configuration`

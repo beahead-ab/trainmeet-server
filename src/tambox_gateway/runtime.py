@@ -87,9 +87,33 @@ class RuntimePublication:
 
         stations = _required_list(payload, "stations")
         station_ids = _unique_ids(stations, "station")
+        operating_point_stations: dict[str, str] = {}
+        multi_point_stations: set[str] = set()
         for station in stations:
             _required_text(station, "code")
             _required_text(station, "name")
+            operating_points = station.get("operating_points", [])
+            if not isinstance(operating_points, list):
+                raise RuntimePublicationError("En stations driftplatser måste vara en lista")
+            if len(operating_points) > 1:
+                multi_point_stations.add(str(station["id"]))
+            for operating_point in operating_points:
+                if not isinstance(operating_point, dict):
+                    raise RuntimePublicationError("En driftplats måste vara ett objekt")
+                operating_point_id = _required_text(operating_point, "id")
+                if operating_point_id in operating_point_stations:
+                    raise RuntimePublicationError("Två driftplatser har samma id")
+                _required_text(operating_point, "name")
+                _required_text(operating_point, "code")
+                kind = str(operating_point.get("kind") or "station")
+                if kind not in {"station", "yard"}:
+                    raise RuntimePublicationError("En driftplats har ogiltig typ")
+                aliases = operating_point.get("aliases", [])
+                if not isinstance(aliases, list) or not all(
+                    isinstance(alias, str) and alias.strip() for alias in aliases
+                ):
+                    raise RuntimePublicationError("En driftplats har ogiltiga alias")
+                operating_point_stations[operating_point_id] = str(station["id"])
 
         connections = _required_list(payload, "connections")
         connection_ids = _unique_ids(connections, "connection")
@@ -132,12 +156,32 @@ class RuntimePublication:
 
         trains = _required_list(payload, "trains")
         _unique_ids(trains, "train movement")
+        movement_fingerprints: set[tuple[Any, ...]] = set()
         for train in trains:
             _required_text(train, "train_number")
-            if _required_text(train, "station_id") not in station_ids:
+            train_station_id = _required_text(train, "station_id")
+            if train_station_id not in station_ids:
                 raise RuntimePublicationError("En tågrad hänvisar till en okänd station")
+            operating_point_id = train.get("operating_point_id")
+            if operating_point_id is not None:
+                if not isinstance(operating_point_id, str) or not operating_point_id.strip():
+                    raise RuntimePublicationError("En tågrad har ett ogiltigt driftplats-id")
+                if operating_point_stations.get(operating_point_id) != train_station_id:
+                    raise RuntimePublicationError(
+                        "En tågrad hänvisar till en driftplats på fel station"
+                    )
+            elif train_station_id in multi_point_stations:
+                raise RuntimePublicationError(
+                    "En tågrad på en station med flera driftplatser saknar operating_point_id"
+                )
             _required_text(train, "days")
             _required_text(train, "sort_time")
+            fingerprint = _movement_fingerprint(train)
+            if fingerprint in movement_fingerprints:
+                raise RuntimePublicationError(
+                    "Driftpaketet innehåller samma tågrörelse flera gånger"
+                )
+            movement_fingerprints.add(fingerprint)
 
         routes = _required_list(payload, "routes")
         for route in routes:
@@ -628,6 +672,29 @@ def matches_active_day(train_days: str, active_day: str) -> bool:
 
 def _resolve_day(value: str) -> str:
     return SHORT_DAYS.get(value, value)
+
+
+def _fingerprint_text(value: Any) -> str:
+    return " ".join(str(value or "").strip().casefold().split())
+
+
+def _movement_fingerprint(train: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        _fingerprint_text(train.get("station_id")),
+        _fingerprint_text(train.get("operating_point_id")),
+        _fingerprint_text(train.get("train_number")),
+        _fingerprint_text(train.get("days")),
+        _fingerprint_text(train.get("track")),
+        _fingerprint_text(train.get("arrival_time")),
+        _fingerprint_text(train.get("departure_time")),
+        _fingerprint_text(train.get("arrival_from")),
+        _fingerprint_text(train.get("departure_to")),
+        _fingerprint_text(train.get("arrival_from_next")),
+        _fingerprint_text(train.get("departure_to_next")),
+        _fingerprint_text(train.get("sort_time")),
+        _fingerprint_text(train.get("train_type")),
+        bool(train.get("no_stop")),
+    )
 
 
 def _required_text(value: dict[str, Any], key: str) -> str:

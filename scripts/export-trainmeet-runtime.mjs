@@ -115,7 +115,7 @@ const explicitSlots = explicitPanels.length
 const stationIds = meetStations.map((row) => row.station_id);
 const stationRows = await select(
   "stations",
-  "id,code,name",
+  "id,code,name,aliases",
   [["id", `in.(${stationIds.join(",")})`], ["order", "code.asc"]],
 );
 
@@ -129,15 +129,18 @@ const segments = segmentRows.map((segment) => ({
 }));
 
 const stationMeta = new Map(meetStations.map((row) => [row.station_id, row]));
+const timetableRows = mergeDuplicateTrainRows(trainRows);
+const operatingPointsByStation = buildOperatingPoints(stationRows, timetableRows);
 const diagramOrder = buildDiagramOrder(stationRows, segments);
 const stations = stationRows.map((station) => ({
   ...station,
+  operating_points: operatingPointsByStation.get(station.id) || [],
   diagram_order: diagramOrder.indexOf(station.id),
   is_autonomous: Boolean(stationMeta.get(station.id)?.is_autonomous),
   is_topology_branch: Boolean(stationMeta.get(station.id)?.is_topology_branch),
 }));
 const stationNames = new Map(stations.map((station) => [station.id, station.name]));
-const services = buildServices(trainRows, routeRows, stationNames);
+const services = buildServices(timetableRows, routeRows, stationNames);
 const routes = services.flatMap((service) =>
   service.stops.map((stop) => ({
     id: `${service.id}-${stop.stop_order}`,
@@ -202,11 +205,17 @@ const runtimePackage = {
   })),
   autonomous_links: autonomousLinks,
   panels: buildPanels(stations, segments, explicitPanels, explicitSlots),
-  trains: trainRows.map((train) => ({
-    ...train,
-    service_id: serviceId(train),
-    days: normalizeDays(train.days),
-  })),
+  trains: timetableRows.map((train) => {
+    const operatingPoint = (operatingPointsByStation.get(train.station_id) || []).find(
+      (point) => normalizeStationLabel(point.source_name) === normalizeStationLabel(train.station),
+    );
+    return {
+      ...train,
+      ...(operatingPoint ? { operating_point_id: operatingPoint.id } : {}),
+      service_id: serviceId(train),
+      days: normalizeDays(train.days),
+    };
+  }),
   routes,
   services,
   display: {
@@ -226,7 +235,9 @@ console.log(
     stations: stations.length,
     connections: segments.length,
     services: services.length,
-    timetable_rows: trainRows.length,
+    source_timetable_rows: trainRows.length,
+    timetable_rows: timetableRows.length,
+    merged_duplicate_rows: trainRows.length - timetableRows.length,
     routes: routes.length,
     panels: runtimePackage.panels.length,
   }),
@@ -240,6 +251,115 @@ function normalizeDays(value) {
     .split(",")
     .map((part) => part.trim().split("-").map((day) => aliases[day.trim()] || day.trim()).join("-"))
     .join(",");
+}
+
+function normalizeStationLabel(value) {
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase("sv-SE")
+    .replace(/\s+/g, " ");
+}
+
+function normalizedValue(value) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function movementFingerprint(train) {
+  return JSON.stringify([
+    train.station_id,
+    normalizedValue(train.station).toLocaleLowerCase("sv-SE"),
+    normalizedValue(train.train_number),
+    normalizeDays(train.days),
+    normalizedValue(train.track),
+    normalizedValue(train.arrival_time),
+    normalizedValue(train.departure_time),
+    normalizedValue(train.arrival_from).toLocaleLowerCase("sv-SE"),
+    normalizedValue(train.departure_to).toLocaleLowerCase("sv-SE"),
+    normalizedValue(train.arrival_from_next).toLocaleLowerCase("sv-SE"),
+    normalizedValue(train.departure_to_next).toLocaleLowerCase("sv-SE"),
+    normalizedValue(train.sort_time),
+    normalizedValue(train.train_type).toLocaleLowerCase("sv-SE"),
+    Boolean(train.no_stop),
+  ]);
+}
+
+function mergeDuplicateTrainRows(trains) {
+  const groups = new Map();
+  for (const train of trains) {
+    const key = movementFingerprint(train);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(train);
+  }
+  return [...groups.values()].map((rows) => {
+    const ordered = [...rows].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const notes = [...new Set(
+      ordered
+        .map((row) => String(row.note || "").trim())
+        .filter(Boolean),
+    )];
+    const manualSortOrders = ordered
+      .map((row) => Number(row.manual_sort_order))
+      .filter(Number.isFinite);
+    return {
+      ...ordered[0],
+      note: notes.join("\n"),
+      manual_sort_order: manualSortOrders.length ? Math.min(...manualSortOrders) : null,
+      source_row_ids: ordered.map((row) => row.id),
+    };
+  });
+}
+
+function operatingPointCode(stationName, sourceName) {
+  const parent = normalizeStationLabel(stationName);
+  const source = String(sourceName || "").trim();
+  const normalizedSource = normalizeStationLabel(source);
+  if (normalizedSource.startsWith(`${parent} `)) {
+    return source.slice(String(stationName).trim().length).trim().toLocaleUpperCase("sv-SE");
+  }
+  return source.split(/\s+/).at(-1).toLocaleUpperCase("sv-SE");
+}
+
+function operatingPointId(stationId, sourceName) {
+  const label = normalizeStationLabel(sourceName)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `operating-point-${stationId}-${label}`;
+}
+
+function buildOperatingPoints(stations, trains) {
+  const labelsByStation = new Map();
+  for (const train of trains) {
+    if (!train.station_id || !String(train.station || "").trim()) continue;
+    if (!labelsByStation.has(train.station_id)) labelsByStation.set(train.station_id, new Map());
+    const normalized = normalizeStationLabel(train.station);
+    if (!labelsByStation.get(train.station_id).has(normalized)) {
+      labelsByStation.get(train.station_id).set(normalized, String(train.station).trim());
+    }
+  }
+
+  return new Map(stations.map((station) => {
+    const sourceNames = [...(labelsByStation.get(station.id)?.values() || [])];
+    if (sourceNames.length < 2) return [station.id, []];
+    const points = sourceNames
+      .map((sourceName) => ({
+        id: operatingPointId(station.id, sourceName),
+        code: operatingPointCode(station.name, sourceName),
+        name: operatingPointCode(station.name, sourceName),
+        kind: /(^|\s)(rbg|ranger)(\s|$)/i.test(sourceName) ? "yard" : "station",
+        aliases: [sourceName],
+        source_name: sourceName,
+        tracks: [...new Set(
+          trains
+            .filter((train) => train.station_id === station.id && normalizeStationLabel(train.station) === normalizeStationLabel(sourceName))
+            .map((train) => String(train.track || "").trim())
+            .filter(Boolean),
+        )].sort(),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "sv-SE"));
+    return [station.id, points];
+  }));
 }
 
 function serviceId(train) {

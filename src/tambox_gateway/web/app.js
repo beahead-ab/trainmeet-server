@@ -40,11 +40,15 @@ const state = {
   displaySelectedStationID: null,
   displayHoveredTrainNumber: null,
   setupStatus: null,
+  pendingImportPackage: null,
+  pendingImportValidation: null,
 };
 
 const setup = document.querySelector("#setup");
 const login = document.querySelector("#login");
 const appView = document.querySelector("#app-view");
+const serverSidebarToggle = document.querySelector("#server-sidebar-toggle");
+const serverSidebarOverlay = document.querySelector("#server-sidebar-overlay");
 const loginForm = document.querySelector("#login-form");
 const loginError = document.querySelector("#login-error");
 const setupAdminForm = document.querySelector("#setup-admin-form");
@@ -85,6 +89,11 @@ const overviewRouteDetail = document.querySelector("#overview-route-detail");
 const overviewStationCounts = document.querySelector("#overview-station-counts");
 const closeStationInspector = document.querySelector("#close-station-inspector");
 const copyActiveRuntimeButton = document.querySelector("#copy-active-runtime");
+const runtimeImportFile = document.querySelector("#runtime-import-file");
+const runtimeImportValidate = document.querySelector("#runtime-import-validate");
+const runtimeImportActivate = document.querySelector("#runtime-import-activate");
+const runtimeImportMessage = document.querySelector("#runtime-import-message");
+const runtimeImportReview = document.querySelector("#runtime-import-review");
 
 for (const key of keypadKeys) {
   const button = document.createElement("button");
@@ -249,6 +258,23 @@ document.querySelectorAll(".view-tab").forEach((button) => {
   button.addEventListener("click", () => selectView(button.dataset.view));
 });
 
+serverSidebarToggle.addEventListener("click", () => {
+  appView.classList.toggle("sidebar-open");
+});
+serverSidebarOverlay.addEventListener("click", () => {
+  appView.classList.remove("sidebar-open");
+});
+
+document.querySelectorAll("[data-admin-target]").forEach((link) => {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    selectView("admin");
+    requestAnimationFrame(() => {
+      document.querySelector(`#${CSS.escape(link.dataset.adminTarget)}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+});
+
 document.querySelectorAll("[data-open-view]").forEach((button) => {
   button.addEventListener("click", () => selectView(button.dataset.openView));
 });
@@ -273,6 +299,19 @@ overviewStationCounts.addEventListener("click", (event) => {
 closeStationInspector.addEventListener("click", () => selectOverviewStation(null, true));
 
 copyActiveRuntimeButton.addEventListener("click", () => copyActiveRuntimeToDraft());
+
+runtimeImportFile.addEventListener("change", () => {
+  state.pendingImportPackage = null;
+  state.pendingImportValidation = null;
+  runtimeImportValidate.disabled = !runtimeImportFile.files?.length;
+  runtimeImportActivate.classList.add("hidden");
+  runtimeImportReview.classList.add("hidden");
+  document.querySelector("#runtime-import-state").textContent = runtimeImportFile.files?.[0]?.name || "Ingen fil vald";
+  setMessage(runtimeImportMessage, "");
+});
+
+runtimeImportValidate.addEventListener("click", validateRuntimeImport);
+runtimeImportActivate.addEventListener("click", activateRuntimeImport);
 
 logoutButton.addEventListener("click", async () => {
   await fetch("/v1/auth/logout", {
@@ -645,6 +684,7 @@ function selectView(view) {
   document.querySelectorAll(".view-tab").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === selected);
   });
+  appView.classList.remove("sidebar-open");
   if (selected === "admin") checkSoftwareUpdate();
 }
 
@@ -731,10 +771,14 @@ async function refreshInfo() {
     pill.textContent = `${info.runtime.meet_name} · ${info.runtime.active_day}`;
     pill.classList.add("active");
     document.querySelector("#overview-runtime-state").textContent = "Lokalt aktiv";
+    document.querySelector("#sidebar-runtime-name").textContent = info.runtime.meet_name;
+    document.querySelector("#sidebar-runtime-status").textContent = `${info.runtime.active_day} · lokal drift`;
   } else {
     pill.textContent = "Ingen träff aktiverad";
     pill.classList.remove("active");
     document.querySelector("#overview-runtime-state").textContent = "Ej konfigurerad";
+    document.querySelector("#sidebar-runtime-name").textContent = "Ingen aktiv träff";
+    document.querySelector("#sidebar-runtime-status").textContent = "Konfiguration krävs";
   }
   updateRestartButton(Boolean(info.restart_required));
 }
@@ -1315,6 +1359,98 @@ function renderActiveRuntimePlan(snapshot) {
 
   document.querySelector("#admin-active-connection-label").textContent = `${connections.length} konfigurerade`;
   copyActiveRuntimeButton.disabled = stations.length === 0;
+}
+
+async function validateRuntimeImport() {
+  const file = runtimeImportFile.files?.[0];
+  if (!file) return;
+  runtimeImportValidate.disabled = true;
+  runtimeImportActivate.classList.add("hidden");
+  runtimeImportReview.classList.add("hidden");
+  setMessage(runtimeImportMessage, "Läser och validerar hela driftpaketet …", "notice");
+  try {
+    if (file.size > 3_500_000) throw new Error("Runtime-filen får vara högst 3,5 MB");
+    const parsed = JSON.parse(await file.text());
+    const packageValue = parsed?.package && typeof parsed.package === "object" ? parsed.package : parsed;
+    const response = await authorizedFetch("/v1/runtime/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ package: packageValue }),
+    });
+    const validation = await response.json();
+    if (!response.ok) throw new Error(validation.message || "Driftpaketet är inte giltigt");
+    state.pendingImportPackage = packageValue;
+    state.pendingImportValidation = validation;
+    renderRuntimeImportReview(validation);
+    runtimeImportActivate.classList.remove("hidden");
+    document.querySelector("#runtime-import-state").textContent = "Validerad";
+    setMessage(
+      runtimeImportMessage,
+      `${validation.meet.name} är validerad. Ingen körande data har ändrats ännu.`,
+      validation.warnings.length ? "notice" : "success",
+    );
+  } catch (error) {
+    state.pendingImportPackage = null;
+    state.pendingImportValidation = null;
+    document.querySelector("#runtime-import-state").textContent = "Kontrollera filen";
+    setMessage(runtimeImportMessage, error instanceof SyntaxError ? "Filen innehåller inte giltig JSON." : error.message, "error");
+  } finally {
+    runtimeImportValidate.disabled = false;
+  }
+}
+
+function renderRuntimeImportReview(validation) {
+  const counts = validation.counts;
+  document.querySelector("#runtime-import-facts").innerHTML = `
+    <div><b>${counts.stations}</b><span>stationer</span></div>
+    <div><b>${counts.operating_points}</b><span>driftplatser</span></div>
+    <div><b>${counts.connections}</b><span>sträckor</span></div>
+    <div><b>${counts.services}</b><span>tågrutter</span></div>
+    <div><b>${counts.timetable_rows}</b><span>tågrörelser</span></div>`;
+  const warningBox = document.querySelector("#runtime-import-warnings");
+  warningBox.classList.toggle("hidden", validation.warnings.length === 0);
+  warningBox.innerHTML = validation.warnings.length
+    ? `<b>Kontrollera före aktivering</b><ul>${validation.warnings.map((warning) => `<li>${escapeHTML(warning)}</li>`).join("")}</ul>`
+    : "";
+  document.querySelector("#runtime-import-stations").innerHTML = validation.stations.map((station) => {
+    const operatingPoints = station.operating_points?.length
+      ? station.operating_points.map((point) => `${point.name}: ${point.tracks.join(", ") || "inga spår"} · ${point.timetable_rows} rader`).join(" · ")
+      : "";
+    return `<tr>
+      <th><b>${escapeHTML(station.code)}</b><span>${escapeHTML(station.name)}</span>${operatingPoints ? `<small>${escapeHTML(operatingPoints)}</small>` : ""}</th>
+      <td>${station.track_count}</td>
+      <td>${station.connection_count}</td>
+      <td>${station.panel_count}</td>
+      <td>${station.timetable_rows}</td>
+    </tr>`;
+  }).join("");
+  runtimeImportReview.classList.remove("hidden");
+}
+
+async function activateRuntimeImport() {
+  if (!state.pendingImportPackage || !state.pendingImportValidation) return;
+  const name = state.pendingImportValidation.meet.name;
+  if (!window.confirm(`Importera och aktivera ${name}? Den nuvarande träffen ligger kvar i historiken men den nya blir aktiv.`)) return;
+  runtimeImportActivate.disabled = true;
+  setMessage(runtimeImportMessage, "Importerar och aktiverar den validerade träffen …", "notice");
+  try {
+    const response = await authorizedFetch("/v1/runtime/install", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ package: state.pendingImportPackage }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Driftpaketet kunde inte importeras");
+    state.restartRequired = Boolean(result.restart_required);
+    restartButton.classList.toggle("hidden", !state.restartRequired);
+    document.querySelector("#runtime-import-state").textContent = result.restart_required ? "Aktiverad · omstart krävs" : "Aktiverad";
+    setMessage(runtimeImportMessage, result.message, result.restart_required ? "notice" : "success");
+    await Promise.all([refreshRuntime(), refreshInfo()]);
+  } catch (error) {
+    setMessage(runtimeImportMessage, error.message, "error");
+  } finally {
+    runtimeImportActivate.disabled = false;
+  }
 }
 
 function copyActiveRuntimeToDraft() {

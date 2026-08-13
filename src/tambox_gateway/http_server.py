@@ -40,7 +40,12 @@ from .local_config import (
 )
 from .models import Command
 from .operations import SQLiteOperationsStore
-from .runtime import AVAILABLE_CLOCK_STYLES, RuntimePublicationError, SQLiteRuntimeStore
+from .runtime import (
+    AVAILABLE_CLOCK_STYLES,
+    RuntimePublication,
+    RuntimePublicationError,
+    SQLiteRuntimeStore,
+)
 from .software_update import SoftwareUpdateError, installed_version, latest_version, read_update_status, start_update
 
 
@@ -843,6 +848,130 @@ class TamboxHTTPApplication:
             ),
         }
 
+    def validate_runtime(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Validate a complete runtime package without changing server state."""
+        self._require_admin(client)
+        package = payload.get("package", payload)
+        if not isinstance(package, dict):
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST,
+                "invalid_runtime",
+                "Driftpaketet måste vara ett objekt",
+            )
+        try:
+            publication = RuntimePublication.parse(package)
+        except RuntimePublicationError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_runtime", str(error)) from error
+
+        station_rows = {str(station["id"]): 0 for station in package["stations"]}
+        station_tracks: dict[str, set[str]] = {station_id: set() for station_id in station_rows}
+        operating_point_rows: dict[str, int] = {}
+        operating_point_tracks: dict[str, set[str]] = {}
+        for station in package["stations"]:
+            for operating_point in station.get("operating_points", []):
+                operating_point_id = str(operating_point["id"])
+                operating_point_rows[operating_point_id] = 0
+                operating_point_tracks[operating_point_id] = set()
+        for movement in package["trains"]:
+            station_id = str(movement["station_id"])
+            station_rows[station_id] += 1
+            track = str(movement.get("track") or "").strip()
+            if track:
+                station_tracks[station_id].add(track)
+            operating_point_id = movement.get("operating_point_id")
+            if operating_point_id:
+                operating_point_rows[str(operating_point_id)] += 1
+                if track:
+                    operating_point_tracks[str(operating_point_id)].add(track)
+
+        connection_counts = {station_id: 0 for station_id in station_rows}
+        for connection in package["connections"]:
+            connection_counts[str(connection["station_a_id"])] += 1
+            connection_counts[str(connection["station_b_id"])] += 1
+
+        panels_by_station = {station_id: 0 for station_id in station_rows}
+        for panel in package["panels"]:
+            panels_by_station[str(panel["station_id"])] += 1
+
+        warnings: list[str] = []
+        stations = []
+        for station in sorted(
+            package["stations"],
+            key=lambda value: int(value.get("diagram_order", 0)),
+        ):
+            station_id = str(station["id"])
+            if station_rows[station_id] == 0:
+                warnings.append(f"{station['name']} saknar tågrörelser")
+            if connection_counts[station_id] == 0:
+                warnings.append(f"{station['name']} saknar anslutande sträcka")
+            if panels_by_station[station_id] == 0:
+                warnings.append(f"{station['name']} saknar Tambox-panel")
+            operating_points = []
+            for operating_point in station.get("operating_points", []):
+                operating_point_id = str(operating_point["id"])
+                if operating_point_rows[operating_point_id] == 0:
+                    warnings.append(
+                        f"{station['name']} · {operating_point['name']} saknar tågrörelser"
+                    )
+                operating_points.append(
+                    {
+                        "id": operating_point_id,
+                        "code": str(operating_point["code"]),
+                        "name": str(operating_point["name"]),
+                        "aliases": list(operating_point.get("aliases", [])),
+                        "timetable_rows": operating_point_rows[operating_point_id],
+                        "tracks": sorted(operating_point_tracks[operating_point_id]),
+                    }
+                )
+            stations.append(
+                {
+                    "id": station_id,
+                    "code": str(station["code"]),
+                    "name": str(station["name"]),
+                    "timetable_rows": station_rows[station_id],
+                    "track_count": len(station_tracks[station_id]),
+                    "connection_count": connection_counts[station_id],
+                    "panel_count": panels_by_station[station_id],
+                    "operating_points": operating_points,
+                }
+            )
+
+        short_services = [
+            service for service in package["services"] if len(service.get("stops", [])) < 2
+        ]
+        if short_services:
+            warnings.append(
+                f"{len(short_services)} tågturer har bara ett känt stopp och visas utan full rutt"
+            )
+
+        return {
+            "valid": True,
+            "schema_version": publication.schema_version,
+            "publication_id": publication.publication_id,
+            "published_at": publication.published_at,
+            "checksum": publication.checksum,
+            "meet": {
+                "id": publication.meet_id,
+                "name": publication.meet_name,
+                "active_day": publication.active_day,
+                "timezone": publication.timezone,
+            },
+            "counts": {
+                "stations": len(package["stations"]),
+                "operating_points": sum(
+                    len(station.get("operating_points", []))
+                    for station in package["stations"]
+                ),
+                "connections": len(package["connections"]),
+                "panels": len(package["panels"]),
+                "services": len(package["services"]),
+                "timetable_rows": len(package["trains"]),
+                "route_stops": len(package["routes"]),
+            },
+            "stations": stations,
+            "warnings": warnings,
+        }
+
     def set_active_day(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
         if self.runtime_store is None or self.runtime_store.active() is None:
@@ -1307,6 +1436,13 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     HTTPStatus.CREATED,
                     self.server.application.install_runtime(client, payload),
+                )
+                return
+            if path == "/v1/runtime/validate":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.validate_runtime(client, payload),
                 )
                 return
             if path == "/v1/runtime/active-day":
