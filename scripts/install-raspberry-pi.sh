@@ -13,6 +13,17 @@ STATE_DIR=/var/lib/trainmeet-server
 VENV_DIR="$INSTALL_DIR/venv"
 DESKTOP_USER=${TRAINMEET_SERVER_DESKTOP_USER:-${SUDO_USER:-}}
 
+# This script normally runs from the complete source package downloaded by
+# install.sh. If somebody pipes this low-level script directly into sh, $0 is
+# only "sh" and SERVER_DIR points at the current directory. Bootstrap through
+# the public installer instead of failing later with a confusing missing-src
+# message.
+if [ ! -d "$SERVER_DIR/src" ] \
+  || [ ! -f "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server.service" ]; then
+  echo "Hämtar det fullständiga installationspaketet …"
+  exec sh -c 'curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sh'
+fi
+
 echo "Installerar TrainMeet Server …"
 apt-get update
 export DEBIAN_FRONTEND=noninteractive

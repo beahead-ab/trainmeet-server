@@ -97,6 +97,10 @@ ssh pi@RASPBERRY-PI-IP
 curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh
 ```
 
+   `install.sh` är den publika installeraren: den hämtar först hela paketet och
+   kör därefter Raspberry Pi-installationen. Filer under `scripts/` behöver inte
+   anropas direkt.
+
 4. Öppna `http://trainmeet.local:8787` eller adressen som installationen visar.
    På Raspberry Pi OS Desktop öppnas TrainMeet Server automatiskt i Chromium
    efter omstart. Webbläsaren väntar på servern och återstartas om den stängs.
