@@ -47,3 +47,7 @@ serverns `web/app.css` och i iPhone-appens `TrainMeetTheme.swift`. Funktionella
 fullskärmsändringar förs därefter över till den lokala renderingen. Det gör att
 utseendet kan utvecklas utan att Raspberry Pi-servern behöver köra React eller
 vara internetansluten under träffen.
+
+Det mer konkreta kontraktet för alla adminytor finns i
+[`ADMIN-UI-CONTRACT.md`](ADMIN-UI-CONTRACT.md). Det gäller både TrainMeet Server
+och TrainMeet Cloud.
