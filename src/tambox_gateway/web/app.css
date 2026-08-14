@@ -1097,3 +1097,85 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .dashboard-view { grid-template-columns: 1fr; overflow: auto; }
   .clock-face { width: min(92vw, 76vh); height: min(92vw, 76vh); }
 }
+
+/* TrainMeet Admin System
+   Cloudflare-inspired information density, implemented with TrainMeet tokens.
+   Operational display and Tambox hardware simulation keep their own scales. */
+:root {
+  --admin-text: 14px;
+  --admin-supporting: 13px;
+  --admin-nav: 13px;
+  --admin-micro: 10.5px;
+}
+
+.server-admin-shell { grid-template-columns: 250px minmax(0, 1fr); }
+.server-sidebar { padding: 12px; }
+.server-sidebar-title { min-height: 48px; }
+.server-sidebar-title b { font-family: var(--font-brand); font-size: 16px; font-weight: 600; }
+.server-sidebar-title div > span,
+.server-sidebar-nav > p { font-size: var(--admin-micro); font-weight: 500; line-height: 1.4; }
+.server-sidebar-nav > p { margin: 14px 9px 6px; }
+.view-tab.server-nav-item, .server-nav-link {
+  min-height: 40px;
+  padding-inline: 10px;
+  color: var(--ink);
+  font-size: var(--admin-nav);
+  font-weight: 400;
+  line-height: 20px;
+}
+.view-tab.server-nav-item.active { font-weight: 500; }
+.server-sidebar-footer b { font-size: 12.5px; font-weight: 500; }
+.server-sidebar-footer small { font-size: 11px; }
+.server-sidebar .tab-action { min-height: 38px; font-size: 12px; }
+
+.app-view .server-hero p:last-child,
+.app-view .section-heading p:last-child,
+.app-view .editor-heading p,
+.app-view .active-runtime-actions p,
+.app-view .station-inspector > p:not(.overview-kicker),
+.app-view .display-launch-card small { font-size: var(--admin-supporting); line-height: 1.5; }
+.app-view .eyebrow,
+.app-view .overview-kicker { font-size: var(--admin-micro); font-weight: 500; }
+.app-view label { font-size: var(--admin-supporting); font-weight: 500; }
+.app-view input, .app-view select, .app-view textarea { font-size: var(--admin-text); }
+.app-view button:not(.key) { font-size: var(--admin-text); font-weight: 500; }
+.app-view button.compact { min-height: 36px; font-size: 12.5px; }
+.app-view .view-tab.server-nav-item, .app-view .server-nav-link { font-size: var(--admin-nav); font-weight: 400; }
+.app-view .view-tab.server-nav-item.active { font-weight: 500; }
+.app-view .form-message { font-size: 12px; }
+
+.meet-meta, .overview-live-meta, .overview-section-heading a, .overview-routes-heading a,
+.route-empty, .route-detail-empty, .route-detail-heading span { font-size: var(--admin-supporting); }
+.overview-kicker { letter-spacing: .1em; }
+.station-inspector-connections span { font-size: 11.5px; font-weight: 500; }
+.station-inspector-trains > li, .station-inspector-trains button,
+.route-stop span, .station-count-row b { font-size: 12px; }
+.route-picker input { font-size: var(--admin-text); }
+.route-number { min-height: 36px; font-size: var(--admin-text); font-weight: 500; }
+.route-stop b { font-size: var(--admin-supporting); }
+.station-count-row div span { font-size: 11px; }
+
+.runtime-facts span { font-size: 11.5px; }
+.runtime-import-picker label { font-size: var(--admin-supporting); font-weight: 500; }
+.runtime-import-warnings, .runtime-review-table { font-size: 12px; }
+.runtime-review-table thead th { font-size: var(--admin-micro); font-weight: 500; }
+.runtime-review-table th small { font-size: 11.5px; }
+.runtime-station-list span { font-size: 11px; }
+.runtime-plan-heading h3, .runtime-plan-row b { font-size: var(--admin-supporting); font-weight: 500; }
+.runtime-plan-heading span, .runtime-plan-row span { font-size: 11.5px; }
+.runtime-plan-empty { font-size: 12px; }
+.section-heading h2, .server-hero h2 { font-size: 21px; }
+.editor-heading h3 { font-size: 16px; }
+.editor-row input, .editor-row select { min-height: 38px; font-size: var(--admin-text); }
+.chain-builder span { font-size: var(--admin-supporting); }
+.display-launch-card b { font-size: 16px; font-weight: 500; }
+
+.setup-card { font-size: var(--admin-text); }
+.setup-card label { font-size: var(--admin-supporting); font-weight: 500; }
+.setup-card input, .setup-card select { font-size: var(--admin-text); }
+.setup-card button { font-size: var(--admin-text); font-weight: 500; }
+.setup-card .form-message, .setup-runtime-summary span { font-size: 12px; }
+
+@media (max-width: 680px) {
+  .server-sidebar { width: min(300px, calc(100vw - 40px)); }
+}
