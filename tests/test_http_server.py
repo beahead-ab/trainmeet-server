@@ -93,6 +93,11 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn("Extern admininloggning", html)
         self.assertIn('id="login-form"', html)
         self.assertIn("Skärmar", html)
+        self.assertIn('/trainmeet-logo.png', html)
+        with urlopen(f"{self.base_url}/trainmeet-logo.png", timeout=2) as response:
+            logo = response.read()
+            self.assertEqual(response.headers.get_content_type(), "image/png")
+        self.assertTrue(logo.startswith(b"\x89PNG\r\n\x1a\n"))
 
     def test_clean_server_runs_the_complete_first_start_flow(self):
         self.runtime_store.begin_installation()

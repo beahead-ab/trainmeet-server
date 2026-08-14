@@ -1143,6 +1143,7 @@ class TamboxHTTPApplication:
             "/index.html": "index.html",
             "/assets/app.css": "app.css",
             "/assets/app.js": "app.js",
+            "/trainmeet-logo.png": "trainmeet-logo.png",
         }.get(path)
         if relative is None and path in {
             "/display",

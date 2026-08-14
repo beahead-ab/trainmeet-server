@@ -172,19 +172,12 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .brand-lockup { display: flex; align-items: center; gap: 10px; }
 .brand-mark {
-  display: grid;
+  display: block;
   width: 28px;
   height: 28px;
-  place-items: center;
   border-radius: 8px;
-  color: var(--primary-foreground);
-  background: var(--primary);
   box-shadow: var(--shadow);
-  font-family: var(--font-brand);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -.04em;
+  object-fit: cover;
 }
 
 .eyebrow {
@@ -302,15 +295,12 @@ p { line-height: 1.5; }
 .setup-runtime-summary span { color: var(--muted); font-size: 11px; }
 .sync-code-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; font-weight: 700; letter-spacing: .22em; }
 .pairing-icon {
-  display: grid;
+  display: block;
   width: 44px;
   height: 44px;
-  place-items: center;
   margin-bottom: 15px;
   border-radius: 13px;
-  color: var(--primary-foreground);
-  background: var(--trainmeet);
-  font-size: 21px;
+  object-fit: cover;
 }
 
 form { display: grid; gap: 8px; }
@@ -429,19 +419,12 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 }
 .meet-summary-main { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .meet-logo {
-  display: grid;
+  display: block;
   flex: 0 0 auto;
   width: 44px;
   height: 44px;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--primary-foreground);
-  background: linear-gradient(145deg, #e8a11c, #b85414);
-  border: 2px solid #7d310b;
-  font-size: 13px;
-  font-family: var(--font-brand);
-  font-weight: 700;
-  box-shadow: inset 0 0 0 2px #ffc95b;
+  border-radius: 13px;
+  object-fit: cover;
 }
 .meet-summary-card h2 { margin: 0 0 7px; font-size: 21px; line-height: 1.2; letter-spacing: -.025em; }
 .meet-meta { display: flex; flex-wrap: wrap; gap: 5px 16px; color: var(--muted); font-size: 11px; }
