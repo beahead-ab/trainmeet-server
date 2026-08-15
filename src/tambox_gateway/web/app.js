@@ -1,5 +1,49 @@
 const keypadKeys = ["1", "2", "3", "A", "4", "5", "6", "B", "7", "8", "9", "C", "*", "0", "#", "D"];
 const slotKeys = ["A", "B", "C", "D"];
+const adminSections = {
+  runtime: {
+    eyebrow: "DRIFT",
+    title: "Aktiv träff",
+    description: "Serverns körande stationsplan, tidtabell och lokala status.",
+    state: "Lokal drift",
+  },
+  cloud: {
+    eyebrow: "TRAINMEET CLOUD",
+    title: "Synk och förbättringar",
+    description: "Hämta publicerade versioner och skicka lokala ändringar för central granskning.",
+    state: "Cloud",
+  },
+  local: {
+    eyebrow: "KONFIGURATION",
+    title: "Lokala ändringar",
+    description: "Justera stationer, sträckor och Tambox-paneler utan att stoppa den aktiva träffen.",
+    state: "Lokalt utkast",
+  },
+  import: {
+    eyebrow: "MANUELL IMPORT",
+    title: "Importera driftpaket",
+    description: "Validera och aktivera ett komplett TrainMeet-paket från en lokal fil.",
+    state: "JSON",
+  },
+  devices: {
+    eyebrow: "ENHETER",
+    title: "Fysiska Tamboxar",
+    description: "Koppla varje hårdvaruenhet till rätt logisk panel på stationen.",
+    state: "Lokalt nät",
+  },
+  access: {
+    eyebrow: "SYSTEM",
+    title: "Användare och åtkomst",
+    description: "Hantera inloggningen som används utanför serverdatorn.",
+    state: "Säkerhet",
+  },
+  software: {
+    eyebrow: "SYSTEM",
+    title: "Programuppdatering",
+    description: "Kontrollera, säkerhetskopiera och installera en ny serverversion.",
+    state: "GitHub",
+  },
+};
 
 function createWebClientID() {
   const browserCrypto = globalThis.crypto;
@@ -19,6 +63,9 @@ const state = {
   selectedView: localStorage.getItem("trainmeet.view") === "server"
     ? "overview"
     : (localStorage.getItem("trainmeet.view") || "overview"),
+  selectedAdminSection: adminSections[localStorage.getItem("trainmeet.adminSection")]
+    ? localStorage.getItem("trainmeet.adminSection")
+    : "runtime",
   snapshots: new Map(),
   selectedPanelID: localStorage.getItem("tambox.panelID"),
   snapshotTimer: null,
@@ -42,6 +89,7 @@ const state = {
   setupStatus: null,
   pendingImportPackage: null,
   pendingImportValidation: null,
+  runtimeLinkInitialized: false,
 };
 
 const setup = document.querySelector("#setup");
@@ -257,7 +305,10 @@ setupFinishForm.addEventListener("submit", async (event) => {
 });
 
 document.querySelectorAll(".view-tab").forEach((button) => {
-  button.addEventListener("click", () => selectView(button.dataset.view));
+  button.addEventListener("click", () => {
+    if (button.dataset.adminSectionTarget) state.selectedAdminSection = button.dataset.adminSectionTarget;
+    selectView(button.dataset.view);
+  });
 });
 
 serverSidebarToggle.addEventListener("click", () => {
@@ -267,13 +318,10 @@ serverSidebarOverlay.addEventListener("click", () => {
   appView.classList.remove("sidebar-open");
 });
 
-document.querySelectorAll("[data-admin-target]").forEach((link) => {
-  link.addEventListener("click", (event) => {
-    event.preventDefault();
+document.querySelectorAll(".admin-section-link").forEach((button) => {
+  button.addEventListener("click", () => {
+    state.selectedAdminSection = button.dataset.adminSectionTarget;
     selectView("admin");
-    requestAnimationFrame(() => {
-      document.querySelector(`#${CSS.escape(link.dataset.adminTarget)}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
   });
 });
 
@@ -439,6 +487,7 @@ runtimeForm.addEventListener("submit", async (event) => {
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
     setMessage(runtimeMessage, payload.message, payload.restart_required ? "notice" : "success");
     document.querySelector("#runtime-sync-code").value = "";
+    document.querySelector("#runtime-link-details").open = false;
     await Promise.all([refreshRuntime(), refreshInfo()]);
   } catch (error) {
     setMessage(runtimeMessage, error.message, "error");
@@ -718,10 +767,44 @@ function selectView(view) {
   document.querySelector("#simulator-view").classList.toggle("hidden", selected !== "simulator");
   document.querySelector("#displays-view").classList.toggle("hidden", selected !== "displays");
   document.querySelectorAll(".view-tab").forEach((button) => {
-    button.classList.toggle("active", button.dataset.view === selected);
+    const adminSectionMatches = button.dataset.view !== "admin"
+      || button.dataset.adminSectionTarget === state.selectedAdminSection;
+    button.classList.toggle("active", button.dataset.view === selected && adminSectionMatches);
   });
+  if (selected === "admin") selectAdminSection(state.selectedAdminSection);
   appView.classList.remove("sidebar-open");
-  if (selected === "admin") checkSoftwareUpdate();
+}
+
+function selectAdminSection(section) {
+  const selected = adminSections[section] ? section : "runtime";
+  state.selectedAdminSection = selected;
+  localStorage.setItem("trainmeet.adminSection", selected);
+  document.querySelectorAll(".admin-section-panel").forEach((panel) => {
+    panel.classList.toggle("hidden", panel.dataset.adminSection !== selected);
+  });
+  document.querySelectorAll(".admin-section-link").forEach((button) => {
+    button.classList.toggle("active", button.dataset.adminSectionTarget === selected);
+  });
+  const heading = adminSections[selected];
+  document.querySelector("#admin-section-eyebrow").textContent = heading.eyebrow;
+  document.querySelector("#admin-section-title").textContent = heading.title;
+  document.querySelector("#admin-section-description").textContent = heading.description;
+  document.querySelector("#admin-section-state").textContent = heading.state;
+  appView.classList.remove("sidebar-open");
+  window.scrollTo({ top: 0, behavior: "auto" });
+  if (selected === "software") checkSoftwareUpdate();
+  if (selected === "cloud") refreshRuntime();
+}
+
+function updateRuntimeNavigation(configured) {
+  document.querySelectorAll("[data-requires-runtime]").forEach((element) => {
+    element.classList.toggle("hidden", !configured);
+  });
+  if (!configured && ["runtime", "devices"].includes(state.selectedAdminSection)) {
+    state.selectedAdminSection = "cloud";
+    if (state.selectedView === "admin") selectAdminSection("cloud");
+  }
+  if (!configured && ["simulator", "displays"].includes(state.selectedView)) selectView("overview");
 }
 
 async function refreshSnapshots() {
@@ -809,6 +892,9 @@ async function refreshInfo() {
     document.querySelector("#overview-runtime-state").textContent = "Lokalt aktiv";
     document.querySelector("#sidebar-runtime-name").textContent = info.runtime.meet_name;
     document.querySelector("#sidebar-runtime-status").textContent = `${info.runtime.active_day} · lokal drift`;
+    if (state.selectedAdminSection === "runtime") {
+      document.querySelector("#admin-section-state").textContent = info.runtime.active_day || "Lokal drift";
+    }
   } else {
     pill.textContent = "Ingen träff aktiverad";
     pill.classList.remove("active");
@@ -816,6 +902,7 @@ async function refreshInfo() {
     document.querySelector("#sidebar-runtime-name").textContent = "Ingen aktiv träff";
     document.querySelector("#sidebar-runtime-status").textContent = "Konfiguration krävs";
   }
+  updateRuntimeNavigation(Boolean(info.runtime?.configured));
   updateRestartButton(Boolean(info.restart_required));
 }
 
@@ -1155,7 +1242,7 @@ async function refreshRuntime() {
   runtimeAutoSync.checked = !!runtime.cloud_auto_sync;
   runtimeAutoSync.disabled = !runtime.linked;
   runtimePushChanges.classList.toggle("hidden", !runtime.linked || !runtime.pending_cloud_changes);
-  runtimePushChanges.textContent = `Skicka förbättringsförslag${runtime.pending_cloud_changes ? ` (${runtime.pending_cloud_changes})` : ""}`;
+  runtimePushChanges.textContent = `Skicka till Cloud som förbättringsförslag${runtime.pending_cloud_changes ? ` (${runtime.pending_cloud_changes})` : ""}`;
   if (runtime.central_url) document.querySelector("#runtime-central-url").value = runtime.central_url;
   if (runtime.available_publication_id) {
     state.pendingPublicationID = runtime.available_publication_id;
@@ -1166,6 +1253,27 @@ async function refreshRuntime() {
   day.textContent = runtime.active_day || "–";
   row.append(identity, day);
   status.append(row);
+
+  const cloudMeet = document.querySelector("#cloud-connection-meet");
+  const cloudMeta = document.querySelector("#cloud-connection-meta");
+  const cloudState = document.querySelector("#cloud-connection-state");
+  const cloudDetails = document.querySelector("#runtime-link-details");
+  cloudMeet.textContent = runtime.linked ? runtime.meet_name : "Ingen Cloud-koppling";
+  const publicationTime = runtime.published_at
+    ? new Date(runtime.published_at).toLocaleString("sv-SE", { dateStyle: "medium", timeStyle: "short" })
+    : null;
+  cloudMeta.textContent = runtime.linked
+    ? `${runtime.central_url || "TrainMeet Cloud"} · ${runtime.station_count} stationer · ${runtime.train_count} tågrörelser${publicationTime ? ` · publicerad ${publicationTime}` : ""}`
+    : "Koppla en publicerad träff med en sexsiffrig kod.";
+  cloudState.textContent = runtime.linked ? "Kopplad" : "Inte kopplad";
+  cloudState.classList.toggle("active", runtime.linked);
+  if (!state.runtimeLinkInitialized) {
+    cloudDetails.open = !runtime.linked;
+    state.runtimeLinkInitialized = true;
+  }
+  if (state.selectedAdminSection === "cloud") {
+    document.querySelector("#admin-section-state").textContent = runtime.linked ? "Cloud kopplad" : "Inte kopplad";
+  }
 }
 
 async function refreshLocalClock() {

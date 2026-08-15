@@ -134,21 +134,22 @@
             <nav class="server-sidebar-nav" aria-label="Huvudvyer">
               <p>Drift</p>
               <button type="button" class="view-tab server-nav-item active" data-view="overview"><span aria-hidden="true">⌂</span>Översikt</button>
-              <button type="button" class="view-tab server-nav-item" data-view="admin"><span aria-hidden="true">◉</span>Aktiv träff</button>
+              <button type="button" class="view-tab server-nav-item" data-view="admin" data-admin-section-target="runtime" data-requires-runtime><span aria-hidden="true">◉</span>Aktiv träff</button>
 
-              <p>Konfiguration</p>
-              <a class="server-nav-link" href="#runtime-import" data-admin-target="runtime-import"><span aria-hidden="true">⇧</span>Importera driftpaket</a>
-              <a class="server-nav-link" href="#local-runtime-draft" data-admin-target="local-runtime-draft"><span aria-hidden="true">⌘</span>Stationer och sträckor</a>
-              <a class="server-nav-link" href="#sync-and-devices" data-admin-target="sync-and-devices"><span aria-hidden="true">↻</span>Konfigurationssynk</a>
+              <p>Cloud och konfiguration</p>
+              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="cloud"><span aria-hidden="true">↻</span>Cloud och synk</button>
+              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="local"><span aria-hidden="true">⌘</span>Lokala ändringar</button>
+              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="import"><span aria-hidden="true">⇧</span>Manuell import</button>
 
               <p>Enheter</p>
-              <button type="button" class="view-tab server-nav-item" data-view="simulator"><span aria-hidden="true">▦</span>Tambox-simulering</button>
-              <a class="server-nav-link" href="/tkl/"><span aria-hidden="true">▤</span>TKL-terminal</a>
-              <button type="button" class="view-tab server-nav-item" data-view="displays"><span aria-hidden="true">▣</span>Skärmar och klocka</button>
+              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="devices" data-requires-runtime><span aria-hidden="true">⌁</span>Tamboxar</button>
+              <button type="button" class="view-tab server-nav-item" data-view="simulator" data-requires-runtime><span aria-hidden="true">▦</span>Tambox-simulering</button>
+              <a class="server-nav-link" href="/tkl/" data-requires-runtime><span aria-hidden="true">▤</span>TKL-terminal</a>
+              <button type="button" class="view-tab server-nav-item" data-view="displays" data-requires-runtime><span aria-hidden="true">▣</span>Skärmar och klocka</button>
 
               <p>System</p>
-              <a class="server-nav-link" href="#admin-access-settings" data-admin-target="admin-access-settings"><span aria-hidden="true">♙</span>Användare och åtkomst</a>
-              <a class="server-nav-link" href="#software-update-settings" data-admin-target="software-update-settings"><span aria-hidden="true">↓</span>Programuppdatering</a>
+              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="access"><span aria-hidden="true">♙</span>Användare och åtkomst</button>
+              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="software"><span aria-hidden="true">↓</span>Programuppdatering</button>
             </nav>
             <div class="server-sidebar-footer">
               <i></i><span><b id="sidebar-runtime-name">Ingen aktiv träff</b><small id="sidebar-runtime-status">Lokal server</small></span>
@@ -245,7 +246,16 @@
         </section>
 
         <section id="admin-view" class="view-panel hidden">
-          <div class="server-hero card">
+          <header class="admin-page-heading">
+            <div>
+              <p id="admin-section-eyebrow" class="eyebrow">DRIFT</p>
+              <h2 id="admin-section-title">Aktiv träff</h2>
+              <p id="admin-section-description">Serverns körande stationsplan, tidtabell och lokala status.</p>
+            </div>
+            <span id="admin-section-state" class="revision-badge">Lokal server</span>
+          </header>
+
+          <div class="server-hero card admin-section-panel" data-admin-section="runtime">
             <div>
               <p class="eyebrow">DEN HÄR RASPBERRY PI:N</p>
               <h2 id="server-name">Lokal trafikserver</h2>
@@ -254,7 +264,7 @@
             <div id="runtime-pill" class="runtime-pill">Ingen lokal träff vald</div>
           </div>
 
-          <section id="active-runtime-config" class="card section-card active-runtime-card">
+          <section id="active-runtime-config" class="card section-card active-runtime-card admin-section-panel" data-admin-section="runtime">
             <div class="section-heading compact-heading">
               <div>
                 <p class="eyebrow">AKTIV RUNTIME</p>
@@ -292,7 +302,7 @@
             </div>
           </section>
 
-          <section id="runtime-import" class="card section-card runtime-import-card">
+          <section id="runtime-import" class="card section-card runtime-import-card admin-section-panel hidden" data-admin-section="import">
             <div class="section-heading compact-heading">
               <div>
                 <p class="eyebrow">IMPORT OCH PUBLICERING</p>
@@ -320,7 +330,7 @@
             </div>
           </section>
 
-          <section id="local-runtime-draft" class="card section-card configuration-card">
+          <section id="local-runtime-draft" class="card section-card configuration-card admin-section-panel hidden" data-admin-section="local">
             <div class="section-heading">
               <div>
                 <p class="eyebrow">TRÄFF OCH STATIONSPLAN</p>
@@ -396,10 +406,14 @@
                 <button id="activate-config" type="button" class="primary">Spara och aktivera</button>
                 <button id="restart-server" type="button" class="restart hidden">Starta om servern</button>
               </div>
+              <div class="local-change-policy">
+                <span aria-hidden="true">↗</span>
+                <p><b>Lokalt först.</b> Ändringar sparas på den här servern. När servern är Cloud-kopplad kan de skickas post för post som förbättringsförslag för central granskning.</p>
+              </div>
             </form>
           </section>
 
-          <section id="admin-access-settings" class="card section-card">
+          <section id="admin-access-settings" class="card section-card admin-section-panel hidden" data-admin-section="access">
             <div class="section-heading compact-heading">
               <div>
                 <p class="eyebrow">ÅTKOMST</p>
@@ -425,7 +439,7 @@
             </form>
           </section>
 
-          <section id="software-update-settings" class="card section-card">
+          <section id="software-update-settings" class="card section-card admin-section-panel hidden" data-admin-section="software">
             <div class="section-heading compact-heading">
               <div>
                 <p class="eyebrow">PROGRAMVARA</p>
@@ -446,34 +460,55 @@
             </div>
           </section>
 
-          <div id="sync-and-devices" class="two-column">
-            <section class="card section-card">
+          <section id="sync-and-devices" class="card section-card cloud-section-card admin-section-panel hidden" data-admin-section="cloud">
               <div class="section-heading compact-heading">
                 <div>
                   <p class="eyebrow">TRAINMEET CLOUD</p>
-                  <h2>Koppla och hämta träff</h2>
-                  <p>Ange den sexsiffriga koden från en publicerad Cloud-version. Den permanenta kopplingen sparas osynligt på servern och används vid framtida uppdateringar.</p>
+                  <h2>Cloud-koppling</h2>
+                  <p>Hämta publicerade versioner och skicka lokala förbättringsförslag till central granskning.</p>
                 </div>
               </div>
-              <form id="runtime-sync-form" class="inline-form">
-                <label for="runtime-central-url">Konfigurationsserver</label>
-                <input id="runtime-central-url" type="url" value="https://cloud.trainmeet.app/config" required>
-                <label for="runtime-sync-code">Träffkod</label>
-                <input id="runtime-sync-code" class="sync-code-input" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" placeholder="123456" required>
-                <button class="primary" type="submit">Koppla och hämta</button>
-                <p id="runtime-message" class="form-message" role="status"></p>
-              </form>
+              <div class="cloud-connection-summary">
+                <span class="cloud-connection-icon" aria-hidden="true">↻</span>
+                <div>
+                  <small id="cloud-connection-label">KONFIGURATIONSKÄLLA</small>
+                  <b id="cloud-connection-meet">Ingen Cloud-koppling</b>
+                  <span id="cloud-connection-meta">Koppla en publicerad träff med en sexsiffrig kod.</span>
+                </div>
+                <span id="cloud-connection-state" class="revision-badge">Inte kopplad</span>
+              </div>
+
+              <label class="cloud-setting-row" for="runtime-auto-sync">
+                <span>
+                  <b>Automatiska Cloud-uppdateringar</b>
+                  <small>Servern söker var 15:e sekund och aktiverar en ny publicerad version när den finns.</small>
+                </span>
+                <input id="runtime-auto-sync" type="checkbox">
+              </label>
+
               <div class="runtime-update-actions">
-                <label class="auto-sync-toggle"><input id="runtime-auto-sync" type="checkbox"> Hämta och aktivera nya Cloud-versioner automatiskt</label>
                 <button id="runtime-check-update" class="secondary" type="button">Sök efter uppdatering</button>
                 <button id="runtime-download-update" class="secondary hidden" type="button">Hämta versionen</button>
                 <button id="runtime-activate-update" class="primary hidden" type="button">Aktivera hämtad version</button>
-                <button id="runtime-push-changes" class="secondary hidden" type="button">Skicka förbättringsförslag</button>
+                <button id="runtime-push-changes" class="primary hidden" type="button">Skicka förbättringsförslag</button>
               </div>
+              <p id="runtime-message" class="form-message" role="status"></p>
               <div id="runtime-status" class="status-list"></div>
-            </section>
 
-            <section class="card section-card">
+              <details id="runtime-link-details" class="cloud-link-details" open>
+                <summary>Koppla eller byt träff</summary>
+                <p>Ange koden från en publicerad Cloud-version. Kopplingen sparas på servern och den långa åtkomstnyckeln hanteras automatiskt.</p>
+                <form id="runtime-sync-form" class="inline-form">
+                  <label for="runtime-central-url">Config-server</label>
+                  <input id="runtime-central-url" type="url" value="https://cloud.trainmeet.app/config" required>
+                  <label for="runtime-sync-code">Träffkod</label>
+                  <input id="runtime-sync-code" class="sync-code-input" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" placeholder="123456" required>
+                  <button class="primary" type="submit">Koppla och hämta</button>
+                </form>
+              </details>
+          </section>
+
+          <section id="device-management" class="card section-card admin-section-panel hidden" data-admin-section="devices">
               <div class="section-heading compact-heading">
                 <div>
                   <p class="eyebrow">FYSISKA ENHETER</p>
@@ -490,8 +525,7 @@
                 <p id="device-message" class="form-message" role="status"></p>
               </form>
               <div id="device-list" class="status-list"></div>
-            </section>
-          </div>
+          </section>
         </section>
 
         <section id="simulator-view" class="view-panel simulator-view hidden" aria-live="polite">
