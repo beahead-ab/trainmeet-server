@@ -2018,6 +2018,12 @@ let displaySnapshotReceivedAt = null;
 let displayPollTimer = null;
 let displayToolbarTimer = null;
 let displayTickTimer = null;
+let displayClockAnchorSeconds = null;
+let displayClockAnchorAt = null;
+let displayClockAnchorRunning = null;
+let displayClockAnchorSpeed = null;
+let swissMinuteKey = null;
+let swissMinuteWobbleStartedAt = null;
 
 function svgElement(name, attrs = {}, textValue = null) {
   const element = document.createElementNS(svgNS, name);
@@ -2592,13 +2598,8 @@ const clockStyleLabels = {
   italian: "Italiensk (FS)", american: "Amerikansk", digital: "Digital",
 };
 
-function clockSVG(time, style, darkBackground, showSeconds, stopped) {
-  const [hour, minute, second] = String(time || "12:00:00").split(":").map(Number);
+function clockSVG(style, darkBackground, showSeconds, stopped) {
   const config = clockStyleConfig[style] || clockStyleConfig.swiss;
-  const isSwiss = style === "swiss";
-  const hourAngle = (hour % 12 + minute / 60) * 30;
-  const minuteAngle = isSwiss ? minute * 6 : (minute + second / 60) * 6;
-  const secondAngle = isSwiss ? Math.min(second / 58.5, 1) * 360 : second * 6;
   const faceColor = darkBackground ? "#1a1a1a" : "#fff";
   const handColor = darkBackground ? "#e0e0e0" : "#1a1a1a";
   const markerColor = darkBackground ? "#d0d0d0" : "#1a1a1a";
@@ -2616,7 +2617,7 @@ function clockSVG(time, style, darkBackground, showSeconds, stopped) {
     const angle = (index * 30 - 90) * Math.PI / 180;
     return `<text x="${100 + 68 * Math.cos(angle)}" y="${100 + 68 * Math.sin(angle)}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="bold" fill="${numberColor}" font-family="sans-serif">${value}</text>`;
   }).join("") : "";
-  const secondHand = showSeconds ? `<g transform="rotate(${secondAngle} 100 100)">
+  const secondHand = showSeconds ? `<g data-clock-hand="second" transform="rotate(0 100 100)">
     <line x1="100" y1="118" x2="100" y2="${100 - config.secondHandLength}" stroke="${config.secondHandColor}" stroke-width="${config.secondHandWidth}" stroke-linecap="round"/>
     ${config.secondBallRadius > 0 ? `<circle cx="100" cy="${100 - config.secondBallOffset}" r="${config.secondBallRadius}" fill="${config.secondHandColor}"/>` : ""}
   </g>` : "";
@@ -2625,25 +2626,98 @@ function clockSVG(time, style, darkBackground, showSeconds, stopped) {
     <circle cx="100" cy="100" r="${94 - config.bezelWidth / 2}" fill="${faceColor}"/>
     ${marks}
     ${numbers}
-    <line x1="100" y1="100" x2="100" y2="${100 - config.hourHandLength}" stroke="${handColor}" stroke-width="${config.hourHandWidth}" stroke-linecap="round" transform="rotate(${hourAngle} 100 100)"/>
-    <line x1="100" y1="100" x2="100" y2="${100 - config.minuteHandLength}" stroke="${handColor}" stroke-width="${config.minuteHandWidth}" stroke-linecap="round" transform="rotate(${minuteAngle} 100 100)"/>
+    <line data-clock-hand="hour" x1="100" y1="100" x2="100" y2="${100 - config.hourHandLength}" stroke="${handColor}" stroke-width="${config.hourHandWidth}" stroke-linecap="round" transform="rotate(0 100 100)"/>
+    <line data-clock-hand="minute" x1="100" y1="100" x2="100" y2="${100 - config.minuteHandLength}" stroke="${handColor}" stroke-width="${config.minuteHandWidth}" stroke-linecap="round" transform="rotate(0 100 100)"/>
     ${secondHand}
     <circle cx="100" cy="100" r="${config.centerDotRadius}" fill="${handColor}"/>
   </svg>`;
 }
 
-function currentClockTime(snapshot) {
+function parsedClockSeconds(snapshot) {
   const raw = String(snapshot.clock?.time || "12:00:00");
   const parts = raw.split(":").map(Number);
-  let seconds = (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
-  if (snapshot.clock?.running && displaySnapshotReceivedAt !== null) {
-    seconds += (performance.now() - displaySnapshotReceivedAt) / 1000 * Number(snapshot.clock?.speed || 1);
+  return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+}
+
+function circularClockDelta(left, right) {
+  return ((left - right + 43200) % 86400 + 86400) % 86400 - 43200;
+}
+
+function syncDisplayClock(snapshot, receivedAt = performance.now()) {
+  const serverSeconds = parsedClockSeconds(snapshot);
+  const running = Boolean(snapshot.clock?.running);
+  const speed = Number(snapshot.clock?.speed || 1);
+  const stateChanged = displayClockAnchorRunning !== running || displayClockAnchorSpeed !== speed;
+  let predicted = displayClockAnchorSeconds;
+  if (predicted !== null && displayClockAnchorAt !== null && displayClockAnchorRunning) {
+    predicted += (receivedAt - displayClockAnchorAt) / 1000 * Number(displayClockAnchorSpeed || 1);
   }
+  const correction = predicted === null ? Infinity : Math.abs(circularClockDelta(serverSeconds, predicted));
+
+  // Servern skickar hela sekunder. Små skillnader lämnas åt den lokala,
+  // monotona klockan så att visarna inte rycker vid varje synkning.
+  if (displayClockAnchorSeconds === null || stateChanged || !running || correction > 1.25) {
+    displayClockAnchorSeconds = serverSeconds;
+    displayClockAnchorAt = receivedAt;
+  }
+  displayClockAnchorRunning = running;
+  displayClockAnchorSpeed = speed;
+}
+
+function currentClockSeconds(snapshot) {
+  if (displayClockAnchorSeconds === null || displayClockAnchorAt === null) syncDisplayClock(snapshot);
+  let seconds = Number(displayClockAnchorSeconds || 0);
+  if (displayClockAnchorRunning) {
+    seconds += (performance.now() - displayClockAnchorAt) / 1000 * Number(displayClockAnchorSpeed || 1);
+  }
+  return ((seconds % 86400) + 86400) % 86400;
+}
+
+function formatClockTime(seconds) {
   seconds = Math.floor(seconds) % 86400;
   const hour = Math.floor(seconds / 3600);
   const minute = Math.floor((seconds % 3600) / 60);
   const second = seconds % 60;
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
+}
+
+function currentClockTime(snapshot) {
+  return formatClockTime(currentClockSeconds(snapshot));
+}
+
+function swissMinuteWobble(minuteKey, running) {
+  if (swissMinuteKey === null) swissMinuteKey = minuteKey;
+  if (minuteKey !== swissMinuteKey) {
+    swissMinuteKey = minuteKey;
+    swissMinuteWobbleStartedAt = running ? performance.now() : null;
+  }
+  if (swissMinuteWobbleStartedAt === null) return 0;
+  const elapsed = (performance.now() - swissMinuteWobbleStartedAt) / 1000;
+  const decay = Math.exp(-6 * elapsed);
+  if (decay <= 0.01) {
+    swissMinuteWobbleStartedAt = null;
+    return 0;
+  }
+  return 1.8 * decay * Math.sin(8 * Math.PI * 2 * elapsed);
+}
+
+function updateAnalogClockHands(target, seconds, style, running) {
+  const isSwiss = style === "swiss";
+  const hour = Math.floor(seconds / 3600);
+  const minute = Math.floor((seconds % 3600) / 60);
+  const second = seconds % 60;
+  const minuteKey = Math.floor(seconds / 60);
+  const hourAngle = isSwiss
+    ? (hour % 12 + minute / 60) * 30
+    : (hour % 12 + minute / 60 + second / 3600) * 30;
+  const minuteAngle = isSwiss
+    ? minute * 6 + swissMinuteWobble(minuteKey, running)
+    : (minute + second / 60) * 6;
+  // Hilfikers SBB-klocka gör varvet på 58,5 s och väntar sedan vid 12.
+  const secondAngle = isSwiss ? Math.min(second / 58.5, 1) * 360 : second * 6;
+  target.querySelector('[data-clock-hand="hour"]')?.setAttribute("transform", `rotate(${hourAngle} 100 100)`);
+  target.querySelector('[data-clock-hand="minute"]')?.setAttribute("transform", `rotate(${minuteAngle} 100 100)`);
+  target.querySelector('[data-clock-hand="second"]')?.setAttribute("transform", `rotate(${secondAngle} 100 100)`);
 }
 
 function renderClock(snapshot) {
@@ -2658,17 +2732,29 @@ function renderClock(snapshot) {
     styleSelect.innerHTML = available.map((value) => `<option value="${escapeHTML(value)}">${escapeHTML(clockStyleLabels[value] || value)}</option>`).join("");
   }
   styleSelect.value = style;
-  const time = currentClockTime(snapshot);
+  const seconds = currentClockSeconds(snapshot);
+  const time = formatClockTime(seconds);
   const localSeconds = localStorage.getItem("trainmeet.showSeconds");
   const showSeconds = localSeconds === null ? snapshot.clock?.show_seconds !== false : localSeconds === "true";
   const displayTime = showSeconds ? time : time.slice(0, 5);
   const darkBackground = !document.querySelector("#display-app").classList.contains("light");
   const stopped = !snapshot.clock?.running;
-  const face = style === "digital"
-    ? `<div class="clock-digital${stopped ? " stopped" : ""}">${escapeHTML(displayTime)}</div>`
-    : clockSVG(time, style, darkBackground, showSeconds, stopped);
-  const reason = snapshot.clock?.running ? "" : `<div class="clock-stopped">STOPPAD${snapshot.clock?.stopped_reason ? ` · ${escapeHTML(snapshot.clock.stopped_reason)}` : ""}</div>`;
-  target.innerHTML = `<div class="clock-shell">${face}${reason}</div>`;
+  const stopText = snapshot.clock?.running ? "" : `STOPPAD${snapshot.clock?.stopped_reason ? ` · ${snapshot.clock.stopped_reason}` : ""}`;
+  const renderSignature = [style, darkBackground, showSeconds, stopped, stopText].join("|");
+  if (target.dataset.clockSignature !== renderSignature) {
+    target.dataset.clockSignature = renderSignature;
+    const face = style === "digital"
+      ? `<div class="clock-digital${stopped ? " stopped" : ""}"></div>`
+      : clockSVG(style, darkBackground, showSeconds, stopped);
+    const reason = stopText ? `<div class="clock-stopped">${escapeHTML(stopText)}</div>` : "";
+    target.innerHTML = `<div class="clock-shell">${face}${reason}</div>`;
+  }
+  if (style === "digital") {
+    const digital = target.querySelector(".clock-digital");
+    if (digital && digital.textContent !== displayTime) digital.textContent = displayTime;
+  } else {
+    updateAnalogClockHands(target, seconds, style, !stopped);
+  }
 }
 
 function renderDashboard(snapshot) {
@@ -2756,6 +2842,7 @@ async function pollDisplay() {
     if (!response.ok) throw new Error("Servern svarade inte");
     const payload = await response.json();
     displaySnapshotReceivedAt = performance.now();
+    syncDisplayClock(payload, displaySnapshotReceivedAt);
     live.classList.remove("offline");
     live.lastChild.textContent = " Ansluten";
     renderDisplay(payload);
@@ -2820,11 +2907,11 @@ async function initDisplay() {
   displayApp.addEventListener("click", showToolbar);
   showToolbar();
   try { await navigator.wakeLock?.request("screen"); } catch {}
-  displayTickTimer = setInterval(() => {
-    if (!displaySnapshot) return;
-    if (displayKind === "clock") renderClock(displaySnapshot);
-    if (displayKind === "dashboard") renderDashboard(displaySnapshot);
-  }, 200);
+  const animateClock = () => {
+    if (displaySnapshot && displayKind === "clock") renderClock(displaySnapshot);
+    displayTickTimer = requestAnimationFrame(animateClock);
+  };
+  displayTickTimer = requestAnimationFrame(animateClock);
   pollDisplay();
 }
 
