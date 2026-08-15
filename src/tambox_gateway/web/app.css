@@ -447,6 +447,22 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .local-change-policy p { margin: 0; color: var(--muted); font-size: 12.5px; }
 .local-change-policy b { color: var(--ink); font-weight: 600; }
 
+.server-identity-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(240px, 1.2fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--v2-bg);
+}
+.server-identity-form > div { display: grid; align-self: center; gap: 3px; }
+.server-identity-form > div b { font-size: var(--admin-text, 14px); font-weight: 500; }
+.server-identity-form > div span { color: var(--muted); font-size: 12px; }
+.server-identity-form .form-message { grid-column: 2 / -1; }
+
 .cloud-section-card { display: grid; gap: 18px; }
 .cloud-connection-summary {
   display: grid;
@@ -980,6 +996,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .cloud-connection-icon { width: 40px; height: 40px; }
   .cloud-connection-summary > .revision-badge { grid-column: 1 / -1; width: fit-content; }
   .cloud-setting-row { align-items: flex-start; gap: 14px; }
+  .server-identity-form { grid-template-columns: 1fr; }
+  .server-identity-form .form-message { grid-column: 1; }
   .server-sidebar {
     position: fixed;
     z-index: 70;

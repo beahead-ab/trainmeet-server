@@ -408,7 +408,7 @@
               </div>
               <div class="local-change-policy">
                 <span aria-hidden="true">↗</span>
-                <p><b>Lokalt först.</b> Ändringar sparas på den här servern. När servern är Cloud-kopplad kan de skickas post för post som förbättringsförslag för central granskning.</p>
+                <p><b>Lokalt först.</b> Ändringar sparas på den här servern. När servern är Cloud-kopplad skickas de automatiskt post för post som förbättringsförslag för central granskning.</p>
               </div>
             </form>
           </section>
@@ -422,6 +422,17 @@
               </div>
               <span id="access-mode" class="revision-badge">Lokal åtkomst</span>
             </div>
+            <form id="server-identity-form" class="server-identity-form">
+              <div>
+                <b>Serveridentitet</b>
+                <span>Namnet visas lokalt och följer med förbättringsförslag till Cloud.</span>
+              </div>
+              <label>Servernamn
+                <input id="admin-server-name" maxlength="80" placeholder="Exempel: Grimslöv driftserver" required>
+              </label>
+              <button type="submit" class="secondary">Spara servernamn</button>
+              <p id="server-identity-message" class="form-message" role="status"></p>
+            </form>
             <form id="admin-access-form" class="form-grid access-grid">
               <label>Användarnamn
                 <input id="admin-username" maxlength="64" autocomplete="username" required>
@@ -465,7 +476,7 @@
                 <div>
                   <p class="eyebrow">TRAINMEET CLOUD</p>
                   <h2>Cloud-koppling</h2>
-                  <p>Hämta publicerade versioner och skicka lokala förbättringsförslag till central granskning.</p>
+                  <p>Hämta publicerade versioner. Cloud-kopplade lokala ändringar skickas automatiskt som förbättringsförslag till central granskning.</p>
                 </div>
               </div>
               <div class="cloud-connection-summary">

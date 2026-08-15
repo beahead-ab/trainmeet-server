@@ -126,6 +126,8 @@ const restartButton = document.querySelector("#restart-server");
 const logoutButton = document.querySelector("#logout");
 const adminAccessForm = document.querySelector("#admin-access-form");
 const adminAccessMessage = document.querySelector("#admin-access-message");
+const serverIdentityForm = document.querySelector("#server-identity-form");
+const serverIdentityMessage = document.querySelector("#server-identity-message");
 const clockControlForm = document.querySelector("#clock-control-form");
 const clockControlMessage = document.querySelector("#clock-control-message");
 const softwareChannel = document.querySelector("#software-channel");
@@ -416,6 +418,28 @@ adminAccessForm.addEventListener("submit", async (event) => {
     await refreshAdminAccess();
   } catch (error) {
     setMessage(adminAccessMessage, error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+serverIdentityForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setMessage(serverIdentityMessage, "");
+  const button = serverIdentityForm.querySelector("button");
+  button.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/setup/server", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ server_name: document.querySelector("#admin-server-name").value }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Servernamnet kunde inte sparas");
+    setMessage(serverIdentityMessage, `Servernamnet är nu ${payload.server_name}.`, "success");
+    await refreshInfo();
+  } catch (error) {
+    setMessage(serverIdentityMessage, error.message, "error");
   } finally {
     button.disabled = false;
   }
@@ -885,6 +909,10 @@ async function refreshInfo() {
   document.querySelector("#server-name").textContent = info.gateway_id || "TrainMeet Server";
   document.querySelector("#server-detail").textContent =
     `Kör lokalt · aktiv trafiksession: ${info.traffic_session_name}`;
+  const serverNameInput = document.querySelector("#admin-server-name");
+  if (document.activeElement !== serverNameInput) {
+    serverNameInput.value = info.runtime?.server_name || info.gateway_id || "";
+  }
   const pill = document.querySelector("#runtime-pill");
   if (info.runtime?.configured) {
     pill.textContent = `${info.runtime.meet_name} · ${info.runtime.active_day}`;
@@ -1242,7 +1270,7 @@ async function refreshRuntime() {
   runtimeAutoSync.checked = !!runtime.cloud_auto_sync;
   runtimeAutoSync.disabled = !runtime.linked;
   runtimePushChanges.classList.toggle("hidden", !runtime.linked || !runtime.pending_cloud_changes);
-  runtimePushChanges.textContent = `Skicka till Cloud som förbättringsförslag${runtime.pending_cloud_changes ? ` (${runtime.pending_cloud_changes})` : ""}`;
+  runtimePushChanges.textContent = `Försök skicka väntande förslag igen${runtime.pending_cloud_changes ? ` (${runtime.pending_cloud_changes})` : ""}`;
   if (runtime.central_url) document.querySelector("#runtime-central-url").value = runtime.central_url;
   if (runtime.available_publication_id) {
     state.pendingPublicationID = runtime.available_publication_id;
