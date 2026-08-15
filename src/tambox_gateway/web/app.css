@@ -294,6 +294,8 @@ p { line-height: 1.5; }
 }
 .setup-runtime-summary span { color: var(--muted); font-size: 11px; }
 .sync-code-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; font-weight: 700; letter-spacing: .22em; }
+.auto-sync-toggle { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; color: hsl(var(--foreground)); font-size: 12px; }
+.auto-sync-toggle input { width: 17px; min-height: 17px; accent-color: hsl(var(--primary)); }
 .pairing-icon {
   display: block;
   width: 44px;

@@ -413,10 +413,21 @@ MQTT är avsiktligt lösenordsfritt på träffens lokala nät. Servern ska inte 
 
 Servern kan skapa och aktivera en träff helt lokalt. Den kan också installera
 ett normaliserat, versionsmärkt runtime-paket från valfri kompatibel
-konfigurationsserver. Standardadressen är `https://trainmeet.app/konfig`.
+konfigurationsserver. Standardadressen är `https://cloud.trainmeet.app/config`.
 Användaren anger bara serveradressen och en sexsiffrig kod. Den permanenta
 länkidentiteten returneras av konfigurationsservern och lagras osynligt lokalt;
 ingen lång API-nyckel behöver kopieras eller visas.
+
+En ansluten server kan skicka lokala konfigurationsändringar tillbaka till
+TrainMeet Cloud. Stationer, sträckor, Tamboxar och grundinställningar läggs då
+som separata poster i en lokal, beständig kö. Cloud-admin godkänner eller avslår
+varje post innan den påverkar Cloud-utkastet. Först när utkastet publiceras som
+en ny version kan ändringen hämtas tillbaka av lokala servrar.
+
+Administratören kan aktivera automatisk Cloud-synk. Servern kontrollerar då
+var femtonde sekund om en ny komplett version har publicerats, hämtar och
+aktiverar den samt gör en kontrollerad omstart när trafikmotorns stations- eller
+Tambox-konfiguration har ändrats.
 
 Under den nuvarande utvecklingsfasen stöds endast runtime-schema 2. Vi håller inte
 ett kompatibilitetslager för äldre testformat innan den första externa releasen;
@@ -452,6 +463,8 @@ Viktiga API:er:
 - `POST /v1/runtime/sync`
 - `GET/POST /v1/runtime/update`
 - `POST /v1/runtime/activate`
+- `POST /v1/cloud/changes`
+- `POST /v1/cloud/auto-sync`
 - `GET /v1/runtime`
 - `GET /v1/timetable?station_id=...`
 - `GET /v1/display`

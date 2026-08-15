@@ -77,11 +77,11 @@
 
         <form id="setup-central-form" class="setup-step hidden">
           <p class="eyebrow">STEG 3 AV 4</p>
-          <h3>Hämta träffen</h3>
-          <p>Ange konfigurationsservern och den sex tecken långa kod som visas där. Ingen lång nyckel behöver hanteras.</p>
+          <h3>Hämta träffen från TrainMeet Cloud</h3>
+          <p>Ange den sexsiffriga kod som visas vid den publicerade versionen i Cloud. Adressen kan ändras om ni använder en annan kompatibel konfigurationsserver.</p>
           <div class="form-grid setup-fields central-fields">
             <label>Konfigurationsserver
-              <input id="setup-central-url" type="url" value="https://trainmeet.app/konfig" placeholder="https://trainmeet.app/konfig" required>
+              <input id="setup-central-url" type="url" value="https://cloud.trainmeet.app/config" placeholder="https://cloud.trainmeet.app/config" required>
             </label>
             <label>Träffkod
               <input id="setup-sync-code" class="sync-code-input" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" placeholder="123456" required>
@@ -450,23 +450,25 @@
             <section class="card section-card">
               <div class="section-heading compact-heading">
                 <div>
-                  <p class="eyebrow">CENTRAL TRAINMEET</p>
-                  <h2>Hämta färdig träff</h2>
-                  <p>Ange en konfigurationsserver och den sexsiffriga träffkoden. Den permanenta kopplingen sparas osynligt på servern.</p>
+                  <p class="eyebrow">TRAINMEET CLOUD</p>
+                  <h2>Koppla och hämta träff</h2>
+                  <p>Ange den sexsiffriga koden från en publicerad Cloud-version. Den permanenta kopplingen sparas osynligt på servern och används vid framtida uppdateringar.</p>
                 </div>
               </div>
               <form id="runtime-sync-form" class="inline-form">
                 <label for="runtime-central-url">Konfigurationsserver</label>
-                <input id="runtime-central-url" type="url" value="https://trainmeet.app/konfig" required>
+                <input id="runtime-central-url" type="url" value="https://cloud.trainmeet.app/config" required>
                 <label for="runtime-sync-code">Träffkod</label>
                 <input id="runtime-sync-code" class="sync-code-input" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" placeholder="123456" required>
                 <button class="primary" type="submit">Koppla och hämta</button>
                 <p id="runtime-message" class="form-message" role="status"></p>
               </form>
               <div class="runtime-update-actions">
+                <label class="auto-sync-toggle"><input id="runtime-auto-sync" type="checkbox"> Hämta och aktivera nya Cloud-versioner automatiskt</label>
                 <button id="runtime-check-update" class="secondary" type="button">Sök efter uppdatering</button>
                 <button id="runtime-download-update" class="secondary hidden" type="button">Hämta versionen</button>
                 <button id="runtime-activate-update" class="primary hidden" type="button">Aktivera hämtad version</button>
+                <button id="runtime-push-changes" class="secondary hidden" type="button">Skicka förbättringsförslag</button>
               </div>
               <div id="runtime-status" class="status-list"></div>
             </section>

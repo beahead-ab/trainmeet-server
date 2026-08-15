@@ -22,8 +22,10 @@ from .central_sync import (
     CentralRuntimeDownload,
     CentralRuntimeManifest,
     CentralSyncError,
+    canonical_runtime_url,
     fetch_linked_runtime,
     fetch_runtime_download,
+    push_change_proposals,
 )
 from .identity import (
     AdminAccessError,
@@ -53,6 +55,28 @@ LOGGER = logging.getLogger("tambox_gateway.http")
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
 ADMIN_COOKIE_NAME = "trainmeet_admin"
 ADMIN_COOKIE_MAX_AGE = 12 * 60 * 60
+
+
+def _local_configuration_changes(before: dict[str, Any], after: dict[str, Any]) -> list[dict[str, Any]]:
+    changes: list[dict[str, Any]] = []
+    meet_fields = ("name", "timezone", "active_day", "clock_time", "default_dispatch_mode")
+    changed_meet = {key: after.get(key) for key in meet_fields if before.get(key) != after.get(key)}
+    if changed_meet:
+        changes.append({
+            "entity_type": "meet",
+            "entity_id": str(after.get("id") or "meet"),
+            "operation": "upsert",
+            "payload": changed_meet,
+        })
+    for entity_type, collection in (("station", "stations"), ("connection", "connections"), ("panel", "panels")):
+        previous = {str(item.get("id")): item for item in before.get(collection, []) if isinstance(item, dict) and item.get("id")}
+        current = {str(item.get("id")): item for item in after.get(collection, []) if isinstance(item, dict) and item.get("id")}
+        for entity_id, item in current.items():
+            if previous.get(entity_id) != item:
+                changes.append({"entity_type": entity_type, "entity_id": entity_id, "operation": "upsert", "payload": item})
+        for entity_id in previous.keys() - current.keys():
+            changes.append({"entity_type": entity_type, "entity_id": entity_id, "operation": "delete", "payload": {}})
+    return changes
 
 
 def _tkl_engine_reason(reason: str) -> str:
@@ -89,6 +113,7 @@ class TamboxHTTPApplication:
         local_configuration_store: SQLiteLocalConfigurationStore | None = None,
         runtime_fetcher: Callable[[str, str], Any] | None = None,
         linked_runtime_fetcher: Callable[[str, str, bool], Any] | None = None,
+        change_sender: Callable[[str, list[dict[str, Any]], str, str | None], list[str]] | None = None,
         operations_store: SQLiteOperationsStore | None = None,
     ):
         self.engine = engine
@@ -99,15 +124,30 @@ class TamboxHTTPApplication:
         self.local_configuration_store = local_configuration_store
         self.operations_store = operations_store
         self.runtime_fetcher = runtime_fetcher or (
-            lambda code, url: fetch_runtime_download(code, url)
+            lambda code, url: fetch_runtime_download(
+                code,
+                url,
+                server_name=(self.runtime_store.server_name() if self.runtime_store else self.config.gateway_id),
+            )
         )
         self.linked_runtime_fetcher = linked_runtime_fetcher or (
             lambda token, url, manifest_only: fetch_linked_runtime(
                 token, url, manifest_only=manifest_only
             )
         )
+        self.change_sender = change_sender or (
+            lambda token, proposals, url, server_name: push_change_proposals(
+                token, proposals, url, server_name=server_name
+            )
+        )
         self.web_root = files("tambox_gateway").joinpath("web")
         self.tkl_web_root = files("tambox_gateway").joinpath("tkl")
+
+        if self.runtime_store is not None and self.runtime_store.central_url():
+            saved_url = self.runtime_store.central_url() or ""
+            migrated_url = canonical_runtime_url(saved_url)
+            if migrated_url != saved_url:
+                self.runtime_store.save_central_url(migrated_url)
 
         if self.operations_store is not None:
             self.engine.set_transition_observer(self.operations_store.record_engine_transition)
@@ -341,8 +381,11 @@ class TamboxHTTPApplication:
     def runtime_summary(self, client: PairedClient) -> dict[str, Any]:
         del client
         if self.runtime_store is None:
-            return {"configured": False}
-        return self.runtime_store.summary()
+            return {"configured": False, "central_url": canonical_runtime_url(self.config.central_runtime_url)}
+        return {
+            **self.runtime_store.summary(),
+            "central_url": canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url),
+        }
 
     def display_snapshot(self) -> dict[str, Any]:
         publication = self.runtime_store.active() if self.runtime_store is not None else None
@@ -736,9 +779,10 @@ class TamboxHTTPApplication:
                 "Konfigurationen måste vara ett objekt",
             )
         expected_revision = payload.get("expected_revision")
+        before = self.local_configuration_store.current().get("draft", {})
         try:
             revision = int(expected_revision) if expected_revision is not None else None
-            return self.local_configuration_store.save(
+            saved = self.local_configuration_store.save(
                 draft,
                 expected_revision=revision,
             )
@@ -750,6 +794,85 @@ class TamboxHTTPApplication:
                 "invalid_local_configuration",
                 str(error),
             ) from error
+        if self.runtime_store is not None and self.runtime_store.link_token() and self.runtime_store.active():
+            changes = _local_configuration_changes(before, saved["draft"])
+            self.runtime_store.queue_cloud_changes(
+                self.runtime_store.active().meet_id,
+                self.runtime_store.active().publication_id,
+                changes,
+            )
+            if changes:
+                try:
+                    saved["cloud_sync"] = self.push_cloud_changes(client)
+                except HTTPAPIError as error:
+                    saved["cloud_sync"] = {
+                        "sent": 0,
+                        "pending": self.runtime_store.pending_cloud_change_count(),
+                        "message": f"Ändringarna ligger kvar lokalt: {error}",
+                    }
+        return saved
+
+    def push_cloud_changes(self, client: PairedClient) -> dict[str, Any]:
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal lagring saknas")
+        token = self.runtime_store.link_token()
+        if not token:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla servern till TrainMeet Cloud först")
+        proposals = self.runtime_store.pending_cloud_changes()
+        if not proposals:
+            return {"sent": 0, "pending": 0, "message": "Inga lokala ändringar väntar på Cloud."}
+        central_url = canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url)
+        try:
+            accepted = self.change_sender(token, proposals, central_url, self.runtime_store.server_name())
+        except CentralSyncError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "cloud_push_failed", str(error)) from error
+        self.runtime_store.mark_cloud_changes_sent(accepted)
+        pending = self.runtime_store.pending_cloud_change_count()
+        return {
+            "sent": len(accepted),
+            "pending": pending,
+            "message": f"{len(accepted)} förbättringsförslag skickades till Cloud för granskning.",
+        }
+
+    def configure_cloud_auto_sync(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal lagring saknas")
+        enabled = payload.get("enabled") is True
+        if enabled and not self.runtime_store.link_token():
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla servern till TrainMeet Cloud först")
+        self.runtime_store.set_cloud_auto_sync(enabled)
+        return {
+            "enabled": enabled,
+            "message": "Automatisk Cloud-synk är aktiverad." if enabled else "Automatisk Cloud-synk är avstängd.",
+        }
+
+    def auto_sync_cloud_runtime(self) -> dict[str, Any]:
+        if self.runtime_store is None or not self.runtime_store.cloud_auto_sync_enabled():
+            return {"checked": False, "updated": False}
+        token = self.runtime_store.link_token()
+        if not token:
+            return {"checked": False, "updated": False}
+        central_url = canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url)
+        manifest = self.linked_runtime_fetcher(token, central_url, True)
+        if not isinstance(manifest, CentralRuntimeManifest):
+            raise CentralSyncError("TrainMeet Cloud skickade inget versionsbesked")
+        active = self.runtime_store.active()
+        if active is not None and active.publication_id == manifest.publication_id:
+            return {"checked": True, "updated": False, "publication_id": manifest.publication_id}
+        download = self.linked_runtime_fetcher(token, central_url, False)
+        if not isinstance(download, CentralRuntimeDownload):
+            raise CentralSyncError("TrainMeet Cloud skickade inget driftpaket")
+        publication = self.runtime_store.install(download.package)
+        if self.operations_store is not None:
+            self.operations_store.ensure_publication(publication)
+        return {
+            "checked": True,
+            "updated": True,
+            "publication_id": publication.publication_id,
+            "restart_required": publication.session_config() != self.engine.config,
+        }
 
     def activate_local_configuration(
         self,
@@ -994,6 +1117,7 @@ class TamboxHTTPApplication:
             central_url = central_url or self.runtime_store.central_url() or self.config.central_runtime_url
         else:
             central_url = central_url or self.config.central_runtime_url
+        central_url = canonical_runtime_url(central_url)
         parsed_url = urlparse(central_url)
         if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
             raise HTTPAPIError(
@@ -1034,7 +1158,7 @@ class TamboxHTTPApplication:
         if not token:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla först servern med en sexsiffrig träffkod")
         try:
-            central_url = self.runtime_store.central_url() or self.config.central_runtime_url
+            central_url = canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url)
             result = self.linked_runtime_fetcher(token, central_url, True)
         except CentralSyncError as error:
             raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
@@ -1058,7 +1182,7 @@ class TamboxHTTPApplication:
         if not token:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "runtime_not_linked", "Koppla först servern med en sexsiffrig träffkod")
         try:
-            central_url = self.runtime_store.central_url() or self.config.central_runtime_url
+            central_url = canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url)
             result = self.linked_runtime_fetcher(token, central_url, False)
         except CentralSyncError as error:
             raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
@@ -1486,6 +1610,20 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     HTTPStatus.CREATED,
                     self.server.application.activate_local_configuration(client, payload),
+                )
+                return
+            if path == "/v1/cloud/changes":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.push_cloud_changes(client),
+                )
+                return
+            if path == "/v1/cloud/auto-sync":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.configure_cloud_auto_sync(client, payload),
                 )
                 return
             if path == "/v1/server/restart":

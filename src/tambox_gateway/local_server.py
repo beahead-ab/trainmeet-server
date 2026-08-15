@@ -9,6 +9,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -156,6 +157,14 @@ def main() -> None:
         operations_store=operations_store,
     )
     server = TamboxHTTPServer((args.bind, args.http_port), application)
+    cloud_sync_stop = threading.Event()
+    cloud_sync_thread = threading.Thread(
+        target=_cloud_auto_sync_loop,
+        args=(application, server, cloud_sync_stop),
+        name="trainmeet-cloud-sync",
+        daemon=True,
+    )
+    cloud_sync_thread.start()
     signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
     signal.signal(signal.SIGINT, _raise_keyboard_interrupt)
     local_ip = _local_ip()
@@ -166,6 +175,8 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nTambox-servern stoppas …")
     finally:
+        cloud_sync_stop.set()
+        cloud_sync_thread.join(timeout=2)
         server.shutdown()
         server.server_close()
         gateway.client.disconnect()
@@ -189,6 +200,25 @@ def main() -> None:
             sys.executable,
             [sys.executable, "-m", "tambox_gateway.local_server", *sys.argv[1:]],
         )
+
+
+def _cloud_auto_sync_loop(
+    application: TamboxHTTPApplication,
+    server: TamboxHTTPServer,
+    stop: threading.Event,
+) -> None:
+    while not stop.is_set():
+        try:
+            result = application.auto_sync_cloud_runtime()
+            if result.get("updated"):
+                LOGGER.info("Ny Cloud-config hämtad: %s", result.get("publication_id"))
+                if result.get("restart_required"):
+                    LOGGER.info("Startar om för att aktivera den nya Cloud-configen")
+                    server.request_restart()
+                    return
+        except Exception as error:
+            LOGGER.warning("Automatisk Cloud-synk misslyckades: %s", error)
+        stop.wait(15)
 
 
 def _start_discovery_advertiser(port: int) -> subprocess.Popen[bytes] | None:

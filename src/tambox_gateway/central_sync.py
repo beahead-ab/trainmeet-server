@@ -8,9 +8,16 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
-DEFAULT_RUNTIME_PUBLICATION_URL = (
-    "https://trainmeet.app/konfig"
-)
+DEFAULT_RUNTIME_PUBLICATION_URL = "https://cloud.trainmeet.app/config"
+LEGACY_RUNTIME_PUBLICATION_URLS = frozenset({
+    "https://trainmeet.app/konfig",
+    "https://cloud.trainmeet.app/konfig",
+})
+
+
+def canonical_runtime_url(value: str) -> str:
+    url = value.strip().rstrip("/")
+    return DEFAULT_RUNTIME_PUBLICATION_URL if url in LEGACY_RUNTIME_PUBLICATION_URLS else url
 
 
 class CentralSyncError(RuntimeError):
@@ -43,15 +50,20 @@ def fetch_runtime_download(
     sync_code: str,
     endpoint_url: str = DEFAULT_RUNTIME_PUBLICATION_URL,
     *,
+    server_name: str | None = None,
     timeout: float = 20,
 ) -> CentralRuntimeDownload:
     code = "".join(character for character in sync_code if character.isdigit())
     if len(code) != 6:
         raise CentralSyncError("Synkkoden ska ha sex siffror")
 
+    endpoint_url = canonical_runtime_url(endpoint_url)
+    query = {"code": code}
+    if server_name and server_name.strip():
+        query["server_name"] = server_name.strip()
     separator = "&" if "?" in endpoint_url else "?"
     request = Request(
-        f"{endpoint_url}{separator}{urlencode({'code': code})}",
+        f"{endpoint_url}{separator}{urlencode(query)}",
         headers={"Accept": "application/json", "User-Agent": "TrainMeet-Server/0.6"},
     )
     try:
@@ -91,6 +103,7 @@ def fetch_linked_runtime(
     query = {"token": token}
     if manifest_only:
         query["manifest"] = "1"
+    endpoint_url = canonical_runtime_url(endpoint_url)
     separator = "&" if "?" in endpoint_url else "?"
     request = Request(
         f"{endpoint_url}{separator}{urlencode(query)}",
@@ -129,3 +142,35 @@ def _read_json(request: Request, *, timeout: float) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise CentralSyncError("TrainMeet skickade ett ogiltigt svar")
     return payload
+
+
+def push_change_proposals(
+    link_token: str,
+    proposals: list[dict[str, Any]],
+    endpoint_url: str = DEFAULT_RUNTIME_PUBLICATION_URL,
+    *,
+    server_name: str | None = None,
+    timeout: float = 20,
+) -> list[str]:
+    token = link_token.strip()
+    if not token:
+        raise CentralSyncError("Servern är inte kopplad till TrainMeet Cloud")
+    if not proposals:
+        return []
+    endpoint = f"{canonical_runtime_url(endpoint_url)}/proposals"
+    data = json.dumps({
+        "token": token,
+        "server_name": (server_name or "").strip(),
+        "proposals": proposals,
+    }, ensure_ascii=False).encode("utf-8")
+    request = Request(
+        endpoint,
+        data=data,
+        method="POST",
+        headers={"Accept": "application/json", "Content-Type": "application/json", "User-Agent": "TrainMeet-Server/0.7"},
+    )
+    payload = _read_json(request, timeout=timeout)
+    accepted = payload.get("accepted_ids")
+    if not isinstance(accepted, list):
+        raise CentralSyncError("TrainMeet Cloud bekräftade inte ändringarna")
+    return [str(item) for item in accepted]

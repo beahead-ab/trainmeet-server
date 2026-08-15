@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from session_fixture import sample_session
-from tambox_gateway.central_sync import CentralRuntimeDownload, CentralRuntimeManifest
+from tambox_gateway.central_sync import DEFAULT_RUNTIME_PUBLICATION_URL, CentralRuntimeDownload, CentralRuntimeManifest
 from tambox_gateway.engine import TrafficEngine
 from tambox_gateway.http_server import (
     HTTPServerConfig,
@@ -137,6 +137,21 @@ class HTTPServerTests(unittest.TestCase):
         )
         self.assertTrue(finished["completed"])
         self.assertFalse(self._json_request("/v1/setup")["required"])
+
+    def test_legacy_default_configuration_url_is_migrated_to_cloud(self):
+        self.runtime_store.save_central_url("https://trainmeet.app/konfig")
+        self.application = TamboxHTTPApplication(
+            self.engine,
+            self.identities,
+            PairingService(self.identities, set(self.engine.config.panels)),
+            HTTPServerConfig(local_development=True),
+            runtime_store=self.runtime_store,
+            local_configuration_store=self.local_configuration_store,
+            operations_store=self.operations_store,
+        )
+
+        self.assertEqual(DEFAULT_RUNTIME_PUBLICATION_URL, self.runtime_store.central_url())
+        self.assertEqual(DEFAULT_RUNTIME_PUBLICATION_URL, self.application.runtime_summary(self.application.local_admin())["central_url"])
 
     def test_public_display_exposes_runtime_clock_services_and_live_state(self):
         publication = self.runtime_store.install(runtime_package_v2())
@@ -275,6 +290,19 @@ class HTTPServerTests(unittest.TestCase):
         )
         self.assertEqual(activated["publication_id"], "publication-v2-second")
         self.assertEqual(self.runtime_store.active().publication_id, "publication-v2-second")
+
+    def test_admin_can_enable_realtime_cloud_config_updates(self):
+        self.runtime_store.install(runtime_package_v2(publication_id="publication-v2-first"))
+        self.runtime_store.save_link_token("central-test-link")
+        client = self.application.local_admin()
+
+        setting = self.application.configure_cloud_auto_sync(client, {"enabled": True})
+        result = self.application.auto_sync_cloud_runtime()
+
+        self.assertTrue(setting["enabled"])
+        self.assertTrue(result["updated"])
+        self.assertEqual("publication-v2-second", self.runtime_store.active().publication_id)
+        self.assertTrue(self.application.runtime_summary(client)["cloud_auto_sync"])
 
     def test_local_admin_opens_directly_and_external_admin_uses_login_cookie(self):
         local = self._json_request("/v1/local-configuration")

@@ -195,5 +195,23 @@ class RuntimeStoreTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_local_cloud_changes_are_queued_record_by_record(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
+            try:
+                store.queue_cloud_changes("meet-1", "publication-1", [
+                    {"entity_type": "station", "entity_id": "station-a", "operation": "upsert", "payload": {"name": "A"}},
+                    {"entity_type": "panel", "entity_id": "panel-a", "operation": "delete", "payload": {}},
+                ])
+                pending = store.pending_cloud_changes()
+                self.assertEqual({"station", "panel"}, {item["entity_type"] for item in pending})
+                self.assertEqual(2, store.pending_cloud_change_count())
+                store.mark_cloud_changes_sent([pending[0]["id"]])
+                self.assertEqual(1, store.pending_cloud_change_count())
+                store.set_cloud_auto_sync(True)
+                self.assertTrue(store.cloud_auto_sync_enabled())
+            finally:
+                store.close()
+
 if __name__ == "__main__":
     unittest.main()

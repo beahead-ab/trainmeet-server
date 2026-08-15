@@ -67,6 +67,8 @@ const runtimeMessage = document.querySelector("#runtime-message");
 const runtimeCheckUpdate = document.querySelector("#runtime-check-update");
 const runtimeDownloadUpdate = document.querySelector("#runtime-download-update");
 const runtimeActivateUpdate = document.querySelector("#runtime-activate-update");
+const runtimePushChanges = document.querySelector("#runtime-push-changes");
+const runtimeAutoSync = document.querySelector("#runtime-auto-sync");
 const configForm = document.querySelector("#config-form");
 const configMessage = document.querySelector("#config-message");
 const stationEditor = document.querySelector("#station-editor");
@@ -442,6 +444,40 @@ runtimeForm.addEventListener("submit", async (event) => {
     setMessage(runtimeMessage, error.message, "error");
   } finally {
     button.disabled = false;
+  }
+});
+
+runtimePushChanges.addEventListener("click", async () => {
+  setMessage(runtimeMessage, "Skickar förbättringsförslag till Cloud …");
+  runtimePushChanges.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/cloud/changes", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Ändringarna kunde inte skickas");
+    setMessage(runtimeMessage, payload.message, "success");
+    await refreshRuntime();
+  } catch (error) {
+    setMessage(runtimeMessage, error.message, "error");
+  } finally {
+    runtimePushChanges.disabled = false;
+  }
+});
+
+runtimeAutoSync.addEventListener("change", async () => {
+  runtimeAutoSync.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/cloud/auto-sync", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: runtimeAutoSync.checked }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Inställningen kunde inte sparas");
+    setMessage(runtimeMessage, payload.message, "success");
+  } catch (error) {
+    runtimeAutoSync.checked = !runtimeAutoSync.checked;
+    setMessage(runtimeMessage, error.message, "error");
+  } finally {
+    runtimeAutoSync.disabled = false;
   }
 });
 
@@ -1110,12 +1146,17 @@ async function refreshRuntime() {
   const detail = document.createElement("small");
   if (runtime.configured) {
     title.textContent = runtime.meet_name;
-    detail.textContent = `${runtime.station_count} stationer · ${runtime.train_count} tågrörelser`;
+    detail.textContent = `${runtime.station_count} stationer · ${runtime.train_count} tågrörelser · ${runtime.linked ? "Cloud kopplad" : "lokal konfiguration"}`;
   } else {
     title.textContent = "Ingen träff aktiverad";
     detail.textContent = "Koppla en konfigurationsserver eller bygg en lokal träff";
   }
   runtimeCheckUpdate.classList.toggle("hidden", !runtime.linked);
+  runtimeAutoSync.checked = !!runtime.cloud_auto_sync;
+  runtimeAutoSync.disabled = !runtime.linked;
+  runtimePushChanges.classList.toggle("hidden", !runtime.linked || !runtime.pending_cloud_changes);
+  runtimePushChanges.textContent = `Skicka förbättringsförslag${runtime.pending_cloud_changes ? ` (${runtime.pending_cloud_changes})` : ""}`;
+  if (runtime.central_url) document.querySelector("#runtime-central-url").value = runtime.central_url;
   if (runtime.available_publication_id) {
     state.pendingPublicationID = runtime.available_publication_id;
     runtimeActivateUpdate.classList.remove("hidden");
