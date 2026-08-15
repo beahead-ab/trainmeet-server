@@ -312,7 +312,12 @@ class TamboxHTTPApplication:
                 "tls": False,
             },
         }
-        if result.client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN, DeviceKind.TKL_TERMINAL}:
+        if result.client.kind in {
+            DeviceKind.SWIFT_PANEL,
+            DeviceKind.WEB_ADMIN,
+            DeviceKind.SWIFT_ADMIN,
+            DeviceKind.TKL_TERMINAL,
+        }:
             response["access_token"] = result.access_token
         return response
 

@@ -366,6 +366,25 @@ class HTTPServerTests(unittest.TestCase):
         self.assertTrue(paired["access_token"])
         self.assertEqual(set(paired["mqtt"]), {"host", "port", "tls"})
 
+    def test_swift_panel_gets_scoped_http_token_for_runtime_bootstrap(self):
+        paired = self._json_request(
+            "/v1/pair",
+            {
+                "pairing_code": self.pairing_code,
+                "client_id": "swift-panel-runtime",
+                "display_name": "TrainMeet Tambox på iPhone",
+                "device_kind": "swift_panel",
+            },
+            expected_status=201,
+        )
+
+        self.assertTrue(paired["access_token"])
+        snapshots = self._json_request("/v1/snapshots", token=paired["access_token"])
+        self.assertEqual(
+            [snapshot["panel_id"] for snapshot in snapshots["snapshots"]],
+            ["panel-a"],
+        )
+
     def test_pairing_grants_only_assigned_panel_for_snapshots_and_commands(self):
         paired = self._json_request(
             "/v1/pair",
