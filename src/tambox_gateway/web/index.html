@@ -150,6 +150,7 @@
               <p>System</p>
               <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="access"><span aria-hidden="true">♙</span>Användare och åtkomst</button>
               <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="software"><span aria-hidden="true">↓</span>Programuppdatering</button>
+              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="system"><span aria-hidden="true">⚙</span>Server och nollställning</button>
             </nav>
             <div class="server-sidebar-footer">
               <i></i><span><b id="sidebar-runtime-name">Ingen aktiv träff</b><small id="sidebar-runtime-status">Lokal server</small></span>
@@ -471,6 +472,35 @@
             </div>
           </section>
 
+          <section id="server-system-settings" class="card section-card admin-section-panel hidden" data-admin-section="system">
+            <div class="section-heading compact-heading">
+              <div>
+                <p class="eyebrow">SYSTEM</p>
+                <h2>Server och nollställning</h2>
+                <p>Visa serverns lokala identitet eller återgå till första installationen.</p>
+              </div>
+              <span id="system-server-state" class="revision-badge active">Servern kör</span>
+            </div>
+            <div class="system-summary-grid">
+              <div><small>SERVER</small><b id="system-server-name">TrainMeet Server</b></div>
+              <div><small>AKTIV TRÄFF</small><b id="system-runtime-name">Ingen aktiv träff</b></div>
+              <div><small>CLOUD</small><b id="system-cloud-state">Inte kopplad</b></div>
+            </div>
+            <div class="danger-zone">
+              <div>
+                <p class="eyebrow">NOLLSTÄLL SERVERN</p>
+                <h3>Börja om från en helt ren TrainMeet Server</h3>
+                <p>Tar bort administratör, träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Programvaran ligger kvar och första installationen öppnas efter omstarten.</p>
+              </div>
+              <label for="factory-reset-confirmation">Skriv <b>NOLLSTÄLL</b> för att låsa upp knappen</label>
+              <div class="factory-reset-row">
+                <input id="factory-reset-confirmation" autocomplete="off" autocapitalize="characters" placeholder="NOLLSTÄLL">
+                <button id="factory-reset-server" class="danger-action" type="button" disabled>Nollställ TrainMeet Server</button>
+              </div>
+              <p id="factory-reset-message" class="form-message" role="status"></p>
+            </div>
+          </section>
+
           <section id="sync-and-devices" class="card section-card cloud-section-card admin-section-panel hidden" data-admin-section="cloud">
               <div class="section-heading compact-heading">
                 <div>
@@ -488,6 +518,13 @@
                 </div>
                 <span id="cloud-connection-state" class="revision-badge">Inte kopplad</span>
               </div>
+
+              <ol class="cloud-connection-flow" aria-label="Cloud-kopplingens steg">
+                <li id="cloud-step-server"><i>1</i><span><b>Config-server</b><small>Adress vald</small></span></li>
+                <li id="cloud-step-code"><i>2</i><span><b>Träffkod</b><small>Väntar på kod</small></span></li>
+                <li id="cloud-step-version"><i>3</i><span><b>Version hämtad</b><small>Ingen lokal version</small></span></li>
+                <li id="cloud-step-sync"><i>4</i><span><b>Fortsatt synk</b><small>Manuell</small></span></li>
+              </ol>
 
               <label class="cloud-setting-row" for="runtime-auto-sync">
                 <span>

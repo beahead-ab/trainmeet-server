@@ -721,6 +721,25 @@ class TamboxHTTPApplication:
             "message": "TrainMeet Server startar om. Sidan ansluter igen automatiskt.",
         }
 
+    def factory_reset_server(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_admin(client)
+        if not self.config.allow_restart:
+            raise HTTPAPIError(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                "factory_reset_unavailable",
+                "Nollställning är inte tillgänglig i det här körläget",
+            )
+        if str(payload.get("confirmation", "")).strip().upper() != "NOLLSTÄLL":
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST,
+                "factory_reset_not_confirmed",
+                "Skriv NOLLSTÄLL för att bekräfta",
+            )
+        return {
+            "status": "resetting",
+            "message": "TrainMeet Server nollställs och öppnar första installationen igen.",
+        }
+
     def software_update_status(self, client: PairedClient, channel: str = "stable") -> dict[str, Any]:
         self._require_admin(client)
         result: dict[str, Any] = {
@@ -1637,6 +1656,12 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.ACCEPTED, response)
                 self.server.request_restart()
                 return
+            if path == "/v1/server/factory-reset":
+                client = self._authenticated_client()
+                response = self.server.application.factory_reset_server(client, payload)
+                self._send_json(HTTPStatus.ACCEPTED, response)
+                self.server.request_factory_reset()
+                return
             if path == "/v1/server/update":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.ACCEPTED, self.server.application.update_software(client, payload))
@@ -1807,6 +1832,7 @@ class TamboxHTTPServer(ThreadingHTTPServer):
     ):
         self.application = application
         self.restart_requested = False
+        self.factory_reset_requested = False
         super().__init__(address, TamboxRequestHandler)
 
     def request_restart(self) -> None:
@@ -1814,6 +1840,10 @@ class TamboxHTTPServer(ThreadingHTTPServer):
         timer = threading.Timer(0.25, self.shutdown)
         timer.daemon = True
         timer.start()
+
+    def request_factory_reset(self) -> None:
+        self.factory_reset_requested = True
+        self.request_restart()
 
 
 def _hostname_without_port(host_header: str) -> str:

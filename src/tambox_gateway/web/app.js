@@ -43,6 +43,12 @@ const adminSections = {
     description: "Kontrollera, säkerhetskopiera och installera en ny serverversion.",
     state: "GitHub",
   },
+  system: {
+    eyebrow: "SYSTEM",
+    title: "Server och nollställning",
+    description: "Se serverns identitet eller återgå till första installationen.",
+    state: "Lokal server",
+  },
 };
 
 function createWebClientID() {
@@ -135,6 +141,9 @@ const softwareCheck = document.querySelector("#software-check");
 const softwareInstall = document.querySelector("#software-install");
 const softwareUpdateMessage = document.querySelector("#software-update-message");
 const softwareVersion = document.querySelector("#software-version");
+const factoryResetConfirmation = document.querySelector("#factory-reset-confirmation");
+const factoryResetButton = document.querySelector("#factory-reset-server");
+const factoryResetMessage = document.querySelector("#factory-reset-message");
 const overviewRouteSearch = document.querySelector("#overview-route-search");
 const overviewRouteList = document.querySelector("#overview-route-list");
 const overviewRouteDetail = document.querySelector("#overview-route-detail");
@@ -495,7 +504,8 @@ deviceForm.addEventListener("submit", async (event) => {
 
 runtimeForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  setMessage(runtimeMessage, "Hämtar träffen …");
+  setMessage(runtimeMessage, "1/3 · Kontaktar Config-servern och kontrollerar träffkoden …");
+  document.querySelector("#cloud-connection-state").textContent = "Kopplar …";
   const button = runtimeForm.querySelector("button");
   button.disabled = true;
   try {
@@ -509,14 +519,45 @@ runtimeForm.addEventListener("submit", async (event) => {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
-    setMessage(runtimeMessage, payload.message, payload.restart_required ? "notice" : "success");
+    setMessage(runtimeMessage, `3/3 · ${payload.message} Cloud-kopplingen är sparad på servern.`, payload.restart_required ? "notice" : "success");
     document.querySelector("#runtime-sync-code").value = "";
     document.querySelector("#runtime-link-details").open = false;
     await Promise.all([refreshRuntime(), refreshInfo()]);
   } catch (error) {
     setMessage(runtimeMessage, error.message, "error");
+    document.querySelector("#cloud-connection-state").textContent = "Kopplingen misslyckades";
   } finally {
     button.disabled = false;
+  }
+});
+
+factoryResetConfirmation.addEventListener("input", () => {
+  factoryResetButton.disabled = factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL";
+});
+
+factoryResetButton.addEventListener("click", async () => {
+  if (factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL") return;
+  if (!window.confirm("All lokal TrainMeet-data tas bort och kan inte återställas från servern. Vill du nollställa nu?")) return;
+  factoryResetButton.disabled = true;
+  setMessage(factoryResetMessage, "Nollställer servern och startar första installationen …", "notice");
+  state.restarting = true;
+  try {
+    const response = await authorizedFetch("/v1/server/factory-reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmation: "NOLLSTÄLL" }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Servern kunde inte nollställas");
+    localStorage.removeItem("tambox.accessToken");
+    state.token = null;
+    setConnection("waiting", "Nollställer");
+    setMessage(factoryResetMessage, payload.message, "notice");
+    await waitForServerReturn();
+  } catch (error) {
+    state.restarting = false;
+    factoryResetButton.disabled = false;
+    setMessage(factoryResetMessage, error.message, "error");
   }
 });
 
@@ -909,6 +950,9 @@ async function refreshInfo() {
   document.querySelector("#server-name").textContent = info.gateway_id || "TrainMeet Server";
   document.querySelector("#server-detail").textContent =
     `Kör lokalt · aktiv trafiksession: ${info.traffic_session_name}`;
+  document.querySelector("#system-server-name").textContent = info.runtime?.server_name || info.gateway_id || "TrainMeet Server";
+  document.querySelector("#system-runtime-name").textContent = info.runtime?.configured ? info.runtime.meet_name : "Ingen aktiv träff";
+  document.querySelector("#system-cloud-state").textContent = info.runtime?.linked ? "Kopplad" : "Inte kopplad";
   const serverNameInput = document.querySelector("#admin-server-name");
   if (document.activeElement !== serverNameInput) {
     serverNameInput.value = info.runtime?.server_name || info.gateway_id || "";
@@ -919,7 +963,7 @@ async function refreshInfo() {
     pill.classList.add("active");
     document.querySelector("#overview-runtime-state").textContent = "Lokalt aktiv";
     document.querySelector("#sidebar-runtime-name").textContent = info.runtime.meet_name;
-    document.querySelector("#sidebar-runtime-status").textContent = `${info.runtime.active_day} · lokal drift`;
+    document.querySelector("#sidebar-runtime-status").textContent = `${info.runtime.active_day} · ${info.runtime.linked ? "Cloud kopplad" : "lokal config"}`;
     if (state.selectedAdminSection === "runtime") {
       document.querySelector("#admin-section-state").textContent = info.runtime.active_day || "Lokal drift";
     }
@@ -1301,6 +1345,20 @@ async function refreshRuntime() {
     : "Koppla en publicerad träff med en sexsiffrig kod.";
   cloudState.textContent = runtime.linked ? "Kopplad" : "Inte kopplad";
   cloudState.classList.toggle("active", runtime.linked);
+  const cloudSteps = {
+    server: document.querySelector("#cloud-step-server"),
+    code: document.querySelector("#cloud-step-code"),
+    version: document.querySelector("#cloud-step-version"),
+    sync: document.querySelector("#cloud-step-sync"),
+  };
+  cloudSteps.server.classList.add("is-complete");
+  cloudSteps.server.querySelector("small").textContent = runtime.central_url || "Config-server vald";
+  cloudSteps.code.classList.toggle("is-complete", runtime.linked);
+  cloudSteps.code.querySelector("small").textContent = runtime.linked ? "Koppling sparad" : "Väntar på sexsiffrig kod";
+  cloudSteps.version.classList.toggle("is-complete", runtime.configured);
+  cloudSteps.version.querySelector("small").textContent = runtime.configured ? `${runtime.meet_name} finns lokalt` : "Ingen lokal version";
+  cloudSteps.sync.classList.toggle("is-complete", runtime.linked && runtime.cloud_auto_sync);
+  cloudSteps.sync.querySelector("small").textContent = runtime.cloud_auto_sync ? "Automatisk var 15:e sekund" : (runtime.linked ? "Manuell uppdatering" : "Aktiveras efter koppling");
   if (!state.runtimeLinkInitialized) {
     cloudDetails.open = !runtime.linked;
     state.runtimeLinkInitialized = true;

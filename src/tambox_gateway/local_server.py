@@ -199,12 +199,26 @@ def main() -> None:
             except subprocess.TimeoutExpired:
                 broker.kill()
                 broker.wait(timeout=5)
+    if server.factory_reset_requested:
+        _reset_server_state(database_path, state_directory)
     if server.restart_requested:
         print("TrainMeet Server startar om …")
         os.execv(
             sys.executable,
             [sys.executable, "-m", "tambox_gateway.local_server", *sys.argv[1:]],
         )
+
+
+def _reset_server_state(database_path: Path, state_directory: Path) -> None:
+    """Remove local operational identity and configuration while keeping the installation."""
+    for path in (
+        database_path,
+        database_path.with_name(f"{database_path.name}-wal"),
+        database_path.with_name(f"{database_path.name}-shm"),
+        state_directory / "connection-code.txt",
+    ):
+        path.unlink(missing_ok=True)
+    LOGGER.warning("TrainMeet Server är nollställd och startar första installationen")
 
 
 def _cloud_auto_sync_loop(

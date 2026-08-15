@@ -1,12 +1,35 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from tambox_gateway.local_server import _wait_for_port
+from tambox_gateway.local_server import _reset_server_state, _wait_for_port
 
 
 class LocalServerStartupTests(unittest.TestCase):
+    def test_factory_reset_removes_runtime_identity_but_keeps_software_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_directory = Path(directory)
+            database = state_directory / "tambox.db"
+            for path in (
+                database,
+                state_directory / "tambox.db-wal",
+                state_directory / "tambox.db-shm",
+                state_directory / "connection-code.txt",
+                state_directory / "update-status.json",
+            ):
+                path.write_text("test", encoding="utf-8")
+
+            _reset_server_state(database, state_directory)
+
+            self.assertFalse(database.exists())
+            self.assertFalse((state_directory / "tambox.db-wal").exists())
+            self.assertFalse((state_directory / "tambox.db-shm").exists())
+            self.assertFalse((state_directory / "connection-code.txt").exists())
+            self.assertTrue((state_directory / "update-status.json").exists())
+
     @patch("tambox_gateway.local_server.time.sleep")
     @patch(
         "tambox_gateway.local_server._port_is_open",
@@ -29,4 +52,3 @@ class LocalServerStartupTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

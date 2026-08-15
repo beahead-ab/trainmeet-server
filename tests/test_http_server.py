@@ -629,6 +629,31 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(restarted["status"], "restarting")
         self.assertTrue(self.server.restart_requested)
 
+    def test_admin_can_factory_reset_server_with_explicit_confirmation(self):
+        paired = self._json_request(
+            "/v1/pair",
+            {
+                "pairing_code": self.pairing_code,
+                "client_id": "reset-admin",
+                "display_name": "Nollställningsadmin",
+                "device_kind": "web_admin",
+            },
+            expected_status=201,
+        )
+        self.application.config = HTTPServerConfig(
+            local_development=True,
+            allow_restart=True,
+        )
+        reset = self._json_request(
+            "/v1/server/factory-reset",
+            {"confirmation": "NOLLSTÄLL"},
+            token=paired["access_token"],
+            expected_status=202,
+        )
+        self.assertEqual(reset["status"], "resetting")
+        self.assertTrue(self.server.factory_reset_requested)
+        self.assertTrue(self.server.restart_requested)
+
     def _json_request(
         self,
         path: str,
