@@ -77,6 +77,7 @@ class HTTPServerTests(unittest.TestCase):
         with urlopen(f"{self.base_url}/", timeout=2) as response:
             html = response.read().decode("utf-8")
         self.assertIn("TrainMeet Server", html)
+        self.assertNotIn("LOKAL DRIFT", html)
         self.assertIn('id="overview-view"', html)
         self.assertIn('id="overview-topology"', html)
         self.assertIn('id="overview-route-list"', html)
