@@ -656,6 +656,58 @@ class HTTPServerTests(unittest.TestCase):
         self.assertTrue(self.server.factory_reset_requested)
         self.assertTrue(self.server.restart_requested)
 
+    def test_external_admin_can_reset_meet_data_without_factory_reset(self):
+        paired = self._json_request(
+            "/v1/pair",
+            {
+                "pairing_code": self.pairing_code,
+                "client_id": "remote-reset-admin",
+                "display_name": "Extern admin",
+                "device_kind": "web_admin",
+            },
+            expected_status=201,
+        )
+        self.application.config = HTTPServerConfig(
+            local_development=True,
+            allow_restart=True,
+            force_external_auth=True,
+        )
+        reset = self._json_request(
+            "/v1/server/operational-reset",
+            {"confirmation": "NOLLSTÄLL"},
+            token=paired["access_token"],
+            expected_status=202,
+        )
+        self.assertEqual("operational", reset["mode"])
+        self.assertTrue(self.server.operational_reset_requested)
+        self.assertFalse(self.server.factory_reset_requested)
+
+    def test_external_admin_cannot_factory_reset_server(self):
+        paired = self._json_request(
+            "/v1/pair",
+            {
+                "pairing_code": self.pairing_code,
+                "client_id": "remote-factory-admin",
+                "display_name": "Extern admin",
+                "device_kind": "web_admin",
+            },
+            expected_status=201,
+        )
+        self.application.config = HTTPServerConfig(
+            local_development=True,
+            allow_restart=True,
+            force_external_auth=True,
+        )
+        with self.assertRaises(HTTPError) as denied:
+            self._json_request(
+                "/v1/server/factory-reset",
+                {"confirmation": "NOLLSTÄLL"},
+                token=paired["access_token"],
+                expected_status=202,
+            )
+        self.assertEqual(403, denied.exception.code)
+        self.assertFalse(self.server.factory_reset_requested)
+
     def _json_request(
         self,
         path: str,

@@ -7,6 +7,7 @@ import secrets
 import shutil
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -199,7 +200,9 @@ def main() -> None:
             except subprocess.TimeoutExpired:
                 broker.kill()
                 broker.wait(timeout=5)
-    if server.factory_reset_requested:
+    if server.operational_reset_requested:
+        _reset_operational_state(database_path, state_directory)
+    elif server.factory_reset_requested:
         _reset_server_state(database_path, state_directory)
     if server.restart_requested:
         print("TrainMeet Server startar om …")
@@ -219,6 +222,41 @@ def _reset_server_state(database_path: Path, state_directory: Path) -> None:
     ):
         path.unlink(missing_ok=True)
     LOGGER.warning("TrainMeet Server är nollställd och startar första installationen")
+
+
+def _reset_operational_state(database_path: Path, state_directory: Path) -> None:
+    """Clear meet/runtime data while retaining remote administrative access."""
+    connection = sqlite3.connect(database_path, timeout=10)
+    try:
+        connection.execute("PRAGMA foreign_keys=ON")
+        with connection:
+            for table in (
+                "engine_state",
+                "runtime_clock",
+                "train_positions",
+                "tkl_shifts",
+                "tkl_movement_states",
+                "tkl_events",
+                "train_readiness",
+                "local_configuration_current",
+                "local_configuration_revisions",
+                "cloud_change_outbox",
+                "runtime_publications",
+                "pairing_codes",
+                "client_panels",
+                "discovered_devices",
+            ):
+                connection.execute(f"DELETE FROM {table}")
+            connection.execute(
+                "DELETE FROM clients WHERE kind NOT IN ('web_admin', 'swift_admin')"
+            )
+            connection.execute("DELETE FROM runtime_settings WHERE key <> 'server_name'")
+    finally:
+        connection.close()
+    (state_directory / "connection-code.txt").unlink(missing_ok=True)
+    LOGGER.warning(
+        "TrainMeet Server träffdata är nollställd; administratör och serveridentitet behålls"
+    )
 
 
 def _cloud_auto_sync_loop(

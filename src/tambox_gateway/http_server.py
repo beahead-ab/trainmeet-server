@@ -721,8 +721,43 @@ class TamboxHTTPApplication:
             "message": "TrainMeet Server startar om. Sidan ansluter igen automatiskt.",
         }
 
-    def factory_reset_server(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+    def reset_operational_data(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
+        if not self.config.allow_restart:
+            raise HTTPAPIError(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                "operational_reset_unavailable",
+                "Nollställning är inte tillgänglig i det här körläget",
+            )
+        if str(payload.get("confirmation", "")).strip().upper() != "NOLLSTÄLL":
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST,
+                "operational_reset_not_confirmed",
+                "Skriv NOLLSTÄLL för att bekräfta",
+            )
+        return {
+            "status": "resetting",
+            "mode": "operational",
+            "message": (
+                "Träffdata och anslutningar nollställs. Administratören, "
+                "servernamnet och din inloggning behålls."
+            ),
+        }
+
+    def factory_reset_server(
+        self,
+        client: PairedClient,
+        payload: dict[str, Any],
+        *,
+        local_access: bool,
+    ) -> dict[str, Any]:
+        self._require_admin(client)
+        if not local_access:
+            raise HTTPAPIError(
+                HTTPStatus.FORBIDDEN,
+                "factory_reset_requires_local_access",
+                "Full fabriksåterställning kan bara göras direkt på serverns lokala adress",
+            )
         if not self.config.allow_restart:
             raise HTTPAPIError(
                 HTTPStatus.SERVICE_UNAVAILABLE,
@@ -1656,9 +1691,19 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.ACCEPTED, response)
                 self.server.request_restart()
                 return
+            if path == "/v1/server/operational-reset":
+                client = self._authenticated_client()
+                response = self.server.application.reset_operational_data(client, payload)
+                self._send_json(HTTPStatus.ACCEPTED, response)
+                self.server.request_operational_reset()
+                return
             if path == "/v1/server/factory-reset":
                 client = self._authenticated_client()
-                response = self.server.application.factory_reset_server(client, payload)
+                response = self.server.application.factory_reset_server(
+                    client,
+                    payload,
+                    local_access=self._has_automatic_local_admin(),
+                )
                 self._send_json(HTTPStatus.ACCEPTED, response)
                 self.server.request_factory_reset()
                 return
@@ -1832,6 +1877,7 @@ class TamboxHTTPServer(ThreadingHTTPServer):
     ):
         self.application = application
         self.restart_requested = False
+        self.operational_reset_requested = False
         self.factory_reset_requested = False
         super().__init__(address, TamboxRequestHandler)
 
@@ -1843,6 +1889,10 @@ class TamboxHTTPServer(ThreadingHTTPServer):
 
     def request_factory_reset(self) -> None:
         self.factory_reset_requested = True
+        self.request_restart()
+
+    def request_operational_reset(self) -> None:
+        self.operational_reset_requested = True
         self.request_restart()
 
 

@@ -537,20 +537,30 @@ factoryResetConfirmation.addEventListener("input", () => {
 
 factoryResetButton.addEventListener("click", async () => {
   if (factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL") return;
-  if (!window.confirm("All lokal TrainMeet-data tas bort och kan inte återställas från servern. Vill du nollställa nu?")) return;
+  const localFactoryReset = state.authStatus?.access_mode === "local";
+  const question = localFactoryReset
+    ? "All lokal TrainMeet-data och administratören tas bort. Vill du fabriksåterställa nu?"
+    : "Träffdata och anslutningar tas bort. Din administratörsinloggning behålls. Vill du fortsätta?";
+  if (!window.confirm(question)) return;
   factoryResetButton.disabled = true;
-  setMessage(factoryResetMessage, "Nollställer servern och startar första installationen …", "notice");
+  setMessage(factoryResetMessage, localFactoryReset
+    ? "Fabriksåterställer servern och startar första installationen …"
+    : "Nollställer träffdata och behåller din inloggning …", "notice");
   state.restarting = true;
   try {
-    const response = await authorizedFetch("/v1/server/factory-reset", {
+    const response = await authorizedFetch(localFactoryReset
+      ? "/v1/server/factory-reset"
+      : "/v1/server/operational-reset", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ confirmation: "NOLLSTÄLL" }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Servern kunde inte nollställas");
-    localStorage.removeItem("tambox.accessToken");
-    state.token = null;
+    if (localFactoryReset) {
+      localStorage.removeItem("tambox.accessToken");
+      state.token = null;
+    }
     setConnection("waiting", "Nollställer");
     setMessage(factoryResetMessage, payload.message, "notice");
     await waitForServerReturn();
@@ -1863,7 +1873,24 @@ async function refreshAuthStatus() {
   state.token = null;
   localStorage.removeItem("tambox.accessToken");
   document.querySelector("#login-username").value = state.authStatus.username || "";
+  configureResetMode();
   return state.authStatus;
+}
+
+function configureResetMode() {
+  const localFactoryReset = state.authStatus?.access_mode === "local";
+  document.querySelector("#reset-mode-eyebrow").textContent = localFactoryReset
+    ? "FABRIKSÅTERSTÄLL SERVERN"
+    : "NOLLSTÄLL TRÄFFDATA";
+  document.querySelector("#reset-mode-title").textContent = localFactoryReset
+    ? "Börja om från en helt ren TrainMeet Server"
+    : "Börja om utan att förlora administratörsåtkomsten";
+  document.querySelector("#reset-mode-description").textContent = localFactoryReset
+    ? "Tar bort administratör, träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Första installationen öppnas efter omstarten."
+    : "Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och din aktiva webbinloggning behålls.";
+  factoryResetButton.textContent = localFactoryReset
+    ? "Fabriksåterställ servern"
+    : "Nollställ träffdata";
 }
 
 async function refreshSetupStatus() {

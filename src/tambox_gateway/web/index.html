@@ -483,14 +483,14 @@
             </div>
             <div class="danger-zone">
               <div>
-                <p class="eyebrow">NOLLSTÄLL SERVERN</p>
-                <h3>Börja om från en helt ren TrainMeet Server</h3>
-                <p>Tar bort administratör, träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Programvaran ligger kvar och första installationen öppnas efter omstarten.</p>
+                <p id="reset-mode-eyebrow" class="eyebrow">NOLLSTÄLL TRÄFFDATA</p>
+                <h3 id="reset-mode-title">Börja om utan att förlora administratörsåtkomsten</h3>
+                <p id="reset-mode-description">Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och den aktiva webbinloggningen behålls.</p>
               </div>
               <label for="factory-reset-confirmation">Skriv <b>NOLLSTÄLL</b> för att låsa upp knappen</label>
               <div class="factory-reset-row">
                 <input id="factory-reset-confirmation" autocomplete="off" autocapitalize="characters" placeholder="NOLLSTÄLL">
-                <button id="factory-reset-server" class="danger-action" type="button" disabled>Nollställ TrainMeet Server</button>
+                <button id="factory-reset-server" class="danger-action" type="button" disabled>Nollställ träffdata</button>
               </div>
               <p id="factory-reset-message" class="form-message" role="status"></p>
             </div>
