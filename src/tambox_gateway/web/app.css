@@ -371,10 +371,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   border: 1px solid var(--border);
   box-shadow: none;
 }
-.server-sidebar-title { display: flex; align-items: center; gap: 9px; min-height: 42px; padding: 2px 4px 10px; border-bottom: 1px solid var(--border); }
-.server-sidebar-title > div:last-child { display: grid; min-width: 0; }
-.server-sidebar-title b { font-family: var(--font-brand); font-size: 14px; line-height: 1; letter-spacing: -.025em; }
-.server-sidebar-title div > span { margin-top: 3px; color: var(--muted); font-size: 8px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
 .server-sidebar-nav { flex: 1; padding: 8px 0; overflow-y: auto; }
 .server-sidebar-nav > p { margin: 10px 8px 4px; color: var(--muted); font-size: 8px; font-weight: 700; line-height: 1; letter-spacing: .13em; text-transform: uppercase; }
 .view-tab.server-nav-item, .server-nav-link {
@@ -1290,9 +1286,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 .server-admin-shell { grid-template-columns: 250px minmax(0, 1fr); }
 .server-sidebar { padding: 12px; }
-.server-sidebar-title { min-height: 48px; }
-.server-sidebar-title b { font-family: var(--font-brand); font-size: 16px; font-weight: 600; }
-.server-sidebar-title div > span,
 .server-sidebar-nav > p { font-size: var(--admin-micro); font-weight: 500; line-height: 1.4; }
 .server-sidebar-nav > p { margin: 14px 9px 6px; }
 .view-tab.server-nav-item, .server-nav-link {

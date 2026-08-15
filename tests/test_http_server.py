@@ -94,6 +94,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="login-form"', html)
         self.assertIn("Skärmar", html)
         self.assertIn('/trainmeet-logo.png', html)
+        self.assertNotIn('class="server-sidebar-title"', html)
         with urlopen(f"{self.base_url}/trainmeet-logo.png", timeout=2) as response:
             logo = response.read()
             self.assertEqual(response.headers.get_content_type(), "image/png")
