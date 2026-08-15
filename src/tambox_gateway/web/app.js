@@ -924,11 +924,15 @@ async function refreshInfo() {
       document.querySelector("#admin-section-state").textContent = info.runtime.active_day || "Lokal drift";
     }
   } else {
-    pill.textContent = "Ingen träff aktiverad";
+    pill.textContent = info.runtime?.error ? "Konfigurationen behöver rättas" : "Ingen träff aktiverad";
     pill.classList.remove("active");
-    document.querySelector("#overview-runtime-state").textContent = "Ej konfigurerad";
+    document.querySelector("#overview-runtime-state").textContent = info.runtime?.error
+      ? "Konfigurationsfel"
+      : "Ej konfigurerad";
     document.querySelector("#sidebar-runtime-name").textContent = "Ingen aktiv träff";
-    document.querySelector("#sidebar-runtime-status").textContent = "Konfiguration krävs";
+    document.querySelector("#sidebar-runtime-status").textContent = info.runtime?.error
+      ? "Importera en rättad version"
+      : "Konfiguration krävs";
   }
   updateRuntimeNavigation(Boolean(info.runtime?.configured));
   updateRestartButton(Boolean(info.restart_required));
@@ -1263,8 +1267,10 @@ async function refreshRuntime() {
     title.textContent = runtime.meet_name;
     detail.textContent = `${runtime.station_count} stationer · ${runtime.train_count} tågrörelser · ${runtime.linked ? "Cloud kopplad" : "lokal konfiguration"}`;
   } else {
-    title.textContent = "Ingen träff aktiverad";
-    detail.textContent = "Koppla en konfigurationsserver eller bygg en lokal träff";
+    title.textContent = runtime.error ? "Träffkonfigurationen kunde inte aktiveras" : "Ingen träff aktiverad";
+    detail.textContent = runtime.error
+      ? `${runtime.error}. Hämta eller aktivera en rättad version; den tidigare versionen är sparad.`
+      : "Koppla en konfigurationsserver eller bygg en lokal träff";
   }
   runtimeCheckUpdate.classList.toggle("hidden", !runtime.linked);
   runtimeAutoSync.checked = !!runtime.cloud_auto_sync;

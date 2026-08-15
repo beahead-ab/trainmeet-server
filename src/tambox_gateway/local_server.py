@@ -22,7 +22,7 @@ from .local_config import SQLiteLocalConfigurationStore
 from .models import unconfigured_session
 from .mqtt_adapter import MQTTGatewayAdapter
 from .operations import SQLiteOperationsStore
-from .runtime import SQLiteRuntimeStore
+from .runtime import RuntimePublicationError, SQLiteRuntimeStore
 from .storage import SQLiteStateStore
 
 
@@ -90,7 +90,12 @@ def main() -> None:
     runtime_store = SQLiteRuntimeStore(database_path)
     operations_store = SQLiteOperationsStore(database_path)
     local_configuration_store = SQLiteLocalConfigurationStore(database_path)
-    active_publication = runtime_store.active()
+    try:
+        active_publication = runtime_store.active()
+    except RuntimePublicationError as error:
+        LOGGER.error("Den aktiva träffkonfigurationen kunde inte startas: %s", error)
+        runtime_store.quarantine_active(str(error))
+        active_publication = None
     session_config = (
         active_publication.session_config()
         if active_publication is not None

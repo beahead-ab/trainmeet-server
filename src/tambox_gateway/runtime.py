@@ -450,6 +450,9 @@ class SQLiteRuntimeStore:
                         """,
                         (publication.active_day,),
                     )
+                    self._connection.execute(
+                        "DELETE FROM runtime_settings WHERE key = 'runtime_error'"
+                    )
                 self._connection.execute("COMMIT")
             except Exception:
                 if self._connection.in_transaction:
@@ -469,6 +472,31 @@ class SQLiteRuntimeStore:
         except json.JSONDecodeError as error:
             raise RuntimePublicationError("Det aktiva driftpaketet är skadat") from error
         return RuntimePublication.parse(payload)
+
+    def quarantine_active(self, error: str) -> None:
+        """Keep an invalid publication, but prevent it from blocking server startup."""
+        message = error.strip() or "Det aktiva driftpaketet kunde inte läsas"
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    "UPDATE runtime_publications SET active = 0 WHERE active = 1"
+                )
+                self._connection.execute(
+                    """
+                    INSERT INTO runtime_settings(key, value, updated_at)
+                    VALUES ('runtime_error', ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(key) DO UPDATE SET
+                        value = excluded.value,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (message,),
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
 
     def publication(self, publication_id: str) -> RuntimePublication | None:
         with self._lock:
@@ -504,6 +532,9 @@ class SQLiteRuntimeStore:
                     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
                     """,
                     (publication.active_day,),
+                )
+                self._connection.execute(
+                    "DELETE FROM runtime_settings WHERE key = 'runtime_error'"
                 )
                 self._connection.execute("COMMIT")
             except Exception:
@@ -650,18 +681,18 @@ class SQLiteRuntimeStore:
 
     def latest_staged(self) -> RuntimePublication | None:
         with self._lock:
-            row = self._connection.execute(
+            rows = self._connection.execute(
                 """
                 SELECT payload_json FROM runtime_publications
-                WHERE active = 0 ORDER BY installed_at DESC LIMIT 1
+                WHERE active = 0 ORDER BY installed_at DESC
                 """
-            ).fetchone()
-        if row is None:
-            return None
-        try:
-            return RuntimePublication.parse(json.loads(row[0]))
-        except json.JSONDecodeError as error:
-            raise RuntimePublicationError("Det hämtade driftpaketet är skadat") from error
+            ).fetchall()
+        for row in rows:
+            try:
+                return RuntimePublication.parse(json.loads(row[0]))
+            except (json.JSONDecodeError, RuntimePublicationError):
+                continue
+        return None
 
     def active_day(self) -> str | None:
         with self._lock:
@@ -695,6 +726,7 @@ class SQLiteRuntimeStore:
         if publication is None:
             return {
                 "configured": False,
+                "error": self._setting("runtime_error"),
                 "linked": self.link_token() is not None,
                 "server_name": self.server_name(),
                 "pending_cloud_changes": self.pending_cloud_change_count(),

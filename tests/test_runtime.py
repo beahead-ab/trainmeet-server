@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from copy import deepcopy
@@ -192,6 +193,38 @@ class RuntimeStoreTests(unittest.TestCase):
 
                 store.activate("publication-v2-second")
                 self.assertEqual(store.active().publication_id, "publication-v2-second")
+            finally:
+                store.close()
+
+    def test_invalid_active_publication_can_be_quarantined_without_being_deleted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
+            try:
+                installed = store.install(runtime_package_v2())
+                broken = runtime_package_v2()
+                duplicate = deepcopy(broken["trains"][0])
+                duplicate["id"] = "duplicate-movement"
+                broken["trains"].append(duplicate)
+                store._connection.execute(
+                    "UPDATE runtime_publications SET payload_json = ? WHERE publication_id = ?",
+                    (json.dumps(broken), installed.publication_id),
+                )
+
+                with self.assertRaisesRegex(RuntimePublicationError, "samma tågrörelse"):
+                    store.active()
+
+                store.quarantine_active("Driftpaketet innehåller samma tågrörelse flera gånger")
+
+                self.assertIsNone(store.active())
+                self.assertEqual(
+                    "Driftpaketet innehåller samma tågrörelse flera gånger",
+                    store.summary()["error"],
+                )
+                row = store._connection.execute(
+                    "SELECT COUNT(*) FROM runtime_publications WHERE publication_id = ?",
+                    (installed.publication_id,),
+                ).fetchone()
+                self.assertEqual(1, row[0])
             finally:
                 store.close()
 
