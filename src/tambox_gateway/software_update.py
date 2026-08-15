@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
 
 
@@ -20,20 +22,30 @@ def installed_version() -> str:
 
 def latest_version(channel: str) -> dict[str, str]:
     urls = {
-        "stable": "https://api.github.com/repos/beahead-ab/trainmeet-server/releases/latest",
-        "test": "https://api.github.com/repos/beahead-ab/trainmeet-server/commits/main",
+        # GitHubs vanliga webb- och patchadresser saknar API:ts anonyma
+        # gräns på 60 anrop/timme, som ofta delas av en hel driftleverantör.
+        "stable": "https://github.com/beahead-ab/trainmeet-server/releases/latest",
+        "test": "https://github.com/beahead-ab/trainmeet-server/commit/main.patch",
     }
     if channel not in urls:
         raise SoftwareUpdateError("Okänd uppdateringskanal")
-    request = Request(urls[channel], headers={"Accept": "application/vnd.github+json", "User-Agent": "TrainMeet-Server/0.7"})
+    request = Request(urls[channel], headers={"Accept": "text/html, text/plain", "User-Agent": "TrainMeet-Server/0.7"})
     try:
         with urlopen(request, timeout=10) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
+            final_url = response.geturl()
+            payload = response.read()
+    except (HTTPError, URLError, TimeoutError) as error:
         raise SoftwareUpdateError("GitHub kunde inte nås") from error
     if channel == "stable":
-        return {"version": str(payload["tag_name"]), "published_at": str(payload.get("published_at") or "")}
-    return {"version": str(payload["sha"])[:8], "published_at": str(payload.get("commit", {}).get("author", {}).get("date") or "")}
+        path = unquote(urlparse(final_url).path).rstrip("/")
+        marker = "/releases/tag/"
+        if marker not in path:
+            raise SoftwareUpdateError("Ingen stabil TrainMeet-version är publicerad")
+        return {"version": path.split(marker, 1)[1], "published_at": ""}
+    match = re.match(rb"From ([0-9a-f]{40}) ", payload)
+    if match is None:
+        raise SoftwareUpdateError("GitHub lämnade ingen giltig versionsinformation")
+    return {"version": match.group(1).decode("ascii")[:8], "published_at": ""}
 
 
 def read_update_status(state_dir: Path) -> dict[str, str]:
