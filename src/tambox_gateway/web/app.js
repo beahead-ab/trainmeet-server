@@ -2916,7 +2916,7 @@ function renderConnectionBadge(snapshot) {
   const visible = Boolean(connection.code) && Boolean(address) && screens.includes(displayKind);
   badge.classList.toggle("hidden", !visible);
   if (!visible) return;
-  document.querySelector("#display-connection-address").textContent = address;
+  document.querySelector("#display-connection-address").textContent = `Tambox ${address}`;
   document.querySelector("#display-connection-code").textContent = connection.code;
 }
 
