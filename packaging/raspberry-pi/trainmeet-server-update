@@ -8,7 +8,6 @@ INSTALL_DIR=/opt/trainmeet-server
 INSTALL_BACKUP="$INSTALL_DIR.rollback"
 SERVICE_UNIT=/etc/systemd/system/trainmeet-server.service
 SERVICE_UNIT_BACKUP="$STATE_DIR/trainmeet-server.service.rollback"
-CHANNEL=${1:-stable}
 
 status() {
   stage=$1
@@ -46,18 +45,8 @@ if [ -f "$STATE_DIR/tambox.db" ]; then
   chown trainmeet-server:trainmeet-server "$BACKUP_DIR"/*.db
 fi
 
-case "$CHANNEL" in
-  stable)
-    RELEASE_URL=$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/beahead-ab/trainmeet-server/releases/latest)
-    VERSION=${RELEASE_URL##*/}
-    URL="https://github.com/beahead-ab/trainmeet-server/archive/refs/tags/$VERSION.tar.gz"
-    ;;
-  test)
-    URL=https://github.com/beahead-ab/trainmeet-server/archive/refs/heads/main.tar.gz
-    VERSION=$(curl -fsSL https://github.com/beahead-ab/trainmeet-server/commit/main.patch | sed -n '1s/^From \([0-9a-f]\{8\}\).*/\1/p')
-    ;;
-  *) status failed "Okänd uppdateringskanal"; exit 1 ;;
-esac
+URL=https://github.com/beahead-ab/trainmeet-server/archive/refs/heads/main.tar.gz
+VERSION=$(curl -fsSL https://github.com/beahead-ab/trainmeet-server/commit/main.patch | sed -n '1s/^From \([0-9a-f]\{8\}\).*/\1/p')
 
 if [ -z "$VERSION" ]; then
   status failed "GitHub lämnade ingen giltig versionsinformation"

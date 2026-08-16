@@ -5,9 +5,7 @@ polkit.addRule(function(action, subject) {
         return polkit.Result.NOT_HANDLED;
     }
 
-    var unit = action.lookup("unit");
-    if (unit === "trainmeet-server-update@stable.service" ||
-        unit === "trainmeet-server-update@test.service") {
+    if (action.lookup("unit") === "trainmeet-server-update.service") {
         return polkit.Result.YES;
     }
 

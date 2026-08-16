@@ -775,24 +775,19 @@ class TamboxHTTPApplication:
             "message": "TrainMeet Server nollställs och öppnar första installationen igen.",
         }
 
-    def software_update_status(self, client: PairedClient, channel: str = "stable") -> dict[str, Any]:
+    def software_update_status(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
         result: dict[str, Any] = {
             "supported": self.config.allow_software_update,
-            "channel": channel,
             "installed_version": installed_version(),
             **read_update_status(Path(self.config.state_dir)),
         }
         if self.config.allow_software_update:
             try:
-                latest = latest_version(channel)
+                latest = latest_version()
                 result["latest_version"] = latest["version"]
                 result["published_at"] = latest["published_at"]
-                if channel == "stable" and not str(result["installed_version"]).startswith("v"):
-                    result["update_available"] = False
-                    result["channel_notice"] = "Testversion är installerad. Stabil kanal används inte för nedgradering."
-                else:
-                    result["update_available"] = result["latest_version"] != result["installed_version"]
+                result["update_available"] = result["latest_version"] != result["installed_version"]
             except SoftwareUpdateError as error:
                 result["check_error"] = str(error)
         return result
@@ -801,12 +796,11 @@ class TamboxHTTPApplication:
         self._require_admin(client)
         if not self.config.allow_software_update:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "update_unavailable", "Programuppdatering hanteras av Docker eller driftmiljön")
-        channel = str(payload.get("channel") or "stable")
         try:
-            start_update(channel)
+            start_update()
         except SoftwareUpdateError as error:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "update_failed", str(error)) from error
-        return {"status": "started", "message": "Uppdateringen har startat i bakgrunden.", "channel": channel}
+        return {"status": "started", "message": "Uppdateringen har startat i bakgrunden."}
 
     def local_configuration(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
@@ -1446,8 +1440,7 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/server/update":
                 client = self._authenticated_client()
-                channel = parse_qs(parsed.query).get("channel", ["stable"])[0]
-                self._send_json(HTTPStatus.OK, self.server.application.software_update_status(client, channel))
+                self._send_json(HTTPStatus.OK, self.server.application.software_update_status(client))
                 return
             if path == "/v1/snapshots":
                 client = self._authenticated_client()

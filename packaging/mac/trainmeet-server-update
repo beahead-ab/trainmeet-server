@@ -12,7 +12,6 @@ STATUS_FILE="$STATE_DIR/update-status.json"
 BACKUP_DIR="$STATE_DIR/backups"
 INSTALL_BACKUP="$APP_DIR/server.rollback"
 LABEL="com.beahead.trainmeet-server"
-CHANNEL=${1:-stable}
 
 status() {
   printf '{"status":"%s","message":"%s","updated_at":"%s"}\n' \
@@ -41,18 +40,8 @@ if [ -f "$STATE_DIR/tambox.db" ]; then
   cp "$STATE_DIR/tambox.db" "$BACKUP_DIR/tambox-$(date -u +%Y%m%d-%H%M%S).db"
 fi
 
-case "$CHANNEL" in
-  stable)
-    RELEASE_URL=$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/beahead-ab/trainmeet-server/releases/latest)
-    VERSION=${RELEASE_URL##*/}
-    URL="https://github.com/beahead-ab/trainmeet-server/archive/refs/tags/$VERSION.tar.gz"
-    ;;
-  test)
-    URL=https://github.com/beahead-ab/trainmeet-server/archive/refs/heads/main.tar.gz
-    VERSION=$(curl -fsSL https://github.com/beahead-ab/trainmeet-server/commit/main.patch | sed -n '1s/^From \([0-9a-f]\{8\}\).*/\1/p')
-    ;;
-  *) status failed "Okänd uppdateringskanal"; exit 1 ;;
-esac
+URL=https://github.com/beahead-ab/trainmeet-server/archive/refs/heads/main.tar.gz
+VERSION=$(curl -fsSL https://github.com/beahead-ab/trainmeet-server/commit/main.patch | sed -n '1s/^From \([0-9a-f]\{8\}\).*/\1/p')
 
 if [ -z "$VERSION" ]; then
   status failed "GitHub lämnade ingen giltig versionsinformation"

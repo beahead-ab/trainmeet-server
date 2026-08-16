@@ -7,7 +7,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
 
 
@@ -66,28 +65,16 @@ def installed_version() -> str:
         return "utvecklingsversion"
 
 
-def latest_version(channel: str) -> dict[str, str]:
-    urls = {
-        # GitHubs vanliga webb- och patchadresser saknar API:ts anonyma
-        # gräns på 60 anrop/timme, som ofta delas av en hel driftleverantör.
-        "stable": "https://github.com/beahead-ab/trainmeet-server/releases/latest",
-        "test": "https://github.com/beahead-ab/trainmeet-server/commit/main.patch",
-    }
-    if channel not in urls:
-        raise SoftwareUpdateError("Okänd uppdateringskanal")
-    request = Request(urls[channel], headers={"Accept": "text/html, text/plain", "User-Agent": "TrainMeet-Server/0.7"})
+def latest_version() -> dict[str, str]:
+    # GitHubs vanliga patchadress saknar API:ts anonyma gräns på 60 anrop/timme,
+    # som ofta delas av en hel driftleverantör.
+    url = "https://github.com/beahead-ab/trainmeet-server/commit/main.patch"
+    request = Request(url, headers={"Accept": "text/plain", "User-Agent": "TrainMeet-Server/0.7"})
     try:
         with urlopen(request, timeout=10) as response:
-            final_url = response.geturl()
             payload = response.read()
     except (HTTPError, URLError, TimeoutError) as error:
         raise SoftwareUpdateError("GitHub kunde inte nås") from error
-    if channel == "stable":
-        path = unquote(urlparse(final_url).path).rstrip("/")
-        marker = "/releases/tag/"
-        if marker not in path:
-            raise SoftwareUpdateError("Ingen stabil TrainMeet-version är publicerad")
-        return {"version": path.split(marker, 1)[1], "published_at": ""}
     match = re.match(rb"From ([0-9a-f]{40}) ", payload)
     if match is None:
         raise SoftwareUpdateError("GitHub lämnade ingen giltig versionsinformation")
@@ -102,16 +89,14 @@ def read_update_status(state_dir: Path) -> dict[str, str]:
         return {"status": "idle", "message": "Ingen uppdatering pågår"}
 
 
-def start_update(channel: str) -> None:
-    if channel not in {"stable", "test"}:
-        raise SoftwareUpdateError("Okänd uppdateringskanal")
+def start_update() -> None:
     backend = update_backend()
     if backend is None:
         raise SoftwareUpdateError("Den här installationen uppdateras inte från webbgränssnittet")
     try:
         if backend.kind == "systemd":
             subprocess.run(
-                ["/bin/systemctl", "start", "--no-block", f"trainmeet-server-update@{channel}.service"],
+                ["/bin/systemctl", "start", "--no-block", "trainmeet-server-update.service"],
                 check=True,
                 timeout=5,
             )
@@ -119,7 +104,7 @@ def start_update(channel: str) -> None:
             # The updater restarts the service and therefore kills this very
             # process. Detach it so the update survives its own parent.
             subprocess.Popen(
-                [str(backend.updater), channel],
+                [str(backend.updater)],
                 start_new_session=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,

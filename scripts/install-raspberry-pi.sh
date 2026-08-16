@@ -41,7 +41,8 @@ python3 -m venv "$VENV_DIR"
 install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server.conf" /etc/mosquitto/conf.d/trainmeet-server.conf
 install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server.service" /etc/systemd/system/trainmeet-server.service
 install -m 0755 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server-update" /usr/local/sbin/trainmeet-server-update
-install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server-update@.service" /etc/systemd/system/trainmeet-server-update@.service
+install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server-update.service" /etc/systemd/system/trainmeet-server-update.service
+rm -f /etc/systemd/system/trainmeet-server-update@.service
 install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/50-trainmeet-server-update.rules" /etc/polkit-1/rules.d/50-trainmeet-server-update.rules
 install -m 0755 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server-browser" /usr/local/bin/trainmeet-server-browser
 rm -f /etc/sudoers.d/trainmeet-server-update

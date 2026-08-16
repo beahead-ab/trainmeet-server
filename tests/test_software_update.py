@@ -35,27 +35,16 @@ class _Response:
 
 class SoftwareUpdateTests(unittest.TestCase):
     @patch("tambox_gateway.software_update.urlopen")
-    def test_test_channel_reads_commit_from_public_patch(self, open_url) -> None:
+    def test_latest_version_reads_commit_from_public_patch(self, open_url) -> None:
         open_url.return_value = _Response(
             b"From 3aec36552bfb15883cb30b70db19f3152466fc3f Mon Sep 17 00:00:00 2001\n",
             "https://github.com/beahead-ab/trainmeet-server/commit/main.patch",
         )
 
-        result = latest_version("test")
+        result = latest_version()
 
         self.assertEqual(result["version"], "3aec3655")
         self.assertIn("/commit/main.patch", open_url.call_args.args[0].full_url)
-
-    @patch("tambox_gateway.software_update.urlopen")
-    def test_stable_channel_reads_tag_from_redirect(self, open_url) -> None:
-        open_url.return_value = _Response(
-            b"",
-            "https://github.com/beahead-ab/trainmeet-server/releases/tag/v1.2.3",
-        )
-
-        result = latest_version("stable")
-
-        self.assertEqual(result["version"], "v1.2.3")
 
     @patch("tambox_gateway.software_update.urlopen")
     def test_invalid_patch_is_reported_clearly(self, open_url) -> None:
@@ -65,7 +54,7 @@ class SoftwareUpdateTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(SoftwareUpdateError, "giltig versionsinformation"):
-            latest_version("test")
+            latest_version()
 
 
 class UpdateBackendTests(unittest.TestCase):
@@ -106,10 +95,10 @@ class UpdateBackendTests(unittest.TestCase):
         ):
             backend = update_backend()
             with patch("tambox_gateway.software_update.subprocess.run") as run:
-                start_update("stable")
+                start_update()
 
         self.assertEqual(backend.kind, "systemd")
-        self.assertIn("trainmeet-server-update@stable.service", run.call_args.args[0])
+        self.assertIn("trainmeet-server-update.service", run.call_args.args[0])
 
     def test_mac_updates_through_its_own_unprivileged_script(self) -> None:
         updater = self._mac_installation()
@@ -117,10 +106,10 @@ class UpdateBackendTests(unittest.TestCase):
         with platform, install_dir:
             backend = update_backend()
             with patch("tambox_gateway.software_update.subprocess.Popen") as popen:
-                start_update("test")
+                start_update()
 
         self.assertEqual(backend.kind, "launchd")
-        self.assertEqual(popen.call_args.args[0], [str(updater), "test"])
+        self.assertEqual(popen.call_args.args[0], [str(updater)])
         # The updater restarts the server that spawned it, so it has to outlive
         # its own parent process.
         self.assertTrue(popen.call_args.kwargs["start_new_session"])
@@ -130,7 +119,7 @@ class UpdateBackendTests(unittest.TestCase):
             "tambox_gateway.software_update.LINUX_UPDATER", self.root / "missing"
         ):
             with self.assertRaisesRegex(SoftwareUpdateError, "uppdateras inte"):
-                start_update("test")
+                start_update()
 
     def test_installed_version_follows_the_active_backend(self) -> None:
         self._mac_installation()

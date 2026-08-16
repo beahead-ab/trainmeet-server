@@ -136,7 +136,6 @@ const serverIdentityForm = document.querySelector("#server-identity-form");
 const serverIdentityMessage = document.querySelector("#server-identity-message");
 const clockControlForm = document.querySelector("#clock-control-form");
 const clockControlMessage = document.querySelector("#clock-control-message");
-const softwareChannel = document.querySelector("#software-channel");
 const softwareCheck = document.querySelector("#software-check");
 const softwareInstall = document.querySelector("#software-install");
 const softwareUpdateMessage = document.querySelector("#software-update-message");
@@ -187,9 +186,6 @@ loginForm.addEventListener("submit", async (event) => {
     const installation = await refreshSetupStatus();
     if (installation.required) {
       showSetup(installation);
-    } else if (payload.channel_notice) {
-      softwareInstall.classList.add("hidden");
-      setMessage(softwareUpdateMessage, payload.channel_notice, "notice");
     } else {
       await openApplication();
     }
@@ -668,7 +664,6 @@ runtimeActivateUpdate.addEventListener("click", async () => {
 });
 
 softwareCheck.addEventListener("click", checkSoftwareUpdate);
-softwareChannel.addEventListener("change", checkSoftwareUpdate);
 softwareInstall.addEventListener("click", async () => {
   if (!confirm("Uppdateringen säkerhetskopierar databasen och startar om servern. Pågående trafik avbryts. Fortsätta?")) return;
   softwareInstall.disabled = true;
@@ -678,7 +673,7 @@ softwareInstall.addEventListener("click", async () => {
     const response = await authorizedFetch("/v1/server/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ channel: softwareChannel.value }),
+      body: "{}",
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Uppdateringen kunde inte startas");
@@ -697,7 +692,7 @@ async function waitForSoftwareUpdate(previousVersion) {
   for (let attempt = 0; attempt < 180; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     try {
-      const response = await authorizedFetch(`/v1/server/update?channel=${encodeURIComponent(softwareChannel.value)}`);
+      const response = await authorizedFetch("/v1/server/update");
       if (!response.ok) continue;
       const payload = await response.json();
       if (payload.status === "failed") {
@@ -719,7 +714,7 @@ async function waitForSoftwareUpdate(previousVersion) {
 async function checkSoftwareUpdate() {
   softwareCheck.disabled = true;
   try {
-    const response = await authorizedFetch(`/v1/server/update?channel=${encodeURIComponent(softwareChannel.value)}`);
+    const response = await authorizedFetch("/v1/server/update");
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Versionskontrollen misslyckades");
     softwareVersion.textContent = `Installerad ${payload.installed_version}`;
