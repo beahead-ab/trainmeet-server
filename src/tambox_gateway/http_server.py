@@ -396,7 +396,7 @@ class TamboxHTTPApplication:
             "central_url": canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url),
         }
 
-    def display_snapshot(self) -> dict[str, Any]:
+    def display_snapshot(self, request_host: str = "") -> dict[str, Any]:
         publication = self.runtime_store.active() if self.runtime_store is not None else None
         if publication is not None:
             active_day = self.runtime_store.active_day() or publication.active_day
@@ -463,19 +463,30 @@ class TamboxHTTPApplication:
             "display": display,
             "clock": clock,
             "train_positions": positions,
-            "connection": self.connection_details(),
+            "connection": self.connection_details(request_host),
             "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
 
-    def connection_details(self) -> dict[str, Any]:
-        """Address and code a Tambox needs, plus the screens allowed to show it."""
+    def connection_details(self, request_host: str = "") -> dict[str, Any]:
+        """Address and code a Tambox needs, plus the screens allowed to show it.
+
+        A guessed LAN address is used when there is one. On a host whose own
+        name does not resolve to anything but loopback - a cloud droplet, most
+        Docker setups - that guess is 127.0.0.1, which is useless to a Tambox
+        on someone else's network. The address the display page itself was
+        just loaded through is a working fallback, the same way pair() already
+        derives the MQTT host devices should use.
+        """
         screens = (
             self.runtime_store.connection_badge_screens()
             if self.runtime_store is not None
             else list(DISPLAY_SCREENS)
         )
+        host = self.config.local_ip
+        if (not host or _is_loopback_address(host)) and request_host:
+            host = _hostname_without_port(request_host)
         return {
-            "host": self.config.local_ip,
+            "host": host,
             "port": self.config.http_port,
             "code": self.config.connection_code,
             "screens": screens,
@@ -1417,7 +1428,10 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
             if path == "/v1/display":
-                self._send_json(HTTPStatus.OK, self.server.application.display_snapshot())
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.display_snapshot(self.headers.get("Host", "")),
+                )
                 return
             if path == "/v1/tkl/context":
                 client = self._authenticated_client()
@@ -1949,6 +1963,13 @@ class TamboxHTTPServer(ThreadingHTTPServer):
     def request_operational_reset(self) -> None:
         self.operational_reset_requested = True
         self.request_restart()
+
+
+def _is_loopback_address(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def _hostname_without_port(host_header: str) -> str:

@@ -742,5 +742,70 @@ class HTTPServerTests(unittest.TestCase):
         return CentralRuntimeDownload(package=package, link_token=token)
 
 
+class ConnectionBadgeTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.identities = IdentityStore(Path(self.temporary_directory.name) / "identity.db")
+        self.runtime_store = SQLiteRuntimeStore(Path(self.temporary_directory.name) / "runtime.db")
+        engine = TrafficEngine(sample_session(DispatchMode.CLEARANCE))
+        pairing = PairingService(self.identities, set(engine.config.panels))
+        self.application = TamboxHTTPApplication(
+            engine,
+            self.identities,
+            pairing,
+            HTTPServerConfig(
+                local_development=True,
+                http_port=8787,
+                local_ip="127.0.0.1",
+                connection_code="042-137",
+            ),
+            runtime_store=self.runtime_store,
+        )
+        self.server = TamboxHTTPServer(("127.0.0.1", 0), self.application)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.base_url = f"http://127.0.0.1:{self.server.server_port}"
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+        self.identities.close()
+        self.runtime_store.close()
+        self.temporary_directory.cleanup()
+
+    def _connection(self, host_header: str | None = None):
+        headers = {"Host": host_header} if host_header else {}
+        with urlopen(Request(f"{self.base_url}/v1/display", headers=headers), timeout=2) as response:
+            return json.loads(response.read())["connection"]
+
+    def test_loopback_local_ip_falls_back_to_the_address_the_request_arrived_on(self):
+        # A cloud droplet's own hostname often resolves to nothing but
+        # loopback, which is useless to a physical Tambox reading the screen -
+        # this is the exact bug seen live on server.trainmeet.app.
+        connection = self._connection(host_header="192.0.2.10:8787")
+
+        self.assertEqual(connection["host"], "192.0.2.10")
+        self.assertEqual(connection["code"], "042-137")
+
+    def test_a_real_lan_address_is_not_overridden_by_the_request_host(self):
+        self.application.config = HTTPServerConfig(
+            local_development=True,
+            http_port=8787,
+            local_ip="192.168.1.50",
+            connection_code="042-137",
+        )
+
+        connection = self._connection(host_header="unrelated.example:9999")
+
+        self.assertEqual(connection["host"], "192.168.1.50")
+
+    def test_default_screens_and_forever_validity(self):
+        connection = self._connection()
+
+        self.assertEqual(connection["screens"], ["clock", "topology", "graph", "dashboard"])
+        self.assertEqual(connection["validity_hours"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
