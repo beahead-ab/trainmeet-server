@@ -1487,6 +1487,15 @@ function selectOverviewStation(stationID, preserveTrain = false) {
   renderStationInspector();
 }
 
+function clearOverviewSelection() {
+  state.selectedTrainNumber = null;
+  state.selectedStationID = null;
+  renderRouteExplorer();
+  renderOverviewTopology();
+  renderOverviewGraph(state.overviewSnapshot);
+  renderStationInspector();
+}
+
 function renderOverviewTopology() {
   if (!state.overviewSnapshot) return;
   renderTopology(state.overviewSnapshot, document.querySelector("#overview-topology"), {
@@ -1495,14 +1504,7 @@ function renderOverviewTopology() {
     showBadge: false,
     onTrainSelect: (trainNumber) => selectOverviewTrain(trainNumber),
     onStationSelect: (stationID) => selectOverviewStation(stationID, Boolean(state.selectedTrainNumber)),
-    onClear: () => {
-      state.selectedTrainNumber = null;
-      state.selectedStationID = null;
-      renderRouteExplorer();
-      renderOverviewTopology();
-      renderOverviewGraph(state.overviewSnapshot);
-      renderStationInspector();
-    },
+    onClear: clearOverviewSelection,
   });
 }
 
@@ -2412,6 +2414,9 @@ function renderOverviewGraph(snapshot) {
   stationLabels.setAttribute("width", left);
   stationLabels.setAttribute("height", height);
   svg.replaceChildren();
+  svg.onclick = (event) => {
+    if (event.target === svg) clearOverviewSelection();
+  };
   stationLabels.replaceChildren();
   stationLabels.append(svgElement("rect", { x: 0, y: 0, width: left, height, class: "overview-graph-label-bg" }));
   for (let minute = minMinute; minute <= maxMinute; minute += 60) {
@@ -2774,10 +2779,11 @@ function renderClock(snapshot) {
       ? `<div class="clock-digital${stopped ? " stopped" : ""}"></div>`
       : clockSVG(style, darkBackground, showSeconds, stopped);
     const reason = stopText ? `<div class="clock-stopped">${escapeHTML(stopText)}</div>` : "";
-    target.innerHTML = `<div class="clock-shell">${face}${reason}</div>`;
+    target.innerHTML = `<div class="clock-shell${style === "digital" ? " clock-shell--digital" : ""}">${face}${reason}</div>`;
   }
   if (style === "digital") {
     const digital = target.querySelector(".clock-digital");
+    if (digital) digital.dataset.seconds = String(showSeconds);
     if (digital && digital.textContent !== displayTime) digital.textContent = displayTime;
   } else {
     updateAnalogClockHands(target, seconds, style, !stopped);

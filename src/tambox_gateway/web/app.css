@@ -1240,10 +1240,16 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .display-selection small { margin-top: 4px; overflow: hidden; color: var(--display-fg); font-size: 10px; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
 .clock-view { width: 100%; height: 100%; display: grid; place-items: center; }
 .clock-shell { position: relative; display: grid; place-items: center; gap: 1.2rem; max-width: min(92vw, 92vh); }
+.clock-shell--digital { max-width: 98vw; }
 .clock-face { width: min(72vw, 72vh); height: min(72vw, 72vh); }
 .clock-face [data-clock-hand] { will-change: transform; }
 .clock-face.stopped { opacity: .5; }
-.clock-digital { font: 700 clamp(5rem, 18vw, 16rem)/.9 var(--font-mono); letter-spacing: -.08em; }
+/* Width ratio differs by format (HH:MM ≈ 2.69em, HH:MM:SS ≈ 4.31em), so each
+   is scaled against its own measured ratio to fill the screen without
+   overflowing; both are also bounded by vh so portrait/short screens don't
+   clip vertically. */
+.clock-digital { font: 700 clamp(5rem, min(21vw, 55vh), 64rem)/.9 var(--font-mono); letter-spacing: -.08em; }
+.clock-digital[data-seconds="false"] { font-size: clamp(5rem, min(32vw, 55vh), 64rem); }
 .clock-digital.stopped { opacity: .5; }
 .clock-meta { color: var(--display-muted); font-size: clamp(.9rem, 1.7vw, 1.3rem); text-align: center; }
 .clock-stopped { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 2; padding: clamp(12px, 3vw, 28px) clamp(24px, 6vw, 56px); border: 2px solid rgba(255,255,255,.3); border-radius: 16px; color: #ef4444; background: rgba(0,0,0,.75); font-size: clamp(1.5rem, 6vw, 5rem); font-weight: 700; text-align: center; white-space: nowrap; }
