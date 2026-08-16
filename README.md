@@ -118,23 +118,33 @@ ssh pi@RASPBERRY-PI-IP
 3. Installera servern:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh && sudo reboot
+curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh
 ```
 
    `install.sh` är den publika installeraren: den hämtar först hela paketet och
    kör därefter Raspberry Pi-installationen. Filer under `scripts/` behöver inte
-   anropas direkt. Omstarten på slutet startar tjänsten, den automatiska
-   inloggningen och Chromium i sitt normala driftläge. SSH-anslutningen bryts
-   när Pi:n startar om — det är väntat.
+   anropas direkt. Servern startar direkt — du kan öppna den innan du startar om.
 
-4. Öppna `http://trainmeet.local:8787` eller adressen som installationen visar.
+4. Starta om Pi:n när installationen är klar:
+
+```sh
+sudo reboot
+```
+
+   Omstarten behövs bara på Raspberry Pi OS Desktop, för att autologin och
+   Chromium ska starta i skärmläge. På Lite körs servern redan och omstarten kan
+   hoppas över. Gör omstarten som ett eget steg — att kedja den direkt efter
+   installationen kan få avstängningen att hänga på startbilden, eftersom
+   installationen precis hunnit ändra skrivbordets uppstartsläge.
+
+5. Öppna `http://trainmeet.local:8787` eller adressen som installationen visar.
    På Raspberry Pi OS Desktop öppnas TrainMeet Server automatiskt i Chromium
    efter omstart. Webbläsaren väntar på servern och återstartas om den stängs.
    Genvägen **Starta TrainMeet Server** läggs också på skrivbordet.
-5. Uppdatera i fortsättningen med **Uppdatera TrainMeet Server** under
+6. Uppdatera i fortsättningen med **Uppdatera TrainMeet Server** under
    **System → Programuppdatering** i webbgränssnittet. Data i
    `/var/lib/trainmeet-server` bevaras.
-6. Kontrollera med `systemctl status trainmeet-server`, tryck `q` och avsluta
+7. Kontrollera med `systemctl status trainmeet-server`, tryck `q` och avsluta
    SSH med `exit`.
 
 ### DigitalOcean eller annan Linuxserver via SSH
@@ -204,12 +214,14 @@ träffens lokala nätverk. Börja med en ren Raspberry Pi OS 64-bit-installation
 anslut Pi:n till nätverket och kör i terminalen:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh && sudo reboot
+curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh
 ```
 
-Efter omstarten är servern igång i sitt normala driftläge. Uppdateringar görs
-sedan under **System → Programuppdatering**; befintlig
-träffkonfiguration och trafikhistorik ligger kvar.
+Servern startar direkt. Kör därefter `sudo reboot` som ett eget kommando om
+Pi:n har skrivbord och ska visa TrainMeet Server på sin egen skärm; på Lite
+behövs ingen omstart. Uppdateringar görs sedan under
+**System → Programuppdatering**; befintlig träffkonfiguration och
+trafikhistorik ligger kvar.
 
 Installationen lägger in Python, Mosquitto och mDNS/Bonjour, skapar
 systemtjänsten `trainmeet-server` och lagrar driftsdata i
