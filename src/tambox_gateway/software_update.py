@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlparse
@@ -13,9 +15,53 @@ class SoftwareUpdateError(RuntimeError):
     pass
 
 
+LINUX_INSTALL_DIR = Path("/opt/trainmeet-server")
+LINUX_UPDATER = Path("/usr/local/sbin/trainmeet-server-update")
+
+
+def mac_install_dir() -> Path:
+    return Path.home() / "Library" / "Application Support" / "TrainMeet Server" / "server"
+
+
+@dataclass(frozen=True)
+class UpdateBackend:
+    """How this installation replaces and restarts itself."""
+
+    kind: str
+    version_file: Path
+    updater: Path
+
+
+def update_backend() -> UpdateBackend | None:
+    """Return the updater for the running installation, or None if unmanaged.
+
+    Docker and Kubernetes deliberately have no backend. A container cannot
+    replace its own image without being handed the host's Docker socket, so
+    those installations keep updating through a new image instead.
+    """
+    if sys.platform.startswith("linux") and LINUX_UPDATER.exists():
+        # The Pi runs the server as its own unprivileged user. Updating is a
+        # root-owned systemd unit that the web server may only ask to start.
+        return UpdateBackend("systemd", LINUX_INSTALL_DIR / "VERSION", LINUX_UPDATER)
+    if sys.platform == "darwin":
+        install_dir = mac_install_dir()
+        updater = install_dir / "scripts" / "trainmeet-server-update"
+        if updater.exists():
+            # Everything belongs to the logged-in user, so the update runs
+            # unprivileged and needs no helper service at all.
+            return UpdateBackend("launchd", install_dir / "VERSION", updater)
+    return None
+
+
+def supports_updates() -> bool:
+    return update_backend() is not None
+
+
 def installed_version() -> str:
+    backend = update_backend()
+    version_file = backend.version_file if backend else LINUX_INSTALL_DIR / "VERSION"
     try:
-        return Path("/opt/trainmeet-server/VERSION").read_text(encoding="utf-8").strip() or "okänd"
+        return version_file.read_text(encoding="utf-8").strip() or "okänd"
     except OSError:
         return "utvecklingsversion"
 
@@ -59,7 +105,24 @@ def read_update_status(state_dir: Path) -> dict[str, str]:
 def start_update(channel: str) -> None:
     if channel not in {"stable", "test"}:
         raise SoftwareUpdateError("Okänd uppdateringskanal")
+    backend = update_backend()
+    if backend is None:
+        raise SoftwareUpdateError("Den här installationen uppdateras inte från webbgränssnittet")
     try:
-        subprocess.run(["/bin/systemctl", "start", "--no-block", f"trainmeet-server-update@{channel}.service"], check=True, timeout=5)
+        if backend.kind == "systemd":
+            subprocess.run(
+                ["/bin/systemctl", "start", "--no-block", f"trainmeet-server-update@{channel}.service"],
+                check=True,
+                timeout=5,
+            )
+        else:
+            # The updater restarts the service and therefore kills this very
+            # process. Detach it so the update survives its own parent.
+            subprocess.Popen(
+                [str(backend.updater), channel],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
     except (OSError, subprocess.SubprocessError) as error:
         raise SoftwareUpdateError("Uppdateringstjänsten kunde inte startas") from error

@@ -11,6 +11,23 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+case "$(uname -s)" in
+  Darwin)
+    INSTALLER="scripts/install-mac.command"
+    # The Mac installation is per user: it writes to Application Support and
+    # registers a launchd agent in the logged-in user's own domain. Running it
+    # through sudo would install everything for root instead.
+    if [ "$(id -u)" -eq 0 ]; then
+      echo "Kör installationen utan sudo på Mac:"
+      echo "  curl -fsSL https://raw.githubusercontent.com/${REPOSITORY}/main/install.sh | sh"
+      exit 1
+    fi
+    ;;
+  *)
+    INSTALLER="scripts/install-raspberry-pi.sh"
+    ;;
+esac
+
 echo "Hämtar TrainMeet Server …"
 if ! curl -fsSL "$SOURCE_URL" -o "$ARCHIVE_PATH"; then
   echo
@@ -21,15 +38,16 @@ if ! curl -fsSL "$SOURCE_URL" -o "$ARCHIVE_PATH"; then
 fi
 
 tar -xzf "$ARCHIVE_PATH" -C "$TEMP_DIR"
-if [ -x "$TEMP_DIR/scripts/install-raspberry-pi.sh" ]; then
+if [ -f "$TEMP_DIR/$INSTALLER" ]; then
   SOURCE_DIR="$TEMP_DIR"
 else
   SOURCE_DIR=$(find "$TEMP_DIR" -maxdepth 1 -type d -name 'trainmeet-server-*' | head -n 1)
 fi
 
-if [ -z "${SOURCE_DIR:-}" ] || [ ! -x "$SOURCE_DIR/scripts/install-raspberry-pi.sh" ]; then
-  echo "Installationspaketet saknar Raspberry Pi-installationen."
+if [ -z "${SOURCE_DIR:-}" ] || [ ! -f "$SOURCE_DIR/$INSTALLER" ]; then
+  echo "Installationspaketet saknar installationen för den här plattformen."
   exit 1
 fi
 
-exec "$SOURCE_DIR/scripts/install-raspberry-pi.sh"
+chmod +x "$SOURCE_DIR/$INSTALLER"
+exec "$SOURCE_DIR/$INSTALLER"

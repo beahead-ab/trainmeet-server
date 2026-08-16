@@ -1,0 +1,84 @@
+#!/bin/sh
+set -eu
+
+# Everything below belongs to the logged-in user. Unlike the Raspberry Pi this
+# needs no root, no polkit and no helper service: the server, the install
+# directory and the launchd agent all run as the same person.
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+INSTALL_DIR=$(dirname "$SCRIPT_DIR")
+APP_DIR=$(dirname "$INSTALL_DIR")
+STATE_DIR="$APP_DIR/state"
+STATUS_FILE="$STATE_DIR/update-status.json"
+BACKUP_DIR="$STATE_DIR/backups"
+INSTALL_BACKUP="$APP_DIR/server.rollback"
+LABEL="com.beahead.trainmeet-server"
+CHANNEL=${1:-stable}
+
+status() {
+  printf '{"status":"%s","message":"%s","updated_at":"%s"}\n' \
+    "$1" "$2" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS_FILE"
+  chmod 0640 "$STATUS_FILE"
+}
+
+rollback() {
+  if [ -d "$INSTALL_BACKUP" ]; then
+    rm -rf "$INSTALL_DIR"
+    mv "$INSTALL_BACKUP" "$INSTALL_DIR"
+  fi
+  launchctl kickstart -k "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
+}
+
+fail() {
+  rollback
+  status failed "$1"
+  exit 1
+}
+
+mkdir -p "$BACKUP_DIR"
+status downloading "Hämtar TrainMeet Server från GitHub"
+
+if [ -f "$STATE_DIR/tambox.db" ]; then
+  cp "$STATE_DIR/tambox.db" "$BACKUP_DIR/tambox-$(date -u +%Y%m%d-%H%M%S).db"
+fi
+
+case "$CHANNEL" in
+  stable)
+    RELEASE_URL=$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/beahead-ab/trainmeet-server/releases/latest)
+    VERSION=${RELEASE_URL##*/}
+    URL="https://github.com/beahead-ab/trainmeet-server/archive/refs/tags/$VERSION.tar.gz"
+    ;;
+  test)
+    URL=https://github.com/beahead-ab/trainmeet-server/archive/refs/heads/main.tar.gz
+    VERSION=$(curl -fsSL https://github.com/beahead-ab/trainmeet-server/commit/main.patch | sed -n '1s/^From \([0-9a-f]\{8\}\).*/\1/p')
+    ;;
+  *) status failed "Okänd uppdateringskanal"; exit 1 ;;
+esac
+
+if [ -z "$VERSION" ]; then
+  status failed "GitHub lämnade ingen giltig versionsinformation"
+  exit 1
+fi
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT INT TERM
+curl -fsSL "$URL" -o "$TMP/source.tar.gz" || fail "Nedladdningen från GitHub misslyckades"
+tar -xzf "$TMP/source.tar.gz" -C "$TMP"
+SOURCE=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+
+if [ ! -x "$SOURCE/scripts/install-mac.command" ]; then
+  fail "Det hämtade paketet saknar Mac-installationen"
+fi
+
+status installing "Installerar version $VERSION"
+
+rm -rf "$INSTALL_BACKUP"
+cp -a "$INSTALL_DIR" "$INSTALL_BACKUP"
+
+# install-mac.command stops the launchd agent, so this script must already be
+# detached from the server process that started it.
+if ! TRAINMEET_INSTALL_VERSION="$VERSION" "$SOURCE/scripts/install-mac.command" >/dev/null 2>&1; then
+  fail "Installationen misslyckades, återställde föregående version"
+fi
+
+rm -rf "$INSTALL_BACKUP"
+status complete "Version $VERSION installerades. Servern startar om."

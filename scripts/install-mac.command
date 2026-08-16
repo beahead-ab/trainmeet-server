@@ -16,14 +16,30 @@ LEGACY_PLIST="$LAUNCH_AGENTS_DIR/$LEGACY_LABEL.plist"
 LEGACY_DISABLED_PLIST="$LEGACY_PLIST.disabled"
 
 if ! command -v mosquitto >/dev/null 2>&1; then
-  echo "Mosquitto saknas. Installera det först med: brew install mosquitto"
-  exit 1
+  if command -v brew >/dev/null 2>&1; then
+    echo "Installerar Mosquitto med Homebrew …"
+    brew install mosquitto
+  else
+    echo "Mosquitto och Homebrew saknas."
+    echo "Installera Homebrew från https://brew.sh och kör installationen igen."
+    exit 1
+  fi
 fi
 
 mkdir -p "$INSTALL_DIR" "$STATE_DIR" "$LOG_DIR" "$LAUNCH_AGENTS_DIR"
+# Replace rather than merge, so modules removed upstream do not linger in an
+# updated installation.
+rm -rf "$INSTALL_DIR/src"
 ditto "$SERVER_DIR/src" "$INSTALL_DIR/src"
 cp "$SERVER_DIR/pyproject.toml" "$INSTALL_DIR/pyproject.toml"
 cp "$SERVER_DIR/README.md" "$INSTALL_DIR/README.md"
+printf '%s\n' "${TRAINMEET_INSTALL_VERSION:-main}" > "$INSTALL_DIR/VERSION"
+
+# The update button runs the updater from the installed copy, so it has to be
+# reinstalled by every update as well.
+mkdir -p "$INSTALL_DIR/scripts"
+install -m 0755 "$SERVER_DIR/packaging/mac/trainmeet-server-update" \
+  "$INSTALL_DIR/scripts/trainmeet-server-update"
 
 if [[ ! -x "$VENV_DIR/bin/python" ]]; then
   python3 -m venv "$VENV_DIR"
@@ -83,11 +99,18 @@ sleep 1
 launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH"
 launchctl kickstart -k "gui/$(id -u)/$LABEL"
 
-sleep 2
-if ! curl --silent --fail http://127.0.0.1:8787/v1/info >/dev/null; then
-  echo "Tjänsten startade inte. Loggen finns i: $LOG_DIR/server-error.log"
-  exit 1
-fi
+# Give the service a real chance to come up before declaring failure: an update
+# treats a non-zero exit here as the signal to roll back.
+for attempt in {1..30}; do
+  if curl --silent --fail --max-time 2 http://127.0.0.1:8787/v1/info >/dev/null 2>&1; then
+    break
+  fi
+  if [[ $attempt -eq 30 ]]; then
+    echo "Tjänsten startade inte. Loggen finns i: $LOG_DIR/server-error.log"
+    exit 1
+  fi
+  sleep 1
+done
 
 LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "din-macs-ip")
 CONNECTION_CODE=$(tr -cd '0-9' < "$STATE_DIR/connection-code.txt")
