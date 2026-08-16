@@ -10,15 +10,19 @@ Den centrala [TrainMeet-applikationen](https://github.com/beahead-ab/trainmeet) 
 | --- | --- | --- |
 | Raspberry Pi OS 64-bit | Enradaren nedan | Normal lokal drift på en träff |
 | Ubuntu/Debian-server | Enradaren nedan | DigitalOcean, VPS eller annan fristående Linuxserver |
+| Mac | Enradaren nedan | Lokal server på en Mac, utan Docker |
 | Windows 10/11-PC | Docker Desktop | Lokal testserver på en vanlig PC |
-| Mac | Docker med Colima | Lokal utveckling och test med samma containerupplägg som i drift |
+| Mac med Docker | Docker med Colima | Utveckling och test med samma containerupplägg som i drift |
 | Linux med Docker | Docker Compose | Server eller dator där Docker redan finns |
 | Raspberry Pi med Docker | Docker Compose | När all lokal drift ska vara containerbaserad |
 | Kubernetes/K3s | Helm | Centrera eller annan klustermiljö |
-| Mac utan Docker | Native reservinstallation | Felsökning och äldre lokala installationer |
 
 Servern använder port `8787` för webben och `1883` för MQTT. Driftsdata är
 beständig och ska överleva både uppdateringar och omstarter.
+
+Enradarna installerar servern direkt på maskinen, och bara de installationerna
+får knappen **Uppdatera TrainMeet Server** i webbgränssnittet. Docker- och
+Kubernetesinstallationer uppdateras genom ny image respektive Helm-deployment.
 
 ## Snabbstart för första installationen
 
@@ -60,8 +64,28 @@ Visa status med `docker compose ps`. Stoppa utan att radera data med
 ### Mac
 
 1. Öppna **Terminal** via Spotlight (`⌘` + mellanslag, skriv `Terminal`).
-2. Installera [Homebrew](https://brew.sh/) om det saknas.
-3. Kör ett kommando i taget:
+2. Kör installationen. Använd **inte** `sudo` — servern installeras för din
+   användare och startar automatiskt när du loggar in:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sh
+```
+
+   Saknas Mosquitto installeras det automatiskt med [Homebrew](https://brew.sh/).
+   Servern och driftsdata hamnar i
+   `~/Library/Application Support/TrainMeet Server`.
+3. Öppna `http://127.0.0.1:8787`. Installationen skriver också ut Macens
+   IP-adress och serverns sexsiffriga anslutningskod.
+4. Uppdatera senare med **Uppdatera TrainMeet Server** under Administration.
+   Databasen säkerhetskopieras först, och misslyckas uppdateringen återställs
+   föregående version automatiskt.
+
+### Mac med Docker
+
+Samma containerupplägg som i drift, men utan uppdateringsknapp.
+
+1. Installera [Homebrew](https://brew.sh/) om det saknas.
+2. Kör ett kommando i taget:
 
 ```sh
 brew install colima docker docker-compose git
@@ -70,7 +94,7 @@ cd trainmeet-server
 ./scripts/install-docker-mac.command
 ```
 
-4. Öppna `http://127.0.0.1:8787`. Uppdatera senare från samma mapp:
+3. Öppna `http://127.0.0.1:8787`. Uppdatera senare från samma mapp:
 
 ```sh
 git pull
@@ -321,9 +345,10 @@ molnnät. Vid Compose-test på Mac anges därför datorns lokala IP-adress i den
 fysiska boxens Wi-Fi-portal. På en lokal K3s-nod kan `server.hostNetwork=true`
 användas när nätmiljön kräver direkt åtkomst till nodens portar.
 
-## Mac native – reserv utan Docker
+## Mac – installationen i detalj
 
-Docker är huvudmiljön på Mac. För felsökning utan container-runtime:
+Enradaren under [Mac](#mac) gör allt det här åt dig. Beskrivningen är för den
+som vill veta vad som installeras, eller köra installationen från en klon:
 
 ```sh
 brew install python mosquitto
@@ -332,13 +357,16 @@ cd trainmeet-server
 ./scripts/install-mac.command
 ```
 
-Installationen skapar en LaunchAgent och startar servern automatiskt vid
-inloggning. Öppna `http://127.0.0.1:8787`. Från en iPhone på samma Wi-Fi används
-Macens lokala IP-adress, exempelvis `http://192.168.1.20:8787`.
+Installationen lägger servern i `~/Library/Application Support/TrainMeet Server`,
+skapar en LaunchAgent som startar den automatiskt vid inloggning, och lägger dit
+uppdateraren som knappen **Uppdatera TrainMeet Server** använder. Allt ägs av din
+egen användare; ingenting installeras som root. Öppna `http://127.0.0.1:8787`.
+Från en iPhone på samma Wi-Fi används Macens lokala IP-adress, exempelvis
+`http://192.168.1.20:8787`.
 
-Kör inte native-versionen och Docker samtidigt på standardportarna.
-`install-docker-mac.command` stänger därför av den native LaunchAgent som
-skriptet känner till.
+Kör inte den här installationen och Docker samtidigt på standardportarna.
+`install-docker-mac.command` stänger därför av den LaunchAgent som skriptet
+känner till.
 
 ## Klienter och fysisk Tambox
 
@@ -382,12 +410,19 @@ kanaler:
 - **Stabil** hämtar den senaste märkta GitHub-releasen och är avsedd för träffar.
 - **Test** hämtar senaste versionen från `main` och är avsedd för testservrar.
 
-Före installationen säkerhetskopieras SQLite-databasen till
-`/var/lib/trainmeet-server/backups`. Uppdateringen körs av en separat root-ägd
-systemd-tjänst; webbservern har ingen generell sudo-behörighet. Efter
-installationen startar TrainMeet Server om och webbsidan ansluter automatiskt
-igen. Docker- och Kubernetesinstallationer uppdateras i stället genom ny image
-respektive Helm-deployment.
+Före installationen säkerhetskopieras SQLite-databasen. Misslyckas
+uppdateringen återställs föregående version automatiskt. Efter installationen
+startar TrainMeet Server om och webbsidan ansluter automatiskt igen.
+
+På Raspberry Pi och Linux körs uppdateringen av en separat root-ägd
+systemd-tjänst; webbservern har ingen generell sudo-behörighet. På Mac ligger
+hela installationen i din egen användarmapp, så uppdateringen körs utan root
+och utan hjälptjänst.
+
+Docker- och Kubernetesinstallationer saknar knappen med flit: en container kan
+inte byta ut sin egen image utan att få tillgång till värdens Docker-socket,
+vilket i praktiken ger containern root på värdmaskinen. De uppdateras i stället
+genom ny image respektive Helm-deployment.
 
 ## Arkitektur
 
