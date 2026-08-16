@@ -3,7 +3,7 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 GATEWAY_DIR=$(dirname "$SCRIPT_DIR")
-VERSION=0.5.0
+VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' "$GATEWAY_DIR/pyproject.toml")
 DIST_DIR="$GATEWAY_DIR/dist"
 ARCHIVE="$DIST_DIR/trainmeet-server-${VERSION}.tar.gz"
 LATEST_ARCHIVE="$DIST_DIR/trainmeet-server.tar.gz"
