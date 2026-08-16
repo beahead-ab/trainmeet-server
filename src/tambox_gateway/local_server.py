@@ -119,7 +119,13 @@ def main() -> None:
     connection_code = args.pairing_code or _load_or_create_connection_code(state_directory)
     identities.revoke_pairing_codes(label="Lokal enkel parkoppling")
     pairing_code = connection_code
+    # Only a code that was actually issued may reach the screens; without panels
+    # there is nothing to pair with and the code would not work.
+    issued_code = ""
     if engine.config.panels:
+        # The code is printed on the meeting's screens, so it defaults to never
+        # expiring. An administrator can still give it a lifetime.
+        validity_hours = runtime_store.connection_code_validity_hours()
         pairing_code = identities.issue_pairing_code(
             list(engine.config.panels),
             allowed_kinds=[
@@ -128,11 +134,12 @@ def main() -> None:
                 DeviceKind.WEB_ADMIN,
                 DeviceKind.TKL_TERMINAL,
             ],
-            ttl=timedelta(hours=24),
+            ttl=timedelta(hours=validity_hours) if validity_hours else None,
             max_uses=50,
             label="Lokal enkel parkoppling",
             code=connection_code,
         )
+        issued_code = pairing_code
 
     gateway = MQTTGatewayAdapter(
         engine,
@@ -145,6 +152,7 @@ def main() -> None:
     gateway.client.loop_start()
     discovery_advertiser = _start_discovery_advertiser(args.mqtt_port)
 
+    local_ip = _local_ip()
     application = TamboxHTTPApplication(
         engine,
         identities,
@@ -158,6 +166,9 @@ def main() -> None:
             allow_software_update=supports_updates(),
             state_dir=str(state_directory),
             force_external_auth=args.force_external_auth,
+            http_port=args.http_port,
+            local_ip=local_ip,
+            connection_code=issued_code,
         ),
         runtime_store=runtime_store,
         local_configuration_store=local_configuration_store,
@@ -174,7 +185,6 @@ def main() -> None:
     cloud_sync_thread.start()
     signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
     signal.signal(signal.SIGINT, _raise_keyboard_interrupt)
-    local_ip = _local_ip()
     _print_ready(local_ip, args.http_port, args.mqtt_port, pairing_code)
 
     try:

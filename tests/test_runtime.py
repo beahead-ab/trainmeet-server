@@ -246,5 +246,44 @@ class RuntimeStoreTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_connection_badge_defaults_to_every_screen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
+            try:
+                self.assertEqual(
+                    ["clock", "topology", "graph", "dashboard"],
+                    store.connection_badge_screens(),
+                )
+                self.assertEqual(0, store.connection_code_validity_hours())
+            finally:
+                store.close()
+
+    def test_connection_badge_screens_can_be_narrowed_and_widened(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
+            try:
+                store.set_connection_badge_screens(["dashboard", "clock", "not-a-real-screen"])
+                self.assertEqual(["clock", "dashboard"], store.connection_badge_screens())
+
+                store.set_connection_badge_screens([])
+                self.assertEqual([], store.connection_badge_screens())
+            finally:
+                store.close()
+
+    def test_connection_code_validity_only_accepts_known_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
+            try:
+                store.set_connection_code_validity_hours(24)
+                self.assertEqual(24, store.connection_code_validity_hours())
+
+                with self.assertRaises(RuntimePublicationError):
+                    store.set_connection_code_validity_hours(5)
+                # A rejected write leaves the previous choice in place.
+                self.assertEqual(24, store.connection_code_validity_hours())
+            finally:
+                store.close()
+
+
 if __name__ == "__main__":
     unittest.main()

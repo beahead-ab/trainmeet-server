@@ -453,12 +453,28 @@ serverIdentityForm.addEventListener("submit", async (event) => {
   }
 });
 
+document.querySelector("#connection-badge-screens").addEventListener("change", saveConnectionBadgeSettings);
+document.querySelector("#connection-badge-validity").addEventListener("change", saveConnectionBadgeSettings);
+
+// The field offers whole numbers in a dropdown but accepts anything typed, so
+// a Swedish decimal comma has to read as a decimal point.
+function clockSpeedValue() {
+  const raw = document.querySelector("#local-clock-speed").value.trim().replace(",", ".");
+  const speed = Number(raw);
+  return Number.isFinite(speed) && speed > 0 ? speed : null;
+}
+
 clockControlForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const speed = clockSpeedValue();
+  if (speed === null) {
+    setMessage(clockControlMessage, "Ange en hastighet större än noll, till exempel 4,3.", "error");
+    return;
+  }
   await controlLocalClock({
     action: "start",
     time: document.querySelector("#local-clock-time").value,
-    speed: Number(document.querySelector("#local-clock-speed").value),
+    speed,
   });
 });
 
@@ -1390,6 +1406,53 @@ async function refreshLocalClock() {
   const stateLabel = document.querySelector("#clock-state");
   stateLabel.textContent = clock.running ? `Går · ${Number(clock.speed || 1)}×` : "Stoppad";
   stateLabel.classList.toggle("clock-running", Boolean(clock.running));
+  renderConnectionBadgeSettings(payload.connection || {});
+}
+
+function renderConnectionBadgeSettings(connection) {
+  const container = document.querySelector("#connection-badge-screens");
+  if (!container) return;
+  const screens = connection.screens || [];
+  for (const input of container.querySelectorAll("input[type=checkbox]")) {
+    if (document.activeElement !== input) input.checked = screens.includes(input.value);
+  }
+  const validity = document.querySelector("#connection-badge-validity");
+  if (validity && document.activeElement !== validity) validity.value = String(connection.validity_hours ?? 0);
+  const badge = document.querySelector("#connection-badge-code");
+  badge.textContent = connection.code
+    ? `${connection.host}:${connection.port} · ${connection.code}`
+    : "Ingen kod utfärdad";
+}
+
+async function saveConnectionBadgeSettings() {
+  const container = document.querySelector("#connection-badge-screens");
+  const message = document.querySelector("#connection-badge-message");
+  const screens = [...container.querySelectorAll("input[type=checkbox]")]
+    .filter((input) => input.checked)
+    .map((input) => input.value);
+  try {
+    const response = await authorizedFetch("/v1/display/connection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        screens,
+        validity_hours: Number(document.querySelector("#connection-badge-validity").value),
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Inställningen kunde inte sparas");
+    setMessage(
+      message,
+      payload.restart_required
+        ? "Sparat. Starta om servern för att ge koden den nya giltighetstiden."
+        : screens.length
+          ? `Sparat. Koden visas på ${screens.length} av 4 skärmar.`
+          : "Sparat. Koden visas inte på någon skärm.",
+      "success",
+    );
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  }
 }
 
 async function controlLocalClock(command) {
@@ -2844,6 +2907,19 @@ function renderDisplayTopology(snapshot) {
   renderDisplaySelection(snapshot);
 }
 
+function renderConnectionBadge(snapshot) {
+  const badge = document.querySelector("#display-connection");
+  if (!badge) return;
+  const connection = snapshot.connection || {};
+  const screens = connection.screens || [];
+  const address = connection.host ? `${connection.host}:${connection.port}` : "";
+  const visible = Boolean(connection.code) && Boolean(address) && screens.includes(displayKind);
+  badge.classList.toggle("hidden", !visible);
+  if (!visible) return;
+  document.querySelector("#display-connection-address").textContent = address;
+  document.querySelector("#display-connection-code").textContent = connection.code;
+}
+
 function renderDisplay(snapshot) {
   displaySnapshot = snapshot;
   document.querySelector("#display-loading").classList.add("hidden");
@@ -2865,6 +2941,7 @@ function renderDisplay(snapshot) {
   }
   if (!services.some((service) => String(service.train_number) === state.displaySelectedTrainNumber)) state.displaySelectedTrainNumber = null;
   trainSelect.value = state.displaySelectedTrainNumber || "";
+  renderConnectionBadge(snapshot);
   const ids = { topology: "topology-svg", graph: "graph-scroll", clock: "clock-view", dashboard: "dashboard-view" };
   for (const id of Object.values(ids)) document.querySelector(`#${id}`).classList.toggle("hidden", id !== ids[displayKind]);
   if (displayKind === "topology") renderDisplayTopology(snapshot);

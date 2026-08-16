@@ -35,6 +35,10 @@ AVAILABLE_CLOCK_STYLES = (
     "american",
     "digital",
 )
+DISPLAY_SCREENS = ("clock", "topology", "graph", "dashboard")
+# 0 means the code never expires, which is the default: it is printed on the
+# meeting's screens and has to keep working for as long as it is up there.
+CONNECTION_CODE_VALIDITY_HOURS = (0, 12, 24, 72, 168)
 DAY_ORDER = ("Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön")
 SHORT_DAYS = {
     "M": "Mån",
@@ -583,6 +587,39 @@ class SQLiteRuntimeStore:
 
     def central_url(self) -> str | None:
         return self._setting("central_runtime_url")
+
+    def connection_badge_screens(self) -> list[str]:
+        """Screens showing the address and connection code. All of them by default."""
+        stored = self._setting("connection_badge_screens")
+        if stored is None:
+            return list(DISPLAY_SCREENS)
+        try:
+            chosen = json.loads(stored)
+        except json.JSONDecodeError:
+            return list(DISPLAY_SCREENS)
+        if not isinstance(chosen, list):
+            return list(DISPLAY_SCREENS)
+        return [screen for screen in DISPLAY_SCREENS if screen in chosen]
+
+    def set_connection_badge_screens(self, screens: list[Any]) -> list[str]:
+        chosen = [screen for screen in DISPLAY_SCREENS if screen in screens]
+        self._save_setting("connection_badge_screens", json.dumps(chosen))
+        return chosen
+
+    def connection_code_validity_hours(self) -> int:
+        """Hours the connection code stays valid; 0 means it never expires."""
+        stored = self._setting("connection_code_validity_hours")
+        try:
+            hours = int(stored) if stored is not None else 0
+        except ValueError:
+            return 0
+        return hours if hours in CONNECTION_CODE_VALIDITY_HOURS else 0
+
+    def set_connection_code_validity_hours(self, hours: int) -> int:
+        if hours not in CONNECTION_CODE_VALIDITY_HOURS:
+            raise RuntimePublicationError("Ogiltig giltighetstid för anslutningskoden")
+        self._save_setting("connection_code_validity_hours", str(hours))
+        return hours
 
     def set_cloud_auto_sync(self, enabled: bool) -> bool:
         self._save_setting("cloud_auto_sync", "1" if enabled else "0")

@@ -44,6 +44,7 @@ from .models import Command
 from .operations import SQLiteOperationsStore
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
+    DISPLAY_SCREENS,
     RuntimePublication,
     RuntimePublicationError,
     SQLiteRuntimeStore,
@@ -100,6 +101,9 @@ class HTTPServerConfig:
     allow_software_update: bool = False
     state_dir: str = "data/local"
     force_external_auth: bool = False
+    http_port: int = 8787
+    local_ip: str = ""
+    connection_code: str = ""
 
 
 class TamboxHTTPApplication:
@@ -459,7 +463,58 @@ class TamboxHTTPApplication:
             "display": display,
             "clock": clock,
             "train_positions": positions,
+            "connection": self.connection_details(),
             "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+
+    def connection_details(self) -> dict[str, Any]:
+        """Address and code a Tambox needs, plus the screens allowed to show it."""
+        screens = (
+            self.runtime_store.connection_badge_screens()
+            if self.runtime_store is not None
+            else list(DISPLAY_SCREENS)
+        )
+        return {
+            "host": self.config.local_ip,
+            "port": self.config.http_port,
+            "code": self.config.connection_code,
+            "screens": screens,
+            "validity_hours": (
+                self.runtime_store.connection_code_validity_hours()
+                if self.runtime_store is not None
+                else 0
+            ),
+        }
+
+    def configure_connection_badge(
+        self,
+        client: PairedClient,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal lagring saknas")
+        screens = payload.get("screens")
+        if not isinstance(screens, list):
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_screens", "Skärmvalet måste vara en lista")
+        self.runtime_store.set_connection_badge_screens(screens)
+        previous_hours = self.runtime_store.connection_code_validity_hours()
+        changed_validity = False
+        if payload.get("validity_hours") is not None:
+            try:
+                hours = int(payload["validity_hours"])
+            except (TypeError, ValueError) as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_validity", "Ogiltig giltighetstid") from error
+            try:
+                self.runtime_store.set_connection_code_validity_hours(hours)
+            except RuntimePublicationError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_validity", str(error)) from error
+            changed_validity = hours != previous_hours
+        return {
+            **self.connection_details(),
+            # Screens follow immediately; the lifetime is applied to the code the
+            # next time the server issues it, which happens at start-up.
+            "restart_required": changed_validity,
         }
 
     def tkl_context(self, client: PairedClient, station_id: str) -> dict[str, Any]:
@@ -1703,6 +1758,13 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/server/update":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.ACCEPTED, self.server.application.update_software(client, payload))
+                return
+            if path == "/v1/display/connection":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.configure_connection_badge(client, payload),
+                )
                 return
             if path == "/v1/clock":
                 client = self._authenticated_client()

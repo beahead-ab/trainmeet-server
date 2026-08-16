@@ -17,6 +17,9 @@ PAIRING_HASH_ITERATIONS = 210_000
 CLIENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{3,64}$")
 ADMIN_USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9._@+-]{3,64}$")
 ADMIN_SESSION_TTL = timedelta(hours=12)
+# A connection code printed on the meeting's screens has to keep working for as
+# long as it is on display, so it may be issued without an expiry.
+NEVER_EXPIRES = datetime(9999, 12, 31, tzinfo=timezone.utc)
 
 
 class DeviceKind(StrEnum):
@@ -177,12 +180,13 @@ class IdentityStore:
             DeviceKind.SWIFT_ADMIN,
             DeviceKind.WEB_ADMIN,
         ),
-        ttl: timedelta = timedelta(minutes=15),
+        ttl: timedelta | None = timedelta(minutes=15),
         max_uses: int = 1,
         label: str | None = None,
         code: str | None = None,
         now: datetime | None = None,
     ) -> str:
+        """Issue a pairing code. A ttl of None never expires."""
         if not panel_ids:
             raise ValueError("A pairing code must grant at least one panel")
         if not allowed_kinds:
@@ -210,7 +214,7 @@ class IdentityStore:
                     pairing_id,
                     salt,
                     digest,
-                    (now + ttl).isoformat(),
+                    (NEVER_EXPIRES if ttl is None else now + ttl).isoformat(),
                     max_uses,
                     json.dumps([kind.value for kind in allowed_kinds]),
                     json.dumps(sorted(set(panel_ids))),

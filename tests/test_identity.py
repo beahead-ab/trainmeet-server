@@ -83,6 +83,20 @@ class IdentityTests(unittest.TestCase):
                 now=issued_at + timedelta(minutes=2),
             )
 
+    def test_code_without_ttl_never_expires(self):
+        issued_at = datetime(2026, 8, 10, tzinfo=timezone.utc)
+        code = self.store.issue_pairing_code(
+            ["panel-a"],
+            code="55667788",
+            ttl=None,
+            now=issued_at,
+        )
+
+        far_future = issued_at + timedelta(days=3650)
+        grant = self.store.reserve_pairing_code(code, DeviceKind.SWIFT_PANEL, now=far_future)
+
+        self.assertEqual(grant.panel_ids, ("panel-a",))
+
     def test_repairing_rotates_credentials_and_assignments(self):
         first_code = self.store.issue_pairing_code(["panel-a"], code="11112222")
         first = self.service.pair(
