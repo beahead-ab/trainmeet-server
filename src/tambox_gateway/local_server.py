@@ -48,6 +48,16 @@ def main() -> None:
         help="Adress till extern MQTT-broker (standard: localhost)",
     )
     parser.add_argument(
+        "--advertised-host",
+        default=os.environ.get("TRAINMEET_ADVERTISED_HOST", ""),
+        help=(
+            "IP eller domän som visas för Tambox-anslutning. Krävs i Docker/"
+            "Kubernetes: containern ser bara sitt eget interna nätverk, inte "
+            "värdens riktiga adress. Behövs inte vid installation direkt på "
+            "Pi, Mac eller en Linuxserver."
+        ),
+    )
+    parser.add_argument(
         "--broker-wait-seconds",
         type=float,
         default=15,
@@ -152,7 +162,7 @@ def main() -> None:
     gateway.client.loop_start()
     discovery_advertiser = _start_discovery_advertiser(args.mqtt_port)
 
-    local_ip = _local_ip()
+    local_ip = args.advertised_host.strip() or _local_ip()
     application = TamboxHTTPApplication(
         engine,
         identities,

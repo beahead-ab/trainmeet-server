@@ -1258,9 +1258,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 /* Bottom left, opposite the train/station panel, so the two never collide.
    Deliberately low-key: it only needs reading up close while pairing a box,
    not across the room like the rest of the screen. */
-.display-connection { position: fixed; z-index: 8; left: 14px; bottom: 10px; display: flex; align-items: baseline; gap: 7px; padding: 3px 9px; border-radius: 999px; background: color-mix(in srgb, var(--display-bg) 55%, transparent); }
-.display-connection span { color: var(--display-muted); font: 400 11px/1.4 var(--font-mono); opacity: .7; }
-.display-connection b { color: var(--display-fg); font: 600 11px/1.4 var(--font-mono); letter-spacing: .03em; opacity: .7; }
+.display-connection { position: fixed; z-index: 8; left: 16px; bottom: 12px; display: flex; align-items: baseline; gap: 9px; padding: 5px 12px; border-radius: 999px; background: color-mix(in srgb, var(--display-bg) 55%, transparent); }
+.display-connection span { color: var(--display-muted); font: 400 15px/1.4 var(--font-mono); opacity: .85; }
+.display-connection b { color: var(--display-fg); font: 600 15px/1.4 var(--font-mono); letter-spacing: .03em; opacity: .85; }
 .display-selection { position: fixed; z-index: 8; right: 22px; bottom: 22px; display: grid; width: min(420px, calc(100vw - 44px)); gap: 3px; padding: 14px 16px; border: 0; border-radius: 16px; color: var(--display-fg); background: var(--display-card); box-shadow: var(--shadow-md); }
 .display-selection p { margin: 0; color: var(--display-muted); font-size: 9px; font-weight: 700; letter-spacing: .13em; }
 .display-selection b { font-size: 22px; }

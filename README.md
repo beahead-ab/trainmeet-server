@@ -46,6 +46,20 @@ ESP32/Arduino-enhet. Installera servern först.
 ```powershell
 git clone https://github.com/beahead-ab/trainmeet-server.git
 cd trainmeet-server
+```
+
+> **Skriv adressen till en fil innan servern startas.** Containern ser bara
+> sitt eget interna nätverk, inte datorns riktiga IP-adress, så
+> anslutningsraden som visas för Tambox-parkoppling behöver få veta den.
+> Kör `ipconfig` och leta upp `IPv4-adress` under din Wi-Fi- eller
+> Ethernet-adapter, skapa sedan filen `.env` i `trainmeet-server`-mappen med
+> den adressen:
+>
+> ```
+> TRAINMEET_ADVERTISED_HOST=192.168.1.50
+> ```
+
+```powershell
 docker compose up --detach
 ```
 
@@ -91,6 +105,19 @@ Samma containerupplägg som i drift, men utan uppdateringsknapp.
 brew install colima docker docker-compose git
 git clone https://github.com/beahead-ab/trainmeet-server.git
 cd trainmeet-server
+```
+
+> **Skriv adressen till en fil innan servern startas.** Containern ser bara
+> sitt eget interna nätverk, inte Macens riktiga IP-adress, så
+> anslutningsraden som visas för Tambox-parkoppling behöver få veta den. Kör
+> `ipconfig getifaddr en0` för att hitta adressen, skapa sedan filen `.env` i
+> `trainmeet-server`-mappen med den:
+>
+> ```
+> TRAINMEET_ADVERTISED_HOST=192.168.1.50
+> ```
+
+```sh
 ./scripts/install-docker-mac.command
 ```
 
@@ -279,6 +306,16 @@ cd trainmeet-server
 som två tjänster med beständiga volymer. Colima startas automatiskt vid
 inloggning och containrarna använder `restart: unless-stopped`.
 
+Containern ser bara sitt eget interna nätverk, inte Macens riktiga
+IP-adress, så anslutningsraden som visas för Tambox-parkoppling behöver få
+veta den explicit. Kör `ipconfig getifaddr en0` för att hitta adressen och
+lägg den i en `.env`-fil i `trainmeet-server`-mappen innan `docker compose
+up`:
+
+```
+TRAINMEET_ADVERTISED_HOST=192.168.1.50
+```
+
 För en manuell start används `docker compose up --build --detach`, eller
 `docker-compose up --build --detach` när Homebrew har installerat det fristående
 kommandot. Stoppa utan att ta bort data med `docker compose down`; lägg till
@@ -321,6 +358,15 @@ Visa status med `docker compose ps`. Uppdatera med `git pull` följt av samma
 startkommando. Stoppa utan att radera data med `docker compose down`. Använd
 inte `--volumes` om träffkonfigurationen ska sparas.
 
+Containern ser bara sitt eget interna nätverk, inte värdens riktiga
+IP-adress, så anslutningsraden som visas för Tambox-parkoppling behöver få
+veta den explicit. Lägg värdens IP i en `.env`-fil i `trainmeet-server`-mappen
+innan `docker compose up`:
+
+```
+TRAINMEET_ADVERTISED_HOST=192.168.1.50
+```
+
 ## Kubernetes, K3s eller Centrera
 
 Klustret behöver Kubernetes, `kubectl` och Helm. Klona repot på den dator som
@@ -354,8 +400,22 @@ och aktivera sedan Ingress. Använd TLS för all extern trafik.
 
 Automatisk mDNS/Bonjour-upptäckt går inte genom ett vanligt container- eller
 molnnät. Vid Compose-test på Mac anges därför datorns lokala IP-adress i den
-fysiska boxens Wi-Fi-portal. På en lokal K3s-nod kan `server.hostNetwork=true`
-användas när nätmiljön kräver direkt åtkomst till nodens portar.
+fysiska boxens Wi-Fi-portal. Podden ser av samma skäl bara klustrets interna
+nätverk, inte adressen andra enheter faktiskt når klustret på, så
+anslutningsraden som visas för Tambox-parkoppling behöver få veta den
+explicit:
+
+```sh
+helm upgrade --install trainmeet ./deploy/helm/trainmeet-server \
+  --namespace trainmeet --create-namespace \
+  --set server.advertisedHost=192.168.1.50
+```
+
+Sätt den till Ingress-adressen eller LoadBalancer-adressen beroende på hur
+klustret nås. På en lokal K3s-nod kan `server.hostNetwork=true` användas i
+stället när nätmiljön kräver direkt åtkomst till nodens portar — då hittar
+servern sin egen adress precis som på en vanlig installation, utan att
+`advertisedHost` behöver sättas.
 
 ## Mac – installationen i detalj
 

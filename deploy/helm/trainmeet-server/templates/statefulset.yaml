@@ -58,10 +58,16 @@ spec:
             - --gateway-id
             - {{ .Values.server.gatewayId | quote }}
             {{- end }}
-          {{- if .Values.server.centralRuntimeUrl }}
+          {{- if or .Values.server.centralRuntimeUrl .Values.server.advertisedHost }}
           env:
+            {{- if .Values.server.centralRuntimeUrl }}
             - name: TRAINMEET_RUNTIME_URL
               value: {{ .Values.server.centralRuntimeUrl | quote }}
+            {{- end }}
+            {{- if .Values.server.advertisedHost }}
+            - name: TRAINMEET_ADVERTISED_HOST
+              value: {{ .Values.server.advertisedHost | quote }}
+            {{- end }}
           {{- end }}
           securityContext:
             allowPrivilegeEscalation: false

@@ -23,6 +23,10 @@ services:
     restart: unless-stopped
     environment:
       TRAINMEET_MQTT_HOST: mosquitto
+      # The container only sees its own internal network, not the host's real
+      # LAN address, so a Tambox cannot be told where to connect without this.
+      # Set it to the address other devices actually use to reach this host.
+      TRAINMEET_ADVERTISED_HOST: ${TRAINMEET_ADVERTISED_HOST:-}
     ports:
       - "${TRAINMEET_HTTP_PORT:-8787}:8787"
     volumes:
