@@ -57,11 +57,83 @@ class OperationsStoreTests(unittest.TestCase):
                         }
                     }
                 }
+                # A reservation is not a movement yet. Nothing should appear on
+                # the displays until the train has actually departed.
                 store.record_engine_transition(free, reserved, moment)
-                self.assertEqual(store.positions()[0]["station_id"], "station-a")
+                self.assertEqual(store.positions(), [])
                 store.record_engine_transition(reserved, occupied, moment)
                 self.assertEqual(store.positions()[0]["connection_id"], "connection-a-b")
                 store.record_engine_transition(occupied, free, moment)
+                self.assertEqual(store.positions()[0]["station_id"], "station-b")
+            finally:
+                store.close()
+
+    def test_a_rejected_or_cancelled_request_never_appears_on_the_displays(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                publication = RuntimePublication.parse(runtime_package_v2())
+                store.ensure_publication(publication)
+                moment = datetime.now(timezone.utc)
+                free = {"connections": {"connection-a-b": {"state": "free"}}}
+                requested = {
+                    "connections": {
+                        "connection-a-b": {
+                            "state": "requested",
+                            "train_number": "202",
+                            "from_station_id": "station-a",
+                            "to_station_id": "station-b",
+                        }
+                    }
+                }
+                # A request that is rejected, or cancelled by the requester,
+                # goes straight from requested/reserved back to free - the
+                # transition that used to leave a ghost train on the map.
+                store.record_engine_transition(free, requested, moment)
+                store.record_engine_transition(requested, free, moment)
+
+                self.assertEqual(store.positions(), [])
+            finally:
+                store.close()
+
+    def test_a_rejected_second_request_does_not_erase_where_the_train_already_stood(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                publication = RuntimePublication.parse(runtime_package_v2())
+                store.ensure_publication(publication)
+                moment = datetime.now(timezone.utc)
+                free = {"connections": {"connection-a-b": {"state": "free"}}}
+                occupied = {
+                    "connections": {
+                        "connection-a-b": {
+                            "state": "occupied",
+                            "train_number": "303",
+                            "from_station_id": "station-a",
+                            "to_station_id": "station-b",
+                        }
+                    }
+                }
+                arrived = {"connections": {"connection-a-b": {"state": "free"}}}
+                requested_again = {
+                    "connections": {
+                        "connection-b-c": {
+                            "state": "requested",
+                            "train_number": "303",
+                            "from_station_id": "station-b",
+                            "to_station_id": "station-c",
+                        }
+                    }
+                }
+                store.record_engine_transition(free, occupied, moment)
+                store.record_engine_transition(occupied, arrived, moment)
+                self.assertEqual(store.positions()[0]["station_id"], "station-b")
+
+                # The train really is standing at station-b. A rejected onward
+                # request must leave that in place, not clear it.
+                store.record_engine_transition(free, requested_again, moment)
+                store.record_engine_transition(requested_again, free, moment)
+
                 self.assertEqual(store.positions()[0]["station_id"], "station-b")
             finally:
                 store.close()

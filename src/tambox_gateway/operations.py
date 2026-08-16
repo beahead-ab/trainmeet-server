@@ -258,13 +258,13 @@ class SQLiteOperationsStore:
                 continue
             current_state = current.get("state")
             previous_state = previous.get("state")
-            if current_state in {"requested", "reserved"} and current.get("train_number"):
-                self._upsert_position(
-                    str(current["train_number"]),
-                    status="station",
-                    station_id=current.get("from_station_id"),
-                )
-            elif current_state == "occupied" and current.get("train_number"):
+            # A request or reservation is not yet a real movement - it can
+            # still be rejected or cancelled and fall straight back to free,
+            # a transition this loop otherwise never sees, which used to
+            # leave the train shown at the station indefinitely. Waiting for
+            # "occupied" to actually be reached means there is nothing to
+            # leave behind if it never gets there.
+            if current_state == "occupied" and current.get("train_number"):
                 self._upsert_position(
                     str(current["train_number"]),
                     status="connection",
