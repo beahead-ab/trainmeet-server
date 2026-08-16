@@ -339,7 +339,10 @@ document.querySelectorAll("[data-open-view]").forEach((button) => {
 overviewRouteSearch.addEventListener("input", renderRouteExplorer);
 overviewRouteList.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-train-number]");
-  if (!button) return;
+  if (!button) {
+    clearOverviewSelection();
+    return;
+  }
   selectOverviewTrain(button.dataset.trainNumber);
 });
 
@@ -2498,6 +2501,8 @@ function renderGraph(snapshot) {
   const canvas = document.querySelector("#graph-canvas");
   const stationOverlay = document.querySelector("#graph-station-overlay");
   const stationLabels = document.querySelector("#graph-station-labels");
+  const timeOverlay = document.querySelector("#graph-time-overlay");
+  const timeLabels = document.querySelector("#graph-time-labels");
   const stations = orderedStations(snapshot);
   const stationIndex = new Map(stations.map((station, index) => [station.id, index]));
   const services = graphServices(snapshot).map((service) => ({ ...service, stops: [...service.stops].sort((a, b) => a.stop_order - b.stop_order) }));
@@ -2511,7 +2516,10 @@ function renderGraph(snapshot) {
   const maxMinute = minutes.length ? Math.max(minMinute + 60, Math.ceil(Math.max(...minutes) / 60) * 60) : 24 * 60;
   const left = 70, right = 20, top = 30, bottom = 35;
   const width = Math.max(1000, left + (maxMinute - minMinute) * 5 + right);
-  const height = Math.max(innerHeight - 50, top + Math.max(stations.length, 1) * 60 + bottom);
+  // Never fall below the CSS floor for .graph-canvas > .display-visual. A
+  // viewBox smaller than the rendered box makes the SVG scale and centre its
+  // own contents, which silently stretched the timeline off its minute grid.
+  const height = Math.max(600, innerHeight - 50, top + Math.max(stations.length, 1) * 60 + bottom);
   const x = (minute) => left + (minute - minMinute) / (maxMinute - minMinute) * (width - left - right);
   const y = (index) => top + index * 60;
   let selectedStartX = null;
@@ -2525,16 +2533,25 @@ function renderGraph(snapshot) {
   stationLabels.setAttribute("viewBox", `0 0 ${left} ${height}`);
   stationLabels.setAttribute("width", left);
   stationLabels.setAttribute("height", height);
+  timeOverlay.style.width = `${width}px`;
+  timeOverlay.style.height = `${bottom}px`;
+  timeOverlay.style.marginTop = `-${bottom}px`;
+  timeLabels.setAttribute("viewBox", `0 0 ${width} ${bottom}`);
+  timeLabels.setAttribute("width", width);
+  timeLabels.setAttribute("height", bottom);
   svg.replaceChildren();
   stationLabels.replaceChildren();
+  timeLabels.replaceChildren();
   stationLabels.append(svgElement("rect", { x: 0, y: 0, width: left, height, class: "graph-station-label-bg" }));
+  timeLabels.append(svgElement("rect", { x: 0, y: 0, width, height: bottom, class: "graph-time-label-bg" }));
   for (let minute = minMinute + 30; minute < maxMinute; minute += 60) {
     svg.append(svgElement("line", { x1: x(minute), y1: top - 5, x2: x(minute), y2: height - bottom, class: "graph-grid-half" }));
   }
   for (let minute = minMinute; minute <= maxMinute; minute += 60) {
     const lineX = x(minute);
     svg.append(svgElement("line", { x1: lineX, y1: top - 5, x2: lineX, y2: height - bottom, class: "graph-grid" }));
-    svg.append(svgElement("text", { x: lineX, y: height - bottom + 18, "text-anchor": "middle", class: "graph-label" }, `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:00`));
+    // Drawn in the pinned overlay, whose x axis matches the graph's own.
+    timeLabels.append(svgElement("text", { x: lineX, y: 18, "text-anchor": "middle", class: "graph-label" }, `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:00`));
   }
   stations.forEach((station, index) => {
     const lineY = y(index);

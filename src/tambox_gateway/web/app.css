@@ -1196,6 +1196,17 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 }
 .graph-station-overlay svg { display: block; width: 70px; height: 100%; }
 .graph-station-label-bg { fill: var(--display-bg); fill-opacity: .96; }
+/* The timeline scrolls vertically once the graph is taller than the screen, so
+   the hour axis is pinned to the bottom of the scrollport instead of living at
+   the bottom of the drawing. It still scrolls sideways with the timeline. */
+.graph-time-overlay {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.graph-time-overlay svg { display: block; }
+.graph-time-label-bg { fill: var(--display-bg); fill-opacity: .96; }
 .topology-track { stroke: var(--display-line); stroke-width: 2.5; stroke-linecap: round; transition: opacity .25s ease, stroke .25s ease, stroke-width .25s ease; }
 .topology-track.double-shadow { stroke-width: 7; stroke: var(--display-bg); }
 .topology-track.active { stroke: var(--display-primary); }
