@@ -94,19 +94,22 @@ ssh pi@RASPBERRY-PI-IP
 3. Installera servern:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh && sudo reboot
 ```
 
    `install.sh` är den publika installeraren: den hämtar först hela paketet och
    kör därefter Raspberry Pi-installationen. Filer under `scripts/` behöver inte
-   anropas direkt.
+   anropas direkt. Omstarten på slutet startar tjänsten, den automatiska
+   inloggningen och Chromium i sitt normala driftläge. SSH-anslutningen bryts
+   när Pi:n startar om — det är väntat.
 
 4. Öppna `http://trainmeet.local:8787` eller adressen som installationen visar.
    På Raspberry Pi OS Desktop öppnas TrainMeet Server automatiskt i Chromium
    efter omstart. Webbläsaren väntar på servern och återstartas om den stängs.
    Genvägen **Starta TrainMeet Server** läggs också på skrivbordet.
-5. Uppdatera genom SSH genom att köra exakt samma installationskommando igen.
-   Data i `/var/lib/trainmeet-server` bevaras.
+5. Uppdatera i fortsättningen med **Uppdatera TrainMeet Server** under
+   Administration i webbgränssnittet. Data i `/var/lib/trainmeet-server`
+   bevaras.
 6. Kontrollera med `systemctl status trainmeet-server`, tryck `q` och avsluta
    SSH med `exit`.
 
@@ -177,11 +180,12 @@ träffens lokala nätverk. Börja med en ren Raspberry Pi OS 64-bit-installation
 anslut Pi:n till nätverket och kör i terminalen:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh && sudo reboot
 ```
 
-Samma kommando kan köras igen för att uppdatera installationen till aktuell
-version. Befintlig träffkonfiguration och trafikhistorik ligger kvar.
+Efter omstarten är servern igång i sitt normala driftläge. Uppdateringar görs
+sedan med **Uppdatera TrainMeet Server** under Administration; befintlig
+träffkonfiguration och trafikhistorik ligger kvar.
 
 Installationen lägger in Python, Mosquitto och mDNS/Bonjour, skapar
 systemtjänsten `trainmeet-server` och lagrar driftsdata i
