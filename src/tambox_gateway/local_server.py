@@ -399,6 +399,26 @@ def _wait_for_port(host: str, port: int, timeout: float) -> bool:
 
 
 def _local_ip() -> str:
+    # Asking the OS which interface would carry outbound traffic is far more
+    # reliable than resolving our own hostname: that resolution depends on
+    # DNS, mDNS or /etc/hosts state that is frequently missing or wrong (no
+    # mDNS record yet, a Docker container's internal hostname, ...), while the
+    # routing table reliably points at whichever interface is actually
+    # connected - normally the same Wi-Fi a Tambox is on. No packet is sent;
+    # UDP connect() only performs a routing decision, so this works even
+    # without internet access as long as a local gateway is configured, which
+    # a Wi-Fi router hands out by DHCP whether or not it has a WAN uplink.
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            probe.connect(("8.8.8.8", 80))
+            address = probe.getsockname()[0]
+        finally:
+            probe.close()
+        if address and not address.startswith("127."):
+            return address
+    except OSError:
+        pass
     candidates: list[str] = []
     try:
         for result in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
