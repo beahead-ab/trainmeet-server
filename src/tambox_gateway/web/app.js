@@ -107,6 +107,73 @@ const loginForm = document.querySelector("#login-form");
 const loginError = document.querySelector("#login-error");
 const setupAdminForm = document.querySelector("#setup-admin-form");
 const setupServerForm = document.querySelector("#setup-server-form");
+// Six single-digit boxes standing in for one text field, kept in sync with a
+// hidden input so the rest of the app can go on reading/clearing `.value`
+// exactly as it did with a plain input. Typing advances focus, backspace on
+// an empty box steps back, and pasting anywhere in the group (with or
+// without the "123-456" dash) spreads the digits across all six boxes.
+function wireCodeBoxes(containerSelector, hiddenInputSelector) {
+  const container = document.querySelector(containerSelector);
+  const hidden = document.querySelector(hiddenInputSelector);
+  if (!container || !hidden) return { reset() {} };
+  const boxes = [...container.querySelectorAll("input")];
+
+  const sync = () => {
+    hidden.value = boxes.map((box) => box.value).join("");
+  };
+
+  const fillFrom = (raw, startIndex) => {
+    const digits = raw.replace(/\D/g, "").slice(0, boxes.length - startIndex);
+    for (let offset = 0; offset < digits.length; offset += 1) {
+      boxes[startIndex + offset].value = digits[offset];
+    }
+    sync();
+    const lastFilled = Math.min(startIndex + digits.length, boxes.length - 1);
+    boxes[lastFilled].focus();
+    boxes[lastFilled].select();
+  };
+
+  boxes.forEach((box, index) => {
+    box.addEventListener("input", () => {
+      const digits = box.value.replace(/\D/g, "");
+      if (digits.length > 1) {
+        fillFrom(digits, index);
+        return;
+      }
+      box.value = digits;
+      sync();
+      if (digits && index < boxes.length - 1) boxes[index + 1].focus();
+    });
+    box.addEventListener("keydown", (event) => {
+      if (event.key === "Backspace" && !box.value && index > 0) {
+        event.preventDefault();
+        boxes[index - 1].value = "";
+        boxes[index - 1].focus();
+        sync();
+      } else if (event.key === "ArrowLeft" && index > 0) {
+        boxes[index - 1].focus();
+      } else if (event.key === "ArrowRight" && index < boxes.length - 1) {
+        boxes[index + 1].focus();
+      }
+    });
+    box.addEventListener("paste", (event) => {
+      event.preventDefault();
+      fillFrom((event.clipboardData || window.clipboardData).getData("text"), 0);
+    });
+    box.addEventListener("focus", () => box.select());
+  });
+
+  return {
+    reset() {
+      boxes.forEach((box) => { box.value = ""; });
+      hidden.value = "";
+    },
+  };
+}
+
+const setupSyncCodeBoxes = wireCodeBoxes("#setup-sync-code-boxes", "#setup-sync-code");
+const runtimeSyncCodeBoxes = wireCodeBoxes("#runtime-sync-code-boxes", "#runtime-sync-code");
+
 const setupCentralForm = document.querySelector("#setup-central-form");
 const setupFinishForm = document.querySelector("#setup-finish-form");
 const panelSelect = document.querySelector("#panel-select");
@@ -255,6 +322,11 @@ setupCentralForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = document.querySelector("#setup-central-message");
   const button = setupCentralForm.querySelector("button");
+  const syncCode = document.querySelector("#setup-sync-code").value;
+  if (syncCode.length !== 6) {
+    setMessage(message, "Fyll i alla sex siffror i träffkoden.", "error");
+    return;
+  }
   setMessage(message, "Hämtar träffen …", "notice");
   button.disabled = true;
   try {
@@ -263,12 +335,12 @@ setupCentralForm.addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         central_url: document.querySelector("#setup-central-url").value,
-        sync_code: document.querySelector("#setup-sync-code").value,
+        sync_code: syncCode,
       }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
-    document.querySelector("#setup-sync-code").value = "";
+    setupSyncCodeBoxes.reset();
     showSetup(await refreshSetupStatus());
   } catch (error) {
     setMessage(message, error.message, "error");
@@ -519,6 +591,11 @@ deviceForm.addEventListener("submit", async (event) => {
 
 runtimeForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const syncCode = document.querySelector("#runtime-sync-code").value;
+  if (syncCode.length !== 6) {
+    setMessage(runtimeMessage, "Fyll i alla sex siffror i träffkoden.", "error");
+    return;
+  }
   setMessage(runtimeMessage, "1/3 · Kontaktar Config-servern och kontrollerar träffkoden …");
   document.querySelector("#cloud-connection-state").textContent = "Kopplar …";
   const button = runtimeForm.querySelector("button");
@@ -529,13 +606,13 @@ runtimeForm.addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         central_url: document.querySelector("#runtime-central-url").value,
-        sync_code: document.querySelector("#runtime-sync-code").value,
+        sync_code: syncCode,
       }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
     setMessage(runtimeMessage, `3/3 · ${payload.message} Cloud-kopplingen är sparad på servern.`, payload.restart_required ? "notice" : "success");
-    document.querySelector("#runtime-sync-code").value = "";
+    runtimeSyncCodeBoxes.reset();
     document.querySelector("#runtime-link-details").open = false;
     await Promise.all([refreshRuntime(), refreshInfo()]);
   } catch (error) {

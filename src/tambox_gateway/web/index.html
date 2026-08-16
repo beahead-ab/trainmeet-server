@@ -83,7 +83,16 @@
               <input id="setup-central-url" type="url" value="https://cloud.trainmeet.app/config" placeholder="https://cloud.trainmeet.app/config" required>
             </label>
             <label>Träffkod
-              <input id="setup-sync-code" class="sync-code-input" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" placeholder="123456" required>
+              <div class="code-boxes" id="setup-sync-code-boxes" role="group" aria-label="Sexsiffrig träffkod, en siffra per fält">
+                <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 1 av 6">
+                <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 2 av 6">
+                <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 3 av 6">
+                <span class="code-boxes-dash" aria-hidden="true">–</span>
+                <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 4 av 6">
+                <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 5 av 6">
+                <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 6 av 6">
+              </div>
+              <input id="setup-sync-code" type="hidden">
             </label>
           </div>
           <div class="setup-actions">
@@ -539,8 +548,17 @@
                 <form id="runtime-sync-form" class="inline-form">
                   <label for="runtime-central-url">Config-server</label>
                   <input id="runtime-central-url" type="url" value="https://cloud.trainmeet.app/config" required>
-                  <label for="runtime-sync-code">Träffkod</label>
-                  <input id="runtime-sync-code" class="sync-code-input" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" placeholder="123456" required>
+                  <label for="runtime-sync-code-boxes">Träffkod</label>
+                  <div class="code-boxes" id="runtime-sync-code-boxes" role="group" aria-label="Sexsiffrig träffkod, en siffra per fält">
+                    <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 1 av 6">
+                    <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 2 av 6">
+                    <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 3 av 6">
+                    <span class="code-boxes-dash" aria-hidden="true">–</span>
+                    <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 4 av 6">
+                    <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 5 av 6">
+                    <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 6 av 6">
+                  </div>
+                  <input id="runtime-sync-code" type="hidden">
                   <button class="primary" type="submit">Koppla och hämta</button>
                 </form>
               </details>

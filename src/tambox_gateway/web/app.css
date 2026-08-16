@@ -293,7 +293,11 @@ p { line-height: 1.5; }
   background: var(--surface);
 }
 .setup-runtime-summary span { color: var(--muted); font-size: 11px; }
-.sync-code-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; font-weight: 700; letter-spacing: .22em; }
+.code-boxes { display: flex; align-items: center; gap: 7px; }
+.code-boxes input { width: 40px; height: 48px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--ink); text-align: center; font: 700 22px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.code-boxes input:focus { outline: 2px solid var(--trainmeet); outline-offset: 1px; }
+.code-boxes-dash { color: var(--muted); font-size: 18px; font-weight: 700; }
+.inline-form .code-boxes { margin-right: 4px; }
 .auto-sync-toggle { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; color: hsl(var(--foreground)); font-size: 12px; }
 .auto-sync-toggle input { width: 17px; min-height: 17px; accent-color: hsl(var(--primary)); }
 .pairing-icon {
