@@ -4,6 +4,10 @@ set -eu
 STATE_DIR=/var/lib/trainmeet-server
 STATUS_FILE="$STATE_DIR/update-status.json"
 BACKUP_DIR="$STATE_DIR/backups"
+INSTALL_DIR=/opt/trainmeet-server
+INSTALL_BACKUP="$INSTALL_DIR.rollback"
+SERVICE_UNIT=/etc/systemd/system/trainmeet-server.service
+SERVICE_UNIT_BACKUP="$STATE_DIR/trainmeet-server.service.rollback"
 CHANNEL=${1:-stable}
 
 status() {
@@ -13,6 +17,25 @@ status() {
     "$stage" "$message" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS_FILE"
   chown trainmeet-server:trainmeet-server "$STATUS_FILE"
   chmod 0640 "$STATUS_FILE"
+}
+
+rollback() {
+  if [ -d "$INSTALL_BACKUP" ]; then
+    rm -rf "$INSTALL_DIR"
+    mv "$INSTALL_BACKUP" "$INSTALL_DIR"
+  fi
+  if [ -f "$SERVICE_UNIT_BACKUP" ]; then
+    install -m 0644 "$SERVICE_UNIT_BACKUP" "$SERVICE_UNIT"
+    rm -f "$SERVICE_UNIT_BACKUP"
+  fi
+  systemctl daemon-reload
+  systemctl restart trainmeet-server.service || true
+}
+
+fail() {
+  rollback
+  status failed "$1"
+  exit 1
 }
 
 mkdir -p "$BACKUP_DIR"
@@ -48,7 +71,21 @@ tar -xzf "$TMP/source.tar.gz" -C "$TMP"
 SOURCE=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -n 1)
 
 status installing "Installerar version $VERSION"
-TRAINMEET_INSTALL_VERSION="$VERSION" "$SOURCE/scripts/install-raspberry-pi.sh"
+
+rm -rf "$INSTALL_BACKUP"
+if [ -d "$INSTALL_DIR" ]; then
+  cp -a "$INSTALL_DIR" "$INSTALL_BACKUP"
+fi
+rm -f "$SERVICE_UNIT_BACKUP"
+if [ -f "$SERVICE_UNIT" ]; then
+  cp -a "$SERVICE_UNIT" "$SERVICE_UNIT_BACKUP"
+fi
+
+if ! TRAINMEET_INSTALL_VERSION="$VERSION" "$SOURCE/scripts/install-raspberry-pi.sh"; then
+  fail "Installationen misslyckades, återställde föregående version"
+fi
+
 printf '%s\n' "$VERSION" > /opt/trainmeet-server/VERSION
 chmod 0644 /opt/trainmeet-server/VERSION
+rm -rf "$INSTALL_BACKUP" "$SERVICE_UNIT_BACKUP"
 status complete "Version $VERSION installerades. Servern startar om."
