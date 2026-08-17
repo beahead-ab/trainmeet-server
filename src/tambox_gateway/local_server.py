@@ -143,6 +143,11 @@ def main() -> None:
                 DeviceKind.SWIFT_ADMIN,
                 DeviceKind.WEB_ADMIN,
                 DeviceKind.TKL_TERMINAL,
+                # A physical Tambox keys this same code in directly (Wi-Fi
+                # portal or its own keypad), so it needs to be an allowed
+                # kind here too - otherwise the code shown on the connection
+                # badge would be rejected from the one device it is for.
+                DeviceKind.ESP32_PANEL,
             ],
             ttl=timedelta(hours=validity_hours) if validity_hours else None,
             max_uses=50,
