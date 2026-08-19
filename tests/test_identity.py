@@ -121,10 +121,45 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(paired.client_id, "esp32-a1b2c3")
         self.assertEqual(paired.kind, DeviceKind.ESP32_PANEL)
         self.assertEqual(paired.panel_ids, ("panel-b",))
+        self.assertIsNone(paired.station_id)
         self.assertEqual(
             self.store.discovered_device("esp32-a1b2c3").panel_ids,
             ("panel-b",),
         )
+
+    def test_tmbox_device_is_assigned_a_station_instead_of_a_panel(self):
+        self.store.record_discovery(
+            "esp32-tmbox-1",
+            "tbx-7a42",
+            model="TMBox",
+            firmware_version="2.0.0",
+        )
+
+        paired = self.store.assign_discovered_device(
+            "TBX 7A42", (), station_id="st-cda"
+        )
+
+        self.assertEqual(paired.panel_ids, ())
+        self.assertEqual(paired.station_id, "st-cda")
+        self.assertEqual(self.store.station_for_client("esp32-tmbox-1"), "st-cda")
+        self.assertEqual(
+            self.store.discovered_device("esp32-tmbox-1").station_id, "st-cda"
+        )
+        self.assertEqual(self.store.client("esp32-tmbox-1").station_id, "st-cda")
+
+    def test_v1_clients_keep_no_station_assignment(self):
+        discovered = self.store.record_discovery(
+            "esp32-v1-device",
+            "tbx-b7k3",
+            model="Bennys Tambox",
+            firmware_version="1.0.0",
+        )
+        self.assertIsNone(discovered.station_id)
+
+        paired = self.store.assign_discovered_device("TBX B7K3", ("panel-a",))
+
+        self.assertIsNone(paired.station_id)
+        self.assertIsNone(self.store.station_for_client("esp32-v1-device"))
 
     def test_admin_password_creates_a_temporary_session(self):
         before = self.store.admin_access_summary()

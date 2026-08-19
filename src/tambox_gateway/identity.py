@@ -60,6 +60,11 @@ class PairedClient:
     display_name: str
     kind: DeviceKind
     panel_ids: tuple[str, ...]
+    # Protocol v2 (decision, see trainmeet-tambox docs/underlag/protokoll-v2-
+    # kontrakt.md §2): a TMBox is assigned a station directly, not a panel.
+    # Additive alongside panel_ids so v1 ESP32/Swift clients are untouched —
+    # a v2 client simply has panel_ids=() and a station_id.
+    station_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -70,6 +75,7 @@ class DiscoveredDevice:
     firmware_version: str
     last_seen_at: str
     panel_ids: tuple[str, ...]
+    station_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -158,6 +164,13 @@ class IdentityStore:
             self._connection.execute(
                 "ALTER TABLE admin_access ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0"
             )
+        client_columns = {
+            row[1] for row in self._connection.execute("PRAGMA table_info(clients)").fetchall()
+        }
+        if "station_id" not in client_columns:
+            # Protocol v2 station assignment (see PairedClient.station_id).
+            # Nullable: a v1 client never has one.
+            self._connection.execute("ALTER TABLE clients ADD COLUMN station_id TEXT")
         now = datetime.now(timezone.utc).isoformat()
         self._connection.execute(
             """
@@ -298,6 +311,7 @@ class IdentityStore:
         credential: str,
         panel_ids: tuple[str, ...],
         *,
+        station_id: str | None = None,
         now: datetime | None = None,
     ) -> PairedClient:
         now = now or datetime.now(timezone.utc)
@@ -313,14 +327,15 @@ class IdentityStore:
                     """
                     INSERT INTO clients (
                         client_id, display_name, kind, credential_digest,
-                        enabled, created_at, last_paired_at
-                    ) VALUES (?, ?, ?, ?, 1, ?, ?)
+                        enabled, created_at, last_paired_at, station_id
+                    ) VALUES (?, ?, ?, ?, 1, ?, ?, ?)
                     ON CONFLICT(client_id) DO UPDATE SET
                         display_name = excluded.display_name,
                         kind = excluded.kind,
                         credential_digest = excluded.credential_digest,
                         enabled = 1,
-                        last_paired_at = excluded.last_paired_at
+                        last_paired_at = excluded.last_paired_at,
+                        station_id = excluded.station_id
                     """,
                     (
                         client_id,
@@ -329,6 +344,7 @@ class IdentityStore:
                         digest,
                         created_at[0] if created_at else now.isoformat(),
                         now.isoformat(),
+                        station_id,
                     ),
                 )
                 self._connection.execute(
@@ -345,14 +361,16 @@ class IdentityStore:
                     self._connection.execute("ROLLBACK")
                 raise
 
-        return PairedClient(client_id, display_name, kind, tuple(sorted(set(panel_ids))))
+        return PairedClient(
+            client_id, display_name, kind, tuple(sorted(set(panel_ids))), station_id
+        )
 
     def authenticate(self, credential: str) -> PairedClient | None:
         digest = _credential_digest(credential)
         with self._lock:
             row = self._connection.execute(
                 """
-                SELECT client_id, display_name, kind
+                SELECT client_id, display_name, kind, station_id
                 FROM clients
                 WHERE credential_digest = ? AND enabled = 1
                 """,
@@ -361,13 +379,13 @@ class IdentityStore:
             if row is None:
                 return None
             panels = self._panel_ids_locked(row[0])
-        return PairedClient(row[0], row[1], DeviceKind(row[2]), panels)
+        return PairedClient(row[0], row[1], DeviceKind(row[2]), panels, row[3])
 
     def client(self, client_id: str) -> PairedClient | None:
         with self._lock:
             row = self._connection.execute(
                 """
-                SELECT client_id, display_name, kind
+                SELECT client_id, display_name, kind, station_id
                 FROM clients
                 WHERE client_id = ? AND enabled = 1
                 """,
@@ -376,24 +394,30 @@ class IdentityStore:
             if row is None:
                 return None
             panels = self._panel_ids_locked(client_id)
-        return PairedClient(row[0], row[1], DeviceKind(row[2]), panels)
+        return PairedClient(row[0], row[1], DeviceKind(row[2]), panels, row[3])
 
     def panels_for_client(self, client_id: str) -> tuple[str, ...]:
         client = self.client(client_id)
         return client.panel_ids if client else ()
 
+    def station_for_client(self, client_id: str) -> str | None:
+        client = self.client(client_id)
+        return client.station_id if client else None
+
     def enabled_clients(self) -> tuple[PairedClient, ...]:
         with self._lock:
             rows = self._connection.execute(
                 """
-                SELECT client_id, display_name, kind
+                SELECT client_id, display_name, kind, station_id
                 FROM clients
                 WHERE enabled = 1
                 ORDER BY client_id
                 """
             ).fetchall()
             return tuple(
-                PairedClient(row[0], row[1], DeviceKind(row[2]), self._panel_ids_locked(row[0]))
+                PairedClient(
+                    row[0], row[1], DeviceKind(row[2]), self._panel_ids_locked(row[0]), row[3]
+                )
                 for row in rows
             )
 
@@ -492,7 +516,8 @@ class IdentityStore:
             if row is None:
                 raise InvalidClientError("Tambox-enheten har ännu inte hittats")
             panels = self._panel_ids_locked(device_id)
-        return DiscoveredDevice(row[0], row[1], row[2], row[3], row[4], panels)
+            station_id = self._station_id_locked(device_id)
+        return DiscoveredDevice(row[0], row[1], row[2], row[3], row[4], panels, station_id)
 
     def discovered_devices(self) -> tuple[DiscoveredDevice, ...]:
         with self._lock:
@@ -503,7 +528,15 @@ class IdentityStore:
                 """
             ).fetchall()
             return tuple(
-                DiscoveredDevice(row[0], row[1], row[2], row[3], row[4], self._panel_ids_locked(row[0]))
+                DiscoveredDevice(
+                    row[0],
+                    row[1],
+                    row[2],
+                    row[3],
+                    row[4],
+                    self._panel_ids_locked(row[0]),
+                    self._station_id_locked(row[0]),
+                )
                 for row in rows
             )
 
@@ -512,6 +545,7 @@ class IdentityStore:
         device_code: str,
         panel_ids: tuple[str, ...],
         *,
+        station_id: str | None = None,
         now: datetime | None = None,
     ) -> PairedClient:
         normalized = _normalize_device_code(device_code)
@@ -532,6 +566,7 @@ class IdentityStore:
             DeviceKind.ESP32_PANEL,
             internal_credential,
             panel_ids,
+            station_id=station_id,
             now=now,
         )
 
@@ -681,6 +716,13 @@ class IdentityStore:
             (client_id,),
         ).fetchall()
         return tuple(row[0] for row in rows)
+
+    def _station_id_locked(self, client_id: str) -> str | None:
+        row = self._connection.execute(
+            "SELECT station_id FROM clients WHERE client_id = ? AND enabled = 1",
+            (client_id,),
+        ).fetchone()
+        return row[0] if row else None
 
 
 class PairingService:
