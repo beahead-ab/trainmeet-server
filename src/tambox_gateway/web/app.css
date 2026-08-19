@@ -978,7 +978,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .tmbox-v2-status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 12px 0; }
 .tmbox-v2-status-grid dt { font-size: 11px; color: var(--muted); }
 .tmbox-v2-status-grid dd { margin: 2px 0 0; font-weight: 600; }
-.tmbox-v2-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tmbox-v2-track-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.tmbox-v2-track-picker button { min-height: 30px; padding: 0 10px; border-radius: 8px; }
+.tmbox-v2-track-picker button.active { background: var(--trainmeet); color: var(--primary-foreground); }
+.tmbox-v2-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
 .tmbox-v2-connection-picker { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .tmbox-v2-clearance-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
 .tmbox-v2-clearance-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--trainmeet-soft); }

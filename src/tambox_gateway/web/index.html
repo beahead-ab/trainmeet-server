@@ -623,21 +623,24 @@
               <div><dt>Förare på plats</dt><dd id="tmbox-v2-crew-ready">—</dd></div>
               <div><dt>Revision</dt><dd id="tmbox-v2-revision">—</dd></div>
             </dl>
-            <div class="tmbox-v2-actions">
-              <button type="button" data-tmbox-v2-action="position">A · Uppställt</button>
-              <button type="button" data-tmbox-v2-action="crew_ready">A · Förare på plats</button>
-              <label class="tmbox-v2-connection-picker">Begär mot
-                <select id="tmbox-v2-connection-select"></select>
-              </label>
-              <button type="button" data-tmbox-v2-action="request">A · Begär klarering</button>
-              <button type="button" data-tmbox-v2-action="departed">A · Avgått</button>
-              <button type="button" data-tmbox-v2-action="arrived">A · Ankommet</button>
-            </div>
+
+            <div class="tmbox-v2-track-picker" id="tmbox-v2-track-picker"></div>
+
+            <div class="tmbox-v2-actions" id="tmbox-v2-actions"></div>
+
+            <label class="tmbox-v2-connection-picker">Mot
+              <select id="tmbox-v2-connection-select"></select>
+            </label>
           </div>
 
           <div class="card" id="tmbox-v2-clearances">
             <h3>Aktiva klareringsärenden på stationen</h3>
             <ul id="tmbox-v2-clearance-list" class="tmbox-v2-clearance-list"></ul>
+          </div>
+
+          <div class="card" id="tmbox-v2-line-messages">
+            <h3>Linjemeddelanden</h3>
+            <ul id="tmbox-v2-line-message-list" class="tmbox-v2-clearance-list"></ul>
           </div>
 
           <p id="tmbox-v2-message" class="command-message" role="status"></p>
