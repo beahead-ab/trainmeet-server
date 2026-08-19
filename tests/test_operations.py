@@ -126,6 +126,78 @@ class OperationsStoreTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_crew_ready_is_declared_by_tkl_separately_from_positioned(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                shift = store.start_tkl_shift(
+                    "publication-a", "Dagl", "station-a", "Anna", "CDA TKL 1",
+                )
+                store.update_tkl_movement(
+                    "publication-a",
+                    "Dagl",
+                    "station-a",
+                    "movement-421-a",
+                    arrival="none",
+                    departure="positioned",
+                    actual_track="1B",
+                    updated_by="Anna",
+                    shift_id=shift["shift_id"],
+                    event_type="positioned",
+                )
+
+                declared = store.set_crew_ready(
+                    "publication-a",
+                    "Dagl",
+                    "station-a",
+                    "movement-421-a",
+                    crew_ready=True,
+                    updated_by="Anna",
+                    shift_id=shift["shift_id"],
+                )
+                self.assertTrue(declared["crew_ready"])
+
+                state = store.tkl_station_state("publication-a", "Dagl", "station-a")
+                movement = state["movements"]["movement-421-a"]
+                self.assertEqual(movement["departure"], "positioned")
+                self.assertTrue(movement["crewReady"])
+
+                store.set_crew_ready(
+                    "publication-a",
+                    "Dagl",
+                    "station-a",
+                    "movement-421-a",
+                    crew_ready=False,
+                    updated_by="Anna",
+                    shift_id=shift["shift_id"],
+                )
+                state = store.tkl_station_state("publication-a", "Dagl", "station-a")
+                self.assertFalse(state["movements"]["movement-421-a"]["crewReady"])
+                self.assertEqual(state["movements"]["movement-421-a"]["departure"], "positioned")
+            finally:
+                store.close()
+
+    def test_crew_ready_can_be_declared_before_any_movement_row_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                store.set_crew_ready(
+                    "publication-a",
+                    "Dagl",
+                    "station-a",
+                    "movement-421-a",
+                    crew_ready=True,
+                    updated_by="Anna",
+                    shift_id=None,
+                )
+                movement = store.tkl_station_state(
+                    "publication-a", "Dagl", "station-a"
+                )["movements"]["movement-421-a"]
+                self.assertTrue(movement["crewReady"])
+                self.assertEqual(movement["departure"], "none")
+            finally:
+                store.close()
+
     def test_tkl_and_ranger_share_tåg_klart_but_only_ranger_requires_acknowledgement(self):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteOperationsStore(Path(directory) / "runtime.db")

@@ -109,6 +109,18 @@ class SQLiteOperationsStore:
                 ON train_readiness(publication_id, active_day, station_id, status);
             """
         )
+        movement_columns = {
+            row[1]
+            for row in self._connection.execute("PRAGMA table_info(tkl_movement_states)").fetchall()
+        }
+        if "crew_ready" not in movement_columns:
+            # TKL's own "lokförare på plats" declaration (protocol v2, decision
+            # B2). Deliberately a separate column from the ranger-facing
+            # train_readiness table above, not merged into it — TKL owns this
+            # end-to-end in TMBox, rangers get their own future panel/flow.
+            self._connection.execute(
+                "ALTER TABLE tkl_movement_states ADD COLUMN crew_ready INTEGER NOT NULL DEFAULT 0 CHECK(crew_ready IN (0, 1))"
+            )
 
     def ensure_publication(self, publication: RuntimePublication) -> None:
         with self._lock:
@@ -334,7 +346,7 @@ class SQLiteOperationsStore:
             movement_rows = self._connection.execute(
                 """
                 SELECT movement_id, arrival_status, departure_status, actual_track,
-                       updated_by, updated_at
+                       crew_ready, updated_by, updated_at
                 FROM tkl_movement_states
                 WHERE publication_id = ? AND active_day = ? AND station_id = ?
                 ORDER BY updated_at
@@ -349,8 +361,9 @@ class SQLiteOperationsStore:
                     "arrival": row[1],
                     "departure": row[2],
                     "actualTrack": row[3],
-                    "updated_by": row[4],
-                    "updated_at": row[5],
+                    "crewReady": bool(row[4]),
+                    "updated_by": row[5],
+                    "updated_at": row[6],
                 }
                 for row in movement_rows
             },
@@ -556,6 +569,73 @@ class SQLiteOperationsStore:
             "arrival": arrival,
             "departure": departure,
             "actualTrack": track,
+            "updated_by": updated_by,
+            "updated_at": now,
+        }
+
+    def set_crew_ready(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+        movement_id: str,
+        *,
+        crew_ready: bool,
+        updated_by: str,
+        shift_id: str | None,
+        event_type: str = "crew_ready_set",
+    ) -> dict[str, Any]:
+        """TKL's own 'lokförare på plats' declaration (protocol v2, decision B2).
+
+        Kept separate from update_tkl_movement so a caller never has to fetch
+        and re-supply arrival/departure just to touch this field, and from
+        train_readiness (the ranger-facing table) so the two flows can never
+        collide.
+        """
+        now = _now_iso()
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    """
+                    INSERT INTO tkl_movement_states(
+                        publication_id, active_day, movement_id, station_id,
+                        arrival_status, departure_status, actual_track,
+                        crew_ready, updated_by, updated_at
+                    ) VALUES (?, ?, ?, ?, 'none', 'none', NULL, ?, ?, ?)
+                    ON CONFLICT(publication_id, active_day, movement_id) DO UPDATE SET
+                        station_id = excluded.station_id,
+                        crew_ready = excluded.crew_ready,
+                        updated_by = excluded.updated_by,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        publication_id,
+                        active_day,
+                        movement_id,
+                        station_id,
+                        1 if crew_ready else 0,
+                        updated_by,
+                        now,
+                    ),
+                )
+                self._insert_tkl_event_locked(
+                    publication_id,
+                    active_day,
+                    station_id,
+                    event_type,
+                    {"crew_ready": crew_ready, "updated_by": updated_by},
+                    shift_id=shift_id,
+                    movement_id=movement_id,
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return {
+            "movement_id": movement_id,
+            "crew_ready": crew_ready,
             "updated_by": updated_by,
             "updated_at": now,
         }
