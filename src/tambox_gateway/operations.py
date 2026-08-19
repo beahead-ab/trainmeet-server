@@ -684,7 +684,10 @@ class SQLiteOperationsStore:
                 raise
         return {
             "movement_id": movement_id,
-            "crew_ready": crew_ready,
+            # crewReady, not crew_ready: must match tkl_station_state()'s
+            # movement dict shape (actualTrack/crewReady) so a caller can
+            # merge a mutation response straight into a read snapshot.
+            "crewReady": crew_ready,
             "revision": revision,
             "updated_by": updated_by,
             "updated_at": now,

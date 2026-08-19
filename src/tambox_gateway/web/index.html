@@ -139,6 +139,7 @@
               <p>Enheter</p>
               <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="devices" data-requires-runtime><span aria-hidden="true">⌁</span>Tamboxar</button>
               <button type="button" class="view-tab server-nav-item" data-view="simulator" data-requires-runtime><span aria-hidden="true">▦</span>Tambox-simulering</button>
+              <button type="button" class="view-tab server-nav-item" data-view="tmbox-v2" data-requires-runtime><span aria-hidden="true">▨</span>TMBox v2 (protokoll v2)</button>
               <a class="server-nav-link" href="/tkl/" data-requires-runtime><span aria-hidden="true">▤</span>TKL-terminal</a>
               <button type="button" class="view-tab server-nav-item" data-view="displays" data-requires-runtime><span aria-hidden="true">▣</span>Skärmar och klocka</button>
 
@@ -589,6 +590,57 @@
             <div id="keypad" class="keypad" aria-label="Tambox tangentbord"></div>
           </article>
           <p id="command-message" class="command-message" role="status"></p>
+        </section>
+
+        <section id="tmbox-v2-view" class="view-panel hidden" aria-live="polite">
+          <div class="simulator-intro">
+            <div>
+              <p class="eyebrow">PROTOKOLL V2 · UNDER UTVECKLING</p>
+              <h2>TMBox v2</h2>
+              <p>Tågcentrerad klient enligt <a href="https://github.com/beahead-ab/trainmeet-tambox/blob/main/docs/underlag/protokoll-v2-kontrakt.md" target="_blank" rel="noopener">protokoll v2-kontraktet</a>: stationsbunden, inte panelbunden. Referensflödet är tåg 421 Charlottendal → Vagnsta.</p>
+            </div>
+            <div class="panel-picker card">
+              <label for="tmbox-v2-station-select">Station</label>
+              <select id="tmbox-v2-station-select"></select>
+            </div>
+          </div>
+
+          <div class="card" id="tmbox-v2-lookup">
+            <label for="tmbox-v2-train-number">Tågnummer</label>
+            <div class="tmbox-v2-lookup-row">
+              <input id="tmbox-v2-train-number" type="text" inputmode="numeric" placeholder="421" maxlength="5">
+              <button id="tmbox-v2-lookup-button" type="button">Slå upp</button>
+            </div>
+            <p id="tmbox-v2-lookup-message" class="command-message" role="status"></p>
+          </div>
+
+          <div class="card hidden" id="tmbox-v2-movement">
+            <h3 id="tmbox-v2-movement-title">—</h3>
+            <dl class="tmbox-v2-status-grid">
+              <div><dt>Ankomst</dt><dd id="tmbox-v2-arrival">—</dd></div>
+              <div><dt>Avgång</dt><dd id="tmbox-v2-departure">—</dd></div>
+              <div><dt>Spår</dt><dd id="tmbox-v2-track">—</dd></div>
+              <div><dt>Förare på plats</dt><dd id="tmbox-v2-crew-ready">—</dd></div>
+              <div><dt>Revision</dt><dd id="tmbox-v2-revision">—</dd></div>
+            </dl>
+            <div class="tmbox-v2-actions">
+              <button type="button" data-tmbox-v2-action="position">A · Uppställt</button>
+              <button type="button" data-tmbox-v2-action="crew_ready">A · Förare på plats</button>
+              <label class="tmbox-v2-connection-picker">Begär mot
+                <select id="tmbox-v2-connection-select"></select>
+              </label>
+              <button type="button" data-tmbox-v2-action="request">A · Begär klarering</button>
+              <button type="button" data-tmbox-v2-action="departed">A · Avgått</button>
+              <button type="button" data-tmbox-v2-action="arrived">A · Ankommet</button>
+            </div>
+          </div>
+
+          <div class="card" id="tmbox-v2-clearances">
+            <h3>Aktiva klareringsärenden på stationen</h3>
+            <ul id="tmbox-v2-clearance-list" class="tmbox-v2-clearance-list"></ul>
+          </div>
+
+          <p id="tmbox-v2-message" class="command-message" role="status"></p>
         </section>
 
         <section id="displays-view" class="view-panel hidden">

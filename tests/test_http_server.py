@@ -334,7 +334,7 @@ class HTTPServerTests(unittest.TestCase):
             client,
             {"station_id": "station-a", "movement_id": "movement-101-a", "action": "crew_ready", "crew_ready": True},
         )
-        self.assertTrue(ready["movement"]["crew_ready"])
+        self.assertTrue(ready["movement"]["crewReady"])
 
         departed = self.application.v2_movement_command(
             client, {"station_id": "station-a", "movement_id": "movement-101-a", "action": "departed"}

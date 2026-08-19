@@ -829,12 +829,13 @@ async function openApplication() {
 }
 
 function selectView(view) {
-  const selected = ["overview", "admin", "simulator", "displays"].includes(view) ? view : "overview";
+  const selected = ["overview", "admin", "simulator", "tmbox-v2", "displays"].includes(view) ? view : "overview";
   state.selectedView = selected;
   localStorage.setItem("trainmeet.view", selected);
   document.querySelector("#overview-view").classList.toggle("hidden", selected !== "overview");
   document.querySelector("#admin-view").classList.toggle("hidden", selected !== "admin");
   document.querySelector("#simulator-view").classList.toggle("hidden", selected !== "simulator");
+  document.querySelector("#tmbox-v2-view").classList.toggle("hidden", selected !== "tmbox-v2");
   document.querySelector("#displays-view").classList.toggle("hidden", selected !== "displays");
   document.querySelectorAll(".view-tab").forEach((button) => {
     const adminSectionMatches = button.dataset.view !== "admin"
@@ -842,6 +843,7 @@ function selectView(view) {
     button.classList.toggle("active", button.dataset.view === selected && adminSectionMatches);
   });
   if (selected === "admin") selectAdminSection(state.selectedAdminSection);
+  if (selected === "tmbox-v2") refreshTmboxV2();
   appView.classList.remove("sidebar-open");
 }
 
@@ -2945,3 +2947,229 @@ async function initDisplay() {
 
 if (displayKind && ["topology", "graph", "clock", "dashboard"].includes(displayKind)) initDisplay();
 else bootstrap();
+
+// --- TMBox v2 (protokoll v2) — under utveckling ---------------------------
+// Ren tillägg: separat vy, egna endpoints (/v1/tmbox-v2/...), rör aldrig
+// v1-simulatorns state eller DOM. Se docs/underlag/protokoll-v2-kontrakt.md
+// i trainmeet-tambox. Referensflöde: tåg 421 Charlottendal -> Vagnsta.
+
+const tmboxV2StationSelect = document.querySelector("#tmbox-v2-station-select");
+const tmboxV2TrainNumberInput = document.querySelector("#tmbox-v2-train-number");
+const tmboxV2LookupButton = document.querySelector("#tmbox-v2-lookup-button");
+const tmboxV2LookupMessage = document.querySelector("#tmbox-v2-lookup-message");
+const tmboxV2MovementCard = document.querySelector("#tmbox-v2-movement");
+const tmboxV2MovementTitle = document.querySelector("#tmbox-v2-movement-title");
+const tmboxV2Arrival = document.querySelector("#tmbox-v2-arrival");
+const tmboxV2Departure = document.querySelector("#tmbox-v2-departure");
+const tmboxV2Track = document.querySelector("#tmbox-v2-track");
+const tmboxV2CrewReady = document.querySelector("#tmbox-v2-crew-ready");
+const tmboxV2Revision = document.querySelector("#tmbox-v2-revision");
+const tmboxV2ConnectionSelect = document.querySelector("#tmbox-v2-connection-select");
+const tmboxV2ClearanceList = document.querySelector("#tmbox-v2-clearance-list");
+const tmboxV2Message = document.querySelector("#tmbox-v2-message");
+
+const tmboxV2State = {
+  stationId: localStorage.getItem("tmboxV2.stationId") || null,
+  movement: null,
+};
+
+tmboxV2StationSelect?.addEventListener("change", () => {
+  tmboxV2State.stationId = tmboxV2StationSelect.value;
+  localStorage.setItem("tmboxV2.stationId", tmboxV2State.stationId);
+  tmboxV2State.movement = null;
+  tmboxV2MovementCard.classList.add("hidden");
+  refreshTmboxV2();
+});
+
+tmboxV2LookupButton?.addEventListener("click", () => tmboxV2Lookup());
+tmboxV2TrainNumberInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") tmboxV2Lookup();
+});
+
+document.querySelectorAll("[data-tmbox-v2-action]").forEach((button) => {
+  button.addEventListener("click", () => tmboxV2Act(button.dataset.tmboxV2Action));
+});
+
+tmboxV2ClearanceList?.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-clearance-action]");
+  if (!button) return;
+  tmboxV2ClearanceAction(button.dataset.clearanceAction, button.dataset.clearanceId);
+});
+
+async function refreshTmboxV2() {
+  if (!tmboxV2StationSelect) return;
+  if (!state.overviewSnapshot) {
+    const response = await fetch("/v1/display", { cache: "no-store" });
+    if (response.ok) state.overviewSnapshot = await response.json();
+  }
+  const stations = state.overviewSnapshot?.stations || [];
+  if (!stations.length) return;
+
+  const previousValue = tmboxV2StationSelect.value;
+  tmboxV2StationSelect.innerHTML = stations
+    .map((station) => `<option value="${station.id}">${station.name} (${station.code})</option>`)
+    .join("");
+  if (!tmboxV2State.stationId || !stations.some((station) => station.id === tmboxV2State.stationId)) {
+    tmboxV2State.stationId = stations.some((station) => station.id === previousValue)
+      ? previousValue
+      : stations[0].id;
+  }
+  tmboxV2StationSelect.value = tmboxV2State.stationId;
+
+  const connections = (state.overviewSnapshot?.connections || []).filter(
+    (connection) =>
+      connection.station_a_id === tmboxV2State.stationId || connection.station_b_id === tmboxV2State.stationId,
+  );
+  tmboxV2ConnectionSelect.innerHTML = connections
+    .map((connection) => {
+      const otherId =
+        connection.station_a_id === tmboxV2State.stationId ? connection.station_b_id : connection.station_a_id;
+      const other = stations.find((station) => station.id === otherId);
+      return `<option value="${connection.id}">${other ? other.code : otherId}</option>`;
+    })
+    .join("");
+
+  try {
+    const response = await authorizedFetch(
+      `/v1/tmbox-v2/station?station_id=${encodeURIComponent(tmboxV2State.stationId)}`,
+    );
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Kunde inte hämta stationens status");
+    renderTmboxV2Clearances(payload.active_clearances || []);
+    setMessage(tmboxV2Message, "");
+  } catch (error) {
+    setMessage(tmboxV2Message, error.message, "error");
+  }
+}
+
+async function tmboxV2Lookup() {
+  const trainNumber = tmboxV2TrainNumberInput.value.trim();
+  if (!trainNumber || !tmboxV2State.stationId) return;
+  setMessage(tmboxV2LookupMessage, "");
+  try {
+    const response = await authorizedFetch(
+      `/v1/tmbox-v2/train-lookup?station_id=${encodeURIComponent(tmboxV2State.stationId)}` +
+        `&train_number=${encodeURIComponent(trainNumber)}`,
+    );
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Uppslaget misslyckades");
+    if (!payload.matches.length) {
+      tmboxV2State.movement = null;
+      tmboxV2MovementCard.classList.add("hidden");
+      setMessage(tmboxV2LookupMessage, `TAG ${trainNumber} HITTAS INTE`, "error");
+      return;
+    }
+    tmboxV2State.movement = payload.matches[0];
+    renderTmboxV2Movement();
+  } catch (error) {
+    setMessage(tmboxV2LookupMessage, error.message, "error");
+  }
+}
+
+function renderTmboxV2Movement() {
+  const movement = tmboxV2State.movement;
+  if (!movement) {
+    tmboxV2MovementCard.classList.add("hidden");
+    return;
+  }
+  tmboxV2MovementCard.classList.remove("hidden");
+  tmboxV2MovementTitle.textContent = `TÅG ${movement.train_number}`;
+  tmboxV2Arrival.textContent = movement.arrival || "none";
+  tmboxV2Departure.textContent = movement.departure || "none";
+  tmboxV2Track.textContent = movement.actualTrack || movement.track || "—";
+  tmboxV2CrewReady.textContent = movement.crewReady ? "JA" : "NEJ";
+  tmboxV2Revision.textContent = movement.revision ?? "—";
+}
+
+async function tmboxV2Act(action) {
+  if (!tmboxV2State.movement) return;
+  setMessage(tmboxV2Message, "");
+  try {
+    if (action === "request") {
+      const connectionId = tmboxV2ConnectionSelect.value;
+      if (!connectionId) throw new Error("Ingen sträcka vald");
+      const response = await authorizedFetch("/v1/tmbox-v2/clearance/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          station_id: tmboxV2State.stationId,
+          movement_id: tmboxV2State.movement.id,
+          connection_id: connectionId,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || "Begäran avvisades");
+      if (payload.clearance?.status === "rejected") {
+        throw new Error(
+          payload.clearance.reason === "connection_busy" ? "STRACKA UPPTAGEN" : "BEGARAN AVVISAD",
+        );
+      }
+      setMessage(tmboxV2Message, "BEGÄRAN SKICKAD, VÄNTAR PÅ SVAR", "success");
+      await refreshTmboxV2();
+      return;
+    }
+    const response = await authorizedFetch("/v1/tmbox-v2/movement", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        station_id: tmboxV2State.stationId,
+        movement_id: tmboxV2State.movement.id,
+        action,
+        ...(action === "crew_ready" ? { crew_ready: true } : {}),
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Kommandot avvisades");
+    tmboxV2State.movement = { ...tmboxV2State.movement, ...payload.movement };
+    renderTmboxV2Movement();
+    setMessage(tmboxV2Message, "OK", "success");
+  } catch (error) {
+    setMessage(tmboxV2Message, error.message, "error");
+  }
+}
+
+function renderTmboxV2Clearances(clearances) {
+  if (!tmboxV2ClearanceList) return;
+  if (!clearances.length) {
+    tmboxV2ClearanceList.innerHTML = "<li>Inga aktiva ärenden</li>";
+    return;
+  }
+  tmboxV2ClearanceList.innerHTML = clearances
+    .map((clearance) => {
+      const isReceiver = clearance.to_station_id === tmboxV2State.stationId;
+      let actions = "";
+      if (clearance.status === "waiting" && isReceiver) {
+        actions =
+          `<button data-clearance-action="accept" data-clearance-id="${clearance.clearance_id}">A=Klart</button>` +
+          `<button data-clearance-action="reject" data-clearance-id="${clearance.clearance_id}">B=Ej</button>`;
+      } else if (clearance.status === "waiting") {
+        actions = `<button data-clearance-action="cancel" data-clearance-id="${clearance.clearance_id}">Avbryt</button>`;
+      }
+      return (
+        `<li><span>${clearance.movement_id} · ${clearance.status}</span>` +
+        `<span class="tmbox-v2-clearance-actions">${actions}</span></li>`
+      );
+    })
+    .join("");
+}
+
+async function tmboxV2ClearanceAction(action, clearanceId) {
+  try {
+    const path = action === "cancel" ? "/v1/tmbox-v2/clearance/cancel" : "/v1/tmbox-v2/clearance/respond";
+    const body =
+      action === "cancel"
+        ? { clearance_id: clearanceId }
+        : { clearance_id: clearanceId, accept: action === "accept" };
+    const response = await authorizedFetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Åtgärden avvisades");
+    setMessage(tmboxV2Message, "OK", "success");
+    await refreshTmboxV2();
+  } catch (error) {
+    setMessage(tmboxV2Message, error.message, "error");
+  }
+}

@@ -155,7 +155,7 @@ class OperationsStoreTests(unittest.TestCase):
                     updated_by="Anna",
                     shift_id=shift["shift_id"],
                 )
-                self.assertTrue(declared["crew_ready"])
+                self.assertTrue(declared["crewReady"])
 
                 state = store.tkl_station_state("publication-a", "Dagl", "station-a")
                 movement = state["movements"]["movement-421-a"]
