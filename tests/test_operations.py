@@ -430,6 +430,82 @@ class OperationsStoreTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_assign_track_and_reject_a_track_another_active_movement_holds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                assigned = store.assign_track(
+                    "publication-a", "Dagl", "station-a", "movement-421-a", "track-a-1a",
+                    updated_by="Anna", shift_id=None,
+                )
+                self.assertEqual(assigned["status"], "assigned")
+                self.assertEqual(assigned["assignedTrackId"], "track-a-1a")
+
+                blocked = store.assign_track(
+                    "publication-a", "Dagl", "station-a", "movement-422-a", "track-a-1a",
+                    updated_by="Bertil", shift_id=None,
+                )
+                self.assertEqual(blocked, {"status": "rejected", "reason": "track_occupied"})
+
+                store.update_tkl_movement(
+                    "publication-a", "Dagl", "station-a", "movement-421-a",
+                    arrival="none", departure="departed", actual_track="1A",
+                    updated_by="Anna", shift_id=None, event_type="departed",
+                )
+                freed = store.assign_track(
+                    "publication-a", "Dagl", "station-a", "movement-422-a", "track-a-1a",
+                    updated_by="Bertil", shift_id=None,
+                )
+                self.assertEqual(freed["status"], "assigned")
+            finally:
+                store.close()
+
+    def test_reassigning_the_same_movement_to_a_new_track_does_not_block_itself(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                store.assign_track(
+                    "publication-a", "Dagl", "station-a", "movement-421-a", "track-a-1a",
+                    updated_by="Anna", shift_id=None,
+                )
+                changed = store.assign_track(
+                    "publication-a", "Dagl", "station-a", "movement-421-a", "track-a-1b",
+                    updated_by="Anna", shift_id=None,
+                )
+                self.assertEqual(changed["status"], "assigned")
+                self.assertEqual(changed["revision"], 2)
+                self.assertEqual(
+                    store.tkl_station_state("publication-a", "Dagl", "station-a")
+                    ["movements"]["movement-421-a"]["assignedTrackId"],
+                    "track-a-1b",
+                )
+            finally:
+                store.close()
+
+    def test_line_available_message_is_delivered_then_acknowledged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                message = store.publish_line_message(
+                    "publication-a", "Dagl", "movement-428-b",
+                    "connection-a-b", "station-b", "station-a",
+                    sent_by="Bertil",
+                )
+                self.assertEqual(message["status"], "delivered_to_device")
+
+                at_a = store.active_line_messages_for_station("publication-a", "Dagl", "station-a")
+                self.assertEqual(len(at_a), 1)
+                at_b = store.active_line_messages_for_station("publication-a", "Dagl", "station-b")
+                self.assertEqual(len(at_b), 1)
+
+                acknowledged = store.acknowledge_line_message(message["message_id"])
+                self.assertEqual(acknowledged["status"], "display_acknowledged")
+                self.assertEqual(
+                    store.active_line_messages_for_station("publication-a", "Dagl", "station-a"), []
+                )
+            finally:
+                store.close()
+
 
 if __name__ == "__main__":
     unittest.main()

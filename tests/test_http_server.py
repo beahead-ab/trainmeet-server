@@ -398,6 +398,114 @@ class HTTPServerTests(unittest.TestCase):
         )
         self.assertEqual(reopened["clearance"]["status"], "waiting")
 
+    def test_v2_movement_command_approaching(self):
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        self.application.start_tkl_shift(
+            client, {"station_id": "station-b", "operator_name": "Bertil", "terminal_name": "LEK TKL"}
+        )
+
+        approaching = self.application.v2_movement_command(
+            client, {"station_id": "station-b", "movement_id": "movement-101-b", "action": "approaching"}
+        )
+        self.assertEqual(approaching["movement"]["arrival"], "approaching")
+
+        arrived = self.application.v2_movement_command(
+            client, {"station_id": "station-b", "movement_id": "movement-101-b", "action": "arrived"}
+        )
+        self.assertEqual(arrived["movement"]["arrival"], "arrived")
+
+    def test_v2_assign_track_validates_catalog_and_occupancy(self):
+        package = runtime_package_v2()
+        package["tracks"] = [
+            {"id": "track-a-1a", "display_label": "1A", "station_id": "station-a", "sort_order": 10},
+            {"id": "track-a-1b", "display_label": "1B", "station_id": "station-a", "sort_order": 20},
+        ]
+        # movement-202-a is Sön-only in the fixture; make it a same-day
+        # second movement at station-a so the occupancy check has two real
+        # candidates to work with.
+        for train in package["trains"]:
+            if train["id"] == "movement-202-a":
+                train["days"] = "Dagl"
+        for route in package["routes"]:
+            if route["train_number"] == "202":
+                route["days"] = "Dagl"
+        publication = self.runtime_store.install(package)
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        self.application.start_tkl_shift(
+            client, {"station_id": "station-a", "operator_name": "Anna", "terminal_name": "CDA TKL"}
+        )
+
+        with self.assertRaises(HTTPAPIError) as raised:
+            self.application.v2_assign_track(
+                client,
+                {"station_id": "station-a", "movement_id": "movement-101-a", "track_id": "not-a-track"},
+            )
+        self.assertEqual(raised.exception.code, "unknown_track")
+
+        assigned = self.application.v2_assign_track(
+            client, {"station_id": "station-a", "movement_id": "movement-101-a", "track_id": "track-a-1a"}
+        )
+        self.assertEqual(assigned["movement"]["status"], "assigned")
+
+        occupied = self.application.v2_assign_track(
+            client, {"station_id": "station-a", "movement_id": "movement-202-a", "track_id": "track-a-1a"}
+        )
+        self.assertEqual(occupied["movement"], {"status": "rejected", "reason": "track_occupied"})
+
+        moved = self.application.v2_assign_track(
+            client, {"station_id": "station-a", "movement_id": "movement-101-a", "track_id": "track-a-1b"}
+        )
+        self.assertEqual(moved["movement"]["assignedTrackId"], "track-a-1b")
+
+        freed = self.application.v2_assign_track(
+            client, {"station_id": "station-a", "movement_id": "movement-202-a", "track_id": "track-a-1a"}
+        )
+        self.assertEqual(freed["movement"]["status"], "assigned")
+
+    def test_v2_line_available_is_a_one_way_notice_not_a_clearance(self):
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        for station_id, operator_name in (("station-a", "Anna"), ("station-b", "Bertil")):
+            self.application.start_tkl_shift(
+                client, {"station_id": station_id, "operator_name": operator_name, "terminal_name": station_id}
+            )
+
+        published = self.application.v2_line_publish(
+            client,
+            {"station_id": "station-b", "movement_id": "movement-101-b", "connection_id": "connection-a-b"},
+        )
+        self.assertEqual(published["line_message"]["status"], "delivered_to_device")
+        self.assertEqual(published["line_message"]["to_station_id"], "station-a")
+
+        at_a = self.application.v2_station_snapshot(client, "station-a")
+        self.assertEqual(len(at_a["line_messages"]), 1)
+
+        acknowledged = self.application.v2_line_acknowledge(
+            client, {"message_id": published["line_message"]["message_id"]}
+        )
+        self.assertEqual(acknowledged["line_message"]["status"], "display_acknowledged")
+
+        at_a_after = self.application.v2_station_snapshot(client, "station-a")
+        self.assertEqual(at_a_after["line_messages"], [])
+
+    def test_v2_station_snapshot_exposes_connection_dispatch_mode(self):
+        package = runtime_package_v2()
+        package["connections"][0]["dispatch_mode_override"] = "direct"
+        publication = self.runtime_store.install(package)
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        self.application.start_tkl_shift(
+            client, {"station_id": "station-a", "operator_name": "Anna", "terminal_name": "CDA TKL"}
+        )
+
+        snapshot = self.application.v2_station_snapshot(client, "station-a")
+        self.assertEqual(snapshot["connections"][0]["dispatch_mode"], "direct")
+        self.assertEqual(snapshot["connections"][0]["other_station_code"], "LEK")
+
     def test_v2_station_access_is_enforced_for_non_admin_clients(self):
         publication = self.runtime_store.install(runtime_package_v2())
         self.operations_store.ensure_publication(publication)

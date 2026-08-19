@@ -132,6 +132,25 @@ class SQLiteOperationsStore:
                 ON clearances(publication_id, active_day, channel_id, status);
             CREATE INDEX IF NOT EXISTS clearances_by_movement
                 ON clearances(publication_id, active_day, movement_id);
+            CREATE TABLE IF NOT EXISTS line_messages (
+                message_id TEXT PRIMARY KEY,
+                publication_id TEXT NOT NULL,
+                active_day TEXT NOT NULL,
+                movement_id TEXT NOT NULL,
+                connection_id TEXT NOT NULL,
+                from_station_id TEXT NOT NULL,
+                to_station_id TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN (
+                    'delivered_to_device', 'display_acknowledged'
+                )),
+                sent_by TEXT NOT NULL,
+                sent_at TEXT NOT NULL,
+                acknowledged_at TEXT,
+                revision INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS line_messages_by_station
+                ON line_messages(publication_id, active_day, to_station_id, status);
             """
         )
         movement_columns = {
@@ -151,6 +170,13 @@ class SQLiteOperationsStore:
             # any other movement's or station's revision.
             self._connection.execute(
                 "ALTER TABLE tkl_movement_states ADD COLUMN revision INTEGER NOT NULL DEFAULT 1"
+            )
+        if "assigned_track_id" not in movement_columns:
+            # TKL's chosen track for today's run (monsterprompt §9.3), distinct
+            # from actual_track (where the train really ended up). Validated
+            # against the runtime's track catalog by the caller, not here.
+            self._connection.execute(
+                "ALTER TABLE tkl_movement_states ADD COLUMN assigned_track_id TEXT"
             )
 
     def ensure_publication(self, publication: RuntimePublication) -> None:
@@ -377,7 +403,7 @@ class SQLiteOperationsStore:
             movement_rows = self._connection.execute(
                 """
                 SELECT movement_id, arrival_status, departure_status, actual_track,
-                       crew_ready, revision, updated_by, updated_at
+                       crew_ready, revision, updated_by, updated_at, assigned_track_id
                 FROM tkl_movement_states
                 WHERE publication_id = ? AND active_day = ? AND station_id = ?
                 ORDER BY updated_at
@@ -396,6 +422,7 @@ class SQLiteOperationsStore:
                     "revision": row[5],
                     "updated_by": row[6],
                     "updated_at": row[7],
+                    "assignedTrackId": row[8],
                 }
                 for row in movement_rows
             },
@@ -693,6 +720,81 @@ class SQLiteOperationsStore:
             "updated_at": now,
         }
 
+    def assign_track(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+        movement_id: str,
+        track_id: str,
+        *,
+        updated_by: str,
+        shift_id: str | None,
+        event_type: str = "track_assigned",
+    ) -> dict[str, Any]:
+        """TKL's chosen track for today's run (monsterprompt §9.2/§9.3).
+
+        Rejects a track another not-yet-departed movement at the same
+        station/day already has assigned — the "SPAR UPPTAG" case in the
+        flow reference. Track-catalog membership is validated by the HTTP
+        layer, which has the SessionConfig; this store only knows ids.
+        """
+        now = _now_iso()
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                busy = self._connection.execute(
+                    """
+                    SELECT movement_id FROM tkl_movement_states
+                    WHERE publication_id = ? AND active_day = ? AND station_id = ?
+                      AND assigned_track_id = ? AND movement_id != ?
+                      AND departure_status != 'departed'
+                    """,
+                    (publication_id, active_day, station_id, track_id, movement_id),
+                ).fetchone()
+                if busy is not None:
+                    self._connection.execute("COMMIT")
+                    return {"status": "rejected", "reason": "track_occupied"}
+                self._connection.execute(
+                    """
+                    INSERT INTO tkl_movement_states(
+                        publication_id, active_day, movement_id, station_id,
+                        arrival_status, departure_status, actual_track,
+                        assigned_track_id, revision, updated_by, updated_at
+                    ) VALUES (?, ?, ?, ?, 'none', 'none', NULL, ?, 1, ?, ?)
+                    ON CONFLICT(publication_id, active_day, movement_id) DO UPDATE SET
+                        station_id = excluded.station_id,
+                        assigned_track_id = excluded.assigned_track_id,
+                        revision = tkl_movement_states.revision + 1,
+                        updated_by = excluded.updated_by,
+                        updated_at = excluded.updated_at
+                    """,
+                    (publication_id, active_day, movement_id, station_id, track_id, updated_by, now),
+                )
+                revision = self._connection.execute(
+                    """
+                    SELECT revision FROM tkl_movement_states
+                    WHERE publication_id = ? AND active_day = ? AND movement_id = ?
+                    """,
+                    (publication_id, active_day, movement_id),
+                ).fetchone()[0]
+                self._insert_tkl_event_locked(
+                    publication_id, active_day, station_id, event_type,
+                    {"assigned_track_id": track_id, "updated_by": updated_by},
+                    shift_id=shift_id, movement_id=movement_id,
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return {
+            "status": "assigned",
+            "movement_id": movement_id,
+            "assignedTrackId": track_id,
+            "revision": revision,
+        }
+
     @staticmethod
     def channel_id(connection_id: str, track_type: str, from_station_id: str) -> str:
         """A single-track connection has one shared channel; a double-track
@@ -924,6 +1026,108 @@ class SQLiteOperationsStore:
             """,
             (now.isoformat(), publication_id, active_day, now.isoformat()),
         )
+
+    def publish_line_message(
+        self,
+        publication_id: str,
+        active_day: str,
+        movement_id: str,
+        connection_id: str,
+        from_station_id: str,
+        to_station_id: str,
+        *,
+        sent_by: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Ensidigt 'linjen är ledig' (monsterprompt §12.2/protokoll v2 §8.3).
+
+        No 'waiting' status and no busy-check against another request — a
+        one-way notice is never a clearance decision. Starts delivered
+        (this is a synchronous HTTP simulator, not a real device rundtrip)
+        and only distinguishes sent vs. display-acknowledged.
+        """
+        now = now or datetime.now(timezone.utc)
+        message_id = str(uuid4())
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    """
+                    INSERT INTO line_messages(
+                        message_id, publication_id, active_day, movement_id,
+                        connection_id, from_station_id, to_station_id, status,
+                        sent_by, sent_at, revision, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'delivered_to_device', ?, ?, 1, ?)
+                    """,
+                    (
+                        message_id, publication_id, active_day, movement_id,
+                        connection_id, from_station_id, to_station_id,
+                        sent_by, now.isoformat(), now.isoformat(),
+                    ),
+                )
+                self._insert_tkl_event_locked(
+                    publication_id, active_day, from_station_id, "line_available_published",
+                    {"message_id": message_id, "to_station_id": to_station_id},
+                    movement_id=movement_id,
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return self.line_message(message_id)
+
+    def acknowledge_line_message(self, message_id: str, *, now: datetime | None = None) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    """
+                    UPDATE line_messages
+                    SET status = 'display_acknowledged', acknowledged_at = ?,
+                        revision = revision + 1, updated_at = ?
+                    WHERE message_id = ? AND status != 'display_acknowledged'
+                    """,
+                    (now.isoformat(), now.isoformat(), message_id),
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return self.line_message(message_id)
+
+    def line_message(self, message_id: str) -> dict[str, Any]:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT message_id, movement_id, connection_id, from_station_id,
+                       to_station_id, status, sent_by, sent_at, acknowledged_at, revision
+                FROM line_messages WHERE message_id = ?
+                """,
+                (message_id,),
+            ).fetchone()
+        if row is None:
+            raise ValueError("Okänt linjemeddelande")
+        return _line_message_from_row(row)
+
+    def active_line_messages_for_station(
+        self, publication_id: str, active_day: str, station_id: str
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT message_id, movement_id, connection_id, from_station_id,
+                       to_station_id, status, sent_by, sent_at, acknowledged_at, revision
+                FROM line_messages
+                WHERE publication_id = ? AND active_day = ? AND status != 'display_acknowledged'
+                  AND (from_station_id = ? OR to_station_id = ?)
+                ORDER BY sent_at
+                """,
+                (publication_id, active_day, station_id, station_id),
+            ).fetchall()
+        return [_line_message_from_row(row) for row in rows]
 
     def train_readiness(
         self,
@@ -1207,6 +1411,21 @@ def _clearance_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
         "revision": row[12],
         "publication_id": row[13],
         "active_day": row[14],
+    }
+
+
+def _line_message_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
+    return {
+        "message_id": row[0],
+        "movement_id": row[1],
+        "connection_id": row[2],
+        "from_station_id": row[3],
+        "to_station_id": row[4],
+        "status": row[5],
+        "sent_by": row[6],
+        "sent_at": row[7],
+        "acknowledged_at": row[8],
+        "revision": row[9],
     }
 
 
