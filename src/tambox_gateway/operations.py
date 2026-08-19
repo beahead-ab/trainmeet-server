@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -107,6 +107,31 @@ class SQLiteOperationsStore:
             );
             CREATE INDEX IF NOT EXISTS train_readiness_for_station
                 ON train_readiness(publication_id, active_day, station_id, status);
+            CREATE TABLE IF NOT EXISTS clearances (
+                clearance_id TEXT PRIMARY KEY,
+                publication_id TEXT NOT NULL,
+                active_day TEXT NOT NULL,
+                movement_id TEXT NOT NULL,
+                connection_id TEXT NOT NULL,
+                channel_id TEXT NOT NULL,
+                from_station_id TEXT NOT NULL,
+                to_station_id TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN (
+                    'waiting', 'approved', 'rejected', 'cancelled', 'expired',
+                    'invalidated_by_revision'
+                )),
+                requested_by TEXT NOT NULL,
+                requested_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                responded_by TEXT,
+                responded_at TEXT,
+                revision INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS clearances_by_channel
+                ON clearances(publication_id, active_day, channel_id, status);
+            CREATE INDEX IF NOT EXISTS clearances_by_movement
+                ON clearances(publication_id, active_day, movement_id);
             """
         )
         movement_columns = {
@@ -120,6 +145,12 @@ class SQLiteOperationsStore:
             # end-to-end in TMBox, rangers get their own future panel/flow.
             self._connection.execute(
                 "ALTER TABLE tkl_movement_states ADD COLUMN crew_ready INTEGER NOT NULL DEFAULT 0 CHECK(crew_ready IN (0, 1))"
+            )
+        if "revision" not in movement_columns:
+            # Per-movement revision (protocol v2 decision B4), independent of
+            # any other movement's or station's revision.
+            self._connection.execute(
+                "ALTER TABLE tkl_movement_states ADD COLUMN revision INTEGER NOT NULL DEFAULT 1"
             )
 
     def ensure_publication(self, publication: RuntimePublication) -> None:
@@ -346,7 +377,7 @@ class SQLiteOperationsStore:
             movement_rows = self._connection.execute(
                 """
                 SELECT movement_id, arrival_status, departure_status, actual_track,
-                       crew_ready, updated_by, updated_at
+                       crew_ready, revision, updated_by, updated_at
                 FROM tkl_movement_states
                 WHERE publication_id = ? AND active_day = ? AND station_id = ?
                 ORDER BY updated_at
@@ -362,8 +393,9 @@ class SQLiteOperationsStore:
                     "departure": row[2],
                     "actualTrack": row[3],
                     "crewReady": bool(row[4]),
-                    "updated_by": row[5],
-                    "updated_at": row[6],
+                    "revision": row[5],
+                    "updated_by": row[6],
+                    "updated_at": row[7],
                 }
                 for row in movement_rows
             },
@@ -530,6 +562,7 @@ class SQLiteOperationsStore:
                         arrival_status = excluded.arrival_status,
                         departure_status = excluded.departure_status,
                         actual_track = excluded.actual_track,
+                        revision = tkl_movement_states.revision + 1,
                         updated_by = excluded.updated_by,
                         updated_at = excluded.updated_at
                     """,
@@ -545,6 +578,13 @@ class SQLiteOperationsStore:
                         now,
                     ),
                 )
+                revision = self._connection.execute(
+                    """
+                    SELECT revision FROM tkl_movement_states
+                    WHERE publication_id = ? AND active_day = ? AND movement_id = ?
+                    """,
+                    (publication_id, active_day, movement_id),
+                ).fetchone()[0]
                 self._insert_tkl_event_locked(
                     publication_id,
                     active_day,
@@ -569,6 +609,7 @@ class SQLiteOperationsStore:
             "arrival": arrival,
             "departure": departure,
             "actualTrack": track,
+            "revision": revision,
             "updated_by": updated_by,
             "updated_at": now,
         }
@@ -606,6 +647,7 @@ class SQLiteOperationsStore:
                     ON CONFLICT(publication_id, active_day, movement_id) DO UPDATE SET
                         station_id = excluded.station_id,
                         crew_ready = excluded.crew_ready,
+                        revision = tkl_movement_states.revision + 1,
                         updated_by = excluded.updated_by,
                         updated_at = excluded.updated_at
                     """,
@@ -619,6 +661,13 @@ class SQLiteOperationsStore:
                         now,
                     ),
                 )
+                revision = self._connection.execute(
+                    """
+                    SELECT revision FROM tkl_movement_states
+                    WHERE publication_id = ? AND active_day = ? AND movement_id = ?
+                    """,
+                    (publication_id, active_day, movement_id),
+                ).fetchone()[0]
                 self._insert_tkl_event_locked(
                     publication_id,
                     active_day,
@@ -636,9 +685,240 @@ class SQLiteOperationsStore:
         return {
             "movement_id": movement_id,
             "crew_ready": crew_ready,
+            "revision": revision,
             "updated_by": updated_by,
             "updated_at": now,
         }
+
+    @staticmethod
+    def channel_id(connection_id: str, track_type: str, from_station_id: str) -> str:
+        """A single-track connection has one shared channel; a double-track
+        connection has one independent channel per direction (protocol v2
+        decision B7) — trains going opposite ways never block each other.
+        """
+        if track_type == "double":
+            return f"{connection_id}:{from_station_id}"
+        return connection_id
+
+    def request_clearance(
+        self,
+        publication_id: str,
+        active_day: str,
+        movement_id: str,
+        connection_id: str,
+        track_type: str,
+        from_station_id: str,
+        to_station_id: str,
+        *,
+        requested_by: str,
+        ttl_seconds: float,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        channel = self.channel_id(connection_id, track_type, from_station_id)
+        clearance_id = str(uuid4())
+        expires_at = now + timedelta(seconds=ttl_seconds)
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._expire_stale_locked(publication_id, active_day, now)
+                busy = self._connection.execute(
+                    """
+                    SELECT clearance_id FROM clearances
+                    WHERE publication_id = ? AND active_day = ? AND channel_id = ?
+                      AND status IN ('waiting', 'approved')
+                    """,
+                    (publication_id, active_day, channel),
+                ).fetchone()
+                if busy is not None:
+                    self._connection.execute("COMMIT")
+                    return {"status": "rejected", "reason": "connection_busy"}
+                self._connection.execute(
+                    """
+                    INSERT INTO clearances(
+                        clearance_id, publication_id, active_day, movement_id,
+                        connection_id, channel_id, from_station_id, to_station_id,
+                        status, requested_by, requested_at, expires_at, revision,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?, ?, 1, ?)
+                    """,
+                    (
+                        clearance_id,
+                        publication_id,
+                        active_day,
+                        movement_id,
+                        connection_id,
+                        channel,
+                        from_station_id,
+                        to_station_id,
+                        requested_by,
+                        now.isoformat(),
+                        expires_at.isoformat(),
+                        now.isoformat(),
+                    ),
+                )
+                self._insert_tkl_event_locked(
+                    publication_id,
+                    active_day,
+                    from_station_id,
+                    "clearance_requested",
+                    {"clearance_id": clearance_id, "channel_id": channel, "to_station_id": to_station_id},
+                    movement_id=movement_id,
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return self.clearance(clearance_id)
+
+    def respond_clearance(
+        self,
+        clearance_id: str,
+        *,
+        accept: bool,
+        responded_by: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._connection.execute(
+                    "SELECT status, publication_id, active_day FROM clearances WHERE clearance_id = ?",
+                    (clearance_id,),
+                ).fetchone()
+                if row is None or row[0] != "waiting":
+                    self._connection.execute("COMMIT")
+                    return {"status": "rejected", "reason": "request_no_longer_pending"}
+                self._expire_stale_locked(row[1], row[2], now)
+                refreshed = self._connection.execute(
+                    "SELECT status FROM clearances WHERE clearance_id = ?", (clearance_id,)
+                ).fetchone()
+                if refreshed[0] != "waiting":
+                    self._connection.execute("COMMIT")
+                    return {"status": "rejected", "reason": "request_no_longer_pending"}
+                new_status = "approved" if accept else "rejected"
+                self._connection.execute(
+                    """
+                    UPDATE clearances
+                    SET status = ?, responded_by = ?, responded_at = ?,
+                        revision = revision + 1, updated_at = ?
+                    WHERE clearance_id = ?
+                    """,
+                    (new_status, responded_by, now.isoformat(), now.isoformat(), clearance_id),
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return self.clearance(clearance_id)
+
+    def cancel_clearance(
+        self,
+        clearance_id: str,
+        *,
+        cancelled_by: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        now = now or datetime.now(timezone.utc)
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._connection.execute(
+                    "SELECT status FROM clearances WHERE clearance_id = ?", (clearance_id,)
+                ).fetchone()
+                if row is None or row[0] != "waiting":
+                    self._connection.execute("COMMIT")
+                    return {"status": "rejected", "reason": "request_no_longer_pending"}
+                self._connection.execute(
+                    """
+                    UPDATE clearances
+                    SET status = 'cancelled', responded_by = ?, responded_at = ?,
+                        revision = revision + 1, updated_at = ?
+                    WHERE clearance_id = ?
+                    """,
+                    (cancelled_by, now.isoformat(), now.isoformat(), clearance_id),
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return self.clearance(clearance_id)
+
+    def invalidate_clearance(self, clearance_id: str, *, now: datetime | None = None) -> dict[str, Any]:
+        """Called when a movement's track changes while its clearance is waiting
+        (gap-analys §3.2/§9.5) — the receiving station must see a fresh state,
+        never a silently stale one."""
+        now = now or datetime.now(timezone.utc)
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    """
+                    UPDATE clearances
+                    SET status = 'invalidated_by_revision', revision = revision + 1, updated_at = ?
+                    WHERE clearance_id = ? AND status = 'waiting'
+                    """,
+                    (now.isoformat(), clearance_id),
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return self.clearance(clearance_id)
+
+    def clearance(self, clearance_id: str) -> dict[str, Any]:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT clearance_id, movement_id, connection_id, channel_id,
+                       from_station_id, to_station_id, status, requested_by,
+                       requested_at, expires_at, responded_by, responded_at, revision
+                FROM clearances WHERE clearance_id = ?
+                """,
+                (clearance_id,),
+            ).fetchone()
+        if row is None:
+            raise ValueError("Okänt klareringsärende")
+        return _clearance_from_row(row)
+
+    def active_clearance_for_channel(
+        self,
+        publication_id: str,
+        active_day: str,
+        connection_id: str,
+        track_type: str,
+        from_station_id: str,
+    ) -> dict[str, Any] | None:
+        channel = self.channel_id(connection_id, track_type, from_station_id)
+        with self._lock:
+            self._expire_stale_locked(publication_id, active_day, datetime.now(timezone.utc))
+            row = self._connection.execute(
+                """
+                SELECT clearance_id, movement_id, connection_id, channel_id,
+                       from_station_id, to_station_id, status, requested_by,
+                       requested_at, expires_at, responded_by, responded_at, revision
+                FROM clearances
+                WHERE publication_id = ? AND active_day = ? AND channel_id = ?
+                  AND status IN ('waiting', 'approved')
+                """,
+                (publication_id, active_day, channel),
+            ).fetchone()
+        return _clearance_from_row(row) if row else None
+
+    def _expire_stale_locked(self, publication_id: str, active_day: str, now: datetime) -> None:
+        self._connection.execute(
+            """
+            UPDATE clearances
+            SET status = 'expired', revision = revision + 1, updated_at = ?
+            WHERE publication_id = ? AND active_day = ? AND status = 'waiting' AND expires_at < ?
+            """,
+            (now.isoformat(), publication_id, active_day, now.isoformat()),
+        )
 
     def train_readiness(
         self,
@@ -902,6 +1182,24 @@ def _train_readiness_from_row(row: tuple[Any, ...], station_id: str) -> dict[str
         "revoked_by": row[8],
         "revoked_at": row[9],
         "updated_at": row[10],
+    }
+
+
+def _clearance_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
+    return {
+        "clearance_id": row[0],
+        "movement_id": row[1],
+        "connection_id": row[2],
+        "channel_id": row[3],
+        "from_station_id": row[4],
+        "to_station_id": row[5],
+        "status": row[6],
+        "requested_by": row[7],
+        "requested_at": row[8],
+        "expires_at": row[9],
+        "responded_by": row[10],
+        "responded_at": row[11],
+        "revision": row[12],
     }
 
 

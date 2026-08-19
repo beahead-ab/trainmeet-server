@@ -198,6 +198,189 @@ class OperationsStoreTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_movement_revision_increases_on_position_and_crew_ready_but_not_on_readback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                first = store.update_tkl_movement(
+                    "publication-a", "Dagl", "station-a", "movement-421-a",
+                    arrival="none", departure="positioned", actual_track="1B",
+                    updated_by="Anna", shift_id=None, event_type="positioned",
+                )
+                self.assertEqual(first["revision"], 1)
+
+                second = store.set_crew_ready(
+                    "publication-a", "Dagl", "station-a", "movement-421-a",
+                    crew_ready=True, updated_by="Anna", shift_id=None,
+                )
+                self.assertEqual(second["revision"], 2)
+
+                unrelated = store.update_tkl_movement(
+                    "publication-a", "Dagl", "station-a", "movement-999-b",
+                    arrival="none", departure="positioned", actual_track=None,
+                    updated_by="Anna", shift_id=None, event_type="positioned",
+                )
+                self.assertEqual(unrelated["revision"], 1)
+                self.assertEqual(
+                    store.tkl_station_state("publication-a", "Dagl", "station-a")
+                    ["movements"]["movement-421-a"]["revision"],
+                    2,
+                )
+            finally:
+                store.close()
+
+    def test_clearance_request_is_granted_when_channel_is_free(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                clearance = store.request_clearance(
+                    "publication-a", "Dagl", "movement-421-a",
+                    "connection-a-b", "single", "station-a", "station-b",
+                    requested_by="Anna", ttl_seconds=30,
+                )
+                self.assertEqual(clearance["status"], "waiting")
+                self.assertEqual(clearance["channel_id"], "connection-a-b")
+                self.assertEqual(clearance["revision"], 1)
+            finally:
+                store.close()
+
+    def test_second_request_on_the_same_single_track_channel_is_rejected_as_busy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                store.request_clearance(
+                    "publication-a", "Dagl", "movement-421-a",
+                    "connection-a-b", "single", "station-a", "station-b",
+                    requested_by="Anna", ttl_seconds=30,
+                )
+                second = store.request_clearance(
+                    "publication-a", "Dagl", "movement-422-a",
+                    "connection-a-b", "single", "station-b", "station-a",
+                    requested_by="Bertil", ttl_seconds=30,
+                )
+                self.assertEqual(second, {"status": "rejected", "reason": "connection_busy"})
+            finally:
+                store.close()
+
+    def test_double_track_channels_in_opposite_directions_do_not_block_each_other(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                first = store.request_clearance(
+                    "publication-a", "Dagl", "movement-421-a",
+                    "connection-a-b", "double", "station-a", "station-b",
+                    requested_by="Anna", ttl_seconds=30,
+                )
+                second = store.request_clearance(
+                    "publication-a", "Dagl", "movement-422-a",
+                    "connection-a-b", "double", "station-b", "station-a",
+                    requested_by="Bertil", ttl_seconds=30,
+                )
+                self.assertEqual(first["status"], "waiting")
+                self.assertEqual(second["status"], "waiting")
+                self.assertNotEqual(first["channel_id"], second["channel_id"])
+            finally:
+                store.close()
+
+    def test_clearance_response_approves_and_rejects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                clearance = store.request_clearance(
+                    "publication-a", "Dagl", "movement-421-a",
+                    "connection-a-b", "single", "station-a", "station-b",
+                    requested_by="Anna", ttl_seconds=30,
+                )
+                approved = store.respond_clearance(
+                    clearance["clearance_id"], accept=True, responded_by="Bertil"
+                )
+                self.assertEqual(approved["status"], "approved")
+                self.assertEqual(approved["revision"], 2)
+
+                again = store.respond_clearance(
+                    clearance["clearance_id"], accept=False, responded_by="Bertil"
+                )
+                self.assertEqual(again, {"status": "rejected", "reason": "request_no_longer_pending"})
+            finally:
+                store.close()
+
+    def test_clearance_cancel_only_works_while_waiting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                clearance = store.request_clearance(
+                    "publication-a", "Dagl", "movement-421-a",
+                    "connection-a-b", "single", "station-a", "station-b",
+                    requested_by="Anna", ttl_seconds=30,
+                )
+                cancelled = store.cancel_clearance(clearance["clearance_id"], cancelled_by="Anna")
+                self.assertEqual(cancelled["status"], "cancelled")
+
+                again = store.cancel_clearance(clearance["clearance_id"], cancelled_by="Anna")
+                self.assertEqual(again, {"status": "rejected", "reason": "request_no_longer_pending"})
+
+                reopened = store.request_clearance(
+                    "publication-a", "Dagl", "movement-421-a",
+                    "connection-a-b", "single", "station-a", "station-b",
+                    requested_by="Anna", ttl_seconds=30,
+                )
+                self.assertEqual(reopened["status"], "waiting")
+            finally:
+                store.close()
+
+    def test_expired_clearance_frees_the_channel_for_a_new_request(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                start = datetime(2026, 8, 19, 12, 0, tzinfo=timezone.utc)
+                clearance = store.request_clearance(
+                    "publication-a", "Dagl", "movement-421-a",
+                    "connection-a-b", "single", "station-a", "station-b",
+                    requested_by="Anna", ttl_seconds=5, now=start,
+                )
+                blocked = store.request_clearance(
+                    "publication-a", "Dagl", "movement-422-a",
+                    "connection-a-b", "single", "station-b", "station-a",
+                    requested_by="Bertil", ttl_seconds=30, now=start,
+                )
+                self.assertEqual(blocked["status"], "rejected")
+
+                later = start + timedelta(seconds=10)
+                freed = store.request_clearance(
+                    "publication-a", "Dagl", "movement-422-a",
+                    "connection-a-b", "single", "station-b", "station-a",
+                    requested_by="Bertil", ttl_seconds=30, now=later,
+                )
+                self.assertEqual(freed["status"], "waiting")
+
+                stale = store.clearance(clearance["clearance_id"])
+                self.assertEqual(stale["status"], "expired")
+            finally:
+                store.close()
+
+    def test_invalidate_clearance_marks_waiting_case_but_leaves_resolved_ones_alone(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                waiting = store.request_clearance(
+                    "publication-a", "Dagl", "movement-421-a",
+                    "connection-a-b", "single", "station-a", "station-b",
+                    requested_by="Anna", ttl_seconds=30,
+                )
+                invalidated = store.invalidate_clearance(waiting["clearance_id"])
+                self.assertEqual(invalidated["status"], "invalidated_by_revision")
+
+                approved = store.request_clearance(
+                    "publication-a", "Dagl", "movement-421-a",
+                    "connection-a-b", "single", "station-a", "station-b",
+                    requested_by="Anna", ttl_seconds=30,
+                )
+                store.respond_clearance(approved["clearance_id"], accept=True, responded_by="Bertil")
+                unchanged = store.invalidate_clearance(approved["clearance_id"])
+                self.assertEqual(unchanged["status"], "approved")
+            finally:
+                store.close()
+
     def test_tkl_and_ranger_share_tåg_klart_but_only_ranger_requires_acknowledgement(self):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteOperationsStore(Path(directory) / "runtime.db")
