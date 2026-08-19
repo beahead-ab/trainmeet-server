@@ -77,6 +77,22 @@ class PanelConfig:
 
 
 @dataclass(frozen=True)
+class TrackConfig:
+    """A stable, servervalidated station track — never a bare integer.
+
+    Additive to runtime schema 2, the same way operating_points was: an
+    older publication without a tracks list simply has an empty catalog.
+    """
+
+    id: str
+    display_label: str
+    station_id: str
+    operating_point_id: str | None
+    active: bool
+    sort_order: int
+
+
+@dataclass(frozen=True)
 class SessionConfig:
     id: str
     name: str
@@ -84,6 +100,7 @@ class SessionConfig:
     stations: dict[str, StationConfig]
     connections: dict[str, ConnectionConfig]
     panels: dict[str, PanelConfig]
+    tracks: dict[str, TrackConfig] = field(default_factory=dict)
     clock_time: str = "12:00"
 
 

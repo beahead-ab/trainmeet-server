@@ -16,6 +16,7 @@ from .models import (
     PanelConfig,
     SessionConfig,
     StationConfig,
+    TrackConfig,
     TrackType,
 )
 
@@ -116,6 +117,31 @@ class RuntimePublication:
                     raise RuntimePublicationError("En driftplats har ogiltiga alias")
                 operating_point_stations[operating_point_id] = str(station["id"])
 
+        tracks = payload.get("tracks", [])
+        if not isinstance(tracks, list) or any(not isinstance(track, dict) for track in tracks):
+            raise RuntimePublicationError("Spårkatalogen måste vara en lista")
+        _unique_ids(tracks, "spår")
+        track_stations: dict[str, tuple[str, str | None]] = {}
+        for track in tracks:
+            track_id = str(track["id"])
+            _required_text(track, "display_label")
+            track_station_id = _required_text(track, "station_id")
+            if track_station_id not in station_ids:
+                raise RuntimePublicationError("Ett spår hänvisar till en okänd station")
+            track_operating_point_id = track.get("operating_point_id")
+            if track_operating_point_id is not None:
+                if not isinstance(track_operating_point_id, str) or not track_operating_point_id.strip():
+                    raise RuntimePublicationError("Ett spår har ett ogiltigt driftplats-id")
+                if operating_point_stations.get(track_operating_point_id) != track_station_id:
+                    raise RuntimePublicationError("Ett spår hänvisar till en driftplats på fel station")
+            if not isinstance(track.get("active", True), bool):
+                raise RuntimePublicationError("Ett spårs active-flagga måste vara sant eller falskt")
+            try:
+                int(track.get("sort_order", 0))
+            except (TypeError, ValueError) as error:
+                raise RuntimePublicationError("Ett spårs sorteringsordning är ogiltig") from error
+            track_stations[track_id] = (track_station_id, track_operating_point_id)
+
         connections = _required_list(payload, "connections")
         connection_ids = _unique_ids(connections, "connection")
         connection_endpoints: dict[str, set[str]] = {}
@@ -175,6 +201,18 @@ class RuntimePublication:
                 raise RuntimePublicationError(
                     "En tågrad på en station med flera driftplatser saknar operating_point_id"
                 )
+            track_id = train.get("track_id")
+            if track_id is not None:
+                if not isinstance(track_id, str) or not track_id.strip():
+                    raise RuntimePublicationError("En tågrad har ett ogiltigt spår-id")
+                track_reference = track_stations.get(track_id)
+                if track_reference is None:
+                    raise RuntimePublicationError("En tågrad hänvisar till ett okänt spår")
+                track_station_ref, track_operating_point_ref = track_reference
+                if track_station_ref != train_station_id:
+                    raise RuntimePublicationError("En tågrad hänvisar till ett spår på fel station")
+                if operating_point_id is not None and track_operating_point_ref not in (None, operating_point_id):
+                    raise RuntimePublicationError("En tågrad hänvisar till ett spår på fel driftplats")
             _required_text(train, "days")
             _required_text(train, "sort_time")
             fingerprint = _movement_fingerprint(train)
@@ -293,6 +331,17 @@ class RuntimePublication:
             )
             for value in self.payload["panels"]
         }
+        tracks = {
+            value["id"]: TrackConfig(
+                id=value["id"],
+                display_label=value["display_label"],
+                station_id=value["station_id"],
+                operating_point_id=value.get("operating_point_id"),
+                active=bool(value.get("active", True)),
+                sort_order=int(value.get("sort_order", 0)),
+            )
+            for value in self.payload.get("tracks", [])
+        }
         return SessionConfig(
             # A publication is a distinct run, so mutable state from another
             # version can never be restored into it by accident.
@@ -304,6 +353,7 @@ class RuntimePublication:
             stations=stations,
             connections=connections,
             panels=panels,
+            tracks=tracks,
             clock_time=str(meet.get("clock_time") or "12:00")[:5],
         )
 

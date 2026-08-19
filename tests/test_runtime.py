@@ -115,6 +115,116 @@ class RuntimePublicationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimePublicationError, "driftplats på fel station"):
             RuntimePublication.parse(payload)
 
+    def test_missing_tracks_list_defaults_to_empty_catalog(self):
+        payload = runtime_package_v2()
+        self.assertNotIn("tracks", payload)
+
+        session = RuntimePublication.parse(payload).session_config()
+
+        self.assertEqual(session.tracks, {})
+
+    def test_track_catalog_builds_and_resolves_train_reference(self):
+        payload = runtime_package_v2()
+        payload["tracks"] = [
+            {
+                "id": "track-a-1",
+                "display_label": "1A",
+                "station_id": "station-a",
+                "operating_point_id": None,
+                "active": True,
+                "sort_order": 10,
+            },
+            {
+                "id": "track-a-2",
+                "display_label": "1B",
+                "station_id": "station-a",
+                "sort_order": 20,
+            },
+        ]
+        payload["trains"][0]["track_id"] = "track-a-1"
+
+        publication = RuntimePublication.parse(payload)
+        session = publication.session_config()
+
+        self.assertEqual(session.tracks["track-a-1"].display_label, "1A")
+        self.assertTrue(session.tracks["track-a-1"].active)
+        self.assertEqual(session.tracks["track-a-2"].sort_order, 20)
+
+    def test_track_catalog_rejects_duplicate_ids(self):
+        payload = runtime_package_v2()
+        payload["tracks"] = [
+            {"id": "track-a-1", "display_label": "1A", "station_id": "station-a"},
+            {"id": "track-a-1", "display_label": "1B", "station_id": "station-a"},
+        ]
+
+        with self.assertRaisesRegex(RuntimePublicationError, "dubbla spår-id"):
+            RuntimePublication.parse(payload)
+
+    def test_train_row_cannot_reference_an_unknown_track(self):
+        payload = runtime_package_v2()
+        payload["trains"][0]["track_id"] = "missing-track"
+
+        with self.assertRaisesRegex(RuntimePublicationError, "okänt spår"):
+            RuntimePublication.parse(payload)
+
+    def test_train_row_cannot_reference_a_track_at_another_station(self):
+        payload = runtime_package_v2()
+        payload["tracks"] = [
+            {"id": "track-b-1", "display_label": "1", "station_id": "station-b"},
+        ]
+        payload["trains"][0]["track_id"] = "track-b-1"
+
+        with self.assertRaisesRegex(RuntimePublicationError, "spår på fel station"):
+            RuntimePublication.parse(payload)
+
+    def test_train_row_cannot_reference_a_track_at_another_operating_point(self):
+        payload = runtime_package_v2()
+        payload["stations"][0]["operating_points"] = [
+            {"id": "station-a-main", "code": "C", "name": "C", "aliases": []},
+            {"id": "station-a-rbg", "code": "RBG", "name": "Rbg", "aliases": []},
+        ]
+        payload["tracks"] = [
+            {
+                "id": "track-rbg-1",
+                "display_label": "1",
+                "station_id": "station-a",
+                "operating_point_id": "station-a-rbg",
+            },
+        ]
+        for train in payload["trains"]:
+            if train["station_id"] == "station-a":
+                train["operating_point_id"] = "station-a-main"
+        payload["trains"][0]["track_id"] = "track-rbg-1"
+
+        with self.assertRaisesRegex(RuntimePublicationError, "spår på fel driftplats"):
+            RuntimePublication.parse(payload)
+
+    def test_track_operating_point_must_belong_to_the_same_station(self):
+        payload = runtime_package_v2()
+        payload["stations"][1]["operating_points"] = [
+            {"id": "station-b-main", "code": "LEK", "name": "Lekby", "aliases": []},
+        ]
+        payload["tracks"] = [
+            {
+                "id": "track-cross",
+                "display_label": "1",
+                "station_id": "station-a",
+                "operating_point_id": "station-b-main",
+            },
+        ]
+
+        with self.assertRaisesRegex(RuntimePublicationError, "driftplats på fel station"):
+            RuntimePublication.parse(payload)
+
+    def test_track_active_flag_must_be_boolean(self):
+        payload = runtime_package_v2()
+        payload["tracks"] = [
+            {"id": "track-a-1", "display_label": "1A", "station_id": "station-a", "active": "yes"},
+        ]
+
+        with self.assertRaisesRegex(RuntimePublicationError, "active-flagga"):
+            RuntimePublication.parse(payload)
+
     def test_rejects_duplicate_movements_even_when_notes_differ(self):
         payload = runtime_package_v2()
         duplicate = deepcopy(payload["trains"][0])
