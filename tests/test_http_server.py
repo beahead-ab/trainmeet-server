@@ -12,11 +12,12 @@ from session_fixture import sample_session
 from tambox_gateway.central_sync import DEFAULT_RUNTIME_PUBLICATION_URL, CentralRuntimeDownload, CentralRuntimeManifest
 from tambox_gateway.engine import TrafficEngine
 from tambox_gateway.http_server import (
+    HTTPAPIError,
     HTTPServerConfig,
     TamboxHTTPApplication,
     TamboxHTTPServer,
 )
-from tambox_gateway.identity import IdentityStore, PairingService
+from tambox_gateway.identity import DeviceKind, IdentityStore, PairingService
 from tambox_gateway.local_config import SQLiteLocalConfigurationStore
 from tambox_gateway.models import DispatchMode
 from tambox_gateway.operations import SQLiteOperationsStore
@@ -272,6 +273,149 @@ class HTTPServerTests(unittest.TestCase):
             },
         )
         self.assertEqual(arrived["connection"]["state"], "free")
+
+    def test_v2_station_snapshot_exposes_tracks_and_movements(self):
+        package = runtime_package_v2()
+        package["tracks"] = [
+            {"id": "track-a-1", "display_label": "1A", "station_id": "station-a", "sort_order": 10},
+            {"id": "track-a-2", "display_label": "1B", "station_id": "station-a", "sort_order": 20},
+        ]
+        publication = self.runtime_store.install(package)
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        self.application.start_tkl_shift(
+            client, {"station_id": "station-a", "operator_name": "Anna", "terminal_name": "CDA TKL"}
+        )
+
+        snapshot = self.application.v2_station_snapshot(client, "station-a")
+
+        self.assertEqual(snapshot["protocol_version"], 2)
+        self.assertEqual([track["display_label"] for track in snapshot["tracks"]], ["1A", "1B"])
+        self.assertEqual(len(snapshot["movements"]), 1)
+        self.assertEqual(snapshot["movements"][0]["train_number"], "101")
+        self.assertEqual(snapshot["active_clearances"], [])
+
+    def test_v2_train_lookup_returns_matches_for_the_station(self):
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        self.application.start_tkl_shift(
+            client, {"station_id": "station-a", "operator_name": "Anna", "terminal_name": "CDA TKL"}
+        )
+
+        found = self.application.v2_train_lookup(client, "station-a", "101")
+        self.assertEqual(len(found["matches"]), 1)
+        self.assertEqual(found["matches"][0]["id"], "movement-101-a")
+
+        missing = self.application.v2_train_lookup(client, "station-a", "4711")
+        self.assertEqual(missing["matches"], [])
+
+    def test_v2_movement_command_positions_and_departs_without_clobbering_arrival(self):
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        self.application.start_tkl_shift(
+            client, {"station_id": "station-a", "operator_name": "Anna", "terminal_name": "CDA TKL"}
+        )
+        self.operations_store.update_tkl_movement(
+            "publication-2026-08-11-a", "Lör", "station-a", "movement-101-a",
+            arrival="approaching", departure="none", actual_track=None,
+            updated_by="Anna", shift_id=None, event_type="approaching",
+        )
+
+        positioned = self.application.v2_movement_command(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "action": "position", "actual_track": "2"},
+        )
+        self.assertEqual(positioned["movement"]["departure"], "positioned")
+        self.assertEqual(positioned["movement"]["arrival"], "approaching")
+
+        ready = self.application.v2_movement_command(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "action": "crew_ready", "crew_ready": True},
+        )
+        self.assertTrue(ready["movement"]["crew_ready"])
+
+        departed = self.application.v2_movement_command(
+            client, {"station_id": "station-a", "movement_id": "movement-101-a", "action": "departed"}
+        )
+        self.assertEqual(departed["movement"]["departure"], "departed")
+        self.assertEqual(departed["movement"]["arrival"], "approaching")
+        self.assertEqual(departed["movement"]["actualTrack"], "2")
+
+    def test_v2_clearance_request_respond_and_channel_frees_afterward(self):
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        for station_id, operator_name in (("station-a", "Anna"), ("station-b", "Bertil")):
+            self.application.start_tkl_shift(
+                client, {"station_id": station_id, "operator_name": operator_name, "terminal_name": station_id}
+            )
+
+        requested = self.application.v2_clearance_request(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "connection_id": "connection-a-b"},
+        )
+        self.assertEqual(requested["clearance"]["status"], "waiting")
+
+        blocked = self.application.v2_clearance_request(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-202-a", "connection_id": "connection-a-b"},
+        )
+        self.assertEqual(blocked["clearance"], {"status": "rejected", "reason": "connection_busy"})
+
+        approved = self.application.v2_clearance_respond(
+            client, {"clearance_id": requested["clearance"]["clearance_id"], "accept": True}
+        )
+        self.assertEqual(approved["clearance"]["status"], "approved")
+
+        freed = self.application.v2_clearance_request(
+            client,
+            {"station_id": "station-b", "movement_id": "movement-101-b", "connection_id": "connection-a-b"},
+        )
+        self.assertEqual(freed["clearance"], {"status": "rejected", "reason": "connection_busy"})
+
+    def test_v2_clearance_cancel_frees_the_channel(self):
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        self.application.start_tkl_shift(
+            client, {"station_id": "station-a", "operator_name": "Anna", "terminal_name": "CDA TKL"}
+        )
+
+        requested = self.application.v2_clearance_request(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "connection_id": "connection-a-b"},
+        )
+        cancelled = self.application.v2_clearance_cancel(
+            client, {"clearance_id": requested["clearance"]["clearance_id"]}
+        )
+        self.assertEqual(cancelled["clearance"]["status"], "cancelled")
+
+        reopened = self.application.v2_clearance_request(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "connection_id": "connection-a-b"},
+        )
+        self.assertEqual(reopened["clearance"]["status"], "waiting")
+
+    def test_v2_station_access_is_enforced_for_non_admin_clients(self):
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+        tmbox = self.identities.register_client(
+            "esp32-tmbox-a",
+            "TMBOX-7A42F1",
+            DeviceKind.ESP32_PANEL,
+            "credential-tmbox-a",
+            (),
+            station_id="station-a",
+        )
+
+        allowed = self.application.v2_station_snapshot(tmbox, "station-a")
+        self.assertEqual(allowed["station"]["id"], "station-a")
+
+        with self.assertRaises(HTTPAPIError) as raised:
+            self.application.v2_station_snapshot(tmbox, "station-b")
+        self.assertEqual(raised.exception.code, "station_not_assigned")
 
     def test_linked_runtime_update_is_downloaded_before_activation(self):
         self.runtime_store.install(runtime_package_v2(publication_id="publication-v2-first"))

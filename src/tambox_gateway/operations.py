@@ -877,7 +877,8 @@ class SQLiteOperationsStore:
                 """
                 SELECT clearance_id, movement_id, connection_id, channel_id,
                        from_station_id, to_station_id, status, requested_by,
-                       requested_at, expires_at, responded_by, responded_at, revision
+                       requested_at, expires_at, responded_by, responded_at, revision,
+                       publication_id, active_day
                 FROM clearances WHERE clearance_id = ?
                 """,
                 (clearance_id,),
@@ -901,7 +902,8 @@ class SQLiteOperationsStore:
                 """
                 SELECT clearance_id, movement_id, connection_id, channel_id,
                        from_station_id, to_station_id, status, requested_by,
-                       requested_at, expires_at, responded_by, responded_at, revision
+                       requested_at, expires_at, responded_by, responded_at, revision,
+                       publication_id, active_day
                 FROM clearances
                 WHERE publication_id = ? AND active_day = ? AND channel_id = ?
                   AND status IN ('waiting', 'approved')
@@ -1200,6 +1202,8 @@ def _clearance_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
         "responded_by": row[10],
         "responded_at": row[11],
         "revision": row[12],
+        "publication_id": row[13],
+        "active_day": row[14],
     }
 
 

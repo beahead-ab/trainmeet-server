@@ -399,6 +399,7 @@ class TamboxHTTPApplication:
             timetable = publication.timetable(active_day=active_day)
             stations = publication.payload["stations"]
             connections = publication.payload["connections"]
+            tracks = publication.payload.get("tracks", [])
             autonomous_links = publication.payload.get("autonomous_links", [])
             display = publication.payload.get("display", {})
             meet = publication.payload["meet"]
@@ -418,6 +419,17 @@ class TamboxHTTPApplication:
                     "track_type": connection.track_type.value,
                 }
                 for connection in self.engine.config.connections.values()
+            ]
+            tracks = [
+                {
+                    "id": track.id,
+                    "display_label": track.display_label,
+                    "station_id": track.station_id,
+                    "operating_point_id": track.operating_point_id,
+                    "active": track.active,
+                    "sort_order": track.sort_order,
+                }
+                for track in self.engine.config.tracks.values()
             ]
             autonomous_links = []
             display = {"graph_station_order": [station["id"] for station in stations], "default_theme": "dark"}
@@ -451,6 +463,7 @@ class TamboxHTTPApplication:
             "active_day": active_day,
             "stations": stations,
             "connections": connections,
+            "tracks": tracks,
             "connection_states": connection_states,
             "autonomous_links": autonomous_links,
             "trains": timetable.get("trains", []),
@@ -674,6 +687,223 @@ class TamboxHTTPApplication:
         snapshot = self.display_snapshot()
         state = next((item for item in snapshot["connection_states"] if item["id"] == connection_id), None)
         return {"action": action, "connection": state, "revision": self.engine.revision}
+
+    def _require_v2_station_access(self, client: PairedClient, station_id: str) -> None:
+        """Protocol v2 authorization: a TMBox is assigned a station directly
+        (protokoll-v2-kontrakt.md §2), not a panel — kept as a separate check
+        from _require_station_access so v1's panel-based authorization is
+        never touched by this."""
+        if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
+            return
+        if client.station_id != station_id:
+            raise HTTPAPIError(
+                HTTPStatus.FORBIDDEN, "station_not_assigned", "Enheten har inte tillgång till stationen"
+            )
+
+    def v2_station_snapshot(self, client: PairedClient, station_id: str) -> dict[str, Any]:
+        if self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
+        self._require_v2_station_access(client, station_id)
+        snapshot = self.display_snapshot()
+        station = next((item for item in snapshot["stations"] if item["id"] == station_id), None)
+        if station is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "station_not_found", "Stationen finns inte i den aktiva träffen")
+
+        tracks = [
+            {
+                "id": track["id"],
+                "display_label": track["display_label"],
+                "operating_point_id": track.get("operating_point_id"),
+                "sort_order": track.get("sort_order", 0),
+            }
+            for track in sorted(snapshot["tracks"], key=lambda item: item.get("sort_order", 0))
+            if track["station_id"] == station_id and track.get("active", True)
+        ]
+
+        state = self.operations_store.tkl_station_state(
+            snapshot["publication_id"], snapshot["active_day"], station_id
+        )
+        empty_movement_state = {
+            "arrival": "none", "departure": "none", "actualTrack": None,
+            "crewReady": False, "revision": 0,
+        }
+        movements = [
+            {**train, **state["movements"].get(train["id"], empty_movement_state)}
+            for train in snapshot["trains"]
+            if train.get("station_id") == station_id
+        ]
+
+        active_clearances = []
+        for connection in snapshot["connections"]:
+            if station_id not in {connection["station_a_id"], connection["station_b_id"]}:
+                continue
+            other_id = (
+                connection["station_b_id"] if connection["station_a_id"] == station_id
+                else connection["station_a_id"]
+            )
+            candidate_origins = (
+                {station_id, other_id} if connection.get("track_type") == "double" else {station_id}
+            )
+            for origin in candidate_origins:
+                active = self.operations_store.active_clearance_for_channel(
+                    snapshot["publication_id"], snapshot["active_day"],
+                    connection["id"], connection.get("track_type", "single"), origin,
+                )
+                if active is not None:
+                    active_clearances.append(active)
+
+        return {
+            "protocol_version": 2,
+            "publication_id": snapshot["publication_id"],
+            "active_day": snapshot["active_day"],
+            "station": station,
+            "shift": state["shift"],
+            "tracks": tracks,
+            "movements": movements,
+            "active_clearances": active_clearances,
+            "clock": snapshot["clock"],
+        }
+
+    def v2_train_lookup(self, client: PairedClient, station_id: str, train_number: str) -> dict[str, Any]:
+        snapshot = self.v2_station_snapshot(client, station_id)
+        matches = [
+            movement for movement in snapshot["movements"]
+            if str(movement.get("train_number") or "") == train_number
+        ]
+        return {"train_number": train_number, "matches": matches}
+
+    def v2_movement_command(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
+        station_id = str(payload.get("station_id") or "")
+        movement_id = str(payload.get("movement_id") or "")
+        action = str(payload.get("action") or "")
+        self._require_v2_station_access(client, station_id)
+        snapshot = self.display_snapshot()
+        movement = next(
+            (
+                train for train in snapshot["trains"]
+                if train.get("id") == movement_id and train.get("station_id") == station_id
+            ),
+            None,
+        )
+        if movement is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "movement_not_found", "Tågrörelsen finns inte på stationen")
+        state = self.operations_store.tkl_station_state(
+            snapshot["publication_id"], snapshot["active_day"], station_id
+        )
+        current_shift = state["shift"]
+        if current_shift is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan tågrörelser hanteras")
+        current = state["movements"].get(
+            movement_id, {"arrival": "none", "departure": "none", "actualTrack": None}
+        )
+
+        if action == "crew_ready":
+            result = self.operations_store.set_crew_ready(
+                snapshot["publication_id"], snapshot["active_day"], station_id, movement_id,
+                crew_ready=bool(payload.get("crew_ready", True)),
+                updated_by=current_shift["operator_name"],
+                shift_id=current_shift["shift_id"],
+            )
+            return {"movement": result}
+
+        # position/departed/arrived all go through update_tkl_movement, which
+        # upserts arrival_status and departure_status together — carry the
+        # untouched dimension through so this action never clobbers it.
+        actions = {
+            "position": {
+                "arrival": current["arrival"], "departure": "positioned",
+                "actual_track": str(payload.get("actual_track") or "") or current["actualTrack"],
+                "event_type": "v2_positioned",
+            },
+            "departed": {
+                "arrival": current["arrival"], "departure": "departed",
+                "actual_track": current["actualTrack"], "event_type": "v2_departed",
+            },
+            "arrived": {
+                "arrival": "arrived", "departure": current["departure"],
+                "actual_track": current["actualTrack"], "event_type": "v2_arrived",
+            },
+        }
+        spec = actions.get(action)
+        if spec is None:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_v2_movement_action", "Okänd åtgärd")
+        result = self.operations_store.update_tkl_movement(
+            snapshot["publication_id"], snapshot["active_day"], station_id, movement_id,
+            arrival=spec["arrival"], departure=spec["departure"], actual_track=spec["actual_track"],
+            updated_by=current_shift["operator_name"], shift_id=current_shift["shift_id"],
+            event_type=spec["event_type"],
+        )
+        return {"movement": result}
+
+    def v2_clearance_request(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
+        station_id = str(payload.get("station_id") or "")
+        movement_id = str(payload.get("movement_id") or "")
+        connection_id = str(payload.get("connection_id") or "")
+        self._require_v2_station_access(client, station_id)
+        snapshot = self.display_snapshot()
+        connection = next((item for item in snapshot["connections"] if item["id"] == connection_id), None)
+        if connection is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "connection_not_found", "Sträckan finns inte")
+        if station_id not in {connection["station_a_id"], connection["station_b_id"]}:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "connection_not_reachable", "Stationen ligger inte på sträckan")
+        to_station_id = (
+            connection["station_b_id"] if connection["station_a_id"] == station_id
+            else connection["station_a_id"]
+        )
+        current_shift = self.operations_store.tkl_station_state(
+            snapshot["publication_id"], snapshot["active_day"], station_id
+        )["shift"]
+        if current_shift is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan en begäran skickas")
+        result = self.operations_store.request_clearance(
+            snapshot["publication_id"], snapshot["active_day"], movement_id,
+            connection_id, connection.get("track_type", "single"), station_id, to_station_id,
+            requested_by=current_shift["operator_name"],
+            ttl_seconds=float(payload.get("ttl_seconds") or 120),
+        )
+        return {"clearance": result}
+
+    def v2_clearance_respond(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
+        clearance_id = str(payload.get("clearance_id") or "")
+        try:
+            clearance = self.operations_store.clearance(clearance_id)
+        except ValueError as error:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "clearance_not_found", str(error)) from error
+        self._require_v2_station_access(client, clearance["to_station_id"])
+        current_shift = self.operations_store.tkl_station_state(
+            clearance["publication_id"], clearance["active_day"], clearance["to_station_id"]
+        )["shift"]
+        if current_shift is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan ett svar lämnas")
+        result = self.operations_store.respond_clearance(
+            clearance_id, accept=bool(payload.get("accept")), responded_by=current_shift["operator_name"]
+        )
+        return {"clearance": result}
+
+    def v2_clearance_cancel(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
+        clearance_id = str(payload.get("clearance_id") or "")
+        try:
+            clearance = self.operations_store.clearance(clearance_id)
+        except ValueError as error:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "clearance_not_found", str(error)) from error
+        self._require_v2_station_access(client, clearance["from_station_id"])
+        current_shift = self.operations_store.tkl_station_state(
+            clearance["publication_id"], clearance["active_day"], clearance["from_station_id"]
+        )["shift"]
+        if current_shift is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan en begäran avbryts")
+        result = self.operations_store.cancel_clearance(
+            clearance_id, cancelled_by=current_shift["operator_name"]
+        )
+        return {"clearance": result}
 
     def _require_station_access(self, client: PairedClient, station_id: str) -> None:
         if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
@@ -1473,6 +1703,24 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                     self.server.application.timetable(client, station_id),
                 )
                 return
+            if path == "/v1/tmbox-v2/station":
+                client = self._authenticated_client()
+                station_id = parse_qs(parsed.query).get("station_id", [""])[0]
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.v2_station_snapshot(client, station_id),
+                )
+                return
+            if path == "/v1/tmbox-v2/train-lookup":
+                client = self._authenticated_client()
+                query = parse_qs(parsed.query)
+                station_id = query.get("station_id", [""])[0]
+                train_number = query.get("train_number", [""])[0]
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.v2_train_lookup(client, station_id, train_number),
+                )
+                return
             asset = self.server.application.static_asset(path)
             if asset is not None:
                 self._send_bytes(HTTPStatus.OK, *asset)
@@ -1603,6 +1851,22 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/tkl/line":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.tkl_line_action(client, payload))
+                return
+            if path == "/v1/tmbox-v2/movement":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.v2_movement_command(client, payload))
+                return
+            if path == "/v1/tmbox-v2/clearance/request":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.v2_clearance_request(client, payload))
+                return
+            if path == "/v1/tmbox-v2/clearance/respond":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.v2_clearance_respond(client, payload))
+                return
+            if path == "/v1/tmbox-v2/clearance/cancel":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.v2_clearance_cancel(client, payload))
                 return
             if path == "/v1/devices/assign":
                 client = self._authenticated_client()
