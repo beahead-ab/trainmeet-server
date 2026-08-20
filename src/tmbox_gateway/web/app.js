@@ -3226,8 +3226,14 @@ async function loadTMBoxV2Stations() {
   const els = tmboxV2Els();
   try {
     const response = await authorizedFetch("/v1/tmbox-v2/stations");
-    if (!response.ok) return;
-    const body = await response.json();
+    const body = await response.json().catch(() => ({}));
+    // The server says why — no active session, or not an admin — and dropping
+    // that on the floor left an empty station list and no explanation, which
+    // is indistinguishable from a simulator that is simply broken.
+    if (!response.ok) {
+      els.station.innerHTML = "";
+      throw new Error(body.message || "Stationerna kunde inte hämtas");
+    }
     const remembered = localStorage.getItem("trainmeet.v2Station");
     els.station.innerHTML = "";
     (body.stations || []).forEach((station) => {
@@ -3281,7 +3287,11 @@ async function refreshTMBoxV2() {
     );
     if (!response.ok) {
       tmboxV2.snapshot = null;
-      setMessage(els.message, "Stationen finns inte i den aktiva träffen", "error");
+      // Was hardcoded to "stationen finns inte", which is a guess: the same
+      // branch catches a missing session and a client without admin rights,
+      // and told the user the wrong thing in both cases.
+      const body = await response.json().catch(() => ({}));
+      setMessage(els.message, body.message || "Läget kunde inte hämtas", "error");
       return;
     }
     tmboxV2.snapshot = await response.json();
