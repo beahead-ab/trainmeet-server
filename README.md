@@ -529,6 +529,12 @@ i loggraderna, i auditjournalen och i trafikmotorns egen post, så hela vägen
 från mottaget meddelande till registrerad effekt går att följa. Hemligheter
 redigeras bort på fältnamn innan något skrivs.
 
+Ansvarsfördelningen mellan TrainMeet Cloud och servern — vem som får ändra
+vad, och hur en ändring rör sig — är fastslagen i
+[docs/cloud-server.md](docs/cloud-server.md). Flödet är enkelriktat: Cloud
+bygger och trycker ner, servern kör. Servern kan redigera träffen lokalt bara
+när den är satt i offline-läge, och de ändringarna lever bara under träffen.
+
 Protokollet mellan en fysisk TMBox och servern är specificerat i
 [docs/protocol/v2/](docs/protocol/v2/README.md): topics, meddelandekuvert,
 revisionsregler och tillståndsmaskiner, med JSON-scheman och kompletta
