@@ -358,6 +358,39 @@ class OperationsStoreTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_arrival_and_departure_can_be_set_independently_without_reverting_each_other(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                store.set_departure(
+                    "publication-a", "Dagl", "station-a", "movement-421-a",
+                    departure="positioned", actual_track="2",
+                    updated_by="Anna", shift_id=None, event_type="v2_positioned",
+                )
+                # A through movement gets both dimensions moved, by two
+                # operators, in either order. Neither may undo the other.
+                arrival = store.set_arrival(
+                    "publication-a", "Dagl", "station-a", "movement-421-a",
+                    arrival="approaching",
+                    updated_by="Bertil", shift_id=None, event_type="v2_approaching",
+                )
+                self.assertEqual(arrival["arrival"], "approaching")
+                self.assertEqual(arrival["departure"], "positioned")
+                self.assertEqual(arrival["actualTrack"], "2")
+
+                # Departing again must not wipe the arrival state or the track
+                # it is standing on.
+                departed = store.set_departure(
+                    "publication-a", "Dagl", "station-a", "movement-421-a",
+                    departure="departed",
+                    updated_by="Anna", shift_id=None, event_type="v2_departed",
+                )
+                self.assertEqual(departed["arrival"], "approaching")
+                self.assertEqual(departed["departure"], "departed")
+                self.assertEqual(departed["actualTrack"], "2")
+            finally:
+                store.close()
+
     def test_assigning_a_track_invalidates_a_waiting_case_but_not_a_resolved_one(self):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteOperationsStore(Path(directory) / "runtime.db")

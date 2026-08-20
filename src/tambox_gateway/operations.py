@@ -705,6 +705,137 @@ class SQLiteOperationsStore:
             "updated_at": now,
         }
 
+    def set_arrival(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+        movement_id: str,
+        *,
+        arrival: str,
+        updated_by: str,
+        shift_id: str | None,
+        event_type: str,
+    ) -> dict[str, Any]:
+        """Move only the arrival dimension, leaving departure as it stands.
+
+        Like set_crew_ready, and unlike update_tkl_movement, this never asks
+        the caller to read and re-supply the other dimension — which would
+        otherwise let a concurrent departure update be silently reverted by
+        whatever the caller happened to read first.
+        """
+        if arrival not in {"none", "approaching", "arrived"}:
+            raise ValueError("Ogiltigt ankomstläge")
+        return self._set_movement_dimension(
+            publication_id, active_day, station_id, movement_id,
+            column="arrival_status", value=arrival, actual_track=None,
+            updated_by=updated_by, shift_id=shift_id, event_type=event_type,
+        )
+
+    def set_departure(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+        movement_id: str,
+        *,
+        departure: str,
+        actual_track: str | None = None,
+        updated_by: str,
+        shift_id: str | None,
+        event_type: str,
+    ) -> dict[str, Any]:
+        """Move only the departure dimension, leaving arrival as it stands.
+
+        actual_track is written when supplied and left untouched otherwise, so
+        'departed' does not have to carry the track that 'positioned' set.
+        """
+        if departure not in {"none", "positioned", "ready", "departed"}:
+            raise ValueError("Ogiltigt avgångsläge")
+        return self._set_movement_dimension(
+            publication_id, active_day, station_id, movement_id,
+            column="departure_status", value=departure,
+            actual_track=(actual_track or "").strip() or None,
+            updated_by=updated_by, shift_id=shift_id, event_type=event_type,
+        )
+
+    def _set_movement_dimension(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+        movement_id: str,
+        *,
+        column: str,
+        value: str,
+        actual_track: str | None,
+        updated_by: str,
+        shift_id: str | None,
+        event_type: str,
+    ) -> dict[str, Any]:
+        now = _now_iso()
+        defaults = {"arrival_status": "none", "departure_status": "none"}
+        other_column = (
+            "departure_status" if column == "arrival_status" else "arrival_status"
+        )
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    f"""
+                    INSERT INTO tkl_movement_states(
+                        publication_id, active_day, movement_id, station_id,
+                        {column}, {other_column}, actual_track,
+                        updated_by, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(publication_id, active_day, movement_id) DO UPDATE SET
+                        station_id = excluded.station_id,
+                        {column} = excluded.{column},
+                        actual_track = COALESCE(
+                            excluded.actual_track, tkl_movement_states.actual_track
+                        ),
+                        revision = tkl_movement_states.revision + 1,
+                        updated_by = excluded.updated_by,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        publication_id, active_day, movement_id, station_id,
+                        value, defaults[other_column], actual_track, updated_by, now,
+                    ),
+                )
+                row = self._connection.execute(
+                    """
+                    SELECT arrival_status, departure_status, actual_track, revision
+                    FROM tkl_movement_states
+                    WHERE publication_id = ? AND active_day = ? AND movement_id = ?
+                    """,
+                    (publication_id, active_day, movement_id),
+                ).fetchone()
+                self._insert_tkl_event_locked(
+                    publication_id, active_day, station_id, event_type,
+                    {
+                        "arrival": row[0],
+                        "departure": row[1],
+                        "actual_track": row[2],
+                        "updated_by": updated_by,
+                    },
+                    shift_id=shift_id, movement_id=movement_id,
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return {
+            "movement_id": movement_id,
+            "arrival": row[0],
+            "departure": row[1],
+            "actualTrack": row[2],
+            "revision": row[3],
+            "updated_by": updated_by,
+            "updated_at": now,
+        }
+
     def set_crew_ready(
         self,
         publication_id: str,

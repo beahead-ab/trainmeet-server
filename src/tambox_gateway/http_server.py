@@ -824,9 +824,6 @@ class TamboxHTTPApplication:
             snapshot["publication_id"], snapshot["active_day"], station_id
         )
         actor, shift_id = self._v2_actor(client, state["shift"])
-        current = state["movements"].get(
-            movement_id, {"arrival": "none", "departure": "none", "actualTrack": None}
-        )
 
         if action == "crew_ready":
             result = self.operations_store.set_crew_ready(
@@ -837,37 +834,29 @@ class TamboxHTTPApplication:
             )
             return {"movement": result}
 
-        # position/departed/arrived all go through update_tkl_movement, which
-        # upserts arrival_status and departure_status together — carry the
-        # untouched dimension through so this action never clobbers it.
-        actions = {
-            "position": {
-                "arrival": current["arrival"], "departure": "positioned",
-                "actual_track": str(payload.get("actual_track") or "") or current["actualTrack"],
-                "event_type": "v2_positioned",
-            },
-            "departed": {
-                "arrival": current["arrival"], "departure": "departed",
-                "actual_track": current["actualTrack"], "event_type": "v2_departed",
-            },
-            "arrived": {
-                "arrival": "arrived", "departure": current["departure"],
-                "actual_track": current["actualTrack"], "event_type": "v2_arrived",
-            },
-            "approaching": {
-                "arrival": "approaching", "departure": current["departure"],
-                "actual_track": current["actualTrack"], "event_type": "v2_approaching",
-            },
-        }
-        spec = actions.get(action)
-        if spec is None:
+        # Each action moves exactly one dimension, and the store writes only
+        # that column. Reading the other one here to re-supply it would open a
+        # window where a concurrent update to it is reverted by whatever this
+        # request happened to read first.
+        where = (snapshot["publication_id"], snapshot["active_day"], station_id, movement_id)
+        if action == "position":
+            result = self.operations_store.set_departure(
+                *where, departure="positioned",
+                actual_track=str(payload.get("actual_track") or ""),
+                updated_by=actor, shift_id=shift_id, event_type="v2_positioned",
+            )
+        elif action == "departed":
+            result = self.operations_store.set_departure(
+                *where, departure="departed",
+                updated_by=actor, shift_id=shift_id, event_type="v2_departed",
+            )
+        elif action in {"arrived", "approaching"}:
+            result = self.operations_store.set_arrival(
+                *where, arrival=action,
+                updated_by=actor, shift_id=shift_id, event_type=f"v2_{action}",
+            )
+        else:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_v2_movement_action", "Okänd åtgärd")
-        result = self.operations_store.update_tkl_movement(
-            snapshot["publication_id"], snapshot["active_day"], station_id, movement_id,
-            arrival=spec["arrival"], departure=spec["departure"], actual_track=spec["actual_track"],
-            updated_by=actor, shift_id=shift_id,
-            event_type=spec["event_type"],
-        )
         if action == "arrived":
             # The train is physically off the shared line now, so free the
             # channel its approved clearance was holding busy. The clearance
