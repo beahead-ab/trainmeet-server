@@ -266,22 +266,23 @@ class MQTTIntegrationV2Tests(unittest.TestCase):
         self.assertTrue(events_b["snapshot"].wait(5), "receiving station did not see the pending clearance")
         self.assertEqual(len(received_b["snapshot"]["active_clearances"]), 1)
 
-        # A second request on the same single-track channel must be rejected as busy.
-        events_a["ack"].clear()
-        device_a.publish(
-            f"tmbox/v2/device/{device_a_id}/command",
+        # A single-track connection is one shared channel, so the station at the
+        # other end cannot claim it while this request is outstanding.
+        events_b["ack"].clear()
+        device_b.publish(
+            f"tmbox/v2/device/{device_b_id}/command",
             json.dumps(
                 {
-                    "protocol_version": 2, "message_id": "clr-2", "device_id": device_a_id,
-                    "station_id": "station-a", "action": "clearance.request",
-                    "payload": {"movement_id": "movement-202-a", "connection_id": "connection-a-b"},
+                    "protocol_version": 2, "message_id": "clr-2", "device_id": device_b_id,
+                    "station_id": "station-b", "action": "clearance.request",
+                    "payload": {"movement_id": "movement-101-b", "connection_id": "connection-a-b"},
                 }
             ),
             qos=1,
         )
-        self.assertTrue(events_a["ack"].wait(5))
-        self.assertEqual(received_a["ack"]["status"], "rejected")
-        self.assertEqual(received_a["ack"]["reason"], "connection_busy")
+        self.assertTrue(events_b["ack"].wait(5))
+        self.assertEqual(received_b["ack"]["status"], "rejected")
+        self.assertEqual(received_b["ack"]["reason"], "connection_busy")
 
         device_b.publish(
             f"tmbox/v2/device/{device_b_id}/command",

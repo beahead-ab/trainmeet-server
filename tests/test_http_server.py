@@ -25,6 +25,21 @@ from tambox_gateway.runtime import SQLiteRuntimeStore
 from runtime_fixture import runtime_package, runtime_package_v2
 
 
+def _package_with_two_daily_movements_at_station_a() -> dict:
+    """movement-202-a is Sön-only in the shared fixture, so on the meet's Lör
+    it is not part of the day's plan at all. Tests that need a second real
+    movement at station-a — a train to claim a channel the first one has
+    finished with — promote it to a daily one."""
+    package = runtime_package_v2()
+    for train in package["trains"]:
+        if train["id"] == "movement-202-a":
+            train["days"] = "Dagl"
+    for route in package["routes"]:
+        if route["train_number"] == "202":
+            route["days"] = "Dagl"
+    return package
+
+
 class HTTPServerTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -373,7 +388,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(requested["clearance"]["requested_by"], "TMBox TBX-NOSHIFT")
 
     def test_v2_clearance_request_respond_and_channel_frees_afterward(self):
-        publication = self.runtime_store.install(runtime_package_v2())
+        publication = self.runtime_store.install(_package_with_two_daily_movements_at_station_a())
         self.operations_store.ensure_publication(publication)
         client = self.application.local_admin()
         for station_id, operator_name in (("station-a", "Anna"), ("station-b", "Bertil")):
@@ -407,7 +422,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(still_busy["clearance"], {"status": "rejected", "reason": "connection_busy"})
 
     def test_v2_arrival_releases_the_channel_for_the_next_train(self):
-        publication = self.runtime_store.install(runtime_package_v2())
+        publication = self.runtime_store.install(_package_with_two_daily_movements_at_station_a())
         self.operations_store.ensure_publication(publication)
         client = self.application.local_admin()
         for station_id, operator_name in (("station-a", "Anna"), ("station-b", "Bertil")):
@@ -535,6 +550,38 @@ class HTTPServerTests(unittest.TestCase):
         # a track change should silently undo.
         answered = self.operations_store.clearance(requested["clearance"]["clearance_id"])
         self.assertEqual(answered["status"], "approved")
+
+    def test_v2_clearance_and_line_reject_a_movement_that_is_not_on_the_plan(self):
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        self.application.start_tkl_shift(
+            client, {"station_id": "station-a", "operator_name": "Anna", "terminal_name": "CDA TKL"}
+        )
+
+        for method in (self.application.v2_clearance_request, self.application.v2_line_publish):
+            with self.assertRaises(HTTPAPIError) as raised:
+                method(
+                    client,
+                    {
+                        "station_id": "station-a",
+                        "movement_id": "movement-does-not-exist",
+                        "connection_id": "connection-a-b",
+                    },
+                )
+            self.assertEqual(raised.exception.code, "movement_not_found")
+
+        # movement-101-b is real, but it belongs to the other station.
+        with self.assertRaises(HTTPAPIError) as raised:
+            self.application.v2_clearance_request(
+                client,
+                {
+                    "station_id": "station-a",
+                    "movement_id": "movement-101-b",
+                    "connection_id": "connection-a-b",
+                },
+            )
+        self.assertEqual(raised.exception.code, "movement_not_found")
 
     def test_v2_clearance_cancel_frees_the_channel(self):
         publication = self.runtime_store.install(runtime_package_v2())

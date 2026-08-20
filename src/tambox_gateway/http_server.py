@@ -905,6 +905,21 @@ class TamboxHTTPApplication:
         )
         return {"movement": result}
 
+    def _require_v2_movement(
+        self, snapshot: dict[str, Any], station_id: str, movement_id: str
+    ) -> None:
+        """Reject a movement that is not on today's plan for this station.
+
+        Without it the store happily writes a clearance or line message
+        referencing nothing, which then shows up on the receiving station's
+        snapshot as an actionable case for a train that does not exist.
+        """
+        if movement_id not in {
+            str(train["id"]) for train in snapshot["trains"]
+            if train.get("station_id") == station_id
+        }:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "movement_not_found", "Tågrörelsen finns inte på stationen")
+
     def v2_line_publish(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         if self.operations_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
@@ -913,6 +928,7 @@ class TamboxHTTPApplication:
         connection_id = str(payload.get("connection_id") or "")
         self._require_v2_station_access(client, station_id)
         snapshot = self.display_snapshot()
+        self._require_v2_movement(snapshot, station_id, movement_id)
         connection = next((item for item in snapshot["connections"] if item["id"] == connection_id), None)
         if connection is None:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "connection_not_found", "Sträckan finns inte")
@@ -952,6 +968,7 @@ class TamboxHTTPApplication:
         connection_id = str(payload.get("connection_id") or "")
         self._require_v2_station_access(client, station_id)
         snapshot = self.display_snapshot()
+        self._require_v2_movement(snapshot, station_id, movement_id)
         connection = next((item for item in snapshot["connections"] if item["id"] == connection_id), None)
         if connection is None:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "connection_not_found", "Sträckan finns inte")
