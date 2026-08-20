@@ -1,0 +1,13 @@
+{
+  "protocol_version": 2,
+  "device_code": "TMBOX-7A42F1",
+  "model": "TMBox ESP32-S3",
+  "firmware_version": "0.3.0",
+  "hardware_version": "esp32-s3",
+  "device_token": null,
+  "display": {
+    "rows": 4,
+    "cols": 20,
+    "charset": "ascii"
+  }
+}

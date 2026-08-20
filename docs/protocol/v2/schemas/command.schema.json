@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainmeet.app/protocol/v2/command.schema.json",
+  "title": "TMBox command",
+  "description": "Ett komplett operativt kommando. Aldrig en tangenttryckning.",
+  "type": "object",
+  "required": [
+    "protocol_version",
+    "message_id",
+    "device_id",
+    "action"
+  ],
+  "properties": {
+    "protocol_version": {
+      "type": "integer",
+      "enum": [
+        2
+      ]
+    },
+    "message_id": {
+      "type": "string",
+      "description": "Idempotensnyckel per enhet. Återanvänds vid retry, aldrig för ett nytt beslut."
+    },
+    "device_id": {
+      "type": "string"
+    },
+    "device_token": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "station_id": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "device.config.ack",
+        "train.lookup",
+        "train.position.set",
+        "train.crew_ready.set",
+        "train.track.change",
+        "train.departed",
+        "train.arrived",
+        "train.approaching",
+        "clearance.request",
+        "clearance.response",
+        "clearance.cancel",
+        "line.available.publish",
+        "line.available.acknowledge"
+      ]
+    },
+    "expected_revision": {
+      "type": "object",
+      "required": [
+        "scope",
+        "key",
+        "value"
+      ],
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": [
+            "movement",
+            "case",
+            "config"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "integer"
+        }
+      }
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

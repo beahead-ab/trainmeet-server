@@ -1,0 +1,62 @@
+{
+  "protocol_version": 2,
+  "station_id": "st-cda",
+  "revision": {
+    "config_version": 3,
+    "movements": {
+      "movement-421-a": 6,
+      "movement-428-a": 1
+    },
+    "cases": {
+      "clr-4d10": 1,
+      "line-9c22": 2
+    }
+  },
+  "movements": [
+    {
+      "id": "movement-421-a",
+      "train_number": "421",
+      "arrival_time": null,
+      "departure_time": "09:20",
+      "departure": "ready",
+      "arrival": "none",
+      "assignedTrackId": "track-cda-1b",
+      "actualTrack": null,
+      "crewReady": true
+    },
+    {
+      "id": "movement-428-a",
+      "train_number": "428",
+      "arrival_time": "09:41",
+      "departure_time": null,
+      "departure": "none",
+      "arrival": "approaching",
+      "assignedTrackId": "track-cda-2a",
+      "actualTrack": null,
+      "crewReady": false
+    }
+  ],
+  "active_clearances": [
+    {
+      "clearance_id": "clr-4d10",
+      "movement_id": "movement-421-a",
+      "connection_id": "connection-cda-vst",
+      "status": "waiting",
+      "from_station_id": "st-cda",
+      "to_station_id": "st-vst"
+    }
+  ],
+  "line_messages": [
+    {
+      "message_id": "line-9c22",
+      "connection_id": "connection-cda-lek",
+      "status": "delivered_to_device",
+      "from_station_id": "st-lek"
+    }
+  ],
+  "clock": {
+    "time": "09:18",
+    "running": true,
+    "stopped_reason": null
+  }
+}

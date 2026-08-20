@@ -518,6 +518,14 @@ begäran, reservationer och belagda sträckor återställs från SQLite.
 
 MQTT är avsiktligt lösenordsfritt på träffens lokala nät. Servern ska inte exponeras direkt mot internet.
 
+Protokollet mellan en fysisk TMBox och servern är specificerat i
+[docs/protocol/v2/](docs/protocol/v2/README.md): topics, meddelandekuvert,
+revisionsregler och tillståndsmaskiner, med JSON-scheman och kompletta
+exempel för både Charlottendal och den fiktiva testtopologin. Kontraktet är
+normativt — säger koden och dokumentet olika saker är det en bugg i koden.
+Den nuvarande MQTT-gatewayn talar fortfarande v1; v2-ytan byggs mot det här
+kontraktet.
+
 ## Lokal konfiguration och tidtabell
 
 Servern kan skapa och aktivera en träff helt lokalt. Den kan också installera

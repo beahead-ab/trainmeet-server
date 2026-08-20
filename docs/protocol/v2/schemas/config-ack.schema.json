@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainmeet.app/protocol/v2/config-ack.schema.json",
+  "title": "TMBox config ack",
+  "description": "Boxen kvitterar en mottagen config.",
+  "type": "object",
+  "required": [
+    "protocol_version",
+    "device_id",
+    "config_version"
+  ],
+  "properties": {
+    "protocol_version": {
+      "type": "integer",
+      "enum": [
+        2
+      ]
+    },
+    "device_id": {
+      "type": "string"
+    },
+    "config_version": {
+      "type": "integer"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainmeet.app/protocol/v2/assignment.schema.json",
+  "title": "TMBox assignment",
+  "description": "Enhetens stationstilldelning. Retained.",
+  "type": "object",
+  "required": [
+    "protocol_version",
+    "status",
+    "device_id"
+  ],
+  "properties": {
+    "protocol_version": {
+      "type": "integer",
+      "enum": [
+        2
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "assigned",
+        "waiting_for_assignment"
+      ]
+    },
+    "device_id": {
+      "type": "string"
+    },
+    "device_code": {
+      "type": "string"
+    },
+    "station_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Satt när status är assigned. En enhet har exakt en station."
+    },
+    "station_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

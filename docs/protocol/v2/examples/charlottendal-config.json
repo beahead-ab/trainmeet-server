@@ -1,0 +1,55 @@
+{
+  "protocol_version": 2,
+  "config_version": 12,
+  "station": {
+    "id": "st-charlottendal",
+    "code": "CDA",
+    "name": "Charlottendal"
+  },
+  "tracks": [
+    {
+      "id": "track-charlottendal-c-1",
+      "display_label": "1",
+      "operating_point_id": "op-charlottendal-c",
+      "sort_order": 10
+    },
+    {
+      "id": "track-charlottendal-c-2",
+      "display_label": "2",
+      "operating_point_id": "op-charlottendal-c",
+      "sort_order": 20
+    },
+    {
+      "id": "track-charlottendal-c-3",
+      "display_label": "3",
+      "operating_point_id": "op-charlottendal-c",
+      "sort_order": 30
+    },
+    {
+      "id": "track-charlottendal-rbg-1",
+      "display_label": "R1",
+      "operating_point_id": "op-charlottendal-rbg",
+      "sort_order": 40
+    },
+    {
+      "id": "track-charlottendal-rbg-2",
+      "display_label": "R2",
+      "operating_point_id": "op-charlottendal-rbg",
+      "sort_order": 50
+    }
+  ],
+  "connections": [
+    {
+      "connection_id": "connection-cda-vst",
+      "other_station_code": "VST",
+      "track_type": "single",
+      "dispatch_mode": "clearance",
+      "display_row": 1
+    }
+  ],
+  "display": {
+    "rows": 2,
+    "cols": 16,
+    "charset": "ascii"
+  }
+}
