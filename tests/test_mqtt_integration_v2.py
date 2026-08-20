@@ -310,6 +310,40 @@ class MQTTIntegrationV2Tests(unittest.TestCase):
             time.sleep(0.05)
         self.assertEqual(approved_status, "approved", "requesting station did not see the approval")
 
+    def test_a_local_command_does_not_republish_to_the_other_station(self):
+        device_a_id, device_b_id = "esp32-v2-cda", "esp32-v2-vst"
+        device_a, received_a, events_a = self._make_device(device_a_id)
+        device_b, received_b, events_b = self._make_device(device_b_id)
+        self.identities.record_discovery(device_a_id, "TBX-CDA1")
+        self.identities.assign_discovered_device("TBX-CDA1", (), station_id="station-a")
+        self.identities.record_discovery(device_b_id, "TBX-VST1")
+        self.identities.assign_discovered_device("TBX-VST1", (), station_id="station-b")
+        self._hello(device_a, device_a_id, "TBX-CDA1")
+        self._hello(device_b, device_b_id, "TBX-VST1")
+        self.assertTrue(events_a["snapshot"].wait(5))
+        self.assertTrue(events_b["snapshot"].wait(5))
+        events_a["snapshot"].clear()
+        events_b["snapshot"].clear()
+
+        # Positioning a train touches one movement row belonging to station-a.
+        device_a.publish(
+            f"tmbox/v2/device/{device_a_id}/command",
+            json.dumps(
+                {
+                    "protocol_version": 2, "message_id": "pos-1", "device_id": device_a_id,
+                    "station_id": "station-a", "action": "train.position.set",
+                    "payload": {"movement_id": "movement-101-a", "actual_track_id": "2"},
+                }
+            ),
+            qos=1,
+        )
+
+        self.assertTrue(events_a["snapshot"].wait(5), "acting station was not refreshed")
+        self.assertFalse(
+            events_b["snapshot"].wait(1),
+            "station-b was republished to for a change it cannot see",
+        )
+
     def test_rejecting_a_clearance_is_a_successful_command_and_reaches_the_requester(self):
         device_a_id, device_b_id = "esp32-v2-cda", "esp32-v2-vst"
         device_a, received_a, events_a = self._make_device(device_a_id)

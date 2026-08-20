@@ -170,6 +170,28 @@ class MQTTGatewayAdapterV2:
             if paired_client.station_id:
                 self._publish_device(paired_client.client_id)
 
+    def _publish_stations(self, station_ids: set[str]) -> None:
+        for paired_client in self.identities.enabled_clients():
+            if paired_client.station_id in station_ids:
+                self._publish_device(paired_client.client_id)
+
+    @staticmethod
+    def _affected_stations(station_id: str, result: Any) -> set[str]:
+        """Which stations' snapshots this command can have changed.
+
+        Always the acting station. Clearances and line messages also name the
+        station at the other end, and those are the only commands whose effect
+        anyone else can see — a position or crew-ready change touches one
+        movement row belonging to the acting station alone.
+        """
+        stations = {station_id}
+        if isinstance(result, dict):
+            for key in ("from_station_id", "to_station_id"):
+                other = result.get(key)
+                if other:
+                    stations.add(str(other))
+        return stations
+
     def _publish_device(self, device_id: str) -> None:
         client = self.identities.client(device_id)
         if client is None or not client.station_id:
@@ -266,7 +288,7 @@ class MQTTGatewayAdapterV2:
             return
 
         self._publish_ack(device_id, message_id, "accepted", None, result=result)
-        self._publish_all_stations()
+        self._publish_stations(self._affected_stations(station_id, result))
 
     def _stale_revision(
         self,
