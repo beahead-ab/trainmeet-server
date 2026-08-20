@@ -688,6 +688,20 @@ class TamboxHTTPApplication:
         state = next((item for item in snapshot["connection_states"] if item["id"] == connection_id), None)
         return {"action": action, "connection": state, "revision": self.engine.revision}
 
+    def _v2_actor(self, client: PairedClient, shift: dict[str, Any] | None) -> tuple[str, str | None]:
+        """The audit actor for a v2 command.
+
+        TMBox deliberately does not require an active TKL shift (decision
+        2026-08-20, trainmeet-tambox docs/underlag/tmbox-monsterprompt-v2.md
+        §22 — "onödigt komplext och tillför ingenting"). When a shift exists
+        its operator is used, for continuity with the TKL terminal's audit
+        trail; otherwise the device itself is the actor and there is no
+        shift to attach the event to.
+        """
+        if shift is not None:
+            return shift["operator_name"], shift["shift_id"]
+        return client.display_name, None
+
     def _require_v2_station_access(self, client: PairedClient, station_id: str) -> None:
         """Protocol v2 authorization: a TMBox is assigned a station directly
         (protokoll-v2-kontrakt.md §2), not a panel — kept as a separate check
@@ -809,9 +823,7 @@ class TamboxHTTPApplication:
         state = self.operations_store.tkl_station_state(
             snapshot["publication_id"], snapshot["active_day"], station_id
         )
-        current_shift = state["shift"]
-        if current_shift is None:
-            raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan tågrörelser hanteras")
+        actor, shift_id = self._v2_actor(client, state["shift"])
         current = state["movements"].get(
             movement_id, {"arrival": "none", "departure": "none", "actualTrack": None}
         )
@@ -820,8 +832,8 @@ class TamboxHTTPApplication:
             result = self.operations_store.set_crew_ready(
                 snapshot["publication_id"], snapshot["active_day"], station_id, movement_id,
                 crew_ready=bool(payload.get("crew_ready", True)),
-                updated_by=current_shift["operator_name"],
-                shift_id=current_shift["shift_id"],
+                updated_by=actor,
+                shift_id=shift_id,
             )
             return {"movement": result}
 
@@ -853,7 +865,7 @@ class TamboxHTTPApplication:
         result = self.operations_store.update_tkl_movement(
             snapshot["publication_id"], snapshot["active_day"], station_id, movement_id,
             arrival=spec["arrival"], departure=spec["departure"], actual_track=spec["actual_track"],
-            updated_by=current_shift["operator_name"], shift_id=current_shift["shift_id"],
+            updated_by=actor, shift_id=shift_id,
             event_type=spec["event_type"],
         )
         return {"movement": result}
@@ -869,11 +881,10 @@ class TamboxHTTPApplication:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "movement_not_found", "Tågrörelsen finns inte på stationen")
         if track_id not in {track["id"] for track in snapshot["tracks"]}:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "unknown_track", "Spåret finns inte i stationens spårkatalog")
-        if snapshot["shift"] is None:
-            raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan spår väljs")
+        actor, shift_id = self._v2_actor(client, snapshot["shift"])
         result = self.operations_store.assign_track(
             snapshot["publication_id"], snapshot["active_day"], station_id, movement_id, track_id,
-            updated_by=snapshot["shift"]["operator_name"], shift_id=snapshot["shift"]["shift_id"],
+            updated_by=actor, shift_id=shift_id,
         )
         return {"movement": result}
 
@@ -897,11 +908,10 @@ class TamboxHTTPApplication:
         current_shift = self.operations_store.tkl_station_state(
             snapshot["publication_id"], snapshot["active_day"], station_id
         )["shift"]
-        if current_shift is None:
-            raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan linjen kan meddelas ledig")
+        actor, _shift_id = self._v2_actor(client, current_shift)
         result = self.operations_store.publish_line_message(
             snapshot["publication_id"], snapshot["active_day"], movement_id,
-            connection_id, station_id, to_station_id, sent_by=current_shift["operator_name"],
+            connection_id, station_id, to_station_id, sent_by=actor,
         )
         return {"line_message": result}
 
@@ -937,12 +947,11 @@ class TamboxHTTPApplication:
         current_shift = self.operations_store.tkl_station_state(
             snapshot["publication_id"], snapshot["active_day"], station_id
         )["shift"]
-        if current_shift is None:
-            raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan en begäran skickas")
+        actor, _shift_id = self._v2_actor(client, current_shift)
         result = self.operations_store.request_clearance(
             snapshot["publication_id"], snapshot["active_day"], movement_id,
             connection_id, connection.get("track_type", "single"), station_id, to_station_id,
-            requested_by=current_shift["operator_name"],
+            requested_by=actor,
             ttl_seconds=float(payload.get("ttl_seconds") or 120),
         )
         return {"clearance": result}
@@ -959,10 +968,9 @@ class TamboxHTTPApplication:
         current_shift = self.operations_store.tkl_station_state(
             clearance["publication_id"], clearance["active_day"], clearance["to_station_id"]
         )["shift"]
-        if current_shift is None:
-            raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan ett svar lämnas")
+        actor, _shift_id = self._v2_actor(client, current_shift)
         result = self.operations_store.respond_clearance(
-            clearance_id, accept=bool(payload.get("accept")), responded_by=current_shift["operator_name"]
+            clearance_id, accept=bool(payload.get("accept")), responded_by=actor
         )
         return {"clearance": result}
 
@@ -978,10 +986,9 @@ class TamboxHTTPApplication:
         current_shift = self.operations_store.tkl_station_state(
             clearance["publication_id"], clearance["active_day"], clearance["from_station_id"]
         )["shift"]
-        if current_shift is None:
-            raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan en begäran avbryts")
+        actor, _shift_id = self._v2_actor(client, current_shift)
         result = self.operations_store.cancel_clearance(
-            clearance_id, cancelled_by=current_shift["operator_name"]
+            clearance_id, cancelled_by=actor
         )
         return {"clearance": result}
 

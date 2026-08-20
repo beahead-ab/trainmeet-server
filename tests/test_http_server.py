@@ -343,6 +343,35 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(departed["movement"]["arrival"], "approaching")
         self.assertEqual(departed["movement"]["actualTrack"], "2")
 
+    def test_v2_commands_work_without_an_active_tkl_shift(self):
+        # Decision 2026-08-19: TMBox does not require a TKL shift to be
+        # started — "onödigt komplext och tillför ingenting". The device
+        # itself is the audit actor when no shift exists.
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+        device = self.identities.register_client(
+            "esp32-tmbox-noshift",
+            "TMBox TBX-NOSHIFT",
+            DeviceKind.ESP32_PANEL,
+            "credential-noshift",
+            (),
+            station_id="station-a",
+        )
+
+        positioned = self.application.v2_movement_command(
+            device,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "action": "position", "actual_track": "2"},
+        )
+        self.assertEqual(positioned["movement"]["departure"], "positioned")
+        self.assertEqual(positioned["movement"]["updated_by"], "TMBox TBX-NOSHIFT")
+
+        requested = self.application.v2_clearance_request(
+            device,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "connection_id": "connection-a-b"},
+        )
+        self.assertEqual(requested["clearance"]["status"], "waiting")
+        self.assertEqual(requested["clearance"]["requested_by"], "TMBox TBX-NOSHIFT")
+
     def test_v2_clearance_request_respond_and_channel_frees_afterward(self):
         publication = self.runtime_store.install(runtime_package_v2())
         self.operations_store.ensure_publication(publication)
