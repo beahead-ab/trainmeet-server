@@ -249,10 +249,18 @@ waiting
 ```
 
 TTL kontrolleras **lat vid varje request och response**. Korrektheten får
-aldrig bero på att ett bakgrundsjobb hunnit köra.
+aldrig bero på att ett bakgrundsjobb hunnit köra. En stoppad träffklocka
+stoppar också TTL:en — en rast får inte låta öppna begäranden förfalla.
 
-En enkelspårsförbindelse har en delad kanal. En dubbelspårsförbindelse har en
-oberoende kanal per riktning, så motriktade rörelser aldrig blockerar varandra.
+En enkelspårsförbindelse har en delad kanal, `connection_id`. En
+dubbelspårsförbindelse har en oberoende kanal per riktning,
+`{connection_id}:{from_station_id}`, så motriktade rörelser aldrig blockerar
+varandra. Kanalen modelleras som två kanaler, inte som flaggor på en.
+
+`approved` avgör ärendet men frigör inte linjen. Kanalen hålls tills tåget är
+inne: mottagarstationens `train.arrived` för samma tågnummer frigör den. Ett
+`rejected`, `cancelled`, `expired` eller `invalidated_by_revision` frigör den
+direkt.
 
 ### 7.2 Linjen är ledig
 
