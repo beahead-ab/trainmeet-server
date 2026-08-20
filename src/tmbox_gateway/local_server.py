@@ -346,14 +346,15 @@ def _start_discovery_advertiser(
     port: int,
     *,
     server_id: str = "",
-    protocol_version: int = 1,
+    protocol_version: int = 2,
 ) -> subprocess.Popen[bytes] | None:
     """Announce this server on the meeting network as _tmbox._tcp.
 
     A box resolves the address from this record, so the service name has to be
-    the one the firmware looks for. The TXT record carries the protocol this
-    server actually speaks - it stays at 1 until the v2 gateway lands - and a
-    server id, so a box on a network with several servers can tell them apart.
+    the one the firmware looks for. The TXT record carries the highest protocol
+    this server serves and a server id, so a box on a network with several
+    servers can tell them apart. Both protocols share the broker this record
+    points at; they differ only in topic prefix.
     """
     records = [f"protocol={protocol_version}"]
     if server_id:
