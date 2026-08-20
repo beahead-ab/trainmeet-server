@@ -847,6 +847,21 @@ class SQLiteOperationsStore:
                     {"assigned_track_id": track_id, "updated_by": updated_by},
                     shift_id=shift_id, movement_id=movement_id,
                 )
+                # The receiving station may be looking at a clearance request
+                # for this movement right now; the track it would be answering
+                # about just changed underneath it. Invalidate in the same
+                # transaction as the assignment so the two can never disagree.
+                # Answered cases are left alone: reopening those is the
+                # operators' decision, not a side effect of a track change.
+                self._connection.execute(
+                    """
+                    UPDATE clearances
+                    SET status = 'invalidated_by_revision', revision = revision + 1, updated_at = ?
+                    WHERE publication_id = ? AND active_day = ? AND movement_id = ?
+                      AND status = 'waiting'
+                    """,
+                    (now, publication_id, active_day, movement_id),
+                )
                 self._connection.execute("COMMIT")
             except Exception:
                 if self._connection.in_transaction:
@@ -1068,29 +1083,6 @@ class SQLiteOperationsStore:
                     self._connection.execute("ROLLBACK")
                 raise
         return completed
-
-    def invalidate_clearance(self, clearance_id: str, *, now: datetime | None = None) -> dict[str, Any]:
-        """Called when a movement's track changes while its clearance is waiting
-        (gap-analys §3.2/§9.5) — the receiving station must see a fresh state,
-        never a silently stale one."""
-        now = now or datetime.now(timezone.utc)
-        with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                self._connection.execute(
-                    """
-                    UPDATE clearances
-                    SET status = 'invalidated_by_revision', revision = revision + 1, updated_at = ?
-                    WHERE clearance_id = ? AND status = 'waiting'
-                    """,
-                    (now.isoformat(), clearance_id),
-                )
-                self._connection.execute("COMMIT")
-            except Exception:
-                if self._connection.in_transaction:
-                    self._connection.execute("ROLLBACK")
-                raise
-        return self.clearance(clearance_id)
 
     def clearance(self, clearance_id: str) -> dict[str, Any]:
         with self._lock:

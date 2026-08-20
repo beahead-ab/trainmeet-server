@@ -358,7 +358,7 @@ class OperationsStoreTests(unittest.TestCase):
             finally:
                 store.close()
 
-    def test_invalidate_clearance_marks_waiting_case_but_leaves_resolved_ones_alone(self):
+    def test_assigning_a_track_invalidates_a_waiting_case_but_not_a_resolved_one(self):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteOperationsStore(Path(directory) / "runtime.db")
             try:
@@ -367,8 +367,13 @@ class OperationsStoreTests(unittest.TestCase):
                     "connection-a-b", "single", "station-a", "station-b",
                     requested_by="Anna", ttl_seconds=30,
                 )
-                invalidated = store.invalidate_clearance(waiting["clearance_id"])
-                self.assertEqual(invalidated["status"], "invalidated_by_revision")
+                store.assign_track(
+                    "publication-a", "Dagl", "station-a", "movement-421-a", "track-a-1",
+                    updated_by="Anna", shift_id=None,
+                )
+                self.assertEqual(
+                    store.clearance(waiting["clearance_id"])["status"], "invalidated_by_revision"
+                )
 
                 approved = store.request_clearance(
                     "publication-a", "Dagl", "movement-421-a",
@@ -376,8 +381,11 @@ class OperationsStoreTests(unittest.TestCase):
                     requested_by="Anna", ttl_seconds=30,
                 )
                 store.respond_clearance(approved["clearance_id"], accept=True, responded_by="Bertil")
-                unchanged = store.invalidate_clearance(approved["clearance_id"])
-                self.assertEqual(unchanged["status"], "approved")
+                store.assign_track(
+                    "publication-a", "Dagl", "station-a", "movement-421-a", "track-a-2",
+                    updated_by="Anna", shift_id=None,
+                )
+                self.assertEqual(store.clearance(approved["clearance_id"])["status"], "approved")
             finally:
                 store.close()
 

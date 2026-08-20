@@ -467,6 +467,75 @@ class HTTPServerTests(unittest.TestCase):
         untouched = self.operations_store.clearance(requested["clearance"]["clearance_id"])
         self.assertEqual(untouched["status"], "approved")
 
+    def test_v2_track_change_invalidates_a_clearance_still_awaiting_an_answer(self):
+        package = runtime_package_v2()
+        package["tracks"] = [
+            {"id": "track-a-1a", "display_label": "1A", "station_id": "station-a", "sort_order": 10},
+            {"id": "track-a-1b", "display_label": "1B", "station_id": "station-a", "sort_order": 20},
+        ]
+        publication = self.runtime_store.install(package)
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        for station_id, operator_name in (("station-a", "Anna"), ("station-b", "Bertil")):
+            self.application.start_tkl_shift(
+                client, {"station_id": station_id, "operator_name": operator_name, "terminal_name": station_id}
+            )
+
+        requested = self.application.v2_clearance_request(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "connection_id": "connection-a-b"},
+        )
+        self.assertEqual(requested["clearance"]["status"], "waiting")
+
+        # The receiving station is still looking at the request when the track
+        # underneath it changes, so what it has on screen is no longer what it
+        # would be answering.
+        self.application.v2_assign_track(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "track_id": "track-a-1b"},
+        )
+
+        stale = self.operations_store.clearance(requested["clearance"]["clearance_id"])
+        self.assertEqual(stale["status"], "invalidated_by_revision")
+
+        # An invalidated case must not keep the channel hostage either.
+        reopened = self.application.v2_clearance_request(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "connection_id": "connection-a-b"},
+        )
+        self.assertEqual(reopened["clearance"]["status"], "waiting")
+
+    def test_v2_track_change_leaves_an_already_answered_clearance_alone(self):
+        package = runtime_package_v2()
+        package["tracks"] = [
+            {"id": "track-a-1a", "display_label": "1A", "station_id": "station-a", "sort_order": 10},
+            {"id": "track-a-1b", "display_label": "1B", "station_id": "station-a", "sort_order": 20},
+        ]
+        publication = self.runtime_store.install(package)
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        for station_id, operator_name in (("station-a", "Anna"), ("station-b", "Bertil")):
+            self.application.start_tkl_shift(
+                client, {"station_id": station_id, "operator_name": operator_name, "terminal_name": station_id}
+            )
+
+        requested = self.application.v2_clearance_request(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "connection_id": "connection-a-b"},
+        )
+        self.application.v2_clearance_respond(
+            client, {"clearance_id": requested["clearance"]["clearance_id"], "accept": True}
+        )
+        self.application.v2_assign_track(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "track_id": "track-a-1b"},
+        )
+
+        # Already answered: re-deciding it is the operators' call, not something
+        # a track change should silently undo.
+        answered = self.operations_store.clearance(requested["clearance"]["clearance_id"])
+        self.assertEqual(answered["status"], "approved")
+
     def test_v2_clearance_cancel_frees_the_channel(self):
         publication = self.runtime_store.install(runtime_package_v2())
         self.operations_store.ensure_publication(publication)
