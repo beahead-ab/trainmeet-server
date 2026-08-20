@@ -147,6 +147,30 @@ class IdentityTests(unittest.TestCase):
         )
         self.assertEqual(self.store.client("esp32-tmbox-1").station_id, "st-cda")
 
+    def test_re_registering_a_device_keeps_the_station_it_was_assigned(self):
+        self.store.record_discovery("esp32-tmbox-1", "tbx-7a42", model="TMBox")
+        self.store.assign_discovered_device("TBX 7A42", (), station_id="st-cda")
+
+        # A later registration for the same device — rotating its credential,
+        # say — says nothing about its station, so it must not clear one.
+        self.store.register_client(
+            "esp32-tmbox-1", "TMBox TBX-7A42", DeviceKind.ESP32_PANEL, "ny-credential", ()
+        )
+
+        self.assertEqual(self.store.client("esp32-tmbox-1").station_id, "st-cda")
+        self.assertEqual(self.store.station_for_client("esp32-tmbox-1"), "st-cda")
+
+    def test_re_registering_a_device_can_still_move_it_to_another_station(self):
+        self.store.record_discovery("esp32-tmbox-1", "tbx-7a42", model="TMBox")
+        self.store.assign_discovered_device("TBX 7A42", (), station_id="st-cda")
+
+        self.store.register_client(
+            "esp32-tmbox-1", "TMBox TBX-7A42", DeviceKind.ESP32_PANEL, "credential",
+            (), station_id="st-vst",
+        )
+
+        self.assertEqual(self.store.client("esp32-tmbox-1").station_id, "st-vst")
+
     def test_v1_clients_keep_no_station_assignment(self):
         discovered = self.store.record_discovery(
             "esp32-v1-device",

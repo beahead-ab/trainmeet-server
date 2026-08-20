@@ -335,7 +335,12 @@ class IdentityStore:
                         credential_digest = excluded.credential_digest,
                         enabled = 1,
                         last_paired_at = excluded.last_paired_at,
-                        station_id = excluded.station_id
+                        -- Callers that re-register a device without naming a
+                        -- station (a credential rotation, say) must not clear
+                        -- the assignment it already has: a v2 box with no
+                        -- station is refused by every v2 endpoint and stops
+                        -- being published to over MQTT.
+                        station_id = COALESCE(excluded.station_id, clients.station_id)
                     """,
                     (
                         client_id,
