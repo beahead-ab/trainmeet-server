@@ -938,12 +938,13 @@ async function openApplication() {
 }
 
 function selectView(view) {
-  const selected = ["overview", "admin", "simulator", "displays"].includes(view) ? view : "overview";
+  const selected = ["overview", "admin", "simulator", "tmbox-v2", "displays"].includes(view) ? view : "overview";
   state.selectedView = selected;
   localStorage.setItem("trainmeet.view", selected);
   document.querySelector("#overview-view").classList.toggle("hidden", selected !== "overview");
   document.querySelector("#admin-view").classList.toggle("hidden", selected !== "admin");
   document.querySelector("#simulator-view").classList.toggle("hidden", selected !== "simulator");
+  document.querySelector("#tmbox-v2-view").classList.toggle("hidden", selected !== "tmbox-v2");
   document.querySelector("#displays-view").classList.toggle("hidden", selected !== "displays");
   document.querySelectorAll(".view-tab").forEach((button) => {
     const adminSectionMatches = button.dataset.view !== "admin"
@@ -951,6 +952,7 @@ function selectView(view) {
     button.classList.toggle("active", button.dataset.view === selected && adminSectionMatches);
   });
   if (selected === "admin") selectAdminSection(state.selectedAdminSection);
+  if (selected === "tmbox-v2") startTMBoxV2(); else stopTMBoxV2();
   appView.classList.remove("sidebar-open");
 }
 
@@ -983,7 +985,7 @@ function updateRuntimeNavigation(configured) {
     state.selectedAdminSection = "cloud";
     if (state.selectedView === "admin") selectAdminSection("cloud");
   }
-  if (!configured && ["simulator", "displays"].includes(state.selectedView)) selectView("overview");
+  if (!configured && ["simulator", "tmbox-v2", "displays"].includes(state.selectedView)) selectView("overview");
 }
 
 async function refreshSnapshots() {
@@ -3145,3 +3147,356 @@ async function initDisplay() {
 
 if (displayKind && ["topology", "graph", "clock", "dashboard"].includes(displayKind)) initDisplay();
 else bootstrap();
+
+/* ---------------------------------------------------------------- TMBox v2
+
+   The simulator stands in for a physical box, so it is deliberately thin: it
+   reads the three payloads a box reads and sends the one envelope a box sends.
+   Every button is rendered from the server's own `allowed_actions`, and every
+   choice a command needs comes from the station's own config - nothing here
+   restates a rule the server already owns. That duplication is what let the
+   firmware and the server drift apart in the first place.                  */
+
+const tmboxV2 = {
+  timer: null, config: null, configFor: null, snapshot: null, assignment: null,
+  // What was last drawn. The poll runs every few seconds, and rebuilding the
+  // list unconditionally would tear a picker out of the operator's hand
+  // mid-choice, so nothing is redrawn unless the state behind it moved.
+  rendered: null,
+};
+
+const V2_ACTION_LABELS = {
+  "train.position.set": "Uppställt",
+  "train.crew_ready.set": "Förare på plats",
+  "train.departed": "Avgått",
+  "train.approaching": "Närmar sig",
+  "train.arrived": "Ankommit",
+  "train.track.change": "Byt spår",
+  "clearance.request": "Begär klarering",
+  "clearance.cancel": "Återta begäran",
+};
+
+/** Actions that cannot travel on a movement id alone. */
+const V2_ACTION_PICKERS = {
+  "train.track.change": "track",
+  "clearance.request": "connection",
+};
+
+function tmboxV2Els() {
+  return {
+    device: document.querySelector("#tmbox-v2-device"),
+    station: document.querySelector("#tmbox-v2-station"),
+    assignmentState: document.querySelector("#tmbox-v2-assignment-state"),
+    assignmentHeading: document.querySelector("#tmbox-v2-view .tmbox-v2-assignment h3"),
+    movements: document.querySelector("#tmbox-v2-movements"),
+    clearances: document.querySelector("#tmbox-v2-clearances"),
+    lineMessages: document.querySelector("#tmbox-v2-line-messages"),
+    ack: document.querySelector("#tmbox-v2-ack"),
+    message: document.querySelector("#tmbox-v2-message"),
+  };
+}
+
+function startTMBoxV2() {
+  const els = tmboxV2Els();
+  if (!els.device.dataset.bound) {
+    els.device.value = localStorage.getItem("trainmeet.v2Device") || "";
+    els.device.addEventListener("change", () => {
+      localStorage.setItem("trainmeet.v2Device", els.device.value.trim());
+      refreshTMBoxV2();
+    });
+    els.station.addEventListener("change", () => {
+      localStorage.setItem("trainmeet.v2Station", els.station.value);
+      tmboxV2.configFor = null;
+      tmboxV2.rendered = null;
+      refreshTMBoxV2();
+    });
+    els.device.dataset.bound = "1";
+  }
+  loadTMBoxV2Stations().then(refreshTMBoxV2);
+  clearInterval(tmboxV2.timer);
+  tmboxV2.timer = setInterval(refreshTMBoxV2, 4000);
+}
+
+function stopTMBoxV2() {
+  clearInterval(tmboxV2.timer);
+  tmboxV2.timer = null;
+}
+
+async function loadTMBoxV2Stations() {
+  const els = tmboxV2Els();
+  try {
+    const response = await authorizedFetch("/v1/tmbox-v2/stations");
+    if (!response.ok) return;
+    const body = await response.json();
+    const remembered = localStorage.getItem("trainmeet.v2Station");
+    els.station.innerHTML = "";
+    (body.stations || []).forEach((station) => {
+      const option = document.createElement("option");
+      option.value = station.id;
+      option.textContent = station.code ? `${station.name} (${station.code})` : station.name;
+      els.station.append(option);
+    });
+    if (remembered && [...els.station.options].some((o) => o.value === remembered)) {
+      els.station.value = remembered;
+    }
+  } catch (error) {
+    setMessage(els.message, error.message, "error");
+  }
+}
+
+async function refreshTMBoxV2() {
+  const els = tmboxV2Els();
+  const deviceID = els.device.value.trim();
+  const stationID = els.station.value;
+
+  if (deviceID) {
+    try {
+      const response = await authorizedFetch(
+        `/v1/tmbox-v2/assignment?device_id=${encodeURIComponent(deviceID)}`,
+      );
+      tmboxV2.assignment = response.ok ? await response.json() : null;
+    } catch { tmboxV2.assignment = null; }
+  } else {
+    tmboxV2.assignment = null;
+  }
+  renderTMBoxV2Assignment();
+  if (!stationID) return;
+
+  // Config changes only on publish, so fetch it once per station.
+  if (tmboxV2.configFor !== stationID) {
+    try {
+      const response = await authorizedFetch(
+        `/v1/tmbox-v2/config?station_id=${encodeURIComponent(stationID)}`,
+      );
+      if (response.ok) {
+        tmboxV2.config = await response.json();
+        tmboxV2.configFor = stationID;
+      }
+    } catch { /* the snapshot below will report the trouble */ }
+  }
+
+  try {
+    const response = await authorizedFetch(
+      `/v1/tmbox-v2/snapshot?station_id=${encodeURIComponent(stationID)}`,
+    );
+    if (!response.ok) {
+      tmboxV2.snapshot = null;
+      setMessage(els.message, "Stationen finns inte i den aktiva träffen", "error");
+      return;
+    }
+    tmboxV2.snapshot = await response.json();
+    const signature = JSON.stringify(tmboxV2.snapshot);
+    if (signature !== tmboxV2.rendered) {
+      tmboxV2.rendered = signature;
+      renderTMBoxV2Snapshot();
+    }
+  } catch (error) {
+    setMessage(els.message, error.message, "error");
+  }
+}
+
+function renderTMBoxV2Assignment() {
+  const els = tmboxV2Els();
+  const assignment = tmboxV2.assignment;
+  if (!assignment) {
+    els.assignmentState.textContent = "Ange en enhet för att läsa dess tilldelning.";
+    els.assignmentState.className = "tmbox-v2-assignment-state";
+    return;
+  }
+  // The firmware shows KOPPLA BOXEN for any status but assigned; say the same.
+  const assigned = assignment.status === "assigned";
+  els.assignmentState.textContent = assigned
+    ? `Tilldelad ${assignment.station_code || assignment.station_id}`
+    : "KOPPLA BOXEN — enheten är inte tilldelad någon station";
+  els.assignmentState.className = `tmbox-v2-assignment-state ${assigned ? "ok" : "warn"}`;
+}
+
+function v2TrackOptions() {
+  return (tmboxV2.config?.tracks || []).map((track) => [track.id, track.display_label]);
+}
+
+function v2ConnectionOptions() {
+  return (tmboxV2.config?.connections || []).map((connection) => [
+    connection.connection_id,
+    `mot ${connection.other_station_code}`,
+  ]);
+}
+
+function v2Picker(options) {
+  const select = document.createElement("select");
+  options.forEach(([value, label]) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.append(option);
+  });
+  return select;
+}
+
+function renderTMBoxV2Snapshot() {
+  const els = tmboxV2Els();
+  const snapshot = tmboxV2.snapshot;
+  const clock = snapshot.clock || {};
+  els.assignmentHeading.textContent =
+    `Tilldelning — träffklockan ${clock.time || "--:--"}${clock.running ? "" : " (stoppad)"}`;
+
+  els.movements.innerHTML = "";
+  (snapshot.movements || []).forEach((movement) => {
+    const item = document.createElement("li");
+    item.className = "tmbox-v2-movement";
+
+    const head = document.createElement("div");
+    head.className = "tmbox-v2-movement-head";
+    const number = document.createElement("b");
+    number.textContent = `Tåg ${movement.train_number}`;
+    const times = document.createElement("span");
+    times.textContent = `${movement.arrival_time || "—"} → ${movement.departure_time || "—"}`;
+    head.append(number, times);
+    item.append(head);
+
+    const trackLabel = (tmboxV2.config?.tracks || [])
+      .find((track) => track.id === movement.assignedTrackId)?.display_label;
+    const facts = document.createElement("div");
+    facts.className = "tmbox-v2-movement-facts";
+    facts.textContent = `Ankomst ${movement.arrival} · Avgång ${movement.departure}`
+      + ` · Spår ${trackLabel || movement.assignedTrackId || "—"}`
+      + ` · Förare ${movement.crewReady ? "på plats" : "ej på plats"}`;
+    item.append(facts);
+
+    const actions = document.createElement("div");
+    actions.className = "tmbox-v2-actions";
+    (movement.allowed_actions || []).forEach((action) => {
+      const needs = V2_ACTION_PICKERS[action];
+      const options = needs === "track" ? v2TrackOptions()
+        : needs === "connection" ? v2ConnectionOptions()
+        : null;
+      let picker = null;
+      if (options) {
+        if (!options.length) return;  // nothing to choose from, so nothing to offer
+        picker = v2Picker(options);
+        if (needs === "track") picker.value = movement.assignedTrackId || options[0][0];
+        actions.append(picker);
+      }
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = V2_ACTION_LABELS[action] || action;
+      button.addEventListener("click", () => {
+        const body = { movement_id: movement.id };
+        if (needs === "track") body.track_id = picker.value;
+        if (needs === "connection") body.connection_id = picker.value;
+        sendTMBoxV2Command(action, body);
+      });
+      actions.append(button);
+    });
+    if (!actions.children.length) {
+      const none = document.createElement("span");
+      none.className = "tmbox-v2-hint";
+      none.textContent = "Inget tillåtet just nu";
+      actions.append(none);
+    }
+    item.append(actions);
+    els.movements.append(item);
+  });
+
+  els.clearances.innerHTML = "";
+  (snapshot.active_clearances || []).forEach((clearance) => {
+    const item = document.createElement("li");
+    item.className = "tmbox-v2-case";
+    const text = document.createElement("div");
+    text.textContent = `${clearance.status} · ${clearance.from_station_id} → ${clearance.to_station_id}`;
+    item.append(text);
+    const actions = document.createElement("div");
+    actions.className = "tmbox-v2-actions";
+    // A is the decision, B is the refusal; # never settles one.
+    [["Klart", true], ["Ej klart", false]].forEach(([label, approved]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.addEventListener("click", () => sendTMBoxV2Command("clearance.response", {
+        clearance_id: clearance.clearance_id,
+        approved,
+      }));
+      actions.append(button);
+    });
+    item.append(actions);
+    els.clearances.append(item);
+  });
+  if (!els.clearances.children.length) {
+    els.clearances.innerHTML = '<li class="tmbox-v2-hint">Inga öppna ärenden</li>';
+  }
+
+  els.lineMessages.innerHTML = "";
+  (snapshot.line_messages || []).forEach((message) => {
+    const item = document.createElement("li");
+    item.className = "tmbox-v2-case";
+    const text = document.createElement("div");
+    text.textContent = `${message.status} · från ${message.from_station_id}`;
+    item.append(text);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Kvittera";
+    button.addEventListener("click", () => sendTMBoxV2Command("line.available.acknowledge", {
+      message_id: message.message_id,
+    }));
+    item.append(button);
+    els.lineMessages.append(item);
+  });
+
+  // Publishing is one-sided information, so it belongs beside the inbox
+  // rather than on any one movement.
+  const connections = v2ConnectionOptions();
+  if (connections.length) {
+    const publish = document.createElement("li");
+    publish.className = "tmbox-v2-case";
+    const picker = v2Picker(connections);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Meddela att linjen är ledig";
+    button.addEventListener("click", () => sendTMBoxV2Command("line.available.publish", {
+      connection_id: picker.value,
+    }));
+    const row = document.createElement("div");
+    row.className = "tmbox-v2-actions";
+    row.append(picker, button);
+    publish.append(row);
+    els.lineMessages.append(publish);
+  }
+}
+
+async function sendTMBoxV2Command(action, body) {
+  const els = tmboxV2Els();
+  const deviceID = els.device.value.trim();
+  if (!deviceID) {
+    setMessage(els.message, "Ange vilken enhet kommandot kommer från", "error");
+    return;
+  }
+  // A box mints one id per command and reuses it on replay, so a reconnect
+  // cannot turn one decision into two. The simulator does the same.
+  const envelope = {
+    protocol_version: 2,
+    message_id: `sim-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    action,
+    station_id: els.station.value,
+    payload: body,
+  };
+  try {
+    const response = await authorizedFetch("/v1/tmbox-v2/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device_id: deviceID, command: envelope }),
+    });
+    const ack = await response.json();
+    els.ack.textContent = JSON.stringify(ack, null, 2);
+    tmboxV2.rendered = null;
+    await refreshTMBoxV2();
+    if (ack.status === "rejected") {
+      setMessage(els.message, `Avvisat: ${ack.reason || "okänd orsak"}`, "error");
+    } else if (ack.status === "duplicate") {
+      setMessage(els.message, "Samma kommando igen — inget nytt beslut", "");
+    } else {
+      setMessage(els.message, "Kvitterat", "");
+    }
+  } catch (error) {
+    setMessage(els.message, error.message, "error");
+  }
+}

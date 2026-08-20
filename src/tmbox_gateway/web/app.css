@@ -1390,3 +1390,50 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 @media (max-width: 680px) {
   .server-sidebar { width: min(300px, calc(100vw - 40px)); }
 }
+
+/* TMBox v2 simulator */
+.tmbox-v2-view { display: grid; gap: 16px; }
+.tmbox-v2-view .card { padding: 16px; }
+.tmbox-v2-view h3 { margin: 0 0 10px; font-size: 13px; }
+.tmbox-v2-view .panel-picker { display: grid; gap: 6px; }
+.tmbox-v2-view .panel-picker input,
+.tmbox-v2-view .panel-picker select { min-height: 34px; }
+
+.tmbox-v2-hint { color: var(--muted); font-size: 11px; margin: 0 0 10px; }
+
+.tmbox-v2-assignment-state { margin: 0; font-weight: 600; }
+.tmbox-v2-assignment-state.ok { color: var(--ok, #1f7a4d); }
+.tmbox-v2-assignment-state.warn { color: var(--warn, #a05a00); }
+
+.tmbox-v2-movements,
+.tmbox-v2-cases { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+
+.tmbox-v2-movement,
+.tmbox-v2-case {
+  border-radius: var(--radius);
+  background: var(--surface-alt, rgba(127, 127, 127, 0.07));
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+.tmbox-v2-movement-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.tmbox-v2-movement-head span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.tmbox-v2-movement-facts { color: var(--muted); font-size: 11px; }
+
+.tmbox-v2-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tmbox-v2-actions button { min-height: 32px; padding: 0 12px; font-size: 12px; }
+
+.tmbox-v2-ack {
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--surface-alt, rgba(127, 127, 127, 0.07));
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+@media (max-width: 720px) {
+  .tmbox-v2-movement-head { flex-direction: column; gap: 2px; }
+}
