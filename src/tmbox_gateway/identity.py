@@ -592,6 +592,12 @@ class IdentityStore:
             station_id = self._station_id_locked(device_id)
         return _discovered_device_from_row(row, panels, station_id)
 
+    def discovered_device_or_none(self, device_id: str) -> DiscoveredDevice | None:
+        try:
+            return self.discovered_device(device_id)
+        except InvalidClientError:
+            return None
+
     def discovered_devices(self) -> tuple[DiscoveredDevice, ...]:
         with self._lock:
             rows = self._connection.execute(
