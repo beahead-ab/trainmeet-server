@@ -296,20 +296,20 @@ def _start_discovery_advertiser(port: int) -> subprocess.Popen[bytes] | None:
     if sys.platform == "darwin":
         executable = shutil.which("dns-sd")
         command = (
-            [executable, "-R", "TrainMeet Tambox", "_tambox._tcp", "local.", str(port), "protocol=1"]
+            [executable, "-R", "TrainMeet TMBox", "_tmbox._tcp", "local.", str(port), "protocol=2"]
             if executable
             else None
         )
     else:
         executable = shutil.which("avahi-publish-service")
         command = (
-            [executable, "TrainMeet Tambox", "_tambox._tcp", str(port), "protocol=1"]
+            [executable, "TrainMeet TMBox", "_tmbox._tcp", str(port), "protocol=2"]
             if executable
             else None
         )
     if command is None:
         LOGGER.warning(
-            "Lokal Tambox-upptäckt saknas; ange Raspberry Pi-adressen i boxens Wi-Fi-portal"
+            "Lokal TMBox-upptäckt saknas; ange Raspberry Pi-adressen i boxens Wi-Fi-portal"
         )
         return None
     try:
@@ -319,15 +319,15 @@ def _start_discovery_advertiser(port: int) -> subprocess.Popen[bytes] | None:
             stderr=subprocess.DEVNULL,
         )
     except OSError as error:
-        LOGGER.warning("Kunde inte annonsera Tambox-servern på nätverket: %s", error)
+        LOGGER.warning("Kunde inte annonsera TMBox-servern på nätverket: %s", error)
         return None
     time.sleep(0.05)
     if process.poll() is not None:
         LOGGER.warning(
-            "Lokal Tambox-upptäckt kunde inte starta; serveradressen kan anges manuellt"
+            "Lokal TMBox-upptäckt kunde inte starta; serveradressen kan anges manuellt"
         )
         return None
-    LOGGER.info("Annonserar _tambox._tcp på port %s", port)
+    LOGGER.info("Annonserar _tmbox._tcp på port %s", port)
     return process
 
 
