@@ -7,7 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from runtime_fixture import runtime_package, runtime_package_v2
-from tambox_gateway.runtime import (
+from tmbox_gateway.runtime import (
     RuntimePublication,
     RuntimePublicationError,
     SQLiteRuntimeStore,
@@ -16,7 +16,7 @@ from tambox_gateway.runtime import (
 
 
 class RuntimePublicationTests(unittest.TestCase):
-    def test_publication_builds_tambox_session_and_filters_active_day(self):
+    def test_publication_builds_tmbox_session_and_filters_active_day(self):
         publication = RuntimePublication.parse(runtime_package())
 
         session = publication.session_config()

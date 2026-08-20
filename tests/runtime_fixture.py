@@ -33,13 +33,13 @@ def _runtime_package_base() -> dict:
             {
                 "id": "panel-a",
                 "station_id": "station-a",
-                "name": "CDA Tambox",
+                "name": "CDA TMBox",
                 "slots": {"A": "connection-a-b", "B": None, "C": None, "D": None},
             },
             {
                 "id": "panel-b",
                 "station_id": "station-b",
-                "name": "LEK Tambox",
+                "name": "LEK TMBox",
                 "slots": {"A": "connection-a-b", "B": None, "C": None, "D": None},
             },
         ],

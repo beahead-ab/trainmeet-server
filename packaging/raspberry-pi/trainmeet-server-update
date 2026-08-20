@@ -40,10 +40,15 @@ fail() {
 mkdir -p "$BACKUP_DIR"
 status downloading "Hämtar TrainMeet Server från GitHub"
 
-if [ -f "$STATE_DIR/tambox.db" ]; then
-  cp "$STATE_DIR/tambox.db" "$BACKUP_DIR/tambox-$(date -u +%Y%m%d-%H%M%S).db"
-  chown trainmeet-server:trainmeet-server "$BACKUP_DIR"/*.db
-fi
+# An installation from before the TMBox rename still holds tambox.db; the
+# server renames it on its next start, so back up whichever one is there.
+for CANDIDATE in trainmeet.db tambox.db; do
+  if [ -f "$STATE_DIR/$CANDIDATE" ]; then
+    cp "$STATE_DIR/$CANDIDATE" "$BACKUP_DIR/trainmeet-$(date -u +%Y%m%d-%H%M%S).db"
+    chown trainmeet-server:trainmeet-server "$BACKUP_DIR"/*.db
+    break
+  fi
+done
 
 URL=https://github.com/beahead-ab/trainmeet-server/archive/refs/heads/main.tar.gz
 VERSION=$(curl -fsSL https://github.com/beahead-ab/trainmeet-server/commit/main.patch | sed -n '1s/^From \([0-9a-f]\{8\}\).*/\1/p')

@@ -23,7 +23,7 @@ from .storage import CorruptStateError, StateStore, session_config_fingerprint
 
 
 class TrafficEngine:
-    """Single-process authoritative Tambox state machine.
+    """Single-process authoritative TMBox state machine.
 
     The engine is intentionally transport-independent. Its public boundary is a
     command plus one or more complete snapshots, matching the MQTT contract.

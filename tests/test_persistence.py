@@ -7,9 +7,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from session_fixture import sample_session
-from tambox_gateway.engine import TrafficEngine
-from tambox_gateway.models import Command, ConnectionState, DispatchMode
-from tambox_gateway.storage import ConfigurationMismatchError, SQLiteStateStore
+from tmbox_gateway.engine import TrafficEngine
+from tmbox_gateway.models import Command, ConnectionState, DispatchMode
+from tmbox_gateway.storage import ConfigurationMismatchError, SQLiteStateStore
 
 
 def command_for(
@@ -40,7 +40,7 @@ def press(engine: TrafficEngine, panel_id: str, key: str, sequence: int) -> None
 class PersistenceTests(unittest.TestCase):
     def test_pending_clearance_request_survives_restart(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "tambox.db"
+            path = Path(directory) / "trainmeet.db"
             first_store = SQLiteStateStore(path)
             engine = TrafficEngine(
                 sample_session(DispatchMode.CLEARANCE),
@@ -75,7 +75,7 @@ class PersistenceTests(unittest.TestCase):
 
     def test_occupied_line_and_command_id_survive_restart(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "tambox.db"
+            path = Path(directory) / "trainmeet.db"
             first_store = SQLiteStateStore(path)
             engine = TrafficEngine(
                 sample_session(DispatchMode.DIRECT),
@@ -114,7 +114,7 @@ class PersistenceTests(unittest.TestCase):
 
     def test_reserved_departure_survives_restart(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "tambox.db"
+            path = Path(directory) / "trainmeet.db"
             first_store = SQLiteStateStore(path)
             engine = TrafficEngine(
                 sample_session(DispatchMode.DIRECT),
@@ -145,7 +145,7 @@ class PersistenceTests(unittest.TestCase):
 
     def test_changed_configuration_cannot_open_active_run(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "tambox.db"
+            path = Path(directory) / "trainmeet.db"
             original = sample_session(DispatchMode.CLEARANCE)
             first_store = SQLiteStateStore(path)
             engine = TrafficEngine(original, state_store=first_store)

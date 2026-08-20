@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from tambox_gateway.identity import (
+from tmbox_gateway.identity import (
     DeviceKind,
     IdentityStore,
     InvalidPairingCodeError,
@@ -120,11 +120,11 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(self.store.authenticate(second.access_token), second.client)
         self.assertEqual(second.client.panel_ids, ("panel-a", "panel-b"))
 
-    def test_physical_tambox_is_discovered_and_assigned_by_printed_code(self):
+    def test_physical_tmbox_is_discovered_and_assigned_by_printed_code(self):
         discovered = self.store.record_discovery(
             "esp32-a1b2c3",
             "tbx-a7k2",
-            model="Bennys Tambox",
+            model="Bennys TMBox",
             firmware_version="1.0.0",
         )
         self.assertEqual(discovered.device_code, "TBX-A7K2")

@@ -1,6 +1,6 @@
 # TrainMeet Server
 
-TrainMeet Server är den lokala, självständiga driftsmiljön för en TrainMeet-träff. Den körs på en Raspberry Pi och fortsätter fungera utan internet. Servern äger stationer, spårförbindelser, körsätt, aktiv tidtabell, trafiktillstånd och alla anslutna Tamboxar.
+TrainMeet Server är den lokala, självständiga driftsmiljön för en TrainMeet-träff. Den körs på en Raspberry Pi och fortsätter fungera utan internet. Servern äger stationer, spårförbindelser, körsätt, aktiv tidtabell, trafiktillstånd och alla anslutna TMBoxar.
 
 Den centrala [TrainMeet-applikationen](https://github.com/beahead-ab/trainmeet) används längre fram för att bygga och publicera konfigurationer och bearbeta importerade tidtabeller. Själva träffen körs lokalt här.
 
@@ -27,7 +27,7 @@ Kubernetesinstallationer uppdateras genom ny image respektive Helm-deployment.
 ## Snabbstart för första installationen
 
 TrainMeet består av två installationer. **TrainMeet Server** körs på PC, Mac,
-Raspberry Pi eller Linuxserver. **TrainMeet Tambox** installeras på varje
+Raspberry Pi eller Linuxserver. **TrainMeet TMBox** installeras på varje
 ESP32/Arduino-enhet. Installera servern först.
 
 > **En ny server är helt tom.** Den innehåller inga exempelstationer, ingen
@@ -50,7 +50,7 @@ cd trainmeet-server
 
 > **Skriv adressen till en fil innan servern startas.** Containern ser bara
 > sitt eget interna nätverk, inte datorns riktiga IP-adress, så
-> anslutningsraden som visas för Tambox-parkoppling behöver få veta den.
+> anslutningsraden som visas för TMBox-parkoppling behöver få veta den.
 > Kör `ipconfig` och leta upp `IPv4-adress` under din Wi-Fi- eller
 > Ethernet-adapter, skapa sedan filen `.env` i `trainmeet-server`-mappen med
 > den adressen:
@@ -109,7 +109,7 @@ cd trainmeet-server
 
 > **Skriv adressen till en fil innan servern startas.** Containern ser bara
 > sitt eget interna nätverk, inte Macens riktiga IP-adress, så
-> anslutningsraden som visas för Tambox-parkoppling behöver få veta den. Kör
+> anslutningsraden som visas för TMBox-parkoppling behöver få veta den. Kör
 > `ipconfig getifaddr en0` för att hitta adressen, skapa sedan filen `.env` i
 > `trainmeet-server`-mappen med den:
 >
@@ -199,9 +199,9 @@ systemctl status trainmeet-server
 Tryck `q` och avsluta med `exit`. På en publik server ska HTTPS/reverse proxy
 användas och MQTT-port `1883` får inte exponeras mot internet.
 
-### ESP32/Arduino Tambox
+### ESP32/Arduino TMBox
 
-Firmware finns i [trainmeet-tambox](https://github.com/beahead-ab/trainmeet-tambox).
+Firmware finns i [trainmeet-tmbox](https://github.com/beahead-ab/trainmeet-tmbox).
 En Arduino Uno räcker inte eftersom boxen behöver Wi-Fi; lösningen är byggd för
 ESP32 och ESP32-S3.
 
@@ -210,12 +210,12 @@ ESP32 och ESP32-S3.
 2. Hämta firmware:
 
 ```sh
-git clone https://github.com/beahead-ab/trainmeet-tambox.git
-cd trainmeet-tambox/firmware/esp32
+git clone https://github.com/beahead-ab/trainmeet-tmbox.git
+cd trainmeet-tmbox/firmware/esp32
 ```
 
 3. Anslut ESP32 med USB och kontrollera först
-   [kopplingsguiden](https://github.com/beahead-ab/trainmeet-tambox/blob/main/firmware/esp32/WIRING.md).
+   [kopplingsguiden](https://github.com/beahead-ab/trainmeet-tmbox/blob/main/firmware/esp32/WIRING.md).
 4. För Bennys befintliga box, bygg och ladda:
 
 ```sh
@@ -230,7 +230,7 @@ pio run -e esp32-benny -t upload
    `TrainMeet-XXXX`. Anslut telefonen, välj träffens Wi-Fi och ange vid behov
    serverns lokala IP-adress.
 6. Tilldela boxkoden till rätt station och panel A–D i serverns webbadmin.
-   Tamboxen behöver inget eget lösenord.
+   TMBoxen behöver inget eget lösenord.
 7. Uppdatera firmware med `git pull` och kör sedan samma upload-kommando igen.
    Boxens permanenta hårdvaru-id ändras inte.
 
@@ -307,7 +307,7 @@ som två tjänster med beständiga volymer. Colima startas automatiskt vid
 inloggning och containrarna använder `restart: unless-stopped`.
 
 Containern ser bara sitt eget interna nätverk, inte Macens riktiga
-IP-adress, så anslutningsraden som visas för Tambox-parkoppling behöver få
+IP-adress, så anslutningsraden som visas för TMBox-parkoppling behöver få
 veta den explicit. Kör `ipconfig getifaddr en0` för att hitta adressen och
 lägg den i en `.env`-fil i `trainmeet-server`-mappen innan `docker compose
 up`:
@@ -359,7 +359,7 @@ startkommando. Stoppa utan att radera data med `docker compose down`. Använd
 inte `--volumes` om träffkonfigurationen ska sparas.
 
 Containern ser bara sitt eget interna nätverk, inte värdens riktiga
-IP-adress, så anslutningsraden som visas för Tambox-parkoppling behöver få
+IP-adress, så anslutningsraden som visas för TMBox-parkoppling behöver få
 veta den explicit. Lägg värdens IP i en `.env`-fil i `trainmeet-server`-mappen
 innan `docker compose up`:
 
@@ -402,7 +402,7 @@ Automatisk mDNS/Bonjour-upptäckt går inte genom ett vanligt container- eller
 molnnät. Vid Compose-test på Mac anges därför datorns lokala IP-adress i den
 fysiska boxens Wi-Fi-portal. Podden ser av samma skäl bara klustrets interna
 nätverk, inte adressen andra enheter faktiskt når klustret på, så
-anslutningsraden som visas för Tambox-parkoppling behöver få veta den
+anslutningsraden som visas för TMBox-parkoppling behöver få veta den
 explicit:
 
 ```sh
@@ -440,13 +440,13 @@ Kör inte den här installationen och Docker samtidigt på standardportarna.
 `install-docker-mac.command` stänger därför av den LaunchAgent som skriptet
 känner till.
 
-## Klienter och fysisk Tambox
+## Klienter och fysisk TMBox
 
 Serverinstallationen ovan innehåller webbadmin, skärmvyer och
-Tambox-simulering. De andra delarna installeras separat:
+TMBox-simulering. De andra delarna installeras separat:
 
 - Den fysiska ESP32/Arduino-boxens firmware finns i
-  [trainmeet-tambox](https://github.com/beahead-ab/trainmeet-tambox).
+  [trainmeet-tmbox](https://github.com/beahead-ab/trainmeet-tmbox).
 - Den nativa iPhone-appen finns i
   [trainmeet-iphone](https://github.com/beahead-ab/trainmeet-iphone).
 - [TrainMeet TKL](https://github.com/beahead-ab/trainmeet-tkl) är den separata
@@ -455,7 +455,7 @@ Tambox-simulering. De andra delarna installeras separat:
 ## Två tydligt separerade webbdelar
 
 - **TrainMeet Server** är administrationen. Här definieras träffen, stationernas ordning, enkel- och dubbelspår, körsätt, paneler A–D, boxkopplingar, aktiv tidtabell och lokal klocka.
-- **Tambox-simulering** använder samma serverstyrda logik, 16×2-display och tangentbord som de fysiska och nativa klienterna.
+- **TMBox-simulering** använder samma serverstyrda logik, 16×2-display och tangentbord som de fysiska och nativa klienterna.
 
 Ändringar sparas först som ett utkast och aktiveras uttryckligen. Om topologin ändras krävs serveromstart, så en pågående körning inte ändras tyst. Administrationsvyn har en knapp för kontrollerad omstart.
 
@@ -508,7 +508,7 @@ Raspberry Pi: TrainMeet Server + SQLite + Mosquitto
 
 Raspberry Pi:n är alltid auktoritativ. MQTT används som transport med QoS 1, retained snapshots och idempotenta kommandon. En klient som tappar nätet återansluter, presenterar sig igen och får hela det aktuella läget. Klienterna avgör aldrig själva om ett tåg får skickas.
 
-Ett trafikärende tillhör sträckan på servern, inte Tamboxens aktuella skärm.
+Ett trafikärende tillhör sträckan på servern, inte TMBoxens aktuella skärm.
 När en operatör har begärt ett tåg återgår panelen därför direkt till sin
 A–D-översikt och kan hantera nästa tåg. Väntande, inkommande och godkända
 ärenden markeras i respektive A–D-position och öppnas med samma riktningsknapp.
@@ -528,7 +528,7 @@ länkidentiteten returneras av konfigurationsservern och lagras osynligt lokalt;
 ingen lång API-nyckel behöver kopieras eller visas.
 
 En ansluten server kan skicka lokala konfigurationsändringar tillbaka till
-TrainMeet Cloud. Stationer, sträckor, Tamboxar och grundinställningar läggs då
+TrainMeet Cloud. Stationer, sträckor, TMBoxar och grundinställningar läggs då
 som separata poster i en lokal, beständig kö. Cloud-admin godkänner eller avslår
 varje post innan den påverkar Cloud-utkastet. Först när utkastet publiceras som
 en ny version kan ändringen hämtas tillbaka av lokala servrar.
@@ -536,7 +536,7 @@ en ny version kan ändringen hämtas tillbaka av lokala servrar.
 Administratören kan aktivera automatisk Cloud-synk. Servern kontrollerar då
 var femtonde sekund om en ny komplett version har publicerats, hämtar och
 aktiverar den samt gör en kontrollerad omstart när trafikmotorns stations- eller
-Tambox-konfiguration har ändrats.
+TMBox-konfiguration har ändrats.
 
 Under den nuvarande utvecklingsfasen stöds endast runtime-schema 2. Vi håller inte
 ett kompatibilitetslager för äldre testformat innan den första externa releasen;
@@ -549,7 +549,7 @@ banöversikten. Driftpaketet anger då `operating_points` under stationen och
 varje importerad tågrad anger `operating_point_id`. Alias används för att
 matcha PDF-rubriker till rätt driftplats, inte för att kasta bort skillnaden
 mellan dem. Referensfallet Charlottendal publiceras därför som en station med
-driftplatserna C och Rbg: stationens topologi och Tambox är gemensamma, medan
+driftplatserna C och Rbg: stationens topologi och TMBox är gemensamma, medan
 spår och tågrörelser behåller sin driftplats.
 
 TKL och rangerare är två olika operativa roller. TKL ansvarar för hela
@@ -588,7 +588,7 @@ TKL-terminalen kopplas en gång med en lokal sexsiffrig kod, eller använder
 adminsessionen när `/tkl/` öppnas i en extern webbläsare. Före varje körning tar
 en namngiven operatör stationen i tjänst. Pågående trafikärenden överlever
 överlämning, terminalbyte och serveromstart. Tågklarering, avgång och ankomst går
-via samma auktoritativa trafikmotor som de fysiska Tamboxarna.
+via samma auktoritativa trafikmotor som de fysiska TMBoxarna.
 
 Den första sexsiffriga synkkoden kopplar servern permanent till träffen. Därefter
 kan admin söka efter en ny central publicering och hämta den till ett lokalt
@@ -601,7 +601,7 @@ träffklocka och en kombinerad översikt. De hämtar lägesbilden från Raspberr
 Pi:n, inte från molnet, och återansluter automatiskt efter nätavbrott. Där finns
 också klockstyrning för starttid, hastighet och stopporsak. Samtliga elva
 analoga TrainMeet-klockor samt den digitala klockan kan användas. Färger,
-typografi, kort, fullskärmsuttryck och Tamboxens särskilda proportioner beskrivs
+typografi, kort, fullskärmsuttryck och TMBoxens särskilda proportioner beskrivs
 i [den grafiska identiteten](docs/GRAPHIC_IDENTITY.md).
 
 ## Utveckling och test
@@ -612,4 +612,4 @@ python3 -m venv .venv
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Den fysiska boxens firmware finns i [trainmeet-tambox](https://github.com/beahead-ab/trainmeet-tambox). Den nativa appen finns separat i [trainmeet-iphone](https://github.com/beahead-ab/trainmeet-iphone).
+Den fysiska boxens firmware finns i [trainmeet-tmbox](https://github.com/beahead-ab/trainmeet-tmbox). Den nativa appen finns separat i [trainmeet-iphone](https://github.com/beahead-ab/trainmeet-iphone).

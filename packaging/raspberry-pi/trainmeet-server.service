@@ -10,7 +10,7 @@ User=trainmeet-server
 Group=trainmeet-server
 WorkingDirectory=/var/lib/trainmeet-server
 Environment=PYTHONPATH=/opt/trainmeet-server/src
-ExecStart=/opt/trainmeet-server/venv/bin/python -m tambox_gateway.local_server --external-broker --bind 0.0.0.0 --http-port 8787 --mqtt-port 1883 --state-dir /var/lib/trainmeet-server
+ExecStart=/opt/trainmeet-server/venv/bin/python -m tmbox_gateway.local_server --external-broker --bind 0.0.0.0 --http-port 8787 --mqtt-port 1883 --state-dir /var/lib/trainmeet-server
 Restart=always
 RestartSec=2
 NoNewPrivileges=true

@@ -524,7 +524,7 @@ function buildPanels(stations, segments, panels, slots) {
     result.push({
       id: `station-${station.id}-panel-1`,
       station_id: station.id,
-      name: `${station.code} Tambox`,
+      name: `${station.code} TMBox`,
       slots,
     });
   }

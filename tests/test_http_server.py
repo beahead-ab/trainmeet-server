@@ -9,18 +9,18 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from session_fixture import sample_session
-from tambox_gateway.central_sync import DEFAULT_RUNTIME_PUBLICATION_URL, CentralRuntimeDownload, CentralRuntimeManifest
-from tambox_gateway.engine import TrafficEngine
-from tambox_gateway.http_server import (
+from tmbox_gateway.central_sync import DEFAULT_RUNTIME_PUBLICATION_URL, CentralRuntimeDownload, CentralRuntimeManifest
+from tmbox_gateway.engine import TrafficEngine
+from tmbox_gateway.http_server import (
     HTTPServerConfig,
-    TamboxHTTPApplication,
-    TamboxHTTPServer,
+    TrainMeetHTTPApplication,
+    TrainMeetHTTPServer,
 )
-from tambox_gateway.identity import IdentityStore, PairingService
-from tambox_gateway.local_config import SQLiteLocalConfigurationStore
-from tambox_gateway.models import DispatchMode
-from tambox_gateway.operations import SQLiteOperationsStore
-from tambox_gateway.runtime import SQLiteRuntimeStore
+from tmbox_gateway.identity import IdentityStore, PairingService
+from tmbox_gateway.local_config import SQLiteLocalConfigurationStore
+from tmbox_gateway.models import DispatchMode
+from tmbox_gateway.operations import SQLiteOperationsStore
+from tmbox_gateway.runtime import SQLiteRuntimeStore
 from runtime_fixture import runtime_package, runtime_package_v2
 
 
@@ -42,7 +42,7 @@ class HTTPServerTests(unittest.TestCase):
             ["panel-a"],
             code="123456",
         )
-        application = TamboxHTTPApplication(
+        application = TrainMeetHTTPApplication(
             self.engine,
             self.identities,
             pairing,
@@ -58,7 +58,7 @@ class HTTPServerTests(unittest.TestCase):
             operations_store=self.operations_store,
         )
         self.application = application
-        self.server = TamboxHTTPServer(("127.0.0.1", 0), application)
+        self.server = TrainMeetHTTPServer(("127.0.0.1", 0), application)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.base_url = f"http://127.0.0.1:{self.server.server_port}"
@@ -83,7 +83,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="overview-route-list"', html)
         self.assertIn("TÅGRUTTER", html)
         self.assertIn("Administration", html)
-        self.assertIn("Tambox-simulering", html)
+        self.assertIn("TMBox-simulering", html)
         self.assertIn("AKTIV RUNTIME", html)
         self.assertIn("Aktiva sträckor", html)
         self.assertIn('id="copy-active-runtime"', html)
@@ -142,7 +142,7 @@ class HTTPServerTests(unittest.TestCase):
 
     def test_legacy_default_configuration_url_is_migrated_to_cloud(self):
         self.runtime_store.save_central_url("https://trainmeet.app/konfig")
-        self.application = TamboxHTTPApplication(
+        self.application = TrainMeetHTTPApplication(
             self.engine,
             self.identities,
             PairingService(self.identities, set(self.engine.config.panels)),
@@ -374,7 +374,7 @@ class HTTPServerTests(unittest.TestCase):
             {
                 "pairing_code": self.pairing_code,
                 "client_id": "swift-panel-runtime",
-                "display_name": "TrainMeet Tambox på iPhone",
+                "display_name": "TrainMeet TMBox på iPhone",
                 "device_kind": "swift_panel",
             },
             expected_status=201,
@@ -426,7 +426,7 @@ class HTTPServerTests(unittest.TestCase):
         self.identities.record_discovery(
             "esp32-real-box",
             "TBX-A7K2",
-            model="Tambox S3",
+            model="TMBox S3",
             firmware_version="0.1.0",
         )
         paired = self._json_request(
@@ -566,13 +566,13 @@ class HTTPServerTests(unittest.TestCase):
                 {
                     "id": "panel-a",
                     "station_id": "station-a",
-                    "name": "CDA Tambox",
+                    "name": "CDA TMBox",
                     "slots": {"A": "connection-a-b", "B": None, "C": None, "D": None},
                 },
                 {
                     "id": "panel-b",
                     "station_id": "station-b",
-                    "name": "LEK Tambox",
+                    "name": "LEK TMBox",
                     "slots": {"A": "connection-a-b", "B": None, "C": None, "D": None},
                 },
             ],
@@ -749,7 +749,7 @@ class ConnectionBadgeTests(unittest.TestCase):
         self.runtime_store = SQLiteRuntimeStore(Path(self.temporary_directory.name) / "runtime.db")
         engine = TrafficEngine(sample_session(DispatchMode.CLEARANCE))
         pairing = PairingService(self.identities, set(engine.config.panels))
-        self.application = TamboxHTTPApplication(
+        self.application = TrainMeetHTTPApplication(
             engine,
             self.identities,
             pairing,
@@ -761,7 +761,7 @@ class ConnectionBadgeTests(unittest.TestCase):
             ),
             runtime_store=self.runtime_store,
         )
-        self.server = TamboxHTTPServer(("127.0.0.1", 0), self.application)
+        self.server = TrainMeetHTTPServer(("127.0.0.1", 0), self.application)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.base_url = f"http://127.0.0.1:{self.server.server_port}"
@@ -781,7 +781,7 @@ class ConnectionBadgeTests(unittest.TestCase):
 
     def test_loopback_local_ip_falls_back_to_the_address_the_request_arrived_on(self):
         # A cloud droplet's own hostname often resolves to nothing but
-        # loopback, which is useless to a physical Tambox reading the screen -
+        # loopback, which is useless to a physical TMBox reading the screen -
         # this is the exact bug seen live on server.trainmeet.app.
         connection = self._connection(host_header="192.0.2.10:8787")
 

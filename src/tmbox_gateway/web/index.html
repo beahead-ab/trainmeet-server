@@ -146,8 +146,8 @@
               <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="import"><span aria-hidden="true">⇧</span>Manuell import</button>
 
               <p>Enheter</p>
-              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="devices" data-requires-runtime><span aria-hidden="true">⌁</span>Tamboxar</button>
-              <button type="button" class="view-tab server-nav-item" data-view="simulator" data-requires-runtime><span aria-hidden="true">▦</span>Tambox-simulering</button>
+              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="devices" data-requires-runtime><span aria-hidden="true">⌁</span>TMBoxar</button>
+              <button type="button" class="view-tab server-nav-item" data-view="simulator" data-requires-runtime><span aria-hidden="true">▦</span>TMBox-simulering</button>
               <a class="server-nav-link" href="/tkl/" data-requires-runtime><span aria-hidden="true">▤</span>TKL-terminal</a>
               <button type="button" class="view-tab server-nav-item" data-view="displays" data-requires-runtime><span aria-hidden="true">▣</span>Skärmar och klocka</button>
 
@@ -295,7 +295,7 @@
               </section>
               <section class="runtime-plan-section">
                 <div class="runtime-plan-heading">
-                  <h3>Aktiva Tambox-paneler</h3>
+                  <h3>Aktiva TMBox-paneler</h3>
                   <span>A–D från körande runtime</span>
                 </div>
                 <div id="admin-active-panel-list" class="runtime-plan-list"></div>
@@ -397,7 +397,7 @@
               <div class="editor-section">
                 <div class="editor-heading">
                   <div>
-                    <h3>3. Tambox-paneler</h3>
+                    <h3>3. TMBox-paneler</h3>
                     <p>Varje panel tillhör en station. Tangenterna A–D kopplas direkt till stationens sträckor.</p>
                   </div>
                   <button type="button" class="secondary compact" data-action="add-panel">Lägg till panel</button>
@@ -568,7 +568,7 @@
               <div class="section-heading compact-heading">
                 <div>
                   <p class="eyebrow">FYSISKA ENHETER</p>
-                  <h2>Koppla en Tambox</h2>
+                  <h2>Koppla en TMBox</h2>
                   <p>Skriv koden på lådan och välj vilken lokal panel den ska använda.</p>
                 </div>
               </div>
@@ -588,7 +588,7 @@
           <div class="simulator-intro">
             <div>
               <p class="eyebrow">TESTKLIENT</p>
-              <h2>Tambox-simulering</h2>
+              <h2>TMBox-simulering</h2>
               <p>Samma 16×2-display, tangenter och serverstyrda trafiklogik som de fysiska boxarna.</p>
             </div>
             <div class="panel-picker card">
@@ -597,14 +597,14 @@
             </div>
           </div>
 
-          <article class="tambox-case">
+          <article class="tmbox-case">
             <div class="lcd-module">
-              <div class="lcd" aria-label="Tambox display">
+              <div class="lcd" aria-label="TMBox display">
                 <div id="lcd-line-1">STARTAR...</div>
                 <div id="lcd-line-2">VÄNTA</div>
               </div>
             </div>
-            <div id="keypad" class="keypad" aria-label="Tambox tangentbord"></div>
+            <div id="keypad" class="keypad" aria-label="TMBox tangentbord"></div>
           </article>
           <p id="command-message" class="command-message" role="status"></p>
         </section>
@@ -636,7 +636,7 @@
               <div>
                 <p class="eyebrow">ANSLUT TAMBOX</p>
                 <h2>Visa anslutningsuppgifter</h2>
-                <p>Adress, port och kod som en Tambox behöver. Visas som standard på alla skärmar.</p>
+                <p>Adress, port och kod som en TMBox behöver. Visas som standard på alla skärmar.</p>
               </div>
               <span id="connection-badge-code" class="revision-badge">Läser koden …</span>
             </div>
@@ -732,7 +732,7 @@
           </div>
           <div id="clock-view" class="clock-view hidden"></div>
           <div id="dashboard-view" class="dashboard-view hidden"></div>
-          <aside id="display-connection" class="display-connection hidden" aria-label="Anslut en Tambox">
+          <aside id="display-connection" class="display-connection hidden" aria-label="Anslut en TMBox">
             <span id="display-connection-address"></span>
             <b id="display-connection-code"></b>
           </aside>

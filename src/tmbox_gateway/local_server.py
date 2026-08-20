@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .central_sync import DEFAULT_RUNTIME_PUBLICATION_URL
 from .engine import TrafficEngine
-from .http_server import HTTPServerConfig, TamboxHTTPApplication, TamboxHTTPServer
+from .http_server import HTTPServerConfig, TrainMeetHTTPApplication, TrainMeetHTTPServer
 from .identity import DeviceKind, IdentityStore, PairingService
 from .local_config import SQLiteLocalConfigurationStore
 from .models import unconfigured_session
@@ -28,7 +28,7 @@ from .software_update import supports_updates
 from .storage import SQLiteStateStore
 
 
-LOGGER = logging.getLogger("tambox_gateway.server")
+LOGGER = logging.getLogger("tmbox_gateway.server")
 
 
 def _raise_keyboard_interrupt(_signum: int, _frame: object) -> None:
@@ -51,7 +51,7 @@ def main() -> None:
         "--advertised-host",
         default=os.environ.get("TRAINMEET_ADVERTISED_HOST", ""),
         help=(
-            "IP eller domän som visas för Tambox-anslutning. Krävs i Docker/"
+            "IP eller domän som visas för TMBox-anslutning. Krävs i Docker/"
             "Kubernetes: containern ser bara sitt eget interna nätverk, inte "
             "värdens riktiga adress. Behövs inte vid installation direkt på "
             "Pi, Mac eller en Linuxserver."
@@ -98,7 +98,7 @@ def main() -> None:
     else:
         broker = _start_broker(args.bind, args.mqtt_port, state_directory)
         broker_host = "127.0.0.1"
-    database_path = state_directory / "tambox.db"
+    database_path = _database_path(state_directory)
     runtime_store = SQLiteRuntimeStore(database_path)
     operations_store = SQLiteOperationsStore(database_path)
     local_configuration_store = SQLiteLocalConfigurationStore(database_path)
@@ -143,7 +143,7 @@ def main() -> None:
                 DeviceKind.SWIFT_ADMIN,
                 DeviceKind.WEB_ADMIN,
                 DeviceKind.TKL_TERMINAL,
-                # A physical Tambox keys this same code in directly (Wi-Fi
+                # A physical TMBox keys this same code in directly (Wi-Fi
                 # portal or its own keypad), so it needs to be an allowed
                 # kind here too - otherwise the code shown on the connection
                 # badge would be rejected from the one device it is for.
@@ -165,10 +165,12 @@ def main() -> None:
     )
     gateway.client.connect(broker_host, args.mqtt_port, keepalive=10, clean_start=True)
     gateway.client.loop_start()
-    discovery_advertiser = _start_discovery_advertiser(args.mqtt_port)
+    discovery_advertiser = _start_discovery_advertiser(
+        args.mqtt_port, server_id=args.gateway_id
+    )
 
     local_ip = args.advertised_host.strip() or _local_ip()
-    application = TamboxHTTPApplication(
+    application = TrainMeetHTTPApplication(
         engine,
         identities,
         pairing,
@@ -189,7 +191,7 @@ def main() -> None:
         local_configuration_store=local_configuration_store,
         operations_store=operations_store,
     )
-    server = TamboxHTTPServer((args.bind, args.http_port), application)
+    server = TrainMeetHTTPServer((args.bind, args.http_port), application)
     cloud_sync_stop = threading.Event()
     cloud_sync_thread = threading.Thread(
         target=_cloud_auto_sync_loop,
@@ -205,7 +207,7 @@ def main() -> None:
     try:
         server.serve_forever(poll_interval=0.25)
     except KeyboardInterrupt:
-        print("\nTambox-servern stoppas …")
+        print("\nTMBox-servern stoppas …")
     finally:
         cloud_sync_stop.set()
         cloud_sync_thread.join(timeout=2)
@@ -234,7 +236,7 @@ def main() -> None:
         print("TrainMeet Server startar om …")
         os.execv(
             sys.executable,
-            [sys.executable, "-m", "tambox_gateway.local_server", *sys.argv[1:]],
+            [sys.executable, "-m", "tmbox_gateway.local_server", *sys.argv[1:]],
         )
 
 
@@ -286,8 +288,8 @@ def _reset_operational_state(database_path: Path, state_directory: Path) -> None
 
 
 def _cloud_auto_sync_loop(
-    application: TamboxHTTPApplication,
-    server: TamboxHTTPServer,
+    application: TrainMeetHTTPApplication,
+    server: TrainMeetHTTPServer,
     stop: threading.Event,
 ) -> None:
     while not stop.is_set():
@@ -304,24 +306,59 @@ def _cloud_auto_sync_loop(
         stop.wait(15)
 
 
-def _start_discovery_advertiser(port: int) -> subprocess.Popen[bytes] | None:
+def _database_path(state_directory: Path) -> Path:
+    """Return the operational database, carrying a pre-rename one over.
+
+    Installations from before the TMBox rename hold tambox.db. Renaming it
+    once, before any connection is opened, keeps their meeting configuration
+    and traffic history intact. The write-ahead log and shared-memory files
+    have to travel with it or SQLite will refuse the database.
+    """
+    database_path = state_directory / "trainmeet.db"
+    legacy_path = state_directory / "tambox.db"
+    if database_path.exists() or not legacy_path.exists():
+        return database_path
+    for suffix in ("", "-wal", "-shm"):
+        source = legacy_path.with_name(f"{legacy_path.name}{suffix}")
+        if source.exists():
+            source.rename(database_path.with_name(f"{database_path.name}{suffix}"))
+    LOGGER.info("Driftdatabasen tambox.db har bytt namn till trainmeet.db")
+    return database_path
+
+
+def _start_discovery_advertiser(
+    port: int,
+    *,
+    server_id: str = "",
+    protocol_version: int = 1,
+) -> subprocess.Popen[bytes] | None:
+    """Announce this server on the meeting network as _tmbox._tcp.
+
+    A box resolves the address from this record, so the service name has to be
+    the one the firmware looks for. The TXT record carries the protocol this
+    server actually speaks - it stays at 1 until the v2 gateway lands - and a
+    server id, so a box on a network with several servers can tell them apart.
+    """
+    records = [f"protocol={protocol_version}"]
+    if server_id:
+        records.append(f"server_id={server_id}")
     if sys.platform == "darwin":
         executable = shutil.which("dns-sd")
         command = (
-            [executable, "-R", "TrainMeet Tambox", "_tambox._tcp", "local.", str(port), "protocol=1"]
+            [executable, "-R", "TrainMeet TMBox", "_tmbox._tcp", "local.", str(port), *records]
             if executable
             else None
         )
     else:
         executable = shutil.which("avahi-publish-service")
         command = (
-            [executable, "TrainMeet Tambox", "_tambox._tcp", str(port), "protocol=1"]
+            [executable, "TrainMeet TMBox", "_tmbox._tcp", str(port), *records]
             if executable
             else None
         )
     if command is None:
         LOGGER.warning(
-            "Lokal Tambox-upptäckt saknas; ange Raspberry Pi-adressen i boxens Wi-Fi-portal"
+            "Lokal TMBox-upptäckt saknas; ange Raspberry Pi-adressen i boxens Wi-Fi-portal"
         )
         return None
     try:
@@ -331,15 +368,15 @@ def _start_discovery_advertiser(port: int) -> subprocess.Popen[bytes] | None:
             stderr=subprocess.DEVNULL,
         )
     except OSError as error:
-        LOGGER.warning("Kunde inte annonsera Tambox-servern på nätverket: %s", error)
+        LOGGER.warning("Kunde inte annonsera TMBox-servern på nätverket: %s", error)
         return None
     time.sleep(0.05)
     if process.poll() is not None:
         LOGGER.warning(
-            "Lokal Tambox-upptäckt kunde inte starta; serveradressen kan anges manuellt"
+            "Lokal TMBox-upptäckt kunde inte starta; serveradressen kan anges manuellt"
         )
         return None
-    LOGGER.info("Annonserar _tambox._tcp på port %s", port)
+    LOGGER.info("Annonserar _tmbox._tcp på port %s", port)
     return process
 
 
@@ -419,7 +456,7 @@ def _local_ip() -> str:
     # DNS, mDNS or /etc/hosts state that is frequently missing or wrong (no
     # mDNS record yet, a Docker container's internal hostname, ...), while the
     # routing table reliably points at whichever interface is actually
-    # connected - normally the same Wi-Fi a Tambox is on. No packet is sent;
+    # connected - normally the same Wi-Fi a TMBox is on. No packet is sent;
     # UDP connect() only performs a routing decision, so this works even
     # without internet access as long as a local gateway is configured, which
     # a Wi-Fi router hands out by DHCP whether or not it has a WAN uplink.

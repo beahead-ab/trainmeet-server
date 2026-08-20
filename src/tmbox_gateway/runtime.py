@@ -142,7 +142,7 @@ class RuntimePublication:
         panels = _required_list(payload, "panels")
         _unique_ids(panels, "panel")
         if not panels:
-            raise RuntimePublicationError("Driftpaketet innehåller inga Tambox-paneler")
+            raise RuntimePublicationError("Driftpaketet innehåller inga TMBox-paneler")
         for panel in panels:
             if _required_text(panel, "station_id") not in station_ids:
                 raise RuntimePublicationError("En panel hänvisar till en okänd station")
@@ -292,7 +292,7 @@ class RuntimePublication:
             value["id"]: PanelConfig(
                 id=value["id"],
                 station_id=value["station_id"],
-                name=value.get("name") or f"{stations[value['station_id']].code} Tambox",
+                name=value.get("name") or f"{stations[value['station_id']].code} TMBox",
                 slots={key: value["slots"].get(key) for key in ("A", "B", "C", "D")},
             )
             for value in self.payload["panels"]

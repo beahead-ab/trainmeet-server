@@ -6,18 +6,77 @@ import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
-from tambox_gateway.local_server import (
+from tmbox_gateway.local_server import (
+    _database_path,
     _reset_operational_state,
     _reset_server_state,
+    _start_discovery_advertiser,
     _wait_for_port,
 )
 
 
 class LocalServerStartupTests(unittest.TestCase):
+    def test_a_pre_rename_database_is_carried_over_with_its_journal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_directory = Path(directory)
+            legacy = state_directory / "tambox.db"
+            connection = sqlite3.connect(legacy)
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("CREATE TABLE runtime_settings (key TEXT, value TEXT)")
+            connection.execute(
+                "INSERT INTO runtime_settings VALUES ('server_name', 'Charlottendal')"
+            )
+            connection.commit()
+            connection.close()
+
+            database = _database_path(state_directory)
+
+            self.assertEqual(database.name, "trainmeet.db")
+            self.assertTrue(database.exists())
+            self.assertFalse(legacy.exists())
+            carried = sqlite3.connect(database)
+            try:
+                self.assertEqual(
+                    carried.execute(
+                        "SELECT value FROM runtime_settings WHERE key = 'server_name'"
+                    ).fetchone()[0],
+                    "Charlottendal",
+                )
+            finally:
+                carried.close()
+
+    def test_an_existing_database_is_never_overwritten_by_a_legacy_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_directory = Path(directory)
+            (state_directory / "tambox.db").write_bytes(b"legacy")
+            (state_directory / "trainmeet.db").write_bytes(b"current")
+
+            database = _database_path(state_directory)
+
+            self.assertEqual(database.read_bytes(), b"current")
+            self.assertTrue((state_directory / "tambox.db").exists())
+
+    def test_discovery_announces_the_service_the_firmware_looks_for(self):
+        recorded: dict[str, list[str]] = {}
+
+        def fake_popen(command, **_kwargs):
+            recorded["command"] = command
+            raise OSError("not started in tests")
+
+        with patch("tmbox_gateway.local_server.shutil.which", return_value="/usr/bin/publish"):
+            with patch("tmbox_gateway.local_server.subprocess.Popen", fake_popen):
+                self.assertIsNone(
+                    _start_discovery_advertiser(1883, server_id="charlottendal")
+                )
+
+        self.assertIn("_tmbox._tcp", recorded["command"])
+        self.assertIn("server_id=charlottendal", recorded["command"])
+        self.assertIn("protocol=1", recorded["command"])
+
     def test_remote_reset_preserves_admin_session_and_server_name(self):
         with tempfile.TemporaryDirectory() as directory:
             state_directory = Path(directory)
-            database = state_directory / "tambox.db"
+            database = state_directory / "trainmeet.db"
             connection = sqlite3.connect(database)
             connection.executescript(
                 """
@@ -74,11 +133,11 @@ class LocalServerStartupTests(unittest.TestCase):
     def test_factory_reset_removes_runtime_identity_but_keeps_software_files(self):
         with tempfile.TemporaryDirectory() as directory:
             state_directory = Path(directory)
-            database = state_directory / "tambox.db"
+            database = state_directory / "trainmeet.db"
             for path in (
                 database,
-                state_directory / "tambox.db-wal",
-                state_directory / "tambox.db-shm",
+                state_directory / "trainmeet.db-wal",
+                state_directory / "trainmeet.db-shm",
                 state_directory / "connection-code.txt",
                 state_directory / "update-status.json",
             ):
@@ -87,14 +146,14 @@ class LocalServerStartupTests(unittest.TestCase):
             _reset_server_state(database, state_directory)
 
             self.assertFalse(database.exists())
-            self.assertFalse((state_directory / "tambox.db-wal").exists())
-            self.assertFalse((state_directory / "tambox.db-shm").exists())
+            self.assertFalse((state_directory / "trainmeet.db-wal").exists())
+            self.assertFalse((state_directory / "trainmeet.db-shm").exists())
             self.assertFalse((state_directory / "connection-code.txt").exists())
             self.assertTrue((state_directory / "update-status.json").exists())
 
-    @patch("tambox_gateway.local_server.time.sleep")
+    @patch("tmbox_gateway.local_server.time.sleep")
     @patch(
-        "tambox_gateway.local_server._port_is_open",
+        "tmbox_gateway.local_server._port_is_open",
         side_effect=[False, False, True],
     )
     def test_external_broker_can_start_after_server_container(
@@ -106,7 +165,7 @@ class LocalServerStartupTests(unittest.TestCase):
         self.assertEqual(port_is_open.call_count, 3)
         self.assertEqual(sleep.call_count, 2)
 
-    @patch("tambox_gateway.local_server._port_is_open", return_value=False)
+    @patch("tmbox_gateway.local_server._port_is_open", return_value=False)
     def test_zero_wait_performs_one_final_broker_check(self, port_is_open) -> None:
         self.assertFalse(_wait_for_port("mosquitto", 1883, 0))
         port_is_open.assert_called_once_with("mosquitto", 1883)

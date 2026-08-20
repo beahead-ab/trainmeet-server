@@ -52,7 +52,7 @@ from .runtime import (
 from .software_update import SoftwareUpdateError, installed_version, latest_version, read_update_status, start_update
 
 
-LOGGER = logging.getLogger("tambox_gateway.http")
+LOGGER = logging.getLogger("tmbox_gateway.http")
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
 ADMIN_COOKIE_NAME = "trainmeet_admin"
 ADMIN_COOKIE_MAX_AGE = 12 * 60 * 60
@@ -106,7 +106,7 @@ class HTTPServerConfig:
     connection_code: str = ""
 
 
-class TamboxHTTPApplication:
+class TrainMeetHTTPApplication:
     def __init__(
         self,
         engine: TrafficEngine,
@@ -144,8 +144,8 @@ class TamboxHTTPApplication:
                 token, proposals, url, server_name=server_name
             )
         )
-        self.web_root = files("tambox_gateway").joinpath("web")
-        self.tkl_web_root = files("tambox_gateway").joinpath("tkl")
+        self.web_root = files("tmbox_gateway").joinpath("web")
+        self.tkl_web_root = files("tmbox_gateway").joinpath("tkl")
 
         if self.runtime_store is not None and self.runtime_store.central_url():
             saved_url = self.runtime_store.central_url() or ""
@@ -469,11 +469,11 @@ class TamboxHTTPApplication:
         }
 
     def connection_details(self, request_host: str = "") -> dict[str, Any]:
-        """Address and code a Tambox needs, plus the screens allowed to show it.
+        """Address and code a TMBox needs, plus the screens allowed to show it.
 
         A guessed LAN address is used when there is one. On a host whose own
         name does not resolve to anything but loopback - a cloud droplet, most
-        Docker setups - that guess is 127.0.0.1, which is useless to a Tambox
+        Docker setups - that guess is 127.0.0.1, which is useless to a TMBox
         on someone else's network. The address the display page itself was
         just loaded through is a working fallback, the same way pair() already
         derives the MQTT host devices should use.
@@ -1148,7 +1148,7 @@ class TamboxHTTPApplication:
             if connection_counts[station_id] == 0:
                 warnings.append(f"{station['name']} saknar anslutande sträcka")
             if panels_by_station[station_id] == 0:
-                warnings.append(f"{station['name']} saknar Tambox-panel")
+                warnings.append(f"{station['name']} saknar TMBox-panel")
             operating_points = []
             for operating_point in station.get("operating_points", []):
                 operating_point_id = str(operating_point["id"])
@@ -1415,8 +1415,8 @@ class HTTPAPIError(RuntimeError):
         self.code = code
 
 
-class TamboxRequestHandler(BaseHTTPRequestHandler):
-    server: "TamboxHTTPServer"
+class TrainMeetRequestHandler(BaseHTTPRequestHandler):
+    server: "TrainMeetHTTPServer"
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -1940,20 +1940,20 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-class TamboxHTTPServer(ThreadingHTTPServer):
+class TrainMeetHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
     def __init__(
         self,
         address: tuple[str, int],
-        application: TamboxHTTPApplication,
+        application: TrainMeetHTTPApplication,
     ):
         self.application = application
         self.restart_requested = False
         self.operational_reset_requested = False
         self.factory_reset_requested = False
-        super().__init__(address, TamboxRequestHandler)
+        super().__init__(address, TrainMeetRequestHandler)
 
     def request_restart(self) -> None:
         # The flag is what makes the supervising process act, so it is set

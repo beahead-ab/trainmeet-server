@@ -449,16 +449,16 @@ class IdentityStore:
         device_id: str,
         device_code: str,
         *,
-        model: str = "Tambox",
+        model: str = "TMBox",
         firmware_version: str = "unknown",
         now: datetime | None = None,
     ) -> DiscoveredDevice:
         device_id = device_id.strip()
         device_code = _normalize_device_code(device_code)
         if not CLIENT_ID_PATTERN.fullmatch(device_id):
-            raise InvalidClientError("Ogiltigt enhets-ID från Tambox")
+            raise InvalidClientError("Ogiltigt enhets-ID från TMBox")
         if len(device_code) < 4 or len(device_code) > 24:
-            raise InvalidClientError("Ogiltig kod från Tambox")
+            raise InvalidClientError("Ogiltig kod från TMBox")
         now = now or datetime.now(timezone.utc)
         with self._lock:
             self._connection.execute(
@@ -494,7 +494,7 @@ class IdentityStore:
                 (device_id,),
             ).fetchone()
             if row is None:
-                raise InvalidClientError("Tambox-enheten har ännu inte hittats")
+                raise InvalidClientError("TMBox-enheten har ännu inte hittats")
             panels = self._panel_ids_locked(device_id)
         return DiscoveredDevice(row[0], row[1], row[2], row[3], row[4], panels)
 
@@ -528,7 +528,7 @@ class IdentityStore:
                 (normalized,),
             ).fetchone()
         if row is None:
-            raise InvalidClientError("Ingen inkopplad Tambox har den koden")
+            raise InvalidClientError("Ingen inkopplad TMBox har den koden")
         internal_credential = f"local-device:{row[0]}"
         return self.register_client(
             row[0],

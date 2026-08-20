@@ -12,7 +12,7 @@ from .models import Command, CommandAck, unconfigured_session
 from .storage import SQLiteStateStore
 
 
-LOGGER = logging.getLogger("tambox_gateway.mqtt")
+LOGGER = logging.getLogger("tmbox_gateway.mqtt")
 
 
 class MQTTGatewayAdapter:
@@ -40,7 +40,7 @@ class MQTTGatewayAdapter:
         self.identities = identities
         self.client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-            client_id=f"tambox-gateway-{gateway_id}",
+            client_id=f"tmbox-gateway-{gateway_id}",
             protocol=mqtt.MQTTv5,
             reconnect_on_failure=True,
             manual_ack=True,
@@ -160,7 +160,7 @@ class MQTTGatewayAdapter:
         device = self.identities.record_discovery(
             device_id,
             str(payload["device_code"]),
-            model=str(payload.get("model", "Tambox")),
+            model=str(payload.get("model", "TMBox")),
             firmware_version=str(payload.get("firmware_version", "unknown")),
         )
         assigned_panel_ids = list(self.identities.panels_for_client(device_id))
@@ -245,13 +245,13 @@ def _parse_datetime(value: str) -> datetime:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="TrainMeet Tambox local MQTT gateway")
+    parser = argparse.ArgumentParser(description="TrainMeet TMBox local MQTT gateway")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=1883)
     parser.add_argument("--gateway-id", default="gateway-local")
     parser.add_argument(
         "--state-db",
-        default="data/tambox-state.db",
+        default="data/tmbox-state.db",
         help="SQLite database used to restore the active run after restart",
     )
     args = parser.parse_args()

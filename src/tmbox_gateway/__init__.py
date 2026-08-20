@@ -1,4 +1,4 @@
-"""TrainMeet Tambox Gateway domain package."""
+"""TrainMeet TMBox Gateway domain package."""
 
 from .engine import TrafficEngine
 from .models import (

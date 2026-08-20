@@ -16,7 +16,7 @@ const adminSections = {
   local: {
     eyebrow: "KONFIGURATION",
     title: "Lokala ändringar",
-    description: "Justera stationer, sträckor och Tambox-paneler utan att stoppa den aktiva träffen.",
+    description: "Justera stationer, sträckor och TMBox-paneler utan att stoppa den aktiva träffen.",
     state: "Lokalt utkast",
   },
   import: {
@@ -27,7 +27,7 @@ const adminSections = {
   },
   devices: {
     eyebrow: "ENHETER",
-    title: "Fysiska Tamboxar",
+    title: "Fysiska TMBoxar",
     description: "Koppla varje hårdvaruenhet till rätt logisk panel på stationen.",
     state: "Lokalt nät",
   },
@@ -63,9 +63,22 @@ function createWebClientID() {
   return `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
 }
 
+// Three keys used to carry a tambox. prefix while the rest already used
+// trainmeet. Move them once so an open browser keeps its session instead of
+// being logged out by the rename.
+for (const key of ["accessToken", "clientID", "panelID"]) {
+  const legacy = localStorage.getItem(`tambox.${key}`);
+  if (legacy !== null) {
+    if (localStorage.getItem(`trainmeet.${key}`) === null) {
+      localStorage.setItem(`trainmeet.${key}`, legacy);
+    }
+    localStorage.removeItem(`tambox.${key}`);
+  }
+}
+
 const state = {
-  token: localStorage.getItem("tambox.accessToken"),
-  clientID: localStorage.getItem("tambox.clientID") || createWebClientID(),
+  token: localStorage.getItem("trainmeet.accessToken"),
+  clientID: localStorage.getItem("trainmeet.clientID") || createWebClientID(),
   selectedView: localStorage.getItem("trainmeet.view") === "server"
     ? "overview"
     : (localStorage.getItem("trainmeet.view") || "overview"),
@@ -73,7 +86,7 @@ const state = {
     ? localStorage.getItem("trainmeet.adminSection")
     : "runtime",
   snapshots: new Map(),
-  selectedPanelID: localStorage.getItem("tambox.panelID"),
+  selectedPanelID: localStorage.getItem("trainmeet.panelID"),
   snapshotTimer: null,
   adminTimer: null,
   sending: false,
@@ -451,8 +464,8 @@ logoutButton.addEventListener("click", async () => {
     headers: { "Content-Type": "application/json" },
     body: "{}",
   });
-  localStorage.removeItem("tambox.accessToken");
-  localStorage.removeItem("tambox.panelID");
+  localStorage.removeItem("trainmeet.accessToken");
+  localStorage.removeItem("trainmeet.panelID");
   state.token = null;
   state.snapshots.clear();
   clearTimeout(state.snapshotTimer);
@@ -559,8 +572,8 @@ document.querySelector("#stop-local-clock").addEventListener("click", async () =
 
 panelSelect.addEventListener("change", () => {
   state.selectedPanelID = panelSelect.value;
-  localStorage.setItem("tambox.panelID", state.selectedPanelID);
-  renderTambox();
+  localStorage.setItem("trainmeet.panelID", state.selectedPanelID);
+  renderTMBox();
 });
 
 deviceForm.addEventListener("submit", async (event) => {
@@ -578,8 +591,8 @@ deviceForm.addEventListener("submit", async (event) => {
       }),
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message || "Tamboxen kunde inte kopplas");
-    setMessage(deviceMessage, "Tamboxen är kopplad och får sin panel vid nästa kontakt.", "success");
+    if (!response.ok) throw new Error(payload.message || "TMBoxen kunde inte kopplas");
+    setMessage(deviceMessage, "TMBoxen är kopplad och får sin panel vid nästa kontakt.", "success");
     document.querySelector("#device-code").value = "";
     await refreshDevices();
   } catch (error) {
@@ -650,7 +663,7 @@ factoryResetButton.addEventListener("click", async () => {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Servern kunde inte nollställas");
     if (localFactoryReset) {
-      localStorage.removeItem("tambox.accessToken");
+      localStorage.removeItem("trainmeet.accessToken");
       state.token = null;
     }
     setConnection("waiting", "Nollställer");
@@ -978,7 +991,7 @@ async function refreshSnapshots() {
   try {
     const response = await authorizedFetch("/v1/snapshots");
     if (response.status === 401) {
-      localStorage.removeItem("tambox.accessToken");
+      localStorage.removeItem("trainmeet.accessToken");
       state.token = null;
       await showLogin();
       throw new Error("Inloggningen gäller inte längre");
@@ -990,7 +1003,7 @@ async function refreshSnapshots() {
       state.selectedPanelID = payload.snapshots[0]?.panel_id || null;
     }
     updatePanelOptions();
-    renderTambox();
+    renderTMBox();
     renderActiveRuntimePlan(state.overviewSnapshot);
     setConnection(
       "online",
@@ -1017,7 +1030,7 @@ async function pressKey(key) {
   if (!snapshot || state.sending || !snapshot.interaction.allowed_keys.includes(key)) return;
   state.sending = true;
   setMessage(commandMessage, "");
-  renderTambox();
+  renderTMBox();
   try {
     const response = await authorizedFetch("/v1/command", {
       method: "POST",
@@ -1035,12 +1048,12 @@ async function pressKey(key) {
       state.snapshots.set(next.panel_id, next);
     }
     if (payload.status === "rejected") setMessage(commandMessage, reasonText(payload.reason), "error");
-    renderTambox();
+    renderTMBox();
   } catch (error) {
     setMessage(commandMessage, error.message, "error");
   } finally {
     state.sending = false;
-    renderTambox();
+    renderTMBox();
   }
 }
 
@@ -1249,7 +1262,7 @@ function renderConfiguration() {
         </div>
         <button type="button" class="icon-button danger" data-action="remove-panel" data-index="${index}" title="Ta bort">×</button>
       </div>`).join("")
-    : emptyEditor("Inga paneler ännu", "Varje station som ska användas behöver minst en Tambox-panel.");
+    : emptyEditor("Inga paneler ännu", "Varje station som ska användas behöver minst en TMBox-panel.");
 }
 
 function syncConfigurationFromDOM() {
@@ -1308,7 +1321,7 @@ function addPanel() {
   state.config.panels.push({
     id: uniqueID("panel"),
     station_id: station.id,
-    name: `${station.code} Tambox`,
+    name: `${station.code} TMBox`,
     slots: { A: null, B: null, C: null, D: null },
   });
 }
@@ -1340,7 +1353,7 @@ function buildStationChain() {
     return {
       id: uniqueID("panel"),
       station_id: station.id,
-      name: `${station.code} Tambox`,
+      name: `${station.code} TMBox`,
       slots: Object.fromEntries(slotKeys.map((key, index) => [key, incident[index]?.id || null])),
     };
   });
@@ -1376,7 +1389,7 @@ async function refreshDevices() {
   const list = document.querySelector("#device-list");
   list.replaceChildren();
   if (!payload.devices.length) {
-    list.innerHTML = '<div class="empty-status">Ingen fysisk Tambox har presenterat sig ännu.</div>';
+    list.innerHTML = '<div class="empty-status">Ingen fysisk TMBox har presenterat sig ännu.</div>';
     return;
   }
   for (const device of payload.devices) {
@@ -1576,7 +1589,7 @@ function updatePanelOptions() {
   devicePanel.replaceChildren(...[...panelSelect.options].map((option) => option.cloneNode(true)));
 }
 
-function renderTambox() {
+function renderTMBox() {
   const snapshot = state.snapshots.get(state.selectedPanelID);
   if (!snapshot) return;
   panelSelect.value = snapshot.panel_id;
@@ -2011,7 +2024,7 @@ async function refreshAuthStatus() {
   if (!response.ok) throw new Error("Serverns åtkomstläge kunde inte läsas");
   state.authStatus = await response.json();
   state.token = null;
-  localStorage.removeItem("tambox.accessToken");
+  localStorage.removeItem("trainmeet.accessToken");
   document.querySelector("#login-username").value = state.authStatus.username || "";
   configureResetMode();
   return state.authStatus;
@@ -2993,7 +3006,7 @@ function renderConnectionBadge(snapshot) {
   const visible = Boolean(connection.code) && Boolean(address) && screens.includes(displayKind);
   badge.classList.toggle("hidden", !visible);
   if (!visible) return;
-  document.querySelector("#display-connection-address").textContent = `Tambox ${address}`;
+  document.querySelector("#display-connection-address").textContent = `TMBox ${address}`;
   document.querySelector("#display-connection-code").textContent = connection.code;
 }
 
