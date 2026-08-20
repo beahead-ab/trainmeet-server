@@ -76,6 +76,7 @@ class SQLiteOperationsStore:
                 updated_by TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 revision INTEGER NOT NULL DEFAULT 0,
+                crew_ready INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY(publication_id, active_day, movement_id)
             );
             CREATE TABLE IF NOT EXISTS tkl_events (
@@ -143,6 +144,26 @@ class SQLiteOperationsStore:
             );
             CREATE INDEX IF NOT EXISTS clearance_events_by_case
                 ON clearance_events(clearance_id, recorded_at);
+            CREATE TABLE IF NOT EXISTS line_available_messages (
+                message_id TEXT PRIMARY KEY,
+                publication_id TEXT NOT NULL,
+                active_day TEXT NOT NULL,
+                connection_id TEXT NOT NULL,
+                from_station_id TEXT NOT NULL,
+                to_station_id TEXT NOT NULL,
+                movement_id TEXT,
+                status TEXT NOT NULL CHECK(status IN (
+                    'delivered_to_device', 'display_acknowledged'
+                )),
+                revision INTEGER NOT NULL DEFAULT 1,
+                created_by TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                acknowledged_by TEXT,
+                acknowledged_at TEXT,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS line_messages_for_station
+                ON line_available_messages(publication_id, active_day, to_station_id, status);
             CREATE TABLE IF NOT EXISTS device_commands (
                 device_id TEXT NOT NULL,
                 message_id TEXT NOT NULL,
@@ -155,7 +176,11 @@ class SQLiteOperationsStore:
         # Movement revision arrived with protocol v2. An installation from
         # before it keeps its rows and starts counting from zero.
         self._add_missing_columns(
-            "tkl_movement_states", {"revision": "INTEGER NOT NULL DEFAULT 0"}
+            "tkl_movement_states",
+            {
+                "revision": "INTEGER NOT NULL DEFAULT 0",
+                "crew_ready": "INTEGER NOT NULL DEFAULT 0",
+            },
         )
 
     def _add_missing_columns(self, table: str, columns: dict[str, str]) -> None:
@@ -393,7 +418,7 @@ class SQLiteOperationsStore:
             movement_rows = self._connection.execute(
                 """
                 SELECT movement_id, arrival_status, departure_status, actual_track,
-                       updated_by, updated_at, revision
+                       updated_by, updated_at, revision, crew_ready
                 FROM tkl_movement_states
                 WHERE publication_id = ? AND active_day = ? AND station_id = ?
                 ORDER BY updated_at
@@ -406,11 +431,13 @@ class SQLiteOperationsStore:
             "movements": {
                 row[0]: {
                     "arrival": row[1],
-                    "departure": row[2],
+                    "departure": derived_departure(row[2], bool(row[7])),
+                    "storedDeparture": row[2],
                     "actualTrack": row[3],
                     "updated_by": row[4],
                     "updated_at": row[5],
                     "revision": int(row[6] or 0),
+                    "crewReady": bool(row[7]),
                 }
                 for row in movement_rows
             },
@@ -555,11 +582,18 @@ class SQLiteOperationsStore:
         updated_by: str,
         shift_id: str | None,
         event_type: str,
+        crew_ready: bool | None = None,
     ) -> dict[str, Any]:
         if arrival not in {"none", "approaching", "arrived"}:
             raise ValueError("Ogiltigt ankomstläge")
         if departure not in {"none", "positioned", "ready", "departed"}:
             raise ValueError("Ogiltigt avgångsläge")
+        # REDO is derived, never stored: it is what TKL's two declarations
+        # add up to. A terminal that still sends ready is saying both, so both
+        # are recorded and the derived value comes back out unchanged.
+        if departure == "ready":
+            departure = "positioned"
+            crew_ready = True
         track = (actual_track or "").strip() or None
         now = _now_iso()
         with self._lock:
@@ -570,8 +604,8 @@ class SQLiteOperationsStore:
                     INSERT INTO tkl_movement_states(
                         publication_id, active_day, movement_id, station_id,
                         arrival_status, departure_status, actual_track,
-                        updated_by, updated_at, revision
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                        updated_by, updated_at, revision, crew_ready
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
                     ON CONFLICT(publication_id, active_day, movement_id) DO UPDATE SET
                         station_id = excluded.station_id,
                         arrival_status = excluded.arrival_status,
@@ -579,7 +613,8 @@ class SQLiteOperationsStore:
                         actual_track = excluded.actual_track,
                         updated_by = excluded.updated_by,
                         updated_at = excluded.updated_at,
-                        revision = tkl_movement_states.revision + 1
+                        revision = tkl_movement_states.revision + 1,
+                        crew_ready = excluded.crew_ready
                     """,
                     (
                         publication_id,
@@ -591,6 +626,7 @@ class SQLiteOperationsStore:
                         track,
                         updated_by,
                         now,
+                        1 if crew_ready else 0,
                     ),
                 )
                 self._insert_tkl_event_locked(
@@ -624,7 +660,9 @@ class SQLiteOperationsStore:
         return {
             "movement_id": movement_id,
             "arrival": arrival,
-            "departure": departure,
+            "departure": derived_departure(departure, bool(crew_ready)),
+            "storedDeparture": departure,
+            "crewReady": bool(crew_ready),
             "actualTrack": track,
             "updated_by": updated_by,
             "updated_at": now,
@@ -1083,6 +1121,90 @@ class SQLiteOperationsStore:
             ),
         )
 
+    # ------------------------------------------------------- line available
+    #
+    # One-sided information, never a question. It carries two delivery levels
+    # and no decision, and it is never checked against channel occupancy - a
+    # clearance case with only one party would be a lie about what it is.
+
+    def publish_line_available(
+        self,
+        publication_id: str,
+        active_day: str,
+        *,
+        message_id: str,
+        connection_id: str,
+        from_station_id: str,
+        to_station_id: str,
+        movement_id: str | None,
+        created_by: str,
+    ) -> dict[str, Any]:
+        now = _now_iso()
+        with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO line_available_messages(
+                    message_id, publication_id, active_day, connection_id,
+                    from_station_id, to_station_id, movement_id, status,
+                    revision, created_by, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'delivered_to_device', 1, ?, ?, ?)
+                """,
+                (
+                    message_id,
+                    publication_id,
+                    active_day,
+                    connection_id,
+                    from_station_id,
+                    to_station_id,
+                    movement_id,
+                    created_by,
+                    now,
+                    now,
+                ),
+            )
+        return self.line_message(message_id)
+
+    def acknowledge_line_available(self, message_id: str, actor: str) -> dict[str, Any] | None:
+        now = _now_iso()
+        with self._lock:
+            self._connection.execute(
+                """
+                UPDATE line_available_messages
+                SET status = 'display_acknowledged', revision = revision + 1,
+                    acknowledged_by = ?, acknowledged_at = ?, updated_at = ?
+                WHERE message_id = ? AND status = 'delivered_to_device'
+                """,
+                (actor, now, now, message_id),
+            )
+        return self.line_message(message_id)
+
+    def line_message(self, message_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._connection.execute(
+                f"SELECT {_LINE_MESSAGE_COLUMNS} FROM line_available_messages WHERE message_id = ?",
+                (message_id,),
+            ).fetchone()
+        return _line_message_from_row(row) if row else None
+
+    def open_line_messages_for_station(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                f"""
+                SELECT {_LINE_MESSAGE_COLUMNS} FROM line_available_messages
+                WHERE publication_id = ? AND active_day = ?
+                  AND status = 'delivered_to_device'
+                  AND (to_station_id = ? OR from_station_id = ?)
+                ORDER BY created_at
+                """,
+                (publication_id, active_day, station_id, station_id),
+            ).fetchall()
+        return [_line_message_from_row(row) for row in rows]
+
     def device_command_response(self, device_id: str, message_id: str) -> dict[str, Any] | None:
         """The answer a device already got for this message, if any.
 
@@ -1155,6 +1277,39 @@ class SQLiteOperationsStore:
                     _now_iso(),
                 ),
             )
+
+
+_LINE_MESSAGE_COLUMNS = (
+    "message_id, connection_id, from_station_id, to_station_id, movement_id, "
+    "status, revision, created_by, created_at, acknowledged_by, acknowledged_at"
+)
+
+
+def _line_message_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
+    return {
+        "message_id": row[0],
+        "connection_id": row[1],
+        "from_station_id": row[2],
+        "to_station_id": row[3],
+        "movement_id": row[4],
+        "status": row[5],
+        "revision": int(row[6]),
+        "created_by": row[7],
+        "created_at": row[8],
+        "acknowledged_by": row[9],
+        "acknowledged_at": row[10],
+    }
+
+
+def derived_departure(stored: str, crew_ready: bool) -> str:
+    """REDO is what TKL's two declarations add up to, never a stored value.
+
+    The train is set up and the driver is on board, and the server's own rules
+    hold: only then is a train ready. No client can shortcut to it.
+    """
+    if stored == "positioned" and crew_ready:
+        return "ready"
+    return stored
 
 
 _CLEARANCE_COLUMNS = (

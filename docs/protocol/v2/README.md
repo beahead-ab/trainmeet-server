@@ -229,6 +229,11 @@ utfallet — aldrig för att skapa ett nytt beslut.
 | `line.available.publish` | Skickar linjen-ledig | `movement` |
 | `line.available.acknowledge` | Kvitterar visning av linjen-ledig | `case` |
 
+`movements[].allowed_actions` säger vad servern accepterar för rörelsen just
+nu. Firmware härleder samma sak ur sin cache för att välja knappetiketter,
+men beslutet är alltid serverns: en knapp som ser tillåten ut men avvisas
+visar orsaken och väntar på nästa snapshot.
+
 `clearance.approved`, `clearance.rejected`, `clearance.expired` och
 `clearance.revised` är **händelser**, inte kommandon. De når boxen genom
 snapshoten, inte via egna topics.
@@ -271,7 +276,22 @@ delivered_to_device → display_acknowledged
 Ett ensidigt meddelande, aldrig en fråga. Det beläggningskontrolleras aldrig
 mot en klareringsbegäran — det är inget beslut, bara information. Det
 modelleras som en egen statusrad, inte som ett skenbart klareringsärende med
-bara en part.
+bara en part. Mottagaren kan bara kvittera att meddelandet visats; det finns
+inget godkänn och inget neka att ge det.
+
+### 7.3 Uppställt, förare och härledd REDO
+
+TKL deklarerar två saker via `train.position.set` och `train.crew_ready.set`.
+Båda är trafikrelevant lägesinformation och lagras beständigt på servern med
+samma omstartsgaranti som `positioned` alltid har haft.
+
+**`REDO` går inte att sätta.** Servern härleder det ur `positioned &&
+crew_ready` plus sina egna regler och exponerar utfallet i `movements[]
+.departure` samt i `movements[].allowed_actions`. En klient som ändå skickar
+`ready` säger i praktiken båda deklarationerna, och båda registreras.
+
+Rangerarnas `train_readiness`-flöde är ett **eget** flöde med egna roller och
+egen historik, och slås aldrig ihop med detta (beslut B2).
 
 ### 7.3 Anslutning
 

@@ -22,7 +22,12 @@
       "arrival": "none",
       "assignedTrackId": "track-cda-1b",
       "actualTrack": null,
-      "crewReady": true
+      "crewReady": true,
+      "allowed_actions": [
+        "clearance.request",
+        "train.departed",
+        "train.track.change"
+      ]
     },
     {
       "id": "movement-428-a",
@@ -33,7 +38,10 @@
       "arrival": "approaching",
       "assignedTrackId": "track-cda-2a",
       "actualTrack": null,
-      "crewReady": false
+      "crewReady": false,
+      "allowed_actions": [
+        "train.arrived"
+      ]
     }
   ],
   "active_clearances": [

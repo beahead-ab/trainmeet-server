@@ -705,7 +705,14 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_movement", str(error)) from error
         return {"movement": result}
 
-    def tkl_line_action(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+    def tkl_clearance_action(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Drive one clearance step for a TKL terminal.
+
+        This used to be called tkl_line_action, which read as if it were the
+        one-sided line-available message. It is not: it requests, answers,
+        cancels and closes a clearance. The real line-available message has
+        its own endpoint.
+        """
         if self.operations_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
         station_id = str(payload.get("station_id") or "")
@@ -723,55 +730,88 @@ class TrainMeetHTTPApplication:
                 "tkl_shift_not_started",
                 "Starta trafikpasset innan en tågklarering hanteras",
             )
-        panel = next(
-            (
-                candidate for candidate in self.engine.config.panels.values()
-                if candidate.station_id == station_id and connection_id in candidate.slots.values()
-            ),
-            None,
-        )
-        if panel is None or (
-            panel.id not in client.panel_ids
-            and client.kind not in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}
+        connection = self.engine.config.connections.get(connection_id)
+        if connection is None or station_id not in (
+            connection.station_a_id,
+            connection.station_b_id,
         ):
-            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "connection_not_assigned", "Terminalen har inte tillgång till sträckan")
-        slot = next((key for key, value in panel.slots.items() if value == connection_id), None)
-        if slot is None:
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "connection_not_mapped", "Sträckan saknar en A–D-plats på stationen")
-        sequences = {
-            "request": [slot, *list(train_number), "#"],
-            "accept": [slot, "#"],
-            "reject": [slot, "*"],
-            "cancel": [slot, "*"],
-            "depart": [slot, slot, "#"],
-            "arrive": [slot, "#"],
-        }
-        keys = sequences.get(action)
-        if keys is None or action == "request" and (not train_number or not train_number.isdigit()):
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_line_action", "Ogiltig sträckåtgärd eller tågnummer")
-        acknowledgements = []
-        for key in keys:
-            acknowledgement = self.engine.press(
-                Command(
-                    command_id=str(uuid4()),
-                    client_id=client.client_id,
-                    traffic_session_id=self.engine.config.id,
-                    panel_id=panel.id,
-                    expected_revision=self.engine.revision,
-                    key=key,
-                    expires_at=datetime.now(timezone.utc) + timedelta(seconds=5),
-                )
-            ).to_dict()
-            acknowledgements.append(acknowledgement)
-            if acknowledgement["status"] != "accepted":
-                raise HTTPAPIError(
-                    HTTPStatus.CONFLICT,
-                    "tkl_line_action_rejected",
-                    _tkl_engine_reason(str(acknowledgement.get("reason") or "")),
-                )
+            raise HTTPAPIError(
+                HTTPStatus.FORBIDDEN,
+                "connection_not_assigned",
+                "Terminalen har inte tillgång till sträckan",
+            )
+        if action not in {"request", "accept", "reject", "cancel", "depart", "arrive"} or (
+            action == "request" and (not train_number or not train_number.isdigit())
+        ):
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST,
+                "invalid_tkl_clearance_action",
+                "Ogiltig sträckåtgärd eller tågnummer",
+            )
+        accepted, reason = self.engine.perform(
+            station_id=station_id,
+            connection_id=connection_id,
+            action=action,
+            train_number=train_number,
+            client_id=client.client_id,
+        )
+        if not accepted:
+            raise HTTPAPIError(
+                HTTPStatus.CONFLICT,
+                "tkl_clearance_action_rejected",
+                _tkl_engine_reason(str(reason or "")),
+            )
         snapshot = self.display_snapshot()
         state = next((item for item in snapshot["connection_states"] if item["id"] == connection_id), None)
         return {"action": action, "connection": state, "revision": self.engine.revision}
+
+    def tkl_line_available(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Send or acknowledge a line-available message.
+
+        One-sided information, never a question. It is never checked against
+        channel occupancy and never becomes a clearance case, so a receiving
+        station can only acknowledge that it was shown.
+        """
+        if self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
+        station_id = str(payload.get("station_id") or "")
+        self._require_station_access(client, station_id)
+        snapshot = self.display_snapshot()
+        action = str(payload.get("action") or "publish")
+        if action == "acknowledge":
+            message_id = str(payload.get("message_id") or "")
+            message = self.operations_store.line_message(message_id)
+            if message is None or message["to_station_id"] != station_id:
+                raise HTTPAPIError(
+                    HTTPStatus.NOT_FOUND, "unknown_message", "Meddelandet finns inte för stationen"
+                )
+            return {
+                "message": self.operations_store.acknowledge_line_available(
+                    message_id, client.client_id
+                )
+            }
+        connection = self.engine.config.connections.get(str(payload.get("connection_id") or ""))
+        if connection is None or station_id not in (
+            connection.station_a_id,
+            connection.station_b_id,
+        ):
+            raise HTTPAPIError(
+                HTTPStatus.FORBIDDEN,
+                "connection_not_assigned",
+                "Terminalen har inte tillgång till sträckan",
+            )
+        return {
+            "message": self.operations_store.publish_line_available(
+                snapshot["publication_id"],
+                snapshot["active_day"],
+                message_id=f"line-{uuid4().hex[:8]}",
+                connection_id=connection.id,
+                from_station_id=station_id,
+                to_station_id=connection.other_station(station_id),
+                movement_id=str(payload.get("movement_id") or "") or None,
+                created_by=client.client_id,
+            )
+        }
 
     def _require_station_access(self, client: PairedClient, station_id: str) -> None:
         if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
@@ -1736,9 +1776,21 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.update_tkl_movement(client, payload))
                 return
-            if path == "/v1/tkl/line":
+            if path in ("/v1/tkl/clearance", "/v1/tkl/line"):
+                # /v1/tkl/line is the old name for this, kept until the
+                # terminals have moved. It never meant line-available.
                 client = self._authenticated_client()
-                self._send_json(HTTPStatus.OK, self.server.application.tkl_line_action(client, payload))
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.tkl_clearance_action(client, payload),
+                )
+                return
+            if path == "/v1/tkl/line-available":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.tkl_line_available(client, payload),
+                )
                 return
             if path == "/v1/devices/assign":
                 client = self._authenticated_client()

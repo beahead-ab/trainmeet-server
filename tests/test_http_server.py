@@ -248,7 +248,47 @@ class HTTPServerTests(unittest.TestCase):
         )
         self.assertEqual(finished["shift"]["status"], "closed")
 
-    def test_tkl_line_actions_use_the_authoritative_traffic_engine(self):
+    def test_line_available_is_never_answered_like_a_clearance(self):
+        publication = self.runtime_store.install(runtime_package_v3())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        self.application.start_tkl_shift(
+            client,
+            {"station_id": "station-a", "operator_name": "Anna", "terminal_name": "CDA TKL"},
+        )
+
+        sent = self.application.tkl_line_available(
+            client,
+            {
+                "station_id": "station-a",
+                "connection_id": "connection-a-b",
+                "action": "publish",
+            },
+        )["message"]
+        self.assertEqual(sent["status"], "delivered_to_device")
+        self.assertEqual(sent["to_station_id"], "station-b")
+
+        # The line stays free: a one-sided message is not a request, so it
+        # never occupies a channel and never asks the other end for a
+        # decision.
+        state = next(
+            entry
+            for entry in self.application.display_snapshot()["connection_states"]
+            if entry["id"] == "connection-a-b"
+        )
+        self.assertEqual(state["state"], "free")
+
+        acknowledged = self.application.tkl_line_available(
+            client,
+            {
+                "station_id": "station-b",
+                "action": "acknowledge",
+                "message_id": sent["message_id"],
+            },
+        )["message"]
+        self.assertEqual(acknowledged["status"], "display_acknowledged")
+
+    def test_tkl_clearance_actions_use_the_authoritative_traffic_engine(self):
         client = self.application.local_admin()
         for station_id, operator_name in (("station-a", "Anna"), ("station-b", "Bertil")):
             self.application.start_tkl_shift(
@@ -259,7 +299,7 @@ class HTTPServerTests(unittest.TestCase):
                     "terminal_name": f"{station_id} TKL",
                 },
             )
-        requested = self.application.tkl_line_action(
+        requested = self.application.tkl_clearance_action(
             client,
             {
                 "station_id": "station-a",
@@ -270,7 +310,7 @@ class HTTPServerTests(unittest.TestCase):
         )
         self.assertEqual(requested["connection"]["state"], "requested")
 
-        accepted = self.application.tkl_line_action(
+        accepted = self.application.tkl_clearance_action(
             client,
             {
                 "station_id": "station-b",
@@ -281,7 +321,7 @@ class HTTPServerTests(unittest.TestCase):
         )
         self.assertEqual(accepted["connection"]["state"], "reserved")
 
-        departed = self.application.tkl_line_action(
+        departed = self.application.tkl_clearance_action(
             client,
             {
                 "station_id": "station-a",
@@ -292,7 +332,7 @@ class HTTPServerTests(unittest.TestCase):
         )
         self.assertEqual(departed["connection"]["state"], "occupied")
 
-        arrived = self.application.tkl_line_action(
+        arrived = self.application.tkl_clearance_action(
             client,
             {
                 "station_id": "station-b",

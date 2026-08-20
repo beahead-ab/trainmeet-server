@@ -57,6 +57,73 @@ class TrafficEngine:
         with self._lock:
             return self._press_locked(command, now=now)
 
+    def perform(
+        self,
+        *,
+        station_id: str,
+        connection_id: str,
+        action: str,
+        train_number: str = "",
+        client_id: str = "terminal",
+        now: datetime | None = None,
+    ) -> tuple[bool, str | None]:
+        """Apply one traffic action directly, with the same bookkeeping.
+
+        A terminal used to reach these transitions by having the server replay
+        a key sequence into the panel state machine on its behalf. That made
+        the key grammar part of the HTTP contract; this does not.
+        """
+        with self._lock:
+            if connection_id not in self.connections:
+                return False, "unknown_connection"
+            moment = now or datetime.now(timezone.utc)
+            previous = self.revision
+            checkpoint = self._checkpoint()
+            before_state = self.export_state()
+            handlers = {
+                "request": lambda: self.open_case(station_id, connection_id, train_number),
+                "accept": lambda: self.answer_case(station_id, connection_id, accept=True),
+                "reject": lambda: self.answer_case(station_id, connection_id, accept=False),
+                "cancel": lambda: self.withdraw_case(
+                    station_id,
+                    connection_id,
+                    expect=(
+                        ConnectionState.REQUESTED
+                        if self.connections[connection_id].state == ConnectionState.REQUESTED
+                        else ConnectionState.RESERVED
+                    ),
+                ),
+                "depart": lambda: self.depart_case(station_id, connection_id),
+                "arrive": lambda: self.arrive_case(station_id, connection_id),
+            }
+            handler = handlers.get(action)
+            if handler is None:
+                return False, "unknown_action"
+            accepted, reason = handler()
+            if not accepted:
+                self._persist_or_rollback(checkpoint)
+                return False, reason
+
+            self.revision += 1
+            self.audit.append(
+                {
+                    "client_id": client_id,
+                    "station_id": station_id,
+                    "connection_id": connection_id,
+                    "action": action,
+                    "previous_revision": previous,
+                    "revision": self.revision,
+                    "recorded_at": moment.isoformat(),
+                }
+            )
+            self._persist_or_rollback(checkpoint)
+            if self.transition_observer is not None:
+                try:
+                    self.transition_observer(before_state, self.export_state(), moment)
+                except Exception:
+                    pass
+            return True, None
+
     def set_transition_observer(
         self,
         observer: Callable[[dict[str, Any], dict[str, Any], datetime], None] | None,
@@ -512,22 +579,26 @@ class TrafficEngine:
 
         return False, "unsupported_interaction"
 
-    def _reserve_or_request(
+    # ------------------------------------------------------------------
+    # Traffic transitions. These are keyed on a station and a connection, not
+    # on a panel and a slot, so a terminal reaching them over HTTP calls the
+    # same code a key press does instead of replaying a key sequence.
+
+    def open_case(
         self,
-        panel: PanelConfig,
-        runtime: PanelRuntime,
+        station_id: str,
+        connection_id: str,
+        train_number: str,
     ) -> tuple[bool, str | None]:
-        connection_id = self._selected_connection(panel, runtime)
         line = self.connections[connection_id]
         if line.state != ConnectionState.FREE:
             return False, "connection_busy"
         connection = self.config.connections[connection_id]
-        other_station_id = connection.other_station(panel.station_id)
         mode = connection.dispatch_mode_override or self.config.default_dispatch_mode
 
-        line.from_station_id = panel.station_id
-        line.to_station_id = other_station_id
-        line.train_number = runtime.train_number
+        line.from_station_id = station_id
+        line.to_station_id = connection.other_station(station_id)
+        line.train_number = train_number
         line.request_id = str(uuid4())
 
         if mode == DispatchMode.CLEARANCE:
@@ -536,11 +607,74 @@ class TrafficEngine:
         else:
             line.state = ConnectionState.RESERVED
             line.request_status = RequestStatus.ACCEPTED
-        # The request/reservation now belongs to the connection, not to the
-        # foreground screen. Return immediately so this panel can handle other
-        # trains while the traffic case remains visible in its A-D slot.
-        runtime.reset()
         return True, None
+
+    def answer_case(
+        self,
+        station_id: str,
+        connection_id: str,
+        *,
+        accept: bool,
+    ) -> tuple[bool, str | None]:
+        line = self.connections[connection_id]
+        if line.state != ConnectionState.REQUESTED or line.to_station_id != station_id:
+            return False, "request_no_longer_pending"
+        if accept:
+            line.state = ConnectionState.RESERVED
+            line.request_status = RequestStatus.ACCEPTED
+        else:
+            line.request_status = RequestStatus.REJECTED
+            line.clear()
+        return True, None
+
+    def withdraw_case(
+        self,
+        station_id: str,
+        connection_id: str,
+        *,
+        expect: ConnectionState,
+    ) -> tuple[bool, str | None]:
+        line = self.connections[connection_id]
+        if line.state != expect or line.from_station_id != station_id:
+            return False, (
+                "request_no_longer_pending"
+                if expect == ConnectionState.REQUESTED
+                else "reservation_no_longer_active"
+            )
+        line.request_status = RequestStatus.CANCELED
+        line.clear()
+        return True, None
+
+    def depart_case(self, station_id: str, connection_id: str) -> tuple[bool, str | None]:
+        line = self.connections[connection_id]
+        if line.state != ConnectionState.RESERVED or line.from_station_id != station_id:
+            return False, "departure_not_reserved"
+        line.state = ConnectionState.OCCUPIED
+        return True, None
+
+    def arrive_case(self, station_id: str, connection_id: str) -> tuple[bool, str | None]:
+        line = self.connections[connection_id]
+        if line.state != ConnectionState.OCCUPIED or line.to_station_id != station_id:
+            return False, "train_not_departed"
+        line.clear()
+        return True, None
+
+    def _reserve_or_request(
+        self,
+        panel: PanelConfig,
+        runtime: PanelRuntime,
+    ) -> tuple[bool, str | None]:
+        accepted, reason = self.open_case(
+            panel.station_id,
+            self._selected_connection(panel, runtime),
+            runtime.train_number,
+        )
+        # The case now belongs to the connection, not to the foreground
+        # screen. Return immediately so this panel can handle other trains
+        # while the case remains visible in its A-D slot.
+        if accepted:
+            runtime.reset()
+        return accepted, reason
 
     def _respond_request(
         self,
@@ -549,73 +683,66 @@ class TrafficEngine:
         *,
         accept: bool,
     ) -> tuple[bool, str | None]:
-        connection_id = self._selected_connection(panel, runtime)
-        line = self.connections[connection_id]
-        if line.state != ConnectionState.REQUESTED or line.to_station_id != panel.station_id:
-            return False, "request_no_longer_pending"
-
-        if accept:
-            line.state = ConnectionState.RESERVED
-            line.request_status = RequestStatus.ACCEPTED
-        else:
-            line.request_status = RequestStatus.REJECTED
-            line.clear()
-        runtime.reset()
-        return True, None
+        accepted, reason = self.answer_case(
+            panel.station_id,
+            self._selected_connection(panel, runtime),
+            accept=accept,
+        )
+        if accepted:
+            runtime.reset()
+        return accepted, reason
 
     def _cancel_request(
         self,
         panel: PanelConfig,
         runtime: PanelRuntime,
     ) -> tuple[bool, str | None]:
-        connection_id = self._selected_connection(panel, runtime)
-        line = self.connections[connection_id]
-        if line.state != ConnectionState.REQUESTED or line.from_station_id != panel.station_id:
-            return False, "request_no_longer_pending"
-        line.request_status = RequestStatus.CANCELED
-        line.clear()
-        runtime.reset()
-        return True, None
+        accepted, reason = self.withdraw_case(
+            panel.station_id,
+            self._selected_connection(panel, runtime),
+            expect=ConnectionState.REQUESTED,
+        )
+        if accepted:
+            runtime.reset()
+        return accepted, reason
 
     def _cancel_reservation(
         self,
         panel: PanelConfig,
         runtime: PanelRuntime,
     ) -> tuple[bool, str | None]:
-        connection_id = self._selected_connection(panel, runtime)
-        line = self.connections[connection_id]
-        if line.state != ConnectionState.RESERVED or line.from_station_id != panel.station_id:
-            return False, "reservation_no_longer_active"
-        line.request_status = RequestStatus.CANCELED
-        line.clear()
-        runtime.reset()
-        return True, None
+        accepted, reason = self.withdraw_case(
+            panel.station_id,
+            self._selected_connection(panel, runtime),
+            expect=ConnectionState.RESERVED,
+        )
+        if accepted:
+            runtime.reset()
+        return accepted, reason
 
     def _depart(
         self,
         panel: PanelConfig,
         runtime: PanelRuntime,
     ) -> tuple[bool, str | None]:
-        connection_id = self._selected_connection(panel, runtime)
-        line = self.connections[connection_id]
-        if line.state != ConnectionState.RESERVED or line.from_station_id != panel.station_id:
-            return False, "departure_not_reserved"
-        line.state = ConnectionState.OCCUPIED
-        runtime.reset()
-        return True, None
+        accepted, reason = self.depart_case(
+            panel.station_id, self._selected_connection(panel, runtime)
+        )
+        if accepted:
+            runtime.reset()
+        return accepted, reason
 
     def _arrive(
         self,
         panel: PanelConfig,
         runtime: PanelRuntime,
     ) -> tuple[bool, str | None]:
-        connection_id = self._selected_connection(panel, runtime)
-        line = self.connections[connection_id]
-        if line.state != ConnectionState.OCCUPIED or line.to_station_id != panel.station_id:
-            return False, "train_not_departed"
-        line.clear()
-        runtime.reset()
-        return True, None
+        accepted, reason = self.arrive_case(
+            panel.station_id, self._selected_connection(panel, runtime)
+        )
+        if accepted:
+            runtime.reset()
+        return accepted, reason
 
     @staticmethod
     def _slot_action(station_id: str, runtime: ConnectionRuntime) -> str:
