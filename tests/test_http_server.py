@@ -12,6 +12,7 @@ from session_fixture import sample_session
 from tmbox_gateway.central_sync import DEFAULT_RUNTIME_PUBLICATION_URL, CentralRuntimeDownload, CentralRuntimeManifest
 from tmbox_gateway.engine import TrafficEngine
 from tmbox_gateway.http_server import (
+    HTTPAPIError,
     HTTPServerConfig,
     TrainMeetHTTPApplication,
     TrainMeetHTTPServer,
@@ -21,7 +22,7 @@ from tmbox_gateway.local_config import SQLiteLocalConfigurationStore
 from tmbox_gateway.models import DispatchMode
 from tmbox_gateway.operations import SQLiteOperationsStore
 from tmbox_gateway.runtime import SQLiteRuntimeStore
-from runtime_fixture import runtime_package, runtime_package_v2
+from runtime_fixture import runtime_package, runtime_package_v3
 
 
 class HTTPServerTests(unittest.TestCase):
@@ -156,7 +157,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(DEFAULT_RUNTIME_PUBLICATION_URL, self.application.runtime_summary(self.application.local_admin())["central_url"])
 
     def test_public_display_exposes_runtime_clock_services_and_live_state(self):
-        publication = self.runtime_store.install(runtime_package_v2())
+        publication = self.runtime_store.install(runtime_package_v3())
         self.operations_store.ensure_publication(publication)
 
         display = self._json_request("/v1/display")
@@ -174,8 +175,35 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(started["speed"], 2)
         self.assertTrue(started["time"].startswith("10:30:"))
 
+    def test_a_track_outside_the_catalogue_is_refused(self):
+        publication = self.runtime_store.install(runtime_package_v3())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        self.application.start_tkl_shift(
+            client,
+            {
+                "station_id": "station-a",
+                "operator_name": "Anna",
+                "terminal_name": "CDA TKL 1",
+            },
+        )
+
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.application.update_tkl_movement(
+                client,
+                {
+                    "station_id": "station-a",
+                    "movement_id": "movement-101-a",
+                    "arrival": "none",
+                    "departure": "positioned",
+                    "actual_track": "17",
+                    "event_type": "positioned",
+                },
+            )
+        self.assertEqual(refused.exception.code, "unknown_track")
+
     def test_tkl_context_persists_shift_and_train_progress(self):
-        publication = self.runtime_store.install(runtime_package_v2())
+        publication = self.runtime_store.install(runtime_package_v3())
         self.operations_store.ensure_publication(publication)
         client = self.application.local_admin()
 
@@ -204,7 +232,9 @@ class HTTPServerTests(unittest.TestCase):
                 "event_type": "positioned",
             },
         )
-        self.assertEqual(updated["movement"]["actualTrack"], "2")
+        # The terminal sends the label an operator reads. What gets stored is
+        # the catalogue id, so every later reader means the same track.
+        self.assertEqual(updated["movement"]["actualTrack"], "track-station-a-2")
         after = self.application.tkl_context(client, "station-a")
         self.assertEqual(after["movements"]["movement-101-a"]["departure"], "positioned")
 
@@ -274,7 +304,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(arrived["connection"]["state"], "free")
 
     def test_linked_runtime_update_is_downloaded_before_activation(self):
-        self.runtime_store.install(runtime_package_v2(publication_id="publication-v2-first"))
+        self.runtime_store.install(runtime_package_v3(publication_id="publication-v2-first"))
         self.runtime_store.save_link_token("central-test-link")
 
         manifest = self._json_request("/v1/runtime/update")
@@ -294,7 +324,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(self.runtime_store.active().publication_id, "publication-v2-second")
 
     def test_admin_can_enable_realtime_cloud_config_updates(self):
-        self.runtime_store.install(runtime_package_v2(publication_id="publication-v2-first"))
+        self.runtime_store.install(runtime_package_v3(publication_id="publication-v2-first"))
         self.runtime_store.save_link_token("central-test-link")
         client = self.application.local_admin()
 
@@ -495,7 +525,7 @@ class HTTPServerTests(unittest.TestCase):
     def test_admin_validates_runtime_without_installing_it(self):
         validation = self._json_request(
             "/v1/runtime/validate",
-            {"package": runtime_package_v2()},
+            {"package": runtime_package_v3()},
         )
 
         self.assertTrue(validation["valid"])
@@ -732,7 +762,7 @@ class HTTPServerTests(unittest.TestCase):
     def _linked_runtime(token: str, _url: str, manifest_only: bool):
         if token != "central-test-link":
             raise ValueError("unexpected runtime link")
-        package = runtime_package_v2(publication_id="publication-v2-second")
+        package = runtime_package_v3(publication_id="publication-v2-second")
         if manifest_only:
             return CentralRuntimeManifest(
                 publication_id=package["publication_id"],

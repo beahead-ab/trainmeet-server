@@ -17,10 +17,11 @@ from .models import (
     SessionConfig,
     StationConfig,
     TrackType,
+    TrackConfig,
 )
 
 
-RUNTIME_SCHEMA_VERSION = 2
+RUNTIME_SCHEMA_VERSION = 3
 AVAILABLE_CLOCK_STYLES = (
     "swiss",
     "swedish",
@@ -159,6 +160,39 @@ class RuntimePublication:
                         f"Panelplats {key} hänvisar till en sträcka som inte når stationen"
                     )
 
+        tracks = _required_list(payload, "tracks")
+        track_ids = _unique_ids(tracks, "track")
+        track_stations: dict[str, str] = {}
+        track_operating_points: dict[str, str | None] = {}
+        seen_labels: set[tuple[str, str | None, str]] = set()
+        for track in tracks:
+            label = _required_text(track, "display_label")
+            track_station_id = _required_text(track, "station_id")
+            if track_station_id not in station_ids:
+                raise RuntimePublicationError("Ett spår hänvisar till en okänd station")
+            track_operating_point_id = track.get("operating_point_id")
+            if track_operating_point_id is not None:
+                if not isinstance(track_operating_point_id, str) or not track_operating_point_id.strip():
+                    raise RuntimePublicationError("Ett spår har ett ogiltigt driftplats-id")
+                if operating_point_stations.get(track_operating_point_id) != track_station_id:
+                    raise RuntimePublicationError(
+                        "Ett spår hänvisar till en driftplats på fel station"
+                    )
+            # A label is what an operator reads on the display, so two tracks
+            # sharing one inside the same operating point would be unusable.
+            label_key = (track_station_id, track_operating_point_id, label.casefold())
+            if label_key in seen_labels:
+                raise RuntimePublicationError(
+                    "Två spår har samma beteckning på samma driftplats"
+                )
+            seen_labels.add(label_key)
+            try:
+                int(track["sort_order"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise RuntimePublicationError("Ett spår saknar giltig sorteringsordning") from error
+            track_stations[str(track["id"])] = track_station_id
+            track_operating_points[str(track["id"])] = track_operating_point_id
+
         trains = _required_list(payload, "trains")
         _unique_ids(trains, "train movement")
         movement_fingerprints: set[tuple[Any, ...]] = set()
@@ -179,6 +213,21 @@ class RuntimePublication:
                 raise RuntimePublicationError(
                     "En tågrad på en station med flera driftplatser saknar operating_point_id"
                 )
+            track_id = train.get("track_id")
+            if track_id is not None:
+                if track_id not in track_ids:
+                    raise RuntimePublicationError("En tågrad hänvisar till ett okänt spår")
+                if track_stations[track_id] != train_station_id:
+                    raise RuntimePublicationError(
+                        "En tågrad hänvisar till ett spår på fel station"
+                    )
+                if (
+                    operating_point_id is not None
+                    and track_operating_points[track_id] != operating_point_id
+                ):
+                    raise RuntimePublicationError(
+                        "En tågrad hänvisar till ett spår på fel driftplats"
+                    )
             _required_text(train, "days")
             _required_text(train, "sort_time")
             fingerprint = _movement_fingerprint(train)
@@ -264,6 +313,20 @@ class RuntimePublication:
             payload=payload,
         )
 
+    def track_catalogue(self) -> dict[str, TrackConfig]:
+        """The publication's track catalogue, keyed by id."""
+        return {
+            value["id"]: TrackConfig(
+                id=value["id"],
+                display_label=value["display_label"],
+                station_id=value["station_id"],
+                operating_point_id=value.get("operating_point_id"),
+                active=bool(value.get("active", True)),
+                sort_order=int(value["sort_order"]),
+            )
+            for value in self.payload["tracks"]
+        }
+
     def session_config(self) -> SessionConfig:
         meet = self.payload["meet"]
         stations = {
@@ -308,10 +371,18 @@ class RuntimePublication:
             stations=stations,
             connections=connections,
             panels=panels,
+            tracks=self.track_catalogue(),
             clock_time=str(meet.get("clock_time") or "12:00")[:5],
         )
 
     def timetable(self, *, active_day: str, station_id: str | None = None) -> dict[str, Any]:
+        # Rows reference the catalogue by id. The catalogue travels with them
+        # so a client can render a label without deriving a second, divergent
+        # track list of its own.
+        labels = {
+            str(track["id"]): str(track["display_label"])
+            for track in self.payload["tracks"]
+        }
         trains = [
             train
             for train in self.payload["trains"]
@@ -347,7 +418,11 @@ class RuntimePublication:
             "meet": self.payload["meet"],
             "active_day": active_day,
             "stations": self.payload["stations"],
-            "trains": trains,
+            "tracks": self.payload["tracks"],
+            "trains": [
+                {**train, "track": labels.get(str(train.get("track_id")))}
+                for train in trains
+            ],
             "routes": routes,
             "services": services,
             "connections": self.payload["connections"],
@@ -835,7 +910,7 @@ def _movement_fingerprint(train: dict[str, Any]) -> tuple[Any, ...]:
         _fingerprint_text(train.get("operating_point_id")),
         _fingerprint_text(train.get("train_number")),
         _fingerprint_text(train.get("days")),
-        _fingerprint_text(train.get("track")),
+        _fingerprint_text(train.get("track_id")),
         _fingerprint_text(train.get("arrival_time")),
         _fingerprint_text(train.get("departure_time")),
         _fingerprint_text(train.get("arrival_from")),

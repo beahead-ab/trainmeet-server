@@ -205,6 +205,9 @@ def local_configuration_runtime_package(
             for index, station in enumerate(normalized["stations"])
         ],
         "connections": normalized["connections"],
+        # A locally built meet has no imported timetable, so it has no tracks
+        # to catalogue either. The catalogue is built in TrainMeet Cloud.
+        "tracks": [],
         "autonomous_links": [],
         "panels": normalized["panels"],
         "trains": [],

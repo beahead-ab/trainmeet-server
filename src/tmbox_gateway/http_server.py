@@ -40,7 +40,7 @@ from .local_config import (
     LocalConfigurationError,
     SQLiteLocalConfigurationStore,
 )
-from .models import Command
+from .models import Command, TrackConfig, UnknownTrackError, resolve_track_id
 from .operations import SQLiteOperationsStore
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
@@ -458,6 +458,7 @@ class TrainMeetHTTPApplication:
             "connections": connections,
             "connection_states": connection_states,
             "autonomous_links": autonomous_links,
+            "tracks": timetable.get("tracks", []),
             "trains": timetable.get("trains", []),
             "routes": timetable.get("routes", []),
             "services": timetable.get("services", []),
@@ -529,6 +530,18 @@ class TrainMeetHTTPApplication:
             "restart_required": changed_validity,
         }
 
+    def track_catalogue(self) -> dict[str, TrackConfig]:
+        """The catalogue that governs writes right now.
+
+        The active publication owns it. The engine's own copy is the fallback
+        for a server running a locally built configuration, where there is no
+        publication to read.
+        """
+        publication = self.runtime_store.active() if self.runtime_store is not None else None
+        if publication is not None:
+            return publication.track_catalogue()
+        return self.engine.config.tracks
+
     def tkl_context(self, client: PairedClient, station_id: str) -> dict[str, Any]:
         if self.operations_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
@@ -562,7 +575,11 @@ class TrainMeetHTTPApplication:
                 "server_online": True,
                 "clock_configured": bool(snapshot["clock"].get("configured", True)),
                 "clock_running": bool(snapshot["clock"].get("running", False)),
-                "track_count": len({str(train.get("track") or "") for train in trains if train.get("track")}),
+                "track_count": sum(
+                    1
+                    for track in self.track_catalogue().values()
+                    if track.station_id == station_id and track.active
+                ),
                 "connection_count": len(related_connection_ids),
                 "train_count": len(trains),
                 "open_connection_count": sum(1 for state in connection_states if state.get("state") != "free"),
@@ -658,6 +675,12 @@ class TrainMeetHTTPApplication:
         if current_shift is None:
             raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan tågrörelser hanteras")
         try:
+            actual_track = resolve_track_id(
+                self.track_catalogue(), station_id, str(payload.get("actual_track") or "")
+            )
+        except UnknownTrackError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "unknown_track", str(error)) from error
+        try:
             result = self.operations_store.update_tkl_movement(
                 snapshot["publication_id"],
                 snapshot["active_day"],
@@ -665,7 +688,7 @@ class TrainMeetHTTPApplication:
                 movement_id,
                 arrival=str(payload.get("arrival") or "none"),
                 departure=str(payload.get("departure") or "none"),
-                actual_track=str(payload.get("actual_track") or "") or None,
+                actual_track=actual_track,
                 updated_by=current_shift["operator_name"],
                 shift_id=current_shift["shift_id"],
                 event_type=str(payload.get("event_type") or "movement_updated")[:80],
@@ -1107,25 +1130,33 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_runtime", str(error)) from error
 
         station_rows = {str(station["id"]): 0 for station in package["stations"]}
-        station_tracks: dict[str, set[str]] = {station_id: set() for station_id in station_rows}
+        station_tracks: dict[str, set[tuple[int, str]]] = {
+            station_id: set() for station_id in station_rows
+        }
         operating_point_rows: dict[str, int] = {}
-        operating_point_tracks: dict[str, set[str]] = {}
+        operating_point_tracks: dict[str, set[tuple[int, str]]] = {}
         for station in package["stations"]:
             for operating_point in station.get("operating_points", []):
                 operating_point_id = str(operating_point["id"])
                 operating_point_rows[operating_point_id] = 0
                 operating_point_tracks[operating_point_id] = set()
+        # The catalogue is the only track list. Deriving a second one from the
+        # timetable rows is what let Cloud's tracks and the server's drift
+        # apart without anyone noticing.
+        for track in package["tracks"]:
+            if not bool(track.get("active", True)):
+                continue
+            entry = (int(track["sort_order"]), str(track["display_label"]))
+            station_tracks[str(track["station_id"])].add(entry)
+            track_operating_point_id = track.get("operating_point_id")
+            if track_operating_point_id:
+                operating_point_tracks[str(track_operating_point_id)].add(entry)
         for movement in package["trains"]:
             station_id = str(movement["station_id"])
             station_rows[station_id] += 1
-            track = str(movement.get("track") or "").strip()
-            if track:
-                station_tracks[station_id].add(track)
             operating_point_id = movement.get("operating_point_id")
             if operating_point_id:
                 operating_point_rows[str(operating_point_id)] += 1
-                if track:
-                    operating_point_tracks[str(operating_point_id)].add(track)
 
         connection_counts = {station_id: 0 for station_id in station_rows}
         for connection in package["connections"]:
@@ -1149,6 +1180,8 @@ class TrainMeetHTTPApplication:
                 warnings.append(f"{station['name']} saknar anslutande sträcka")
             if panels_by_station[station_id] == 0:
                 warnings.append(f"{station['name']} saknar TMBox-panel")
+            if station_rows[station_id] > 0 and not station_tracks[station_id]:
+                warnings.append(f"{station['name']} saknar spårkatalog")
             operating_points = []
             for operating_point in station.get("operating_points", []):
                 operating_point_id = str(operating_point["id"])
@@ -1163,7 +1196,10 @@ class TrainMeetHTTPApplication:
                         "name": str(operating_point["name"]),
                         "aliases": list(operating_point.get("aliases", [])),
                         "timetable_rows": operating_point_rows[operating_point_id],
-                        "tracks": sorted(operating_point_tracks[operating_point_id]),
+                        "tracks": [
+                            label
+                            for _, label in sorted(operating_point_tracks[operating_point_id])
+                        ],
                     }
                 )
             stations.append(
