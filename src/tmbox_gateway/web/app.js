@@ -203,6 +203,7 @@ const runtimeDownloadUpdate = document.querySelector("#runtime-download-update")
 const runtimeActivateUpdate = document.querySelector("#runtime-activate-update");
 const runtimePushChanges = document.querySelector("#runtime-push-changes");
 const runtimeAutoSync = document.querySelector("#runtime-auto-sync");
+const runtimeAutoSyncHint = document.querySelector("#runtime-auto-sync-hint");
 const configForm = document.querySelector("#config-form");
 const configMessage = document.querySelector("#config-message");
 const stationEditor = document.querySelector("#station-editor");
@@ -692,6 +693,29 @@ runtimePushChanges.addEventListener("click", async () => {
   }
 });
 
+const AUTO_SYNC_REASON =
+  "Automatiska Cloud-uppdateringar är på — servern hämtar och aktiverar själv.";
+
+/** Keep the manual staging controls from racing the automatic loop.
+
+    With automatic updates on, the fifteen-second loop installs *and* activates,
+    so downloading a version by hand can only duplicate what it has already
+    done. The buttons stay visible rather than vanishing: an operator who just
+    saw them should be told why they are inert, not left hunting for them. */
+function applyCloudAutoSyncLock() {
+  const automatic = runtimeAutoSync.checked;
+  [runtimeDownloadUpdate, runtimeActivateUpdate].forEach((button) => {
+    button.disabled = automatic;
+    if (automatic) button.title = AUTO_SYNC_REASON;
+    else button.removeAttribute("title");
+  });
+  // Only worth saying when there is a disabled button on screen to explain.
+  const offering = [runtimeDownloadUpdate, runtimeActivateUpdate]
+    .some((button) => !button.classList.contains("hidden"));
+  runtimeAutoSyncHint.textContent = automatic && offering ? AUTO_SYNC_REASON : "";
+  runtimeAutoSyncHint.classList.toggle("hidden", !(automatic && offering));
+}
+
 runtimeAutoSync.addEventListener("change", async () => {
   runtimeAutoSync.disabled = true;
   try {
@@ -707,6 +731,7 @@ runtimeAutoSync.addEventListener("change", async () => {
     setMessage(runtimeMessage, error.message, "error");
   } finally {
     runtimeAutoSync.disabled = false;
+    applyCloudAutoSyncLock();
   }
 });
 
@@ -727,6 +752,7 @@ runtimeCheckUpdate.addEventListener("click", async () => {
     setMessage(runtimeMessage, error.message, "error");
   } finally {
     runtimeCheckUpdate.disabled = false;
+    applyCloudAutoSyncLock();
   }
 });
 
@@ -745,7 +771,7 @@ runtimeDownloadUpdate.addEventListener("click", async () => {
   } catch (error) {
     setMessage(runtimeMessage, error.message, "error");
   } finally {
-    runtimeDownloadUpdate.disabled = false;
+    applyCloudAutoSyncLock();
   }
 });
 
@@ -768,7 +794,7 @@ runtimeActivateUpdate.addEventListener("click", async () => {
   } catch (error) {
     setMessage(runtimeMessage, error.message, "error");
   } finally {
-    runtimeActivateUpdate.disabled = false;
+    applyCloudAutoSyncLock();
   }
 });
 
@@ -1459,6 +1485,7 @@ async function refreshRuntime() {
     state.pendingPublicationID = runtime.available_publication_id;
     runtimeActivateUpdate.classList.remove("hidden");
   }
+  applyCloudAutoSyncLock();
   identity.append(title, detail);
   const day = document.createElement("span");
   day.textContent = runtime.active_day || "–";

@@ -1450,3 +1450,5 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 @media (max-width: 720px) {
   .tmbox-v2-movement-head { flex-direction: column; gap: 2px; }
 }
+
+.runtime-auto-sync-hint { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
