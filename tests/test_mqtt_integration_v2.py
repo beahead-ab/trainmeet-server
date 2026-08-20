@@ -309,6 +309,66 @@ class MQTTIntegrationV2Tests(unittest.TestCase):
             time.sleep(0.05)
         self.assertEqual(approved_status, "approved", "requesting station did not see the approval")
 
+    def test_rejecting_a_clearance_is_a_successful_command_and_reaches_the_requester(self):
+        device_a_id, device_b_id = "esp32-v2-cda", "esp32-v2-vst"
+        device_a, received_a, events_a = self._make_device(device_a_id)
+        device_b, received_b, events_b = self._make_device(device_b_id)
+        self.identities.record_discovery(device_a_id, "TBX-CDA1")
+        self.identities.assign_discovered_device("TBX-CDA1", (), station_id="station-a")
+        self.identities.record_discovery(device_b_id, "TBX-VST1")
+        self.identities.assign_discovered_device("TBX-VST1", (), station_id="station-b")
+        self._hello(device_a, device_a_id, "TBX-CDA1")
+        self._hello(device_b, device_b_id, "TBX-VST1")
+        self.assertTrue(events_a["snapshot"].wait(5))
+        self.assertTrue(events_b["snapshot"].wait(5))
+        events_a["snapshot"].clear()
+        events_b["snapshot"].clear()
+
+        device_a.publish(
+            f"tmbox/v2/device/{device_a_id}/command",
+            json.dumps(
+                {
+                    "protocol_version": 2, "message_id": "clr-1", "device_id": device_a_id,
+                    "station_id": "station-a", "action": "clearance.request",
+                    "payload": {"movement_id": "movement-101-a", "connection_id": "connection-a-b"},
+                }
+            ),
+            qos=1,
+        )
+        self.assertTrue(events_a["ack"].wait(5))
+        clearance_id = received_a["ack"]["result"]["clearance_id"]
+        events_a["snapshot"].clear()
+
+        device_b.publish(
+            f"tmbox/v2/device/{device_b_id}/command",
+            json.dumps(
+                {
+                    "protocol_version": 2, "message_id": "resp-no", "device_id": device_b_id,
+                    "station_id": "station-b", "action": "clearance.response",
+                    "payload": {"clearance_id": clearance_id, "accept": False},
+                }
+            ),
+            qos=1,
+        )
+
+        # Saying no is a successful command: the responding box must not be told
+        # its own action failed.
+        self.assertTrue(events_b["ack"].wait(5))
+        self.assertEqual(received_b["ack"]["status"], "accepted")
+        self.assertEqual(received_b["ack"]["result"]["status"], "rejected")
+
+        # And the station that asked has to learn about it without waiting for
+        # unrelated traffic to trigger the next republish.
+        deadline = time.monotonic() + 5
+        cleared = False
+        while time.monotonic() < deadline:
+            snapshot = received_a.get("snapshot")
+            if snapshot is not None and not snapshot["active_clearances"]:
+                cleared = True
+                break
+            time.sleep(0.05)
+        self.assertTrue(cleared, "requesting station never saw the rejection")
+
 
 if __name__ == "__main__":
     unittest.main()

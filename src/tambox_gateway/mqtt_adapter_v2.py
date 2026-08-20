@@ -249,7 +249,18 @@ class MQTTGatewayAdapterV2:
         except HTTPAPIError as error:
             self._publish_ack(device_id, message_id, "rejected", error.code)
             return
-        if isinstance(result, dict) and result.get("status") == "rejected":
+        # The clearance handlers return either a store-level failure sentinel
+        # ({"status": "rejected", "reason": ...}, e.g. connection_busy) or the
+        # full clearance row — whose own "status" field can legitimately be
+        # "rejected" too (TKL declined the request). Only the sentinel lacks
+        # "clearance_id"; a real business rejection is a successful command
+        # and must flow through the accepted path below so the requesting
+        # station's snapshot gets republished along with everyone else's.
+        if (
+            isinstance(result, dict)
+            and result.get("status") == "rejected"
+            and "clearance_id" not in result
+        ):
             self._publish_ack(device_id, message_id, "rejected", result.get("reason"))
             self._publish_device(device_id)
             return
