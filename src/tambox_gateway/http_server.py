@@ -1751,14 +1751,18 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/server/restart":
                 client = self._authenticated_client()
                 response = self.server.application.restart_server(client)
-                self._send_json(HTTPStatus.ACCEPTED, response)
+                # Record the intent before answering. The shutdown itself is
+                # deferred, so the client still gets its response first, but
+                # the server can never report "restarting" without having
+                # decided to restart.
                 self.server.request_restart()
+                self._send_json(HTTPStatus.ACCEPTED, response)
                 return
             if path == "/v1/server/operational-reset":
                 client = self._authenticated_client()
                 response = self.server.application.reset_operational_data(client, payload)
-                self._send_json(HTTPStatus.ACCEPTED, response)
                 self.server.request_operational_reset()
+                self._send_json(HTTPStatus.ACCEPTED, response)
                 return
             if path == "/v1/server/factory-reset":
                 client = self._authenticated_client()
@@ -1767,8 +1771,8 @@ class TamboxRequestHandler(BaseHTTPRequestHandler):
                     payload,
                     local_access=self._has_automatic_local_admin(),
                 )
-                self._send_json(HTTPStatus.ACCEPTED, response)
                 self.server.request_factory_reset()
+                self._send_json(HTTPStatus.ACCEPTED, response)
                 return
             if path == "/v1/server/update":
                 client = self._authenticated_client()
@@ -1952,6 +1956,10 @@ class TamboxHTTPServer(ThreadingHTTPServer):
         super().__init__(address, TamboxRequestHandler)
 
     def request_restart(self) -> None:
+        # The flag is what makes the supervising process act, so it is set
+        # first and the shutdown is deferred. A quarter of a second is far
+        # more than a local response needs, and it keeps the ordering honest:
+        # decided, answered, then stopped.
         self.restart_requested = True
         timer = threading.Timer(0.25, self.shutdown)
         timer.daemon = True
