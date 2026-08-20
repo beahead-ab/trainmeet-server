@@ -75,6 +75,7 @@ class SQLiteOperationsStore:
                 actual_track TEXT,
                 updated_by TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
+                revision INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY(publication_id, active_day, movement_id)
             );
             CREATE TABLE IF NOT EXISTS tkl_events (
@@ -107,8 +108,31 @@ class SQLiteOperationsStore:
             );
             CREATE INDEX IF NOT EXISTS train_readiness_for_station
                 ON train_readiness(publication_id, active_day, station_id, status);
+            CREATE TABLE IF NOT EXISTS device_commands (
+                device_id TEXT NOT NULL,
+                message_id TEXT NOT NULL,
+                response_json TEXT NOT NULL,
+                recorded_at TEXT NOT NULL,
+                PRIMARY KEY(device_id, message_id)
+            );
             """
         )
+        # Movement revision arrived with protocol v2. An installation from
+        # before it keeps its rows and starts counting from zero.
+        self._add_missing_columns(
+            "tkl_movement_states", {"revision": "INTEGER NOT NULL DEFAULT 0"}
+        )
+
+    def _add_missing_columns(self, table: str, columns: dict[str, str]) -> None:
+        existing = {
+            row[1]
+            for row in self._connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        for name, definition in columns.items():
+            if name not in existing:
+                self._connection.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {name} {definition}"
+                )
 
     def ensure_publication(self, publication: RuntimePublication) -> None:
         with self._lock:
@@ -334,7 +358,7 @@ class SQLiteOperationsStore:
             movement_rows = self._connection.execute(
                 """
                 SELECT movement_id, arrival_status, departure_status, actual_track,
-                       updated_by, updated_at
+                       updated_by, updated_at, revision
                 FROM tkl_movement_states
                 WHERE publication_id = ? AND active_day = ? AND station_id = ?
                 ORDER BY updated_at
@@ -351,6 +375,7 @@ class SQLiteOperationsStore:
                     "actualTrack": row[3],
                     "updated_by": row[4],
                     "updated_at": row[5],
+                    "revision": int(row[6] or 0),
                 }
                 for row in movement_rows
             },
@@ -510,15 +535,16 @@ class SQLiteOperationsStore:
                     INSERT INTO tkl_movement_states(
                         publication_id, active_day, movement_id, station_id,
                         arrival_status, departure_status, actual_track,
-                        updated_by, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        updated_by, updated_at, revision
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                     ON CONFLICT(publication_id, active_day, movement_id) DO UPDATE SET
                         station_id = excluded.station_id,
                         arrival_status = excluded.arrival_status,
                         departure_status = excluded.departure_status,
                         actual_track = excluded.actual_track,
                         updated_by = excluded.updated_by,
-                        updated_at = excluded.updated_at
+                        updated_at = excluded.updated_at,
+                        revision = tkl_movement_states.revision + 1
                     """,
                     (
                         publication_id,
@@ -546,6 +572,15 @@ class SQLiteOperationsStore:
                     shift_id=shift_id,
                     movement_id=movement_id,
                 )
+                revision = int(
+                    self._connection.execute(
+                        """
+                        SELECT revision FROM tkl_movement_states
+                        WHERE publication_id = ? AND active_day = ? AND movement_id = ?
+                        """,
+                        (publication_id, active_day, movement_id),
+                    ).fetchone()[0]
+                )
                 self._connection.execute("COMMIT")
             except Exception:
                 if self._connection.in_transaction:
@@ -558,6 +593,7 @@ class SQLiteOperationsStore:
             "actualTrack": track,
             "updated_by": updated_by,
             "updated_at": now,
+            "revision": revision,
         }
 
     def train_readiness(
@@ -738,6 +774,39 @@ class SQLiteOperationsStore:
                 _now_iso(),
             ),
         )
+
+    def device_command_response(self, device_id: str, message_id: str) -> dict[str, Any] | None:
+        """The answer a device already got for this message, if any.
+
+        A box that loses an acknowledgement reuses the same message id to ask
+        what happened - never to make a second decision. Keeping the answer
+        durable means a server restart cannot turn that question into one.
+        """
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT response_json FROM device_commands
+                WHERE device_id = ? AND message_id = ?
+                """,
+                (device_id, message_id),
+            ).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def remember_device_command(
+        self,
+        device_id: str,
+        message_id: str,
+        response: dict[str, Any],
+    ) -> None:
+        with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO device_commands(device_id, message_id, response_json, recorded_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(device_id, message_id) DO NOTHING
+                """,
+                (device_id, message_id, json.dumps(response, ensure_ascii=False), _now_iso()),
+            )
 
     def close(self) -> None:
         with self._lock:

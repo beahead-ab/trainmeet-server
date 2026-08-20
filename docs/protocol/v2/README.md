@@ -122,6 +122,10 @@ Avslagsorsaker (`reason`) som en klient måste kunna hantera:
 En box som får ett avslag visar orsaken och **väntar på nästa snapshot**. Den
 agerar aldrig på den gamla cachade datan igen.
 
+Ett läsande kommando — idag bara `train.lookup` — får dessutom ett
+`result`-block i kvittensen. Skrivande kommandon har inget `result`; deras
+utfall syns i den bifogade snapshoten.
+
 ### 4.3 Retained `config` (server → box)
 
 Ändras bara vid ny driftpaket-aktivering. Ersätts i sin helhet vid varje
@@ -304,8 +308,9 @@ avvisa ett i övrigt giltigt meddelande för fältens skull:
 - `hello` bär idag `device_code`, `model` och `firmware_version`, men ännu inte
   `hardware_version`, `protocol_version` eller `display`. Utan `display` antas
   16×2 och `ascii`.
-- Kommandon bär ännu inte `expected_revision`. Ett kommando utan fältet får
-  behandlas som optimistiskt och accepteras om tillståndet tillåter det.
+- Kommandon bär ännu inte `expected_revision`. Ett kommando utan fältet
+  behandlas som optimistiskt och accepteras om tillståndet tillåter det. Ett
+  kommando **med** fältet villkoras strikt, per scope och nyckel.
 - Boxen sätter ännu ingen last will på sitt `presence`-topic.
 
 Detta är en lista över kända luckor att stänga, inte en tillåten permanent

@@ -65,6 +65,13 @@
         "object",
         "null"
       ]
+    },
+    "result": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Svar på ett läsande kommando, t.ex. train.lookup. Utelämnas för skrivande kommandon."
     }
   }
 }

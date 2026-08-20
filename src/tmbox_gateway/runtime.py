@@ -537,6 +537,8 @@ class SQLiteRuntimeStore:
                 if self._connection.in_transaction:
                     self._connection.execute("ROLLBACK")
                 raise
+        if activate:
+            self.bump_config_version()
         return publication
 
     def active(self) -> RuntimePublication | None:
@@ -620,7 +622,25 @@ class SQLiteRuntimeStore:
                 if self._connection.in_transaction:
                     self._connection.execute("ROLLBACK")
                 raise
+        self.bump_config_version()
         return publication
+
+    def config_version(self) -> int:
+        """The current configuration generation.
+
+        A box conditions its config acknowledgement on this, so it has to
+        increase whenever an activation changes what a station looks like.
+        """
+        value = self._setting("config_version")
+        try:
+            return int(value) if value else 1
+        except ValueError:
+            return 1
+
+    def bump_config_version(self) -> int:
+        version = self.config_version() + 1
+        self._save_setting("config_version", str(version))
+        return version
 
     def save_link_token(self, token: str) -> None:
         token = token.strip()
