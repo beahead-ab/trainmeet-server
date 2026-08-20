@@ -164,6 +164,21 @@ class SQLiteOperationsStore:
             );
             CREATE INDEX IF NOT EXISTS line_messages_for_station
                 ON line_available_messages(publication_id, active_day, to_station_id, status);
+            CREATE TABLE IF NOT EXISTS audit_events (
+                event_id TEXT PRIMARY KEY,
+                correlation_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                station_id TEXT,
+                movement_id TEXT,
+                action TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                reason TEXT,
+                detail_json TEXT NOT NULL,
+                recorded_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS audit_events_by_correlation
+                ON audit_events(correlation_id, recorded_at);
             CREATE TABLE IF NOT EXISTS device_commands (
                 device_id TEXT NOT NULL,
                 message_id TEXT NOT NULL,
@@ -1204,6 +1219,75 @@ class SQLiteOperationsStore:
                 (publication_id, active_day, station_id, station_id),
             ).fetchall()
         return [_line_message_from_row(row) for row in rows]
+
+    # ---------------------------------------------------------------- audit
+    #
+    # One journal for everything a command touches, keyed on the correlation
+    # id it carried, so a train's history can be pulled out in one query
+    # rather than reconstructed from timestamps across three places.
+
+    def record_audit_event(
+        self,
+        *,
+        correlation_id: str,
+        source: str,
+        actor: str,
+        action: str,
+        outcome: str,
+        station_id: str | None = None,
+        movement_id: str | None = None,
+        reason: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO audit_events(
+                    event_id, correlation_id, source, actor, station_id,
+                    movement_id, action, outcome, reason, detail_json, recorded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(uuid4()),
+                    correlation_id,
+                    source,
+                    actor,
+                    station_id,
+                    movement_id,
+                    action,
+                    outcome,
+                    reason,
+                    json.dumps(detail or {}, ensure_ascii=False),
+                    _now_iso(),
+                ),
+            )
+
+    def audit_trail(self, correlation_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT correlation_id, source, actor, station_id, movement_id,
+                       action, outcome, reason, detail_json, recorded_at
+                FROM audit_events WHERE correlation_id = ?
+                ORDER BY recorded_at, event_id
+                """,
+                (correlation_id,),
+            ).fetchall()
+        return [
+            {
+                "correlation_id": row[0],
+                "source": row[1],
+                "actor": row[2],
+                "station_id": row[3],
+                "movement_id": row[4],
+                "action": row[5],
+                "outcome": row[6],
+                "reason": row[7],
+                "detail": json.loads(row[8]),
+                "recorded_at": row[9],
+            }
+            for row in rows
+        ]
 
     def device_command_response(self, device_id: str, message_id: str) -> dict[str, Any] | None:
         """The answer a device already got for this message, if any.

@@ -313,6 +313,17 @@ Regeln gäller synkront i motorn och i alla klienter — box, webbsimulator,
 Swift, TKL-terminal. Ingen klient får implementera ett undantag på egen hand.
 `B`-etiketten är alltid **`B=EJ`**.
 
+## 8.1 Spårbarhet
+
+Ett kommandos `message_id` är också dess korrelations-id. Loggrader,
+auditjournalen och trafikmotorns egen post bär samma id, så hela vägen från
+mottaget MQTT-meddelande till registrerad effekt går att hämta med en fråga.
+
+Loggen är strukturerad `nyckel=värde`. Hemligheter — parkopplingskoder,
+åtkomsttokens, lösenord, `device_token` — redigeras bort på fältnamn innan
+något skrivs, så en slarvig anropare kan inte läcka en genom att skicka den
+till en loggrad.
+
 ## 9. Scheman och exempel
 
 `schemas/` innehåller ett JSON Schema per meddelandetyp. `examples/` innehåller

@@ -7,6 +7,7 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from .display import allowed_keys, render_panel
+from .observability import correlation_id
 from .models import (
     Command,
     CommandAck,
@@ -113,6 +114,7 @@ class TrafficEngine:
                     "action": action,
                     "previous_revision": previous,
                     "revision": self.revision,
+                    "correlation_id": correlation_id() or f"{client_id}:{action}",
                     "recorded_at": moment.isoformat(),
                 }
             )
@@ -210,6 +212,7 @@ class TrafficEngine:
                 "key": command.key,
                 "previous_revision": previous,
                 "revision": self.revision,
+                "correlation_id": correlation_id() or command.command_id,
                 "recorded_at": now.isoformat(),
             }
         )

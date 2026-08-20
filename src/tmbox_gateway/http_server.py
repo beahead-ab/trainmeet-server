@@ -41,6 +41,7 @@ from .local_config import (
     SQLiteLocalConfigurationStore,
 )
 from .models import Command, TrackConfig, UnknownTrackError, resolve_track_id
+from .observability import log_event, use_correlation
 from .operations import SQLiteOperationsStore
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
@@ -748,13 +749,34 @@ class TrainMeetHTTPApplication:
                 "invalid_tkl_clearance_action",
                 "Ogiltig sträckåtgärd eller tågnummer",
             )
-        accepted, reason = self.engine.perform(
-            station_id=station_id,
-            connection_id=connection_id,
-            action=action,
-            train_number=train_number,
-            client_id=client.client_id,
-        )
+        with use_correlation(f"tkl-{uuid4().hex[:12]}") as trace:
+            accepted, reason = self.engine.perform(
+                station_id=station_id,
+                connection_id=connection_id,
+                action=action,
+                train_number=train_number,
+                client_id=client.client_id,
+            )
+            self.operations_store.record_audit_event(
+                correlation_id=trace,
+                source="tkl",
+                actor=client.client_id,
+                action=f"clearance.{action}",
+                outcome="accepted" if accepted else "rejected",
+                station_id=station_id,
+                reason=None if accepted else str(reason or ""),
+                detail={"connection_id": connection_id, "train_number": train_number},
+            )
+            log_event(
+                LOGGER,
+                "clearance.accepted" if accepted else "clearance.rejected",
+                level=logging.INFO if accepted else logging.WARNING,
+                actor=client.client_id,
+                station_id=station_id,
+                connection_id=connection_id,
+                action=action,
+                reason=None if accepted else str(reason or ""),
+            )
         if not accepted:
             raise HTTPAPIError(
                 HTTPStatus.CONFLICT,

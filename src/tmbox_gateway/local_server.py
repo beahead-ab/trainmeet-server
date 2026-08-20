@@ -21,6 +21,7 @@ from .http_server import HTTPServerConfig, TrainMeetHTTPApplication, TrainMeetHT
 from .identity import DeviceKind, IdentityStore, PairingService
 from .local_config import SQLiteLocalConfigurationStore
 from .models import unconfigured_session
+from .observability import configure_logging
 from .mqtt_adapter import MQTTGatewayAdapter
 from .mqtt_v2 import MQTTV2Adapter, TMBoxV2Gateway
 from .operations import SQLiteOperationsStore
@@ -86,7 +87,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging(logging.INFO)
     state_directory = Path(args.state_dir).resolve()
     state_directory.mkdir(parents=True, exist_ok=True)
 

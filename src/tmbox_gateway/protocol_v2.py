@@ -20,6 +20,7 @@ from uuid import uuid4
 
 from .identity import DisplayCapability, IdentityStore
 from .models import SessionConfig, TrackType, UnknownTrackError, resolve_track_id
+from .observability import log_event, use_correlation
 from .operations import SQLiteOperationsStore
 from .runtime import RuntimePublication, SQLiteRuntimeStore, matches_active_day
 
@@ -246,30 +247,81 @@ class TMBoxStationService:
     # -------------------------------------------------------------- commands
 
     def handle_command(self, device_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        """Apply one complete command and return the acknowledgement for it."""
+        """Apply one complete command and return the acknowledgement for it.
+
+        The message id is also the correlation id: everything this command
+        touches - log lines, the audit journal, the engine's own record -
+        carries it, so the whole path can be pulled out with one id.
+        """
         message_id = str(payload.get("message_id") or "").strip()
         if not message_id:
             return self._ack(None, "rejected", "missing_message_id", None)
 
-        cached = self.operations_store.device_command_response(device_id, message_id)
-        if cached is not None:
-            # The same question, not a second decision.
-            return {**cached, "status": "duplicate"}
+        action = str(payload.get("action") or "")
+        with use_correlation(message_id):
+            cached = self.operations_store.device_command_response(device_id, message_id)
+            if cached is not None:
+                # The same question, not a second decision.
+                self._audit(device_id, None, action, "duplicate", payload)
+                return {**cached, "status": "duplicate"}
 
-        try:
-            station_id = self._require_station(device_id, payload)
-            result = self._apply(device_id, station_id, payload)
-        except CommandRejected as rejection:
-            station_id = self.identities.station_for_client(device_id)
-            return self._ack(message_id, "rejected", rejection.reason, station_id)
+            try:
+                station_id = self._require_station(device_id, payload)
+                result = self._apply(device_id, station_id, payload)
+            except CommandRejected as rejection:
+                station_id = self.identities.station_for_client(device_id)
+                self._audit(
+                    device_id, station_id, action, "rejected", payload, rejection.reason
+                )
+                return self._ack(message_id, "rejected", rejection.reason, station_id)
 
-        acknowledgement = self._ack(
-            message_id, "accepted", None, station_id, revision=result.get("revision")
+            acknowledgement = self._ack(
+                message_id, "accepted", None, station_id, revision=result.get("revision")
+            )
+            if result.get("result") is not None:
+                acknowledgement["result"] = result["result"]
+            self.operations_store.remember_device_command(
+                device_id, message_id, acknowledgement
+            )
+            self._audit(device_id, station_id, action, "accepted", payload)
+            return acknowledgement
+
+    def _audit(
+        self,
+        device_id: str,
+        station_id: str | None,
+        action: str,
+        outcome: str,
+        payload: dict[str, Any],
+        reason: str | None = None,
+    ) -> None:
+        body = payload.get("payload") or {}
+        movement_id = str(body.get("movement_id") or "") or None
+        self.operations_store.record_audit_event(
+            correlation_id=str(payload.get("message_id") or ""),
+            source="tmbox",
+            actor=device_id,
+            action=action,
+            outcome=outcome,
+            station_id=station_id,
+            movement_id=movement_id,
+            reason=reason,
+            detail={
+                key: value
+                for key, value in body.items()
+                if key in {"connection_id", "clearance_id", "track_id", "train_number", "message_id"}
+            },
         )
-        if result.get("result") is not None:
-            acknowledgement["result"] = result["result"]
-        self.operations_store.remember_device_command(device_id, message_id, acknowledgement)
-        return acknowledgement
+        log_event(
+            LOGGER,
+            f"command.{outcome}",
+            level=logging.INFO if outcome != "rejected" else logging.WARNING,
+            device_id=device_id,
+            station_id=station_id,
+            action=action,
+            movement_id=movement_id,
+            reason=reason,
+        )
 
     def _require_station(self, device_id: str, payload: dict[str, Any]) -> str:
         if int(payload.get("protocol_version") or 0) != PROTOCOL_VERSION:
