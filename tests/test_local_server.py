@@ -71,7 +71,7 @@ class LocalServerStartupTests(unittest.TestCase):
 
         self.assertIn("_tmbox._tcp", recorded["command"])
         self.assertIn("server_id=charlottendal", recorded["command"])
-        self.assertIn("protocol=1", recorded["command"])
+        self.assertIn("protocol=2", recorded["command"])
 
     def test_remote_reset_preserves_admin_session_and_server_name(self):
         with tempfile.TemporaryDirectory() as directory:
