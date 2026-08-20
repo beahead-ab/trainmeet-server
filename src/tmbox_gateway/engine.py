@@ -533,25 +533,36 @@ class TrafficEngine:
                 return False, "awaiting_response"
             return self._cancel_request(panel, runtime)
 
+        # An operational decision - KLART, EJ KLART, AVGÅTT, ANKOMMIT - is
+        # always given on A or B and never on #. The rule is a safety rule,
+        # and it holds in the engine so no client can make its own exception.
         if runtime.mode == InteractionMode.INCOMING_REQUEST:
-            if key == "#":
+            if key == "A":
                 return self._respond_request(panel, runtime, accept=True)
-            if key == "*":
+            if key == "B":
                 return self._respond_request(panel, runtime, accept=False)
-            return False, "answer_with_hash_or_star"
+            if key == "*":
+                # Leaving the screen is not an answer. The request stays where
+                # it was and remains visible in the overview.
+                runtime.reset()
+                return True, None
+            return False, "answer_with_a_or_b"
 
         if runtime.mode == InteractionMode.READY_DEPARTURE:
             if key == "*":
                 runtime.mode = InteractionMode.CONFIRM_CANCEL
                 runtime.owner_client_id = command.client_id
                 return True, None
-            if key != runtime.selected_slot:
-                return False, "confirm_with_same_slot"
+            if key != "A":
+                return False, "depart_with_a"
             runtime.mode = InteractionMode.CONFIRM_DEPARTURE
             runtime.owner_client_id = command.client_id
             return True, None
 
         if runtime.mode == InteractionMode.CONFIRM_CANCEL:
+            # Withdrawing a request is not one of the four operational
+            # decisions, and the spec asks for it on # after an explicit
+            # question.
             if key == "*":
                 runtime.mode = InteractionMode.READY_DEPARTURE
                 runtime.owner_client_id = None
@@ -561,20 +572,20 @@ class TrafficEngine:
             return self._cancel_reservation(panel, runtime)
 
         if runtime.mode == InteractionMode.CONFIRM_DEPARTURE:
-            if key == "*":
+            if key in {"B", "*"}:
                 runtime.mode = InteractionMode.READY_DEPARTURE
                 runtime.owner_client_id = None
                 return True, None
-            if key != "#":
-                return False, "confirm_with_hash_or_star"
+            if key != "A":
+                return False, "depart_with_a"
             return self._depart(panel, runtime)
 
         if runtime.mode == InteractionMode.INCOMING_ARRIVAL:
-            if key == "*":
+            if key in {"B", "*"}:
                 runtime.reset()
                 return True, None
-            if key != "#":
-                return False, "confirm_with_hash_or_star"
+            if key != "A":
+                return False, "arrive_with_a"
             return self._arrive(panel, runtime)
 
         return False, "unsupported_interaction"

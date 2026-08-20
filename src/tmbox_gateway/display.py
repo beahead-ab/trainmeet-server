@@ -24,6 +24,12 @@ def fit_line(left: str = "", right: str = "") -> str:
 
 
 def allowed_keys(runtime: PanelRuntime, panel: PanelConfig) -> list[str]:
+    """Which keys the server will accept on the screen a panel is showing.
+
+    An operational decision is only ever offered on A or B. # selects,
+    confirms typed data and acknowledges - it never carries KLART, EJ KLART,
+    AVGÅTT or ANKOMMIT.
+    """
     if runtime.mode == InteractionMode.IDLE:
         return [key for key, value in panel.slots.items() if value is not None] + ["*"]
     if runtime.mode == InteractionMode.ENTER_TRAIN:
@@ -31,14 +37,14 @@ def allowed_keys(runtime: PanelRuntime, panel: PanelConfig) -> list[str]:
     if runtime.mode == InteractionMode.AWAITING_PERMISSION:
         return ["*"]
     if runtime.mode == InteractionMode.INCOMING_REQUEST:
-        return ["#", "*"]
+        return ["A", "B", "*"]
     if runtime.mode == InteractionMode.READY_DEPARTURE:
-        return [runtime.selected_slot, "*"] if runtime.selected_slot else ["*"]
-    if runtime.mode in {
-        InteractionMode.CONFIRM_DEPARTURE,
-        InteractionMode.CONFIRM_CANCEL,
-        InteractionMode.INCOMING_ARRIVAL,
-    }:
+        return ["A", "*"]
+    if runtime.mode == InteractionMode.CONFIRM_DEPARTURE:
+        return ["A", "B", "*"]
+    if runtime.mode == InteractionMode.INCOMING_ARRIVAL:
+        return ["A", "B", "*"]
+    if runtime.mode == InteractionMode.CONFIRM_CANCEL:
         return ["#", "*"]
     return []
 
@@ -98,18 +104,18 @@ def _render_interaction(
         return fit_line(f"{train}->{other_code}"), fit_line("Väntar svar...", "*=Avb")
     if runtime.mode == InteractionMode.INCOMING_REQUEST:
         from_code = config.stations[line.from_station_id or other_id].code[:3].upper()
-        return fit_line(f"Från {from_code}"), fit_line(f"Tåg {train}", "#/*")
+        return fit_line(f"Från {from_code} {train}"), fit_line("A=KLART", "B=EJ")
     if runtime.mode == InteractionMode.READY_DEPARTURE:
         arrow = _departure_symbol(runtime.selected_slot)
-        return fit_line(f"{train}{arrow}{other_code}", "KLAR"), fit_line(f"{runtime.selected_slot}=Avg", "*=Avb")
+        return fit_line(f"{train}{arrow}{other_code}", "KLAR"), fit_line("A=Avg", "*=Avb")
     if runtime.mode == InteractionMode.CONFIRM_DEPARTURE:
         arrow = _departure_symbol(runtime.selected_slot)
-        return fit_line(f"{train}{arrow}{other_code}", "Tåg ut?"), fit_line("#=Ja", "*=Nej")
+        return fit_line(f"{train}{arrow}{other_code}", "Tåg ut?"), fit_line("A=AVGÅTT", "B=EJ")
     if runtime.mode == InteractionMode.CONFIRM_CANCEL:
-        return fit_line("Ångra körning?"), fit_line("#=Ja", "*=Nej")
+        return fit_line("Avbryt begäran?"), fit_line("#=Ja", "*=Nej")
     if runtime.mode == InteractionMode.INCOMING_ARRIVAL:
         from_code = config.stations[line.from_station_id or other_id].code[:3].upper()
-        return fit_line(f"Ank {train}", f"från {from_code}"), fit_line("#=Kvittera", "*=Avb")
+        return fit_line(f"Ank {train}", f"från {from_code}"), fit_line("A=ANKOMMIT", "B=EJ")
     return None
 
 

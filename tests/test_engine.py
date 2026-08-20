@@ -105,7 +105,7 @@ class TrafficEngineTests(unittest.TestCase):
         self.assertEqual(driver.engine.snapshot("panel-b")["display"]["line1"], "A!2123          ")
 
         driver.press("panel-b", "A")
-        driver.press("panel-b", "#")
+        driver.press("panel-b", "A")
         self.assertEqual(driver.engine.connections["connection-a-b"].state, ConnectionState.RESERVED)
         self.assertEqual(driver.engine.snapshot("panel-a")["interaction"]["mode"], "idle")
         self.assertEqual(driver.engine.snapshot("panel-a")["slots"]["A"]["action"], "depart")
@@ -114,12 +114,12 @@ class TrafficEngineTests(unittest.TestCase):
         driver.press("panel-a", "A")
         self.assertEqual(driver.engine.snapshot("panel-a")["interaction"]["mode"], "ready_departure")
         driver.press("panel-a", "A")
-        departure = driver.press("panel-a", "#")
+        departure = driver.press("panel-a", "A")
         self.assertEqual(departure.status, "accepted")
         self.assertEqual(driver.engine.connections["connection-a-b"].state, ConnectionState.OCCUPIED)
 
         driver.press("panel-b", "A")
-        arrival = driver.press("panel-b", "#")
+        arrival = driver.press("panel-b", "A")
         self.assertEqual(arrival.status, "accepted")
         self.assertEqual(driver.engine.connections["connection-a-b"].state, ConnectionState.FREE)
         self.assertIn("A<LEK", driver.engine.snapshot("panel-a")["display"]["line1"])
@@ -146,7 +146,12 @@ class TrafficEngineTests(unittest.TestCase):
 
         driver.press("panel-a", "#")
         driver.press("panel-b", "A")
-        driver.press("panel-b", "#")
+        self.assertEqual(driver.engine.snapshot("panel-b")["display"], {
+            "line1": "Från CDA 2123   ",
+            "line2": "A=KLART     B=EJ",
+        })
+
+        driver.press("panel-b", "A")
         self.assertEqual(driver.engine.snapshot("panel-a")["display"], {
             "line1": "A!2123          ",
             "line2": "           12:34",
@@ -161,14 +166,14 @@ class TrafficEngineTests(unittest.TestCase):
         driver.press("panel-a", "A")
         self.assertEqual(driver.engine.snapshot("panel-a")["display"], {
             "line1": "2123◀LEK Tåg ut?",
-            "line2": "#=Ja       *=Nej",
+            "line2": "A=AVGÅTT    B=EJ",
         })
 
     def test_rejected_request_releases_connection(self):
         driver = EngineDriver()
         driver.enter_train("panel-a", "42")
         driver.press("panel-b", "A")
-        driver.press("panel-b", "*")
+        driver.press("panel-b", "B")
 
         self.assertEqual(driver.engine.connections["connection-a-b"].state, ConnectionState.FREE)
         self.assertEqual(driver.engine.snapshot("panel-a")["interaction"]["mode"], "idle")
@@ -208,7 +213,7 @@ class TrafficEngineTests(unittest.TestCase):
             traffic_session_id="test-session",
             panel_id="panel-a",
             expected_revision=driver.engine.revision,
-            key="#",
+            key="A",
             sent_at=now,
             expires_at=now + timedelta(seconds=5),
         )
@@ -264,7 +269,7 @@ class TrafficEngineTests(unittest.TestCase):
         driver.press("panel-center", "B")
         driver.press("panel-center", "2")
         driver.press("panel-left", "A")
-        driver.press("panel-left", "#")
+        driver.press("panel-left", "A")
 
         center = driver.engine.snapshot("panel-center")
         self.assertEqual(center["interaction"]["mode"], "enter_train")
@@ -355,6 +360,89 @@ class TrafficEngineTests(unittest.TestCase):
         clock = driver.engine.snapshot("panel-a")["clock"]
         self.assertEqual(clock["time"], "12:34")
         self.assertFalse(clock["running"])
+
+    def test_hash_never_carries_an_operational_decision(self):
+        """The safety rule from docs/tmbox.md section 6.
+
+        KLART, EJ KLART, AVGÅTT and ANKOMMIT are given on A or B and never on
+        #. The rule holds in the engine so no client can make its own
+        exception, and it holds on the offered keys as well as on the accepted
+        ones - a screen must never even suggest # for a decision.
+        """
+        driver = EngineDriver()
+        driver.enter_train("panel-a", "2123")
+
+        # An incoming request is answered on A or B.
+        driver.press("panel-b", "A")
+        offered = driver.engine.snapshot("panel-b")["interaction"]["allowed_keys"]
+        self.assertNotIn("#", offered)
+        refused = driver.press("panel-b", "#")
+        self.assertEqual(refused.status, "rejected")
+        self.assertEqual(refused.reason, "answer_with_a_or_b")
+        self.assertEqual(
+            driver.engine.connections["connection-a-b"].state, ConnectionState.REQUESTED
+        )
+
+        driver.press("panel-b", "A")
+
+        # Departure is confirmed on A, twice, and # is refused at both steps.
+        driver.press("panel-a", "A")
+        self.assertNotIn("#", driver.engine.snapshot("panel-a")["interaction"]["allowed_keys"])
+        self.assertEqual(driver.press("panel-a", "#").reason, "depart_with_a")
+        driver.press("panel-a", "A")
+        self.assertNotIn("#", driver.engine.snapshot("panel-a")["interaction"]["allowed_keys"])
+        self.assertEqual(driver.press("panel-a", "#").reason, "depart_with_a")
+        self.assertEqual(
+            driver.engine.connections["connection-a-b"].state, ConnectionState.RESERVED
+        )
+        driver.press("panel-a", "A")
+
+        # So is arrival.
+        driver.press("panel-b", "A")
+        self.assertNotIn("#", driver.engine.snapshot("panel-b")["interaction"]["allowed_keys"])
+        self.assertEqual(driver.press("panel-b", "#").reason, "arrive_with_a")
+        driver.press("panel-b", "A")
+        self.assertEqual(
+            driver.engine.connections["connection-a-b"].state, ConnectionState.FREE
+        )
+
+    def test_hash_still_confirms_data_and_withdrawals(self):
+        # The rule names four operational decisions. Entering a train number
+        # and withdrawing your own request are neither, and the spec asks for
+        # both on # - the second behind an explicit question.
+        driver = EngineDriver()
+        driver.enter_train("panel-a", "2123")
+        self.assertEqual(
+            driver.engine.connections["connection-a-b"].state, ConnectionState.REQUESTED
+        )
+
+        driver.press("panel-b", "A")
+        driver.press("panel-b", "A")
+        driver.press("panel-a", "A")
+        driver.press("panel-a", "*")
+        self.assertEqual(
+            driver.engine.snapshot("panel-a")["display"]["line1"], "Avbryt begäran? "
+        )
+        self.assertEqual(
+            driver.engine.snapshot("panel-a")["interaction"]["allowed_keys"], ["#", "*"]
+        )
+
+        driver.press("panel-a", "#")
+        self.assertEqual(
+            driver.engine.connections["connection-a-b"].state, ConnectionState.FREE
+        )
+
+    def test_the_negative_key_is_always_labelled_b_ej(self):
+        # Gap analysis section 6.8: two screens said B=NEJ. One label.
+        driver = EngineDriver()
+        driver.enter_train("panel-a", "2123")
+        driver.press("panel-b", "A")
+        self.assertIn("B=EJ", driver.engine.snapshot("panel-b")["display"]["line2"])
+
+        driver.press("panel-b", "A")
+        driver.press("panel-a", "A")
+        driver.press("panel-a", "A")
+        self.assertIn("B=EJ", driver.engine.snapshot("panel-a")["display"]["line2"])
 
     def test_display_rows_are_always_exactly_sixteen_characters(self):
         driver = EngineDriver()

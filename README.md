@@ -508,6 +508,11 @@ Raspberry Pi: TrainMeet Server + SQLite + Mosquitto
 
 Raspberry Pi:n är alltid auktoritativ. MQTT används som transport med QoS 1, retained snapshots och idempotenta kommandon. En klient som tappar nätet återansluter, presenterar sig igen och får hela det aktuella läget. Klienterna avgör aldrig själva om ett tåg får skickas.
 
+Ett operativt beslut lämnas alltid på `A` eller `B`, aldrig på `#`. `KLART`,
+`EJ KLART`, `AVGÅTT` och `ANKOMMIT` följer den regeln i trafikmotorn, så
+ingen klient kan införa ett eget undantag. `#` väljer, bekräftar inmatad data
+och kvitterar visning. Den negativa knappen heter alltid `B=EJ`.
+
 Ett trafikärende tillhör sträckan på servern, inte TMBoxens aktuella skärm.
 När en operatör har begärt ett tåg återgår panelen därför direkt till sin
 A–D-översikt och kan hantera nästa tåg. Väntande, inkommande och godkända
