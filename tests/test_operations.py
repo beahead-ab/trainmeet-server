@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from runtime_fixture import runtime_package_v2
+from session_fixture import sample_session
+from tambox_gateway.engine import TrafficEngine
 from tambox_gateway.operations import SQLiteOperationsStore
 from tambox_gateway.runtime import RuntimePublication
 
@@ -26,6 +28,34 @@ class OperationsStoreTests(unittest.TestCase):
                 stopped = store.stop_clock("Tekniskt stopp")
                 self.assertFalse(stopped["running"])
                 self.assertEqual(stopped["stopped_reason"], "Tekniskt stopp")
+            finally:
+                store.close()
+
+    def test_panel_snapshots_follow_the_running_meeting_clock(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteOperationsStore(Path(directory) / "runtime.db")
+            try:
+                store.ensure_publication(RuntimePublication.parse(runtime_package_v2()))
+                base = datetime(2026, 8, 11, 10, 0, tzinfo=timezone.utc)
+                store.start_clock(time_value="09:15:00", now=base)
+
+                moment = base
+                engine = TrafficEngine(sample_session())
+                engine.set_clock_source(lambda: store.clock_status(now=moment))
+
+                self.assertEqual(engine.snapshot("panel-a")["clock"]["time"], "09:15")
+
+                # Fifteen wall seconds at the publication's speed of four.
+                moment = base + timedelta(seconds=15)
+                snapshot = engine.snapshot("panel-a")
+                self.assertEqual(snapshot["clock"]["time"], "09:16")
+                self.assertTrue(snapshot["clock"]["running"])
+                self.assertEqual(snapshot["display"]["line2"], "           09:16")
+
+                store.stop_clock("Rast")
+                stopped = engine.snapshot("panel-a")["clock"]
+                self.assertFalse(stopped["running"])
+                self.assertEqual(stopped["stopped_reason"], "Rast")
             finally:
                 store.close()
 

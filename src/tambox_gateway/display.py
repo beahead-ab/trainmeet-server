@@ -48,6 +48,8 @@ def render_panel(
     panel: PanelConfig,
     panel_runtime: PanelRuntime,
     connection_runtime: dict[str, ConnectionRuntime],
+    *,
+    clock_time: str | None = None,
 ) -> tuple[str, str]:
     interaction = _render_interaction(config, panel, panel_runtime, connection_runtime)
     if interaction is not None:
@@ -64,7 +66,9 @@ def render_panel(
         tokens[key] = _slot_token(key, panel.station_id, other_code, runtime)
 
     line1 = fit_line(tokens["A"], tokens["B"])
-    line2_right = tokens["D"] or config.clock_time[:5]
+    # The idle row shows meeting time, so the caller passes the live clock.
+    # Without one the publication start time is the only honest fallback.
+    line2_right = tokens["D"] or (clock_time or config.clock_time)[:5]
     line2 = fit_line(tokens["C"], line2_right)
     return line1, line2
 

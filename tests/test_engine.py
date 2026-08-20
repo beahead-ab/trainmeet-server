@@ -301,6 +301,61 @@ class TrafficEngineTests(unittest.TestCase):
             "incoming_request",
         )
 
+    def test_panel_snapshot_shows_the_meeting_clock_not_the_publication_time(self):
+        driver = EngineDriver()
+        driver.engine.set_clock_source(
+            lambda: {
+                "configured": True,
+                "time": "14:32:07",
+                "running": True,
+                "stopped_reason": None,
+            }
+        )
+
+        snapshot = driver.engine.snapshot("panel-a")
+        self.assertEqual(snapshot["clock"]["time"], "14:32")
+        self.assertTrue(snapshot["clock"]["running"])
+        self.assertEqual(snapshot["clock"]["source"], "meeting_clock")
+        # The idle row carries the same meeting time, not the 12:34 start
+        # time baked into the publication.
+        self.assertEqual(snapshot["display"]["line2"], "           14:32")
+
+    def test_a_stopped_meeting_clock_is_never_reported_as_running(self):
+        driver = EngineDriver()
+        driver.engine.set_clock_source(
+            lambda: {
+                "configured": True,
+                "time": "14:32:07",
+                "running": False,
+                "stopped_reason": "Tekniskt stopp",
+            }
+        )
+
+        clock = driver.engine.snapshot("panel-a")["clock"]
+        self.assertFalse(clock["running"])
+        self.assertEqual(clock["stopped_reason"], "Tekniskt stopp")
+
+    def test_publication_start_time_is_never_claimed_to_be_running(self):
+        driver = EngineDriver()
+
+        clock = driver.engine.snapshot("panel-a")["clock"]
+        self.assertEqual(clock["time"], "12:34")
+        self.assertFalse(clock["running"])
+        self.assertFalse(clock["configured"])
+        self.assertEqual(clock["source"], "publication_start_time")
+
+    def test_an_unreadable_clock_never_takes_the_snapshot_down(self):
+        driver = EngineDriver()
+
+        def broken_clock() -> dict:
+            raise RuntimeError("clock database is locked")
+
+        driver.engine.set_clock_source(broken_clock)
+
+        clock = driver.engine.snapshot("panel-a")["clock"]
+        self.assertEqual(clock["time"], "12:34")
+        self.assertFalse(clock["running"])
+
     def test_display_rows_are_always_exactly_sixteen_characters(self):
         driver = EngineDriver()
         for panel_id in ("panel-a", "panel-b"):

@@ -155,6 +155,7 @@ class TamboxHTTPApplication:
 
         if self.operations_store is not None:
             self.engine.set_transition_observer(self.operations_store.record_engine_transition)
+            self.engine.set_clock_source(self.operations_store.clock_status)
             if self.runtime_store is not None:
                 active = self.runtime_store.active()
                 if active is not None:

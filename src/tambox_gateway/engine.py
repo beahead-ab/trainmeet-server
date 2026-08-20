@@ -46,6 +46,7 @@ class TrafficEngine:
         self.processed_commands: dict[str, CommandAck] = {}
         self.audit: list[dict[str, Any]] = []
         self.transition_observer: Callable[[dict[str, Any], dict[str, Any], datetime], None] | None = None
+        self.clock_source: Callable[[], dict[str, Any]] | None = None
         self._validate_config()
         if self.state_store is not None:
             state = self.state_store.load(self.config.id, self.config_fingerprint)
@@ -61,6 +62,43 @@ class TrafficEngine:
         observer: Callable[[dict[str, Any], dict[str, Any], datetime], None] | None,
     ) -> None:
         self.transition_observer = observer
+
+    def set_clock_source(self, source: Callable[[], dict[str, Any]] | None) -> None:
+        """Point the engine at the meeting clock owned by the operations layer.
+
+        Every time a client sees is meeting time, never wall time, and the
+        meeting clock can run at another speed or be stopped entirely. The
+        engine keeps no clock of its own; it only reads the authoritative one.
+        """
+        self.clock_source = source
+
+    def meeting_clock(self) -> dict[str, Any]:
+        """Return the meeting clock exactly as clients should render it."""
+        if self.clock_source is not None:
+            try:
+                status = self.clock_source()
+            except Exception:
+                # A clock that cannot be read must never take the traffic
+                # engine down with it. Fall back to the publication below.
+                status = None
+            if status is not None and status.get("configured"):
+                return {
+                    "time": str(status.get("time") or "")[:5],
+                    "running": bool(status.get("running")),
+                    "stopped_reason": status.get("stopped_reason"),
+                    "configured": True,
+                    "source": "meeting_clock",
+                }
+        # No meeting clock has been configured yet. Show the publication's
+        # start time, but never claim that it is running - a frozen clock that
+        # says it is running is worse than one that admits it is not.
+        return {
+            "time": self.config.clock_time[:5],
+            "running": False,
+            "stopped_reason": None,
+            "configured": False,
+            "source": "publication_start_time",
+        }
 
     def _press_locked(self, command: Command, *, now: datetime | None = None) -> CommandAck:
         now = now or datetime.now(timezone.utc)
@@ -264,7 +302,10 @@ class TrafficEngine:
     def _snapshot_locked(self, panel_id: str) -> dict[str, Any]:
         panel = self.config.panels[panel_id]
         runtime = self.panels[panel_id]
-        line1, line2 = render_panel(self.config, panel, runtime, self.connections)
+        clock = self.meeting_clock()
+        line1, line2 = render_panel(
+            self.config, panel, runtime, self.connections, clock_time=clock["time"]
+        )
 
         slots: dict[str, Any] = {}
         for key in ("A", "B", "C", "D"):
@@ -317,7 +358,7 @@ class TrafficEngine:
                 "slots": attention_slots,
             },
             "display": {"line1": line1, "line2": line2},
-            "clock": {"time": self.config.clock_time[:5], "running": True, "source": "pi_internal"},
+            "clock": clock,
         }
 
     def snapshots(self) -> dict[str, dict[str, Any]]:
