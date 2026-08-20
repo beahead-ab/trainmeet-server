@@ -700,11 +700,23 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .overview-routes-heading { align-items: center; padding: 0 2px; }
 .route-explorer { display: grid; grid-template-columns: 145px minmax(310px, 1fr) 210px; min-height: 390px; overflow: hidden; }
 .route-picker, .route-detail, .station-traffic { min-width: 0; padding: 12px; }
-.route-picker { border-right: 1px solid var(--border); }
+.route-picker {
+  border-right: 1px solid var(--border);
+  /* One row's pitch, declared once. The list's height is derived from it,
+     so neither can drift and leave a row sliced in half at the bottom. */
+  --route-row: 32px;
+  --route-gap: 2px;
+}
 .route-search-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 .route-picker input { min-height: 36px; margin-bottom: 9px; border-radius: 999px; font-size: 12px; }
-.route-list { display: grid; align-content: start; gap: 2px; max-height: 325px; overflow: auto; }
-.route-number { min-height: 32px; padding: 0 10px; border-radius: 999px; color: var(--ink); background: transparent; text-align: left; font-size: 13px; font-weight: 500; }
+.route-list {
+  display: grid;
+  align-content: start;
+  gap: var(--route-gap);
+  max-height: calc(9 * var(--route-row) + 8 * var(--route-gap));
+  overflow: auto;
+}
+.route-number { min-height: var(--route-row); padding: 0 10px; border-radius: 999px; color: var(--ink); background: transparent; text-align: left; font-size: 13px; font-weight: 500; }
 .route-number:hover { background: var(--secondary); }
 .route-number.active { color: var(--primary-foreground); background: var(--trainmeet); }
 .route-empty, .route-detail-empty { color: var(--muted); font-size: 12px; }
@@ -1362,7 +1374,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .station-inspector-trains > li, .station-inspector-trains button,
 .route-stop span, .station-count-row b { font-size: 12px; }
 .route-picker input { font-size: var(--admin-text); }
-.route-number { min-height: 36px; font-size: var(--admin-text); font-weight: 500; }
+.route-picker { --route-row: 36px; }
+.route-number { font-size: var(--admin-text); font-weight: 500; }
 .route-stop b { font-size: var(--admin-supporting); }
 .station-count-row div span { font-size: 11px; }
 
