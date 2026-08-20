@@ -9,6 +9,7 @@ from typing import Any
 from .engine import TrafficEngine
 from .identity import DeviceKind, DisplayCapability, IdentityStore
 from .models import Command, CommandAck, unconfigured_session
+from .observability import configure_logging
 from .storage import SQLiteStateStore
 
 
@@ -264,7 +265,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging(logging.INFO)
     state_store = SQLiteStateStore(args.state_db)
     engine = TrafficEngine(
         unconfigured_session(),

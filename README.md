@@ -523,6 +523,12 @@ begäran, reservationer och belagda sträckor återställs från SQLite.
 
 MQTT är avsiktligt lösenordsfritt på träffens lokala nät. Servern ska inte exponeras direkt mot internet.
 
+Loggningen är strukturerad `nyckel=värde` och varje kommando bär ett
+korrelations-id — för en TMBox är det kommandots `message_id`. Samma id finns
+i loggraderna, i auditjournalen och i trafikmotorns egen post, så hela vägen
+från mottaget meddelande till registrerad effekt går att följa. Hemligheter
+redigeras bort på fältnamn innan något skrivs.
+
 Protokollet mellan en fysisk TMBox och servern är specificerat i
 [docs/protocol/v2/](docs/protocol/v2/README.md): topics, meddelandekuvert,
 revisionsregler och tillståndsmaskiner, med JSON-scheman och kompletta
