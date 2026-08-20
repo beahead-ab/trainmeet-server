@@ -148,6 +148,7 @@
               <p>Enheter</p>
               <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="devices" data-requires-runtime><span aria-hidden="true">⌁</span>TMBoxar</button>
               <button type="button" class="view-tab server-nav-item" data-view="simulator" data-requires-runtime><span aria-hidden="true">▦</span>TMBox-simulering</button>
+              <button type="button" class="view-tab server-nav-item" data-view="tmbox-v2" data-requires-runtime><span aria-hidden="true">▨</span>TMBox v2</button>
               <a class="server-nav-link" href="/tkl/" data-requires-runtime><span aria-hidden="true">▤</span>TKL-terminal</a>
               <button type="button" class="view-tab server-nav-item" data-view="displays" data-requires-runtime><span aria-hidden="true">▣</span>Skärmar och klocka</button>
 
@@ -607,6 +608,50 @@
             <div id="keypad" class="keypad" aria-label="TMBox tangentbord"></div>
           </article>
           <p id="command-message" class="command-message" role="status"></p>
+        </section>
+
+        <section id="tmbox-v2-view" class="view-panel tmbox-v2-view hidden" aria-live="polite">
+          <div class="simulator-intro">
+            <div>
+              <p class="eyebrow">TESTKLIENT · PROTOKOLL V2</p>
+              <h2>TMBox v2</h2>
+              <p>Står in för en fysisk box: läser tilldelning, konfiguration och läge, och skickar kompletta kommandon. Samma trådkontrakt som ESP32:an, utan hårdvara.</p>
+            </div>
+            <div class="panel-picker card">
+              <label for="tmbox-v2-device">Enhet</label>
+              <input id="tmbox-v2-device" type="text" placeholder="TMBOX-A7K2C3" maxlength="32" autocomplete="off">
+              <label for="tmbox-v2-station">Station</label>
+              <select id="tmbox-v2-station"></select>
+            </div>
+          </div>
+
+          <div class="card tmbox-v2-assignment">
+            <h3>Tilldelning</h3>
+            <p id="tmbox-v2-assignment-state" class="tmbox-v2-assignment-state">Ange en enhet för att läsa dess tilldelning.</p>
+          </div>
+
+          <div class="card">
+            <h3>Rörelser på stationen</h3>
+            <p class="tmbox-v2-hint">Knapparna kommer från serverns <code>allowed_actions</code> — samma lista boxen får. Finns ingen knapp är handlingen inte tillåten just nu.</p>
+            <ul id="tmbox-v2-movements" class="tmbox-v2-movements"></ul>
+          </div>
+
+          <div class="card">
+            <h3>Öppna klareringsärenden</h3>
+            <ul id="tmbox-v2-clearances" class="tmbox-v2-cases"></ul>
+          </div>
+
+          <div class="card">
+            <h3>Linjen är ledig</h3>
+            <ul id="tmbox-v2-line-messages" class="tmbox-v2-cases"></ul>
+          </div>
+
+          <div class="card tmbox-v2-wire">
+            <h3>Senaste kvittens</h3>
+            <pre id="tmbox-v2-ack" class="tmbox-v2-ack">—</pre>
+          </div>
+
+          <p id="tmbox-v2-message" class="command-message" role="status"></p>
         </section>
 
         <section id="displays-view" class="view-panel hidden">

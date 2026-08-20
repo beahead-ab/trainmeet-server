@@ -205,6 +205,7 @@ def main() -> None:
         runtime_store=runtime_store,
         local_configuration_store=local_configuration_store,
         operations_store=operations_store,
+        station_service=station_service,
     )
     server = TrainMeetHTTPServer((args.bind, args.http_port), application)
     cloud_sync_stop = threading.Event()

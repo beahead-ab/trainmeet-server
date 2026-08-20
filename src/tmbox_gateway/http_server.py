@@ -43,6 +43,7 @@ from .local_config import (
 from .models import Command, TrackConfig, UnknownTrackError, resolve_track_id
 from .observability import log_event, use_correlation
 from .operations import SQLiteOperationsStore
+from .protocol_v2 import TMBoxStationService
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
     DISPLAY_SCREENS,
@@ -120,6 +121,7 @@ class TrainMeetHTTPApplication:
         linked_runtime_fetcher: Callable[[str, str, bool], Any] | None = None,
         change_sender: Callable[[str, list[dict[str, Any]], str, str | None], list[str]] | None = None,
         operations_store: SQLiteOperationsStore | None = None,
+        station_service: TMBoxStationService | None = None,
     ):
         self.engine = engine
         self.identities = identities
@@ -128,6 +130,7 @@ class TrainMeetHTTPApplication:
         self.runtime_store = runtime_store
         self.local_configuration_store = local_configuration_store
         self.operations_store = operations_store
+        self._station_service = station_service
         self.runtime_fetcher = runtime_fetcher or (
             lambda code, url: fetch_runtime_download(
                 code,
@@ -372,6 +375,80 @@ class TrainMeetHTTPApplication:
             if panel_id in client.panel_ids
         }
         return ack
+
+    # ------------------------------------------------------------- protocol v2
+    #
+    # These four calls are the MQTT gateway's four operations over HTTP, and
+    # nothing more. A box reads three retained topics and publishes complete
+    # commands; the simulator does the same over request/response, so what it
+    # exercises is the wire contract itself rather than a parallel API shaped
+    # for a browser.
+
+    @property
+    def station_service(self) -> TMBoxStationService:
+        if self._station_service is None:
+            if self.runtime_store is None or self.operations_store is None:
+                raise HTTPAPIError(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    "runtime_missing",
+                    "Servern har ingen aktiv träff att simulera mot",
+                )
+            self._station_service = TMBoxStationService(
+                self.runtime_store, self.operations_store, self.identities
+            )
+        return self._station_service
+
+    def tmbox_v2_assignment(self, client: PairedClient, device_id: str) -> dict[str, Any]:
+        self._require_admin(client)
+        if not device_id:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "device_required", "Ange en enhet")
+        return self.station_service.assignment_payload(device_id)
+
+    def tmbox_v2_config(self, client: PairedClient, station_id: str) -> dict[str, Any]:
+        self._require_admin(client)
+        payload = self.station_service.config_payload(station_id)
+        if payload is None:
+            raise HTTPAPIError(
+                HTTPStatus.NOT_FOUND, "unknown_station", "Stationen finns inte i den aktiva träffen"
+            )
+        return payload
+
+    def tmbox_v2_snapshot(self, client: PairedClient, station_id: str) -> dict[str, Any]:
+        self._require_admin(client)
+        payload = self.station_service.snapshot_payload(station_id)
+        if payload is None:
+            raise HTTPAPIError(
+                HTTPStatus.NOT_FOUND, "unknown_station", "Stationen finns inte i den aktiva träffen"
+            )
+        return payload
+
+    def tmbox_v2_command(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_admin(client)
+        device_id = str(payload.get("device_id") or "").strip()
+        if not device_id:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "device_required", "Ange en enhet")
+        envelope = payload.get("command")
+        if not isinstance(envelope, dict):
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST, "command_required", "Kommandot saknas eller har fel form"
+            )
+        # A rejection is an answer, not a transport failure: the box renders
+        # the reason on its display, so the simulator has to receive it too.
+        return self.station_service.handle_command(device_id, envelope)
+
+    def tmbox_v2_stations(self, client: PairedClient) -> dict[str, Any]:
+        """Which stations the simulator can stand in for, and which boxes exist."""
+        self._require_admin(client)
+        config = self.station_service.session_config()
+        stations = (
+            [
+                {"id": station.id, "name": station.name, "code": getattr(station, "code", "")}
+                for station in config.stations.values()
+            ]
+            if config is not None
+            else []
+        )
+        return {"stations": sorted(stations, key=lambda entry: entry["name"])}
 
     def devices(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
@@ -1648,6 +1725,34 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.devices(client))
                 return
+            if path == "/v1/tmbox-v2/stations":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.tmbox_v2_stations(client))
+                return
+            if path == "/v1/tmbox-v2/assignment":
+                client = self._authenticated_client()
+                device_id = parse_qs(parsed.query).get("device_id", [""])[0]
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.tmbox_v2_assignment(client, device_id),
+                )
+                return
+            if path == "/v1/tmbox-v2/config":
+                client = self._authenticated_client()
+                station_id = parse_qs(parsed.query).get("station_id", [""])[0]
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.tmbox_v2_config(client, station_id),
+                )
+                return
+            if path == "/v1/tmbox-v2/snapshot":
+                client = self._authenticated_client()
+                station_id = parse_qs(parsed.query).get("station_id", [""])[0]
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.tmbox_v2_snapshot(client, station_id),
+                )
+                return
             if path == "/v1/runtime":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.runtime_summary(client))
@@ -1851,6 +1956,15 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     HTTPStatus.CREATED,
                     self.server.application.download_runtime_update(client),
+                )
+                return
+            if path == "/v1/tmbox-v2/command":
+                client = self._authenticated_client()
+                # A rejected command is a valid answer carrying its reason, the
+                # same one a box would render. Only transport faults are errors.
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.tmbox_v2_command(client, payload),
                 )
                 return
             if path == "/v1/runtime/activate":
