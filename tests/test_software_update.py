@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tambox_gateway.software_update import (
+from tmbox_gateway.software_update import (
     SoftwareUpdateError,
     installed_version,
     latest_version,
@@ -34,7 +34,7 @@ class _Response:
 
 
 class SoftwareUpdateTests(unittest.TestCase):
-    @patch("tambox_gateway.software_update.urlopen")
+    @patch("tmbox_gateway.software_update.urlopen")
     def test_latest_version_reads_commit_from_public_patch(self, open_url) -> None:
         open_url.return_value = _Response(
             b"From 3aec36552bfb15883cb30b70db19f3152466fc3f Mon Sep 17 00:00:00 2001\n",
@@ -46,7 +46,7 @@ class SoftwareUpdateTests(unittest.TestCase):
         self.assertEqual(result["version"], "3aec3655")
         self.assertIn("/commit/main.patch", open_url.call_args.args[0].full_url)
 
-    @patch("tambox_gateway.software_update.urlopen")
+    @patch("tmbox_gateway.software_update.urlopen")
     def test_invalid_patch_is_reported_clearly(self, open_url) -> None:
         open_url.return_value = _Response(
             b"not a commit patch",
@@ -71,17 +71,17 @@ class UpdateBackendTests(unittest.TestCase):
 
     def _as_mac(self):
         return (
-            patch("tambox_gateway.software_update.sys.platform", "darwin"),
+            patch("tmbox_gateway.software_update.sys.platform", "darwin"),
             patch(
-                "tambox_gateway.software_update.mac_install_dir",
+                "tmbox_gateway.software_update.mac_install_dir",
                 return_value=self.root / "server",
             ),
         )
 
     def test_container_installation_has_no_backend(self) -> None:
         platform, updater = (
-            patch("tambox_gateway.software_update.sys.platform", "linux"),
-            patch("tambox_gateway.software_update.LINUX_UPDATER", self.root / "missing"),
+            patch("tmbox_gateway.software_update.sys.platform", "linux"),
+            patch("tmbox_gateway.software_update.LINUX_UPDATER", self.root / "missing"),
         )
         with platform, updater:
             self.assertIsNone(update_backend())
@@ -90,11 +90,11 @@ class UpdateBackendTests(unittest.TestCase):
     def test_raspberry_pi_updates_through_systemd(self) -> None:
         installed = self.root / "trainmeet-server-update"
         installed.touch()
-        with patch("tambox_gateway.software_update.sys.platform", "linux"), patch(
-            "tambox_gateway.software_update.LINUX_UPDATER", installed
+        with patch("tmbox_gateway.software_update.sys.platform", "linux"), patch(
+            "tmbox_gateway.software_update.LINUX_UPDATER", installed
         ):
             backend = update_backend()
-            with patch("tambox_gateway.software_update.subprocess.run") as run:
+            with patch("tmbox_gateway.software_update.subprocess.run") as run:
                 start_update()
 
         self.assertEqual(backend.kind, "systemd")
@@ -105,7 +105,7 @@ class UpdateBackendTests(unittest.TestCase):
         platform, install_dir = self._as_mac()
         with platform, install_dir:
             backend = update_backend()
-            with patch("tambox_gateway.software_update.subprocess.Popen") as popen:
+            with patch("tmbox_gateway.software_update.subprocess.Popen") as popen:
                 start_update()
 
         self.assertEqual(backend.kind, "launchd")
@@ -115,8 +115,8 @@ class UpdateBackendTests(unittest.TestCase):
         self.assertTrue(popen.call_args.kwargs["start_new_session"])
 
     def test_unmanaged_installation_refuses_to_update(self) -> None:
-        with patch("tambox_gateway.software_update.sys.platform", "linux"), patch(
-            "tambox_gateway.software_update.LINUX_UPDATER", self.root / "missing"
+        with patch("tmbox_gateway.software_update.sys.platform", "linux"), patch(
+            "tmbox_gateway.software_update.LINUX_UPDATER", self.root / "missing"
         ):
             with self.assertRaisesRegex(SoftwareUpdateError, "uppdateras inte"):
                 start_update()

@@ -11,7 +11,7 @@ server:
   gatewayId: ""
   centralRuntimeUrl: ""
   # Without hostNetwork the pod only sees the cluster's internal network, so a
-  # Tambox cannot be told where to connect without this: the IP or domain
+  # TMBox cannot be told where to connect without this: the IP or domain
   # other devices actually use to reach the cluster (e.g. an Ingress host or
   # LoadBalancer address). Not needed when hostNetwork is true.
   advertisedHost: ""

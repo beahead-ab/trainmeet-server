@@ -12,7 +12,7 @@ if ! command -v mosquitto >/dev/null 2>&1; then
 fi
 
 if [[ ! -x .venv/bin/python ]]; then
-  echo "Förbereder Tambox-servern första gången …"
+  echo "Förbereder TMBox-servern första gången …"
   python3 -m venv .venv
 fi
 
@@ -22,4 +22,4 @@ if ! .venv/bin/python -c 'import paho.mqtt.client' >/dev/null 2>&1; then
 fi
 
 export PYTHONPATH="$GATEWAY_DIR/src"
-exec .venv/bin/python -m tambox_gateway.local_server --bind 0.0.0.0 --state-dir data/local
+exec .venv/bin/python -m tmbox_gateway.local_server --bind 0.0.0.0 --state-dir data/local

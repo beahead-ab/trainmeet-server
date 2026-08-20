@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tambox_gateway.models import (
+from tmbox_gateway.models import (
     ConnectionConfig,
     DispatchMode,
     PanelConfig,

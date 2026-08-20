@@ -7,9 +7,9 @@ from pathlib import Path
 
 from runtime_fixture import runtime_package_v2
 from session_fixture import sample_session
-from tambox_gateway.engine import TrafficEngine
-from tambox_gateway.operations import SQLiteOperationsStore
-from tambox_gateway.runtime import RuntimePublication
+from tmbox_gateway.engine import TrafficEngine
+from tmbox_gateway.operations import SQLiteOperationsStore
+from tmbox_gateway.runtime import RuntimePublication
 
 
 class OperationsStoreTests(unittest.TestCase):

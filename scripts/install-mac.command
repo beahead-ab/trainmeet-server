@@ -57,7 +57,7 @@ cat > "$PLIST_PATH" <<PLIST
   <array>
     <string>$VENV_DIR/bin/python</string>
     <string>-m</string>
-    <string>tambox_gateway.local_server</string>
+    <string>tmbox_gateway.local_server</string>
     <string>--bind</string>
     <string>0.0.0.0</string>
     <string>--state-dir</string>
@@ -87,7 +87,7 @@ PLIST
 chmod 600 "$PLIST_PATH"
 
 # Version 0.6 uses a new service name and a separate state directory. Stop the
-# pre-release Tambox service so it cannot compete for HTTP/MQTT ports. Its
+# pre-release TMBox service so it cannot compete for HTTP/MQTT ports. Its
 # complete Application Support directory is intentionally left untouched.
 launchctl bootout "gui/$(id -u)/$LEGACY_LABEL" >/dev/null 2>&1 || true
 if [[ -f "$LEGACY_PLIST" ]]; then
@@ -119,6 +119,6 @@ echo "TrainMeet Server är installerad och startar automatiskt."
 echo "På denna Mac: http://127.0.0.1:8787"
 echo "Från iPhone:  http://${LOCAL_IP}:8787"
 echo "Anslutningskod: ${CONNECTION_CODE}"
-if [[ -d "$HOME/Library/Application Support/TrainMeet Tambox" ]]; then
-  echo "Äldre testdata är bevarad i: $HOME/Library/Application Support/TrainMeet Tambox"
+if [[ -d "$HOME/Library/Application Support/TrainMeet TMBox" ]]; then
+  echo "Äldre testdata är bevarad i: $HOME/Library/Application Support/TrainMeet TMBox"
 fi

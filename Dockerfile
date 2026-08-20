@@ -27,5 +27,5 @@ VOLUME ["/var/lib/trainmeet-server"]
 HEALTHCHECK --interval=20s --timeout=12s --start-period=30s --retries=5 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/v1/info', timeout=10)" || exit 1
 
-ENTRYPOINT ["python", "-m", "tambox_gateway.local_server"]
+ENTRYPOINT ["python", "-m", "tmbox_gateway.local_server"]
 CMD ["--external-broker", "--bind", "0.0.0.0", "--state-dir", "/var/lib/trainmeet-server"]

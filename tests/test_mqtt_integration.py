@@ -14,10 +14,10 @@ from pathlib import Path
 import paho.mqtt.client as mqtt
 
 from session_fixture import sample_session
-from tambox_gateway.engine import TrafficEngine
-from tambox_gateway.identity import DeviceKind, IdentityStore
-from tambox_gateway.models import DispatchMode
-from tambox_gateway.mqtt_adapter import MQTTGatewayAdapter
+from tmbox_gateway.engine import TrafficEngine
+from tmbox_gateway.identity import DeviceKind, IdentityStore
+from tmbox_gateway.models import DispatchMode
+from tmbox_gateway.mqtt_adapter import MQTTGatewayAdapter
 
 
 class MQTTIntegrationTests(unittest.TestCase):
@@ -209,7 +209,7 @@ class MQTTIntegrationTests(unittest.TestCase):
                 json.dumps(
                     {
                         "device_code": "TBX-A7K2",
-                        "model": "Tambox ESP32-S3",
+                        "model": "TMBox ESP32-S3",
                         "firmware_version": "0.1.0",
                     }
                 ),

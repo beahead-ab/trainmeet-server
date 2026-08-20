@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from tambox_gateway.mqtt_adapter import _decode_command
+from tmbox_gateway.mqtt_adapter import _decode_command
 
 
 def command_payload() -> dict:

@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tambox_gateway.local_config import (
+from tmbox_gateway.local_config import (
     ConfigurationRevisionConflict,
     LocalConfigurationError,
     SQLiteLocalConfigurationStore,
@@ -45,13 +45,13 @@ def local_configuration() -> dict:
             {
                 "id": "panel-cda",
                 "station_id": "station-cda",
-                "name": "CDA Tambox",
+                "name": "CDA TMBox",
                 "slots": {"A": "connection-cda-lek", "B": None, "C": None, "D": None},
             },
             {
                 "id": "panel-lek",
                 "station_id": "station-lek",
-                "name": "LEK Tambox",
+                "name": "LEK TMBox",
                 "slots": {"A": "connection-cda-lek", "B": None, "C": None, "D": None},
             },
         ],
@@ -89,7 +89,7 @@ class LocalConfigurationTests(unittest.TestCase):
 
     def test_store_keeps_revisions_and_rejects_stale_save(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = SQLiteLocalConfigurationStore(Path(directory) / "tambox.db")
+            store = SQLiteLocalConfigurationStore(Path(directory) / "trainmeet.db")
             try:
                 first = store.save(local_configuration(), expected_revision=0)
                 self.assertEqual(first["revision"], 1)

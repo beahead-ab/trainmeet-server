@@ -4,8 +4,8 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from session_fixture import sample_session
-from tambox_gateway.engine import TrafficEngine
-from tambox_gateway.models import (
+from tmbox_gateway.engine import TrafficEngine
+from tmbox_gateway.models import (
     Command,
     ConnectionConfig,
     ConnectionState,

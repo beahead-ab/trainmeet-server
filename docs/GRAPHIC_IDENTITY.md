@@ -33,9 +33,9 @@ fullskärmskomponenterna är grafisk källa.
 - Rubriker på 19 px och större använder `-0.025em` i teckenmellanrum. Knappar
   och flikar använder medium eller semibold i stället för extra feta vikter.
 
-## Tamboxen är ett eget grafiskt objekt
+## TMBoxen är ett eget grafiskt objekt
 
-Tambox-simuleringen ska inte göras om till ett vanligt TrainMeet-kort. Den
+TMBox-simuleringen ska inte göras om till ett vanligt TrainMeet-kort. Den
 efterliknar den fysiska lådan med 16×2 LCD, samma skärmbredd som tangentbordet,
 rosa kapsling och ett tangentbord med fyra gånger fyra tangenter. Samma
 proportioner används i webb- och Swift-versionen.

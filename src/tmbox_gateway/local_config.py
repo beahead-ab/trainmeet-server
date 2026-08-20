@@ -152,10 +152,10 @@ def validate_local_configuration(
         if not stations:
             raise LocalConfigurationError("Lägg till minst en station före aktivering")
         if not panels:
-            raise LocalConfigurationError("Lägg till minst en Tambox-panel före aktivering")
+            raise LocalConfigurationError("Lägg till minst en TMBox-panel före aktivering")
         missing = station_ids - stations_with_panel
         if missing:
-            raise LocalConfigurationError("Varje station måste ha minst en Tambox-panel")
+            raise LocalConfigurationError("Varje station måste ha minst en TMBox-panel")
 
     return configuration
 
