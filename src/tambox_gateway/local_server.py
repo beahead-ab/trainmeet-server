@@ -22,6 +22,7 @@ from .identity import DeviceKind, IdentityStore, PairingService
 from .local_config import SQLiteLocalConfigurationStore
 from .models import unconfigured_session
 from .mqtt_adapter import MQTTGatewayAdapter
+from .mqtt_adapter_v2 import MQTTGatewayAdapterV2
 from .operations import SQLiteOperationsStore
 from .runtime import RuntimePublicationError, SQLiteRuntimeStore
 from .software_update import supports_updates
@@ -163,6 +164,16 @@ def main() -> None:
         local_configuration_store=local_configuration_store,
         operations_store=operations_store,
     )
+    gateway_v2 = MQTTGatewayAdapterV2(
+        application,
+        identities,
+        host=broker_host,
+        port=args.mqtt_port,
+        gateway_id=args.gateway_id,
+    )
+    gateway_v2.client.connect(broker_host, args.mqtt_port, keepalive=10, clean_start=True)
+    gateway_v2.client.loop_start()
+
     server = TamboxHTTPServer((args.bind, args.http_port), application)
     cloud_sync_stop = threading.Event()
     cloud_sync_thread = threading.Thread(
@@ -188,6 +199,8 @@ def main() -> None:
         server.server_close()
         gateway.client.disconnect()
         gateway.client.loop_stop()
+        gateway_v2.client.disconnect()
+        gateway_v2.client.loop_stop()
         _stop_process(discovery_advertiser)
         identities.close()
         state_store.close()
