@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .engine import TrafficEngine
-from .identity import DeviceKind, IdentityStore
+from .identity import DeviceKind, DisplayCapability, IdentityStore
 from .models import Command, CommandAck, unconfigured_session
 from .storage import SQLiteStateStore
 
@@ -162,16 +162,24 @@ class MQTTGatewayAdapter:
             str(payload["device_code"]),
             model=str(payload.get("model", "TMBox")),
             firmware_version=str(payload.get("firmware_version", "unknown")),
+            hardware_version=str(payload.get("hardware_version", "")),
+            protocol_version=int(payload.get("protocol_version", 1) or 1),
+            display=DisplayCapability.parse(payload.get("display")),
         )
         assigned_panel_ids = list(self.identities.panels_for_client(device_id))
+        station_id = self.identities.station_for_client(device_id)
         self.client.publish(
             f"tambox/v1/device/{device_id}/assignment",
             json.dumps(
                 {
                     "protocol_version": 1,
-                    "status": "assigned" if assigned_panel_ids else "waiting_for_assignment",
+                    "status": (
+                        "assigned" if (station_id or assigned_panel_ids)
+                        else "waiting_for_assignment"
+                    ),
                     "device_id": device_id,
                     "device_code": device.device_code,
+                    "station_id": station_id,
                     "assigned_panel_ids": assigned_panel_ids,
                 },
                 ensure_ascii=False,

@@ -195,7 +195,7 @@ const commandMessage = document.querySelector("#command-message");
 const keypad = document.querySelector("#keypad");
 const deviceForm = document.querySelector("#device-form");
 const deviceMessage = document.querySelector("#device-message");
-const devicePanel = document.querySelector("#device-panel");
+const deviceStation = document.querySelector("#device-station");
 const runtimeForm = document.querySelector("#runtime-sync-form");
 const runtimeMessage = document.querySelector("#runtime-message");
 const runtimeCheckUpdate = document.querySelector("#runtime-check-update");
@@ -587,12 +587,12 @@ deviceForm.addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         device_code: document.querySelector("#device-code").value,
-        panel_id: devicePanel.value,
+        station_id: deviceStation.value,
       }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "TMBoxen kunde inte kopplas");
-    setMessage(deviceMessage, "TMBoxen är kopplad och får sin panel vid nästa kontakt.", "success");
+    setMessage(deviceMessage, "TMBoxen är kopplad och hämtar sin station vid nästa kontakt.", "success");
     document.querySelector("#device-code").value = "";
     await refreshDevices();
   } catch (error) {
@@ -1387,6 +1387,7 @@ async function refreshDevices() {
   if (!response.ok) return;
   const payload = await response.json();
   const list = document.querySelector("#device-list");
+  updateStationOptions(payload.stations || []);
   list.replaceChildren();
   if (!payload.devices.length) {
     list.innerHTML = '<div class="empty-status">Ingen fysisk TMBox har presenterat sig ännu.</div>';
@@ -1401,13 +1402,29 @@ async function refreshDevices() {
     const model = document.createElement("small");
     model.textContent = `${device.model} · ${device.device_id}`;
     identity.append(code, model);
+    const station = (payload.stations || []).find((entry) => entry.id === device.station_id);
     const assignment = document.createElement("span");
-    assignment.textContent = device.assigned_panel_ids.length
-      ? device.assigned_panel_ids.join(", ")
-      : "Väntar på panel";
+    assignment.textContent = station
+      ? `${station.code} · ${station.name}`
+      : "Väntar på station";
     row.append(identity, assignment);
     list.append(row);
   }
+}
+
+function updateStationOptions(stations) {
+  const signature = stations.map((station) => `${station.id}:${station.code}`).join("|");
+  if (deviceStation.dataset.signature === signature) return;
+  deviceStation.dataset.signature = signature;
+  const previous = deviceStation.value;
+  deviceStation.replaceChildren();
+  for (const station of stations) {
+    const option = document.createElement("option");
+    option.value = station.id;
+    option.textContent = `${station.code} · ${station.name}`;
+    deviceStation.append(option);
+  }
+  if (previous) deviceStation.value = previous;
 }
 
 async function refreshRuntime() {
@@ -1586,7 +1603,6 @@ function updatePanelOptions() {
     }
   }
   panelSelect.value = state.selectedPanelID || "";
-  devicePanel.replaceChildren(...[...panelSelect.options].map((option) => option.cloneNode(true)));
 }
 
 function renderTMBox() {
