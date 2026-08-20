@@ -101,6 +101,13 @@
           },
           "crewReady": {
             "type": "boolean"
+          },
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Vad servern accepterar för rörelsen just nu. Härlett, aldrig satt av en klient."
           }
         }
       }

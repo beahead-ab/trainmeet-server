@@ -20,7 +20,11 @@
       "arrival": "none",
       "assignedTrackId": "track-charlottendal-c-1",
       "actualTrack": null,
-      "crewReady": true
+      "crewReady": true,
+      "allowed_actions": [
+        "train.crew_ready.set",
+        "train.track.change"
+      ]
     }
   ],
   "active_clearances": [

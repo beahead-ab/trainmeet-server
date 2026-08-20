@@ -38,6 +38,8 @@ MOVEMENT_ACTIONS: dict[str, tuple[str, str]] = {
 
 READ_ACTIONS = {"train.lookup"}
 CLEARANCE_ACTIONS = {"clearance.request", "clearance.response", "clearance.cancel"}
+LINE_ACTIONS = {"line.available.publish", "line.available.acknowledge"}
+CREW_ACTION = "train.crew_ready.set"
 TRACK_ACTIONS = {"train.track.change"}
 CONFIG_ACTIONS = {"device.config.ack"}
 
@@ -187,11 +189,15 @@ class TMBoxStationService:
                     "assignedTrackId": live.get("actualTrack") or row.get("track_id"),
                     "actualTrack": live.get("actualTrack"),
                     "crewReady": bool(live.get("crewReady", False)),
+                    "allowed_actions": _allowed_actions(row, live),
                 }
             )
         clock = self.clock_source()
         self._expire_due(publication.publication_id, active_day, clock)
         clearances = self.operations_store.open_clearances_for_station(
+            publication.publication_id, active_day, station_id
+        )
+        line_messages = self.operations_store.open_line_messages_for_station(
             publication.publication_id, active_day, station_id
         )
         clock = self.clock_source()
@@ -202,7 +208,11 @@ class TMBoxStationService:
                 "config_version": self.config_version(),
                 "movements": revisions,
                 "cases": {
-                    case["clearance_id"]: case["revision"] for case in clearances
+                    **{case["clearance_id"]: case["revision"] for case in clearances},
+                    **{
+                        message["message_id"]: message["revision"]
+                        for message in line_messages
+                    },
                 },
             },
             "movements": movements,
@@ -217,7 +227,15 @@ class TMBoxStationService:
                 }
                 for case in clearances
             ],
-            "line_messages": [],
+            "line_messages": [
+                {
+                    "message_id": message["message_id"],
+                    "connection_id": message["connection_id"],
+                    "status": message["status"],
+                    "from_station_id": message["from_station_id"],
+                }
+                for message in line_messages
+            ],
             "clock": {
                 "time": str(clock.get("time") or "")[:5],
                 "running": bool(clock.get("running")),
@@ -289,7 +307,16 @@ class TMBoxStationService:
                 device_id, station_id, action, payload, publication, config, active_day
             )
 
-        if action not in MOVEMENT_ACTIONS and action not in TRACK_ACTIONS:
+        if action in LINE_ACTIONS:
+            return self._line_available(
+                device_id, station_id, action, payload, publication, config, active_day
+            )
+
+        if (
+            action not in MOVEMENT_ACTIONS
+            and action not in TRACK_ACTIONS
+            and action != CREW_ACTION
+        ):
             raise CommandRejected("unknown_action")
 
         body = payload.get("payload") or {}
@@ -304,10 +331,17 @@ class TMBoxStationService:
         self._check_revision(payload, "movement", movement_id, int(state.get("revision", 0)))
 
         arrival = state.get("arrival", "none")
-        departure = state.get("departure", "none")
+        # The stored value never says ready: that is derived from the two
+        # declarations, so writing it back would let a client fake it.
+        departure = state.get("storedDeparture", state.get("departure", "none"))
+        if departure == "ready":
+            departure = "positioned"
+        crew_ready = bool(state.get("crewReady", False))
         track = state.get("actualTrack") or movement.get("track_id")
 
-        if action in TRACK_ACTIONS:
+        if action == CREW_ACTION:
+            crew_ready = bool((body.get("crew_ready", True)))
+        elif action in TRACK_ACTIONS:
             try:
                 track = resolve_track_id(
                     config.tracks, station_id, str(body.get("track_id") or "")
@@ -334,6 +368,7 @@ class TMBoxStationService:
             updated_by=device_id,
             shift_id=None,
             event_type=action,
+            crew_ready=crew_ready,
         )
         if action in TRACK_ACTIONS:
             self.operations_store.invalidate_clearances_for_movement(
@@ -444,6 +479,71 @@ class TMBoxStationService:
                 "scope": "case",
                 "key": settled["clearance_id"],
                 "value": settled["revision"],
+            }
+        }
+
+    def _line_available(
+        self,
+        device_id: str,
+        station_id: str,
+        action: str,
+        payload: dict[str, Any],
+        publication: RuntimePublication,
+        config: SessionConfig,
+        active_day: str,
+    ) -> dict[str, Any]:
+        """One-sided information, never a question.
+
+        Deliberately never checked against channel occupancy and never turned
+        into a clearance case: it carries no decision, so a receiving station
+        can only acknowledge that it was shown.
+        """
+        body = payload.get("payload") or {}
+        if action == "line.available.acknowledge":
+            message_id = str(body.get("message_id") or "")
+            message = self.operations_store.line_message(message_id)
+            if message is None:
+                raise CommandRejected("unknown_message")
+            self._check_revision(payload, "case", message_id, message["revision"])
+            if message["to_station_id"] != station_id:
+                raise CommandRejected("not_receiver")
+            if message["status"] != "delivered_to_device":
+                raise CommandRejected("already_acknowledged")
+            acknowledged = self.operations_store.acknowledge_line_available(
+                message_id, device_id
+            )
+            return {
+                "revision": {
+                    "scope": "case",
+                    "key": message_id,
+                    "value": acknowledged["revision"],
+                }
+            }
+
+        connection = config.connections.get(str(body.get("connection_id") or ""))
+        if connection is None or station_id not in (
+            connection.station_a_id,
+            connection.station_b_id,
+        ):
+            raise CommandRejected("unknown_connection")
+        movement_id = str(body.get("movement_id") or "").strip() or None
+        if movement_id and self._movement(publication, active_day, station_id, movement_id) is None:
+            raise CommandRejected("unknown_movement")
+        message = self.operations_store.publish_line_available(
+            publication.publication_id,
+            active_day,
+            message_id=str(body.get("message_id") or "") or f"line-{uuid4().hex[:8]}",
+            connection_id=connection.id,
+            from_station_id=station_id,
+            to_station_id=connection.other_station(station_id),
+            movement_id=movement_id,
+            created_by=device_id,
+        )
+        return {
+            "revision": {
+                "scope": "case",
+                "key": message["message_id"],
+                "value": message["revision"],
             }
         }
 
@@ -583,6 +683,36 @@ class TMBoxStationService:
             "revision": revision,
             "snapshot": self.snapshot_payload(station_id) if station_id else None,
         }
+
+
+def _allowed_actions(row: dict[str, Any], live: dict[str, Any]) -> list[str]:
+    """What the server will accept for this movement right now.
+
+    Firmware derives the same thing from the cached snapshot to decide which
+    key labels to draw, but the decision itself is always the server's: a
+    button that looks allowed and is refused shows the reason and waits.
+    """
+    departure = live.get("departure", "none")
+    arrival = live.get("arrival", "none")
+    actions: list[str] = []
+    departs = bool(row.get("departure_time"))
+    arrives = bool(row.get("arrival_time"))
+
+    if departs and departure != "departed":
+        if departure == "none":
+            actions.append("train.position.set")
+        elif departure == "positioned":
+            actions.append(CREW_ACTION)
+        elif departure == "ready":
+            actions.append("clearance.request")
+            actions.append("train.departed")
+        if departure != "none":
+            actions.append("train.track.change")
+    if arrives and arrival != "arrived":
+        if arrival == "none":
+            actions.append("train.approaching")
+        actions.append("train.arrived")
+    return actions
 
 
 def _minutes_from(clock: str, moment: str) -> int:

@@ -688,5 +688,144 @@ class ClearanceTests(ProtocolV2Base):
         self.assertEqual(self._acks()[-1]["reason"], "stale_revision")
 
 
+class ReadinessAndLineTests(ProtocolV2Base):
+    """TKL's two declarations, the state derived from them, and line-available."""
+
+    def _command(self, message_id: str, action: str, body: dict | None = None) -> dict:
+        self._send(
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": message_id,
+                "device_id": DEVICE,
+                "action": action,
+                "payload": body or {},
+            },
+        )
+        return self._acks()[-1]
+
+    def _movement(self, snapshot: dict, movement_id: str = DEPARTURE) -> dict:
+        return next(entry for entry in snapshot["movements"] if entry["id"] == movement_id)
+
+    def test_ready_is_derived_from_the_two_declarations(self):
+        start = self._movement(self.service.snapshot_payload(STATION))
+        self.assertEqual(start["departure"], "none")
+        self.assertFalse(start["crewReady"])
+
+        positioned = self._movement(
+            self._command("a", "train.position.set", {"movement_id": DEPARTURE})["snapshot"]
+        )
+        self.assertEqual(positioned["departure"], "positioned")
+        self.assertEqual(positioned["allowed_actions"][0], "train.crew_ready.set")
+
+        ready = self._movement(
+            self._command("b", "train.crew_ready.set", {"movement_id": DEPARTURE})["snapshot"]
+        )
+        self.assertEqual(ready["departure"], "ready")
+        self.assertTrue(ready["crewReady"])
+        self.assertIn("clearance.request", ready["allowed_actions"])
+
+    def test_crew_alone_is_not_ready(self):
+        ready = self._movement(
+            self._command("a", "train.crew_ready.set", {"movement_id": DEPARTURE})["snapshot"]
+        )
+
+        # The driver is aboard but the train is not set up. Ready is what both
+        # declarations add up to, so one of them is not enough.
+        self.assertTrue(ready["crewReady"])
+        self.assertEqual(ready["departure"], "none")
+
+    def test_the_declarations_survive_a_server_restart(self):
+        self._command("a", "train.position.set", {"movement_id": DEPARTURE})
+        self._command("b", "train.crew_ready.set", {"movement_id": DEPARTURE})
+
+        self.operations_store.close()
+        reopened = SQLiteOperationsStore(Path(self.directory.name) / "runtime.db")
+        try:
+            service = TMBoxStationService(self.runtime_store, reopened, self.identities)
+            movement = self._movement(service.snapshot_payload(STATION))
+            self.assertEqual(movement["departure"], "ready")
+            self.assertTrue(movement["crewReady"])
+        finally:
+            reopened.close()
+        self.operations_store = SQLiteOperationsStore(Path(self.directory.name) / "runtime.db")
+
+    def test_a_departed_train_offers_nothing_more_to_declare(self):
+        self._command("a", "train.position.set", {"movement_id": DEPARTURE})
+        self._command("b", "train.crew_ready.set", {"movement_id": DEPARTURE})
+        departed = self._movement(
+            self._command("c", "train.departed", {"movement_id": DEPARTURE})["snapshot"]
+        )
+
+        self.assertEqual(departed["departure"], "departed")
+        self.assertEqual(departed["allowed_actions"], [])
+
+    def test_line_available_never_occupies_a_channel(self):
+        """A one-sided message is not a request and is never treated as one."""
+        published = self._command(
+            "line-1",
+            "line.available.publish",
+            {"connection_id": "connection-cda-vst"},
+        )
+        self.assertEqual(published["status"], "accepted")
+        self.assertEqual(published["revision"]["scope"], "case")
+
+        # A clearance on the very same connection is still free to be made.
+        requested = self._command(
+            "clr-1",
+            "clearance.request",
+            {"movement_id": DEPARTURE, "connection_id": "connection-cda-vst"},
+        )
+        self.assertEqual(requested["status"], "accepted")
+
+    def test_line_available_is_acknowledged_never_answered(self):
+        message_id = self._command(
+            "line-1",
+            "line.available.publish",
+            {"connection_id": "connection-cda-vst"},
+        )["revision"]["key"]
+
+        # It travels to the other end as information, not as a case awaiting a
+        # decision, and there is no approve or reject to give it.
+        neighbour = self.service.snapshot_payload("st-vst")
+        self.assertEqual(neighbour["active_clearances"], [])
+        self.assertEqual(neighbour["line_messages"][0]["status"], "delivered_to_device")
+
+        self.identities.record_discovery(NEIGHBOUR, NEIGHBOUR)
+        self.identities.assign_discovered_device(NEIGHBOUR, station_id="st-vst")
+        self.gateway.on_message(
+            device_topic(NEIGHBOUR, "command"),
+            json.dumps(
+                {
+                    "protocol_version": 2,
+                    "message_id": "ack-1",
+                    "device_id": NEIGHBOUR,
+                    "action": "line.available.acknowledge",
+                    "payload": {"message_id": message_id},
+                }
+            ).encode("utf-8"),
+        )
+
+        self.assertEqual(self._acks()[-1]["status"], "accepted")
+        self.assertEqual(
+            self.operations_store.line_message(message_id)["status"],
+            "display_acknowledged",
+        )
+        self.assertEqual(self.service.snapshot_payload("st-vst")["line_messages"], [])
+
+    def test_only_the_receiving_station_acknowledges_a_line_message(self):
+        message_id = self._command(
+            "line-1",
+            "line.available.publish",
+            {"connection_id": "connection-cda-vst"},
+        )["revision"]["key"]
+
+        refused = self._command(
+            "ack-self", "line.available.acknowledge", {"message_id": message_id}
+        )
+
+        self.assertEqual(refused["reason"], "not_receiver")
+
+
 if __name__ == "__main__":
     unittest.main()

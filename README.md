@@ -569,6 +569,18 @@ mellan dem. Referensfallet Charlottendal publiceras därför som en station med
 driftplatserna C och Rbg: stationens topologi och TMBox är gemensamma, medan
 spår och tågrörelser behåller sin driftplats.
 
+TKL deklarerar två saker inför en avgång: att tåget är **uppställt** och att
+**föraren är på plats**. Båda registreras beständigt på servern och överlever
+omstart. **REDO** går inte att sätta — det härleds av servern ur de två
+deklarationerna plus serverns egna regler, så ingen klient kan gena förbi dem.
+
+Klarering och «linjen är ledig» är två skilda saker och har skilda endpoints.
+`POST /v1/tkl/clearance` driver ett klareringsärende: begär, svara, avbryt,
+avgå, ankom. `POST /v1/tkl/line-available` skickar ett ensidigt
+linjen-ledig-meddelande, som aldrig beläggningskontrolleras mot en
+klareringsbegäran och bara kan kvitteras som visat. `POST /v1/tkl/line` finns
+kvar som gammalt namn för klareringsvägen tills terminalerna har flyttat.
+
 TKL och rangerare är två olika operativa roller. TKL ansvarar för hela
 stationen, klarering och avgång. Rangeraren arbetar på rangerdriftplatsen,
 färdigställer tåget och aviserar TKL, men kan aldrig skicka tåget. TKL
@@ -599,7 +611,8 @@ Viktiga API:er:
 - `POST /v1/tkl/shift/start`
 - `POST /v1/tkl/shift/finish`
 - `POST /v1/tkl/movement`
-- `POST /v1/tkl/line`
+- `POST /v1/tkl/clearance`
+- `POST /v1/tkl/line-available`
 
 TKL-terminalen kopplas en gång med en lokal sexsiffrig kod, eller använder
 adminsessionen när `/tkl/` öppnas i en extern webbläsare. Före varje körning tar
