@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainmeet.app/protocol/v2/hello.schema.json",
+  "title": "TMBox hello",
+  "description": "Boxen presenterar sig. Publiceras på tmbox/v2/device/{id}/hello.",
+  "type": "object",
+  "required": [
+    "device_code"
+  ],
+  "properties": {
+    "protocol_version": {
+      "type": "integer",
+      "enum": [
+        2
+      ]
+    },
+    "device_code": {
+      "type": "string",
+      "description": "Den korta koden som visas på displayen, t.ex. TMBOX-7A42F1."
+    },
+    "model": {
+      "type": "string"
+    },
+    "firmware_version": {
+      "type": "string"
+    },
+    "hardware_version": {
+      "type": "string"
+    },
+    "device_token": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Reserverat för TLS och enhetsautentisering. Valideras inte."
+    },
+    "display": {
+      "type": "object",
+      "required": [
+        "rows",
+        "cols",
+        "charset"
+      ],
+      "properties": {
+        "rows": {
+          "type": "integer",
+          "enum": [
+            2,
+            4
+          ]
+        },
+        "cols": {
+          "type": "integer",
+          "enum": [
+            16,
+            20
+          ]
+        },
+        "charset": {
+          "type": "string",
+          "enum": [
+            "ascii",
+            "cgram"
+          ]
+        }
+      }
+    }
+  }
+}

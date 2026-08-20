@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainmeet.app/protocol/v2/gateway-status.schema.json",
+  "title": "TMBox gateway status",
+  "description": "Retained gatewaystatus. Last will publicerar offline.",
+  "type": "object",
+  "required": [
+    "status"
+  ],
+  "properties": {
+    "protocol_version": {
+      "type": "integer",
+      "enum": [
+        2
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "online",
+        "offline"
+      ]
+    },
+    "gateway_id": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainmeet.app/protocol/v2/snapshot.schema.json",
+  "title": "TMBox station snapshot",
+  "description": "Stationens levande läge. Retained, ersätts i sin helhet.",
+  "type": "object",
+  "required": [
+    "protocol_version",
+    "revision",
+    "movements",
+    "active_clearances",
+    "line_messages",
+    "clock"
+  ],
+  "properties": {
+    "protocol_version": {
+      "type": "integer",
+      "enum": [
+        2
+      ]
+    },
+    "station_id": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "object",
+      "required": [
+        "config_version",
+        "movements",
+        "cases"
+      ],
+      "properties": {
+        "config_version": {
+          "type": "integer"
+        },
+        "movements": {
+          "type": "object"
+        },
+        "cases": {
+          "type": "object"
+        }
+      }
+    },
+    "movements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "train_number",
+          "departure",
+          "arrival"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "train_number": {
+            "type": "string"
+          },
+          "arrival_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "departure_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "departure": {
+            "type": "string",
+            "enum": [
+              "none",
+              "positioned",
+              "ready",
+              "departed"
+            ]
+          },
+          "arrival": {
+            "type": "string",
+            "enum": [
+              "none",
+              "approaching",
+              "arrived"
+            ]
+          },
+          "assignedTrackId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actualTrack": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "crewReady": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "active_clearances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "clearance_id",
+          "movement_id",
+          "connection_id",
+          "status"
+        ],
+        "properties": {
+          "clearance_id": {
+            "type": "string"
+          },
+          "movement_id": {
+            "type": "string"
+          },
+          "connection_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "waiting",
+              "approved",
+              "rejected",
+              "cancelled",
+              "expired",
+              "invalidated_by_revision"
+            ]
+          },
+          "from_station_id": {
+            "type": "string"
+          },
+          "to_station_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "line_messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "message_id",
+          "connection_id",
+          "status"
+        ],
+        "properties": {
+          "message_id": {
+            "type": "string"
+          },
+          "connection_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "delivered_to_device",
+              "display_acknowledged"
+            ]
+          },
+          "from_station_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "clock": {
+      "type": "object",
+      "required": [
+        "time",
+        "running"
+      ],
+      "properties": {
+        "time": {
+          "type": "string",
+          "description": "Träffklockan som HH:MM."
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "stopped_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

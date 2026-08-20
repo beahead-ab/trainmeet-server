@@ -1,0 +1,17 @@
+{
+  "protocol_version": 2,
+  "message_id": "TMBOX-7A42F1-9f31c2a4",
+  "device_id": "TMBOX-7A42F1",
+  "device_token": null,
+  "station_id": "st-cda",
+  "action": "clearance.request",
+  "expected_revision": {
+    "scope": "movement",
+    "key": "movement-421-a",
+    "value": 6
+  },
+  "payload": {
+    "clearance_id": "clr-4d10",
+    "connection_id": "connection-cda-vst"
+  }
+}

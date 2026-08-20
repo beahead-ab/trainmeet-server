@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainmeet.app/protocol/v2/ack.schema.json",
+  "title": "TMBox command ack",
+  "description": "Kvittens med bifogad snapshot, så boxen slipper en extra rundresa.",
+  "type": "object",
+  "required": [
+    "protocol_version",
+    "message_id",
+    "status"
+  ],
+  "properties": {
+    "protocol_version": {
+      "type": "integer",
+      "enum": [
+        2
+      ]
+    },
+    "message_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "rejected",
+        "duplicate"
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "revision": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "scope",
+        "key",
+        "value"
+      ],
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": [
+            "movement",
+            "case",
+            "config"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "integer"
+        }
+      }
+    },
+    "snapshot": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  }
+}
