@@ -9,6 +9,10 @@ from typing import Any, Literal
 SlotKey = Literal["A", "B", "C", "D"]
 
 
+class UnknownTrackError(ValueError):
+    """Raised when a track cannot be resolved against the station catalogue."""
+
+
 class DispatchMode(StrEnum):
     CLEARANCE = "clearance"
     DIRECT = "direct"
@@ -69,6 +73,23 @@ class ConnectionConfig:
 
 
 @dataclass(frozen=True)
+class TrackConfig:
+    """One track in a station's catalogue.
+
+    A track is a stable text identifier, never free text and never an
+    enumeration. Inactivating a track hides it from new choices without
+    breaking the history that already points at it, so ids are never reused.
+    """
+
+    id: str
+    display_label: str
+    station_id: str
+    operating_point_id: str | None = None
+    active: bool = True
+    sort_order: int = 0
+
+
+@dataclass(frozen=True)
 class PanelConfig:
     id: str
     station_id: str
@@ -84,7 +105,69 @@ class SessionConfig:
     stations: dict[str, StationConfig]
     connections: dict[str, ConnectionConfig]
     panels: dict[str, PanelConfig]
+    tracks: dict[str, TrackConfig] = field(default_factory=dict)
     clock_time: str = "12:00"
+
+    def tracks_for_station(
+        self,
+        station_id: str,
+        operating_point_id: str | None = None,
+        *,
+        include_inactive: bool = False,
+    ) -> list[TrackConfig]:
+        """Return a station's tracks in the order a track selector shows them.
+
+        sort_order decides, not the label, so 1A can precede 10 even though
+        string sorting disagrees.
+        """
+        return sorted(
+            (
+                track
+                for track in self.tracks.values()
+                if track.station_id == station_id
+                and (include_inactive or track.active)
+                and (
+                    operating_point_id is None
+                    or track.operating_point_id == operating_point_id
+                )
+            ),
+            key=lambda track: (track.sort_order, track.display_label),
+        )
+
+    def resolve_track(self, station_id: str, value: str | None) -> str | None:
+        return resolve_track_id(self.tracks, station_id, value)
+
+
+def resolve_track_id(
+    tracks: dict[str, TrackConfig],
+    station_id: str,
+    value: str | None,
+) -> str | None:
+    """Turn a catalogue id or a visible label into a catalogue id.
+
+    Terminals have always sent the label an operator reads on screen.
+    Accepting it keeps them working, but what gets stored is always an id from
+    the catalogue - an unknown track is refused, never written through.
+    """
+    candidate = (value or "").strip()
+    if not candidate:
+        return None
+    track = tracks.get(candidate)
+    if track is not None and track.station_id == station_id:
+        return track.id
+    matches = [
+        track
+        for track in tracks.values()
+        if track.station_id == station_id
+        and track.display_label.casefold() == candidate.casefold()
+    ]
+    if len(matches) == 1:
+        return matches[0].id
+    if not matches:
+        raise UnknownTrackError(f"Spåret {candidate} finns inte i stationens spårkatalog")
+    raise UnknownTrackError(
+        f"Spårbeteckningen {candidate} finns på flera driftplatser; ange spårets id"
+    )
 
 
 def unconfigured_session() -> SessionConfig:
@@ -96,6 +179,7 @@ def unconfigured_session() -> SessionConfig:
         stations={},
         connections={},
         panels={},
+        tracks={},
         clock_time="12:00",
     )
 

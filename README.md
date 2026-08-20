@@ -546,11 +546,20 @@ var femtonde sekund om en ny komplett version har publicerats, hämtar och
 aktiverar den samt gör en kontrollerad omstart när trafikmotorns stations- eller
 TMBox-konfiguration har ändrats.
 
-Under den nuvarande utvecklingsfasen stöds endast runtime-schema 2. Vi håller inte
+Under den nuvarande utvecklingsfasen stöds endast runtime-schema 3. Vi håller inte
 ett kompatibilitetslager för äldre testformat innan den första externa releasen;
 det gör att stations-, tidtabells- och skärmmodellen kan utvecklas utan onödig
 komplexitet. Före en publik release införs dokumenterade migreringar mellan
 stabila schemaversioner.
+
+Schema 3 lägger till spårkatalogen. Varje station eller driftplats har en
+katalog med stabila spår-id:n, synlig beteckning, aktiv-flagga och
+sorteringsordning, och tidtabellens rader refererar ett spår med `track_id` i
+stället för att bära en fritextsträng. Servern validerar varje spårskrivning
+mot katalogen, oavsett om den kommer från en TMBox, webben eller
+TKL-terminalen — ett spår som inte finns går inte att skriva. Ett inaktiverat
+spår försvinner ur spårväljaren utan att bryta de rader som redan pekar på
+det.
 
 En station kan innehålla flera driftplatser utan att delas upp i flera noder i
 banöversikten. Driftpaketet anger då `operating_points` under stationen och

@@ -6,7 +6,8 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 
-from runtime_fixture import runtime_package, runtime_package_v2
+from runtime_fixture import fictional_runtime_package, runtime_package, runtime_package_v3
+from tmbox_gateway.models import TrackType
 from tmbox_gateway.runtime import (
     RuntimePublication,
     RuntimePublicationError,
@@ -44,12 +45,12 @@ class RuntimePublicationTests(unittest.TestCase):
         self.assertTrue(matches_active_day("Lör,Sön", "Sön"))
         self.assertFalse(matches_active_day("M-Fr", "Lör"))
 
-    def test_v2_publication_contains_clock_services_and_display_order(self):
-        publication = RuntimePublication.parse(runtime_package_v2())
+    def test_v3_publication_contains_clock_services_and_display_order(self):
+        publication = RuntimePublication.parse(runtime_package_v3())
 
         timetable = publication.timetable(active_day="Lör")
 
-        self.assertEqual(publication.schema_version, 2)
+        self.assertEqual(publication.schema_version, 3)
         self.assertEqual(timetable["clock"]["speed"], 4)
         self.assertEqual([service["train_number"] for service in timetable["services"]], ["101"])
         self.assertEqual(
@@ -57,14 +58,87 @@ class RuntimePublicationTests(unittest.TestCase):
             ["station-a", "station-b"],
         )
 
-    def test_v2_rejects_incomplete_graph_station_order(self):
-        payload = runtime_package_v2()
+    def test_v3_rejects_incomplete_graph_station_order(self):
+        payload = runtime_package_v3()
         payload["display"]["graph_station_order"] = ["station-a"]
         with self.assertRaises(RuntimePublicationError):
             RuntimePublication.parse(payload)
 
+    def test_the_catalogue_is_parsed_and_ordered_by_sort_order(self):
+        config = RuntimePublication.parse(runtime_package_v3()).session_config()
+
+        self.assertEqual(len(config.tracks), 3)
+        self.assertEqual(
+            [track.display_label for track in config.tracks_for_station("station-a")],
+            ["1", "2"],
+        )
+        self.assertEqual(config.tracks["track-station-a-1"].station_id, "station-a")
+
+    def test_an_inactive_track_leaves_the_selector_without_losing_its_history(self):
+        payload = runtime_package_v3()
+        payload["tracks"][1]["active"] = False
+
+        config = RuntimePublication.parse(payload).session_config()
+
+        self.assertEqual(
+            [track.display_label for track in config.tracks_for_station("station-a")],
+            ["1"],
+        )
+        # The row that already points at it still resolves; only new choices
+        # lose the track.
+        self.assertIn("track-station-a-2", config.tracks)
+
+    def test_a_train_row_cannot_reference_an_unknown_track(self):
+        payload = runtime_package_v3()
+        payload["trains"][0]["track_id"] = "track-that-was-never-published"
+
+        with self.assertRaisesRegex(RuntimePublicationError, "okänt spår"):
+            RuntimePublication.parse(payload)
+
+    def test_a_train_row_cannot_reference_a_track_at_another_station(self):
+        payload = runtime_package_v3()
+        payload["trains"][0]["track_id"] = "track-station-b-1"
+
+        with self.assertRaisesRegex(RuntimePublicationError, "spår på fel station"):
+            RuntimePublication.parse(payload)
+
+    def test_two_tracks_cannot_share_a_label_at_one_operating_point(self):
+        payload = runtime_package_v3()
+        payload["tracks"].append(
+            {
+                "id": "track-station-a-1-igen",
+                "display_label": "1",
+                "station_id": "station-a",
+                "operating_point_id": None,
+                "active": True,
+                "sort_order": 30,
+            }
+        )
+
+        with self.assertRaisesRegex(RuntimePublicationError, "samma beteckning"):
+            RuntimePublication.parse(payload)
+
+    def test_the_fictional_topology_carries_a_full_catalogue(self):
+        # Decision B5: Charlottendal proves the real import, the fictional
+        # topology exists where the topology itself has to be built - three
+        # neighbours and double track in both directions.
+        config = RuntimePublication.parse(fictional_runtime_package()).session_config()
+
+        self.assertEqual(len(config.stations), 4)
+        self.assertEqual(len(config.tracks), 16)
+        self.assertEqual(
+            [track.display_label for track in config.tracks_for_station("st-cda")],
+            ["1A", "1B", "2A", "2B"],
+        )
+        double = [
+            connection
+            for connection in config.connections.values()
+            if connection.track_type is TrackType.DOUBLE
+        ]
+        self.assertEqual(len(double), 2)
+
     def test_multi_operating_point_station_preserves_the_source_location(self):
-        payload = runtime_package_v2()
+        payload = runtime_package_v3()
         payload["stations"][0]["operating_points"] = [
             {
                 "id": "station-a-main",
@@ -82,6 +156,11 @@ class RuntimePublicationTests(unittest.TestCase):
         for train in payload["trains"]:
             if train["station_id"] == "station-a":
                 train["operating_point_id"] = "station-a-main"
+        # A station split into operating points splits its track catalogue the
+        # same way, so a train row and its track agree on where they are.
+        for track in payload["tracks"]:
+            if track["station_id"] == "station-a":
+                track["operating_point_id"] = "station-a-main"
 
         publication = RuntimePublication.parse(payload)
         timetable = publication.timetable(active_day="Lör", station_id="station-a")
@@ -96,7 +175,7 @@ class RuntimePublicationTests(unittest.TestCase):
         )
 
     def test_multi_operating_point_station_requires_a_location_on_each_train_row(self):
-        payload = runtime_package_v2()
+        payload = runtime_package_v3()
         payload["stations"][0]["operating_points"] = [
             {"id": "station-a-main", "code": "C", "name": "C", "aliases": []},
             {"id": "station-a-rbg", "code": "RBG", "name": "Rbg", "aliases": []},
@@ -106,7 +185,7 @@ class RuntimePublicationTests(unittest.TestCase):
             RuntimePublication.parse(payload)
 
     def test_train_row_cannot_use_an_operating_point_from_another_station(self):
-        payload = runtime_package_v2()
+        payload = runtime_package_v3()
         payload["stations"][1]["operating_points"] = [
             {"id": "station-b-main", "code": "LEK", "name": "Lekby", "aliases": []}
         ]
@@ -116,7 +195,7 @@ class RuntimePublicationTests(unittest.TestCase):
             RuntimePublication.parse(payload)
 
     def test_rejects_duplicate_movements_even_when_notes_differ(self):
-        payload = runtime_package_v2()
+        payload = runtime_package_v3()
         duplicate = deepcopy(payload["trains"][0])
         duplicate["id"] = "train-movement-duplicate"
         duplicate["note"] = "Kompletterande anteckning från en annan källfil"
@@ -126,7 +205,7 @@ class RuntimePublicationTests(unittest.TestCase):
             RuntimePublication.parse(payload)
 
     def test_operating_point_kind_is_station_or_yard(self):
-        payload = runtime_package_v2()
+        payload = runtime_package_v3()
         payload["stations"][0]["operating_points"] = [
             {
                 "id": "station-a-main",
@@ -140,11 +219,16 @@ class RuntimePublicationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimePublicationError, "ogiltig typ"):
             RuntimePublication.parse(payload)
 
-    def test_v1_is_rejected_during_the_pre_release_schema_phase(self):
-        payload = runtime_package_v2()
-        payload["schema_version"] = 1
-        with self.assertRaisesRegex(RuntimePublicationError, "schema_version 2"):
-            RuntimePublication.parse(payload)
+    def test_older_schemas_are_rejected_during_the_pre_release_phase(self):
+        # No compatibility layer is kept before the first external release, so
+        # a package built for schema 2 - one without a track catalogue - is
+        # refused outright rather than quietly parsed with tracks missing.
+        for version in (1, 2):
+            with self.subTest(schema_version=version):
+                payload = runtime_package_v3()
+                payload["schema_version"] = version
+                with self.assertRaisesRegex(RuntimePublicationError, "schema_version 3"):
+                    RuntimePublication.parse(payload)
 
 
 class RuntimeStoreTests(unittest.TestCase):
@@ -180,8 +264,8 @@ class RuntimeStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
             try:
-                first = runtime_package_v2(publication_id="publication-v2-first")
-                second = runtime_package_v2(publication_id="publication-v2-second")
+                first = runtime_package_v3(publication_id="publication-v2-first")
+                second = runtime_package_v3(publication_id="publication-v2-second")
                 store.install(first)
                 store.save_link_token("local-link-token")
                 store.install(second, activate=False)
@@ -200,8 +284,8 @@ class RuntimeStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
             try:
-                installed = store.install(runtime_package_v2())
-                broken = runtime_package_v2()
+                installed = store.install(runtime_package_v3())
+                broken = runtime_package_v3()
                 duplicate = deepcopy(broken["trains"][0])
                 duplicate["id"] = "duplicate-movement"
                 broken["trains"].append(duplicate)

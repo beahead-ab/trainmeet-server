@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from runtime_fixture import runtime_package_v2
+from runtime_fixture import runtime_package_v3
 from session_fixture import sample_session
 from tmbox_gateway.engine import TrafficEngine
 from tmbox_gateway.operations import SQLiteOperationsStore
@@ -17,7 +17,7 @@ class OperationsStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteOperationsStore(Path(directory) / "runtime.db")
             try:
-                publication = RuntimePublication.parse(runtime_package_v2())
+                publication = RuntimePublication.parse(runtime_package_v3())
                 store.ensure_publication(publication)
                 base = datetime(2026, 8, 11, 10, 0, tzinfo=timezone.utc)
                 store.start_clock(time_value="09:15:00", now=base)
@@ -35,7 +35,7 @@ class OperationsStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteOperationsStore(Path(directory) / "runtime.db")
             try:
-                store.ensure_publication(RuntimePublication.parse(runtime_package_v2()))
+                store.ensure_publication(RuntimePublication.parse(runtime_package_v3()))
                 base = datetime(2026, 8, 11, 10, 0, tzinfo=timezone.utc)
                 store.start_clock(time_value="09:15:00", now=base)
 
@@ -63,7 +63,7 @@ class OperationsStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteOperationsStore(Path(directory) / "runtime.db")
             try:
-                publication = RuntimePublication.parse(runtime_package_v2())
+                publication = RuntimePublication.parse(runtime_package_v3())
                 store.ensure_publication(publication)
                 moment = datetime.now(timezone.utc)
                 free = {"connections": {"connection-a-b": {"state": "free"}}}
@@ -102,7 +102,7 @@ class OperationsStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteOperationsStore(Path(directory) / "runtime.db")
             try:
-                publication = RuntimePublication.parse(runtime_package_v2())
+                publication = RuntimePublication.parse(runtime_package_v3())
                 store.ensure_publication(publication)
                 moment = datetime.now(timezone.utc)
                 free = {"connections": {"connection-a-b": {"state": "free"}}}
@@ -130,7 +130,7 @@ class OperationsStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteOperationsStore(Path(directory) / "runtime.db")
             try:
-                publication = RuntimePublication.parse(runtime_package_v2())
+                publication = RuntimePublication.parse(runtime_package_v3())
                 store.ensure_publication(publication)
                 moment = datetime.now(timezone.utc)
                 free = {"connections": {"connection-a-b": {"state": "free"}}}
