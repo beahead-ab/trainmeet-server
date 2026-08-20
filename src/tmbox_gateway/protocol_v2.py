@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Callable
+from uuid import uuid4
 
 from .identity import DisplayCapability, IdentityStore
-from .models import SessionConfig, UnknownTrackError, resolve_track_id
+from .models import SessionConfig, TrackType, UnknownTrackError, resolve_track_id
 from .operations import SQLiteOperationsStore
 from .runtime import RuntimePublication, SQLiteRuntimeStore, matches_active_day
 
@@ -36,10 +37,16 @@ MOVEMENT_ACTIONS: dict[str, tuple[str, str]] = {
 }
 
 READ_ACTIONS = {"train.lookup"}
+CLEARANCE_ACTIONS = {"clearance.request", "clearance.response", "clearance.cancel"}
 TRACK_ACTIONS = {"train.track.change"}
 CONFIG_ACTIONS = {"device.config.ack"}
 
 REVISION_SCOPES = {"movement", "case", "config"}
+
+#: How long a request waits for an answer before it lapses. Counted in wall
+#: time, but only while the meeting clock runs - a break must not expire the
+#: requests that were open when everyone went for coffee.
+CLEARANCE_TTL_SECONDS = 300
 
 
 class CommandRejected(Exception):
@@ -183,18 +190,33 @@ class TMBoxStationService:
                 }
             )
         clock = self.clock_source()
+        self._expire_due(publication.publication_id, active_day, clock)
+        clearances = self.operations_store.open_clearances_for_station(
+            publication.publication_id, active_day, station_id
+        )
+        clock = self.clock_source()
         return {
             "protocol_version": PROTOCOL_VERSION,
             "station_id": station_id,
             "revision": {
                 "config_version": self.config_version(),
                 "movements": revisions,
-                # Clearance and line-available cases land here with their own
-                # aggregate; until then a station simply has no open cases.
-                "cases": {},
+                "cases": {
+                    case["clearance_id"]: case["revision"] for case in clearances
+                },
             },
             "movements": movements,
-            "active_clearances": [],
+            "active_clearances": [
+                {
+                    "clearance_id": case["clearance_id"],
+                    "movement_id": case["movement_id"],
+                    "connection_id": case["connection_id"],
+                    "status": case["status"],
+                    "from_station_id": case["from_station_id"],
+                    "to_station_id": case["to_station_id"],
+                }
+                for case in clearances
+            ],
             "line_messages": [],
             "clock": {
                 "time": str(clock.get("time") or "")[:5],
@@ -262,6 +284,11 @@ class TMBoxStationService:
         if action in READ_ACTIONS:
             return {"result": self._lookup(publication, active_day, station_id, payload)}
 
+        if action in CLEARANCE_ACTIONS:
+            return self._clearance(
+                device_id, station_id, action, payload, publication, config, active_day
+            )
+
         if action not in MOVEMENT_ACTIONS and action not in TRACK_ACTIONS:
             raise CommandRejected("unknown_action")
 
@@ -308,6 +335,18 @@ class TMBoxStationService:
             shift_id=None,
             event_type=action,
         )
+        if action in TRACK_ACTIONS:
+            self.operations_store.invalidate_clearances_for_movement(
+                publication.publication_id,
+                active_day,
+                movement_id,
+                device_id,
+                "track_changed",
+            )
+        if action == "train.arrived":
+            self._release_on_arrival(
+                publication, active_day, station_id, movement, device_id
+            )
         return {
             "revision": {
                 "scope": "movement",
@@ -315,6 +354,137 @@ class TMBoxStationService:
                 "value": int(updated["revision"]),
             }
         }
+
+    def _clearance(
+        self,
+        device_id: str,
+        station_id: str,
+        action: str,
+        payload: dict[str, Any],
+        publication: RuntimePublication,
+        config: SessionConfig,
+        active_day: str,
+    ) -> dict[str, Any]:
+        body = payload.get("payload") or {}
+        self._expire_due(publication.publication_id, active_day, self.clock_source())
+
+        if action == "clearance.request":
+            movement_id = str(body.get("movement_id") or "").strip()
+            movement = self._movement(publication, active_day, station_id, movement_id)
+            if movement is None:
+                raise CommandRejected("unknown_movement")
+            connection = config.connections.get(str(body.get("connection_id") or ""))
+            if connection is None or station_id not in (
+                connection.station_a_id,
+                connection.station_b_id,
+            ):
+                raise CommandRejected("unknown_connection")
+
+            state = self.operations_store.tkl_station_state(
+                publication.publication_id, active_day, station_id
+            )["movements"].get(movement_id, {})
+            self._check_revision(payload, "movement", movement_id, int(state.get("revision", 0)))
+
+            channel_id = self.operations_store.channel_id(
+                connection.id,
+                station_id,
+                double_track=connection.track_type is TrackType.DOUBLE,
+            )
+            occupied = self.operations_store.open_clearance_on_channel(
+                publication.publication_id, active_day, channel_id
+            )
+            if occupied is not None:
+                raise CommandRejected("channel_occupied")
+
+            case = self.operations_store.request_clearance(
+                publication.publication_id,
+                active_day,
+                clearance_id=str(body.get("clearance_id") or "") or f"clr-{uuid4().hex[:8]}",
+                movement_id=movement_id,
+                connection_id=connection.id,
+                channel_id=channel_id,
+                from_station_id=station_id,
+                to_station_id=connection.other_station(station_id),
+                track_id=state.get("actualTrack") or movement.get("track_id"),
+                requested_by=device_id,
+                ttl_seconds=CLEARANCE_TTL_SECONDS,
+            )
+            return {
+                "revision": {
+                    "scope": "case",
+                    "key": case["clearance_id"],
+                    "value": case["revision"],
+                }
+            }
+
+        case = self.operations_store.clearance(str(body.get("clearance_id") or ""))
+        if case is None:
+            raise CommandRejected("unknown_clearance")
+        self._check_revision(payload, "case", case["clearance_id"], case["revision"])
+        if case["status"] != "waiting":
+            raise CommandRejected("clearance_not_pending")
+
+        if action == "clearance.response":
+            if case["to_station_id"] != station_id:
+                raise CommandRejected("not_receiver")
+            approved = bool(body.get("approved"))
+            settled = self.operations_store.settle_clearance(
+                case["clearance_id"],
+                "approved" if approved else "rejected",
+                device_id,
+            )
+        else:
+            if case["from_station_id"] != station_id:
+                raise CommandRejected("not_sender")
+            settled = self.operations_store.settle_clearance(
+                case["clearance_id"], "cancelled", device_id
+            )
+        return {
+            "revision": {
+                "scope": "case",
+                "key": settled["clearance_id"],
+                "value": settled["revision"],
+            }
+        }
+
+    def _release_on_arrival(
+        self,
+        publication: RuntimePublication,
+        active_day: str,
+        station_id: str,
+        movement: dict[str, Any],
+        actor: str,
+    ) -> None:
+        """An arriving train frees the line it was granted.
+
+        The two stations hold separate rows for the same train, so the case is
+        matched by train number: the approved clearance heading here for this
+        train is the one the arrival releases.
+        """
+        train_number = str(movement.get("train_number") or "")
+        numbers = {
+            str(row["id"]): str(row["train_number"]) for row in publication.payload["trains"]
+        }
+        for case in self.operations_store.open_clearances_for_station(
+            publication.publication_id, active_day, station_id
+        ):
+            if case["status"] != "approved" or case["to_station_id"] != station_id:
+                continue
+            if numbers.get(case["movement_id"]) != train_number:
+                continue
+            self.operations_store.release_clearance(case["clearance_id"], actor)
+
+    def _expire_due(
+        self,
+        publication_id: str,
+        active_day: str,
+        clock: dict[str, Any],
+    ) -> None:
+        if not bool(clock.get("running")):
+            # A stopped meeting clock means the meet is paused. Nothing should
+            # lapse while nobody is running trains.
+            return
+        self.operations_store.expire_due_clearances(publication_id, active_day)
 
     def _lookup(
         self,

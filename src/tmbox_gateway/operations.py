@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -108,6 +108,41 @@ class SQLiteOperationsStore:
             );
             CREATE INDEX IF NOT EXISTS train_readiness_for_station
                 ON train_readiness(publication_id, active_day, station_id, status);
+            CREATE TABLE IF NOT EXISTS clearances (
+                clearance_id TEXT PRIMARY KEY,
+                publication_id TEXT NOT NULL,
+                active_day TEXT NOT NULL,
+                movement_id TEXT NOT NULL,
+                connection_id TEXT NOT NULL,
+                channel_id TEXT NOT NULL,
+                from_station_id TEXT NOT NULL,
+                to_station_id TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN (
+                    'waiting', 'approved', 'rejected', 'cancelled',
+                    'expired', 'invalidated_by_revision'
+                )),
+                track_id TEXT,
+                revision INTEGER NOT NULL DEFAULT 1,
+                requested_by TEXT NOT NULL,
+                requested_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                settled_at TEXT,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS clearances_on_channel
+                ON clearances(publication_id, active_day, channel_id, status);
+            CREATE INDEX IF NOT EXISTS clearances_for_movement
+                ON clearances(publication_id, active_day, movement_id, status);
+            CREATE TABLE IF NOT EXISTS clearance_events (
+                event_id TEXT PRIMARY KEY,
+                clearance_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                recorded_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS clearance_events_by_case
+                ON clearance_events(clearance_id, recorded_at);
             CREATE TABLE IF NOT EXISTS device_commands (
                 device_id TEXT NOT NULL,
                 message_id TEXT NOT NULL,
@@ -775,6 +810,279 @@ class SQLiteOperationsStore:
             ),
         )
 
+    # ------------------------------------------------------------ clearances
+    #
+    # A clearance is its own case with a stable id, a state machine and a
+    # time to live, not a flag on a connection. The channel it occupies is
+    # directed on a double-track connection, so two trains meeting head to
+    # head on different tracks never block each other.
+
+    #: A case is decided by its status, but the line stays occupied until the
+    #: train is in. approved with no settled_at means "granted, still out
+    #: there"; approved with settled_at means the channel is free again.
+
+    @staticmethod
+    def channel_id(connection_id: str, from_station_id: str, *, double_track: bool) -> str:
+        """The occupancy channel a clearance takes.
+
+        Single track is one shared channel. Double track is one independent
+        channel per direction - modelled as two channels rather than as flags
+        on one, so nothing has to remember which flag means what.
+        """
+        return f"{connection_id}:{from_station_id}" if double_track else connection_id
+
+    def expire_due_clearances(
+        self,
+        publication_id: str,
+        active_day: str,
+        *,
+        now: datetime | None = None,
+    ) -> list[str]:
+        """Expire whatever has run out, lazily.
+
+        Correctness never depends on a background job having run, so this is
+        called on the way into every request and every response.
+        """
+        moment = (now or datetime.now(timezone.utc)).isoformat()
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT clearance_id FROM clearances
+                WHERE publication_id = ? AND active_day = ?
+                  AND status = 'waiting' AND expires_at <= ?
+                """,
+                (publication_id, active_day, moment),
+            ).fetchall()
+            for row in rows:
+                self._settle_clearance_locked(row[0], "expired", "server", {})
+        return [row[0] for row in rows]
+
+    def open_clearance_on_channel(
+        self,
+        publication_id: str,
+        active_day: str,
+        channel_id: str,
+    ) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._connection.execute(
+                f"""
+                SELECT {_CLEARANCE_COLUMNS} FROM clearances
+                WHERE publication_id = ? AND active_day = ? AND channel_id = ?
+                  AND (status = 'waiting' OR (status = 'approved' AND settled_at IS NULL))
+                ORDER BY requested_at
+                LIMIT 1
+                """,
+                (publication_id, active_day, channel_id),
+            ).fetchone()
+        return _clearance_from_row(row) if row else None
+
+    def clearance(self, clearance_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._connection.execute(
+                f"SELECT {_CLEARANCE_COLUMNS} FROM clearances WHERE clearance_id = ?",
+                (clearance_id,),
+            ).fetchone()
+        return _clearance_from_row(row) if row else None
+
+    def open_clearances_for_station(
+        self,
+        publication_id: str,
+        active_day: str,
+        station_id: str,
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                f"""
+                SELECT {_CLEARANCE_COLUMNS} FROM clearances
+                WHERE publication_id = ? AND active_day = ?
+                  AND (status = 'waiting' OR (status = 'approved' AND settled_at IS NULL))
+                  AND (from_station_id = ? OR to_station_id = ?)
+                ORDER BY requested_at
+                """,
+                (publication_id, active_day, station_id, station_id),
+            ).fetchall()
+        return [_clearance_from_row(row) for row in rows]
+
+    def request_clearance(
+        self,
+        publication_id: str,
+        active_day: str,
+        *,
+        clearance_id: str,
+        movement_id: str,
+        connection_id: str,
+        channel_id: str,
+        from_station_id: str,
+        to_station_id: str,
+        track_id: str | None,
+        requested_by: str,
+        ttl_seconds: int,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        moment = now or datetime.now(timezone.utc)
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    """
+                    INSERT INTO clearances(
+                        clearance_id, publication_id, active_day, movement_id,
+                        connection_id, channel_id, from_station_id, to_station_id,
+                        status, track_id, revision, requested_by, requested_at,
+                        expires_at, settled_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?, 1, ?, ?, ?, NULL, ?)
+                    """,
+                    (
+                        clearance_id,
+                        publication_id,
+                        active_day,
+                        movement_id,
+                        connection_id,
+                        channel_id,
+                        from_station_id,
+                        to_station_id,
+                        track_id,
+                        requested_by,
+                        moment.isoformat(),
+                        (moment + timedelta(seconds=ttl_seconds)).isoformat(),
+                        moment.isoformat(),
+                    ),
+                )
+                self._record_clearance_event_locked(
+                    clearance_id,
+                    "requested",
+                    requested_by,
+                    {"connection_id": connection_id, "channel_id": channel_id},
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return self.clearance(clearance_id)
+
+    def settle_clearance(
+        self,
+        clearance_id: str,
+        status: str,
+        actor: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        with self._lock:
+            self._settle_clearance_locked(clearance_id, status, actor, payload or {})
+        return self.clearance(clearance_id)
+
+    def invalidate_clearances_for_movement(
+        self,
+        publication_id: str,
+        active_day: str,
+        movement_id: str,
+        actor: str,
+        reason: str,
+    ) -> list[str]:
+        """A waiting request stops meaning what it meant when it was made.
+
+        A track change under a pending request invalidates that request
+        explicitly. Silently rewriting it would leave two stations holding
+        different pictures of the same train.
+        """
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT clearance_id FROM clearances
+                WHERE publication_id = ? AND active_day = ? AND movement_id = ?
+                  AND status = 'waiting'
+                """,
+                (publication_id, active_day, movement_id),
+            ).fetchall()
+            for row in rows:
+                self._settle_clearance_locked(
+                    row[0], "invalidated_by_revision", actor, {"reason": reason}
+                )
+        return [row[0] for row in rows]
+
+    def clearance_history(self, clearance_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT event_type, actor, payload_json, recorded_at
+                FROM clearance_events WHERE clearance_id = ?
+                ORDER BY recorded_at, event_id
+                """,
+                (clearance_id,),
+            ).fetchall()
+        return [
+            {
+                "event_type": row[0],
+                "actor": row[1],
+                "payload": json.loads(row[2]),
+                "recorded_at": row[3],
+            }
+            for row in rows
+        ]
+
+    def release_clearance(self, clearance_id: str, actor: str) -> dict[str, Any] | None:
+        """Free the channel an approved clearance still occupies."""
+        now = _now_iso()
+        with self._lock:
+            updated = self._connection.execute(
+                """
+                UPDATE clearances
+                SET settled_at = ?, revision = revision + 1, updated_at = ?
+                WHERE clearance_id = ? AND status = 'approved' AND settled_at IS NULL
+                """,
+                (now, now, clearance_id),
+            )
+            if updated.rowcount:
+                self._record_clearance_event_locked(clearance_id, "released", actor, {})
+        return self.clearance(clearance_id)
+
+    def _settle_clearance_locked(
+        self,
+        clearance_id: str,
+        status: str,
+        actor: str,
+        payload: dict[str, Any],
+    ) -> None:
+        now = _now_iso()
+        # An approved case keeps its channel until the train is in, so only a
+        # refusal, a cancellation or a timeout closes it here.
+        settled_at = None if status == "approved" else now
+        updated = self._connection.execute(
+            """
+            UPDATE clearances
+            SET status = ?, revision = revision + 1, settled_at = ?, updated_at = ?
+            WHERE clearance_id = ? AND status = 'waiting'
+            """,
+            (status, settled_at, now, clearance_id),
+        )
+        if updated.rowcount == 0:
+            return
+        self._record_clearance_event_locked(clearance_id, status, actor, payload)
+
+    def _record_clearance_event_locked(
+        self,
+        clearance_id: str,
+        event_type: str,
+        actor: str,
+        payload: dict[str, Any],
+    ) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO clearance_events(
+                event_id, clearance_id, event_type, actor, payload_json, recorded_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid4()),
+                clearance_id,
+                event_type,
+                actor,
+                json.dumps(payload, ensure_ascii=False),
+                _now_iso(),
+            ),
+        )
+
     def device_command_response(self, device_id: str, message_id: str) -> dict[str, Any] | None:
         """The answer a device already got for this message, if any.
 
@@ -847,6 +1155,31 @@ class SQLiteOperationsStore:
                     _now_iso(),
                 ),
             )
+
+
+_CLEARANCE_COLUMNS = (
+    "clearance_id, movement_id, connection_id, channel_id, from_station_id, "
+    "to_station_id, status, track_id, revision, requested_by, requested_at, "
+    "expires_at, settled_at"
+)
+
+
+def _clearance_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
+    return {
+        "clearance_id": row[0],
+        "movement_id": row[1],
+        "connection_id": row[2],
+        "channel_id": row[3],
+        "from_station_id": row[4],
+        "to_station_id": row[5],
+        "status": row[6],
+        "track_id": row[7],
+        "revision": int(row[8]),
+        "requested_by": row[9],
+        "requested_at": row[10],
+        "expires_at": row[11],
+        "settled_at": row[12],
+    }
 
 
 def _time_to_seconds(value: str | None) -> float:

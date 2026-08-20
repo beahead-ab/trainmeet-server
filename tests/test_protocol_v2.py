@@ -5,16 +5,19 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from runtime_fixture import fictional_runtime_package
 from tmbox_gateway.identity import DisplayCapability, IdentityStore
 from tmbox_gateway.mqtt_v2 import TMBoxV2Gateway, device_topic
 from tmbox_gateway.operations import SQLiteOperationsStore
+from tmbox_gateway import protocol_v2
 from tmbox_gateway.protocol_v2 import TMBoxStationService
 from tmbox_gateway.runtime import RuntimePublication, SQLiteRuntimeStore
 
 
 DEVICE = "TMBOX-7A42F1"
+NEIGHBOUR = "TMBOX-VST001"
 STATION = "st-cda"
 DEPARTURE = "movement-421-cda"
 
@@ -51,7 +54,9 @@ class BoxCache:
         )
 
 
-class ProtocolV2Tests(unittest.TestCase):
+class ProtocolV2Base(unittest.TestCase):
+    """Shared fixture: one meet, one box at Charlottendal, no broker."""
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         root = Path(self.directory.name) / "runtime.db"
@@ -99,6 +104,8 @@ class ProtocolV2Tests(unittest.TestCase):
     def _retained(self) -> list[tuple[str, dict]]:
         return [(topic, payload) for topic, payload, retain in self.published if retain]
 
+
+class ProtocolV2Tests(ProtocolV2Base):
     # ------------------------------------------------------------ retained
 
     def test_hello_answers_with_assignment_config_and_snapshot(self):
@@ -410,6 +417,275 @@ class ProtocolV2Tests(unittest.TestCase):
         )
 
         self.assertEqual(self._acks()[0]["reason"], "unsupported_protocol")
+
+
+class ClearanceTests(ProtocolV2Base):
+    """The clearance aggregate: its own case, its own channel, its own clock."""
+
+    def setUp(self):
+        super().setUp()
+        self.identities.record_discovery(NEIGHBOUR, NEIGHBOUR)
+        self.identities.assign_discovered_device(NEIGHBOUR, station_id="st-vst")
+
+    def _send_from(self, device_id: str, leaf: str, body: dict) -> None:
+        self.gateway.on_message(
+            device_topic(device_id, leaf), json.dumps(body).encode("utf-8")
+        )
+
+    def _request(self, device_id=DEVICE, movement=DEPARTURE, connection="connection-cda-vst",
+                 message_id="req-1", clearance_id=None) -> dict:
+        body = {"movement_id": movement, "connection_id": connection}
+        if clearance_id:
+            body["clearance_id"] = clearance_id
+        self._send_from(
+            device_id,
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": message_id,
+                "device_id": device_id,
+                "action": "clearance.request",
+                "payload": body,
+            },
+        )
+        return self._acks()[-1]
+
+    def test_a_request_waits_for_the_other_station_to_answer(self):
+        acknowledgement = self._request()
+
+        self.assertEqual(acknowledgement["status"], "accepted")
+        self.assertEqual(acknowledgement["revision"]["scope"], "case")
+        case = acknowledgement["snapshot"]["active_clearances"][0]
+        self.assertEqual(case["status"], "waiting")
+        self.assertEqual(case["from_station_id"], STATION)
+        self.assertEqual(case["to_station_id"], "st-vst")
+        # The case revision lives in its own space, beside the movements.
+        self.assertEqual(
+            acknowledgement["snapshot"]["revision"]["cases"][case["clearance_id"]], 1
+        )
+
+    def test_the_receiving_station_approves_and_both_ends_see_it(self):
+        clearance_id = self._request()["revision"]["key"]
+
+        self._send_from(
+            NEIGHBOUR,
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": "answer-1",
+                "device_id": NEIGHBOUR,
+                "action": "clearance.response",
+                "payload": {"clearance_id": clearance_id, "approved": True},
+            },
+        )
+
+        answer = self._acks()[-1]
+        self.assertEqual(answer["status"], "accepted")
+        self.assertEqual(answer["revision"], {"scope": "case", "key": clearance_id, "value": 2})
+        sender_view = self.service.snapshot_payload(STATION)["active_clearances"][0]
+        self.assertEqual(sender_view["status"], "approved")
+
+    def test_only_the_receiving_station_may_answer(self):
+        clearance_id = self._request()["revision"]["key"]
+
+        self._send_from(
+            DEVICE,
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": "self-answer",
+                "device_id": DEVICE,
+                "action": "clearance.response",
+                "payload": {"clearance_id": clearance_id, "approved": True},
+            },
+        )
+
+        self.assertEqual(self._acks()[-1]["reason"], "not_receiver")
+
+    def test_only_the_sender_may_cancel(self):
+        clearance_id = self._request()["revision"]["key"]
+
+        self._send_from(
+            NEIGHBOUR,
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": "wrong-cancel",
+                "device_id": NEIGHBOUR,
+                "action": "clearance.cancel",
+                "payload": {"clearance_id": clearance_id},
+            },
+        )
+        self.assertEqual(self._acks()[-1]["reason"], "not_sender")
+
+        self._send_from(
+            DEVICE,
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": "right-cancel",
+                "device_id": DEVICE,
+                "action": "clearance.cancel",
+                "payload": {"clearance_id": clearance_id},
+            },
+        )
+        self.assertEqual(self._acks()[-1]["status"], "accepted")
+        self.assertEqual(self.service.snapshot_payload(STATION)["active_clearances"], [])
+
+    def test_a_second_request_on_an_occupied_channel_is_refused(self):
+        self._request()
+
+        second = self._request(movement="movement-428-cda", message_id="req-2")
+
+        self.assertEqual(second["reason"], "channel_occupied")
+
+    def test_opposite_directions_on_a_double_track_never_block_each_other(self):
+        """Decision B7: directed channels from the start.
+
+        Vagnsta and Charlottendal are joined by double track. A train leaving
+        each end at the same time uses a different track, so neither request
+        may see the other's channel as taken.
+        """
+        outbound = self._request(message_id="out-1")
+        inbound = self._request(
+            device_id=NEIGHBOUR,
+            movement="movement-428-vst",
+            message_id="in-1",
+        )
+
+        self.assertEqual(outbound["status"], "accepted")
+        self.assertEqual(inbound["status"], "accepted")
+        self.assertNotEqual(outbound["revision"]["key"], inbound["revision"]["key"])
+        # Each station sees both cases; they simply do not contend.
+        self.assertEqual(len(self.service.snapshot_payload(STATION)["active_clearances"]), 2)
+
+    def test_a_single_track_connection_has_one_shared_channel(self):
+        first = self._request(connection="connection-cda-kun", message_id="single-1")
+        self.assertEqual(first["status"], "accepted")
+
+        second = self._request(
+            movement="movement-428-cda",
+            connection="connection-cda-kun",
+            message_id="single-2",
+        )
+        self.assertEqual(second["reason"], "channel_occupied")
+
+    def test_a_track_change_under_a_waiting_request_invalidates_it(self):
+        clearance_id = self._request()["revision"]["key"]
+
+        self._send(
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": "track-move",
+                "device_id": DEVICE,
+                "action": "train.track.change",
+                "payload": {"movement_id": DEPARTURE, "track_id": "2A"},
+            },
+        )
+
+        case = self.operations_store.clearance(clearance_id)
+        self.assertEqual(case["status"], "invalidated_by_revision")
+        # Not a silent rewrite: the case is closed and the channel is free.
+        self.assertEqual(self.service.snapshot_payload(STATION)["active_clearances"], [])
+        history = [entry["event_type"] for entry in self.operations_store.clearance_history(clearance_id)]
+        self.assertEqual(history, ["requested", "invalidated_by_revision"])
+
+    def test_a_request_lapses_when_its_time_runs_out(self):
+        self.operations_store.start_clock(time_value="09:00:00")
+        with mock.patch.object(protocol_v2, "CLEARANCE_TTL_SECONDS", 0):
+            clearance_id = self._request()["revision"]["key"]
+            # The next case action checks the clock on the way in - no
+            # background job is involved.
+            self._request(movement="movement-428-cda", message_id="req-2")
+
+        self.assertEqual(self.operations_store.clearance(clearance_id)["status"], "expired")
+
+    def test_a_stopped_meeting_clock_does_not_expire_a_request(self):
+        # The clock is stopped in this fixture: the meet is paused, so nothing
+        # that was open when everyone left for coffee may lapse.
+        with mock.patch.object(protocol_v2, "CLEARANCE_TTL_SECONDS", 0):
+            clearance_id = self._request()["revision"]["key"]
+            self._request(movement="movement-428-cda", message_id="req-2")
+
+        self.assertEqual(self.operations_store.clearance(clearance_id)["status"], "waiting")
+
+    def test_an_arriving_train_frees_the_line_it_was_granted(self):
+        clearance_id = self._request()["revision"]["key"]
+        self._send_from(
+            NEIGHBOUR,
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": "answer-1",
+                "device_id": NEIGHBOUR,
+                "action": "clearance.response",
+                "payload": {"clearance_id": clearance_id, "approved": True},
+            },
+        )
+        self.assertEqual(len(self.service.snapshot_payload("st-vst")["active_clearances"]), 1)
+
+        self._send_from(
+            NEIGHBOUR,
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": "arrived-1",
+                "device_id": NEIGHBOUR,
+                "action": "train.arrived",
+                "payload": {"movement_id": "movement-421-vst"},
+            },
+        )
+
+        self.assertEqual(self.service.snapshot_payload("st-vst")["active_clearances"], [])
+        history = [entry["event_type"] for entry in self.operations_store.clearance_history(clearance_id)]
+        self.assertEqual(history, ["requested", "approved", "released"])
+
+    def test_an_answer_to_a_settled_case_is_refused(self):
+        clearance_id = self._request()["revision"]["key"]
+        self._send_from(
+            DEVICE,
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": "cancel-1",
+                "device_id": DEVICE,
+                "action": "clearance.cancel",
+                "payload": {"clearance_id": clearance_id},
+            },
+        )
+
+        self._send_from(
+            NEIGHBOUR,
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": "late-answer",
+                "device_id": NEIGHBOUR,
+                "action": "clearance.response",
+                "payload": {"clearance_id": clearance_id, "approved": True},
+            },
+        )
+
+        self.assertEqual(self._acks()[-1]["reason"], "clearance_not_pending")
+
+    def test_a_stale_case_revision_is_rejected(self):
+        clearance_id = self._request()["revision"]["key"]
+
+        self._send_from(
+            NEIGHBOUR,
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": "stale-answer",
+                "device_id": NEIGHBOUR,
+                "action": "clearance.response",
+                "expected_revision": {"scope": "case", "key": clearance_id, "value": 99},
+                "payload": {"clearance_id": clearance_id, "approved": True},
+            },
+        )
+
+        self.assertEqual(self._acks()[-1]["reason"], "stale_revision")
 
 
 if __name__ == "__main__":
