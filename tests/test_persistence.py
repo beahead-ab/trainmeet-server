@@ -86,7 +86,7 @@ class PersistenceTests(unittest.TestCase):
             departure = command_for(
                 engine,
                 "panel-a",
-                "#",
+                "A",
                 "departure-persisted-once",
             )
             first_ack = engine.press(departure)
