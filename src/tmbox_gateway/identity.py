@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 
 PAIRING_HASH_ITERATIONS = 210_000
@@ -58,11 +59,42 @@ class PairingGrant:
 
 
 @dataclass(frozen=True)
+class DisplayCapability:
+    """What a box can actually render.
+
+    Four geometries are supported and the logic is identical between them;
+    only how much context fits per screen differs. A box that announces
+    something else is treated as the smallest one rather than locked out.
+    """
+
+    rows: int = 2
+    cols: int = 16
+    charset: str = "ascii"
+
+    @classmethod
+    def parse(cls, value: Any) -> "DisplayCapability":
+        if not isinstance(value, dict):
+            return cls()
+        rows = value.get("rows")
+        cols = value.get("cols")
+        charset = str(value.get("charset") or "ascii").lower()
+        return cls(
+            rows=rows if rows in (2, 4) else 2,
+            cols=cols if cols in (16, 20) else 16,
+            charset=charset if charset in ("ascii", "cgram") else "ascii",
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"rows": self.rows, "cols": self.cols, "charset": self.charset}
+
+
+@dataclass(frozen=True)
 class PairedClient:
     client_id: str
     display_name: str
     kind: DeviceKind
     panel_ids: tuple[str, ...]
+    station_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -73,6 +105,10 @@ class DiscoveredDevice:
     firmware_version: str
     last_seen_at: str
     panel_ids: tuple[str, ...]
+    station_id: str | None = None
+    hardware_version: str = ""
+    protocol_version: int = 1
+    display: DisplayCapability = DisplayCapability()
 
 
 @dataclass(frozen=True)
@@ -135,7 +171,12 @@ class IdentityStore:
                 model TEXT NOT NULL,
                 firmware_version TEXT NOT NULL,
                 first_seen_at TEXT NOT NULL,
-                last_seen_at TEXT NOT NULL
+                last_seen_at TEXT NOT NULL,
+                hardware_version TEXT NOT NULL DEFAULT '',
+                protocol_version INTEGER NOT NULL DEFAULT 1,
+                display_rows INTEGER NOT NULL DEFAULT 2,
+                display_cols INTEGER NOT NULL DEFAULT 16,
+                charset TEXT NOT NULL DEFAULT 'ascii'
             );
 
             CREATE TABLE IF NOT EXISTS admin_access (
@@ -154,13 +195,23 @@ class IdentityStore:
             );
             """
         )
-        columns = {
-            row[1] for row in self._connection.execute("PRAGMA table_info(admin_access)").fetchall()
-        }
-        if "must_change_password" not in columns:
-            self._connection.execute(
-                "ALTER TABLE admin_access ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0"
-            )
+        self._add_missing_columns(
+            "admin_access",
+            {"must_change_password": "INTEGER NOT NULL DEFAULT 0"},
+        )
+        # A device is assigned one station. Panels stay for the v1 clients
+        # that still speak the panel protocol.
+        self._add_missing_columns("clients", {"station_id": "TEXT"})
+        self._add_missing_columns(
+            "discovered_devices",
+            {
+                "hardware_version": "TEXT NOT NULL DEFAULT ''",
+                "protocol_version": "INTEGER NOT NULL DEFAULT 1",
+                "display_rows": "INTEGER NOT NULL DEFAULT 2",
+                "display_cols": "INTEGER NOT NULL DEFAULT 16",
+                "charset": "TEXT NOT NULL DEFAULT 'ascii'",
+            },
+        )
         now = datetime.now(timezone.utc).isoformat()
         self._connection.execute(
             """
@@ -170,6 +221,17 @@ class IdentityStore:
             """,
             (now,),
         )
+
+    def _add_missing_columns(self, table: str, columns: dict[str, str]) -> None:
+        existing = {
+            row[1]
+            for row in self._connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        for name, definition in columns.items():
+            if name not in existing:
+                self._connection.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {name} {definition}"
+                )
 
     def issue_pairing_code(
         self,
@@ -302,6 +364,7 @@ class IdentityStore:
         credential: str,
         panel_ids: tuple[str, ...],
         *,
+        station_id: str | None = None,
         now: datetime | None = None,
     ) -> PairedClient:
         now = now or datetime.now(timezone.utc)
@@ -317,14 +380,15 @@ class IdentityStore:
                     """
                     INSERT INTO clients (
                         client_id, display_name, kind, credential_digest,
-                        enabled, created_at, last_paired_at
-                    ) VALUES (?, ?, ?, ?, 1, ?, ?)
+                        enabled, created_at, last_paired_at, station_id
+                    ) VALUES (?, ?, ?, ?, 1, ?, ?, ?)
                     ON CONFLICT(client_id) DO UPDATE SET
                         display_name = excluded.display_name,
                         kind = excluded.kind,
                         credential_digest = excluded.credential_digest,
                         enabled = 1,
-                        last_paired_at = excluded.last_paired_at
+                        last_paired_at = excluded.last_paired_at,
+                        station_id = excluded.station_id
                     """,
                     (
                         client_id,
@@ -333,6 +397,7 @@ class IdentityStore:
                         digest,
                         created_at[0] if created_at else now.isoformat(),
                         now.isoformat(),
+                        station_id,
                     ),
                 )
                 self._connection.execute(
@@ -349,14 +414,16 @@ class IdentityStore:
                     self._connection.execute("ROLLBACK")
                 raise
 
-        return PairedClient(client_id, display_name, kind, tuple(sorted(set(panel_ids))))
+        return PairedClient(
+            client_id, display_name, kind, tuple(sorted(set(panel_ids))), station_id
+        )
 
     def authenticate(self, credential: str) -> PairedClient | None:
         digest = _credential_digest(credential)
         with self._lock:
             row = self._connection.execute(
                 """
-                SELECT client_id, display_name, kind
+                SELECT client_id, display_name, kind, station_id
                 FROM clients
                 WHERE credential_digest = ? AND enabled = 1
                 """,
@@ -365,13 +432,13 @@ class IdentityStore:
             if row is None:
                 return None
             panels = self._panel_ids_locked(row[0])
-        return PairedClient(row[0], row[1], DeviceKind(row[2]), panels)
+        return PairedClient(row[0], row[1], DeviceKind(row[2]), panels, row[3])
 
     def client(self, client_id: str) -> PairedClient | None:
         with self._lock:
             row = self._connection.execute(
                 """
-                SELECT client_id, display_name, kind
+                SELECT client_id, display_name, kind, station_id
                 FROM clients
                 WHERE client_id = ? AND enabled = 1
                 """,
@@ -380,24 +447,35 @@ class IdentityStore:
             if row is None:
                 return None
             panels = self._panel_ids_locked(client_id)
-        return PairedClient(row[0], row[1], DeviceKind(row[2]), panels)
+        return PairedClient(row[0], row[1], DeviceKind(row[2]), panels, row[3])
 
     def panels_for_client(self, client_id: str) -> tuple[str, ...]:
         client = self.client(client_id)
         return client.panel_ids if client else ()
 
+    def station_for_client(self, client_id: str) -> str | None:
+        """The one station this device is assigned to, if any.
+
+        A station can have several boxes in the same operating room, but a box
+        has exactly one station.
+        """
+        client = self.client(client_id)
+        return client.station_id if client else None
+
     def enabled_clients(self) -> tuple[PairedClient, ...]:
         with self._lock:
             rows = self._connection.execute(
                 """
-                SELECT client_id, display_name, kind
+                SELECT client_id, display_name, kind, station_id
                 FROM clients
                 WHERE enabled = 1
                 ORDER BY client_id
                 """
             ).fetchall()
             return tuple(
-                PairedClient(row[0], row[1], DeviceKind(row[2]), self._panel_ids_locked(row[0]))
+                PairedClient(
+                    row[0], row[1], DeviceKind(row[2]), self._panel_ids_locked(row[0]), row[3]
+                )
                 for row in rows
             )
 
@@ -451,6 +529,9 @@ class IdentityStore:
         *,
         model: str = "TMBox",
         firmware_version: str = "unknown",
+        hardware_version: str = "",
+        protocol_version: int = 1,
+        display: DisplayCapability | None = None,
         now: datetime | None = None,
     ) -> DiscoveredDevice:
         device_id = device_id.strip()
@@ -460,18 +541,25 @@ class IdentityStore:
         if len(device_code) < 4 or len(device_code) > 24:
             raise InvalidClientError("Ogiltig kod från TMBox")
         now = now or datetime.now(timezone.utc)
+        capability = display or DisplayCapability()
         with self._lock:
             self._connection.execute(
                 """
                 INSERT INTO discovered_devices (
                     device_id, device_code, model, firmware_version,
-                    first_seen_at, last_seen_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    first_seen_at, last_seen_at, hardware_version,
+                    protocol_version, display_rows, display_cols, charset
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(device_id) DO UPDATE SET
                     device_code = excluded.device_code,
                     model = excluded.model,
                     firmware_version = excluded.firmware_version,
-                    last_seen_at = excluded.last_seen_at
+                    last_seen_at = excluded.last_seen_at,
+                    hardware_version = excluded.hardware_version,
+                    protocol_version = excluded.protocol_version,
+                    display_rows = excluded.display_rows,
+                    display_cols = excluded.display_cols,
+                    charset = excluded.charset
                 """,
                 (
                     device_id,
@@ -480,6 +568,11 @@ class IdentityStore:
                     firmware_version[:40],
                     now.isoformat(),
                     now.isoformat(),
+                    hardware_version[:40],
+                    int(protocol_version),
+                    capability.rows,
+                    capability.cols,
+                    capability.charset,
                 ),
             )
         return self.discovered_device(device_id)
@@ -488,7 +581,7 @@ class IdentityStore:
         with self._lock:
             row = self._connection.execute(
                 """
-                SELECT device_id, device_code, model, firmware_version, last_seen_at
+                SELECT device_id, device_code, model, firmware_version, last_seen_at, hardware_version, protocol_version, display_rows, display_cols, charset
                 FROM discovered_devices WHERE device_id = ?
                 """,
                 (device_id,),
@@ -496,26 +589,32 @@ class IdentityStore:
             if row is None:
                 raise InvalidClientError("TMBox-enheten har ännu inte hittats")
             panels = self._panel_ids_locked(device_id)
-        return DiscoveredDevice(row[0], row[1], row[2], row[3], row[4], panels)
+            station_id = self._station_id_locked(device_id)
+        return _discovered_device_from_row(row, panels, station_id)
 
     def discovered_devices(self) -> tuple[DiscoveredDevice, ...]:
         with self._lock:
             rows = self._connection.execute(
                 """
-                SELECT device_id, device_code, model, firmware_version, last_seen_at
+                SELECT device_id, device_code, model, firmware_version, last_seen_at, hardware_version, protocol_version, display_rows, display_cols, charset
                 FROM discovered_devices ORDER BY last_seen_at DESC
                 """
             ).fetchall()
             return tuple(
-                DiscoveredDevice(row[0], row[1], row[2], row[3], row[4], self._panel_ids_locked(row[0]))
+                _discovered_device_from_row(
+                    row,
+                    self._panel_ids_locked(row[0]),
+                    self._station_id_locked(row[0]),
+                )
                 for row in rows
             )
 
     def assign_discovered_device(
         self,
         device_code: str,
-        panel_ids: tuple[str, ...],
+        panel_ids: tuple[str, ...] = (),
         *,
+        station_id: str | None = None,
         now: datetime | None = None,
     ) -> PairedClient:
         normalized = _normalize_device_code(device_code)
@@ -536,6 +635,7 @@ class IdentityStore:
             DeviceKind.ESP32_PANEL,
             internal_credential,
             panel_ids,
+            station_id=station_id,
             now=now,
         )
 
@@ -679,6 +779,13 @@ class IdentityStore:
         with self._lock:
             self._connection.close()
 
+    def _station_id_locked(self, client_id: str) -> str | None:
+        row = self._connection.execute(
+            "SELECT station_id FROM clients WHERE client_id = ? AND enabled = 1",
+            (client_id,),
+        ).fetchone()
+        return row[0] if row else None
+
     def _panel_ids_locked(self, client_id: str) -> tuple[str, ...]:
         rows = self._connection.execute(
             "SELECT panel_id FROM client_panels WHERE client_id = ? ORDER BY panel_id",
@@ -738,6 +845,27 @@ class PairingService:
         return PairingResult(client=client, access_token=access_token)
 
 
+def _discovered_device_from_row(
+    row: tuple[Any, ...],
+    panel_ids: tuple[str, ...],
+    station_id: str | None,
+) -> DiscoveredDevice:
+    return DiscoveredDevice(
+        device_id=row[0],
+        device_code=row[1],
+        model=row[2],
+        firmware_version=row[3],
+        last_seen_at=row[4],
+        panel_ids=panel_ids,
+        station_id=station_id,
+        hardware_version=row[5] or "",
+        protocol_version=int(row[6] or 1),
+        display=DisplayCapability(
+            rows=int(row[7] or 2), cols=int(row[8] or 16), charset=row[9] or "ascii"
+        ),
+    )
+
+
 def _normalize_code(code: str) -> str:
     return "".join(character for character in code.upper() if character.isalnum())
 
@@ -773,6 +901,8 @@ def _admin_password_digest(password: str, salt: bytes) -> bytes:
 
 def _normalize_device_code(code: str) -> str:
     compact = "".join(character for character in code.upper() if character.isalnum())
+    if compact.startswith("TMBOX") and len(compact) > 5:
+        return f"TMBOX-{compact[5:]}"
     if compact.startswith("TBX") and len(compact) > 3:
         return f"TBX-{compact[3:]}"
     return compact

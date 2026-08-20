@@ -383,9 +383,17 @@ class TrainMeetHTTPApplication:
                     "firmware_version": device.firmware_version,
                     "last_seen_at": device.last_seen_at,
                     "assigned_panel_ids": list(device.panel_ids),
+                    "station_id": device.station_id,
+                    "hardware_version": device.hardware_version,
+                    "protocol_version": device.protocol_version,
+                    "display": device.display.to_dict(),
                 }
                 for device in self.identities.discovered_devices()
-            ]
+            ],
+            "stations": [
+                {"id": station.id, "code": station.code, "name": station.name}
+                for station in self.engine.config.stations.values()
+            ],
         }
 
     def runtime_summary(self, client: PairedClient) -> dict[str, Any]:
@@ -767,6 +775,8 @@ class TrainMeetHTTPApplication:
 
     def _require_station_access(self, client: PairedClient, station_id: str) -> None:
         if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
+            return
+        if client.station_id is not None and client.station_id == station_id:
             return
         station_panels = {
             panel.id for panel in self.engine.config.panels.values() if panel.station_id == station_id
@@ -1381,19 +1391,39 @@ class TrainMeetHTTPApplication:
         }
 
     def assign_device(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Assign a discovered box to a station.
+
+        A box is assigned one station, not a panel with fixed A-D slots
+        against individual connections; what it shows is built from the
+        station's topology. panel_id is still accepted for the v1 clients that
+        have not moved yet.
+        """
         self._require_admin(client)
-        panel_id = str(payload.get("panel_id", ""))
-        if panel_id not in self.engine.config.panels:
+        station_id = str(payload.get("station_id", "")).strip()
+        panel_id = str(payload.get("panel_id", "")).strip()
+        if not station_id and not panel_id:
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST,
+                "station_required",
+                "Ange stationen boxen ska tilldelas",
+            )
+        if station_id and station_id not in self.engine.config.stations:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "unknown_station", "Stationen finns inte")
+        if panel_id and panel_id not in self.engine.config.panels:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "unknown_panel", "Panelen finns inte")
+        if panel_id and not station_id:
+            station_id = self.engine.config.panels[panel_id].station_id
         try:
             assigned = self.identities.assign_discovered_device(
                 str(payload.get("device_code", "")),
-                (panel_id,),
+                (panel_id,) if panel_id else (),
+                station_id=station_id or None,
             )
         except PairingError as error:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, error.code, str(error)) from error
         return {
             "device_id": assigned.client_id,
+            "station_id": assigned.station_id,
             "assigned_panel_ids": list(assigned.panel_ids),
         }
 

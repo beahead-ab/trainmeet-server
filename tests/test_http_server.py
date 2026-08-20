@@ -452,6 +452,57 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(acknowledgement["status"], "accepted")
         self.assertEqual(set(acknowledgement["snapshots"]), {"panel-a"})
 
+    def test_a_box_is_assigned_a_station_and_the_admin_view_lists_them(self):
+        self.identities.record_discovery(
+            "TMBOX-7A42F1",
+            "TMBOX-7A42F1",
+            model="TMBox ESP32-S3",
+            firmware_version="0.3.0",
+        )
+        paired = self._json_request(
+            "/v1/pair",
+            {
+                "pairing_code": self.pairing_code,
+                "client_id": "web-admin-stations",
+                "display_name": "Webbadministratör",
+                "device_kind": "web_admin",
+            },
+            expected_status=201,
+        )
+        token = paired["access_token"]
+
+        before = self._json_request("/v1/devices", token=token)
+        self.assertIsNone(before["devices"][0]["station_id"])
+        self.assertIn("station-a", [station["id"] for station in before["stations"]])
+
+        assigned = self._json_request(
+            "/v1/devices/assign",
+            {"device_code": "tmbox 7a42f1", "station_id": "station-a"},
+            token=token,
+        )
+        self.assertEqual(assigned["station_id"], "station-a")
+        # A station is not a panel: nothing needed to exist in the A-D model
+        # for this box to have a place to work.
+        self.assertEqual(assigned["assigned_panel_ids"], [])
+
+        after = self._json_request("/v1/devices", token=token)
+        self.assertEqual(after["devices"][0]["station_id"], "station-a")
+
+    def test_a_station_assigned_box_reaches_its_own_station_only(self):
+        publication = self.runtime_store.install(runtime_package_v3())
+        self.operations_store.ensure_publication(publication)
+        self.identities.record_discovery("TMBOX-STATION", "TMBOX-STATION")
+        box = self.identities.assign_discovered_device(
+            "TMBOX-STATION", station_id="station-a"
+        )
+
+        context = self.application.tkl_context(box, "station-a")
+        self.assertEqual(context["station"]["id"], "station-a")
+
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.application.tkl_context(box, "station-b")
+        self.assertEqual(refused.exception.code, "station_not_assigned")
+
     def test_web_admin_assigns_discovered_physical_box_by_printed_code(self):
         self.identities.record_discovery(
             "esp32-real-box",

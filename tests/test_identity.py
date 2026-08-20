@@ -7,6 +7,7 @@ from pathlib import Path
 
 from tmbox_gateway.identity import (
     DeviceKind,
+    DisplayCapability,
     IdentityStore,
     InvalidPairingCodeError,
     PairingService,
@@ -119,6 +120,54 @@ class IdentityTests(unittest.TestCase):
         self.assertIsNone(self.store.authenticate(first.access_token))
         self.assertEqual(self.store.authenticate(second.access_token), second.client)
         self.assertEqual(second.client.panel_ids, ("panel-a", "panel-b"))
+
+    def test_a_box_is_assigned_one_station_and_keeps_what_it_can_render(self):
+        discovered = self.store.record_discovery(
+            "TMBOX-7A42F1",
+            "TMBOX-7A42F1",
+            model="TMBox ESP32-S3",
+            firmware_version="0.3.0",
+            hardware_version="esp32-s3",
+            protocol_version=2,
+            display=DisplayCapability(rows=4, cols=20, charset="cgram"),
+        )
+        self.assertEqual(discovered.device_code, "TMBOX-7A42F1")
+        self.assertIsNone(discovered.station_id)
+        self.assertEqual(discovered.display.cols, 20)
+
+        paired = self.store.assign_discovered_device(
+            "tmbox 7a42f1", station_id="st-cda"
+        )
+
+        self.assertEqual(paired.station_id, "st-cda")
+        self.assertEqual(paired.panel_ids, ())
+        self.assertEqual(self.store.station_for_client("TMBOX-7A42F1"), "st-cda")
+        stored = self.store.discovered_device("TMBOX-7A42F1")
+        self.assertEqual(stored.station_id, "st-cda")
+        self.assertEqual(stored.protocol_version, 2)
+        self.assertEqual(stored.hardware_version, "esp32-s3")
+
+    def test_two_boxes_can_share_one_station(self):
+        for suffix in ("A", "B"):
+            self.store.record_discovery(f"TMBOX-ROOM{suffix}", f"TMBOX-ROOM{suffix}")
+            self.store.assign_discovered_device(f"TMBOX-ROOM{suffix}", station_id="st-cda")
+
+        assigned = [
+            device.device_id
+            for device in self.store.discovered_devices()
+            if device.station_id == "st-cda"
+        ]
+        self.assertEqual(sorted(assigned), ["TMBOX-ROOMA", "TMBOX-ROOMB"])
+
+    def test_a_nonsense_display_claim_falls_back_to_the_smallest_geometry(self):
+        self.store.record_discovery(
+            "TMBOX-ODD",
+            "TMBOX-ODD",
+            display=DisplayCapability.parse({"rows": 7, "cols": 99, "charset": "runes"}),
+        )
+
+        display = self.store.discovered_device("TMBOX-ODD").display
+        self.assertEqual((display.rows, display.cols, display.charset), (2, 16, "ascii"))
 
     def test_physical_tmbox_is_discovered_and_assigned_by_printed_code(self):
         discovered = self.store.record_discovery(
