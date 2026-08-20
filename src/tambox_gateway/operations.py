@@ -118,7 +118,7 @@ class SQLiteOperationsStore:
                 to_station_id TEXT NOT NULL,
                 status TEXT NOT NULL CHECK(status IN (
                     'waiting', 'approved', 'rejected', 'cancelled', 'expired',
-                    'invalidated_by_revision'
+                    'invalidated_by_revision', 'completed'
                 )),
                 requested_by TEXT NOT NULL,
                 requested_at TEXT NOT NULL,
@@ -178,6 +178,70 @@ class SQLiteOperationsStore:
             self._connection.execute(
                 "ALTER TABLE tkl_movement_states ADD COLUMN assigned_track_id TEXT"
             )
+        self._migrate_clearance_status_check()
+
+    def _migrate_clearance_status_check(self) -> None:
+        """Widen the clearances CHECK to allow 'completed'.
+
+        SQLite cannot alter a CHECK in place, and CREATE TABLE IF NOT EXISTS
+        leaves an existing table untouched, so a database created earlier on
+        this branch would reject the new status. Rebuild only in that case.
+        """
+        row = self._connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'clearances'"
+        ).fetchone()
+        if row is None or "'completed'" in row[0]:
+            return
+        # Individual statements rather than executescript, which commits any
+        # open transaction before it runs and would strand this rebuild
+        # half-applied.
+        self._connection.execute("BEGIN IMMEDIATE")
+        try:
+            self._connection.execute(
+                """
+                CREATE TABLE clearances_migrated (
+                    clearance_id TEXT PRIMARY KEY,
+                    publication_id TEXT NOT NULL,
+                    active_day TEXT NOT NULL,
+                    movement_id TEXT NOT NULL,
+                    connection_id TEXT NOT NULL,
+                    channel_id TEXT NOT NULL,
+                    from_station_id TEXT NOT NULL,
+                    to_station_id TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN (
+                        'waiting', 'approved', 'rejected', 'cancelled', 'expired',
+                        'invalidated_by_revision', 'completed'
+                    )),
+                    requested_by TEXT NOT NULL,
+                    requested_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    responded_by TEXT,
+                    responded_at TEXT,
+                    revision INTEGER NOT NULL DEFAULT 1,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            self._connection.execute("INSERT INTO clearances_migrated SELECT * FROM clearances")
+            self._connection.execute("DROP TABLE clearances")
+            self._connection.execute("ALTER TABLE clearances_migrated RENAME TO clearances")
+            self._connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS clearances_by_channel
+                    ON clearances(publication_id, active_day, channel_id, status)
+                """
+            )
+            self._connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS clearances_by_movement
+                    ON clearances(publication_id, active_day, movement_id)
+                """
+            )
+            self._connection.execute("COMMIT")
+        except Exception:
+            if self._connection.in_transaction:
+                self._connection.execute("ROLLBACK")
+            raise
 
     def ensure_publication(self, publication: RuntimePublication) -> None:
         with self._lock:
@@ -952,6 +1016,58 @@ class SQLiteOperationsStore:
                     self._connection.execute("ROLLBACK")
                 raise
         return self.clearance(clearance_id)
+
+    def complete_clearances_on_arrival(
+        self,
+        publication_id: str,
+        active_day: str,
+        to_station_id: str,
+        movement_ids: set[str] | frozenset[str],
+        *,
+        now: datetime | None = None,
+    ) -> list[str]:
+        """Release the channel once the train has reached its destination.
+
+        An approved clearance keeps the channel busy for as long as the train
+        is on the line, which is correct — but nothing else ever moves it out
+        of 'approved', so without this the first train to get clearance would
+        hold a single-track connection for the rest of the meet.
+
+        Scoped by destination as well as movement: the same train has its own
+        movement row at every station it touches, and only an arrival at the
+        clearance's own to_station means the line is actually clear.
+        """
+        if not movement_ids:
+            return []
+        now = now or datetime.now(timezone.utc)
+        placeholders = ",".join("?" for _ in movement_ids)
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                rows = self._connection.execute(
+                    f"""
+                    SELECT clearance_id FROM clearances
+                    WHERE publication_id = ? AND active_day = ? AND to_station_id = ?
+                      AND status = 'approved' AND movement_id IN ({placeholders})
+                    """,
+                    (publication_id, active_day, to_station_id, *sorted(movement_ids)),
+                ).fetchall()
+                completed = [str(row[0]) for row in rows]
+                for clearance_id in completed:
+                    self._connection.execute(
+                        """
+                        UPDATE clearances
+                        SET status = 'completed', revision = revision + 1, updated_at = ?
+                        WHERE clearance_id = ?
+                        """,
+                        (now.isoformat(), clearance_id),
+                    )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return completed
 
     def invalidate_clearance(self, clearance_id: str, *, now: datetime | None = None) -> dict[str, Any]:
         """Called when a movement's track changes while its clearance is waiting

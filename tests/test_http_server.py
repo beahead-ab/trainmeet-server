@@ -398,11 +398,74 @@ class HTTPServerTests(unittest.TestCase):
         )
         self.assertEqual(approved["clearance"]["status"], "approved")
 
-        freed = self.application.v2_clearance_request(
+        # The train has clearance but has not run yet, so the channel is still
+        # legitimately occupied for anyone else.
+        still_busy = self.application.v2_clearance_request(
             client,
             {"station_id": "station-b", "movement_id": "movement-101-b", "connection_id": "connection-a-b"},
         )
-        self.assertEqual(freed["clearance"], {"status": "rejected", "reason": "connection_busy"})
+        self.assertEqual(still_busy["clearance"], {"status": "rejected", "reason": "connection_busy"})
+
+    def test_v2_arrival_releases_the_channel_for_the_next_train(self):
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        for station_id, operator_name in (("station-a", "Anna"), ("station-b", "Bertil")):
+            self.application.start_tkl_shift(
+                client, {"station_id": station_id, "operator_name": operator_name, "terminal_name": station_id}
+            )
+
+        requested = self.application.v2_clearance_request(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "connection_id": "connection-a-b"},
+        )
+        self.application.v2_clearance_respond(
+            client, {"clearance_id": requested["clearance"]["clearance_id"], "accept": True}
+        )
+        self.application.v2_movement_command(
+            client, {"station_id": "station-a", "movement_id": "movement-101-a", "action": "departed"}
+        )
+        # Train 101 reaches its destination: the line it occupied is now free,
+        # so the next train must be able to claim the same channel.
+        self.application.v2_movement_command(
+            client, {"station_id": "station-b", "movement_id": "movement-101-b", "action": "arrived"}
+        )
+
+        completed = self.operations_store.clearance(requested["clearance"]["clearance_id"])
+        self.assertEqual(completed["status"], "completed")
+
+        next_train = self.application.v2_clearance_request(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-202-a", "connection_id": "connection-a-b"},
+        )
+        self.assertEqual(next_train["clearance"]["status"], "waiting")
+
+    def test_v2_arrival_leaves_an_unrelated_channel_untouched(self):
+        publication = self.runtime_store.install(runtime_package_v2())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        for station_id, operator_name in (("station-a", "Anna"), ("station-b", "Bertil")):
+            self.application.start_tkl_shift(
+                client, {"station_id": station_id, "operator_name": operator_name, "terminal_name": station_id}
+            )
+
+        requested = self.application.v2_clearance_request(
+            client,
+            {"station_id": "station-a", "movement_id": "movement-101-a", "connection_id": "connection-a-b"},
+        )
+        self.application.v2_clearance_respond(
+            client, {"clearance_id": requested["clearance"]["clearance_id"], "accept": True}
+        )
+        # Train 101 also has a movement back at the departure station. Marking
+        # that one arrived says nothing about the train reaching station-b, so
+        # the clearance must survive: matching on train number alone is not
+        # enough, the arrival has to happen at the clearance's destination.
+        self.application.v2_movement_command(
+            client, {"station_id": "station-a", "movement_id": "movement-101-a", "action": "arrived"}
+        )
+
+        untouched = self.operations_store.clearance(requested["clearance"]["clearance_id"])
+        self.assertEqual(untouched["status"], "approved")
 
     def test_v2_clearance_cancel_frees_the_channel(self):
         publication = self.runtime_store.install(runtime_package_v2())

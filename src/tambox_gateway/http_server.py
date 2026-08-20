@@ -868,6 +868,23 @@ class TamboxHTTPApplication:
             updated_by=actor, shift_id=shift_id,
             event_type=spec["event_type"],
         )
+        if action == "arrived":
+            # The train is physically off the shared line now, so free the
+            # channel its approved clearance was holding busy. The clearance
+            # names the departure movement at the origin station, while this
+            # arrival is a different movement row for the same train, so match
+            # on the train and require the arrival to be at the destination.
+            train_number = str(movement.get("train_number") or "")
+            self.operations_store.complete_clearances_on_arrival(
+                snapshot["publication_id"],
+                snapshot["active_day"],
+                station_id,
+                {
+                    str(train["id"])
+                    for train in snapshot["trains"]
+                    if train_number and str(train.get("train_number") or "") == train_number
+                },
+            )
         return {"movement": result}
 
     def v2_assign_track(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
