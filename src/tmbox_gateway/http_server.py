@@ -1594,6 +1594,7 @@ class TrainMeetHTTPApplication:
             "/assets/app.js": "app.js",
             "/assets/tmbox-render.js": "tmbox-render.js",
             "/assets/tmbox-nav.js": "tmbox-nav.js",
+            "/assets/tmbox-attention.js": "tmbox-attention.js",
             "/trainmeet-logo.png": "trainmeet-logo.png",
         }.get(path)
         if relative is None and path in {

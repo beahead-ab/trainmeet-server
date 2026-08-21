@@ -1,0 +1,32 @@
+# Genererad av dump_attention.cpp - redigera inte for hand.
+
+[en-arbetspass-fran-start-till-svar]
+link:up -> (tyst)
+boot-snapshot-med-vantande-begaran -> (tyst)
+samma-igen -> (tyst)
+ny-begaran-hit -> IncomingRequest:clr-2 | loudest=IncomingRequest
+vi-godkanner-clr-1-sjalva -> (tyst)
+var-egen-begaran-ut -> (tyst)
+den-kom-tillbaka-nekad -> RequestDenied:clr-3 | loudest=RequestDenied
+annu-en-egen-begaran-ut -> (tyst)
+den-kom-tillbaka-godkand -> RequestApproved:clr-4 | loudest=RequestApproved
+begaran-hit-som-strax-aterkallas -> IncomingRequest:clr-5 | loudest=IncomingRequest
+den-aterkallades -> (tyst)
+egen-begaran-som-strax-gar-ut -> (tyst)
+den-gick-ut -> (tyst)
+linjen-ledig-mot-oss -> IncomingTrain:msg-1 | loudest=IncomingTrain
+vart-eget-meddelande-ekar -> (tyst)
+
+[servern-forsvinner-mitt-i-passet]
+link:up -> (tyst)
+boot-snapshot -> (tyst)
+link:down -> ConnectionLost | loudest=ConnectionLost
+link:down-igen -> (tyst)
+link:up -> ConnectionRestored | loudest=ConnectionRestored
+allt-som-hant-under-tiden -> IncomingRequest:clr-9 IncomingTrain:msg-9 | loudest=IncomingRequest
+
+[omtilldelning-borjar-om]
+cda-boot -> (tyst)
+vst-boot-efter-forget -> (tyst)
+link:up-igen-efter-forget -> (tyst)
+ny-begaran-till-vst -> IncomingRequest:clr-6 | loudest=IncomingRequest
