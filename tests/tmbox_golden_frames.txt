@@ -9,6 +9,14 @@
 |KOPPLA BOXEN    |
 |TMBOX-A7K2C3    |
 
+[16x2 loading-station]
+|STATION KOPPLAD |
+|HAMTAR DATA...  |
+
+[16x2 resetting-network]
+|NATVERK RADERAS |
+|TMBOX-A7K2C3    |
+
 [16x2 station-overview]
 |CDA        09:00|
 |2 TAG  C=BLADDRA|
@@ -59,6 +67,14 @@
 
 [20x2 awaiting-assignment]
 |KOPPLA BOXEN        |
+|TMBOX-A7K2C3        |
+
+[20x2 loading-station]
+|STATION KOPPLAD     |
+|HAMTAR DATA...      |
+
+[20x2 resetting-network]
+|NATVERK RADERAS     |
 |TMBOX-A7K2C3        |
 
 [20x2 station-overview]
@@ -113,6 +129,18 @@
 
 [16x4 awaiting-assignment]
 |KOPPLA BOXEN    |
+|TMBOX-A7K2C3    |
+|                |
+|                |
+
+[16x4 loading-station]
+|STATION KOPPLAD |
+|HAMTAR DATA...  |
+|                |
+|                |
+
+[16x4 resetting-network]
+|NATVERK RADERAS |
 |TMBOX-A7K2C3    |
 |                |
 |                |
@@ -191,6 +219,18 @@
 
 [20x4 awaiting-assignment]
 |KOPPLA BOXEN        |
+|TMBOX-A7K2C3        |
+|                    |
+|                    |
+
+[20x4 loading-station]
+|STATION KOPPLAD     |
+|HAMTAR DATA...      |
+|                    |
+|                    |
+
+[20x4 resetting-network]
+|NATVERK RADERAS     |
 |TMBOX-A7K2C3        |
 |                    |
 |                    |

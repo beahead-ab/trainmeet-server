@@ -159,6 +159,10 @@
       case "SeekingServer": lines = ["SOKER SERVER", view.device_code || ""]; break;
       case "ServerGone": lines = ["SERVER BORTA", "FORSOKER IGEN"]; break;
       case "AwaitingAssignment": lines = ["KOPPLA BOXEN", view.device_code || ""]; break;
+      // The station is known but its data has not arrived. An empty overview
+      // would claim there are no trains today, which is a different thing.
+      case "LoadingStation": lines = ["STATION KOPPLAD", "HAMTAR DATA..."]; break;
+      case "ResettingNetwork": lines = ["NATVERK RADERAS", view.device_code || ""]; break;
       case "Sending": lines = ["SKICKAR...", ""]; break;
       case "CommandAccepted": lines = ["KOMMANDO OK", ""]; break;
       case "CommandRejected": lines = ["KOMMANDO NEKAT", rejectionWord(view.reason)]; break;

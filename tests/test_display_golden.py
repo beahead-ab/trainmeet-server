@@ -5,8 +5,17 @@ and a copy lives here. If the two implementations of the TMBox layout ever
 disagree, this fails - which is the whole reason the simulator is allowed to
 render locally at all.
 
-When the layout changes: change it in trainmeet-tmbox first, run `make golden`
-there, copy the file here, then change tmbox-render.js to match.
+Every functional change to TMBox has to reach this simulator. It is where the
+features get tested: the whole command page runs here, in any of the four
+geometries, without a box on the bench.
+
+Order matters - the firmware is the original and the simulator mirrors it:
+
+  1. change lib/tmbox_core/ in trainmeet-tmbox
+  2. make -C firmware/esp32/test_native golden
+  3. copy golden_frames.txt and golden_traces.txt into tests/ here
+  4. mirror the change in tmbox-render.js or tmbox-nav.js
+  5. run this suite - it names the frame or the trace that moved
 """
 
 from __future__ import annotations

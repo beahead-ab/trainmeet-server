@@ -44,6 +44,8 @@ const snapshot = {
 const CASES = [
   ["identity", "Identity", -1],
   ["awaiting-assignment", "AwaitingAssignment", -1],
+  ["loading-station", "LoadingStation", -1],
+  ["resetting-network", "ResettingNetwork", -1],
   ["station-overview", "StationOverview", -1],
   ["movement-departure", "MovementDetail", 0],
   ["movement-arrival", "MovementDetail", 1],
