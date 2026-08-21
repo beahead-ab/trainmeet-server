@@ -165,14 +165,32 @@
       }
 
       case "TrackPicker": {
-        lines.push("VALJ SPAR");
         const tracks = config.tracks || [];
-        if (tracks.length === 0) { lines.push("INGA SPAR"); break; }
+        if (tracks.length === 0) { lines.push("VALJ SPAR"); lines.push("INGA SPAR"); break; }
         const index = view.selected_track >= 0 && view.selected_track < tracks.length
           ? view.selected_track : 0;
-        lines.push(`${tracks[index].display_label}   A=VALJ  C=NASTA`);
+        lines.push(spread("VALJ SPAR", tracks[index].display_label, geometry.cols));
+        lines.push("A=VALJ  C=NASTA");
         if (geometry.rows >= 4) {
           lines.push(`${index + 1} AV ${tracks.length}`);
+          lines.push("*=TILLBAKA");
+        }
+        break;
+      }
+
+      case "ConnectionPicker": {
+        const connections = config.connections || [];
+        if (connections.length === 0) {
+          lines.push("BEGAR MOT"); lines.push("INGEN GRANNE"); break;
+        }
+        const index = view.selected_connection >= 0 && view.selected_connection < connections.length
+          ? view.selected_connection : 0;
+        // A request has to name the line the train is taking; the box does not
+        // invent a choice the operator has to make.
+        lines.push(spread("BEGAR MOT", connections[index].other_station_code, geometry.cols));
+        lines.push("A=BEGAR  C=NASTA");
+        if (geometry.rows >= 4) {
+          lines.push(`${index + 1} AV ${connections.length}`);
           lines.push("*=TILLBAKA");
         }
         break;

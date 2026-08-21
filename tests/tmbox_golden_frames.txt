@@ -22,8 +22,12 @@
 |A=NARMAR        |
 
 [16x2 track-picker]
-|VALJ SPAR       |
-|1A   A=VALJ  C=N|
+|VALJ SPAR     1A|
+|A=VALJ  C=NASTA |
+
+[16x2 connection-picker]
+|BEGAR MOT    VST|
+|A=BEGAR  C=NASTA|
 
 [16x2 clearance-inbox]
 |KLARERING VANTAR|
@@ -62,8 +66,12 @@
 |A=NARMAR            |
 
 [20x2 track-picker]
-|VALJ SPAR           |
-|1A   A=VALJ  C=NASTA|
+|VALJ SPAR         1A|
+|A=VALJ  C=NASTA     |
+
+[20x2 connection-picker]
+|BEGAR MOT        VST|
+|A=BEGAR  C=NASTA    |
 
 [20x2 clearance-inbox]
 |KLARERING VANTAR    |
@@ -112,9 +120,15 @@
 |C=NASTA  *=TILLB|
 
 [16x4 track-picker]
-|VALJ SPAR       |
-|1A   A=VALJ  C=N|
+|VALJ SPAR     1A|
+|A=VALJ  C=NASTA |
 |1 AV 4          |
+|*=TILLBAKA      |
+
+[16x4 connection-picker]
+|BEGAR MOT    VST|
+|A=BEGAR  C=NASTA|
+|1 AV 2          |
 |*=TILLBAKA      |
 
 [16x4 clearance-inbox]
@@ -172,9 +186,15 @@
 |C=NASTA  *=TILLBAKA |
 
 [20x4 track-picker]
-|VALJ SPAR           |
-|1A   A=VALJ  C=NASTA|
+|VALJ SPAR         1A|
+|A=VALJ  C=NASTA     |
 |1 AV 4              |
+|*=TILLBAKA          |
+
+[20x4 connection-picker]
+|BEGAR MOT        VST|
+|A=BEGAR  C=NASTA    |
+|1 AV 2              |
 |*=TILLBAKA          |
 
 [20x4 clearance-inbox]

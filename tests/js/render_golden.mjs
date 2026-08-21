@@ -48,6 +48,7 @@ const CASES = [
   ["movement-departure", "MovementDetail", 0],
   ["movement-arrival", "MovementDetail", 1],
   ["track-picker", "TrackPicker", 0],
+  ["connection-picker", "ConnectionPicker", 0],
   ["clearance-inbox", "ClearanceInbox", 0],
   ["line-inbox", "LineInbox", 0],
   ["command-accepted", "CommandAccepted", -1],
@@ -69,7 +70,7 @@ for (const [geometryName, geometry] of GEOMETRIES) {
   for (const [caseName, screen, movement] of CASES) {
     const view = {
       screen, device_code: "TMBOX-A7K2C3", selected_movement: movement,
-      selected_track: 0, selected_case: 0, reason: "spar_upptaget",
+      selected_track: 0, selected_connection: 0, selected_case: 0, reason: "spar_upptaget",
     };
     out.push("", `[${geometryName} ${caseName}]`);
     for (const line of render(geometry, view, config, snapshot)) out.push(`|${line}|`);

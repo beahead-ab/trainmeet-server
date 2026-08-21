@@ -18,25 +18,27 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 GOLDEN = Path(__file__).resolve().parent / "tmbox_golden_frames.txt"
-HARNESS = Path(__file__).resolve().parent / "js" / "render_golden.mjs"
+FRAME_HARNESS = Path(__file__).resolve().parent / "js" / "render_golden.mjs"
+TRACES = Path(__file__).resolve().parent / "tmbox_golden_traces.txt"
+TRACE_HARNESS = Path(__file__).resolve().parent / "js" / "nav_traces.mjs"
 
 
 class DisplayGoldenTests(unittest.TestCase):
-    def test_the_web_renderer_reproduces_the_firmware_frames(self):
+    def _compare(self, harness: Path, golden: Path, what: str) -> None:
         node = shutil.which("node")
         if node is None:
             self.skipTest("node saknas")
         result = subprocess.run(
-            [node, str(HARNESS)], capture_output=True, text=True, cwd=str(ROOT), timeout=60
+            [node, str(harness)], capture_output=True, text=True, cwd=str(ROOT), timeout=60
         )
         self.assertEqual(0, result.returncode, result.stderr)
 
-        expected = GOLDEN.read_text(encoding="utf-8").splitlines()
+        expected = golden.read_text(encoding="utf-8").splitlines()
         actual = result.stdout.splitlines()
         if expected == actual:
             return
 
-        # A raw assertEqual on 200 lines is unreadable. Say which frame moved.
+        # A raw assertEqual on hundreds of lines is unreadable. Say what moved.
         for index, (want, got) in enumerate(zip(expected, actual)):
             if want != got:
                 context = next(
@@ -44,11 +46,18 @@ class DisplayGoldenTests(unittest.TestCase):
                     "?",
                 )
                 self.fail(
-                    f"{context} skiljer sig pa rad {index + 1}:\n"
+                    f"{what} {context} skiljer sig pa rad {index + 1}:\n"
                     f"  firmware: {want}\n"
                     f"  webb:     {got}"
                 )
-        self.fail(f"olika antal rader: firmware {len(expected)}, webb {len(actual)}")
+        self.fail(f"{what}: olika antal rader, firmware {len(expected)}, webb {len(actual)}")
+
+    def test_the_web_renderer_reproduces_the_firmware_frames(self):
+        self._compare(FRAME_HARNESS, GOLDEN, "ruta")
+
+    def test_the_web_navigation_answers_what_the_firmware_answers(self):
+        """Same key sequences, same screens, same commands - or this fails."""
+        self._compare(TRACE_HARNESS, TRACES, "spar")
 
     def test_every_golden_line_is_as_wide_as_its_geometry_says(self):
         """A guard on the file itself, in case it is ever hand-edited."""

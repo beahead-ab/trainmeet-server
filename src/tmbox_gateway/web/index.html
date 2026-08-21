@@ -620,43 +620,36 @@
             <div>
               <p class="eyebrow">TESTKLIENT · PROTOKOLL V2</p>
               <h2>TMBox v2</h2>
-              <p>Står in för en fysisk box: läser tilldelning, konfiguration och läge, och skickar kompletta kommandon. Samma trådkontrakt som ESP32:an, utan hårdvara.</p>
+              <p>Samma display, tangenter och lokala logik som en fysisk box. Skärmarna ritas av samma renderare som firmwaren, och tangenterna går genom samma tillståndsmaskin.</p>
             </div>
             <div class="panel-picker card">
               <label for="tmbox-v2-device">Enhet</label>
               <input id="tmbox-v2-device" type="text" placeholder="TMBOX-A7K2C3" maxlength="32" autocomplete="off">
               <label for="tmbox-v2-station">Station</label>
               <select id="tmbox-v2-station"></select>
+              <label for="tmbox-v2-geometry">Display</label>
+              <select id="tmbox-v2-geometry">
+                <option value="16x2">16 tecken × 2 rader</option>
+                <option value="20x2">20 tecken × 2 rader</option>
+                <option value="16x4">16 tecken × 4 rader</option>
+                <option value="20x4">20 tecken × 4 rader</option>
+              </select>
             </div>
           </div>
 
-          <div class="card tmbox-v2-assignment">
-            <h3>Tilldelning</h3>
-            <p id="tmbox-v2-assignment-state" class="tmbox-v2-assignment-state">Ange en enhet för att läsa dess tilldelning.</p>
-          </div>
-
-          <div class="card">
-            <h3>Rörelser på stationen</h3>
-            <p class="tmbox-v2-hint">Knapparna kommer från serverns <code>allowed_actions</code> — samma lista boxen får. Finns ingen knapp är handlingen inte tillåten just nu.</p>
-            <ul id="tmbox-v2-movements" class="tmbox-v2-movements"></ul>
-          </div>
-
-          <div class="card">
-            <h3>Öppna klareringsärenden</h3>
-            <ul id="tmbox-v2-clearances" class="tmbox-v2-cases"></ul>
-          </div>
-
-          <div class="card">
-            <h3>Linjen är ledig</h3>
-            <ul id="tmbox-v2-line-messages" class="tmbox-v2-cases"></ul>
-          </div>
-
-          <div class="card tmbox-v2-wire">
-            <h3>Senaste kvittens</h3>
-            <pre id="tmbox-v2-ack" class="tmbox-v2-ack">—</pre>
-          </div>
+          <article class="tmbox-case">
+            <div class="lcd-module">
+              <div id="lcd-v2" class="lcd" aria-label="TMBox v2 display"></div>
+            </div>
+            <div id="keypad-v2" class="keypad" aria-label="TMBox v2 tangentbord"></div>
+          </article>
 
           <p id="tmbox-v2-message" class="command-message" role="status"></p>
+
+          <details class="card tmbox-v2-wire">
+            <summary>Senaste kvittens från servern</summary>
+            <pre id="tmbox-v2-ack" class="tmbox-v2-ack">—</pre>
+          </details>
         </section>
 
         <section id="displays-view" class="view-panel hidden">
@@ -789,6 +782,10 @@
         </div>
       </section>
     </main>
-    <script src="/assets/app.js?v=20260813-3" defer></script>
+    <!-- The layout and the state machine, mirrored from the firmware and held
+         to it by golden_frames.txt and golden_traces.txt. -->
+    <script src="/assets/tmbox-render.js?v=20260821-1" defer></script>
+    <script src="/assets/tmbox-nav.js?v=20260821-1" defer></script>
+    <script src="/assets/app.js?v=20260821-1" defer></script>
   </body>
 </html>
