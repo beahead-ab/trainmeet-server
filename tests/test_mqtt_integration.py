@@ -20,6 +20,16 @@ from tmbox_gateway.models import DispatchMode
 from tmbox_gateway.mqtt_adapter import MQTTGatewayAdapter
 
 
+# These are waits for a condition, not sleeps: the wait returns the moment the
+# message arrives, so a generous ceiling costs a healthy run nothing at all.
+# Locally these tests finish in about half a second. The old five-second
+# ceiling was ten times that and still ran out on a CI runner where the whole
+# suite took 49 seconds rather than the usual twenty - a test that fails
+# because the machine was busy teaches nobody anything.
+MESSAGE_TIMEOUT = 30
+BROKER_START_TIMEOUT = 30
+
+
 class MQTTIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -36,7 +46,7 @@ class MQTTIntegrationTests(unittest.TestCase):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + BROKER_START_TIMEOUT
         while time.monotonic() < deadline:
             try:
                 with socket.create_connection(("127.0.0.1", cls.port), timeout=0.2):
@@ -50,7 +60,10 @@ class MQTTIntegrationTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.broker.terminate()
-        cls.broker.wait(timeout=5)
+        # Same argument on the way out: the broker normally dies at once, so
+        # waiting longer for it costs nothing and avoids failing a run in
+        # teardown, after every assertion has already passed.
+        cls.broker.wait(timeout=BROKER_START_TIMEOUT)
 
     def test_qos1_command_returns_ack_and_retained_snapshot(self):
         engine = TrafficEngine(sample_session(DispatchMode.CLEARANCE))
@@ -110,7 +123,7 @@ class MQTTIntegrationTests(unittest.TestCase):
         reconnected_client = None
 
         try:
-            self.assertTrue(snapshot_event.wait(5), "initial retained snapshot was not received")
+            self.assertTrue(snapshot_event.wait(MESSAGE_TIMEOUT), "initial retained snapshot was not received")
             now = datetime.now(timezone.utc)
             command = {
                 "protocol_version": 1,
@@ -131,7 +144,7 @@ class MQTTIntegrationTests(unittest.TestCase):
                 retain=False,
             )
             self.assertEqual(info.rc, mqtt.MQTT_ERR_SUCCESS)
-            self.assertTrue(ack_event.wait(5), "command acknowledgement was not received")
+            self.assertTrue(ack_event.wait(MESSAGE_TIMEOUT), "command acknowledgement was not received")
             self.assertEqual(received["ack"]["status"], "accepted")
             self.assertEqual(received["ack"]["revision"], 1)
             self.assertEqual(
@@ -150,7 +163,7 @@ class MQTTIntegrationTests(unittest.TestCase):
                 qos=1,
                 retain=False,
             )
-            self.assertTrue(ack_event.wait(5), "duplicate acknowledgement was not received")
+            self.assertTrue(ack_event.wait(MESSAGE_TIMEOUT), "duplicate acknowledgement was not received")
             self.assertEqual(received["ack"]["status"], "duplicate")
             self.assertEqual(received["ack"]["revision"], 1)
 
@@ -166,7 +179,7 @@ class MQTTIntegrationTests(unittest.TestCase):
             reconnected_client.on_message = on_message
             reconnected_client.connect("127.0.0.1", self.port, keepalive=10, clean_start=True)
             reconnected_client.loop_start()
-            self.assertTrue(snapshot_event.wait(5), "snapshot was not restored after reconnect")
+            self.assertTrue(snapshot_event.wait(MESSAGE_TIMEOUT), "snapshot was not restored after reconnect")
             self.assertEqual(received["snapshot"]["revision"], 1)
             self.assertEqual(received["snapshot"]["interaction"]["mode"], "enter_train")
         finally:
@@ -239,7 +252,7 @@ class MQTTIntegrationTests(unittest.TestCase):
         device.loop_start()
 
         try:
-            self.assertTrue(assignment_event.wait(5), "box discovery was not acknowledged")
+            self.assertTrue(assignment_event.wait(MESSAGE_TIMEOUT), "box discovery was not acknowledged")
             self.assertEqual(received["assignment"]["status"], "waiting_for_assignment")
             self.assertEqual(identities.discovered_devices()[0].device_code, "TBX-A7K2")
 
@@ -247,10 +260,10 @@ class MQTTIntegrationTests(unittest.TestCase):
             assignment_event.clear()
             publish_hello(device)
 
-            self.assertTrue(assignment_event.wait(5), "assigned box did not get its mapping")
+            self.assertTrue(assignment_event.wait(MESSAGE_TIMEOUT), "assigned box did not get its mapping")
             self.assertEqual(received["assignment"]["status"], "assigned")
             self.assertEqual(received["assignment"]["assigned_panel_ids"], ["panel-b"])
-            self.assertTrue(snapshot_event.wait(5), "assigned box did not get its panel")
+            self.assertTrue(snapshot_event.wait(MESSAGE_TIMEOUT), "assigned box did not get its panel")
             self.assertEqual(received["snapshot"]["panel_id"], "panel-b")
         finally:
             device.disconnect()
