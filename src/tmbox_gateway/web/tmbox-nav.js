@@ -29,6 +29,13 @@
     return "";
   }
 
+  /** A train number is at most five digits; more is a slipped finger. */
+  const MAX_TRAIN_DIGITS = 5;
+
+  function indexOfMovement(snapshot, movementId) {
+    return (snapshot.movements || []).findIndex((entry) => entry.id === movementId);
+  }
+
   function nextIndex(current, count) {
     return count === 0 ? -1 : (current + 1) % count;
   }
@@ -42,6 +49,9 @@
         selected_movement: -1,
         selected_track: 0,
         selected_connection: 0,
+        lookup_digits: "",
+        lookup_matches: [],
+        selected_match: 0,
         selected_case: 0,
         reason: "",
       };
@@ -58,6 +68,26 @@
       this.view.screen = screen;
       this.screenChangedAt = nowMs;
       this.everShown = true;
+    }
+
+    /** Take the server's answer to a train.lookup.
+
+        One match goes straight to that train - making the operator choose
+        from a list of one is a keypress that carries no information. */
+    applyLookup(snapshot, matches, nowMs) {
+      this.view.lookup_matches = matches;
+      this.view.selected_match = 0;
+      if (matches.length === 1) {
+        const index = indexOfMovement(snapshot, matches[0].movement_id);
+        if (index >= 0) {
+          this.view.selected_movement = index;
+          this.view.lookup_digits = "";
+          this.view.lookup_matches = [];
+          this.show("MovementDetail", nowMs);
+          return;
+        }
+      }
+      this.show("LookupResults", nowMs);
     }
 
     /** A fresh snapshot replaces the cache wholesale, so a selection that no
@@ -104,7 +134,20 @@
         }
         this.view.selected_movement = -1;
         this.view.selected_case = 0;
+        this.view.lookup_digits = "";
+        this.view.lookup_matches = [];
         this.show("StationOverview", nowMs);
+        return { outcome: "Redraw", command: null };
+      }
+
+      // A digit is always the start of a train number, wherever the operator
+      // is. Nothing else on the keypad means a digit.
+      if (key >= "0" && key <= "9") {
+        if (this.view.screen !== "TrainLookup") {
+          this.view.lookup_digits = "";
+          this.show("TrainLookup", nowMs);
+        }
+        if (this.view.lookup_digits.length < MAX_TRAIN_DIGITS) this.view.lookup_digits += key;
         return { outcome: "Redraw", command: null };
       }
 
@@ -177,6 +220,44 @@
                 track_id: tracks[this.view.selected_track].id,
               },
             };
+          }
+          return ignored;
+        }
+
+        case "TrainLookup": {
+          if (key === "B") {
+            if (!this.view.lookup_digits) return ignored;
+            this.view.lookup_digits = this.view.lookup_digits.slice(0, -1);
+            return { outcome: "Redraw", command: null };
+          }
+          if (key === "A") {
+            if (!this.view.lookup_digits) return ignored;
+            return {
+              outcome: "Send",
+              command: { action: "train.lookup", train_number: this.view.lookup_digits },
+            };
+          }
+          return ignored;
+        }
+
+        case "LookupResults": {
+          const found = this.view.lookup_matches || [];
+          if (found.length === 0) return ignored;
+          if (key === "C") {
+            this.view.selected_match = nextIndex(this.view.selected_match, found.length);
+            this.screenChangedAt = nowMs;
+            return { outcome: "Redraw", command: null };
+          }
+          // Choosing which movement to look at changes nothing, so `#` may.
+          if (key === "#") {
+            const index = this.view.selected_match < found.length ? this.view.selected_match : 0;
+            const movement = indexOfMovement(snapshot, found[index].movement_id);
+            if (movement < 0) return ignored;
+            this.view.selected_movement = movement;
+            this.view.lookup_digits = "";
+            this.view.lookup_matches = [];
+            this.show("MovementDetail", nowMs);
+            return { outcome: "Redraw", command: null };
           }
           return ignored;
         }

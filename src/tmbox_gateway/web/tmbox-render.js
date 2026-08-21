@@ -96,8 +96,39 @@
       case "rejected": return "EJ KLART";
       case "cancelled": return "ATERTAGEN";
       case "expired": return "UTGANGEN";
-      default: return transliterate(status || "");
+      // frameOf folds Swedish where the display needs it, and it is the only
+      // place that should - folding here strips the vowels even on a display
+      // that carries them.
+      default: return status || "";
     }
+  }
+
+  /** Why a command was refused, in words the person holding the box reads. */
+  const REFUSALS = {
+    unknown_train_number: "FINNS EJ IDAG",
+    missing_train_number: "SAKNAR NUMMER",
+    unknown_movement: "TAGET FINNS EJ",
+    unknown_track: "SPARET FINNS EJ",
+    unknown_connection: "INGEN SADAN LINJE",
+    channel_occupied: "LINJEN UPPTAGEN",
+    clearance_not_pending: "REDAN AVGJORD",
+    already_acknowledged: "REDAN KVITTERAD",
+    unknown_clearance: "ARENDET AR BORTA",
+    unknown_message: "ARENDET AR BORTA",
+    not_receiver: "EJ ER FRAGA",
+    not_sender: "EJ ER BEGARAN",
+    not_assigned: "BOXEN EJ KOPPLAD",
+    station_mismatch: "FEL STATION",
+    stale_revision: "LAGET HAR ANDRATS",
+    invalid_revision: "LAGET HAR ANDRATS",
+    no_active_configuration: "INGEN TRAFF",
+    unsupported_protocol: "FEL PROTOKOLL",
+    unknown_action: "OKANT KOMMANDO",
+  };
+
+  function rejectionWord(reason) {
+    // An unmapped reason still reaches the display rather than vanishing.
+    return REFUSALS[reason] || reason || "";
   }
 
   /** The station's own code, not the id it carries internally. */
@@ -130,7 +161,7 @@
       case "AwaitingAssignment": lines = ["KOPPLA BOXEN", view.device_code || ""]; break;
       case "Sending": lines = ["SKICKAR...", ""]; break;
       case "CommandAccepted": lines = ["KOMMANDO OK", ""]; break;
-      case "CommandRejected": lines = ["KOMMANDO NEKAT", view.reason || ""]; break;
+      case "CommandRejected": lines = ["KOMMANDO NEKAT", rejectionWord(view.reason)]; break;
 
       case "StationOverview": {
         const clock = (snapshot.clock && snapshot.clock.time) || "--:--";
@@ -191,6 +222,35 @@
         lines.push("A=BEGAR  C=NASTA");
         if (geometry.rows >= 4) {
           lines.push(`${index + 1} AV ${connections.length}`);
+          lines.push("*=TILLBAKA");
+        }
+        break;
+      }
+
+      case "TrainLookup": {
+        // The cursor shows there is more to type; an empty field still says so.
+        lines.push(spread("TAG", `${view.lookup_digits || ""}_`, geometry.cols));
+        lines.push("A=SOK  B=SUDDA");
+        if (geometry.rows >= 4) {
+          lines.push("SIFFROR PA TANGENT");
+          lines.push("*=AVBRYT");
+        }
+        break;
+      }
+
+      case "LookupResults": {
+        const found = view.lookup_matches || [];
+        if (found.length === 0) { lines = ["INGEN TRAFF", "*=TILLBAKA"]; break; }
+        const index = view.selected_match >= 0 && view.selected_match < found.length
+          ? view.selected_match : 0;
+        const match = found[index];
+        lines.push(`${match.train_number} ${found.length} TRAFFAR`);
+        // Choosing which movement to look at is not an operative decision.
+        lines.push("C=NASTA #=VALJ");
+        if (geometry.rows >= 4) {
+          const time = match.departure_time || match.arrival_time || "";
+          const what = match.departure_time ? "AVG" : "ANK";
+          lines.push(spread(`${what} ${time}`, `${index + 1}/${found.length}`, geometry.cols));
           lines.push("*=TILLBAKA");
         }
         break;

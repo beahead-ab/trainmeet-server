@@ -3469,6 +3469,16 @@ async function pressV2Key(key) {
     });
     const ack = await response.json();
     v2El("ack").textContent = JSON.stringify(ack, null, 2);
+
+    // A lookup answers rather than changes anything, so it lands on a screen
+    // instead of flashing KOMMANDO OK past the operator.
+    if (result.command.action === "train.lookup" && ack.status !== "rejected") {
+      nav.applyLookup(tmboxV2.snapshot, (ack.result && ack.result.matches) || [], v2Now());
+      drawV2();
+      tmboxV2.busy = false;
+      return;
+    }
+
     if (ack.status === "rejected") {
       nav.view.reason = ack.reason || "okant fel";
       nav.show("CommandRejected", v2Now());
@@ -3498,6 +3508,7 @@ async function pressV2Key(key) {
     every one of them as unknown_connection. */
 const V2_PAYLOAD_FIELDS = [
   "movement_id", "track_id", "connection_id", "clearance_id", "message_id",
+  "train_number",
 ];
 
 function v2Payload(command) {

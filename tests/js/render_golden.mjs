@@ -49,6 +49,8 @@ const CASES = [
   ["movement-arrival", "MovementDetail", 1],
   ["track-picker", "TrackPicker", 0],
   ["connection-picker", "ConnectionPicker", 0],
+  ["train-lookup", "TrainLookup", -1],
+  ["lookup-results", "LookupResults", -1],
   ["clearance-inbox", "ClearanceInbox", 0],
   ["line-inbox", "LineInbox", 0],
   ["command-accepted", "CommandAccepted", -1],
@@ -70,7 +72,14 @@ for (const [geometryName, geometry] of GEOMETRIES) {
   for (const [caseName, screen, movement] of CASES) {
     const view = {
       screen, device_code: "TMBOX-A7K2C3", selected_movement: movement,
-      selected_track: 0, selected_connection: 0, selected_case: 0, reason: "spar_upptaget",
+      selected_track: 0, selected_connection: 0, selected_case: 0, reason: "unknown_train_number",
+      lookup_digits: "42", selected_match: 0,
+      lookup_matches: [
+        { movement_id: "movement-421-cda", train_number: "421", arrival_time: "",
+          departure_time: "09:20", track_id: "track-cda-1b" },
+        { movement_id: "movement-428-cda", train_number: "421", arrival_time: "09:41",
+          departure_time: "", track_id: "track-cda-2a" },
+      ],
     };
     out.push("", `[${geometryName} ${caseName}]`);
     for (const line of render(geometry, view, config, snapshot)) out.push(`|${line}|`);

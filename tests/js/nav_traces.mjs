@@ -54,13 +54,14 @@ function run(name, keys, snapshot, allowed, step) {
     now += step;
     let line = `${key} -> ${result.outcome} screen=${nav.view.screen}`
       + ` move=${nav.view.selected_movement} track=${nav.view.selected_track}`
-      + ` conn=${nav.view.selected_connection} case=${nav.view.selected_case}`;
+      + ` conn=${nav.view.selected_connection}` + ` digits=${nav.view.lookup_digits || "-"}` + ` case=${nav.view.selected_case}`;
     if (result.outcome === "Send") {
       const command = result.command;
       line += ` action=${command.action}`;
       if (command.movement_id) line += ` movement=${command.movement_id}`;
       if (command.track_id) line += ` track_id=${command.track_id}`;
       if (command.connection_id) line += ` connection=${command.connection_id}`;
+      if (command.train_number) line += ` train=${command.train_number}`;
       if (command.clearance_id) line += ` clearance=${command.clearance_id}`;
       if (command.message_id) line += ` message=${command.message_id}`;
       if (command.has_approved) line += ` approved=${command.approved ? "1" : "0"}`;
@@ -85,6 +86,7 @@ run("star-always-returns", "C#*", withCases(), [], UNHURRIED);
 run("nothing-allowed-stays-silent", "CA", twoMovements(), ["train.track.change"], UNHURRIED);
 
 run("clearance-request-picks-the-neighbour", "CACA", twoMovements(), ["clearance.request"], UNHURRIED);
+run("digits-look-up-a-train", "421BA", twoMovements(), [], UNHURRIED);
 run("hurried-presses-are-swallowed", "CCA", twoMovements(), ["train.position.set"], HURRIED);
 run("hurried-clearance-answer-is-swallowed", "#A", withCases(), [], HURRIED);
 
