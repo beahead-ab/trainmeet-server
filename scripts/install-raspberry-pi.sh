@@ -88,7 +88,12 @@ systemctl daemon-reload
 systemctl enable --now avahi-daemon.service
 systemctl enable --now mosquitto.service
 systemctl restart mosquitto.service
-systemctl enable --now trainmeet-server.service
+# `enable --now` starts the service only when it is not already running, so
+# on an update it does nothing at all and the old process keeps serving. That
+# is why an update could report success while the running code was stale.
+# mosquitto above has always had its explicit restart; this one was missed.
+systemctl enable trainmeet-server.service
+systemctl restart trainmeet-server.service
 
 sleep 2
 if ! systemctl is-active --quiet trainmeet-server.service; then
