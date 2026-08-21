@@ -3317,8 +3317,14 @@ async function loadV2Stations() {
   const station = v2El("station");
   try {
     const response = await authorizedFetch("/v1/tmbox-v2/stations");
-    if (!response.ok) return;
-    const body = await response.json();
+    const body = await response.json().catch(() => ({}));
+    // The server says why it will not run - no active meet, or a client
+    // without admin rights - and dropping that left an empty station list
+    // with no explanation, which looks exactly like a broken simulator.
+    if (!response.ok) {
+      station.innerHTML = "";
+      throw new Error(body.message || "Stationerna kunde inte hämtas");
+    }
     const remembered = localStorage.getItem("trainmeet.v2Station");
     station.innerHTML = "";
     for (const entry of body.stations || []) {
@@ -3374,6 +3380,12 @@ async function refreshTMBoxV2() {
     const response = await authorizedFetch(
       `/v1/tmbox-v2/snapshot?station_id=${encodeURIComponent(stationID)}`);
     if (!response.ok) {
+      // The box has no authoritative state either way, so the screen is
+      // honest. But the reason is the server's to give, not ours to guess:
+      // an unknown station, a missing meet and a client without admin all
+      // land here and are not the same thing.
+      const body = await response.json().catch(() => ({}));
+      setMessage(v2El("message"), body.message || "Läget kunde inte hämtas", "error");
       nav.show("ServerGone", v2Now());
       drawV2();
       return;
