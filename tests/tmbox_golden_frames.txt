@@ -1,0 +1,302 @@
+# Genererad av dump_golden.cpp - redigera inte for hand.
+# Varje rad ar exakt sa bred som geometrin sager.
+
+[16x2 identity]
+|TRAINMEET TMBOX |
+|TMBOX-A7K2C3    |
+
+[16x2 awaiting-assignment]
+|KOPPLA BOXEN    |
+|TMBOX-A7K2C3    |
+
+[16x2 loading-station]
+|STATION KOPPLAD |
+|HAMTAR DATA...  |
+
+[16x2 resetting-network]
+|NATVERK RADERAS |
+|TMBOX-A7K2C3    |
+
+[16x2 station-overview]
+|CDA        09:00|
+|2 TAG  C=BLADDRA|
+
+[16x2 movement-departure]
+|421>[1B]   09:20|
+|A=UPP           |
+
+[16x2 movement-arrival]
+|[2A]<428   09:41|
+|A=NARMAR        |
+
+[16x2 track-picker]
+|VALJ SPAR     1A|
+|A=VALJ  C=NASTA |
+
+[16x2 connection-picker]
+|BEGAR MOT    VST|
+|A=BEGAR  C=NASTA|
+
+[16x2 train-lookup]
+|TAG          42_|
+|A=SOK  B=SUDDA  |
+
+[16x2 lookup-results]
+|421 2 TRAFFAR   |
+|C=NASTA #=VALJ  |
+
+[16x2 clearance-inbox]
+|KLARERING VANTAR|
+|A=KLART  B=EJ   |
+
+[16x2 line-inbox]
+|LINJEN LEDIG    |
+|A=KVITTERA      |
+
+[16x2 command-accepted]
+|KOMMANDO OK     |
+|                |
+
+[16x2 command-rejected]
+|KOMMANDO NEKAT  |
+|FINNS EJ IDAG   |
+
+[20x2 identity]
+|TRAINMEET TMBOX     |
+|TMBOX-A7K2C3        |
+
+[20x2 awaiting-assignment]
+|KOPPLA BOXEN        |
+|TMBOX-A7K2C3        |
+
+[20x2 loading-station]
+|STATION KOPPLAD     |
+|HAMTAR DATA...      |
+
+[20x2 resetting-network]
+|NATVERK RADERAS     |
+|TMBOX-A7K2C3        |
+
+[20x2 station-overview]
+|CDA            09:00|
+|2 TAG  C=BLADDRA    |
+
+[20x2 movement-departure]
+|421>[1B]       09:20|
+|A=UPP               |
+
+[20x2 movement-arrival]
+|[2A]<428       09:41|
+|A=NARMAR            |
+
+[20x2 track-picker]
+|VALJ SPAR         1A|
+|A=VALJ  C=NASTA     |
+
+[20x2 connection-picker]
+|BEGAR MOT        VST|
+|A=BEGAR  C=NASTA    |
+
+[20x2 train-lookup]
+|TAG              42_|
+|A=SOK  B=SUDDA      |
+
+[20x2 lookup-results]
+|421 2 TRAFFAR       |
+|C=NASTA #=VALJ      |
+
+[20x2 clearance-inbox]
+|KLARERING VANTAR    |
+|A=KLART  B=EJ       |
+
+[20x2 line-inbox]
+|LINJEN LEDIG        |
+|A=KVITTERA          |
+
+[20x2 command-accepted]
+|KOMMANDO OK         |
+|                    |
+
+[20x2 command-rejected]
+|KOMMANDO NEKAT      |
+|FINNS EJ IDAG       |
+
+[16x4 identity]
+|TRAINMEET TMBOX |
+|TMBOX-A7K2C3    |
+|                |
+|                |
+
+[16x4 awaiting-assignment]
+|KOPPLA BOXEN    |
+|TMBOX-A7K2C3    |
+|                |
+|                |
+
+[16x4 loading-station]
+|STATION KOPPLAD |
+|HAMTAR DATA...  |
+|                |
+|                |
+
+[16x4 resetting-network]
+|NATVERK RADERAS |
+|TMBOX-A7K2C3    |
+|                |
+|                |
+
+[16x4 station-overview]
+|CDA        09:00|
+|2 TAG  C=BLADDRA|
+|09:20 421>[1B]  |
+|09:41 [2A]<428  |
+
+[16x4 movement-departure]
+|421>[1B]   09:20|
+|A=UPP           |
+|FORARE SAKNAS   |
+|C=NASTA  *=TILLB|
+
+[16x4 movement-arrival]
+|[2A]<428   09:41|
+|A=NARMAR        |
+|FORARE SAKNAS   |
+|C=NASTA  *=TILLB|
+
+[16x4 track-picker]
+|VALJ SPAR     1A|
+|A=VALJ  C=NASTA |
+|1 AV 4          |
+|*=TILLBAKA      |
+
+[16x4 connection-picker]
+|BEGAR MOT    VST|
+|A=BEGAR  C=NASTA|
+|1 AV 2          |
+|*=TILLBAKA      |
+
+[16x4 train-lookup]
+|TAG          42_|
+|A=SOK  B=SUDDA  |
+|SIFFROR PA TANGE|
+|*=AVBRYT        |
+
+[16x4 lookup-results]
+|421 2 TRAFFAR   |
+|C=NASTA #=VALJ  |
+|AVG 09:20    1/2|
+|*=TILLBAKA      |
+
+[16x4 clearance-inbox]
+|KLARERING VANTAR|
+|A=KLART  B=EJ   |
+|FRAN VST        |
+|1 AV 1  *=TILLBA|
+
+[16x4 line-inbox]
+|LINJEN LEDIG    |
+|A=KVITTERA      |
+|FRAN VST        |
+|*=TILLBAKA      |
+
+[16x4 command-accepted]
+|KOMMANDO OK     |
+|                |
+|                |
+|                |
+
+[16x4 command-rejected]
+|KOMMANDO NEKAT  |
+|FINNS EJ IDAG   |
+|                |
+|                |
+
+[20x4 identity]
+|TRAINMEET TMBOX     |
+|TMBOX-A7K2C3        |
+|                    |
+|                    |
+
+[20x4 awaiting-assignment]
+|KOPPLA BOXEN        |
+|TMBOX-A7K2C3        |
+|                    |
+|                    |
+
+[20x4 loading-station]
+|STATION KOPPLAD     |
+|HAMTAR DATA...      |
+|                    |
+|                    |
+
+[20x4 resetting-network]
+|NATVERK RADERAS     |
+|TMBOX-A7K2C3        |
+|                    |
+|                    |
+
+[20x4 station-overview]
+|CDA            09:00|
+|2 TAG  C=BLADDRA    |
+|09:20 421>[1B]      |
+|09:41 [2A]<428      |
+
+[20x4 movement-departure]
+|421>[1B]       09:20|
+|A=UPP               |
+|FORARE SAKNAS       |
+|C=NASTA  *=TILLBAKA |
+
+[20x4 movement-arrival]
+|[2A]<428       09:41|
+|A=NARMAR            |
+|FORARE SAKNAS       |
+|C=NASTA  *=TILLBAKA |
+
+[20x4 track-picker]
+|VALJ SPAR         1A|
+|A=VALJ  C=NASTA     |
+|1 AV 4              |
+|*=TILLBAKA          |
+
+[20x4 connection-picker]
+|BEGAR MOT        VST|
+|A=BEGAR  C=NASTA    |
+|1 AV 2              |
+|*=TILLBAKA          |
+
+[20x4 train-lookup]
+|TAG              42_|
+|A=SOK  B=SUDDA      |
+|SIFFROR PA TANGENT  |
+|*=AVBRYT            |
+
+[20x4 lookup-results]
+|421 2 TRAFFAR       |
+|C=NASTA #=VALJ      |
+|AVG 09:20        1/2|
+|*=TILLBAKA          |
+
+[20x4 clearance-inbox]
+|KLARERING VANTAR    |
+|A=KLART  B=EJ       |
+|FRAN VST            |
+|1 AV 1  *=TILLBAKA  |
+
+[20x4 line-inbox]
+|LINJEN LEDIG        |
+|A=KVITTERA          |
+|FRAN VST            |
+|*=TILLBAKA          |
+
+[20x4 command-accepted]
+|KOMMANDO OK         |
+|                    |
+|                    |
+|                    |
+
+[20x4 command-rejected]
+|KOMMANDO NEKAT      |
+|FINNS EJ IDAG       |
+|                    |
+|                    |

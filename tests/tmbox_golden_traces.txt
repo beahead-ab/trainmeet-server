@@ -1,0 +1,63 @@
+# Genererad av dump_traces.cpp - redigera inte for hand.
+
+[browse-and-position]
+C -> Redraw screen=MovementDetail move=0 track=0 conn=0 digits=- case=0
+C -> Redraw screen=MovementDetail move=1 track=0 conn=0 digits=- case=0
+A -> Send screen=MovementDetail move=1 track=0 conn=0 digits=- case=0 action=train.approaching movement=movement-428-cda
+* -> Redraw screen=StationOverview move=-1 track=0 conn=0 digits=- case=0
+
+[track-change-refused-then-allowed]
+C -> Redraw screen=MovementDetail move=0 track=0 conn=0 digits=- case=0
+B -> Ignored screen=MovementDetail move=0 track=0 conn=0 digits=- case=0
+A -> Send screen=MovementDetail move=0 track=0 conn=0 digits=- case=0 action=train.position.set movement=movement-421-cda
+
+[track-picker-picks-second]
+C -> Redraw screen=MovementDetail move=0 track=0 conn=0 digits=- case=0
+B -> Redraw screen=TrackPicker move=0 track=0 conn=0 digits=- case=0
+C -> Redraw screen=TrackPicker move=0 track=1 conn=0 digits=- case=0
+A -> Send screen=TrackPicker move=0 track=1 conn=0 digits=- case=0 action=train.track.change movement=movement-421-cda track_id=track-cda-1b
+
+[hash-opens-clearance-and-a-settles]
+# -> Redraw screen=ClearanceInbox move=-1 track=0 conn=0 digits=- case=0
+A -> Send screen=ClearanceInbox move=-1 track=0 conn=0 digits=- case=0 action=clearance.response clearance=clr-1 approved=1
+
+[hash-then-b-refuses]
+# -> Redraw screen=ClearanceInbox move=-1 track=0 conn=0 digits=- case=0
+B -> Send screen=ClearanceInbox move=-1 track=0 conn=0 digits=- case=0 action=clearance.response clearance=clr-1 approved=0
+
+[line-message-only-acknowledges]
+# -> Redraw screen=ClearanceInbox move=-1 track=0 conn=0 digits=- case=0
+# -> Ignored screen=ClearanceInbox move=-1 track=0 conn=0 digits=- case=0
+A -> Send screen=ClearanceInbox move=-1 track=0 conn=0 digits=- case=0 action=clearance.response clearance=clr-1 approved=1
+B -> Send screen=ClearanceInbox move=-1 track=0 conn=0 digits=- case=0 action=clearance.response clearance=clr-1 approved=0
+
+[star-always-returns]
+C -> Redraw screen=MovementDetail move=0 track=0 conn=0 digits=- case=0
+# -> Ignored screen=MovementDetail move=0 track=0 conn=0 digits=- case=0
+* -> Redraw screen=StationOverview move=-1 track=0 conn=0 digits=- case=0
+
+[nothing-allowed-stays-silent]
+C -> Redraw screen=MovementDetail move=0 track=0 conn=0 digits=- case=0
+A -> Ignored screen=MovementDetail move=0 track=0 conn=0 digits=- case=0
+
+[clearance-request-picks-the-neighbour]
+C -> Redraw screen=MovementDetail move=0 track=0 conn=0 digits=- case=0
+A -> Redraw screen=ConnectionPicker move=0 track=0 conn=0 digits=- case=0
+C -> Redraw screen=ConnectionPicker move=0 track=0 conn=1 digits=- case=0
+A -> Send screen=ConnectionPicker move=0 track=0 conn=1 digits=- case=0 action=clearance.request movement=movement-421-cda connection=connection-cda-kun
+
+[digits-look-up-a-train]
+4 -> Redraw screen=TrainLookup move=-1 track=0 conn=0 digits=4 case=0
+2 -> Redraw screen=TrainLookup move=-1 track=0 conn=0 digits=42 case=0
+1 -> Redraw screen=TrainLookup move=-1 track=0 conn=0 digits=421 case=0
+B -> Redraw screen=TrainLookup move=-1 track=0 conn=0 digits=42 case=0
+A -> Send screen=TrainLookup move=-1 track=0 conn=0 digits=42 case=0 action=train.lookup train=42
+
+[hurried-presses-are-swallowed]
+C -> Redraw screen=MovementDetail move=0 track=0 conn=0 digits=- case=0
+C -> Ignored screen=MovementDetail move=0 track=0 conn=0 digits=- case=0
+A -> Ignored screen=MovementDetail move=0 track=0 conn=0 digits=- case=0
+
+[hurried-clearance-answer-is-swallowed]
+# -> Redraw screen=ClearanceInbox move=-1 track=0 conn=0 digits=- case=0
+A -> Ignored screen=ClearanceInbox move=-1 track=0 conn=0 digits=- case=0
