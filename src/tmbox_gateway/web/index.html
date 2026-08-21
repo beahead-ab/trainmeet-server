@@ -596,15 +596,19 @@
             <div class="panel-picker card">
               <label for="panel-select">Panel</label>
               <select id="panel-select"></select>
+              <label for="lcd-geometry">Display</label>
+              <select id="lcd-geometry">
+                <option value="16x2">16 tecken × 2 rader</option>
+                <option value="20x2">20 tecken × 2 rader</option>
+                <option value="16x4">16 tecken × 4 rader</option>
+                <option value="20x4">20 tecken × 4 rader</option>
+              </select>
             </div>
           </div>
 
           <article class="tmbox-case">
             <div class="lcd-module">
-              <div class="lcd" aria-label="TMBox display">
-                <div id="lcd-line-1">STARTAR...</div>
-                <div id="lcd-line-2">VÄNTA</div>
-              </div>
+              <div id="lcd" class="lcd" aria-label="TMBox display"></div>
             </div>
             <div id="keypad" class="keypad" aria-label="TMBox tangentbord"></div>
           </article>

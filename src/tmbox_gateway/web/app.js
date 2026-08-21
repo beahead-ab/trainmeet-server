@@ -716,6 +716,15 @@ function applyCloudAutoSyncLock() {
   runtimeAutoSyncHint.classList.toggle("hidden", !(automatic && offering));
 }
 
+const lcdGeometryPicker = document.querySelector("#lcd-geometry");
+if (lcdGeometryPicker) {
+  lcdGeometryPicker.addEventListener("change", () => {
+    localStorage.setItem("trainmeet.lcdGeometry", lcdGeometryPicker.value);
+    applyLcdGeometry();
+    renderTMBox();
+  });
+}
+
 runtimeAutoSync.addEventListener("change", async () => {
   runtimeAutoSync.disabled = true;
   try {
@@ -1638,8 +1647,9 @@ function renderTMBox() {
   const snapshot = state.snapshots.get(state.selectedPanelID);
   if (!snapshot) return;
   panelSelect.value = snapshot.panel_id;
-  document.querySelector("#lcd-line-1").textContent = padDisplay(snapshot.display.line1);
-  document.querySelector("#lcd-line-2").textContent = padDisplay(snapshot.display.line2);
+  // v1 always speaks two lines; a taller display simply leaves the rest blank
+  // rather than stretching a two-row layout to fill it.
+  writeLcd([snapshot.display.line1, snapshot.display.line2]);
   const allowed = new Set(snapshot.interaction.allowed_keys);
   for (const button of keypad.querySelectorAll("button")) {
     button.disabled = state.sending || !allowed.has(button.dataset.key);
@@ -2191,9 +2201,51 @@ function setMessage(element, text, kind = "") {
   element.className = `form-message ${kind}`.trim();
 }
 
-function padDisplay(value) {
-  return String(value || "").slice(0, 16).padEnd(16, " ");
+const LCD_GEOMETRIES = {
+  "16x2": { rows: 2, cols: 16 },
+  "20x2": { rows: 2, cols: 20 },
+  "16x4": { rows: 4, cols: 16 },
+  "20x4": { rows: 4, cols: 20 },
+};
+
+/** The display the simulator is standing in for. A box announces this in
+    `hello`, so the simulator has to be able to claim any of them. */
+function lcdGeometry() {
+  const stored = localStorage.getItem("trainmeet.lcdGeometry");
+  return LCD_GEOMETRIES[stored] ? stored : "16x2";
 }
+
+function applyLcdGeometry() {
+  const key = lcdGeometry();
+  const geometry = LCD_GEOMETRIES[key];
+  const lcd = document.querySelector("#lcd");
+  if (!lcd) return geometry;
+  lcd.style.setProperty("--lcd-rows", geometry.rows);
+  lcd.style.setProperty("--lcd-cols", geometry.cols);
+  while (lcd.children.length > geometry.rows) lcd.lastElementChild.remove();
+  while (lcd.children.length < geometry.rows) {
+    const line = document.createElement("div");
+    line.className = "lcd-line";
+    lcd.append(line);
+  }
+  const picker = document.querySelector("#lcd-geometry");
+  if (picker) picker.value = key;
+  return geometry;
+}
+
+/** Write a frame. Every line is cut or padded to the display's own width, so
+    a short line never leaves the previous frame's tail on the glass. */
+function writeLcd(lines) {
+  const geometry = applyLcdGeometry();
+  const lcd = document.querySelector("#lcd");
+  if (!lcd) return;
+  for (let row = 0; row < geometry.rows; row += 1) {
+    const value = String(lines[row] === undefined ? "" : lines[row]);
+    lcd.children[row].textContent =
+      value.slice(0, geometry.cols).padEnd(geometry.cols, " ");
+  }
+}
+
 
 function nextStationCode() {
   const number = state.config.stations.length + 1;

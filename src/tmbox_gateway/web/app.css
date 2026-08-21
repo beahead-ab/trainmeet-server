@@ -1000,10 +1000,14 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   background: var(--case);
   box-shadow: 0 24px 60px rgba(43, 26, 31, .2), inset 0 0 22px rgba(255, 255, 255, .08);
 }
-.lcd-module, .keypad { width: min(100%, 320px); }
+.keypad { width: min(100%, 320px); }
 .lcd-module {
   display: flex;
-  aspect-ratio: 3 / 1;
+  /* Sized by the character grid rather than a fixed ratio: 20 columns really
+     is wider than 16, and four rows really is taller than two, the same way
+     the physical displays differ. */
+  width: fit-content;
+  max-width: 100%;
   padding: 13px 15px;
   border-radius: 3px;
   background: #17191e;
@@ -1012,7 +1016,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .lcd {
   display: grid;
   flex: 1;
-  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--lcd-rows, 2), minmax(0, 1fr));
   align-items: center;
   min-width: 0;
   overflow: hidden;
@@ -1022,12 +1026,17 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   background: var(--lcd-blue);
   box-shadow: inset 0 0 14px #031e88, 0 0 8px #3b78ff55;
   font-family: var(--font-mono);
-  font-size: clamp(19px, 5.7vw, 25px);
+  font-size: clamp(15px, 4.4vw, 23px);
   line-height: 1.28;
   letter-spacing: .015em;
   text-shadow: 0 0 5px #b9d8ffaa;
   white-space: pre;
 }
+.lcd-line {
+  width: calc(var(--lcd-cols, 16) * (1ch + .015em));
+  white-space: pre;
+}
+
 .keypad {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
