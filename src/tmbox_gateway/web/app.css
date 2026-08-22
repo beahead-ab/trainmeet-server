@@ -1461,3 +1461,22 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 }
 
 .runtime-auto-sync-hint { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+
+/* The attention banner. The box has no buzzer yet, so in the simulator this
+   and the tone are the whole of what a signal looks like. It appears only when
+   something happened — a banner that is always there stops being read. */
+.tmbox-attention {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.85rem;
+  border-radius: 0.4rem;
+  border-left: 4px solid var(--pink-strong, #d6336c);
+  background: var(--pink-soft, #ffe3ee);
+  color: var(--ink, #1c1c1c);
+  font-weight: 600;
+  animation: tmbox-attention-in 180ms ease-out;
+}
+
+@keyframes tmbox-attention-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}

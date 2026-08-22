@@ -13,9 +13,10 @@ Order matters - the firmware is the original and the simulator mirrors it:
 
   1. change lib/tmbox_core/ in trainmeet-tmbox
   2. make -C firmware/esp32/test_native golden
-  3. copy golden_frames.txt and golden_traces.txt into tests/ here
-  4. mirror the change in tmbox-render.js or tmbox-nav.js
-  5. run this suite - it names the frame or the trace that moved
+  3. copy golden_frames.txt, golden_traces.txt and golden_attention.txt
+     into tests/ here
+  4. mirror the change in tmbox-render.js, tmbox-nav.js or tmbox-attention.js
+  5. run this suite - it names the frame, trace or signal that moved
 """
 
 from __future__ import annotations
@@ -30,6 +31,8 @@ GOLDEN = Path(__file__).resolve().parent / "tmbox_golden_frames.txt"
 FRAME_HARNESS = Path(__file__).resolve().parent / "js" / "render_golden.mjs"
 TRACES = Path(__file__).resolve().parent / "tmbox_golden_traces.txt"
 TRACE_HARNESS = Path(__file__).resolve().parent / "js" / "nav_traces.mjs"
+ATTENTION = Path(__file__).resolve().parent / "tmbox_golden_attention.txt"
+ATTENTION_HARNESS = Path(__file__).resolve().parent / "js" / "attention_traces.mjs"
 
 
 class DisplayGoldenTests(unittest.TestCase):
@@ -67,6 +70,10 @@ class DisplayGoldenTests(unittest.TestCase):
     def test_the_web_navigation_answers_what_the_firmware_answers(self):
         """Same key sequences, same screens, same commands - or this fails."""
         self._compare(TRACE_HARNESS, TRACES, "spar")
+
+    def test_the_web_decides_the_same_things_are_worth_a_sound(self):
+        """Same snapshots, same signals - and, mostly, the same silences."""
+        self._compare(ATTENTION_HARNESS, ATTENTION, "signal")
 
     def test_every_golden_line_is_as_wide_as_its_geometry_says(self):
         """A guard on the file itself, in case it is ever hand-edited."""

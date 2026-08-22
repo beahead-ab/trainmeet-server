@@ -3253,6 +3253,9 @@ const tmboxV2 = {
   assignment: null,
   flashUntil: 0,
   busy: false,
+  attention: null,
+  attentionTimer: null,
+  audio: null,
 };
 
 function v2El(id) { return document.querySelector(`#tmbox-v2-${id}`); }
@@ -3265,6 +3268,7 @@ function v2Geometry() {
 function startTMBoxV2() {
   if (!tmboxV2.nav) {
     tmboxV2.nav = new TMBoxNav.LocalNavigationState();
+    tmboxV2.attention = new TMBoxAttention.AttentionController();
     buildV2Keypad();
     bindV2Controls();
   }
@@ -3372,6 +3376,7 @@ async function refreshTMBoxV2() {
       if (response.ok) {
         tmboxV2.config = v2NormaliseConfig(await response.json());
         tmboxV2.configFor = stationID;
+        tmboxV2.attention.forget();
       }
     } catch { /* the snapshot below reports the trouble */ }
   }
@@ -3386,11 +3391,14 @@ async function refreshTMBoxV2() {
       // land here and are not the same thing.
       const body = await response.json().catch(() => ({}));
       setMessage(v2El("message"), body.message || "Läget kunde inte hämtas", "error");
+      v2Signal(tmboxV2.attention.observeLink(false));
       nav.show("ServerGone", v2Now());
       drawV2();
       return;
     }
+    v2Signal(tmboxV2.attention.observeLink(true));
     tmboxV2.snapshot = await response.json();
+    v2Signal(tmboxV2.attention.observe(tmboxV2.snapshot));
     if (["Identity", "AwaitingAssignment", "ServerGone", "SeekingServer"]
         .includes(nav.view.screen)) {
       nav.show("StationOverview", v2Now());
@@ -3522,6 +3530,62 @@ const V2_PAYLOAD_FIELDS = [
   "movement_id", "track_id", "connection_id", "clearance_id", "message_id",
   "train_number",
 ];
+
+// The simulator's attention sink. The controller decides *whether* — the same
+// controller the box runs, held to golden_attention.txt — and this decides
+// *how*. The box has no buzzer yet (Bennys svar 5.2), so this is currently the
+// only place the signals can actually be heard.
+const V2_ATTENTION = {
+  ConnectionLost:     { hz: 700,  ms: 600, text: "Servern svarar inte" },
+  ConnectionRestored: { hz: 1400, ms: 120, text: "Servern svarar igen" },
+  IncomingRequest:    { hz: 2200, ms: 250, text: "Begäran om klarering hit" },
+  RequestDenied:      { hz: 900,  ms: 250, text: "Er begäran nekades" },
+  RequestApproved:    { hz: 2600, ms: 150, text: "Er begäran godkändes" },
+  IncomingTrain:      { hz: 1800, ms: 150, text: "Linjen ledig mot er" },
+};
+
+function v2Signal(events) {
+  if (!events || events.length === 0) return;
+  const loudest = TMBoxAttention.AttentionController.loudest(events);
+  const signal = V2_ATTENTION[loudest];
+  if (!signal) return;
+
+  const banner = v2El("attention");
+  if (banner) {
+    banner.textContent = signal.text;
+    banner.hidden = false;
+    clearTimeout(tmboxV2.attentionTimer);
+    tmboxV2.attentionTimer = setTimeout(() => { banner.hidden = true; }, 4000);
+  }
+  v2Beep(signal.hz, signal.ms);
+}
+
+function v2Beep(hz, ms) {
+  // Browsers refuse to start audio before the page has been interacted with,
+  // and a simulator that threw on the first snapshot would be worse than a
+  // silent one.
+  try {
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return;
+    if (!tmboxV2.audio) tmboxV2.audio = new Ctor();
+    const context = tmboxV2.audio;
+    if (context.state === "suspended") context.resume();
+
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "square";
+    oscillator.frequency.value = hz;
+    // A square wave at full gain is unpleasant on headphones, and ramping the
+    // tail off stops the click a hard stop makes.
+    gain.gain.setValueAtTime(0.06, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + ms / 1000);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + ms / 1000);
+  } catch {
+    // No audio available. The banner already said what happened.
+  }
+}
 
 function v2Payload(command) {
   const payload = {};
