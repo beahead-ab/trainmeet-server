@@ -360,6 +360,36 @@ curl -s -b /tmp/cj -X POST -H 'Content-Type: application/json' \
   -d '{}' http://127.0.0.1:8951/v1/setup/complete
 ```
 
+### Mät layouten, titta inte på den
+
+Ett fel nådde produktion som varken markup- eller JavaScript-tester kunde se:
+hela KÖR ritades i vänstra fjärdedelen av ett brett fönster. Skalet ärvde en
+tvåkolumnsgrid från de tolv menypunkterna, byggsidofältet var `display: none`
+men **spåret fanns kvar**, och arbetsytan hamnade i det.
+
+En skärmbild avslöjar det bara om man råkar titta på en tillräckligt bred
+skärm. Måtten avslöjar det alltid:
+
+```js
+const el = document.querySelector(".server-workspace");
+const shell = document.querySelector(".server-admin-shell");
+console.log(el.getBoundingClientRect().width, shell.getBoundingClientRect().width);
+// Arbetsytan ska fylla skalet minus dess padding. Är den en bråkdel ligger
+// den i fel grid-spår.
+```
+
+Granskningsmönstret som hittade resten: gå igenom alla fem körflikar och alla
+fem byggsteg på **924, 1100, 1440 och 1850 px**, och rapportera varje element
+vars högerkant ligger utanför en förälder som inte scrollar, varje kryssruta
+bredare än 30 px, och varje sida vars `scrollWidth` överstiger fönstret.
+
+Skriptet ligger inte i repot, eftersom CI inte har någon webbläsare. Testerna
+i `tests/test_shell_layout.py` vaktar därför *reglerna* som gör måtten rätt,
+inte måtten själva — och det står i testets egen docstring.
+
+**Ett känt falskt positivt:** `#app-chrome.topbar` sticker ut ur sin förälder
+med flit (`margin: 0 calc(50% - 50vw)`) för att spänna hela bredden.
+
 Kör aldrig `playwright install` — `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 npm install playwright` räcker, binären finns redan.
 
