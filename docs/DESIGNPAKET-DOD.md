@@ -11,6 +11,11 @@ Uppdateras efter varje arbetsblock, så att ingenting tappas mellan omgångar.
 | 👁 | dessutom visuellt verifierat i webbläsare mot paketet |
 | ⛔ | verkligt blockerat — orsak angiven |
 
+**Läge 2026-08-22:** ⬜ 63 · 🔨 28 · ✅ 20 · 👁 26 · ⛔ 2
+
+Uppdatera den här raden när du uppdaterar tabellerna, så att en snabb blick
+räcker för att se om arbetet rör sig.
+
 Paketet styr utseende, struktur och användarflöde. Befintliga API-, säkerhets-
 och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 
@@ -36,7 +41,7 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | Aktiv träff | KÖR › Trafik | 👁 |
 | Cloud och synk | BYGG › 1, källa = Cloud | 👁 |
 | Lokala ändringar | BYGG › 1, källa = Lokalt utkast | 👁 |
-| Manuell import | BYGG › 1, källa = Importerad fil | 🔨 |
+| Manuell import | BYGG › 1, källa = Importerad fil | ⬜ kortet scrollar bara till den gamla panelen |
 | TMBoxar | BYGG › 4 | 🔨 |
 | TMBox-simulering | **Borttagen** | ✅ |
 | TMBox v2 | KÖR › TMBox v2 (oförändrad) | 👁 |
@@ -120,7 +125,7 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | 3.7.1 | Tre källkort med radioknapp i auto-fit-rutnät | 👁 |
 | 3.7.2 | Valt kort: kant `#c96442`, botten `#fdf6f3`, ifylld bock | 👁 uppmätt |
 | 3.7.3 | Ovalt kort: kant `#e8e5dc`, botten `#fff`, tom cirkel | 👁 |
-| 3.7.4 | **Valet styr faktisk låsning av steg 2 och 3** | 👁 via driftläget |
+| 3.7.4 | **Valet styr faktisk låsning av steg 2 och 3** | 🔨 mekanismen verifierad, men steg 2–3 finns inte att låsa ännu |
 | 3.7.5 | Cloud: revisionsrad med chip *Aktiv* | ⬜ |
 | 3.7.6 | Cloud: fyrstegs statuslista | ⬜ |
 | 3.7.7 | Lokalt: grunddataformulär i `minmax(150px, 1fr)` | ⬜ |
@@ -196,12 +201,12 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | 5.2 | `source` styr låsning | ✅ |
 | 5.3 | `ttMode`, `ttStation`, `ttSelected` | ⬜ |
 | 5.4 | `trafikStation` | ✅ |
-| 5.5 | `locked = source === "cloud"` | ✅ härledd ur serversvaret |
+| 5.5 | `locked = source === "cloud"` | 🔨 härledd ur serversvaret; ingen konsument ännu |
 | 5.6 | Osparade ändringar räknas ur diffen mot aktiv revision | ⬜ |
 | 5.7 | Aktivering skapar `rev N+local-rN` | ⬜ (finns i API, ej i UI) |
 | 5.8 | *Granska och aktivera* visar diff och kräver bekräftelse | ⬜ |
 | 5.9 | *Lämna byggläget* — osparat ligger kvar som utkast | ⬜ |
-| 5.10 | Byte lokal → Cloud varnar om kastade revisioner | ✅ |
+| 5.10 | Byte lokal → Cloud varnar om kastade revisioner | 🔨 kodvägen finns, **aldrig körd** — inga lokala revisioner i testsessionen |
 
 ---
 
@@ -228,7 +233,7 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | K1 | Endast verkliga API:er, ingen prototypdata | ✅ hittills |
 | K2 | Tester körda före och efter varje block | ✅ |
 | K3 | Test: KÖR/BYGG | ✅ |
-| K4 | Test: källåsning | ✅ |
+| K4 | Test: källåsning | 🔨 statiska tester av kopplingen; inget test kör själva låsningen i UI |
 | K5 | Test: lokal revision och aktivering | ✅ (`test_local_revisions`) |
 | K6 | Test: TKL-iframe | ⬜ |
 | K7 | Test: tidtabellsgruppering | ⬜ |
@@ -260,6 +265,20 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | D10 | Driftkontroll i produktion | ⛔ **utanför min åtkomst** |
 
 ---
+
+## Vad som uttryckligen **inte** är verifierat
+
+Sanningshalten i checklistan är viktigare än hur långt den ser ut att ha
+kommit. Följande är byggt men obevisat, och nästa session ska inte lita på
+det:
+
+| Sak | Läge |
+|---|---|
+| Kassationssammanfattningen vid återgång till Cloud | Koden finns i `confirmDiscardAndSwitch`. Den kördes **aldrig** — testsessionen hade inga lokala revisioner att kasta. Servervägen är däremot testad (`test_operating_modes.py`, 13 tester). |
+| "Importerad fil" som källa | Kortet scrollar bara till den gamla importpanelen. Inget eget flöde, ingen validering, inget resultat. |
+| Källvalets beständighet över omladdning | Aldrig provat. Läget läses ur `/v1/operating-mode` vid varje besök i steg 1, så det *bör* hålla, men "bör" är inte verifierat. |
+| Låsningen som faktisk effekt | `data-source-locked` sätts och CSS:en finns, men steg 2 och 3 existerar inte ännu, så ingenting låses i praktiken. |
+| Osparade ändringar | Panelen finns i markup med statisk text. Ingen diff räknas, knapparna gör ingenting. |
 
 ## Avvikelser och konflikter
 
