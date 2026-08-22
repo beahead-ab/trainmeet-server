@@ -18,6 +18,23 @@ from pathlib import Path
 SOURCE = Path(__file__).resolve().parents[1] / "src" / "tmbox_gateway"
 
 
+def _code_only(text: str) -> str:
+    """Källan utan kommentarer och docstrings.
+
+    Ett negativt test som läser hela filen faller på sin egen förklaring: den
+    här filen *nämner* de ord den förbjuder, och det har hänt förut.
+    """
+    tree = ast.parse(text)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            if (node.body and isinstance(node.body[0], ast.Expr)
+                    and isinstance(node.body[0].value, ast.Constant)
+                    and isinstance(node.body[0].value.value, str)):
+                node.body[0].value.value = ""
+    stripped = ast.unparse(tree)
+    return "\n".join(line.split("#")[0] for line in stripped.splitlines())
+
+
 def _python_sources() -> list[tuple[Path, str]]:
     return [(path, path.read_text(encoding="utf-8")) for path in sorted(SOURCE.rglob("*.py"))]
 
@@ -121,3 +138,49 @@ class TimetableStaysEditableTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ServerHasNoAccountMailTests(unittest.TestCase):
+    """Kontohanteringen hör hemma i Cloud, inte här.
+
+    TrainMeet Cloud har fått e-posttjänst, lösenordsåterställning, inbjudningar
+    och organisationer. Servern ska inte ha någon del av det, och skälet är
+    inte att det vore svårt - det är att servern står på en Raspberry Pi i en
+    lokal, ofta utan utgående nät, och att en andra kontodatabas är en andra
+    plats där någons lösenord kan läcka.
+
+    Servern har exakt en administratör, satt vid installationen, och den
+    identiteten räcker för det servern gör.
+    """
+
+    def test_the_server_never_sends_mail(self):
+        for path, text in _python_sources():
+            tree = ast.parse(text, filename=str(path))
+            for node in ast.walk(tree):
+                names: list[str] = []
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    names = [node.module]
+                for name in names:
+                    self.assertNotIn(
+                        name.split(".")[0],
+                        {"smtplib", "email"},
+                        f"{path.name} importerar {name}. E-post hör hemma i trainmeet-cloud.",
+                    )
+
+    def test_there_is_no_password_reset_or_invitation_route(self):
+        text = (SOURCE / "http_server.py").read_text(encoding="utf-8")
+        for route in ("/v1/auth/forgot", "/v1/auth/reset", "/v1/users/invite",
+                      "/v1/auth/accept-invitation"):
+            self.assertNotIn(route, text, f"{route} hör hemma i Cloud")
+
+    def test_there_is_no_second_account_model(self):
+        """Servern har en administratör, inte roller och organisationer."""
+        for path, text in _python_sources():
+            code = _code_only(text)
+            for token in ("organization_id", "memberships", "invite_user"):
+                self.assertNotIn(
+                    token, code,
+                    f"{path.name} innehåller {token} - kontomodellen hör hemma i Cloud",
+                )
