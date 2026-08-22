@@ -65,8 +65,9 @@ databas för kosmetikans skull är inte värt risken.
 En publicering är oföränderlig. Det ändras inte. Det som saknades var en väg
 att producera ett nytt paket lokalt.
 
-En lokal redigering skapar därför en **ny revision av paketet**, lagrad och
-aktiverad genom exakt samma maskineri som en Cloud-publicering:
+**Det här finns nu.** En lokal redigering skapar en **ny revision av
+paketet**, lagrad och aktiverad genom exakt samma maskineri som en
+Cloud-publicering:
 
 ```text
 publication-hht-2026-a              hämtad från Cloud, aktiverad
