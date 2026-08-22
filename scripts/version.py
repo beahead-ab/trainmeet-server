@@ -31,11 +31,20 @@ ROOT = Path(__file__).resolve().parent.parent
 VERSION_FILE = ROOT / "VERSION"
 
 # Which file holds a derived copy, and how to find it there. Each entry is a
-# regex with one group: the group is what gets replaced.
-DERIVED: list[tuple[str, str]] = [
-    ("pyproject.toml", r'(?m)^version\s*=\s*"([^"]+)"'),
-    ("package.json", r'(?m)^\s*"version":\s*"([^"]+)"'),
-    ("project.yml", r"(?m)^\s*MARKETING_VERSION:\s*(\S+)"),
+# regex with one group - the group is what gets replaced - and a flag for
+# whether every occurrence counts or only the first.
+DERIVED: list[tuple[str, str, bool]] = [
+    ("pyproject.toml", r'(?m)^version\s*=\s*"([^"]+)"', False),
+    ("package.json", r'(?m)^\s*"version":\s*"([^"]+)"', False),
+    ("project.yml", r"(?m)^\s*MARKETING_VERSION:\s*(\S+)", False),
+    # CI builds the committed .xcodeproj rather than regenerating it from
+    # project.yml, so this is the file a build actually reads. It carries one
+    # copy per build configuration, hence every occurrence.
+    (
+        "TrainMeetIPhone.xcodeproj/project.pbxproj",
+        r"(?m)^(?:\s*)MARKETING_VERSION = ([^;]+);",
+        True,
+    ),
 ]
 
 #: A change confined to these paths ships nothing, so it mints no version.
@@ -76,21 +85,34 @@ def sync(version: str) -> list[str]:
     """Write `version` into every derived file that exists. Returns the ones
     it touched, so a caller can say what actually changed."""
     touched = []
-    for name, pattern in DERIVED:
+    for name, pattern, every in DERIVED:
         path = ROOT / name
         if not path.exists():
             continue
         text = path.read_text(encoding="utf-8")
-        match = re.search(pattern, text)
-        if match is None:
+        matches = list(re.finditer(pattern, text))
+        if not matches:
             continue
-        if match.group(1) == version:
+        if not every:
+            matches = matches[:1]
+        if all(match.group(1) == version for match in matches):
             continue
-        start, end = match.span(1)
-        path.write_text(text[:start] + version + text[end:], encoding="utf-8")
+        # Right to left, so an earlier replacement cannot move a later span.
+        for match in reversed(matches):
+            start, end = match.span(1)
+            text = text[:start] + version + text[end:]
+        path.write_text(text, encoding="utf-8")
         touched.append(name)
 
     return touched
+
+
+#: Where the iPhone build number lives. Two files, same reason as the version:
+#: project.yml is the source XcodeGen reads, the .pbxproj is what CI builds.
+BUILD_NUMBER_FILES: list[tuple[str, str]] = [
+    ("project.yml", r"(?m)^(\s*CURRENT_PROJECT_VERSION:\s*)(\d+)"),
+    ("TrainMeetIPhone.xcodeproj/project.pbxproj", r"(?m)^(\s*CURRENT_PROJECT_VERSION = )(\d+);"),
+]
 
 
 def advance_build_number() -> str | None:
@@ -101,31 +123,45 @@ def advance_build_number() -> str | None:
     TestFlight refuses a build number it has already seen, whatever the
     version string says, so it is counted rather than derived.
     """
-    project = ROOT / "project.yml"
-    if not project.exists():
+    # Read the highest number anywhere, then write one more everywhere: if the
+    # two files ever disagree, going up from the larger keeps the sequence
+    # monotonic, which is the only property TestFlight actually cares about.
+    current = 0
+    found = False
+    for name, pattern in BUILD_NUMBER_FILES:
+        path = ROOT / name
+        if not path.exists():
+            continue
+        for match in re.finditer(pattern, path.read_text(encoding="utf-8")):
+            current = max(current, int(match.group(2)))
+            found = True
+    if not found:
         return None
-    text = project.read_text(encoding="utf-8")
-    match = re.search(r"(?m)^(\s*CURRENT_PROJECT_VERSION:\s*)(\d+)", text)
-    if match is None:
-        return None
-    nxt = str(int(match.group(2)) + 1)
-    start, end = match.span(2)
-    project.write_text(text[:start] + nxt + text[end:], encoding="utf-8")
+
+    nxt = str(current + 1)
+    for name, pattern in BUILD_NUMBER_FILES:
+        path = ROOT / name
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        for match in reversed(list(re.finditer(pattern, text))):
+            start, end = match.span(2)
+            text = text[:start] + nxt + text[end:]
+        path.write_text(text, encoding="utf-8")
     return nxt
 
 
 def check() -> int:
     version = VERSION_FILE.read_text(encoding="utf-8").strip()
     problems = []
-    for name, pattern in DERIVED:
+    for name, pattern, _every in DERIVED:
         path = ROOT / name
         if not path.exists():
             continue
-        match = re.search(pattern, path.read_text(encoding="utf-8"))
-        if match is None:
-            continue
-        if match.group(1) != version:
-            problems.append(f"{name} säger {match.group(1)}, VERSION säger {version}")
+        for match in re.finditer(pattern, path.read_text(encoding="utf-8")):
+            if match.group(1) != version:
+                problems.append(f"{name} säger {match.group(1)}, VERSION säger {version}")
+                break
     for problem in problems:
         print(problem, file=sys.stderr)
     return 1 if problems else 0
