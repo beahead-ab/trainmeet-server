@@ -176,22 +176,36 @@ def _git(*args: str) -> str:
 def decide(commit_range: str) -> str:
     """major, minor, patch or skip - read off the commits in `range`.
 
-    Explicit beats inferred: a `[major]`, `[minor]` or `[patch]` marker in any
-    commit message wins, strongest first. `[skip version]` stops it entirely.
-    With no marker the answer is `patch`, because on these repos a merge to
-    main is a deployable change - but only if something shipping changed at
-    all, so a README fix mints nothing.
-    """
-    messages = _git("log", "--format=%B", commit_range)
-    lowered = messages.lower()
+    Precedence, strongest first:
 
+      1. `[skip version]`  - the loop guard the bump commit carries
+      2. VERSION was edited - somebody typed an exact number
+      3. `[major]`, `[minor]`, `[patch]` - strongest marker in the range wins
+      4. nothing outside docs/README/.github changed
+      5. `patch` - on these repos a merge to main is a deployable change
+    """
+    lowered = _git("log", "--format=%B", commit_range).lower()
+    files = [line for line in _git("diff", "--name-only", commit_range).splitlines() if line]
+
+    # The loop guard, absolute: the bump commit carries this, and nothing may
+    # talk it out of stopping.
     if "[skip version]" in lowered:
         return "skip"
+
+    # Somebody already decided. A merge that sets VERSION itself - the one that
+    # introduced this mechanism, or a deliberate hand-picked number - must not
+    # then be bumped past the number it just chose. Without this, introducing
+    # 1.0.0 would immediately produce 1.0.1 and the decision would be lost.
+    #
+    # Ahead of the markers on purpose: typing an exact number is the more
+    # explicit act, so a stray [minor] in the same range must not undo it.
+    if "VERSION" in files:
+        return "skip"
+
     for level in LEVELS:
         if f"[{level}]" in lowered:
             return level
 
-    files = [line for line in _git("diff", "--name-only", commit_range).splitlines() if line]
     # An empty range lands here too, and falls out as "skip" because all() over
     # nothing is True. That is deliberate rather than incidental: a range with
     # no changes has nothing to release either.

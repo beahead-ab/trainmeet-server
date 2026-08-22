@@ -206,6 +206,23 @@ class DecideTests(unittest.TestCase):
         self.repo.commit("Höj version [minor] [skip version]")
         self.assertEqual("skip", self._decide(self.base))
 
+    def test_a_merge_that_sets_the_version_itself_is_not_bumped_past_it(self):
+        """The merge that introduces a version, or picks one by hand, has
+        already decided. Bumping on top of it would lose that decision - and
+        would have turned the deliberate 1.0.0 into 1.0.1 on its first merge.
+        """
+        self.repo.write("VERSION", "2.0.0\n")
+        self.repo.write("src/a.txt", "changed\n")
+        self.repo.commit("Sätt versionen för hand")
+        self.assertEqual("skip", self._decide(self.base))
+
+    def test_an_explicit_marker_does_not_override_a_hand_set_version(self):
+        """Otherwise a stray [minor] in the same PR would undo the choice."""
+        self.repo.write("VERSION", "2.0.0\n")
+        self.repo.write("src/a.txt", "changed\n")
+        self.repo.commit("Sätt versionen [minor]")
+        self.assertEqual("skip", self._decide(self.base))
+
     def test_a_range_with_no_changes_mints_nothing(self):
         head = self.repo._git("rev-parse", "HEAD")
         self.assertEqual("skip", self._decide(head))
