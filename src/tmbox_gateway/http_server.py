@@ -50,7 +50,14 @@ from .runtime import (
     RuntimePublicationError,
     SQLiteRuntimeStore,
 )
-from .software_update import SoftwareUpdateError, installed_version, latest_version, read_update_status, start_update
+from .software_update import (
+    SoftwareUpdateError,
+    installed_build,
+    installed_version,
+    latest_version,
+    read_update_status,
+    start_update,
+)
 
 
 LOGGER = logging.getLogger("tmbox_gateway.http")
@@ -188,7 +195,9 @@ class TrainMeetHTTPApplication:
             "required": required,
             "step": step,
             "admin_configured": bool(access["password_configured"]),
-            "username": access["username"],
+            # No username either. /v1/setup is unauthenticated by design -
+            # it has to answer before anyone can log in - so it must not name
+            # the administrator. Nothing read it.
             "server_name": server_name,
             "central_url": (
                 self.runtime_store.central_url()
@@ -1009,14 +1018,19 @@ class TrainMeetHTTPApplication:
         result: dict[str, Any] = {
             "supported": self.config.allow_software_update,
             "installed_version": installed_version(),
+            "installed_build": installed_build(),
             **read_update_status(Path(self.config.state_dir)),
         }
         if self.config.allow_software_update:
             try:
                 latest = latest_version()
                 result["latest_version"] = latest["version"]
+                result["latest_build"] = latest["build"]
                 result["published_at"] = latest["published_at"]
-                result["update_available"] = result["latest_version"] != result["installed_version"]
+                # The build decides, not the version: a version number can
+                # stay put across several fixes and an operator still wants
+                # to be able to take them.
+                result["update_available"] = latest["build"] != result["installed_build"]
             except SoftwareUpdateError as error:
                 result["check_error"] = str(error)
         return result
@@ -1597,6 +1611,20 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 station_id = parse_qs(parsed.query).get("station_id", [""])[0]
                 self._send_json(HTTPStatus.OK, self.server.application.tkl_context(client, station_id))
                 return
+            if path == "/healthz":
+                # Unauthenticated by necessity: an updater checking whether
+                # the service came back cannot log in first. It therefore says
+                # only what a health check needs - that the process is up and
+                # which build it is - and nothing about who administers it.
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "status": "ok",
+                        "version": installed_version(),
+                        "build": installed_build(),
+                    },
+                )
+                return
             if path == "/v1/auth/status":
                 client = self._optional_authenticated_client()
                 access = self.server.application.identities.admin_access_summary()
@@ -1605,7 +1633,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     {
                         "authenticated": client is not None,
                         "access_mode": "local" if self._has_automatic_local_admin() else "external",
-                        "username": access["username"],
+                        # No username. It used to be here, which both
+                        # prefilled the login field and told any
+                        # unauthenticated caller who the administrator is.
                         "password_configured": access["password_configured"],
                         "must_change_password": access["must_change_password"],
                     },

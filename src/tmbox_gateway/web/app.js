@@ -796,7 +796,6 @@ softwareInstall.addEventListener("click", async () => {
   softwareInstall.disabled = true;
   setMessage(softwareUpdateMessage, "Startar uppdateringen …", "notice");
   try {
-    const previousVersion = softwareVersion.dataset.version || "";
     const response = await authorizedFetch("/v1/server/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -805,7 +804,7 @@ softwareInstall.addEventListener("click", async () => {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Uppdateringen kunde inte startas");
     setMessage(softwareUpdateMessage, "Uppdaterar i bakgrunden. Sidan ansluter igen efter omstart.", "notice");
-    await waitForSoftwareUpdate(previousVersion);
+    await waitForSoftwareUpdate();
     await checkSoftwareUpdate();
   } catch (error) {
     setMessage(softwareUpdateMessage, error.message, "error");
@@ -814,28 +813,132 @@ softwareInstall.addEventListener("click", async () => {
   }
 });
 
-async function waitForSoftwareUpdate(previousVersion) {
-  let serverWasUnavailable = false;
-  for (let attempt = 0; attempt < 180; attempt += 1) {
+async function waitForSoftwareUpdate() {
+  // Poll the stage rather than guess from symptoms. The old version of this
+  // watched for the server going away and the version string changing, which
+  // was the best it could do when the only statuses were downloading,
+  // installing and complete. Now the updater says where it is, so the
+  // progress bar shows the real step and `complete` means the health check
+  // passed - not merely that files were copied.
+  for (let attempt = 0; attempt < 240; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     try {
       const response = await authorizedFetch("/v1/server/update");
       if (!response.ok) continue;
       const payload = await response.json();
+      renderSoftwareUpdate(payload);
       if (payload.status === "failed") {
         throw new Error(payload.message || "Uppdateringen misslyckades");
       }
-      const versionChanged = previousVersion && payload.installed_version !== previousVersion;
-      if ((serverWasUnavailable || versionChanged) && payload.status === "complete") {
+      if (payload.status === "complete") {
         window.location.reload();
         return;
       }
     } catch (error) {
+      // The server is unreachable while it restarts, which is a stage, not a
+      // failure. A real failure carries a message and is rethrown.
       if (error.message && /misslyckades/i.test(error.message)) throw error;
-      serverWasUnavailable = true;
     }
   }
   throw new Error("Uppdateringen tar längre tid än väntat. Ladda om sidan om en stund.");
+}
+
+// The update view. Its twin lives in trainmeet-cloud's SettingsPage: the same
+// seven steps, the same texts, the same states. The two update by completely
+// different means, so only the presentation is shared - deliberately, because
+// what an operator needs to know is identical either way.
+const updateProgress = document.querySelector("#update-progress");
+const softwareRetry = document.querySelector("#software-retry");
+const softwareVersionMove = document.querySelector("#software-version-move");
+const softwareTechnical = document.querySelector("#software-technical");
+
+function renderUpdateProgress(payload) {
+  const steps = payload.steps || [];
+  const running = steps.some((step) => step.state === "active");
+  const failed = payload.status === "failed";
+  updateProgress.classList.toggle("hidden", !running && !failed && payload.status !== "complete");
+  updateProgress.replaceChildren(...steps.map((step) => {
+    const item = document.createElement("li");
+    item.className = `update-step ${step.state}`;
+    item.textContent = step.label;
+    return item;
+  }));
+}
+
+function renderVersionMove(payload) {
+  // "Installerad version 1.3.2 → Tillgänglig version 1.4.0". Only shown when
+  // there is actually somewhere to move to.
+  const show = payload.update_available && payload.latest_version;
+  softwareVersionMove.classList.toggle("hidden", !show);
+  if (!show) return;
+  softwareVersionMove.replaceChildren();
+  const installed = document.createElement("span");
+  installed.textContent = "Installerad version ";
+  const from = document.createElement("b");
+  from.textContent = payload.installed_version;
+  const arrow = document.createElement("span");
+  arrow.className = "arrow";
+  arrow.textContent = "→";
+  const available = document.createElement("span");
+  available.textContent = "Tillgänglig version ";
+  const to = document.createElement("b");
+  to.textContent = payload.latest_version;
+  softwareVersionMove.append(installed, from, arrow, available, to);
+}
+
+function renderTechnicalDetails(payload) {
+  const rows = [["Installerad build", payload.installed_build || "okänd"]];
+  if (payload.latest_build) rows.push(["Tillgänglig build", payload.latest_build]);
+  if (payload.failed_stage) rows.push(["Fel i steget", payload.failed_stage]);
+  softwareTechnical.replaceChildren(...rows.flatMap(([label, value]) => {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const definition = document.createElement("dd");
+    definition.textContent = value;
+    return [term, definition];
+  }));
+}
+
+function renderSoftwareUpdate(payload) {
+  // The version comes first because that is what a person reads; the commit
+  // is under "Teknisk information".
+  softwareVersion.textContent = `Version ${payload.installed_version}`;
+  softwareVersion.dataset.version = payload.installed_version;
+  softwareVersion.dataset.build = payload.installed_build || "";
+
+  renderUpdateProgress(payload);
+  renderVersionMove(payload);
+  renderTechnicalDetails(payload);
+
+  const failed = payload.status === "failed";
+  const running = (payload.steps || []).some((step) => step.state === "active");
+  softwareRetry.classList.toggle("hidden", !failed);
+  softwareCheck.disabled = running;
+
+  if (!payload.supported) {
+    softwareInstall.classList.add("hidden");
+    setMessage(softwareUpdateMessage, "Den här miljön uppdateras via Docker eller driftplattformen.", "notice");
+    return;
+  }
+  if (failed) {
+    softwareInstall.classList.add("hidden");
+    setMessage(softwareUpdateMessage, payload.message || "Uppdateringen misslyckades", "error");
+    return;
+  }
+  if (running) {
+    softwareInstall.classList.add("hidden");
+    setMessage(softwareUpdateMessage, payload.message || "Uppdateringen pågår", "notice");
+    return;
+  }
+  if (payload.check_error) {
+    softwareInstall.classList.add("hidden");
+    setMessage(softwareUpdateMessage, payload.check_error, "error");
+    return;
+  }
+  softwareInstall.classList.toggle("hidden", !payload.update_available);
+  setMessage(softwareUpdateMessage, payload.update_available
+    ? `Version ${payload.latest_version || payload.latest_build} finns tillgänglig.`
+    : "Servern har senaste versionen.", payload.update_available ? "notice" : "success");
 }
 
 async function checkSoftwareUpdate() {
@@ -844,26 +947,25 @@ async function checkSoftwareUpdate() {
     const response = await authorizedFetch("/v1/server/update");
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Versionskontrollen misslyckades");
-    softwareVersion.textContent = `Installerad ${payload.installed_version}`;
-    softwareVersion.dataset.version = payload.installed_version;
-    if (!payload.supported) {
-      softwareInstall.classList.add("hidden");
-      setMessage(softwareUpdateMessage, "Den här miljön uppdateras via Docker eller driftplattformen.", "notice");
-    } else if (payload.check_error) {
-      softwareInstall.classList.add("hidden");
-      setMessage(softwareUpdateMessage, payload.check_error, "error");
-    } else {
-      softwareInstall.classList.toggle("hidden", !payload.update_available);
-      setMessage(softwareUpdateMessage, payload.update_available
-        ? `Ny version ${payload.latest_version} finns tillgänglig.`
-        : `Servern har senaste versionen (${payload.latest_version}).`, payload.update_available ? "notice" : "success");
-    }
+    renderSoftwareUpdate(payload);
   } catch (error) {
     setMessage(softwareUpdateMessage, error.message, "error");
   } finally {
     softwareCheck.disabled = false;
   }
 }
+
+softwareRetry.addEventListener("click", async () => {
+  softwareRetry.disabled = true;
+  try {
+    await authorizedFetch("/v1/server/update", { method: "POST" });
+    await checkSoftwareUpdate();
+  } catch (error) {
+    setMessage(softwareUpdateMessage, error.message, "error");
+  } finally {
+    softwareRetry.disabled = false;
+  }
+});
 
 configForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -2061,7 +2163,9 @@ async function refreshAuthStatus() {
   state.authStatus = await response.json();
   state.token = null;
   localStorage.removeItem("trainmeet.accessToken");
-  document.querySelector("#login-username").value = state.authStatus.username || "";
+  // The username field is left alone. The application never fills it in -
+  // the browser's own password manager may still offer a saved login, which
+  // is the user's choice rather than ours.
   configureResetMode();
   return state.authStatus;
 }

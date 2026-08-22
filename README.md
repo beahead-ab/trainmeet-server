@@ -492,6 +492,55 @@ Före installationen säkerhetskopieras SQLite-databasen. Misslyckas
 uppdateringen återställs föregående version automatiskt. Efter installationen
 startar TrainMeet Server om och webbsidan ansluter automatiskt igen.
 
+### Versionsnummer
+
+TrainMeet Server har ett **användarvänligt versionsnummer** enligt SemVer:
+`större.funktion.rättning`. Det står i `VERSION` i repotets rot, och det är
+den enda auktoritativa källan — installationsskript, API, webbadmin,
+paketering och `pyproject.toml` läser samma fil, och ett test faller om de
+säger olika. Tre påståenden hade hunnit glida isär innan den fanns:
+`pyproject.toml` sa 0.6.0, User-Agent-strängen sa 0.7, och det som faktiskt
+visades var en git-sha.
+
+Git-committen finns kvar, men som det den är: **bygginformation**. Den svarar
+på «exakt vilken kod är detta», vilket ett versionsnummer medvetet inte gör.
+
+```text
+Version 1.0.0 · build 4bd9c9a
+```
+
+I webbadmin står versionsnumret som rubrik och committen under **Teknisk
+information**. `GET /healthz` lämnar båda, utan att kräva inloggning — en
+hälsokontroll kan inte logga in först — och säger ingenting annat.
+
+### Uppdateringsförloppet
+
+Uppdateringen rapporterar sju verkliga steg, inte en animation:
+
+| Steg | Vad som händer |
+|---|---|
+| Söker efter uppdatering | frågar GitHub vilken commit `main` står på |
+| Hämtar | laddar ner arkivet |
+| Verifierar | kontrollerar att arkivet går att packa upp och innehåller installationsskriptet |
+| Installerar | säkerhetskopierar databasen och kör installationen |
+| Startar om | tjänsten startar om |
+| Kontrollerar att tjänsten fungerar | pollar `/healthz` tills den svarar |
+| Klart | allt ovan gick igenom |
+
+Vid fel markeras **steget där felet inträffade**, felmeddelandet visas och en
+knapp för att försöka igen dyker upp. Föregående version återställs
+automatiskt.
+
+**Ett framgångsmeddelande kommer aldrig före hälsokontrollen.** Det gjorde det
+förut: `complete` skrevs innan omstarten, så en administratör fick veta att
+uppdateringen lyckats innan den ens hade provats en gång.
+
+Stegen är desamma i TrainMeet Cloud. De två uppdateras på helt olika sätt — en
+systemd-tjänst som packar upp ett arkiv respektive en värdtjänst som bygger om
+en Docker-image — men det en administratör behöver veta är identiskt, så
+`src/tmbox_gateway/update_contract.py` är ordagrant samma modul i båda repona
+och ett test låser fast den i vardera.
+
 ### Vad installationen gör för att en uppdatering ska bita
 
 Fyra steg finns just för att en uppdatering annars kan rapportera framgång
@@ -647,6 +696,7 @@ Viktiga API:er:
 - `POST /v1/server/restart`
 - `POST /v1/runtime/install`
 - `POST /v1/runtime/sync`
+- `GET /healthz`
 - `GET/POST /v1/runtime/update`
 - `POST /v1/runtime/activate`
 - `POST /v1/cloud/auto-sync`
