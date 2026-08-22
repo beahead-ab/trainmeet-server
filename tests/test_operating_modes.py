@@ -20,7 +20,10 @@ from session_fixture import sample_session
 from tmbox_gateway.engine import TrafficEngine
 from tmbox_gateway.http_server import HTTPAPIError, HTTPServerConfig, TrainMeetHTTPApplication
 from tmbox_gateway.identity import IdentityStore, PairingService
-from tmbox_gateway.local_config import SQLiteLocalConfigurationStore
+from tmbox_gateway.local_config import (
+    SQLiteLocalConfigurationStore,
+    local_configuration_from_publication,
+)
 from tmbox_gateway.models import DispatchMode
 from tmbox_gateway.runtime import SQLiteRuntimeStore
 
@@ -71,20 +74,57 @@ class OperatingModeTests(unittest.TestCase):
             reopened.close()
         self.runtime = SQLiteRuntimeStore(self.database)
 
-    def test_cloud_linked_refuses_every_editing_path(self):
+    def test_cloud_linked_refuses_changes_to_the_line(self):
+        """D3, narrowed by T3.
+
+        This test used to assert that Cloud mode refused *every* editing path.
+        That was one gate over the whole draft, and it made two different
+        things indistinguishable: correcting a departure time was refused for
+        the same reason as redrawing the line.
+
+        The line is still Cloud's. The timetable is not - see the test below.
+        """
         self.runtime.install(runtime_package_v3())
         self.application.set_operating_mode(self.client, {"mode": "cloud-linked"})
 
-        for name, call in (
-            ("seed", lambda: self.application.seed_local_configuration(self.client)),
-            ("save", lambda: self.application.save_local_configuration(self.client, {"draft": {}})),
-            ("activate", lambda: self.application.activate_local_configuration(self.client, {})),
-        ):
-            with self.subTest(path=name):
-                with self.assertRaises(HTTPAPIError) as refused:
-                    call()
-                self.assertEqual("cloud_linked", refused.exception.code)
-                self.assertIn("redaktör", str(refused.exception))
+        draft = local_configuration_from_publication(runtime_package_v3())
+        draft["stations"].append({"id": "local-x", "code": "XXX", "name": "Påhittad"})
+
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.application.save_local_configuration(self.client, {"draft": draft})
+        self.assertEqual("topology_locked_by_cloud", refused.exception.code)
+        self.assertIn("stationer", str(refused.exception))
+
+    def test_cloud_linked_still_lets_the_timetable_be_corrected(self):
+        """T3: during a meet the server *is* the operation.
+
+        Trains run late and movements get cancelled, and there is no route
+        through Cloud for that at 13:40 on a Saturday.
+        """
+        self.runtime.install(runtime_package_v3())
+        self.application.set_operating_mode(self.client, {"mode": "cloud-linked"})
+        self.application.seed_local_configuration(self.client)
+
+        draft = self.local.current()["draft"]
+        draft["trains"][0]["departure_time"] = "09:44"
+        saved = self.application.save_local_configuration(self.client, {"draft": draft})
+
+        self.assertEqual("09:44", saved["draft"]["trains"][0]["departure_time"])
+
+    def test_seeding_is_a_copy_and_is_allowed_in_cloud_mode(self):
+        """Seeding does not change the active meet; it fills a working copy.
+
+        Refusing it in Cloud mode left the timetable with nothing to be
+        corrected *in*, which is how a narrow rule turns into a wide one.
+        """
+        self.runtime.install(runtime_package_v3())
+        self.application.set_operating_mode(self.client, {"mode": "cloud-linked"})
+        state = self.application.seed_local_configuration(self.client)
+        self.assertTrue(state["draft"]["trains"])
+        self.assertEqual(
+            "publication-2026-08-11-a", self.runtime.active().publication_id,
+            "den aktiva träffen ska inte ha rörts av en kopiering",
+        )
 
     def test_offline_meet_opens_them_again(self):
         self.runtime.install(runtime_package_v3())
@@ -107,9 +147,11 @@ class OperatingModeTests(unittest.TestCase):
             OSError("nätet är nere")
         )
         self.assertFalse(self.runtime.editing_is_open())
+        draft = local_configuration_from_publication(runtime_package_v3())
+        draft["connections"] = []
         with self.assertRaises(HTTPAPIError) as refused:
-            self.application.seed_local_configuration(self.client)
-        self.assertEqual("cloud_linked", refused.exception.code)
+            self.application.save_local_configuration(self.client, {"draft": draft})
+        self.assertEqual("topology_locked_by_cloud", refused.exception.code)
 
     # ------------------------------------------------------------- D4
 

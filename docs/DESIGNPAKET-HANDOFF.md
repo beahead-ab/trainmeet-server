@@ -150,17 +150,45 @@ som ett läge där allt är låst. Det är det inte.
 
 I lokalt läge är båda redigerbara.
 
-Två följdregler:
+Grinden heter `_require_topology_unchanged()` och gäller
+`TOPOLOGY_SECTIONS = ("stations", "connections", "panels")` — inget annat. Den
+gamla globala `_require_editing_open()` är **borttagen**, och ett test faller
+om den kommer tillbaka.
+
+Tre saker som hänger ihop med den och som är lätta att bryta:
+
+1. **Sådd är tillåten i Cloud-läge.** En kopia är ingen ändring. Att vägra den
+   lämnar tidtabellen utan något att redigeras *i*.
+2. **Aktivering kontrollerar det utkast som aktiveras**, inte det som råkade
+   sparas sist. Spara och aktivera är två anrop.
+3. **Radordning är ingen ändring.** Jämförelsen sorterar på id.
+
+Två följdregler om revisionerna:
 
 1. **Lokala tidtabellsändringar blir lokala runtime-revisioner**
-   (`<bas>+local-rN`). De är versioner, inte överskrivningar, så det går att
-   se vad som ändrats och när.
-2. **En ny Cloud-revision får aldrig aktiveras tyst över lokala ändringar.**
-   Den ska ligga **väntande**, visa exakt vad som skrivs över, och kräva
-   uttrycklig granskning och aktivering. Att en operatör förlorar tre
-   rättelser hen gjort kl 13 för att Cloud publicerade kl 14 är det värsta
-   den här produkten kan göra, och den enda skyddet mot det är att aldrig
-   aktivera automatiskt.
+   (`<bas>+local-rN`). De är versioner, inte överskrivningar.
+2. **En ny Cloud-revision aktiveras aldrig tyst.** Se nästa beslut.
+
+### 3b. Pollern hämtar, men beslutar aldrig
+
+`auto_sync_cloud_runtime()` körde var 15:e sekund med `install()`, vars
+`activate` är `True` som default, och pollerloopen anropade sedan
+`server.request_restart()`. En operatör som rättat tre avgångstider kl 13
+förlorade dem när Cloud publicerade kl 14 — och träffen startade om medan det
+hände.
+
+Nu: hämta, lagra, markera som väntande, sluta. Ingen aktivering, ingen omstart,
+och i `offline-meet` ingen hämtning alls — där är servern medvetet redaktör,
+och att köa revisioner ingen bett om vore att lägga ett "väntar"-märke över
+arbete som lämnat Cloud med flit.
+
+`/v1/runtime/pending/activate` kräver att revisionens `publication_id` skickas
+tillbaka och stämmer. Utan det kan en flik som stått öppen sedan i morse
+aktivera något som kommit sedan dess — samma tysta överskrivning, fast genom
+UI:t.
+
+Bygger du något som hämtar från Cloud: **använd `stage_pending`, inte
+`install`.**
 
 ### 4. Endast verkliga API:er
 
@@ -229,13 +257,21 @@ paketet, och dokumentet uppdateras. Det har redan hänt en gång (blå → orang
 cd trainmeet-server
 pip install paho-mqtt          # annars faller 4 MQTT-moduler på importfel
 apt-get install -y mosquitto   # annars hoppas 2 tester över, se nedan
-PYTHONPATH=src:tests python3 -m unittest discover -s tests -q               # 341, OK
+PYTHONPATH=src:tests python3 -m unittest discover -s tests -q               # 394, OK
 PYTHONPATH=src:tests python3 -m unittest tests.test_kor_bygg_structure -q   # 43
 PYTHONPATH=src:tests python3 -m unittest tests.test_operating_modes -q      # 13
 ```
 
-Senaste körning: **341 gröna, inga överhoppade.** 315 från basen `7cec157`,
-plus 21 i `test_build_topology` och 5 i `test_product_boundaries`.
+Senaste körning: **394 gröna, inga överhoppade.**
+
+| Modul | Antal |
+|---|---:|
+| basen `7cec157` | 315 |
+| `test_build_topology` | 33 |
+| `test_pending_revisions` (T4) | 17 |
+| `test_area_gate` (T3 + genvägen) | 21 |
+| `test_product_boundaries` | 6 |
+| netto omskrivna i befintliga moduler | +2 |
 
 ### Varför siffran hoppade mellan sessionerna
 
@@ -353,6 +389,35 @@ Kvar i steget: redigeringsläget (fälten är ännu inte inmatningsbara),
 genvägen *Bygg från stationsordningen*, och sådd-kopplingen —
 `/v1/local-configuration/seed` finns men anropas inte av någon vy, så den
 lokala vägen har ännu inget att redigera.
+
+---
+
+## Vad som är byggt — block 5: T4, T3 och steg 2 färdigt
+
+**T4 — ingen tyst Cloud-aktivering.** Pollern stagear i stället för att
+aktivera; `/v1/runtime/pending` visar vad som väntar och en diff av vad ett ja
+skulle ersätta; `/v1/runtime/pending/activate` kräver revisionens id. Hela
+slingan körd i webbläsare mot en riktig väntande revision: kortet visade
+"Omdöpta: Lekeberg → Lekeberg norra" och "Ändrade tider: tåg 101", aktiveringen
+gick igenom och kortet försvann.
+
+**T3 — områdesvis grind.** Banan låst i Cloud-läge, tidtabellen alltid öppen.
+Den globala grinden borttagen.
+
+**Steg 2 färdigt.** Redigerbart läge med riktiga fält, genvägen *Bygg från
+stationsordningen* kopplad till en idempotent serverhärledning, och
+sådd-kopplingen på plats.
+
+Tre fällor som kostade tid:
+
+1. **Servern avvisar tom kropp på POST.** En åtgärd utan argument måste skicka
+   `{}` — annars `invalid_body`, och knappen ser trasig ut utan att något syns
+   i loggen.
+2. **`width: 100%` på ett flexbarn framtvingar den radbrytning det skulle
+   förhindra.** Ett `<input>` bär en inbyggd minimibredd på ~20 tecken som ett
+   `<div>` inte gör; rätt botemedel är `min-width: 0` och `flex-basis: 0`.
+3. **Kvittensen skrevs och raderades i samma andetag** — omritningen nollar
+   meddelanderaden, så "Sparat" måste sättas *efter* den.
 
 ---
 

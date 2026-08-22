@@ -377,6 +377,109 @@ def local_configuration_runtime_package(
     return runtime_package
 
 
+#: The four buttons a TMBox has. Fixed by the hardware, not a preference.
+PANEL_SLOTS = ("A", "B", "C", "D")
+
+
+def build_from_station_order(configuration: dict[str, Any]) -> dict[str, Any]:
+    """Derive connections and A-D panels from the order of the stations.
+
+    The shortcut the package calls the most important move in the whole step:
+    you should not have to enter the same thing three times. The station list
+    already says what the line looks like, so the line between them and the
+    button that reaches each neighbour can both be read off it.
+
+    Idempotent by construction, which is the part that matters. It **adds what
+    is missing and never rewrites what is there**: a connection somebody set to
+    double track stays double track, a panel somebody renamed keeps its name,
+    and a slot somebody pointed somewhere keeps pointing there. Running it a
+    second time is therefore a no-op, and running it after hand-editing does
+    not undo the hand-editing.
+
+    That rule is what makes the button safe to press when you are not sure
+    whether you already pressed it - which, during a meet, is most of the time.
+    """
+    result = deepcopy(configuration)
+    stations = result.get("stations") or []
+    connections = result.get("connections") or []
+    panels = result.get("panels") or []
+
+    # ---------------------------------------------------------- connections
+    existing_pairs = {
+        frozenset((str(link.get("station_a_id")), str(link.get("station_b_id"))))
+        for link in connections
+    }
+    for before, after in zip(stations, stations[1:]):
+        pair = frozenset((str(before["id"]), str(after["id"])))
+        if pair in existing_pairs:
+            continue
+        existing_pairs.add(pair)
+        connections.append({
+            "id": local_id("connection", str(before.get("code") or before["id"]),
+                           str(after.get("code") or after["id"])),
+            "station_a_id": str(before["id"]),
+            "station_b_id": str(after["id"]),
+            "track_type": TrackType.SINGLE.value,
+            "dispatch_mode_override": None,
+            "display_side_a": "right",
+            "display_side_b": "left",
+            "display_order_a": 0,
+            "display_order_b": 0,
+        })
+
+    # --------------------------------------------------------------- panels
+    panels_by_station: dict[str, dict[str, Any]] = {}
+    for panel in panels:
+        panels_by_station.setdefault(str(panel.get("station_id")), panel)
+
+    order = {str(station["id"]): index for index, station in enumerate(stations)}
+    for station in stations:
+        station_id = str(station["id"])
+        panel = panels_by_station.get(station_id)
+        if panel is None:
+            panel = {
+                "id": local_id("panel", str(station.get("code") or station_id)),
+                "station_id": station_id,
+                "name": f"{station.get('code') or station_id} TMBox",
+                "slots": {slot: None for slot in PANEL_SLOTS},
+            }
+            panels.append(panel)
+            panels_by_station[station_id] = panel
+
+        slots = panel.setdefault("slots", {})
+        for slot in PANEL_SLOTS:
+            slots.setdefault(slot, None)
+        taken = {value for value in slots.values() if value}
+
+        # Neighbours in line order, so A is the one before and B the one after
+        # on a plain through station. An operator reading the box should not
+        # have to work out which way A points.
+        neighbours = sorted(
+            (
+                link for link in connections
+                if station_id in (str(link.get("station_a_id")), str(link.get("station_b_id")))
+            ),
+            key=lambda link: order.get(
+                str(link["station_b_id"]) if str(link["station_a_id"]) == station_id
+                else str(link["station_a_id"]),
+                0,
+            ),
+        )
+        for link in neighbours:
+            link_id = str(link["id"])
+            if link_id in taken:
+                continue
+            free = next((slot for slot in PANEL_SLOTS if not slots.get(slot)), None)
+            if free is None:
+                break
+            slots[free] = link_id
+            taken.add(link_id)
+
+    result["connections"] = connections
+    result["panels"] = panels
+    return result
+
+
 def local_configuration_from_publication(payload: dict[str, Any]) -> dict[str, Any]:
     """Open a package fetched from Cloud as an editable working copy.
 

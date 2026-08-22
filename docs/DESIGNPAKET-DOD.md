@@ -11,7 +11,7 @@ Uppdateras efter varje arbetsblock, så att ingenting tappas mellan omgångar.
 | 👁 | dessutom visuellt verifierat i webbläsare mot paketet |
 | ⛔ | verkligt blockerat — orsak angiven |
 
-**Läge 2026-08-22:** ⬜ 50 · 🔨 14 · ✅ 17 · 👁 38 · ⛔ 2
+**Läge 2026-08-22:** ⬜ 49 · 🔨 12 · ✅ 19 · 👁 41 · ⛔ 0
 
 Uppdatera den här raden när du uppdaterar tabellerna, så att en snabb blick
 räcker för att se om arbetet rör sig. Räkna den, gissa den inte — den var
@@ -46,43 +46,77 @@ de ska inte omtolkas av en senare session.
 | P1 | PDF, JPG och PNG tolkas **endast** i TrainMeet Cloud | ✅ | `test_product_boundaries.NoDocumentInterpretationTests` — faller om något tolkningsbibliotek importeras i servern |
 | P2 | Cloud publicerar grundkonfigurationen | ✅ | `RuntimePublication.parse` är enda vägen in; `test_the_manual_import_accepts_a_json_operating_package` |
 | P3 | Synk går **endast** Cloud → Server | ✅ | `test_every_request_to_cloud_is_a_read` — varje `Request` mot Cloud är en GET utan `data` |
-| P4 | Ändringar på servern skickas **aldrig** upp till Cloud | ✅ | samma test; ingen uppladdningsväg finns |
-| P5 | BYGG steg 2 skrivskyddat i Cloud-läge, redigerbart lokalt | 👁 | `test_build_topology` (19 tester); låst läge verifierat i webbläsare |
-| P6 | BYGG steg 3 **alltid** lokalt redigerbart, även på Cloud-revision | ⛔ | **Inte implementerat.** Se T3 nedan. |
-| P7 | Lokala tidtabellsändringar blir lokala runtime-revisioner | 🔨 | `SQLiteRuntimeStore.install` gör `<bas>+local-rN`; ingen UI-koppling |
-| P8 | En ny Cloud-revision aktiveras **aldrig** tyst över lokala ändringar | ⛔ | **Överträdd i dag.** Se T4 nedan. |
+| P4 | Ändringar på servern skickas **aldrig** upp till Cloud | ✅ | samma test, plus `test_area_gate.test_nothing_from_the_server_is_sent_to_cloud_by_editing` som kontrollerar det där arbetet faktiskt produceras |
+| P5 | BYGG steg 2 skrivskyddat i Cloud-läge, redigerbart lokalt | 👁 | `test_build_topology` (33 tester), `test_area_gate` (21). Båda lägena verifierade i webbläsare vid 1280 och 924 px |
+| P6 | BYGG steg 3 **alltid** lokalt redigerbart, även på Cloud-revision | ✅ | `test_area_gate.AreaGateTests` — tid ändrad och rörelse struken i Cloud-läge; `test_operating_modes.test_cloud_linked_still_lets_the_timetable_be_corrected` |
+| P7 | Lokala tidtabellsändringar blir lokala runtime-revisioner | ✅ | `test_a_corrected_timetable_becomes_a_local_revision`, `test_the_local_revision_is_built_on_the_cloud_publication` |
+| P8 | En ny Cloud-revision aktiveras **aldrig** tyst över lokala ändringar | 👁 | `test_pending_revisions` (17 tester); hela slingan körd i webbläsare mot en riktig väntande revision |
 | P9 | Serverns manuella filimport är ett exporterat JSON-driftpaket | ✅ | `test_the_manual_import_accepts_a_json_operating_package` |
 
-### ⛔ T3 — grinden som stänger tidtabellen
+### ✅ T3 — grinden är områdesvis
 
-`http_server._require_editing_open()` stänger *varje* skrivväg i
-`cloud-linked`, tidtabellen inkluderad. P6 säger att den inte får göra det för
-steg 3: under träffen är servern driften, och det finns ingen väg via Cloud när
-ett tåg blir sent.
+Den gamla `_require_editing_open()` stängde *varje* skrivväg i `cloud-linked`,
+tidtabellen inkluderad. Det gjorde två olika saker omöjliga att skilja åt: att
+rätta en avgångstid vägrades av samma skäl som att rita om banan.
 
-Grinden ska bli områdesvis i stället för global: banan stängd i Cloud-läge,
-tidtabellen öppen. `test_product_boundaries.TimetableStaysEditableTests` pinnar
-var raden sitter, så att den som öppnar den vet exakt vad som ändras.
+Grinden heter nu `_require_topology_unchanged()` och gäller bara
+`TOPOLOGY_SECTIONS = ("stations", "connections", "panels")`. Tidtabellen är
+öppen även i Cloud-läge. Den globala grinden är **borttagen**, inte kringgången,
+och `test_product_boundaries.test_the_global_editing_gate_is_gone` faller om den
+smyger tillbaka.
 
-### ⛔ T4 — den tysta aktiveringen
+Tre följdändringar som hörde ihop med den:
 
-`http_server.auto_sync_cloud_runtime()` anropar
-`runtime_store.install(download.package)`, och `install()` har
-`activate: bool = True`. En ny Cloud-publicering **aktiveras alltså direkt**,
-var femtonde sekund, utan att någon sett vad som ändrades.
+1. **Sådd tillåts i Cloud-läge.** En kopia är ingen ändring — den aktiva
+   träffen står orörd. Att vägra den lämnade tidtabellen utan något att
+   redigeras *i*, vilket är hur en smal regel blir en bred.
+2. **Aktivering kontrollerar det utkast som faktiskt aktiveras**, inte det som
+   råkade sparas sist. Spara och aktivera är två anrop.
+3. **Radordning är ingen ändring.** Jämförelsen sorterar på id, för en grind som
+   vägrar en sparning över radordning är en grind folk går runt.
 
-I dag biter det när auto-synken står på och läget är `offline-meet` — att byta
-driftläge stänger inte av auto-synken. Med P6 på plats biter det i Cloud-läge
-också, alltså i normalfallet.
+Jämförelsen är muterad från fyra håll: grinden som slutar jämföra, `trains`
+inflyttad bland de låsta sektionerna, aktiveringens kontroll borttagen, och
+sorteringen borttagen. Alla fyra fångas.
 
-Vad som ska hända i stället: paketet installeras med `activate=False`, läggs
-som **väntande**, och operatören får se exakt vad som skrivs över innan hen
-aktiverar. `runtime.activate()` finns redan; det som saknas är att inte
-aktivera, och en vy som visar diffen.
+### ✅ T4 — ingen tyst aktivering
 
-Det här är den värsta felmoden produkten har — en operatör som förlorar tre
-rättelser hen gjort kl 13 för att Cloud publicerade kl 14 — och det är därför
-det står som ⛔ och inte som en detalj i en tabell.
+`auto_sync_cloud_runtime()` anropade `runtime_store.install(download.package)`
+med `activate` som default `True`, och pollerloopen anropade sedan
+`server.request_restart()`. En träff kunde alltså starta om under händerna på
+tågklareraren för att Cloud råkat publicera.
+
+Nu gäller:
+
+| | |
+|---|---|
+| Pollern hämtar | ja, var 15:e sekund som förut |
+| Pollern aktiverar | **aldrig** |
+| Pollern startar om | **aldrig** |
+| Pollern kör i `offline-meet` | **nej** — inte "hämta men aktivera inte", utan hämta inte alls |
+| Aktivering | kräver att revisionens id skickas tillbaka |
+
+Den hämtade revisionen läggs som **väntande** (`pending_publication_id` i
+`runtime_settings`, publiceringen lagrad med `active = 0`). Nyckeln behövs
+utöver `active = 0`: en lokal revision som byggts men inte aktiverats ligger
+också inaktiv, och de två får inte förväxlas.
+
+`/v1/runtime/pending` svarar med vad som väntar **och en diff**: omdöpta
+stationer vid namn, ändrade tåg vid nummer, tillagda och borttagna rörelser
+räknade. Att räkna rader räcker inte — "3 stationer ändras" säger ingenting om
+huruvida ändringen spelar roll.
+
+`/v1/runtime/pending/activate` kräver att `publication_id` skickas med och
+stämmer. Utan det skulle en flik som stått öppen sedan i morse kunna aktivera
+något som kommit sedan dess — samma tysta överskrivning, men genom UI:t.
+
+Muterat från fem håll: pollern aktiverar igen, offline-grinden borta, id-kravet
+borta, `install()` aktiverar trots `activate=False`, och självläkningen borta.
+Alla fem fångas.
+
+**Kvar:** en väntande revision syns i BYGG steg 1. Den syns *inte* i KÖR-vyerna,
+där en tågklarerare tillbringar dagen. Det är rimligt att den borde göra det,
+men det är en egen designfråga och paketet beskriver ingen sådan markör.
 
 ---
 
@@ -206,30 +240,45 @@ det står som ⛔ och inte som en detalj i en tabell.
 | 3.8.3 | Härledd länkbeskrivning per station | 👁 |
 | 3.8.4 | Sträckor: från, till, spårtyp, trafikeringsregel | 👁 |
 | 3.8.5 | Paneler: station, namn, fyra slot-chips A–D | 👁 |
-| 3.8.6 | **Genväg: *Bygg från stationsordningen*, idempotent** | ⬜ |
+| 3.8.6 | **Genväg: *Bygg från stationsordningen*, idempotent** | 👁 |
 | 3.8.7 | Låst av Cloud: `#f7f5f0`/`#8a857a`, märke "🔒 Låst av Cloud" | 👁 |
-| 3.8.8 | Lokal: vita fält, märke "✎ Redigerbar" `#a44f33` | 🔨 |
+| 3.8.8 | Lokal: vita fält, märke "✎ Redigerbar" `#a44f33` | 👁 |
 
-**Läget i steg 2:** det låsta läget är byggt, testat och visuellt verifierat —
-det är vyn folk faktiskt ser, eftersom Cloud äger banan i normalfallet. Fälten
-ritas som `div` med paketets ruta, inte som avstängda `input`: ett låst fält är
-ingen kontroll, och en skärmläsare ska inte kalla det "redigerbart textfält".
+**Läget i steg 2:** båda lägena är byggda, testade och visuellt verifierade vid
+1280 och 924 px. Låst läge ritar fälten som `div` med paketets ruta, inte som
+avstängda `input`: ett låst fält är ingen kontroll, och en skärmläsare ska inte
+kalla det "redigerbart textfält". Öppet läge ritar riktiga fält och sparar vid
+`change`, inte vid varje tangenttryckning — det senare hade skrivit "L", "Le",
+"Lek" som tre revisioner.
 
-Det **redigerbara** läget ritar samma rader och rätt märke, men fälten är ännu
-inte inmatningsbara och genvägen finns inte. Det är nästa block, tillsammans
-med sådd-kopplingen (`/v1/local-configuration/seed` finns men anropas inte av
-någon vy).
+Genvägen **lägger till det som saknas och skriver aldrig om det som finns**. En
+sträcka någon satt till dubbelspår förblir dubbelspår, en panel någon döpt om
+behåller sitt namn, och en plats någon riktat behåller sin riktning. Att köra
+den en andra gång gör därför ingenting. Det är den egenskapen som gör knappen
+trygg att trycka på när man inte minns om man redan tryckt — vilket under en
+träff är för det mesta. Sju tester och tre mutationer håller den.
+
+Sådd-kopplingen är på plats: ett tomt utkast visar *Hämta från aktiva träffen*
+i stället för genvägen, och genvägen visas först när det finns stationer att
+härleda ur.
 
 En A–D-plats pekar på en **sträcka**, inte på en granne. Grannen är sträckans
-andra ände sedd från panelens station. `test_a_panel_slot_carries_the_connection_id_not_a_station`
-pinnar det, för uppslaget ser rätt ut även när det är fel — det renderar bara
-ett id i stället för ett namn.
+andra ände sedd från panelens station.
+`test_a_panel_slot_carries_the_connection_id_not_a_station` pinnar det, för
+uppslaget ser rätt ut även när det är fel — det renderar bara ett id i stället
+för ett namn.
+
+**Kvar i steget:** `⋯`-menyn per rad (paketet har den; i låst läge finns inget
+bakom den, och i öppet läge saknas *Lägg till station* och *Ta bort*), och
+omordning av stationer.
 
 ### 3.9 BYGG › 3 Tidtabell
 
-> **P6 gäller här:** tidtabellen ska vara redigerbar även när grundrevisionen
-> kommer från Cloud, till skillnad från steg 2. Grinden som stänger den står
-> kvar — se ⛔ T3. Bygg inte det här steget som skrivskyddat.
+> **P6 gäller här:** tidtabellen är redigerbar även när grundrevisionen kommer
+> från Cloud, till skillnad från steg 2. Grinden är öppnad (se ✅ T3) och
+> API-vägen fungerar — `save_local_configuration` tar emot tidtabellsändringar
+> i Cloud-läge och `activate_local_configuration` gör dem till en lokal
+> revision. Det som saknas är vyn. Bygg inte det här steget som skrivskyddat.
 
 | # | Krav | Status |
 |---|---|---|

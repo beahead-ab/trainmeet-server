@@ -258,3 +258,94 @@ class TwelveMenuLeftoverTests(unittest.TestCase):
         file at that line - every feature below it stops working, silently.
         """
         self.assertNotIn("admin-section-state", self.js)
+
+
+class EditableViewTests(unittest.TestCase):
+    """The open mode: real fields, the shortcut, and the seed connection."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.html = (WEB / "index.html").read_text(encoding="utf-8")
+        cls.js = (WEB / "app.js").read_text(encoding="utf-8")
+        cls.css = (WEB / "app.css").read_text(encoding="utf-8")
+
+    def test_open_rows_use_inputs_and_locked_rows_do_not(self):
+        renderer = self.js.split("BYGG steg 2: Bana")[1]
+        self.assertIn("function topologyInput", renderer)
+        self.assertIn("function topologySelect", renderer)
+        self.assertIn("if (locked) {", renderer)
+
+    def test_a_field_commits_on_change_not_on_every_keystroke(self):
+        """Saving per keystroke would write "L", "Le", "Lek" as three revisions."""
+        renderer = self.js.split("BYGG steg 2: Bana")[1]
+        self.assertIn('field.addEventListener("change", commit)', renderer)
+        self.assertNotIn('addEventListener("input"', renderer)
+
+    def test_the_shortcut_and_the_seed_box_both_exist(self):
+        self.assertIn('id="bana-shortcut"', self.html)
+        self.assertIn('id="bana-seed"', self.html)
+        self.assertIn("Snabbaste vägen till en körbar träff", self.html)
+        self.assertIn("Bygg från stationsordningen", self.html)
+
+    def test_the_shortcut_is_hidden_when_it_could_not_do_anything(self):
+        self.assertIn("topology.locked || !hasStations", self.js)
+        self.assertIn("topology.locked || hasStations", self.js)
+
+    def test_the_derivation_happens_on_the_server(self):
+        """Two opinions about how an A-D panel fills would be worse than none."""
+        self.assertIn('"/v1/local-configuration/build"', self.js)
+        renderer = self.js.split("BYGG steg 2, redigering", 1)[1]
+        self.assertNotIn("local-connection-", renderer)
+
+    def test_the_dispatch_rule_keeps_all_three_values(self):
+        """The screenshot shows two; the data has three.
+
+        Rule 3 of the mandate: functionality may move but not disappear.
+        Dropping "Direkt" from the picker would make an existing setting
+        unreachable from the only view that shows it.
+        """
+        self.assertIn('["", "Ärver träffens läge"]', self.js)
+        self.assertIn('["clearance", "Begär och bekräfta"]', self.js)
+        self.assertIn('["direct", "Direkt"]', self.js)
+
+    def test_an_input_may_shrink_below_its_intrinsic_width(self):
+        """Without this the station row splits in two at the package's 924px.
+
+        An <input> carries a built-in minimum of about twenty characters that
+        a <div> does not, so the same row that fits when locked breaks when
+        editable - which reads as two different designs for one screen.
+        """
+        self.assertIn(
+            "input.topology-field,\nselect.topology-field {\n  min-width: 0;\n}",
+            self.css,
+        )
+        self.assertIn("input.topology-field.grow {\n  flex: 1 1 0;\n}", self.css)
+
+
+class PendingRevisionViewTests(unittest.TestCase):
+    """T4's other half: the decision has to be possible to make."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.html = (WEB / "index.html").read_text(encoding="utf-8")
+        cls.js = (WEB / "app.js").read_text(encoding="utf-8")
+
+    def test_the_card_exists_and_names_what_changes(self):
+        self.assertIn('id="pending-revision"', self.html)
+        self.assertIn('id="pending-changes"', self.html)
+        self.assertIn('id="activate-pending"', self.html)
+
+    def test_the_change_list_is_in_the_card_not_behind_a_link(self):
+        """What takes an extra click does not get read."""
+        self.assertIn("renderPendingChanges", self.js)
+        self.assertNotIn("Visa vad som ändras", self.html)
+
+    def test_activation_sends_the_revision_it_was_shown(self):
+        self.assertIn("publication_id: card.dataset.publicationId", self.js)
+
+    def test_a_truncated_list_says_it_is_truncated(self):
+        self.assertIn("och ${group.more} till", self.js)
+
+    def test_the_card_is_built_as_elements_not_html_strings(self):
+        block = self.js.split("Väntande Cloud-revision (T4)")[1]
+        self.assertNotIn("innerHTML", block)

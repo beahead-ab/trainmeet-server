@@ -96,17 +96,27 @@ class SyncGoesOneWayTests(unittest.TestCase):
 
 
 class TimetableStaysEditableTests(unittest.TestCase):
-    """BYGG steg 3 ska vara redigerbart även när grundrevisionen kommer från Cloud.
+    """BYGG steg 3 är redigerbart även när grundrevisionen kommer från Cloud.
 
-    Beslutet är taget; grinden som stänger det står kvar. Testet nedan pinnar
-    bara att grinden finns och var den sitter, så att den som öppnar den vet
-    exakt vilken rad det gäller - se checklistan, punkt ⛔ T3.
+    Den här klassen pinnade tidigare *var grinden satt*, medan beslutet ännu
+    inte var genomfört. Nu är det genomfört, så den pinnar i stället att den
+    gamla globala grinden inte kan smyga tillbaka: en enda `cloud_linked` över
+    hela utkastet gör tidtabellen oredigerbar igen utan att någon märker det
+    förrän ett tåg är sent.
+
+    Beteendet i sig ligger i test_operating_modes; det här är vakten mot
+    återfall.
     """
 
-    def test_the_gate_that_has_to_open_is_where_the_checklist_says(self):
+    def test_the_global_editing_gate_is_gone(self):
         text = (SOURCE / "http_server.py").read_text(encoding="utf-8")
-        self.assertIn("def _require_editing_open", text)
-        self.assertIn("_require_editing_open()", text)
+        self.assertNotIn("_require_editing_open", text)
+
+    def test_the_gate_that_remains_is_about_the_line_only(self):
+        text = (SOURCE / "http_server.py").read_text(encoding="utf-8")
+        self.assertIn("def _require_topology_unchanged", text)
+        self.assertIn('TOPOLOGY_SECTIONS = ("stations", "connections", "panels")', text)
+        self.assertNotIn('"trains"', text.split("TOPOLOGY_SECTIONS =")[1].split(")")[0])
 
 
 if __name__ == "__main__":

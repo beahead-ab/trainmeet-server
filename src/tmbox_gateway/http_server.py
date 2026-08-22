@@ -38,6 +38,8 @@ from .local_config import (
     ConfigurationRevisionConflict,
     LocalConfigurationError,
     SQLiteLocalConfigurationStore,
+    build_from_station_order,
+    local_configuration_from_publication,
 )
 from .models import Command, TrackConfig, TrackType, UnknownTrackError, resolve_track_id
 from .observability import log_event, use_correlation
@@ -90,6 +92,95 @@ class HTTPServerConfig:
     http_port: int = 8787
     local_ip: str = ""
     connection_code: str = ""
+
+
+#: How many rows a change list names before it says "och N till". An operator
+#: reading a diff needs to recognise the change, not audit every row; a list
+#: that fills the screen is one nobody reads to the end of.
+CHANGE_SAMPLE = 8
+
+
+def _named(rows: list[str]) -> dict[str, Any]:
+    return {
+        "count": len(rows),
+        "names": rows[:CHANGE_SAMPLE],
+        "more": max(0, len(rows) - CHANGE_SAMPLE),
+    }
+
+
+def _movement_signature(movement: dict[str, Any]) -> tuple:
+    """Everything about a movement an operator would call a change.
+
+    Deliberately not the whole row: sort keys and internal ordering fields
+    differ between publications without anything visible moving, and a diff
+    that cries wolf on those is a diff people stop reading.
+    """
+    return (
+        str(movement.get("train_number") or ""),
+        str(movement.get("station_id") or ""),
+        str(movement.get("arrival_time") or ""),
+        str(movement.get("departure_time") or ""),
+        str(movement.get("track_id") or ""),
+        str(movement.get("days") or ""),
+        bool(movement.get("no_stop")),
+    )
+
+
+def _revision_changes(
+    active: RuntimePublication | None,
+    pending: RuntimePublication,
+) -> dict[str, Any]:
+    """What activating `pending` would replace in `active`.
+
+    Written as a comparison of what is on screen, not of JSON: stations by
+    name, movements by train and time. A diff nobody can read is the same as
+    no diff at all, and this one exists precisely so that somebody reads it
+    before agreeing to lose work.
+    """
+    if active is None:
+        return {"first_activation": True}
+
+    before, after = active.payload, pending.payload
+
+    old_stations = {str(s["id"]): str(s.get("name") or s["id"]) for s in before.get("stations") or []}
+    new_stations = {str(s["id"]): str(s.get("name") or s["id"]) for s in after.get("stations") or []}
+    renamed = [
+        f"{old_stations[key]} \u2192 {new_stations[key]}"
+        for key in old_stations.keys() & new_stations.keys()
+        if old_stations[key] != new_stations[key]
+    ]
+
+    old_links = {str(c["id"]) for c in before.get("connections") or []}
+    new_links = {str(c["id"]) for c in after.get("connections") or []}
+
+    old_moves = {str(m["id"]): _movement_signature(m) for m in before.get("trains") or []}
+    new_moves = {str(m["id"]): _movement_signature(m) for m in after.get("trains") or []}
+    by_id = {str(m["id"]): m for m in before.get("trains") or []}
+    changed_moves = [
+        str(by_id[key].get("train_number") or key)
+        for key in sorted(old_moves.keys() & new_moves.keys())
+        if old_moves[key] != new_moves[key]
+    ]
+
+    return {
+        "first_activation": False,
+        "stations": {
+            "added": _named(sorted(new_stations[k] for k in new_stations.keys() - old_stations.keys())),
+            "removed": _named(sorted(old_stations[k] for k in old_stations.keys() - new_stations.keys())),
+            "renamed": _named(sorted(renamed)),
+        },
+        "connections": {
+            "added": len(new_links - old_links),
+            "removed": len(old_links - new_links),
+        },
+        "timetable": {
+            "added": len(new_moves.keys() - old_moves.keys()),
+            "removed": len(old_moves.keys() - new_moves.keys()),
+            "changed": _named(sorted(set(changed_moves))),
+            "total_before": len(old_moves),
+            "total_after": len(new_moves),
+        },
+    }
 
 
 class TrainMeetHTTPApplication:
@@ -1139,7 +1230,6 @@ class TrainMeetHTTPApplication:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         self._require_admin(client)
-        self._require_editing_open()
         if self.local_configuration_store is None:
             raise HTTPAPIError(
                 HTTPStatus.SERVICE_UNAVAILABLE,
@@ -1153,6 +1243,7 @@ class TrainMeetHTTPApplication:
                 "invalid_local_configuration",
                 "Konfigurationen måste vara ett objekt",
             )
+        self._require_topology_unchanged(draft)
         expected_revision = payload.get("expected_revision")
         try:
             revision = int(expected_revision) if expected_revision is not None else None
@@ -1170,21 +1261,58 @@ class TrainMeetHTTPApplication:
             ) from error
         return saved
 
-    def _require_editing_open(self) -> None:
-        """D3: while Cloud is the editor, the server refuses local changes.
+    #: Vad i ett utkast som hör till *banan* och inte till dagens trafik.
+    #: Cloud äger de här så länge servern är Cloud-kopplad. Tidtabellen ägs
+    #: aldrig av Cloud när träffen väl kör.
+    TOPOLOGY_SECTIONS = ("stations", "connections", "panels")
 
-        A rule, not a recommendation. The mode is persistent state a person
-        set, never a reading of whether Cloud answered this second - a network
-        blip must not unlock editing, and a network recovering must not lock
-        it in the middle of somebody's work.
+    @classmethod
+    def _topology_of(cls, configuration: dict[str, Any]) -> dict[str, Any]:
+        """The line, in a form two configurations can be compared by.
+
+        Sorted by id, because a publication and a draft can hold the same
+        stations in different order without anything having changed - and a
+        gate that refuses a save over row order is a gate people route around.
+        """
+        return {
+            section: sorted(
+                (configuration.get(section) or []),
+                key=lambda row: str(row.get("id", "")),
+            )
+            for section in cls.TOPOLOGY_SECTIONS
+        }
+
+    def _require_topology_unchanged(self, draft: dict[str, Any]) -> None:
+        """T3: in Cloud mode the timetable stays editable. The line does not.
+
+        The old rule was one gate over the whole draft, which made the two
+        indistinguishable: correcting a departure time was refused for the same
+        reason as redrawing the line. But during a meet the server *is* the
+        operation - trains run late and movements get cancelled, and there is
+        no route through Cloud for that at 13:40 on a Saturday.
+
+        The line is the other way round. It is interpreted from the meet's own
+        documents and reviewed in Cloud, it is drawn once, and it sits still.
         """
         if self.runtime_store is None or self.runtime_store.editing_is_open():
             return
+        active = self.runtime_store.active()
+        if active is None:
+            return
+        base = self._topology_of(local_configuration_from_publication(active.payload))
+        incoming = self._topology_of(draft)
+        changed = [
+            section for section in self.TOPOLOGY_SECTIONS if incoming[section] != base[section]
+        ]
+        if not changed:
+            return
+        names = {"stations": "stationer", "connections": "sträckor", "panels": "paneler"}
         raise HTTPAPIError(
             HTTPStatus.CONFLICT,
-            "cloud_linked",
-            "Servern är kopplad till TrainMeet Cloud, som är redaktör. "
-            "Ta träffen offline för att redigera lokalt.",
+            "topology_locked_by_cloud",
+            "Banan kommer från TrainMeet Cloud och ändras inte här ("
+            + ", ".join(names[section] for section in changed)
+            + "). Tidtabellen går att rätta som vanligt.",
         )
 
     def operating_mode_state(self, client: PairedClient) -> dict[str, Any]:
@@ -1284,7 +1412,9 @@ class TrainMeetHTTPApplication:
         thing worth correcting during a meet.
         """
         self._require_admin(client)
-        self._require_editing_open()
+        # Seeding är en kopia, inte en ändring: den aktiva träffen står orörd.
+        # Den måste gå att göra även i Cloud-läge, annars finns inget utkast
+        # att rätta tidtabellen i - och tidtabellen ska alltid gå att rätta.
         if self.local_configuration_store is None:
             raise HTTPAPIError(
                 HTTPStatus.SERVICE_UNAVAILABLE, "local_configuration_unavailable",
@@ -1317,30 +1447,149 @@ class TrainMeetHTTPApplication:
         }
 
     def auto_sync_cloud_runtime(self) -> dict[str, Any]:
+        """Poll Cloud for a newer revision - and never activate what it finds.
+
+        This runs every fifteen seconds with nobody watching. It used to call
+        `install()`, whose `activate` defaults to True, and then restart the
+        server to apply the result. An operator who had corrected three
+        departure times at 13:00 lost them when Cloud published at 14:00, and
+        the meet restarted underneath them while it happened.
+
+        So: fetch, store, mark as waiting, and stop. Activating is somebody's
+        decision, and a decision needs somebody present to make it.
+        """
         if self.runtime_store is None or not self.runtime_store.cloud_auto_sync_enabled():
-            return {"checked": False, "updated": False}
+            return {"checked": False, "pending": False}
+
+        # In offline-meet the server is deliberately the editor, and polling
+        # Cloud in the background is the wrong thing to be doing at all - not
+        # merely the wrong thing to activate. Staging revisions nobody asked
+        # for would queue a "waiting" badge over work that left Cloud on
+        # purpose.
+        if not self.runtime_store.cloud_polling_is_allowed():
+            return {"checked": False, "pending": False, "reason": "offline_meet"}
+
         token = self.runtime_store.link_token()
         if not token:
-            return {"checked": False, "updated": False}
+            return {"checked": False, "pending": False}
         central_url = canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url)
         manifest = self.linked_runtime_fetcher(token, central_url, True)
         if not isinstance(manifest, CentralRuntimeManifest):
             raise CentralSyncError("TrainMeet Cloud skickade inget versionsbesked")
         active = self.runtime_store.active()
         if active is not None and active.publication_id == manifest.publication_id:
-            return {"checked": True, "updated": False, "publication_id": manifest.publication_id}
+            return {"checked": True, "pending": False, "publication_id": manifest.publication_id}
+
+        # Already fetched and waiting: downloading it again every fifteen
+        # seconds would be pointless traffic and would keep rewriting the row.
+        waiting = self.runtime_store.pending_publication()
+        if waiting is not None and waiting.publication_id == manifest.publication_id:
+            return {"checked": True, "pending": True, "publication_id": waiting.publication_id}
+
         download = self.linked_runtime_fetcher(token, central_url, False)
         if not isinstance(download, CentralRuntimeDownload):
             raise CentralSyncError("TrainMeet Cloud skickade inget driftpaket")
-        publication = self.runtime_store.install(download.package)
+        publication = self.runtime_store.stage_pending(download.package)
         if self.operations_store is not None:
             self.operations_store.ensure_publication(publication)
         return {
             "checked": True,
-            "updated": True,
+            "pending": True,
+            "publication_id": publication.publication_id,
+        }
+
+    # ------------------------------------------------- väntande Cloud-revision
+
+    def pending_revision_state(self, client: PairedClient) -> dict[str, Any]:
+        """What is waiting, and exactly what saying yes would cost.
+
+        Counting rows is not enough. "3 stationer ändras" tells an operator
+        nothing about whether the change matters; naming them does. This exists
+        so that nobody activates a revision without having been shown what it
+        replaces.
+        """
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(
+                HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal lagring saknas"
+            )
+        pending = self.runtime_store.pending_publication()
+        if pending is None:
+            return {"pending": False}
+        active = self.runtime_store.active()
+        return {
+            "pending": True,
+            "publication_id": pending.publication_id,
+            "meet_name": pending.meet_name,
+            "published_at": pending.published_at,
+            "active_publication_id": active.publication_id if active else None,
+            "local_revisions": self.runtime_store.local_revisions(),
+            "changes": _revision_changes(active, pending),
+        }
+
+    def activate_pending_revision(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Activate the waiting revision, because somebody said so.
+
+        The publication id has to be sent back and has to match. Without it a
+        stale button in a tab left open since this morning could activate a
+        revision that arrived since - the same silent overwrite, entering
+        through the UI instead of through the poller.
+        """
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(
+                HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal lagring saknas"
+            )
+        pending = self.runtime_store.pending_publication()
+        if pending is None:
+            raise HTTPAPIError(
+                HTTPStatus.CONFLICT,
+                "no_pending_revision",
+                "Ingen revision väntar på aktivering",
+            )
+        confirmed = str(payload.get("publication_id") or "")
+        if confirmed != pending.publication_id:
+            raise HTTPAPIError(
+                HTTPStatus.CONFLICT,
+                "pending_revision_changed",
+                "En annan revision väntar nu. Läs om vad den ändrar innan du aktiverar.",
+            )
+        publication = self.runtime_store.activate(pending.publication_id)
+        if self.operations_store is not None:
+            self.operations_store.ensure_publication(publication)
+        return {
+            "activated": True,
             "publication_id": publication.publication_id,
             "restart_required": publication.session_config() != self.engine.config,
         }
+
+    def build_local_configuration_from_stations(self, client: PairedClient) -> dict[str, Any]:
+        """The shortcut: derive connections and A-D panels from the station order.
+
+        Goes through the same save path as any other edit, so the same rules
+        apply. In Cloud mode that means it is refused with
+        `topology_locked_by_cloud` - which is right: the shortcut builds the
+        line, and the line is Cloud's while Cloud is linked.
+        """
+        self._require_admin(client)
+        if self.local_configuration_store is None:
+            raise HTTPAPIError(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                "local_configuration_unavailable",
+                "Lokal konfigurationslagring saknas",
+            )
+        current = self.local_configuration_store.current()
+        draft = current.get("draft") or {}
+        if not (draft.get("stations") or []):
+            raise HTTPAPIError(
+                HTTPStatus.CONFLICT,
+                "no_stations",
+                "Lägg till stationer först - genvägen bygger sträckor och paneler ur deras ordning.",
+            )
+        return self.save_local_configuration(
+            client,
+            {"draft": build_from_station_order(draft), "expected_revision": current.get("revision")},
+        )
 
     def activate_local_configuration(
         self,
@@ -1348,13 +1597,20 @@ class TrainMeetHTTPApplication:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         self._require_admin(client)
-        self._require_editing_open()
+        # Ingen global grind här heller: en rättad tidtabell ska kunna bli en
+        # lokal revision även när grundrevisionen kommer från Cloud.
         if self.local_configuration_store is None or self.runtime_store is None:
             raise HTTPAPIError(
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 "local_configuration_unavailable",
                 "Lokal konfigurationslagring saknas",
             )
+        # Kontrollen görs på det utkast som faktiskt aktiveras, inte på det
+        # som råkade sparas sist: spara och aktivera är två anrop och kan komma
+        # i vilken ordning som helst.
+        self._require_topology_unchanged(
+            self.local_configuration_store.current().get("draft") or {}
+        )
         expected_revision = payload.get("expected_revision")
         try:
             revision = int(expected_revision) if expected_revision is not None else None
@@ -1984,6 +2240,12 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     self.server.application.local_configuration(client),
                 )
                 return
+            if path == "/v1/runtime/pending":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK, self.server.application.pending_revision_state(client)
+                )
+                return
             if path == "/v1/build/topology":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.build_topology(client))
@@ -2187,6 +2449,13 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     self.server.application.tmbox_v2_command(client, payload),
                 )
                 return
+            if path == "/v1/runtime/pending/activate":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.activate_pending_revision(client, payload),
+                )
+                return
             if path == "/v1/runtime/activate":
                 client = self._authenticated_client()
                 self._send_json(
@@ -2213,6 +2482,13 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     HTTPStatus.OK,
                     self.server.application.seed_local_configuration(client),
+                )
+                return
+            if path == "/v1/local-configuration/build":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.build_local_configuration_from_stations(client),
                 )
                 return
             if path == "/v1/local-configuration/activate":

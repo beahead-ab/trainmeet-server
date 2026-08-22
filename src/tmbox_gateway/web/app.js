@@ -447,6 +447,7 @@ function selectBuildStep(step) {
   if (sections.includes("software")) checkSoftwareUpdate();
   if (sections.includes("cloud")) refreshRuntime();
   if (selected === "kalla") refreshSourceChoice();
+  if (selected === "kalla") refreshPendingRevision();
   if (selected === "bana") refreshBuildTopology();
   appView.classList.remove("sidebar-open");
   window.scrollTo({ top: 0, behavior: "auto" });
@@ -4056,6 +4057,40 @@ function topologyField(text, locked, extraClass = "") {
   return field;
 }
 
+// Öppet läge: ett riktigt inmatningsfält. `onCommit` får det nya värdet först
+// när fältet lämnas eller Enter trycks - inte vid varje tangenttryckning, som
+// hade sparat "L", "Le", "Lek" var för sig och gjort revisionshistoriken
+// oläslig.
+function topologyInput(value, extraClass, onCommit) {
+  const field = document.createElement("input");
+  field.type = "text";
+  field.className = extraClass ? `topology-field ${extraClass}` : "topology-field";
+  field.value = value ?? "";
+  const commit = () => {
+    if (field.value === (value ?? "")) return;
+    onCommit(field.value);
+  };
+  field.addEventListener("change", commit);
+  field.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") field.blur();
+  });
+  return field;
+}
+
+function topologySelect(options, selected, extraClass, onCommit) {
+  const field = document.createElement("select");
+  field.className = extraClass ? `topology-field ${extraClass}` : "topology-field";
+  options.forEach(([value, label]) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    if (value === selected) option.selected = true;
+    field.append(option);
+  });
+  field.addEventListener("change", () => onCommit(field.value));
+  return field;
+}
+
 function topologyIndex(number) {
   const badge = document.createElement("span");
   badge.className = "topology-index";
@@ -4095,11 +4130,21 @@ function renderTopologyStations(container, topology) {
   stations.forEach((station, index) => {
     const row = document.createElement("div");
     row.className = "topology-row";
-    row.append(
-      topologyIndex(station.order),
-      topologyField(station.code, locked, "signature"),
-      topologyField(station.name, locked, "grow"),
-    );
+    if (locked) {
+      row.append(
+        topologyIndex(station.order),
+        topologyField(station.code, locked, "signature"),
+        topologyField(station.name, locked, "grow"),
+      );
+    } else {
+      row.append(
+        topologyIndex(station.order),
+        topologyInput(station.code, "signature", (value) =>
+          editStation(station.id, "code", value.toUpperCase())),
+        topologyInput(station.name, "grow", (value) =>
+          editStation(station.id, "name", value)),
+      );
+    }
     const note = document.createElement("span");
     note.className = "topology-note";
     note.textContent = forwardDescription(station, stations[index + 1], connections);
@@ -4128,9 +4173,32 @@ function renderTopologyConnections(container, topology, names) {
       topologyIndex(index + 1),
       topologyField(names.get(connection.station_a_id) || "–", locked, "station-pick"),
       topologyField(names.get(connection.station_b_id) || "–", locked, "station-pick"),
-      topologyField(TRACK_TYPE_LABELS[connection.track_type] || connection.track_type, locked, "station-pick"),
-      topologyField(rule, locked, "station-pick"),
     );
+    if (locked) {
+      row.append(
+        topologyField(TRACK_TYPE_LABELS[connection.track_type] || connection.track_type, locked, "station-pick"),
+        topologyField(rule, locked, "station-pick"),
+      );
+    } else {
+      row.append(
+        topologySelect(
+          [["single", "Enkelspår"], ["double", "Dubbelspår"]],
+          connection.track_type,
+          "station-pick",
+          (value) => editConnection(connection.id, "track_type", value),
+        ),
+        // Tre val, inte två som skärmbilden visar: "Ärver träffens läge" är
+        // inte samma sak som något av lägena, och "Direkt" finns i datan.
+        // Regel 3 i uppdraget säger att funktionalitet får flyttas men inte
+        // försvinna, så valet står kvar.
+        topologySelect(
+          [["", "Ärver träffens läge"], ["clearance", "Begär och bekräfta"], ["direct", "Direkt"]],
+          connection.dispatch_mode_override || "",
+          "station-pick",
+          (value) => editConnection(connection.id, "dispatch_mode_override", value || null),
+        ),
+      );
+    }
     container.append(row);
   });
 }
@@ -4161,7 +4229,10 @@ function renderTopologyPanels(container, topology, names) {
     row.append(
       topologyIndex(index + 1),
       topologyField(names.get(panel.station_id) || "–", locked, "station-pick"),
-      topologyField(panel.name, locked, "station-pick"),
+      locked
+        ? topologyField(panel.name, locked, "station-pick")
+        : topologyInput(panel.name, "station-pick", (value) =>
+            editPanel(panel.id, "name", value)),
     );
     const slots = document.createElement("div");
     slots.className = "topology-slots";
@@ -4227,7 +4298,261 @@ async function refreshBuildTopology() {
     renderTopologyConnections(connections, topology, names);
     renderTopologyPanels(panels, topology, names);
     updateStepSubtitles(null);
+
+    // Genvägen visas bara när den kan göra något: läget är öppet och det finns
+    // stationer att härleda ur. Sådden visas bara när det inte finns några.
+    const shortcut = document.querySelector("#bana-shortcut");
+    const seed = document.querySelector("#bana-seed");
+    const hasStations = topology.stations.length > 0;
+    if (shortcut) shortcut.classList.toggle("hidden", topology.locked || !hasStations);
+    if (seed) seed.classList.toggle("hidden", topology.locked || hasStations);
   } catch {
     if (message) setMessage(message, "Banan kunde inte läsas", "error");
   }
 }
+
+// ------------------------------------------- Väntande Cloud-revision (T4)
+// Pollern hämtar men aktiverar inte. Det här är vyn som gör beslutet möjligt:
+// vad som väntar, och vad ett ja skulle ersätta. Listan ligger i kortet och
+// inte bakom en länk - det som kräver ett extra klick blir inte läst.
+
+function pendingChange(label, text, kind = "change") {
+  const row = document.createElement("div");
+  row.className = "pending-change";
+  row.dataset.kind = kind;
+  const name = document.createElement("b");
+  name.textContent = label;
+  const detail = document.createElement("span");
+  detail.textContent = text;
+  row.append(name, detail);
+  return row;
+}
+
+// "och 3 till" i stället för att klippa listan tyst. En avkortad lista som
+// inte säger att den är avkortad läses som fullständig.
+function namedList(group) {
+  if (!group || !group.count) return "";
+  const names = group.names.join(", ");
+  return group.more ? `${names} och ${group.more} till` : names;
+}
+
+function renderPendingChanges(container, changes) {
+  container.replaceChildren();
+  if (!changes) return;
+  if (changes.first_activation) {
+    container.append(
+      pendingChange("Första", "Ingen träff är aktiv, så ingenting skrivs över.", "none"),
+    );
+    return;
+  }
+
+  const rows = [];
+  const stations = changes.stations || {};
+  if (stations.added?.count) rows.push(["Nya stationer", namedList(stations.added)]);
+  if (stations.removed?.count) rows.push(["Borttagna", namedList(stations.removed)]);
+  if (stations.renamed?.count) rows.push(["Omdöpta", namedList(stations.renamed)]);
+
+  const links = changes.connections || {};
+  if (links.added) rows.push(["Nya sträckor", plural(links.added, "sträcka", "sträckor")]);
+  if (links.removed) rows.push(["Borttagna sträckor", plural(links.removed, "sträcka", "sträckor")]);
+
+  const timetable = changes.timetable || {};
+  if (timetable.changed?.count) {
+    rows.push([
+      "Ändrade tider",
+      `tåg ${namedList(timetable.changed)}`,
+    ]);
+  }
+  if (timetable.added) rows.push(["Nya rörelser", String(timetable.added)]);
+  if (timetable.removed) rows.push(["Borttagna rörelser", String(timetable.removed)]);
+
+  if (!rows.length) {
+    container.append(
+      pendingChange("Inget synligt", "Samma stationer, sträckor och tider som nu.", "none"),
+    );
+    return;
+  }
+  rows.forEach(([label, text]) => container.append(pendingChange(label, text)));
+}
+
+async function refreshPendingRevision() {
+  const card = document.querySelector("#pending-revision");
+  if (!card) return;
+  try {
+    const response = await authorizedFetch("/v1/runtime/pending");
+    if (!response.ok) return;
+    const state = await response.json();
+    card.classList.toggle("hidden", !state.pending);
+    if (!state.pending) {
+      state.publication_id = null;
+      card.dataset.publicationId = "";
+      return;
+    }
+    card.dataset.publicationId = state.publication_id;
+    const id = document.querySelector("#pending-id");
+    if (id) id.textContent = state.publication_id;
+    const detail = document.querySelector("#pending-detail");
+    if (detail) {
+      const revisions = (state.local_revisions || []).length;
+      detail.textContent = revisions
+        ? `Träffen kör vidare tills du aktiverar. ${plural(revisions, "lokal revision", "lokala revisioner")} skrivs över.`
+        : "Träffen kör vidare på den aktiva versionen tills du aktiverar.";
+    }
+    renderPendingChanges(document.querySelector("#pending-changes"), state.changes);
+  } catch {
+    // Tyst: kortet är en upplysning, inte en åtgärd. Ett felmeddelande här
+    // skulle skrika om nätet varje gång steg 1 öppnas.
+  }
+}
+
+async function activatePendingRevision() {
+  const card = document.querySelector("#pending-revision");
+  const message = document.querySelector("#pending-message");
+  const button = document.querySelector("#activate-pending");
+  if (!card || !card.dataset.publicationId) return;
+  if (button) button.disabled = true;
+  try {
+    // Id:t skickas tillbaka med flit. En flik som stått öppen sedan i morse
+    // ska inte kunna aktivera något som kommit sedan dess.
+    const response = await authorizedFetch("/v1/runtime/pending/activate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publication_id: card.dataset.publicationId }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setMessage(message, result.message || "Aktiveringen gick inte igenom", "error");
+      await refreshPendingRevision();
+      return;
+    }
+    setMessage(message, "Den nya versionen är aktiv", "success");
+    await refreshPendingRevision();
+    await refreshRuntime();
+  } catch {
+    setMessage(message, "Aktiveringen gick inte igenom", "error");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+document.querySelector("#activate-pending")?.addEventListener("click", activatePendingRevision);
+
+// --------------------------------------- BYGG steg 2, redigering av utkastet
+// Varje ändring går via utkastet i sin helhet: hämta, ändra ett fält, spara.
+// Servern äger revisionsnumret, så en flik som stått öppen sedan i morse får
+// en konflikt i stället för att skriva över någon annans arbete.
+
+async function withDraft(change) {
+  const message = document.querySelector("#bana-message");
+  try {
+    const read = await authorizedFetch("/v1/local-configuration");
+    if (!read.ok) {
+      setMessage(message, "Utkastet kunde inte läsas", "error");
+      return;
+    }
+    const current = await read.json();
+    const draft = current.draft || {};
+    if (!change(draft)) return;
+
+    const saved = await authorizedFetch("/v1/local-configuration", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draft, expected_revision: current.revision }),
+    });
+    const result = await saved.json().catch(() => ({}));
+    if (!saved.ok) {
+      setMessage(message, result.message || "Ändringen sparades inte", "error");
+      await refreshBuildTopology();
+      return;
+    }
+    // Omritningen nollar meddelanderaden, så kvittensen sätts efter den -
+    // annars skrivs "Sparat" och raderas i samma andetag.
+    await refreshBuildTopology();
+    setMessage(message, "Sparat", "success");
+  } catch {
+    setMessage(message, "Ändringen sparades inte", "error");
+  }
+}
+
+function editStation(id, field, value) {
+  return withDraft((draft) => {
+    const station = (draft.stations || []).find((row) => String(row.id) === String(id));
+    if (!station || station[field] === value) return false;
+    station[field] = value;
+    return true;
+  });
+}
+
+function editConnection(id, field, value) {
+  return withDraft((draft) => {
+    const link = (draft.connections || []).find((row) => String(row.id) === String(id));
+    if (!link || link[field] === value) return false;
+    link[field] = value;
+    return true;
+  });
+}
+
+function editPanel(id, field, value) {
+  return withDraft((draft) => {
+    const panel = (draft.panels || []).find((row) => String(row.id) === String(id));
+    if (!panel || panel[field] === value) return false;
+    panel[field] = value;
+    return true;
+  });
+}
+
+// Genvägen. Servern gör själva härledningen, så webbläsaren inte får en egen
+// uppfattning om hur en A-D-panel ska fyllas i - två sanningar om det vore
+// värre än ingen genväg alls.
+async function buildFromStationOrder() {
+  const message = document.querySelector("#bana-message");
+  const button = document.querySelector("#build-from-order");
+  if (button) button.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/local-configuration/build", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setMessage(message, result.message || "Genvägen kunde inte köras", "error");
+      return;
+    }
+    await refreshBuildTopology();
+    setMessage(message, "Sträckor och paneler byggda ur stationsordningen", "success");
+  } catch {
+    setMessage(message, "Genvägen kunde inte köras", "error");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+// Sådden. Utan den har det lokala läget ingenting att redigera: utkastet är
+// tomt tills någon kopierat den aktiva träffen till det.
+async function seedFromActive() {
+  const message = document.querySelector("#bana-message");
+  const button = document.querySelector("#seed-from-active");
+  if (button) button.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/local-configuration/seed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setMessage(message, result.message || "Kopieringen gick inte igenom", "error");
+      return;
+    }
+    await refreshBuildTopology();
+    setMessage(message, "Utkastet är en kopia av den aktiva träffen", "success");
+  } catch {
+    setMessage(message, "Kopieringen gick inte igenom", "error");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+document.querySelector("#build-from-order")?.addEventListener("click", buildFromStationOrder);
+document.querySelector("#seed-from-active")?.addEventListener("click", seedFromActive);

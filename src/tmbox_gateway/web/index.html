@@ -342,6 +342,22 @@
               </button>
             </div>
 
+            <section id="pending-revision" class="card pending-card hidden" aria-live="polite">
+              <div class="pending-heading">
+                <div>
+                  <p class="eyebrow">EN REVISION VÄNTAR</p>
+                  <h3 id="pending-title">TrainMeet Cloud har publicerat en ny version</h3>
+                  <p id="pending-detail">Träffen kör vidare på den aktiva versionen tills du aktiverar.</p>
+                </div>
+                <span class="revision-badge" id="pending-id">–</span>
+              </div>
+              <div id="pending-changes" class="pending-changes"></div>
+              <div class="pending-actions">
+                <button id="activate-pending" type="button">Aktivera den nya versionen</button>
+                <p id="pending-message" class="form-message" role="status"></p>
+              </div>
+            </section>
+
             <p id="source-message" class="form-message" role="status"></p>
           </section>
 
@@ -358,6 +374,22 @@
             </header>
 
             <p id="bana-lock-note" class="lock-note hidden"></p>
+
+            <div id="bana-shortcut" class="shortcut-box hidden">
+              <div>
+                <b>Snabbaste vägen till en körbar träff</b>
+                <p>Bygg sträckor mellan stationerna och en A–D-panel per station.</p>
+              </div>
+              <button id="build-from-order" type="button" class="secondary">Bygg från stationsordningen</button>
+            </div>
+
+            <div id="bana-seed" class="shortcut-box hidden">
+              <div>
+                <b>Utkastet är tomt</b>
+                <p>Hämta stationer, sträckor och tidtabell från den aktiva träffen att utgå ifrån.</p>
+              </div>
+              <button id="seed-from-active" type="button" class="secondary">Hämta från aktiva träffen</button>
+            </div>
 
             <div class="card topology-card">
               <section class="topology-section">

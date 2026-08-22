@@ -594,6 +594,10 @@ class SQLiteRuntimeStore:
                 if updated.rowcount != 1:
                     raise RuntimePublicationError("Den hämtade versionen finns inte")
                 self._connection.execute(
+                    "DELETE FROM runtime_settings WHERE key = ? AND value = ?",
+                    (self.PENDING_KEY, publication_id),
+                )
+                self._connection.execute(
                     """
                     INSERT INTO runtime_settings(key, value, updated_at)
                     VALUES ('active_day', ?, CURRENT_TIMESTAMP)
@@ -750,6 +754,16 @@ class SQLiteRuntimeStore:
     def editing_is_open(self) -> bool:
         return self.operating_mode() == self.OFFLINE_MEET
 
+    def cloud_polling_is_allowed(self) -> bool:
+        """Whether the background poller should talk to Cloud at all.
+
+        In offline-meet the server is deliberately the editor. Polling then
+        would queue up revisions nobody asked for, over work that left Cloud
+        on purpose - so the answer is not "fetch but do not activate", it is
+        "do not fetch".
+        """
+        return self.operating_mode() == self.CLOUD_LINKED
+
     def local_revisions(self) -> list[str]:
         """Local revisions installed on top of a Cloud publication.
 
@@ -783,6 +797,49 @@ class SQLiteRuntimeStore:
                 (key,),
             ).fetchone()
         return str(row[0]) if row else None
+
+    # ------------------------------------------------------------ väntande
+    #
+    # En hämtad Cloud-revision aktiveras aldrig av sig själv. Den läggs här,
+    # och blir aktiv först när någon sagt ja till den.
+    #
+    # Nyckeln behövs utöver `active = 0`: en lokal revision som byggts men inte
+    # aktiverats ligger också inaktiv, och de två får inte förväxlas. Den ena
+    # är något operatören själv gjort, den andra något Cloud skickade.
+
+    PENDING_KEY = "pending_publication_id"
+
+    def stage_pending(self, payload: dict[str, Any]) -> RuntimePublication:
+        """Store a Cloud publication without letting it take over."""
+        publication = self.install(payload, activate=False)
+        self._save_setting(self.PENDING_KEY, publication.publication_id)
+        return publication
+
+    def pending_publication(self) -> RuntimePublication | None:
+        """The Cloud revision waiting for a decision, if there is one.
+
+        Self-healing on purpose: if the pending revision has since been
+        activated - or deleted, or replaced - the marker is stale and cleared
+        rather than reported. A "waiting" badge that outlives what it points
+        at is worse than no badge.
+        """
+        publication_id = self._setting(self.PENDING_KEY)
+        if not publication_id:
+            return None
+        active = self.active()
+        if active is not None and active.publication_id == publication_id:
+            self.clear_pending()
+            return None
+        publication = self.publication(publication_id)
+        if publication is None:
+            self.clear_pending()
+        return publication
+
+    def clear_pending(self) -> None:
+        with self._lock:
+            self._connection.execute(
+                "DELETE FROM runtime_settings WHERE key = ?", (self.PENDING_KEY,)
+            )
 
     def latest_staged(self) -> RuntimePublication | None:
         with self._lock:
