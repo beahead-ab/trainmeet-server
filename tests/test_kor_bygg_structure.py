@@ -9,6 +9,7 @@ De läser den serverade markupen, eftersom det är den en webbläsare får.
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -174,6 +175,182 @@ class SourceChoiceTests(unittest.TestCase):
         self.assertIn("state.devices?.length", self.js)
         self.assertNotIn("Cloud rev 12", self.js)
         self.assertNotIn("499 rörelser", self.js)
+
+
+class BuildStepFiveServerTests(unittest.TestCase):
+    """BYGG steg 5 - Server, paketets DEL 3.11.
+
+    Steget slår ihop tre av dagens menypunkter. Testerna håller fast att de
+    faktiskt hamnade där, i paketets ordning, och att inget av det som flyttade
+    tappades på vägen - särskilt de sju uppdateringsstegen, som kommer ur
+    servern och inte får byggas om i webbläsaren.
+    """
+
+    def setUp(self):
+        self.html = (WEB / "index.html").read_text(encoding="utf-8")
+        self.js = (WEB / "app.js").read_text(encoding="utf-8")
+        self.css = (WEB / "app.css").read_text(encoding="utf-8")
+
+    def test_the_step_gathers_the_three_old_menu_points(self):
+        """Skärmkartan: Användare och åtkomst, Programuppdatering samt Server
+        och nollställning hamnar alla i steg 5."""
+        self.assertIn(
+            'server: ["identity", "access", "software", "system"]',
+            self.js,
+        )
+
+    def test_the_four_blocks_stand_in_the_packages_order(self):
+        """DOM-ordningen är den som syns: identitet, inloggning, uppdatering,
+        nollställning. Ett kort som glider förbi ett annat syns inte i något
+        annat test."""
+        order = [
+            self.html.index('data-admin-section="identity"'),
+            self.html.index('data-admin-section="access"'),
+            self.html.index('data-admin-section="software"'),
+            self.html.index('data-admin-section="system"'),
+        ]
+        self.assertEqual(order, sorted(order))
+
+    def test_the_step_has_its_own_heading(self):
+        self.assertIn('data-build-panel="server"', self.html)
+        self.assertIn("<h2>Server</h2>", self.html)
+
+    def test_identity_is_three_status_boxes_and_the_server_name(self):
+        """3.11.1. Rutorna och namnfältet låg på var sitt håll förut."""
+        panel = self._panel("server-identity-settings")
+        for label in ("SERVER", "AKTIV TRÄFF", "CLOUD"):
+            self.assertIn(f"<small>{label}</small>", panel)
+        self.assertIn('id="admin-server-name"', panel)
+        self.assertIn("Spara servernamn", panel)
+
+    def test_the_status_boxes_read_real_server_state(self):
+        """Ingen prototypdata: /v1/info föder alla tre."""
+        self.assertIn('document.querySelector("#system-server-name").textContent = info.', self.js)
+        self.assertIn("info.runtime?.linked", self.js)
+
+    def test_the_status_boxes_stay_three_across(self):
+        """Paketets bild visar tre i bredd vid 924px. auto-fit bröt till 2 + 1
+        eftersom kortets insida är 556px där."""
+        block = self.css[self.css.index(".identity-status-grid {"):][:220]
+        self.assertIn("repeat(3, minmax(0, 1fr))", block)
+
+    def test_external_login_is_three_columns_with_a_chip(self):
+        """3.11.2."""
+        panel = self._panel("admin-access-settings")
+        self.assertIn("<h2>Extern admininloggning</h2>", panel)
+        self.assertIn("På serverdatorn öppnas admin utan inloggning", panel)
+        for field in ("admin-username", "admin-password", "admin-password-confirm"):
+            self.assertIn(f'id="{field}"', panel)
+        self.assertIn('id="access-mode"', panel)
+        self.assertIn(".access-grid { grid-template-columns: repeat(3, minmax(180px, 1fr)); }", self.css)
+
+    def test_the_access_chip_says_how_this_browser_is_connected(self):
+        """Paketet skriver "Lokal åtkomst" i chippet. Det är inte en etikett
+        utan serverns access_mode, som avgör både texten och vilken
+        nollställning knappen längre ned gör."""
+        self.assertIn('state.authStatus?.access_mode === "external"', self.js)
+        self.assertIn('"Extern inloggning" : "Lokal åtkomst"', self.js)
+
+    def test_the_login_username_field_is_never_filled_in_by_the_program(self):
+        """Inloggningsfältet ska fortsätta vara tomt. Webbläsarens egen
+        lösenordshanterare får gärna erbjuda ett sparat konto - det är
+        användarens val, inte vårt."""
+        writes = re.findall(r"#login-username\"\)\.value\s*=[^=]", self.js)
+        self.assertEqual([], writes)
+        # Fältet läses när man loggar in - det är inte att fylla i det.
+        self.assertIn('#login-username").value,', self.js)
+        self.assertIn("The username field is left alone", self.js)
+
+    def test_the_seven_update_steps_come_from_the_server(self):
+        """3.11.3. Stegen är serverns kontrakt. Webbläsaren får rita dem, inte
+        hitta på dem: skulle etiketterna stå i app.js kunde de glida ifrån
+        update_contract.py utan att något test märkte det."""
+        from tmbox_gateway.update_contract import STAGE_LABELS, STAGES
+
+        self.assertEqual(
+            [STAGE_LABELS[stage] for stage in STAGES],
+            [
+                "Söker efter uppdatering",
+                "Hämtar",
+                "Verifierar",
+                "Installerar",
+                "Startar om",
+                "Kontrollerar att tjänsten fungerar",
+                "Klart",
+            ],
+        )
+        # "Startar om" är också ett anslutningsläge i app.js, så bara de
+        # etiketter som bara kan komma ur uppdateringskontraktet duger som
+        # bevis för att listan inte är dubblerad i webbläsaren.
+        for label in ("Söker efter uppdatering", "Verifierar",
+                      "Kontrollerar att tjänsten fungerar"):
+            self.assertNotIn(label, self.js)
+        self.assertIn("payload.steps || []", self.js)
+        self.assertIn("step.label", self.js)
+
+    def test_each_step_carries_its_state_as_a_word(self):
+        """Färg ensam räcker inte. Orden är en översättning av kontraktets
+        fyra tillstånd, inte ett femte tillstånd."""
+        self.assertIn("UPDATE_STATE_WORDS", self.js)
+        for state in ("done", "active", "pending", "failed"):
+            self.assertIn(f"  {state}: ", self.js)
+        self.assertIn("update-step-state", self.js)
+        self.assertIn(".update-step-state", self.css)
+
+    def test_the_version_row_carries_version_and_build(self):
+        """Paketet: "1.0.0 · build 4bd9c9a". Båda kommer ur /v1/server/update;
+        build-id:t är tomt i en utvecklingskatalog och raden faller då tillbaka
+        på enbart versionen."""
+        self.assertIn("· build ${build}", self.js)
+        self.assertIn("payload.installed_build", self.js)
+        self.assertIn('class="version-row"', self.html)
+
+    def test_the_restart_button_stands_where_the_package_puts_it(self):
+        """Knappen finns på två ställen och delar tillstånd, så de inte kan
+        säga olika om huruvida en omstart behövs."""
+        self.assertIn('id="software-restart"', self.html)
+        self.assertIn('id="restart-server"', self.html)
+        self.assertIn('const restartButtons = ["#restart-server", "#software-restart"]', self.js)
+        self.assertIn("setRestartButtonsVisible", self.js)
+
+    def test_the_reset_is_collapsed_and_carries_the_packages_edges(self):
+        """3.11.4: hopfällt <details>, kant #e6cfc7, botten #fdf6f3."""
+        panel = self._panel("server-system-settings")
+        self.assertIn("<details class=\"reset-details\">", panel)
+        self.assertNotIn("open", panel.split("<summary")[0].split("<details")[1])
+        block = self.css[self.css.index(".reset-card {"):][:220]
+        self.assertIn("var(--accent-edge)", block)
+        self.assertIn("var(--accent-tint-light)", block)
+        self.assertIn("--accent-edge: #e6cfc7;", self.css)
+        self.assertIn("--accent-tint-light: #fdf6f3;", self.css)
+
+    def test_the_reset_still_demands_the_word(self):
+        panel = self._panel("server-system-settings")
+        self.assertIn("NOLLSTÄLL", panel)
+        self.assertIn('id="factory-reset-confirmation"', panel)
+        self.assertIn("disabled", panel)
+        self.assertIn('!== "NOLLSTÄLL"', self.js)
+
+    def test_the_reset_summary_says_which_reset_this_is(self):
+        """Lokalt raderas administratören också. Det är den enda texten som
+        syns när blocket är hopfällt, så den måste skilja de två åt."""
+        self.assertIn('#reset-mode-summary', self.js)
+        self.assertIn('"Fabriksåterställ servern"', self.js)
+        self.assertIn('"Nollställ träffdata"', self.js)
+
+    def test_the_old_admin_page_heading_is_gone(self):
+        """Den skrevs inte längre av någon kod och sa emot byggstegets egen
+        rubrik i varje steg."""
+        for leftover in ("admin-page-heading", "admin-section-title",
+                         "admin-section-eyebrow", "admin-section-state",
+                         "selectedAdminSection", "adminSections"):
+            self.assertNotIn(leftover, self.html)
+            self.assertNotIn(leftover, self.js)
+            self.assertNotIn(leftover, self.css)
+
+    def _panel(self, element_id: str) -> str:
+        start = self.html.index(f'id="{element_id}"')
+        return self.html[start:self.html.index("</section>", start)]
 
 
 class CSPTests(unittest.TestCase):

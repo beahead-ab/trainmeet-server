@@ -11,7 +11,7 @@ Uppdateras efter varje arbetsblock, så att ingenting tappas mellan omgångar.
 | 👁 | dessutom visuellt verifierat i webbläsare mot paketet |
 | ⛔ | verkligt blockerat — orsak angiven |
 
-**Läge 2026-08-22:** ⬜ 63 · 🔨 28 · ✅ 20 · 👁 26 · ⛔ 2
+**Läge 2026-08-22:** ⬜ 59 · 🔨 26 · ✅ 19 · 👁 34 · ⛔ 2
 
 Uppdatera den här raden när du uppdaterar tabellerna, så att en snabb blick
 räcker för att se om arbetet rör sig.
@@ -47,9 +47,9 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | TMBox v2 | KÖR › TMBox v2 (oförändrad) | 👁 |
 | TKL-terminal | KÖR › TKL (inbäddad) | 🔨 |
 | Skärmar och klocka | KÖR › Skärmar | 🔨 |
-| Användare och åtkomst | BYGG › 5 | 🔨 |
-| Programuppdatering | BYGG › 5 | 🔨 |
-| Server och nollställning | BYGG › 5 | 🔨 |
+| Användare och åtkomst | BYGG › 5 | 👁 |
+| Programuppdatering | BYGG › 5 | 👁 |
+| Server och nollställning | BYGG › 5 | 👁 |
 
 ---
 
@@ -168,10 +168,14 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 
 | # | Krav | Status |
 |---|---|---|
-| 3.11.1 | Identitet: tre statusrutor + servernamn | ⬜ |
-| 3.11.2 | Extern admininloggning i tre kolumner + chip | ⬜ |
-| 3.11.3 | Programuppdatering: versionsrad + **sju steg** | 🔨 |
-| 3.11.4 | Nollställ i hopfällt `<details>`, kräver NOLLSTÄLL | 🔨 |
+| 3.11.1 | Identitet: tre statusrutor + servernamn | 👁 |
+| 3.11.2 | Extern admininloggning i tre kolumner + chip | 👁 |
+| 3.11.3 | Programuppdatering: versionsrad + **sju steg** | 👁 |
+| 3.11.4 | Nollställ i hopfällt `<details>`, kräver NOLLSTÄLL | 👁 |
+
+Alla fyra är uppmätta i Chromium vid 924px mot `bygg-09-server.png` och
+`bygg-10-server-uppdatering.png`. Bevisen står under **Webbläsarbevis** nedan.
+Kvarvarande avvikelse mot bilderna är knappformen, se **Avvikelser 5**.
 
 ---
 
@@ -217,10 +221,10 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | 6.1 | Admin-paletten exakt | ✅ |
 | 6.2 | Skärm-paletten (mörkt) | ⬜ |
 | 6.3 | Monospace för tider, tågnummer, koder, IP | ✅ |
-| 6.4 | Admin-skalor 11/12/12.5–13/13.5/14.5–15/16px | 🔨 |
+| 6.4 | Admin-skalor 11/12/12.5–13/13.5/14.5–15/16px | 🔨 steg 5 följer dem; `.revision-badge` står kvar på 9px i övriga vyer |
 | 6.5 | Skärm-skalor 24/26/28–30/34/42–50px | ⬜ |
-| 6.6 | Radier 8/10/12/999px | ✅ |
-| 6.7 | Fälthöjd 34/36px, knapphöjd 30/32–36px | 🔨 |
+| 6.6 | Radier 8/10/12/999px | 🔨 **rättad status.** Kort och fält stämmer, men `button` har `border-radius: 999px` i hela adminen. Paketet säger 8px för knappar och 999px bara för chip. Se **Avvikelser 5** |
+| 6.7 | Fälthöjd 34/36px, knapphöjd 30/32–36px | 🔨 höjderna stämmer i steg 5; knappens *yta* gör det inte, se **Avvikelser 5** |
 | 6.8 | Gap 2/8–12/16/24px | 🔨 |
 | 6.9 | Sidopanel 236px, sticky top 106px | ✅ |
 
@@ -236,16 +240,17 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | K4 | Test: källåsning | 🔨 statiska tester av kopplingen; inget test kör själva låsningen i UI |
 | K5 | Test: lokal revision och aktivering | ✅ (`test_local_revisions`) |
 | K6 | Test: TKL-iframe | ⬜ |
+| K6b | Test: BYGG 5 Server | ✅ 17 tester i `test_kor_bygg_structure.BuildStepFiveServerTests`, mutationsprovade |
 | K7 | Test: tidtabellsgruppering | ⬜ |
 | K8 | Test: degraderade skärmar | ⬜ |
 | K9 | Visuella regressionstester | ⬜ |
-| K10 | `prefers-reduced-motion` | ✅ |
-| K11 | Tangentbord, fokus, etiketter, kontrast | ⬜ |
-| K12 | Konsol fri från JS-, nät- och CSP-fel | 👁 **CSP-fel på main hittat och lagat** |
+| K10 | `prefers-reduced-motion` | 👁 mätt i Chromium med `reducedMotion: "reduce"`: uppdateringsstegets markör får `animation-name: none` |
+| K11 | Tangentbord, fokus, etiketter, kontrast | 🔨 **steg 5 är gjort och mätt** (tabbordning, 2px fokusring, `<summary>` öppnas med Enter, alla fem fält har etikett). Övriga vyer är inte genomgångna, och kontrast är inte mätt någonstans |
+| K12 | Konsol fri från JS-, nät- och CSP-fel | 👁 steg 5 och alla fem körflikar körda: inga JS-, CSP- eller nätfel. Ett kvarstående 404 finns, se **Avvikelser 6** |
 | K13 | Inga hemligheter eller exempeldata incheckade | ✅ |
 | K14 | Dokumentation och versionsanteckningar | 🔨 |
 | K15 | Minst minor-version | 🔨 (`[minor]` i commit) |
-| K16 | Bildjämförelser vid 924px och desktop | ⬜ |
+| K16 | Bildjämförelser vid 924px och desktop | 🔨 **steg 5 jämfört** vid 924, 1440 och 390px mot paketets två bilder. Övriga skärmar är fortfarande ojämförda |
 
 ---
 
@@ -256,7 +261,7 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | D1 | Varje målskärm har en fungerande motsvarighet | ⬜ |
 | D2 | Checklistan visar varje krav | ✅ (den här filen) |
 | D3 | Bildjämförelser mot målbilden | ⬜ |
-| D4 | Alla gamla funktioner flyttade enligt kartan | 🔨 |
+| D4 | Alla gamla funktioner flyttade enligt kartan | 🔨 nio av tolv menypunkter flyttade; kvar: Översikt, Manuell import, samt TMBoxar/Skärmar som är flyttade men inte omformade |
 | D5 | Alla nya flöden använder verkliga API | ✅ hittills |
 | D6 | Tester och produktionsbyggen gröna | ✅ |
 | D7 | PR granskad och mergad | ⬜ |
@@ -279,6 +284,62 @@ det:
 | Källvalets beständighet över omladdning | Aldrig provat. Läget läses ur `/v1/operating-mode` vid varje besök i steg 1, så det *bör* hålla, men "bör" är inte verifierat. |
 | Låsningen som faktisk effekt | `data-source-locked` sätts och CSS:en finns, men steg 2 och 3 existerar inte ännu, så ingenting låses i praktiken. |
 | Osparade ändringar | Panelen finns i markup med statisk text. Ingen diff räknas, knapparna gör ingenting. |
+| Hela uppdateringsförloppet | De sju stegen är ritade i alla fyra tillstånd, men bara med serverns svar som indata. En **riktig** uppdatering är inte körd härifrån: den kräver en installerad server med `update_backend`, och utvecklingskatalogen har ingen. `build`-id:t är därför tomt lokalt och versionsraden faller tillbaka på enbart `1.2.0`. |
+| Nollställningen som faktisk åtgärd | Spärren är provad på riktigt i webbläsaren - fel ord låser, NOLLSTÄLL låser upp - men knappen är **aldrig tryckt**. Servervägen är testad sedan tidigare (`/v1/server/factory-reset` i `test_http_server.py`). |
+| Extern admininloggning som inloggning | Formuläret sparar mot `/v1/admin/access`, men ingen inloggning utifrån är gjord: allt är kört från 127.0.0.1, där servern rapporterar `access_mode: local`. Chippets externa variant och `#reset-mode-summary`:s "Nollställ träffdata" är alltså sedda i koden, inte på skärmen. |
+
+## Webbläsarbevis — BYGG 5 Server
+
+Kört i Chromium 1194 via Playwright mot en färdiginstallerad server (riktig
+`TrainMeetHTTPApplication`, riktiga CSP-headers, riktiga API:er). Skriptet
+ligger i sessionens arbetskatalog och gör 76 kontroller; alla passerar.
+
+Så här startas servern utan Mosquitto, som utvecklingsmiljön saknar: bygg en
+`TrainMeetHTTPApplication` direkt, som `tests/test_http_server.py` gör, och kör
+sedan installationsflödet i `DESIGNPAKET-HANDOFF.md`.
+
+| Vad | Bevis |
+|---|---|
+| Fyra block, paketets ordning | DOM-ordningen lästs ur den renderade sidan: `identity, access, software, system` |
+| Bara steg 5:s paneler syns | Cloud- och enhetskorten dolda; steg 1-panelen dold |
+| Statusrutor ur verklig data | `SERVER: Grimslöv driftserver`, `AKTIV TRÄFF: Sommarträffen`, `CLOUD: Inte kopplad` — ur `/v1/info` |
+| Servernamnet sparas på riktigt | `POST /v1/setup/server` → "Servernamnet är nu Grimslöv driftserver 2." och statusrutan följde med |
+| Tre kolumner | `grid-template-columns` gav 3 spår vid 924px |
+| Chippet | "Lokal åtkomst" — ur `/v1/auth/status`, inte en fast sträng |
+| Inloggningsfältet tomt | `#login-username` = `""` efter full sidladdning |
+| Sju steg | Etiketterna och ordningen matchar `update_contract.STAGES` exakt |
+| Tillstånden | `Klar / Klar / Klar / Pågår / Väntar / Väntar / Väntar`; pågående markör `rgb(201, 100, 66)` = `#c96442`, rad `#fdf6f3` |
+| Versionsraden | `1.2.0` lokalt (build-id tomt utanför en installation); med build-id: `1.2.0 · build 4bd9c9a`, och stegräckan visar samma sträng |
+| Nollställningen | Hopfälld vid inladdning; kant `rgb(230, 207, 199)` = `#e6cfc7`, botten `rgb(253, 246, 243)` = `#fdf6f3` |
+| NOLLSTÄLL-spärren | Knappen låst från start, låst efter fel ord, upplåst efter NOLLSTÄLL |
+| Tangentbord | Tab: användarnamn → nytt lösenord → upprepa. Enter på `<summary>` fäller ut |
+| Fokus | 2px synlig fokusring på servernamnsfältet |
+| Etiketter | Alla fem fält har `<label for>` eller omslutande `<label>` |
+| Mått vid 924px | Topplock 50px, sidopanel 236px, uppdateringssteg 36px |
+| Ingen vågrät scroll | 924px, 1440px och 390px |
+| `prefers-reduced-motion` | `animation-name: none` på pågående stegs markör |
+| Konsol och CSP | Inga JS-, CSP- eller nätfel i steg 5. Ett 404, se **Avvikelser 6** |
+| Inget annat gick sönder | Alla fem byggsteg och alla fem körflikar öppnade; inga adminpaneler läcker in i körläget |
+
+### Tester
+
+```
+PYTHONPATH=src:tests python3 -m unittest discover -s tests -q
+```
+
+| | Före blocket | Efter |
+|---|---|---|
+| Antal | 291 | 308 |
+| Utfall | OK (1 överhoppad) | OK (1 överhoppad) |
+
+De 17 nya ligger i `tests/test_kor_bygg_structure.BuildStepFiveServerTests`.
+De är mutationsprovade: en ändrad statusruteetikett, hårdkodade
+uppdateringssteg i `app.js` och ett `<details open>` fäller var sitt test.
+
+`paho-mqtt` måste installeras (`pip install paho-mqtt`), annars hoppas fyra
+MQTT-moduler över med importfel i stället för att köras.
+
+---
 
 ## Avvikelser och konflikter
 
@@ -314,7 +375,70 @@ Inte infört av det här arbetet, men uppdraget kräver en ren konsol, så det �
 lagat: elementen byggs med DOM-anrop och bredden sätts via CSSOM, som inte
 omfattas av `style-src`. Ett test håller fast det.
 
-### 4. D9 och D10 — driftsättning
+### 5. Knapparnas form och färg — hittat, **inte lagat**
+
+Paketets DEL 6 säger `Radie: 8px fält och knappar` och `Kantlinje #e0dcd1 |
+fält, knappar`. Pixlarna i `bygg-09-server.png` bekräftar det: *Spara
+servernamn* är vit `#ffffff` med en kant runt `#dcdcdc`, i en rundad rektangel.
+
+Repot har `button { border-radius: 999px }` och `button.secondary { color:
+var(--trainmeet); background: var(--trainmeet-soft) }` — piller i accentton.
+
+Det är en **verklig avvikelse mot paketet**, och den är inte lagad här. Skälet
+är avgränsning, inte oenighet: `button` är global och slår igenom på varje vy,
+även de KÖR-vyer som redan står som 👁 i den här listan. Att ändra den inne i
+ett BYGG 5-block skulle antingen ge två knappformer i samma produkt, eller
+tvinga fram en ny visuell genomgång av allt som redan är verifierat.
+
+Rekommenderas som **eget block före nästa skärmarbete**, eftersom varje block
+som byggs innan dess ärver fel knappform:
+
+```css
+button { border: 1px solid var(--line-field); border-radius: var(--radius-sm); }
+button.secondary { color: var(--ink-strong); background: var(--surface-raised); }
+```
+
+Efter den ändringen måste KÖR-vyerna och steg 1 verifieras om.
+
+### 6. 404 på `/terminal/config` — förbefintligt, inte det här blockets
+
+Körfliken TKL bäddar in `/tkl/`, och paketets TKL-bygge frågar efter
+`/terminal/config`, som den här servern inte serverar. Det ger ett 404 i
+konsolen så snart TKL-fliken öppnas.
+
+Kontrollerat att det inte kommer härifrån: felet reproduceras oförändrat med
+det här blockets ändringar `git stash`:ade. Hör till 3.5.1, som står 🔨.
+
+### 7. Nollställningens rubrik säger inte alltid "Nollställ träffdata"
+
+Paketets bild visar sammanfattningen *Nollställ träffdata*. Servern har två
+olika nollställningar, och vilken det blir avgörs av `access_mode`:
+
+| Åtkomst | Vad knappen gör | Sammanfattningen säger |
+|---|---|---|
+| lokal | fabriksåterställning — även administratören raderas | Fabriksåterställ servern |
+| extern | bara träffdata; administratören behålls | Nollställ träffdata |
+
+Paketets text är alltså den externa varianten. Att skriva den även lokalt vore
+att dölja att administratörskontot försvinner. Verklig data vinner över
+bildens etikett; layouten, kanten och bottnen följer paketet exakt.
+
+### 8. Två borttagna texter i steg 5
+
+Två strängar följde inte med flytten, båda utan funktion:
+
+- `Serveridentitet` / *"Namnet visas lokalt och när servern kopplas till
+  Cloud."* — en underrubrik i servernamnsformuläret. Paketets identitetsblock
+  har ingen; rutan `SERVER` ovanför säger samma sak.
+- Chippet `Servern kör` i "Server och nollställning". Statisk markup som ingen
+  kod någonsin skrev om — det stod "Servern kör" även om den inte gjorde det.
+
+Kvarvarande information ur den gamla `#access-mode`-texten
+("Extern inloggning klar" / "Lösenord saknas") är **inte** borttagen: den står
+nu på egen rad som `#access-password-state`, eftersom chippet enligt paketet
+bär åtkomstläget.
+
+### 9. D9 och D10 — driftsättning
 
 Proxyn i utvecklingsmiljön blockerar `trainmeet.app`, och det finns ingen
 SSH-åtkomst till Raspberry Pi:n. Driftsättning och driftkontroll kan inte

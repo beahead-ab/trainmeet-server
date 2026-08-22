@@ -1,54 +1,4 @@
 const slotKeys = ["A", "B", "C", "D"];
-const adminSections = {
-  runtime: {
-    eyebrow: "DRIFT",
-    title: "Aktiv träff",
-    description: "Serverns körande stationsplan, tidtabell och lokala status.",
-    state: "Lokal drift",
-  },
-  cloud: {
-    eyebrow: "TRAINMEET CLOUD",
-    title: "Synk och förbättringar",
-    description: "Hämta publicerade versioner och skicka lokala ändringar för central granskning.",
-    state: "Cloud",
-  },
-  local: {
-    eyebrow: "KONFIGURATION",
-    title: "Lokala ändringar",
-    description: "Justera stationer, sträckor och TMBox-paneler utan att stoppa den aktiva träffen.",
-    state: "Lokalt utkast",
-  },
-  import: {
-    eyebrow: "MANUELL IMPORT",
-    title: "Importera driftpaket",
-    description: "Validera och aktivera ett komplett TrainMeet-paket från en lokal fil.",
-    state: "JSON",
-  },
-  devices: {
-    eyebrow: "ENHETER",
-    title: "Fysiska TMBoxar",
-    description: "Koppla varje hårdvaruenhet till rätt logisk panel på stationen.",
-    state: "Lokalt nät",
-  },
-  access: {
-    eyebrow: "SYSTEM",
-    title: "Användare och åtkomst",
-    description: "Hantera inloggningen som används utanför serverdatorn.",
-    state: "Säkerhet",
-  },
-  software: {
-    eyebrow: "SYSTEM",
-    title: "Programuppdatering",
-    description: "Kontrollera, säkerhetskopiera och installera en ny serverversion.",
-    state: "GitHub",
-  },
-  system: {
-    eyebrow: "SYSTEM",
-    title: "Server och nollställning",
-    description: "Se serverns identitet eller återgå till första installationen.",
-    state: "Lokal server",
-  },
-};
 
 function createWebClientID() {
   const browserCrypto = globalThis.crypto;
@@ -84,9 +34,6 @@ const state = {
   selectedView: localStorage.getItem("trainmeet.view") === "server"
     ? "overview"
     : (localStorage.getItem("trainmeet.view") || "overview"),
-  selectedAdminSection: adminSections[localStorage.getItem("trainmeet.adminSection")]
-    ? localStorage.getItem("trainmeet.adminSection")
-    : "runtime",
   snapshots: new Map(),
   selectedPanelID: localStorage.getItem("trainmeet.panelID"),
   snapshotTimer: null,
@@ -207,7 +154,13 @@ const configMessage = document.querySelector("#config-message");
 const stationEditor = document.querySelector("#station-editor");
 const connectionEditor = document.querySelector("#connection-editor");
 const panelEditor = document.querySelector("#panel-editor");
-const restartButton = document.querySelector("#restart-server");
+// Omstartsknappen står på två ställen och betyder samma sak på båda: en i
+// stationsplanens knapprad, där en aktivering just har begärt omstart, och en
+// i BYGG 5 där paketet placerar den. De delar tillstånd i stället för att
+// hålla var sin sanning om huruvida en omstart behövs.
+const restartButtons = ["#restart-server", "#software-restart"]
+  .map((selector) => document.querySelector(selector))
+  .filter(Boolean);
 const logoutButton = document.querySelector("#logout");
 const adminAccessForm = document.querySelector("#admin-access-form");
 const adminAccessMessage = document.querySelector("#admin-access-message");
@@ -405,7 +358,11 @@ const STEP_SECTIONS = {
   bana: [],
   tid: [],
   boxar: ["devices"],
-  server: ["access", "software", "system"],
+  //: Paketets DEL 3.11 i sin ordning: identitet, inloggning, uppdatering,
+  //: nollställning. Ordningen i listan är inte den som gäller på skärmen -
+  //: den kommer ur DOM-ordningen - men den här är densamma, så de inte
+  //: kan glida isär utan att någon märker det.
+  server: ["identity", "access", "software", "system"],
 };
 
 //: Vilken av dagens vypaneler som visas i vilken körflik.
@@ -873,7 +830,7 @@ runtimeActivateUpdate.addEventListener("click", async () => {
     runtimeActivateUpdate.classList.add("hidden");
     state.pendingPublicationID = null;
     state.restartRequired = !!payload.restart_required;
-    restartButton.classList.toggle("hidden", !state.restartRequired);
+    setRestartButtonsVisible(state.restartRequired);
     setMessage(runtimeMessage, payload.message, payload.restart_required ? "notice" : "success");
     await Promise.all([refreshRuntime(), refreshInfo()]);
   } catch (error) {
@@ -945,15 +902,31 @@ const softwareRetry = document.querySelector("#software-retry");
 const softwareVersionMove = document.querySelector("#software-version-move");
 const softwareTechnical = document.querySelector("#software-technical");
 
+//: Vad varje tillstånd heter i högerkanten. Nycklarna är update_contract.py:s
+//: fyra tillstånd; översättningen är presentation, inte ett nytt tillstånd.
+const UPDATE_STATE_WORDS = {
+  done: "Klar",
+  active: "Pågår",
+  pending: "Väntar",
+  failed: "Fel",
+};
+
 function renderUpdateProgress(payload) {
+  // Paketets DEL 3.11 visar räckan av sju steg, inte bara de som hänt: en
+  // operatör ska kunna se vad en uppdatering innebär innan den startas.
+  // Stegen, ordningen och tillstånden kommer oförändrat ur serverns svar.
   const steps = payload.steps || [];
-  const running = steps.some((step) => step.state === "active");
-  const failed = payload.status === "failed";
-  updateProgress.classList.toggle("hidden", !running && !failed && payload.status !== "complete");
+  updateProgress.classList.toggle("hidden", steps.length === 0);
   updateProgress.replaceChildren(...steps.map((step) => {
     const item = document.createElement("li");
     item.className = `update-step ${step.state}`;
-    item.textContent = step.label;
+    const label = document.createElement("span");
+    label.className = "update-step-label";
+    label.textContent = step.label;
+    const word = document.createElement("span");
+    word.className = "update-step-state";
+    word.textContent = UPDATE_STATE_WORDS[step.state] || "";
+    item.append(label, word);
     return item;
   }));
 }
@@ -993,11 +966,19 @@ function renderTechnicalDetails(payload) {
 }
 
 function renderSoftwareUpdate(payload) {
-  // The version comes first because that is what a person reads; the commit
-  // is under "Teknisk information".
-  softwareVersion.textContent = `Version ${payload.installed_version}`;
+  // The version comes first because that is what a person reads; the rest of
+  // the commit metadata is under "Teknisk information". The package puts the
+  // build id on the same line - "1.2.0 · build 4bd9c9a" - because it is what
+  // an operator reads back over the phone.
+  const build = payload.installed_build || "";
+  softwareVersion.textContent = build
+    ? `${payload.installed_version} · build ${build}`
+    : `${payload.installed_version}`;
   softwareVersion.dataset.version = payload.installed_version;
-  softwareVersion.dataset.build = payload.installed_build || "";
+  softwareVersion.dataset.build = build;
+  // Stegräckan visar samma version som kortet, ur samma svar - annars kan de
+  // stå och säga olika saker om vilken programvara som kör.
+  updateStepSubtitles(null);
 
   renderUpdateProgress(payload);
   renderVersionMove(payload);
@@ -1069,7 +1050,7 @@ document.querySelector("#activate-config").addEventListener("click", async () =>
   await saveConfiguration(true);
 });
 
-restartButton.addEventListener("click", restartServer);
+restartButtons.forEach((button) => button.addEventListener("click", restartServer));
 
 configForm.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
@@ -1206,10 +1187,6 @@ function updateRuntimeNavigation(configured) {
   document.querySelectorAll("[data-requires-runtime]").forEach((element) => {
     element.classList.toggle("hidden", !configured);
   });
-  if (!configured && ["runtime", "devices"].includes(state.selectedAdminSection)) {
-    state.selectedAdminSection = "cloud";
-    if (state.selectedView === "admin") selectAdminSection("cloud");
-  }
   if (!configured && ["tmbox", "skarmar", "trafik", "tkl"].includes(state.runTab)) selectRunTab("oversikt");
 }
 
@@ -1245,9 +1222,6 @@ async function refreshInfo() {
     document.querySelector("#overview-runtime-state").textContent = "Lokalt aktiv";
     document.querySelector("#sidebar-runtime-name").textContent = info.runtime.meet_name;
     document.querySelector("#sidebar-runtime-status").textContent = `${info.runtime.active_day} · ${info.runtime.linked ? "Cloud kopplad" : "lokal config"}`;
-    if (state.selectedAdminSection === "runtime") {
-      document.querySelector("#admin-section-state").textContent = info.runtime.active_day || "Lokal drift";
-    }
   } else {
     pill.textContent = info.runtime?.error ? "Konfigurationen behöver rättas" : "Ingen träff aktiverad";
     pill.classList.remove("active");
@@ -1268,9 +1242,21 @@ async function refreshAdminAccess() {
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || "Åtkomstinställningen kunde inte läsas");
   document.querySelector("#admin-username").value = payload.username || "";
+
+  // Chippet svarar på "hur är jag inne just nu", vilket är vad paketets
+  // "Lokal åtkomst" säger, och det kommer ur /v1/auth/status - inte ur en
+  // gissning här. Om ett externt lösenord finns är en annan fråga, och den
+  // står på egen rad i stället för att trängas in i samma chip.
+  const external = state.authStatus?.access_mode === "external";
   const badge = document.querySelector("#access-mode");
-  badge.textContent = payload.password_configured ? "Extern inloggning klar" : "Lösenord saknas";
-  badge.classList.toggle("active", payload.password_configured);
+  badge.textContent = external ? "Extern inloggning" : "Lokal åtkomst";
+  badge.classList.toggle("active", external);
+
+  const passwordState = document.querySelector("#access-password-state");
+  passwordState.textContent = payload.password_configured
+    ? "Ett lösenord är satt, så andra enheter kan logga in."
+    : "Inget lösenord är satt än, så inloggning utifrån är avstängd.";
+  passwordState.classList.toggle("is-missing", !payload.password_configured);
 }
 
 async function loadLocalConfiguration() {
@@ -1325,7 +1311,7 @@ async function restartServer() {
   if (state.restarting || !state.restartRequired) return;
   if (!window.confirm("Starta om TrainMeet Server och börja använda den aktiverade stationsplanen?")) return;
   state.restarting = true;
-  restartButton.disabled = true;
+  setRestartButtonsDisabled(true);
   setMessage(configMessage, "Startar om TrainMeet Server …", "notice");
   clearTimeout(state.snapshotTimer);
   clearTimeout(state.adminTimer);
@@ -1342,7 +1328,7 @@ async function restartServer() {
     await waitForServerReturn();
   } catch (error) {
     state.restarting = false;
-    restartButton.disabled = false;
+    setRestartButtonsDisabled(false);
     setMessage(configMessage, error.message, "error");
     scheduleAdminRefresh();
   }
@@ -1362,15 +1348,23 @@ async function waitForServerReturn() {
     }
   }
   state.restarting = false;
-  restartButton.disabled = false;
+  setRestartButtonsDisabled(false);
   setConnection("waiting", "Kontrollera servern");
   setMessage(configMessage, "Servern har inte kommit tillbaka ännu. Kontrollera ström och nätverk.", "error");
 }
 
+function setRestartButtonsVisible(required) {
+  restartButtons.forEach((button) => button.classList.toggle("hidden", !required));
+}
+
+function setRestartButtonsDisabled(disabled) {
+  restartButtons.forEach((button) => { button.disabled = disabled; });
+}
+
 function updateRestartButton(required) {
   state.restartRequired = required;
-  restartButton.classList.toggle("hidden", !required);
-  restartButton.disabled = state.restarting;
+  setRestartButtonsVisible(required);
+  setRestartButtonsDisabled(state.restarting);
 }
 
 function renderConfiguration() {
@@ -1668,9 +1662,6 @@ async function refreshRuntime() {
   if (!state.runtimeLinkInitialized) {
     cloudDetails.open = !runtime.linked;
     state.runtimeLinkInitialized = true;
-  }
-  if (state.selectedAdminSection === "cloud") {
-    document.querySelector("#admin-section-state").textContent = runtime.linked ? "Cloud kopplad" : "Inte kopplad";
   }
 }
 
@@ -2009,7 +2000,7 @@ async function activateRuntimeImport() {
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Driftpaketet kunde inte importeras");
     state.restartRequired = Boolean(result.restart_required);
-    restartButton.classList.toggle("hidden", !state.restartRequired);
+    setRestartButtonsVisible(state.restartRequired);
     document.querySelector("#runtime-import-state").textContent = result.restart_required ? "Aktiverad · omstart krävs" : "Aktiverad";
     setMessage(runtimeImportMessage, result.message, result.restart_required ? "notice" : "success");
     await Promise.all([refreshRuntime(), refreshInfo()]);
@@ -2222,9 +2213,11 @@ async function refreshAuthStatus() {
 
 function configureResetMode() {
   const localFactoryReset = state.authStatus?.access_mode === "local";
-  document.querySelector("#reset-mode-eyebrow").textContent = localFactoryReset
-    ? "FABRIKSÅTERSTÄLL SERVERN"
-    : "NOLLSTÄLL TRÄFFDATA";
+  // Sammanfattningen är det enda som syns när blocket är hopfällt, så den ska
+  // säga vilken av de två nollställningarna som gäller den här webbläsaren.
+  document.querySelector("#reset-mode-summary").textContent = localFactoryReset
+    ? "Fabriksåterställ servern"
+    : "Nollställ träffdata";
   document.querySelector("#reset-mode-title").textContent = localFactoryReset
     ? "Börja om från en helt ren TrainMeet Server"
     : "Börja om utan att förlora administratörsåtkomsten";

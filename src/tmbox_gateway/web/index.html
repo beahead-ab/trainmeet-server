@@ -304,16 +304,11 @@
           </section>
         </section>
 
+        <!-- Rubriken kommer ur byggsteget, inte härifrån. Den gamla
+             "DRIFT / Aktiv träff"-listen hörde till de tolv menypunkterna och
+             skrevs inte längre av någon kod - den stod kvar och sa emot
+             stegets egen rubrik i varje byggsteg. -->
         <section id="admin-view" class="view-panel hidden">
-          <header class="admin-page-heading">
-            <div>
-              <p id="admin-section-eyebrow" class="eyebrow">DRIFT</p>
-              <h2 id="admin-section-title">Aktiv träff</h2>
-              <p id="admin-section-description">Serverns körande stationsplan, tidtabell och lokala status.</p>
-            </div>
-            <span id="admin-section-state" class="revision-badge">Lokal server</span>
-          </header>
-
           <section id="build-step-kalla" class="build-panel hidden" data-build-panel="kalla">
             <header class="build-panel-heading">
               <h2>Var kommer träffen ifrån?</h2>
@@ -348,6 +343,16 @@
             </div>
 
             <p id="source-message" class="form-message" role="status"></p>
+          </section>
+
+          <section id="build-step-server" class="build-panel hidden" data-build-panel="server">
+            <header class="build-panel-heading">
+              <h2>Server</h2>
+              <p>
+                Identitet, inloggning, programversion och nollställning — det
+                som förr låg på tre separata menypunkter.
+              </p>
+            </header>
           </section>
 
           <div class="server-hero card admin-section-panel" data-admin-section="runtime">
@@ -508,26 +513,37 @@
             </form>
           </section>
 
-          <section id="admin-access-settings" class="card section-card admin-section-panel hidden" data-admin-section="access">
-            <div class="section-heading compact-heading">
-              <div>
-                <p class="eyebrow">ÅTKOMST</p>
-                <h2>Extern admininloggning</h2>
-                <p>På serverdatorn öppnas admin utan inloggning. Andra enheter på träffens nät och internet använder uppgifterna här.</p>
-              </div>
-              <span id="access-mode" class="revision-badge">Lokal åtkomst</span>
+          <!-- BYGG 5, block 1: identitet. Tre statusrutor och servernamnet i
+               samma kort, som paketets DEL 3.11. Statusrutorna låg förr under
+               "Server och nollställning", servernamnet under "Användare och
+               åtkomst"; ingenting av det är omskrivet, bara flyttat. -->
+          <section id="server-identity-settings" class="card section-card admin-section-panel hidden" data-admin-section="identity">
+            <div class="identity-status-grid">
+              <div><small>SERVER</small><b id="system-server-name">TrainMeet Server</b></div>
+              <div><small>AKTIV TRÄFF</small><b id="system-runtime-name">Ingen aktiv träff</b></div>
+              <div><small>CLOUD</small><b id="system-cloud-state">Inte kopplad</b></div>
             </div>
             <form id="server-identity-form" class="server-identity-form">
-              <div>
-                <b>Serveridentitet</b>
-                <span>Namnet visas lokalt och när servern kopplas till Cloud.</span>
-              </div>
-              <label>Servernamn
-                <input id="admin-server-name" maxlength="80" placeholder="Exempel: Grimslöv driftserver" required>
-              </label>
+              <label for="admin-server-name">Servernamn</label>
+              <input id="admin-server-name" maxlength="80" placeholder="Exempel: Grimslöv driftserver" required>
               <button type="submit" class="secondary">Spara servernamn</button>
               <p id="server-identity-message" class="form-message" role="status"></p>
             </form>
+          </section>
+
+          <!-- BYGG 5, block 2: extern admininloggning. Chippet säger hur den
+               här webbläsaren är inne (verkligt access_mode), raden under det
+               om ett externt lösenord finns. Fältet för användarnamn fylls
+               aldrig i av programmet - se refreshAuthStatus i app.js. -->
+          <section id="admin-access-settings" class="card section-card admin-section-panel hidden" data-admin-section="access">
+            <div class="section-heading compact-heading">
+              <div>
+                <h2>Extern admininloggning</h2>
+                <p class="access-explainer">På serverdatorn öppnas admin utan inloggning. Andra enheter på nätet använder uppgifterna här.</p>
+                <p id="access-password-state" class="access-password-state" role="status"></p>
+              </div>
+              <span id="access-mode" class="status-chip">Lokal åtkomst</span>
+            </div>
             <form id="admin-access-form" class="form-grid access-grid">
               <label>Användarnamn
                 <input id="admin-username" maxlength="64" autocomplete="username" required>
@@ -535,7 +551,7 @@
               <label>Nytt lösenord
                 <input id="admin-password" type="password" minlength="8" autocomplete="new-password" placeholder="Lämna tomt för att behålla">
               </label>
-              <label>Upprepa nytt lösenord
+              <label>Upprepa lösenord
                 <input id="admin-password-confirm" type="password" minlength="8" autocomplete="new-password">
               </label>
               <div class="config-actions access-actions">
@@ -545,24 +561,27 @@
             </form>
           </section>
 
+          <!-- BYGG 5, block 3: programuppdatering. Versionsraden och de sju
+               stegen ur update_contract.py. Stegen är oförändrade - de flyttar
+               hit och får paketets radlayout, inget mer. -->
           <section id="software-update-settings" class="card section-card admin-section-panel hidden" data-admin-section="software">
             <div class="section-heading compact-heading">
               <div>
-                <p class="eyebrow">PROGRAMVARA</p>
-                <h2>Uppdatera TrainMeet Server</h2>
-                <p>Hämtar senaste versionen från GitHub, säkerhetskopierar databasen och installerar automatiskt.</p>
+                <h2>Programuppdatering</h2>
+                <p class="update-explainer">Hämtar senaste versionen från GitHub, säkerhetskopierar databasen och installerar automatiskt.</p>
               </div>
-              <span id="software-version" class="revision-badge">Läser version …</span>
+              <span id="software-version" class="version-row">Läser version …</span>
             </div>
 
             <p id="software-version-move" class="version-move hidden"></p>
 
-            <ol id="update-progress" class="update-progress hidden" aria-live="polite"></ol>
+            <ol id="update-progress" class="update-progress" aria-live="polite"></ol>
 
-            <div class="inline-form">
+            <div class="inline-form update-actions">
               <button id="software-check" class="secondary" type="button">Sök efter uppdatering</button>
-              <button id="software-install" class="restart hidden" type="button">Installera och starta om</button>
-              <button id="software-retry" class="restart hidden" type="button">Försök igen</button>
+              <button id="software-install" class="primary hidden" type="button">Installera och starta om</button>
+              <button id="software-retry" class="secondary hidden" type="button">Försök igen</button>
+              <button id="software-restart" class="secondary hidden" type="button">Starta om servern</button>
               <p id="software-update-message" class="form-message" role="status"></p>
             </div>
 
@@ -572,33 +591,24 @@
             </details>
           </section>
 
-          <section id="server-system-settings" class="card section-card admin-section-panel hidden" data-admin-section="system">
-            <div class="section-heading compact-heading">
-              <div>
-                <p class="eyebrow">SYSTEM</p>
-                <h2>Server och nollställning</h2>
-                <p>Visa serverns lokala identitet eller återgå till första installationen.</p>
-              </div>
-              <span id="system-server-state" class="revision-badge active">Servern kör</span>
-            </div>
-            <div class="system-summary-grid">
-              <div><small>SERVER</small><b id="system-server-name">TrainMeet Server</b></div>
-              <div><small>AKTIV TRÄFF</small><b id="system-runtime-name">Ingen aktiv träff</b></div>
-              <div><small>CLOUD</small><b id="system-cloud-state">Inte kopplad</b></div>
-            </div>
-            <div class="danger-zone">
-              <div>
-                <p id="reset-mode-eyebrow" class="eyebrow">NOLLSTÄLL TRÄFFDATA</p>
+          <!-- BYGG 5, block 4: nollställning. Hopfälld med flit - den ska
+               vara nåbar men inte råkas ut för. Rubriken, brödtexten och
+               knappen skrivs av configureResetMode ur verkligt access_mode:
+               lokalt är det en fabriksåterställning, externt bara träffdatan. -->
+          <section id="server-system-settings" class="card section-card reset-card admin-section-panel hidden" data-admin-section="system">
+            <details class="reset-details">
+              <summary id="reset-mode-summary">Nollställ träffdata</summary>
+              <div class="reset-body">
                 <h3 id="reset-mode-title">Börja om utan att förlora administratörsåtkomsten</h3>
                 <p id="reset-mode-description">Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och den aktiva webbinloggningen behålls.</p>
+                <label for="factory-reset-confirmation">Skriv <b>NOLLSTÄLL</b> för att låsa upp knappen</label>
+                <div class="factory-reset-row">
+                  <input id="factory-reset-confirmation" autocomplete="off" autocapitalize="characters" placeholder="NOLLSTÄLL">
+                  <button id="factory-reset-server" class="danger-action" type="button" disabled>Nollställ träffdata</button>
+                </div>
+                <p id="factory-reset-message" class="form-message" role="status"></p>
               </div>
-              <label for="factory-reset-confirmation">Skriv <b>NOLLSTÄLL</b> för att låsa upp knappen</label>
-              <div class="factory-reset-row">
-                <input id="factory-reset-confirmation" autocomplete="off" autocapitalize="characters" placeholder="NOLLSTÄLL">
-                <button id="factory-reset-server" class="danger-action" type="button" disabled>Nollställ träffdata</button>
-              </div>
-              <p id="factory-reset-message" class="form-message" role="status"></p>
-            </div>
+            </details>
           </section>
 
           <section id="sync-and-devices" class="card section-card cloud-section-card admin-section-panel hidden" data-admin-section="cloud">
