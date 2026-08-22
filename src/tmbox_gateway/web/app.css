@@ -385,7 +385,10 @@ p { line-height: 1.5; }
 
 form { display: grid; gap: 8px; }
 label { display: grid; gap: 4px; color: var(--ink); font-size: 11px; font-weight: 600; line-height: 1.25; }
-input, select {
+/* Kryssrutor och radioknappar undantas. Utan `:not()` får de 100% bredd,
+   kontrollhöjd och 14px radie, och renderas som stora rundade fyrkanter -
+   vilket är precis vad "Bara avvikelser" i KÖR › Trafik gjorde. */
+input:not([type="checkbox"]):not([type="radio"]), select {
   width: 100%;
   min-height: var(--control-height);
   padding: 0 10px;
@@ -393,6 +396,13 @@ input, select {
   border-radius: 14px;
   color: var(--ink);
   background: var(--surface);
+}
+
+input[type="checkbox"], input[type="radio"] {
+  width: auto;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--accent-warm);
 }
 
 input:focus, select:focus, button:focus-visible {
@@ -436,7 +446,17 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 }
 
 .server-admin-shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); align-items: start; gap: var(--content-gap); }
-.server-workspace { display: grid; min-width: 0; gap: var(--content-gap); }
+.server-workspace {
+  display: grid;
+  gap: var(--content-gap);
+  /* Bredden kommer från skalet, inte härifrån. Två ställen som båda sätter
+     bredd glider isär, och det var halva orsaken till att KÖR ritades i en
+     smal vänsterkolumn. */
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+}
 .server-sidebar {
   position: sticky;
   z-index: 35;
@@ -1725,17 +1745,29 @@ body[data-mode="bygg"] .enter-build { display: none; }
 .unsaved-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--ink-muted); }
 .unsaved-panel button { width: 100%; }
 
-/* Innehållsytan, DEL 3. */
-.server-workspace {
+/* Innehållsytan, DEL 3.
+   
+   Skalet ligger kvar från de tolv menypunkterna som en tvåkolumnsgrid med ett
+   sidofält i första spåret. I KÖR finns inget sidofält - det är dolt - men
+   spåret finns kvar, och arbetsytan hamnade då i en 250px-kolumn och svämmade
+   över den. Innehållet ritades i vänstra fjärdedelen av ett brett fönster med
+   resten tomt.
+   
+   Båda lägena sätter därför sin egen layout i stället för att ärva den gamla:
+   KÖR en kolumn, BYGG sidofält plus innehåll. `data-mode` på body är redan
+   den variabel som styr resten av skelettet. */
+body[data-mode="kor"] .server-admin-shell {
+  display: block;
   width: min(100%, 1400px);
   margin: 0 auto;
   padding: 22px 22px 48px;
 }
+
 body[data-mode="bygg"] .server-admin-shell {
   display: flex; gap: 24px;
   width: min(100%, 1400px); margin: 0 auto; padding: 22px 22px 48px;
 }
-body[data-mode="bygg"] .server-workspace { width: auto; margin: 0; padding: 0; flex: 1 1 auto; min-width: 0; }
+body[data-mode="bygg"] .server-workspace { flex: 1 1 auto; }
 
 @media (max-width: 900px) {
   .build-sidebar { position: static; width: auto; flex: none; }
@@ -1757,6 +1789,15 @@ body[data-mode="bygg"] .server-workspace { width: auto; margin: 0; padding: 0; f
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   margin-bottom: 16px;
 }
+/* Rullgardinen ärver `width: 100%` från den globala fältregeln och blev
+   1348px bred på en stor skärm. En stationsväljare behöver bredden av det
+   längsta stationsnamnet, inte av fönstret. */
+.traffic-filters select { width: auto; min-width: 220px; max-width: 320px; }
+.traffic-only-deviations input { flex: none; }
+
+/* "Öppna TKL" är ett <a> i en rad med <button>. Utan det här bär den
+   webbläsarens länkunderstrykning och ser trasig ut bredvid grannarna. */
+a.overview-action { text-decoration: none; }
 .traffic-filters label { font-size: 13px; color: var(--ink-muted); }
 .traffic-only-deviations { display: inline-flex; align-items: center; gap: 6px; }
 
