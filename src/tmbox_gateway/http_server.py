@@ -1559,6 +1559,10 @@ class TrainMeetHTTPApplication:
             "/assets/tmbox-render.js": "tmbox-render.js",
             "/assets/tmbox-nav.js": "tmbox-nav.js",
             "/assets/tmbox-attention.js": "tmbox-attention.js",
+            "/assets/fonts/inter-400.woff2": "fonts/inter-400.woff2",
+            "/assets/fonts/inter-500.woff2": "fonts/inter-500.woff2",
+            "/assets/fonts/inter-600.woff2": "fonts/inter-600.woff2",
+            "/assets/fonts/inter-700.woff2": "fonts/inter-700.woff2",
             "/trainmeet-logo.png": "trainmeet-logo.png",
         }.get(path)
         if relative is None and path in {
