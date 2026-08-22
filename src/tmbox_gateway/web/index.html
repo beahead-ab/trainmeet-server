@@ -517,7 +517,7 @@
                samma kort, som paketets DEL 3.11. Statusrutorna låg förr under
                "Server och nollställning", servernamnet under "Användare och
                åtkomst"; ingenting av det är omskrivet, bara flyttat. -->
-          <section id="server-identity-settings" class="card section-card admin-section-panel hidden" data-admin-section="identity">
+          <section id="server-identity-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="identity">
             <div class="identity-status-grid">
               <div><small>SERVER</small><b id="system-server-name">TrainMeet Server</b></div>
               <div><small>AKTIV TRÄFF</small><b id="system-runtime-name">Ingen aktiv träff</b></div>
@@ -535,7 +535,7 @@
                här webbläsaren är inne (verkligt access_mode), raden under det
                om ett externt lösenord finns. Fältet för användarnamn fylls
                aldrig i av programmet - se refreshAuthStatus i app.js. -->
-          <section id="admin-access-settings" class="card section-card admin-section-panel hidden" data-admin-section="access">
+          <section id="admin-access-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="access">
             <div class="section-heading compact-heading">
               <div>
                 <h2>Extern admininloggning</h2>
@@ -564,7 +564,7 @@
           <!-- BYGG 5, block 3: programuppdatering. Versionsraden och de sju
                stegen ur update_contract.py. Stegen är oförändrade - de flyttar
                hit och får paketets radlayout, inget mer. -->
-          <section id="software-update-settings" class="card section-card admin-section-panel hidden" data-admin-section="software">
+          <section id="software-update-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="software">
             <div class="section-heading compact-heading">
               <div>
                 <h2>Programuppdatering</h2>
@@ -595,7 +595,7 @@
                vara nåbar men inte råkas ut för. Rubriken, brödtexten och
                knappen skrivs av configureResetMode ur verkligt access_mode:
                lokalt är det en fabriksåterställning, externt bara träffdatan. -->
-          <section id="server-system-settings" class="card section-card reset-card admin-section-panel hidden" data-admin-section="system">
+          <section id="server-system-settings" class="card section-card reset-card server-step-card admin-section-panel hidden" data-admin-section="system">
             <details class="reset-details">
               <summary id="reset-mode-summary">Nollställ träffdata</summary>
               <div class="reset-body">

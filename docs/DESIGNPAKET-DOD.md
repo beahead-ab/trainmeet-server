@@ -11,7 +11,7 @@ Uppdateras efter varje arbetsblock, så att ingenting tappas mellan omgångar.
 | 👁 | dessutom visuellt verifierat i webbläsare mot paketet |
 | ⛔ | verkligt blockerat — orsak angiven |
 
-**Läge 2026-08-22:** ⬜ 59 · 🔨 26 · ✅ 19 · 👁 34 · ⛔ 2
+**Läge 2026-08-22:** ⬜ 59 · 🔨 25 · ✅ 19 · 👁 35 · ⛔ 2
 
 Uppdatera den här raden när du uppdaterar tabellerna, så att en snabb blick
 räcker för att se om arbetet rör sig.
@@ -175,7 +175,7 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 
 Alla fyra är uppmätta i Chromium vid 924px mot `bygg-09-server.png` och
 `bygg-10-server-uppdatering.png`. Bevisen står under **Webbläsarbevis** nedan.
-Kvarvarande avvikelse mot bilderna är knappformen, se **Avvikelser 5**.
+Knappformen är sedan kvalitetsrundan också paketets, se **Avvikelser 4**.
 
 ---
 
@@ -223,8 +223,8 @@ Kvarvarande avvikelse mot bilderna är knappformen, se **Avvikelser 5**.
 | 6.3 | Monospace för tider, tågnummer, koder, IP | ✅ |
 | 6.4 | Admin-skalor 11/12/12.5–13/13.5/14.5–15/16px | 🔨 steg 5 följer dem; `.revision-badge` står kvar på 9px i övriga vyer |
 | 6.5 | Skärm-skalor 24/26/28–30/34/42–50px | ⬜ |
-| 6.6 | Radier 8/10/12/999px | 🔨 **rättad status.** Kort och fält stämmer, men `button` har `border-radius: 999px` i hela adminen. Paketet säger 8px för knappar och 999px bara för chip. Se **Avvikelser 5** |
-| 6.7 | Fälthöjd 34/36px, knapphöjd 30/32–36px | 🔨 höjderna stämmer i steg 5; knappens *yta* gör det inte, se **Avvikelser 5** |
+| 6.6 | Radier 8/10/12/999px | 🔨 **steg 5 följer paketet** (knappar och fält 8px, chip 999px, kort 12px), uppmätt i webbläsaren. Globalt är `button` fortfarande 999px och `input` 14px, vilket gäller KÖR och byggsteg 1–4. Se **Avvikelser 4** |
+| 6.7 | Fälthöjd 34/36px, knapphöjd 30/32–36px | 👁 i steg 5: alla sju knappar uppmätta till 34–36px, kant `#e0dcd1`. Utanför steg 5 gäller den globala regeln |
 | 6.8 | Gap 2/8–12/16/24px | 🔨 |
 | 6.9 | Sidopanel 236px, sticky top 106px | ✅ |
 
@@ -240,17 +240,17 @@ Kvarvarande avvikelse mot bilderna är knappformen, se **Avvikelser 5**.
 | K4 | Test: källåsning | 🔨 statiska tester av kopplingen; inget test kör själva låsningen i UI |
 | K5 | Test: lokal revision och aktivering | ✅ (`test_local_revisions`) |
 | K6 | Test: TKL-iframe | ⬜ |
-| K6b | Test: BYGG 5 Server | ✅ 17 tester i `test_kor_bygg_structure.BuildStepFiveServerTests`, mutationsprovade |
+| K6b | Test: BYGG 5 Server | ✅ 22 tester i `test_kor_bygg_structure.BuildStepFiveServerTests`, alla mutationsprovade |
 | K7 | Test: tidtabellsgruppering | ⬜ |
 | K8 | Test: degraderade skärmar | ⬜ |
 | K9 | Visuella regressionstester | ⬜ |
-| K10 | `prefers-reduced-motion` | 👁 mätt i Chromium med `reducedMotion: "reduce"`: uppdateringsstegets markör får `animation-name: none` |
-| K11 | Tangentbord, fokus, etiketter, kontrast | 🔨 **steg 5 är gjort och mätt** (tabbordning, 2px fokusring, `<summary>` öppnas med Enter, alla fem fält har etikett). Övriga vyer är inte genomgångna, och kontrast är inte mätt någonstans |
+| K10 | `prefers-reduced-motion` | 👁 mätt i Chromium med `reducedMotion: "reduce"`: uppdateringsstegets markör får `animation-name: none`, och steg 5:s knappar `transition-property: none` — annars tonade fokusringen in över 200ms |
+| K11 | Tangentbord, fokus, etiketter, kontrast | 🔨 **steg 5 är gjort och mätt**: tabbordning, `<summary>` öppnas med Enter, alla fem fält har etikett, och tre knappar nådda med Tab visar 2px `#c96442`-ring (`:focus-visible` kräver tangentbord — `element.focus()` ger ingen ring och duger inte som bevis). Övriga vyer är inte genomgångna, och kontrast är inte mätt någonstans |
 | K12 | Konsol fri från JS-, nät- och CSP-fel | 👁 steg 5 och alla fem körflikar körda: inga JS-, CSP- eller nätfel. Ett kvarstående 404 finns, se **Avvikelser 6** |
 | K13 | Inga hemligheter eller exempeldata incheckade | ✅ |
 | K14 | Dokumentation och versionsanteckningar | 🔨 |
 | K15 | Minst minor-version | 🔨 (`[minor]` i commit) |
-| K16 | Bildjämförelser vid 924px och desktop | 🔨 **steg 5 jämfört** vid 924, 1440 och 390px mot paketets två bilder. Övriga skärmar är fortfarande ojämförda |
+| K16 | Bildjämförelser vid 924px och desktop | 🔨 **steg 5 jämfört** vid 924, 1440 och 390px mot paketets två bilder, inklusive pixelmätning av knappar och fält i `bygg-09`/`bygg-10`. Övriga skärmar är fortfarande ojämförda |
 
 ---
 
@@ -291,12 +291,14 @@ det:
 ## Webbläsarbevis — BYGG 5 Server
 
 Kört i Chromium 1194 via Playwright mot en färdiginstallerad server (riktig
-`TrainMeetHTTPApplication`, riktiga CSP-headers, riktiga API:er). Skriptet
-ligger i sessionens arbetskatalog och gör 76 kontroller; alla passerar.
+`TrainMeetHTTPApplication`, riktiga CSP-headers, riktiga API:er). Två skript i
+sessionens arbetskatalog: **80 kontroller** för struktur och flöde, **73** för
+knapparna. Alla passerar.
 
-Så här startas servern utan Mosquitto, som utvecklingsmiljön saknar: bygg en
-`TrainMeetHTTPApplication` direkt, som `tests/test_http_server.py` gör, och kör
-sedan installationsflödet i `DESIGNPAKET-HANDOFF.md`.
+Servern byggs som `tests/test_http_server.py` gör — en `TrainMeetHTTPApplication`
+i en tråd — i stället för via `local_server`, som vill ha en MQTT-broker som
+adminvyn ändå inte rör. Kör sedan installationsflödet i
+`DESIGNPAKET-HANDOFF.md`, annars ligger `#app-view` på `display: none`.
 
 | Vad | Bevis |
 |---|---|
@@ -321,23 +323,64 @@ sedan installationsflödet i `DESIGNPAKET-HANDOFF.md`.
 | Konsol och CSP | Inga JS-, CSP- eller nätfel i steg 5. Ett 404, se **Avvikelser 6** |
 | Inget annat gick sönder | Alla fem byggsteg och alla fem körflikar öppnade; inga adminpaneler läcker in i körläget |
 
+### Knapparna (kvalitetsrundan)
+
+73 kontroller, alla gröna. Alla sju knappar i steget mätta i varje tillstånd.
+
+| Vad | Bevis |
+|---|---|
+| Form | Alla sju: radie `8px`, kant `1px`, höjd 34px (nollställningsknappen 36px) |
+| Sekundär | `#ffffff` yta, `#e0dcd1` kant, `#1f1e1d` text — *Spara servernamn*, *Sök efter uppdatering*, *Försök igen*, *Starta om servern* |
+| Primär | `#c96442` yta, vit text, vikt 600 — *Spara inloggning*, *Installera och starta om* |
+| Destruktiv | Upplåst `rgb(192,57,43)`, skild från primärens `rgb(201,100,66)` |
+| Hover | Sekundär byter till `#faf9f5`; primär till `#a44f33`; destruktiv `brightness(.94)` |
+| Active | Primär `#a44f33` + `brightness(.94)`, mätt med musknappen nere |
+| Fokus | *Nådd med Tab*, inte `element.focus()`: `solid 2px rgb(201,100,66)` på primär, sekundär och destruktiv |
+| Disabled | `#8a857a` text på `#f7f5f0`, `cursor: not-allowed`, ingen opacity kvar |
+| Fälten i samma kort | `#admin-server-name`, `#admin-username`, `#factory-reset-confirmation` alla `8px` |
+| Formen håller i bredd | `8px` vid 924, 1440 och 390px, och under `prefers-reduced-motion` |
+| Etiketten | "Skriv NOLLSTÄLL …" står på **en** rad — global `label { display: grid }` delade den i tre |
+| Scopet | Klassen bort ⇒ `999px`/`#f7efe9`; klassen tillbaka ⇒ `8px`/`#ffffff` |
+| KÖR orörd | Elva grupper knappar jämförda mot samma sida serverad ur `198b73f`: fem körflikar, applocket, byggsteg 1–4, sidopanelen. Alla identiska |
+
 ### Tester
 
 ```
 PYTHONPATH=src:tests python3 -m unittest discover -s tests -q
 ```
 
-| | Före blocket | Efter |
+| Miljö | `198b73f` | HEAD |
 |---|---|---|
-| Antal | 291 | 308 |
-| Utfall | OK (1 överhoppad) | OK (1 överhoppad) |
+| med `mosquitto` | `Ran 293 ... OK` | **`Ran 315 ... OK`** |
+| utan `mosquitto` | `Ran 291 ... OK (skipped=1)` | `Ran 313 ... OK (skipped=1)` |
 
-De 17 nya ligger i `tests/test_kor_bygg_structure.BuildStepFiveServerTests`.
-De är mutationsprovade: en ändrad statusruteetikett, hårdkodade
-uppdateringssteg i `app.js` och ett `<details open>` fäller var sitt test.
+Tvåan i differensen är `MQTTIntegrationTests`, vars `setUpClass` hoppar över
+**klassen** när brokern saknas — då räknas dess två metoder inte i `testsRun`.
+Det förklarar hela skillnaden mellan sessionernas rapporter; se
+överlämningens *Varför siffran hoppade mellan sessionerna*.
 
-`paho-mqtt` måste installeras (`pip install paho-mqtt`), annars hoppas fyra
-MQTT-moduler över med importfel i stället för att köras.
+Att inget test tappats är kontrollerat, inte antaget. En inventering över
+`TestLoader().discover()` ger **293 test-id på `198b73f` och 315 på HEAD, med
+0 laddningsfel i båda, 0 borttagna och 22 tillagda** — alla 22 i
+`BuildStepFiveServerTests`.
+
+Alla 22 är mutationsprovade. Varje mutation fäller minst ett test:
+
+| Mutation | Fäller |
+|---|---|
+| Ändrad statusruteetikett | `test_identity_is_three_status_boxes_and_the_server_name` |
+| Uppdateringsstegen hårdkodade i `app.js` | `test_the_seven_update_steps_come_from_the_server` |
+| `<details open>` på nollställningen | `test_the_reset_is_collapsed_and_carries_the_packages_edges` |
+| Knappregeln avscopad till global `button` | `test_the_button_shape_is_scoped_to_the_step_not_global` + `..._carry_the_packages_shape` |
+| `999px` radie i steg 5 | `test_the_step_five_buttons_carry_the_packages_shape` |
+| Destruktiv knapp i accentfärg | `test_the_destructive_button_stays_distinct_from_the_primary` |
+| `opacity: .5` tillbaka på disabled | `test_a_disabled_button_reads_as_disabled` |
+| `server-step-card` borttagen från ett kort | `test_the_button_shape_is_scoped_to_the_step_not_global` |
+| Reduced-motion-regeln borttagen | `test_reduced_motion_stops_the_button_transition` |
+
+Två miljöberoenden måste vara på plats: `pip install paho-mqtt` (annars faller
+fyra MQTT-moduler på importfel) och `apt-get install mosquitto` (annars kör
+integrationstesterna inte alls).
 
 ---
 
@@ -375,30 +418,59 @@ Inte infört av det här arbetet, men uppdraget kräver en ren konsol, så det �
 lagat: elementen byggs med DOM-anrop och bredden sätts via CSSOM, som inte
 omfattas av `style-src`. Ett test håller fast det.
 
-### 5. Knapparnas form och färg — hittat, **inte lagat**
+### 4. Knapparnas form och färg — **lagad i steg 5, scopad dit**
 
 Paketets DEL 6 säger `Radie: 8px fält och knappar` och `Kantlinje #e0dcd1 |
-fält, knappar`. Pixlarna i `bygg-09-server.png` bekräftar det: *Spara
-servernamn* är vit `#ffffff` med en kant runt `#dcdcdc`, i en rundad rektangel.
+fält, knappar`. Pixelmätning i paketets bilder bekräftar det:
 
-Repot har `button { border-radius: 999px }` och `button.secondary { color:
-var(--trainmeet); background: var(--trainmeet-soft) }` — piller i accentton.
+| Uppmätt i paketet | Värde |
+|---|---|
+| Primärknappens yta (`bygg-10`) | `rgb(193–208, 93–103, 66)` ⇒ `#c96442` |
+| Primärknappens höjd | överkant y=329, underkant y=363 ⇒ **34px** |
+| Primärknappens hörn | vänsterkanten går från x=480 vid y=329 till x=468 vid y=336 ⇒ **~8px radie** |
+| Sekundärknappens yta (`bygg-09`, *Spara servernamn*) | `#ffffff`, kant ~`#dcdcdc` ⇒ `#e0dcd1` |
+| Fältets hörn (`bygg-09`, *Servernamn*) | överkant y=344, vänsterkanten stabil vid y=351 ⇒ **~8px radie** |
 
-Det är en **verklig avvikelse mot paketet**, och den är inte lagad här. Skälet
-är avgränsning, inte oenighet: `button` är global och slår igenom på varje vy,
-även de KÖR-vyer som redan står som 👁 i den här listan. Att ändra den inne i
-ett BYGG 5-block skulle antingen ge två knappformer i samma produkt, eller
-tvinga fram en ny visuell genomgång av allt som redan är verifierat.
+Repot hade `button { border-radius: 999px }` med accenttonad sekundärknapp och
+`input { border-radius: 14px }` — former paketet inte visar någonstans.
 
-Rekommenderas som **eget block före nästa skärmarbete**, eftersom varje block
-som byggs innan dess ärver fel knappform:
+**Lagat, men scopat till steg 5** via `.server-step-card`, som de fyra korten
+bär. Den globala `button`- och `input`-regeln är oförändrad, eftersom den slår
+igenom på varje KÖR-vy och på byggsteg 1, som redan står 👁 i den här listan.
+Att byta den globalt kräver omverifiering av allt det, och är därför ett eget
+block (se överlämningens ordningslista, punkt 6).
 
-```css
-button { border: 1px solid var(--line-field); border-radius: var(--radius-sm); }
-button.secondary { color: var(--ink-strong); background: var(--surface-raised); }
-```
+Att scopet håller är bevisat på två sätt, inte antaget:
 
-Efter den ändringen måste KÖR-vyerna och steg 1 verifieras om.
+1. **Mot verkligheten, inte mot en förväntan.** Commit `198b73f` serveras
+   samtidigt på en andra port ur en `git worktree`. Varje synlig knapp i de fem
+   körflikarna, i applocket, i byggstegen 1–4 och i sidopanelen läses av på båda
+   sidor och jämförs som strängar. Alla elva grupperna är identiska.
+2. **Direkt orsakstest.** Tas klassen bort från uppdateringskortet faller
+   knappen tillbaka till `999px` och accenttonen; sätts den tillbaka blir det
+   `8px` och vitt igen. Formen kan alltså inte komma någon annanstans ifrån.
+
+En fälla att känna till: knappar har global `transition: all 200ms ease`. Varje
+mätning direkt efter en tillståndsändring läser mitt i övergången — en
+disabled-knapp som just låstes upp mätte `rgb(196,71,58)` i stället för
+`#c0392b`, och en radie mitt i en 8px→999px-övergång mätte fortfarande 8px.
+Verifieringen väntar 400ms efter varje tillståndsbyte, och stänger av
+övergången i orsakstestet.
+
+### 5. Nollställningens knapp är röd, och paketet har ingen röd
+
+Paketets adminpalett innehåller ingen röd alls. Det beror rimligen på att
+nollställningen ligger hopfälld i varenda skärmbild, så knappen aldrig syns
+och aldrig behövde en färg.
+
+Att ge den accentfärgen skulle göra *Installera och starta om* och
+*Fabriksåterställ servern* till samma knapp. Den ena tar en uppdatering, den
+andra raderar administratören och all träffdata. **Formen följer paketet**
+— 8px, 1px kant, 36px — men färgen är kvar på `#c0392b`. Ett test faller om
+den byts till accentfärgen.
+
+Samma resonemang som Avvikelse 7: en verklig säkerhetsskillnad väger tyngre än
+en etikett i en bild.
 
 ### 6. 404 på `/terminal/config` — förbefintligt, inte det här blockets
 

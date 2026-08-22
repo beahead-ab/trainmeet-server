@@ -64,6 +64,16 @@ plus blocket nedan för BYGG 5.
   längre fanns — en latent krasch.
 - 17 nya tester, 76 kontroller i webbläsaren. Se checklistans **Webbläsarbevis**.
 
+**Block 4 — kvalitetsrunda på steg 5**
+
+- Testskillnaden mellan sessionerna utredd och nedskriven ovan. Inget saknas.
+- Avvikelse 4 lagad, **scopat till steg 5**: paketets 8px-form, kant `#e0dcd1`,
+  34px höjd, vit sekundär och `#c96442` primär. Den globala `button`-regeln är
+  orörd, och att KÖR är oförändrat är bevisat genom att jämföra mot samma sida
+  serverad från `198b73f` - inte mot en förväntan.
+- Den destruktiva knappen behåller sin röda färg. Se beslut 8.
+- Fem nya tester för knappscopet, alla mutationsprovade.
+
 ### Ändrade filer
 
 | Fil | Vad |
@@ -74,7 +84,7 @@ plus blocket nedan för BYGG 5.
 | `http_server.py` | ikontillgångar serveras |
 | `web/ikon/` | paketets ikon, 3 SVG + 8 PNG |
 | `docs/ADMIN-UI-CONTRACT.md`, `docs/GRAPHIC_IDENTITY.md` | uppdaterade efter konflikt |
-| `tests/test_kor_bygg_structure.py` | 38 tester |
+| `tests/test_kor_bygg_structure.py` | 43 tester |
 | `tests/test_http_server.py` | skaltestet mot ny struktur |
 
 ---
@@ -133,7 +143,25 @@ sträng i `app.js`.
 `<details>` är det enda som syns innan man öppnar, så den måste säga vilken av
 dem det blir. Skriv inte paketets fasta "Nollställ träffdata" där.
 
-### 7. Paketet styr utseendet
+### 7. Knapparnas form är scopad med flit
+
+`.server-step-card button` bär paketets form. Den globala `button`-regeln är
+kvar som den var, och det är inte slarv: den slår igenom på varje KÖR-vy och
+på byggsteg 1, som redan står 👁 i checklistan. Byter man den globalt måste
+allt det verifieras om i webbläsaren, och det är ett eget block.
+
+Lägger du till ett kort i steg 5: **ge det klassen `server-step-card`**, annars
+får dess knappar pillerformen. Ett test räknar att exakt fyra kort bär den.
+
+### 8. Den destruktiva knappen är röd med flit
+
+Paketets adminpalett innehåller ingen röd, eftersom nollställningen ligger
+hopfälld i varenda skärmbild och knappen därför aldrig syns. Att ge den
+accentfärgen skulle göra *Installera och starta om* och *Fabriksåterställ
+servern* till samma knapp. Formen följer paketet; färgen gör det inte. Ett test
+faller om den byts till accentfärgen.
+
+### 9. Paketet styr utseendet
 
 Vid konflikt med `ADMIN-UI-CONTRACT.md` eller `GRAPHIC_IDENTITY.md` vinner
 paketet, och dokumentet uppdateras. Det har redan hänt en gång (blå → orange,
@@ -145,16 +173,62 @@ paketet, och dokumentet uppdateras. Det har redan hänt en gång (blå → orang
 
 ```bash
 cd trainmeet-server
-pip install paho-mqtt                                                       # annars 4 importfel
-PYTHONPATH=src:tests python3 -m unittest discover -s tests -q               # 308, OK
-PYTHONPATH=src:tests python3 -m unittest tests.test_kor_bygg_structure -q   # 38
+pip install paho-mqtt          # annars faller 4 MQTT-moduler på importfel
+apt-get install -y mosquitto   # annars hoppas 2 tester över, se nedan
+PYTHONPATH=src:tests python3 -m unittest discover -s tests -q               # 315, OK
+PYTHONPATH=src:tests python3 -m unittest tests.test_kor_bygg_structure -q   # 43
 PYTHONPATH=src:tests python3 -m unittest tests.test_operating_modes -q      # 13
 ```
 
-Senaste körning: **308 gröna**, en överhoppad. Baslinjen före BYGG 5-blocket
-var 291.
+Senaste körning: **315 gröna, inga överhoppade.**
+
+### Varför siffran hoppade mellan sessionerna
+
+Två sessioner rapporterade olika tal för **samma commit** `198b73f`: 293 gröna
+respektive 291 gröna med en överhoppad. Utrett, och orsaken är miljön - inget
+test har försvunnit, bytt namn eller slutat upptäckas.
+
+`tests/test_mqtt_integration.MQTTIntegrationTests.setUpClass` gör
+
+```python
+executable = shutil.which("mosquitto")
+if executable is None:
+    raise unittest.SkipTest("mosquitto is not installed")
+```
+
+En `SkipTest` i `setUpClass` hoppar över **klassen**, inte metoderna. unittest
+räknar då en (1) överhoppning och lägger **inte** klassens två testmetoder till
+`testsRun`. Därav skillnaden på exakt två:
+
+| Miljö | Utfall på `198b73f` |
+|---|---|
+| med `mosquitto` | `Ran 293 tests ... OK` |
+| utan `mosquitto` | `Ran 291 tests ... OK (skipped=1)` |
+
+Båda är verifierade genom att köra sviten i en `git worktree` på `198b73f`, en
+gång med och en gång utan `mosquitto` på `PATH`. Att den föregående sessionen
+såg 293 stämmer alltså - den hade brokern installerad, vilket också är varför
+den kunde se `test_physical_box_needs_only_its_printed_code_and_device_id`
+flaxa: det testet kan bara flaxa om det faktiskt kör.
+
+Att inget test tappats är kontrollerat separat, inte antaget. En inventering
+räknar upp varje test-id `unittest.TestLoader().discover()` hittar, utan att
+köra dem, och de två listorna jämförs:
+
+```
+198b73f: 293 test-id, 0 laddningsfel
+HEAD:    315 test-id, 0 laddningsfel
+borttagna: 0     tillagda: 22
+```
+
+De 22 tillagda ligger alla i `BuildStepFiveServerTests`.
+
+**Installera mosquitto innan du kör sviten.** Annars ser du 313 + 1 överhoppad
+i stället för 315, och integrationstesterna mot en riktig broker kör inte alls.
 
 ### Känd flakighet
+
+Gäller bara när `mosquitto` finns - utan den kör testet inte.
 
 `test_mqtt_integration.test_physical_box_needs_only_its_printed_code_and_device_id`
 faller ibland på `assignment_event.wait(30)` när maskinen är belastad. Kunde
@@ -166,8 +240,8 @@ den har fallit och passerat på samma kod flera gånger den här sessionen.
 Servern måste vara färdiginstallerad, annars ligger `#app-view` på
 `display: none` och Playwright hittar element som inte går att klicka.
 
-`local_server` startar **inte** i den här utvecklingsmiljön: den vill ha
-Mosquitto, som inte finns. Bygg i stället en `TrainMeetHTTPApplication` direkt,
+`local_server` vill ha en MQTT-broker och vägrar starta utan `mosquitto` på
+`PATH`. Bygg i stället en `TrainMeetHTTPApplication` direkt,
 precis som `tests/test_http_server.py` gör, och kör den i en tråd. Det ger
 samma markup, samma CSP-headers och samma API — bara utan MQTT, som adminvyn
 ändå inte rör. Sätt `allow_restart=True` och `allow_software_update=True`, annars
@@ -200,24 +274,29 @@ npm install playwright` räcker, binären finns redan.
 
 ---
 
-## Nästa arbetsblock: knapparna, sedan BYGG 2
+## Nästa arbetsblock: BYGG 2 Stationer och sträckor
 
-**Ta knapparna först.** Paketets DEL 6 säger 8px radie och kant `#e0dcd1` på
-knappar; repot har `border-radius: 999px` och accenttonade piller. Det står som
-**Avvikelse 5** i checklistan med den föreslagna ändringen. Den är global, så
-varje block som byggs innan dess ärver fel form — och när den görs måste
-KÖR-vyerna och steg 1 verifieras om. Ju tidigare desto billigare.
+Paketets DEL 3.8 och skärmbilderna `bygg-04-stationer-och-strackor.png` och
+`bygg-05-strackor-och-paneler.png`. Tre numrerade sektioner i **ett** kort,
+plus genvägen *Bygg från stationsordningen*, som måste vara idempotent.
+
+Det är också första steget där källåsningen får något att låsa: `data-source-locked`
+sätts redan, men steg 2 och 3 fanns inte att låsa förrän nu. Räkna med att
+3.7.4 och 5.5 kan gå från 🔨 till verifierade när steget finns.
+
+Ge kortet klassen `server-step-card` om du vill ha paketets knappform i det —
+tills den globala regeln byts är formen scopad per steg.
 
 ### Därefter, i ordning
 
 | # | Block | Anteckning |
 |---|---|---|
-| 1 | Knappformen | ← Avvikelse 5; kräver omverifiering av KÖR och steg 1 |
-| 2 | BYGG 2 Stationer och sträckor | inkl. **`Bygg från stationsordningen`**, idempotent |
-| 3 | BYGG 3 Tidtabell | tre grupperingar, massredigering; datamodell från `trainmeet-cloud` `src/model.ts` |
-| 4 | BYGG 4 TMBoxar | kopplingsformulär + lista |
-| 5 | KÖR Översikt | banschema med `renderTopology`, nästa rörelser, enheter |
-| 6 | KÖR Skärmar | lista, adress, QR-platshållare |
+| 1 | BYGG 2 Stationer och sträckor | ← nästa; inkl. **`Bygg från stationsordningen`**, idempotent |
+| 2 | BYGG 3 Tidtabell | tre grupperingar, massredigering; datamodell från `trainmeet-cloud` `src/model.ts` |
+| 3 | BYGG 4 TMBoxar | kopplingsformulär + lista |
+| 4 | KÖR Översikt | banschema med `renderTopology`, nästa rörelser, enheter |
+| 5 | KÖR Skärmar | lista, adress, QR-platshållare |
+| 6 | Knappformen globalt | lyft `.server-step-card`-reglerna till `button`; kräver omverifiering av allt som står 👁 |
 | 7 | Hallskärm: Avgångstavla | paketet säger den först |
 | 8 | Hallskärmarna 2–5 | klocka, banöversikt, nu-tavlan, tågdiagram |
 | 9 | Degraderat läge | tona ner, ta bort tågen, gul list; trösklar konfigurerbara |

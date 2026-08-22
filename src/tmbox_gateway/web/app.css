@@ -1979,10 +1979,106 @@ body[data-source-locked="true"] .build-panel textarea {
 }
 .reset-body h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink-strong); }
 .reset-body p { max-width: 72ch; margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-muted); }
-.reset-body > label { font-size: 12.5px; color: var(--ink-strong); }
+/* Globalt är `label` ett rutnät, vilket är rätt för fält med en etikett
+   ovanför sig. Här är etiketten en mening med ett <b> i sig, och
+   rutnätet delar den i tre rader: "Skriv" / "NOLLSTÄLL" / "för att
+   låsa upp knappen". */
+.reset-body > label { display: block; font-size: 12.5px; color: var(--ink-strong); }
 .reset-body .form-message { margin: 0; }
 
 @media (max-width: 700px) {
   .identity-status-grid { grid-template-columns: 1fr; }
   .server-identity-form { grid-template-columns: 1fr; }
+}
+
+/* ---------------------------------------- BYGG 5: knappar och fält (DEL 6)
+   Paketet: "Radie: 8px fält och knappar", "Kantlinje #e0dcd1 | fält, knappar",
+   "Knapphöjd 32-36px". Uppmätt i bygg-10: primärknappen är 34px hög, hörnet
+   böjer över ~8px och ytan ligger på #c96442. Sekundärknappen är vit med en
+   ljus kant och mörk text.
+
+   Globalt är knappar 999px-piller i accentton och fält 14px - former som
+   paketet inte visar någonstans. De reglerna rörs inte här. De slår igenom på
+   KÖR-vyerna, som redan är visuellt verifierade mot paketet, och ska bytas i
+   ett eget block med omverifiering av allt som står 👁 i checklistan. Tills
+   dess bär bara steg 5 paketets form, och den bär den lokalt.               */
+
+.server-step-card input:not([type="radio"]):not([type="checkbox"]),
+.server-step-card select {
+  border-radius: var(--radius-sm);
+}
+
+.server-step-card button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line-field);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Sekundär: vit yta, ljus kant, mörk text. */
+.server-step-card button.secondary {
+  color: var(--ink-strong);
+  background: var(--surface-raised);
+  font-weight: 500;
+}
+.server-step-card button.secondary:hover:not(:disabled) {
+  border-color: var(--ink-faint);
+  background: var(--paper);
+}
+.server-step-card button.secondary:active:not(:disabled) {
+  background: var(--line-inner);
+}
+
+/* Primär: accentytan, vit text. Kanten finns för att höjden ska bli lika. */
+.server-step-card button.primary {
+  color: #fff;
+  border-color: var(--accent-warm);
+  background: var(--accent-warm);
+  font-weight: 600;
+}
+.server-step-card button.primary:hover:not(:disabled) {
+  border-color: var(--accent-warm-dark);
+  background: var(--accent-warm-dark);
+}
+.server-step-card button.primary:active:not(:disabled) {
+  border-color: var(--accent-warm-dark);
+  background: var(--accent-warm-dark);
+  filter: brightness(.94);
+}
+
+/* Destruktiv: samma form, egen färg. Paketets adminpalett har ingen röd,
+   eftersom nollställningen ligger hopfälld i varenda skärmbild. Att låta den
+   bära accentfärgen skulle göra "installera en uppdatering" och "radera
+   servern och administratören" till samma knapp. Formen följer paketet;
+   färgen är kvar för att skillnaden är värd mer än enhetligheten. */
+.server-step-card button.danger-action {
+  color: #fff;
+  border-color: var(--danger);
+  background: var(--danger);
+  font-weight: 600;
+}
+.server-step-card button.danger-action:hover:not(:disabled) { filter: brightness(.94); }
+.server-step-card button.danger-action:active:not(:disabled) { filter: brightness(.88); }
+
+/* Avstängd: läses som avstängd, inte som en blek variant av sig själv.
+   Ingen opacity, för då tappar den destruktiva knappen sin röda signal
+   halvvägs i stället för helt. */
+.server-step-card button:disabled {
+  opacity: 1;
+  color: var(--ink-locked);
+  border-color: var(--line-field);
+  background: var(--surface-muted);
+  cursor: not-allowed;
+}
+
+/* Fokus ärvs från den globala regeln (2px var(--ring) = #c96442, offset 2px)
+   och skrivs medvetet inte om - den är redan paketets accent. */
+
+/* Knapparna ärver `transition: all 200ms ease` från den globala regeln, och
+   den tonar in även fokusringen. Under reduced-motion ska en ring komma
+   direkt: den är ett besked om var man är, inte en effekt. */
+@media (prefers-reduced-motion: reduce) {
+  .server-step-card button { transition: none; }
 }

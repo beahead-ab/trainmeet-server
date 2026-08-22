@@ -348,6 +348,58 @@ class BuildStepFiveServerTests(unittest.TestCase):
             self.assertNotIn(leftover, self.js)
             self.assertNotIn(leftover, self.css)
 
+    def test_the_step_five_buttons_carry_the_packages_shape(self):
+        """DEL 6: 8px radie, kant #e0dcd1, 32-36px hög. Uppmätt i bygg-10."""
+        block = self.css[self.css.index(".server-step-card button {"):][:320]
+        self.assertIn("border-radius: var(--radius-sm)", block)
+        self.assertIn("border: 1px solid var(--line-field)", block)
+        self.assertIn("min-height: 34px", block)
+        self.assertIn("--radius-sm: 8px;", self.css)
+        self.assertIn("--line-field: #e0dcd1;", self.css)
+
+    def test_the_button_shape_is_scoped_to_the_step_not_global(self):
+        """Den globala knappregeln slår igenom på KÖR-vyer som redan är
+        visuellt verifierade. Ändras den här av misstag blir de fel utan att
+        någon tittar på dem."""
+        self.assertIn("button {\n  min-height: var(--control-height);", self.css)
+        self.assertIn("border-radius: 999px;", self.css)
+        # Varje knappregel för steg 5 måste bära scopet. Basregeln matchas med
+        # sin första deklaration: enbart selektorn räcker inte, eftersom
+        # reduced-motion-regeln har samma selektor och skulle svara ja.
+        for rule in (".server-step-card button {\n  min-height: 34px;",
+                     ".server-step-card button.secondary {",
+                     ".server-step-card button.primary {",
+                     ".server-step-card button.danger-action {",
+                     ".server-step-card button:disabled {"):
+            self.assertIn(rule, self.css)
+        # Alla fyra korten i steget bär klassen, annars faller något utanför.
+        self.assertEqual(4, self.html.count("server-step-card"))
+        for element_id in ("server-identity-settings", "admin-access-settings",
+                           "software-update-settings", "server-system-settings"):
+            self.assertIn("server-step-card", self._panel(element_id)[:220])
+
+    def test_the_destructive_button_stays_distinct_from_the_primary(self):
+        """Paketets adminpalett har ingen röd, eftersom nollställningen ligger
+        hopfälld i varje skärmbild. Att ge den accentfärgen skulle göra
+        "installera en uppdatering" och "radera servern" till samma knapp."""
+        danger = self.css[self.css.index(".server-step-card button.danger-action {"):][:220]
+        self.assertIn("var(--danger)", danger)
+        self.assertNotIn("var(--accent-warm)", danger)
+
+    def test_a_disabled_button_reads_as_disabled(self):
+        """Inte som en blek variant av sig själv: en halvgenomskinlig röd knapp
+        ser fortfarande farlig ut."""
+        block = self.css[self.css.index(".server-step-card button:disabled {"):][:260]
+        self.assertIn("opacity: 1", block)
+        self.assertIn("var(--ink-locked)", block)
+        self.assertIn("var(--surface-muted)", block)
+        self.assertIn("cursor: not-allowed", block)
+
+    def test_reduced_motion_stops_the_button_transition(self):
+        """Fokusringen ärver den globala 200ms-övergången. Under
+        reduced-motion ska den komma direkt."""
+        self.assertIn(".server-step-card button { transition: none; }", self.css)
+
     def _panel(self, element_id: str) -> str:
         start = self.html.index(f'id="{element_id}"')
         return self.html[start:self.html.index("</section>", start)]
