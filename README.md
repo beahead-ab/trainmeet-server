@@ -2,7 +2,7 @@
 
 TrainMeet Server är den lokala, självständiga driftsmiljön för en TrainMeet-träff. Den körs på en Raspberry Pi och fortsätter fungera utan internet. Servern äger stationer, spårförbindelser, körsätt, aktiv tidtabell, trafiktillstånd och alla anslutna TMBoxar.
 
-Den centrala [TrainMeet-applikationen](https://github.com/beahead-ab/trainmeet) används längre fram för att bygga och publicera konfigurationer och bearbeta importerade tidtabeller. Själva träffen körs lokalt här.
+[TrainMeet Cloud](https://github.com/beahead-ab/trainmeet-cloud) bygger, validerar och publicerar konfigurationer och tolkar importerade tidtabeller. Själva träffen körs lokalt här. Flödet går bara åt ett håll: Cloud publicerar, den här servern hämtar. Ingenting synkas tillbaka.
 
 ## Välj installation
 
@@ -455,7 +455,15 @@ TMBox-simulering. De andra delarna installeras separat:
 ## Två tydligt separerade webbdelar
 
 - **TrainMeet Server** är administrationen. Här definieras träffen, stationernas ordning, enkel- och dubbelspår, körsätt, paneler A–D, boxkopplingar, aktiv tidtabell och lokal klocka.
-- **TMBox-simulering** använder samma serverstyrda logik, 16×2-display och tangentbord som de fysiska och nativa klienterna.
+- **TMBox-simulering** kör exakt samma renderare och tillståndsmaskin som firmwaren, inte en efterlikning: `tmbox-render.js`, `tmbox-nav.js` och `tmbox-attention.js` hålls mot firmwarens egna guldfiler och serverns testsvit faller om de skiljer sig. Den ritar alla fyra displaygeometrier — **16×2, 20×2, 16×4 och 20×4** — som växlas i vyn, så en skärm går att granska i den storlek boxen faktiskt har.
+
+Simulatorn ger också **uppmärksamhetssignalerna**: en ton och en banderoll när
+en klarering begärs hit, när ett svar på en egen begäran kommer, eller när
+linjen förklaras ledig mot stationen. Policyn är boxens egen — samma
+`AttentionController`, hållen mot samma guldfil — och eftersom hårdvaran ännu
+saknar summer är det här enda stället signalerna går att höra. Det som inte
+låter är minst lika viktigt: en klarering som redan väntade, den första
+ögonblicksbilden efter start, och det tågklareraren själv nyss gjorde är tysta.
 
 Ändringar sparas först som ett utkast och aktiveras uttryckligen. Om topologin ändras krävs serveromstart, så en pågående körning inte ändras tyst. Administrationsvyn har en knapp för kontrollerad omstart.
 
@@ -484,6 +492,29 @@ Före installationen säkerhetskopieras SQLite-databasen. Misslyckas
 uppdateringen återställs föregående version automatiskt. Efter installationen
 startar TrainMeet Server om och webbsidan ansluter automatiskt igen.
 
+### Vad installationen gör för att en uppdatering ska bita
+
+Fyra steg finns just för att en uppdatering annars kan rapportera framgång
+medan den gamla koden fortsätter köra. Var och en har inträffat:
+
+1. **Gammal `src` rensas.** `src/` tas bort innan den nya kopieras in, så att
+   ett borttaget paket inte lever kvar bredvid det nya. Bara kod ligger här —
+   databasen bor i `STATE_DIR` och rörs inte.
+2. **systemd-drop-ins migreras.** En drop-in under
+   `/etc/systemd/system/trainmeet-server.service.d/` åsidosätter unit-filen
+   installationen just skrev. En egen drop-in med riktiga inställningar — bind-
+   adress, extern broker — pekade tyst på `tambox_gateway.local_server` och
+   startade paketet vi bytt namn från. Installationen skriver om modulnamnet
+   i drop-in:en i stället för att radera någons konfiguration.
+3. **Tjänsten startas om, inte bara aktiveras.** `systemctl enable --now` gör
+   ingenting alls när tjänsten redan kör. `enable` och `restart` är därför
+   separerade.
+4. **Effektivt `ExecStart` kontrolleras.** `is-active` är sant för en process
+   som kör fel kod lika villigt som för rätt. Efter omstart läses tjänstens
+   effektiva `ExecStart` och installationen avbryter med felmeddelande om det
+   inte innehåller `tmbox_gateway.local_server` — och pekar på drop-in-
+   katalogen som trolig orsak.
+
 På Raspberry Pi och Linux körs uppdateringen av en separat root-ägd
 systemd-tjänst; webbservern har ingen generell sudo-behörighet. På Mac ligger
 hela installationen i din egen användarmapp, så uppdateringen körs utan root
@@ -497,9 +528,9 @@ genom ny image respektive Helm-deployment.
 ## Arkitektur
 
 ```text
-TrainMeet centralt (konfiguration och import, valfritt)
+TrainMeet Cloud (import, validering och publicering)
                          |
-                         v
+                         v   enkelriktat: Cloud publicerar, servern hämtar
 Raspberry Pi: TrainMeet Server + SQLite + Mosquitto
         |              |              |              |
         v              v              v              v
