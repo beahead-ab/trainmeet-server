@@ -720,6 +720,49 @@ class SQLiteRuntimeStore:
     def complete_installation(self) -> None:
         self._save_setting("installation_required", "0")
 
+    # ------------------------------------------------------- driftläge (D3)
+
+    #: Cloud is the editor and the server refuses local changes.
+    CLOUD_LINKED = "cloud-linked"
+    #: Cloud is out of reach, or deliberately disconnected. Editing is open.
+    OFFLINE_MEET = "offline-meet"
+    OPERATING_MODES = (CLOUD_LINKED, OFFLINE_MEET)
+
+    def operating_mode(self) -> str:
+        """Which mode the server is in, and it survives a restart.
+
+        Deliberately not derived from whether Cloud answers right now. Network
+        status is rarely binary, and a rule decided by a live response would
+        unlock and relock in the middle of somebody's edit. A server that has
+        never been linked to Cloud runs locally without anyone choosing.
+        """
+        stored = self._setting("operating_mode")
+        if stored in self.OPERATING_MODES:
+            return stored
+        return self.CLOUD_LINKED if self.link_token() else self.OFFLINE_MEET
+
+    def set_operating_mode(self, mode: str) -> str:
+        if mode not in self.OPERATING_MODES:
+            raise RuntimePublicationError("Okänt driftläge")
+        self._save_setting("operating_mode", mode)
+        return mode
+
+    def editing_is_open(self) -> bool:
+        return self.operating_mode() == self.OFFLINE_MEET
+
+    def local_revisions(self) -> list[str]:
+        """Local revisions installed on top of a Cloud publication.
+
+        These are what going back to Cloud discards, so returning to Cloud has
+        to be able to name them before it does it (D4).
+        """
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT publication_id FROM runtime_publications "
+                "WHERE publication_id LIKE '%+local-r%' ORDER BY installed_at, publication_id"
+            ).fetchall()
+        return [str(row[0]) for row in rows]
+
     def _save_setting(self, key: str, value: str) -> None:
         with self._lock:
             self._connection.execute(
