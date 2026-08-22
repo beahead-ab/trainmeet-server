@@ -467,6 +467,31 @@ låter är minst lika viktigt: en klarering som redan väntade, den första
 
 Ändringar sparas först som ett utkast och aktiveras uttryckligen. Om topologin ändras krävs serveromstart, så en pågående körning inte ändras tyst. Administrationsvyn har en knapp för kontrollerad omstart.
 
+## Driftlägen
+
+| Läge | Cloud | Redigering på servern |
+|---|---|---|
+| `cloud-linked` | nås, är redaktör | **låst** |
+| `offline-meet` | nås inte, eller medvetet frånkopplad | **öppen** |
+
+Läget är **beständigt tillstånd som en människa satt** — det överlever omstart
+och härleds aldrig ur om Cloud svarade just nu. Ett nätavbrott låser alltså
+aldrig upp redigering på egen hand, och ett nät som kommer tillbaka låser
+aldrig mitt i någons arbete. En server som aldrig kopplats till Cloud kör
+lokalt utan att någon behöver välja.
+
+I `offline-meet` går det att öppna den aktiva Cloud-versionen som en
+arbetskopia, rätta tider och spår, och aktivera. Aktiveringen skriver en ny
+paketrevision `<bas>+local-rN` genom samma maskineri som en Cloud-publicering,
+så TKL och boxarna ser en `config_version` de inte sett och läser om. De vet
+inte, och behöver inte veta, att revisionen gjordes lokalt.
+
+Att gå tillbaka till `cloud-linked` betyder att Clouds publicering gäller igen
+och att de lokala revisionerna kastas. Det sker **aldrig tyst**: servern visar
+först exakt vilka rader som ändrats, lagts till eller tagits bort, och kräver
+en bekräftelse. Finns inget lokalt att kasta krävs ingen bekräftelse — en
+bekräftelseruta för ingenting lär folk att klicka igenom dem.
+
 ## Lokal och extern adminåtkomst
 
 Webbadmin öppnas direkt på datorn eller Raspberry Pi:n som kör servern. Vid en
