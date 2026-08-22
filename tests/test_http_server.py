@@ -83,8 +83,15 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="overview-topology"', html)
         self.assertIn('id="overview-route-list"', html)
         self.assertIn("TÅGRUTTER", html)
-        self.assertIn("Administration", html)
-        self.assertIn("TMBox-simulering", html)
+        # Den gamla sidopanelen ("Administration och funktioner") och
+        # TMBox-simuleringen finns inte längre: designpaketet ersätter tolv
+        # menypunkter med två lägen, och tar bort simuleringen eftersom v2
+        # räcker. Skalet kontrolleras därför mot den nya strukturen.
+        self.assertIn('id="run-tabs"', html)
+        self.assertIn('data-run-tab="trafik"', html)
+        self.assertIn('id="build-sidebar"', html)
+        self.assertIn('data-build-step="kalla"', html)
+        self.assertNotIn('id="simulator-view"', html)
         self.assertIn("AKTIV RUNTIME", html)
         self.assertIn("Aktiva sträckor", html)
         self.assertIn('id="copy-active-runtime"', html)
@@ -364,6 +371,13 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(self.runtime_store.active().publication_id, "publication-v2-second")
 
     def test_admin_can_enable_realtime_cloud_config_updates(self):
+        """Auto-sync fetches. It does not decide.
+
+        This test used to assert that polling made the new publication active.
+        That was the behaviour, and it was the bug: fifteen seconds after Cloud
+        published, the running meet changed under whoever was dispatching it.
+        The fetch is still automatic; only the taking-effect is not.
+        """
         self.runtime_store.install(runtime_package_v3(publication_id="publication-v2-first"))
         self.runtime_store.save_link_token("central-test-link")
         client = self.application.local_admin()
@@ -372,8 +386,12 @@ class HTTPServerTests(unittest.TestCase):
         result = self.application.auto_sync_cloud_runtime()
 
         self.assertTrue(setting["enabled"])
-        self.assertTrue(result["updated"])
-        self.assertEqual("publication-v2-second", self.runtime_store.active().publication_id)
+        self.assertTrue(result["pending"])
+        self.assertNotIn("updated", result)
+        self.assertEqual("publication-v2-first", self.runtime_store.active().publication_id)
+        self.assertEqual(
+            "publication-v2-second", self.runtime_store.pending_publication().publication_id
+        )
         self.assertTrue(self.application.runtime_summary(client)["cloud_auto_sync"])
 
     def test_local_admin_opens_directly_and_external_admin_uses_login_cookie(self):

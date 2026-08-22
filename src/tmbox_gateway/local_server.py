@@ -311,12 +311,15 @@ def _cloud_auto_sync_loop(
     while not stop.is_set():
         try:
             result = application.auto_sync_cloud_runtime()
-            if result.get("updated"):
-                LOGGER.info("Ny Cloud-config hämtad: %s", result.get("publication_id"))
-                if result.get("restart_required"):
-                    LOGGER.info("Startar om för att aktivera den nya Cloud-configen")
-                    server.request_restart()
-                    return
+            if result.get("pending"):
+                # Hämtad, inte aktiverad, och framför allt: ingen omstart. Den
+                # här loopen körde tidigare request_restart() på egen hand, så
+                # en träff kunde starta om under händerna på tågklareraren för
+                # att Cloud råkade publicera. Nu väntar den på ett ja.
+                LOGGER.info(
+                    "Ny Cloud-revision väntar på granskning: %s",
+                    result.get("publication_id"),
+                )
         except Exception as error:
             LOGGER.warning("Automatisk Cloud-synk misslyckades: %s", error)
         stop.wait(15)

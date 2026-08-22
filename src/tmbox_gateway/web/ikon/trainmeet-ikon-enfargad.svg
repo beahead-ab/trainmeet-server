@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="TrainMeet">
+  <rect x="28" y="8" width="8" height="9" rx="2.5" fill="#1f1e1d"></rect>
+  <rect x="12" y="15" width="40" height="39" rx="12" fill="none" stroke="#1f1e1d" stroke-width="3.5"></rect>
+  <rect x="20" y="23" width="24" height="12" rx="5" fill="#1f1e1d"></rect>
+  <circle cx="32" cy="44" r="4.5" fill="none" stroke="#1f1e1d" stroke-width="3"></circle>
+  <rect x="14" y="49" width="7" height="5" rx="2.5" fill="#1f1e1d"></rect>
+  <rect x="43" y="49" width="7" height="5" rx="2.5" fill="#1f1e1d"></rect>
+</svg>
