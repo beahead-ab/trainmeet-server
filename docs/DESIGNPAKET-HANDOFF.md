@@ -24,13 +24,15 @@ att krav, beslut eller testbevis tappas. Det är ingen paus i projektet.
 ### Commits på grenen
 
 ```
+7cec157  Give the Server step the package's button shape, and explain the test count
+abc6eb2  Gather the three system menu points into one Server step
 198b73f  Hand over honestly: correct the checklist and write down how to take over
 e3fece6  Make the source choice do the locking, not just say it
 c4fbfba  Write down every binding requirement and where it stands
 de4ccaa  Two modes instead of twelve menu points [minor]
 ```
 
-plus blocket nedan för BYGG 5.
+plus blocket nedan för BYGG 2 i låst läge.
 
 ---
 
@@ -108,27 +110,79 @@ cloud_linked`) — det är inte UI:ts jobb att grinda, bara att visa.
 
 Bygg inte en egen `source`-variabel bredvid. Den skulle bli en andra sanning.
 
-### 2. Endast verkliga API:er
+### 2. Bara Cloud tolkar underlag, och synken går åt ett håll
+
+Det normala produktflödet, och den enda riktning data rör sig i:
+
+```
+PDF / JPG / PNG
+  → tolkning och granskning i TrainMeet Cloud
+  → publicerad revision (grundkonfigurationen)
+  → Servern hämtar den
+```
+
+Fyra gränser som **inte** får suddas ut:
+
+1. **PDF, JPG och PNG tolkas endast i TrainMeet Cloud.** Ingen PDF-parser,
+   ingen bildtolkning, ingen extraktions- eller granskningskö byggs i servern.
+   `pdftoppm`, modellanrop och granskningsvyer hör hemma i `trainmeet-cloud`
+   och ska stanna där.
+2. **Cloud publicerar grundkonfigurationen.** Stationer, sträckor och den
+   ursprungliga tidtabellen kommer därifrån.
+3. **Synk går endast Cloud → Server.** Ändringar som görs på servern skickas
+   *aldrig* upp till Cloud. Servern är inte en redaktör åt Cloud; den är
+   drift, och driftens rättelser stannar i driften.
+4. **Serverns manuella filimport är ett exporterat JSON-driftpaket.** Aldrig
+   en PDF. Det är reservvägen när Cloud inte går att nå alls.
+
+Om en framtida uppgift verkar kräva PDF-hantering eller uppladdning till Cloud
+i servern: det är fel repo, respektive fel riktning.
+
+### 3. Låst är inte samma sak för banan och för tidtabellen
+
+Det här är den gräns som är lättast att dra fel, eftersom "Cloud-läge" låter
+som ett läge där allt är låst. Det är det inte.
+
+| Steg | Cloud-läge | Varför |
+|---|---|---|
+| **2 · Bana** — stationer, sträckor, paneler | **Skrivskyddat** | Banan är tolkad ur underlaget och granskad i Cloud. Den ritas en gång och ligger still. |
+| **3 · Tidtabell** | **Alltid redigerbar** | Under träffen *är* servern driften. Tåg blir sena och rörelser ställs in, och då finns ingen väg via Cloud. |
+
+I lokalt läge är båda redigerbara.
+
+Två följdregler:
+
+1. **Lokala tidtabellsändringar blir lokala runtime-revisioner**
+   (`<bas>+local-rN`). De är versioner, inte överskrivningar, så det går att
+   se vad som ändrats och när.
+2. **En ny Cloud-revision får aldrig aktiveras tyst över lokala ändringar.**
+   Den ska ligga **väntande**, visa exakt vad som skrivs över, och kräva
+   uttrycklig granskning och aktivering. Att en operatör förlorar tre
+   rättelser hen gjort kl 13 för att Cloud publicerade kl 14 är det värsta
+   den här produkten kan göra, och den enda skyddet mot det är att aldrig
+   aktivera automatiskt.
+
+### 4. Endast verkliga API:er
 
 Skärmbildernas "Cloud rev 12 · 499 rörelser · 3 ändrade" är prototypdata. Ett
 test faller om de strängarna dyker upp i källan. Stegräckans underrubriker
 kommer ur `/v1/runtime` och `/v1/devices`, och samma svar föder både listan
 och räckan så de inte kan visa olika tal.
 
-### 3. Inga inline-stilar i HTML-strängar
+### 5. Inga inline-stilar i HTML-strängar
 
 Serverns CSP är `style-src 'self'`. Ett `style="width:N%"` i en `innerHTML`-
 sträng avvisas tyst. Bygg med DOM-anrop och sätt värdet via CSSOM
 (`element.style.width`), som inte omfattas. Två tester håller det shut.
 
-### 4. Aktiva träffen rörs inte
+### 6. Aktiva träffen rörs inte
 
 Byggläget ändrar ingenting förrän en revision uttryckligen granskas och
 aktiveras. Aktiveringsvägen finns redan i API:t sedan 1.2.0
 (`+local-rN` via `SQLiteRuntimeStore.install`), men **är inte kopplad till
 UI:t**. Koppla den — hitta inte på en ny.
 
-### 5. Sju uppdateringssteg, ett kontrakt
+### 7. Sju uppdateringssteg, ett kontrakt
 
 Stegen och etiketterna kommer ur `update_contract.py`, som är kopierad ordagrant
 till `trainmeet-cloud`. Webbläsaren ritar dem och översätter tillståndet till
@@ -136,14 +190,14 @@ ett ord (`Klar` / `Pågår` / `Väntar` / `Fel`) — den hittar inte på ett ste
 etikett eller ett femte tillstånd. Ett test faller om en etikett dyker upp som
 sträng i `app.js`.
 
-### 6. Nollställningen är två olika saker
+### 8. Nollställningen är två olika saker
 
 `access_mode: local` ⇒ fabriksåterställning, administratören raderas.
 `access_mode: external` ⇒ bara träffdata. Sammanfattningen på det hopfällda
 `<details>` är det enda som syns innan man öppnar, så den måste säga vilken av
 dem det blir. Skriv inte paketets fasta "Nollställ träffdata" där.
 
-### 7. Knapparnas form är scopad med flit
+### 9. Knapparnas form är scopad med flit
 
 `.server-step-card button` bär paketets form. Den globala `button`-regeln är
 kvar som den var, och det är inte slarv: den slår igenom på varje KÖR-vy och
@@ -153,7 +207,7 @@ allt det verifieras om i webbläsaren, och det är ett eget block.
 Lägger du till ett kort i steg 5: **ge det klassen `server-step-card`**, annars
 får dess knappar pillerformen. Ett test räknar att exakt fyra kort bär den.
 
-### 8. Den destruktiva knappen är röd med flit
+### 10. Den destruktiva knappen är röd med flit
 
 Paketets adminpalett innehåller ingen röd, eftersom nollställningen ligger
 hopfälld i varenda skärmbild och knappen därför aldrig syns. Att ge den
@@ -161,7 +215,7 @@ accentfärgen skulle göra *Installera och starta om* och *Fabriksåterställ
 servern* till samma knapp. Formen följer paketet; färgen gör det inte. Ett test
 faller om den byts till accentfärgen.
 
-### 9. Paketet styr utseendet
+### 11. Paketet styr utseendet
 
 Vid konflikt med `ADMIN-UI-CONTRACT.md` eller `GRAPHIC_IDENTITY.md` vinner
 paketet, och dokumentet uppdateras. Det har redan hänt en gång (blå → orange,
@@ -175,12 +229,13 @@ paketet, och dokumentet uppdateras. Det har redan hänt en gång (blå → orang
 cd trainmeet-server
 pip install paho-mqtt          # annars faller 4 MQTT-moduler på importfel
 apt-get install -y mosquitto   # annars hoppas 2 tester över, se nedan
-PYTHONPATH=src:tests python3 -m unittest discover -s tests -q               # 315, OK
+PYTHONPATH=src:tests python3 -m unittest discover -s tests -q               # 341, OK
 PYTHONPATH=src:tests python3 -m unittest tests.test_kor_bygg_structure -q   # 43
 PYTHONPATH=src:tests python3 -m unittest tests.test_operating_modes -q      # 13
 ```
 
-Senaste körning: **315 gröna, inga överhoppade.**
+Senaste körning: **341 gröna, inga överhoppade.** 315 från basen `7cec157`,
+plus 21 i `test_build_topology` och 5 i `test_product_boundaries`.
 
 ### Varför siffran hoppade mellan sessionerna
 
@@ -271,6 +326,33 @@ curl -s -b /tmp/cj -X POST -H 'Content-Type: application/json' \
 
 Kör aldrig `playwright install` — `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 npm install playwright` räcker, binären finns redan.
+
+---
+
+## Vad som är byggt — block 4: BYGG steg 2 i låst läge
+
+`/v1/build/topology` svarar med stationer, sträckor och paneler i **samma form**
+vare sig innehållet kommer från en Cloud-publicering eller ett lokalt utkast.
+Skillnaden är ett `locked` i svaret, inte två kodvägar och inte en gissning i
+webbläsaren.
+
+Tre saker som inte är uppenbara och som kostade tid att hitta:
+
+1. **En A–D-plats pekar på en sträcka, inte på en granne.** Grannens namn är
+   sträckans andra ände sett från panelens station. Ett uppslag som behandlar
+   platsen som ett stations-id renderar utan att krascha — det visar bara ett
+   id där ett namn ska stå.
+2. **Stationsordningen ligger i `diagram_order`, inte i listordningen.**
+   Publiceringen får sorteras; utkastet får inte, för där *är* listan ordningen.
+3. **`.build-panel-heading` delas med steg 1 och 5**, vars rubriker har `h2`
+   och `p` som direkta barn. Att göra den till flex för att få märket till
+   höger ställer dem bredvid varandra i de andra stegen. Därför
+   `.with-badge`, inte en omodifierad regel.
+
+Kvar i steget: redigeringsläget (fälten är ännu inte inmatningsbara),
+genvägen *Bygg från stationsordningen*, och sådd-kopplingen —
+`/v1/local-configuration/seed` finns men anropas inte av någon vy, så den
+lokala vägen har ännu inget att redigera.
 
 ---
 

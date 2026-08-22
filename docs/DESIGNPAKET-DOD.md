@@ -11,13 +11,78 @@ Uppdateras efter varje arbetsblock, så att ingenting tappas mellan omgångar.
 | 👁 | dessutom visuellt verifierat i webbläsare mot paketet |
 | ⛔ | verkligt blockerat — orsak angiven |
 
-**Läge 2026-08-22:** ⬜ 59 · 🔨 25 · ✅ 19 · 👁 35 · ⛔ 2
+**Läge 2026-08-22:** ⬜ 50 · 🔨 14 · ✅ 17 · 👁 38 · ⛔ 2
 
 Uppdatera den här raden när du uppdaterar tabellerna, så att en snabb blick
-räcker för att se om arbetet rör sig.
+räcker för att se om arbetet rör sig. Räkna den, gissa den inte — den var
+handhållen fram till 2026-08-22 och hade hunnit driva isär från tabellerna:
+
+```bash
+python3 - <<'EOF'
+import pathlib
+c = {m: 0 for m in "⬜🔨✅👁⛔"}
+for line in pathlib.Path("docs/DESIGNPAKET-DOD.md").read_text().splitlines():
+    if line.startswith("|"):
+        for cell in [x.strip() for x in line.strip("|").split("|")][2:]:
+            if cell in c:
+                c[cell] += 1
+print(" · ".join(f"{k} {v}" for k, v in c.items()))
+EOF
+```
 
 Paketet styr utseende, struktur och användarflöde. Befintliga API-, säkerhets-
 och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
+
+---
+
+## Produktbeslut — bindande, över paketet
+
+Paketet beskriver hur servern ska *se ut*. De här besluten beskriver vad den
+**är**, och de går före paketet om de någonsin krockar. De är inte förslag och
+de ska inte omtolkas av en senare session.
+
+| # | Beslut | Status | Bevis |
+|---|---|---|---|
+| P1 | PDF, JPG och PNG tolkas **endast** i TrainMeet Cloud | ✅ | `test_product_boundaries.NoDocumentInterpretationTests` — faller om något tolkningsbibliotek importeras i servern |
+| P2 | Cloud publicerar grundkonfigurationen | ✅ | `RuntimePublication.parse` är enda vägen in; `test_the_manual_import_accepts_a_json_operating_package` |
+| P3 | Synk går **endast** Cloud → Server | ✅ | `test_every_request_to_cloud_is_a_read` — varje `Request` mot Cloud är en GET utan `data` |
+| P4 | Ändringar på servern skickas **aldrig** upp till Cloud | ✅ | samma test; ingen uppladdningsväg finns |
+| P5 | BYGG steg 2 skrivskyddat i Cloud-läge, redigerbart lokalt | 👁 | `test_build_topology` (19 tester); låst läge verifierat i webbläsare |
+| P6 | BYGG steg 3 **alltid** lokalt redigerbart, även på Cloud-revision | ⛔ | **Inte implementerat.** Se T3 nedan. |
+| P7 | Lokala tidtabellsändringar blir lokala runtime-revisioner | 🔨 | `SQLiteRuntimeStore.install` gör `<bas>+local-rN`; ingen UI-koppling |
+| P8 | En ny Cloud-revision aktiveras **aldrig** tyst över lokala ändringar | ⛔ | **Överträdd i dag.** Se T4 nedan. |
+| P9 | Serverns manuella filimport är ett exporterat JSON-driftpaket | ✅ | `test_the_manual_import_accepts_a_json_operating_package` |
+
+### ⛔ T3 — grinden som stänger tidtabellen
+
+`http_server._require_editing_open()` stänger *varje* skrivväg i
+`cloud-linked`, tidtabellen inkluderad. P6 säger att den inte får göra det för
+steg 3: under träffen är servern driften, och det finns ingen väg via Cloud när
+ett tåg blir sent.
+
+Grinden ska bli områdesvis i stället för global: banan stängd i Cloud-läge,
+tidtabellen öppen. `test_product_boundaries.TimetableStaysEditableTests` pinnar
+var raden sitter, så att den som öppnar den vet exakt vad som ändras.
+
+### ⛔ T4 — den tysta aktiveringen
+
+`http_server.auto_sync_cloud_runtime()` anropar
+`runtime_store.install(download.package)`, och `install()` har
+`activate: bool = True`. En ny Cloud-publicering **aktiveras alltså direkt**,
+var femtonde sekund, utan att någon sett vad som ändrades.
+
+I dag biter det när auto-synken står på och läget är `offline-meet` — att byta
+driftläge stänger inte av auto-synken. Med P6 på plats biter det i Cloud-läge
+också, alltså i normalfallet.
+
+Vad som ska hända i stället: paketet installeras med `activate=False`, läggs
+som **väntande**, och operatören får se exakt vad som skrivs över innan hen
+aktiverar. `runtime.activate()` finns redan; det som saknas är att inte
+aktivera, och en vy som visar diffen.
+
+Det här är den värsta felmoden produkten har — en operatör som förlorar tre
+rättelser hen gjort kl 13 för att Cloud publicerade kl 14 — och det är därför
+det står som ⛔ och inte som en detalj i en tabell.
 
 ---
 
@@ -136,16 +201,35 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 
 | # | Krav | Status |
 |---|---|---|
-| 3.8.1 | Tre numrerade sektioner i **ett** kort | ⬜ |
-| 3.8.2 | Stationer: ordningsnummer i cirkel, signatur monospace 76px | ⬜ |
-| 3.8.3 | Härledd länkbeskrivning per station | ⬜ |
-| 3.8.4 | Sträckor: från, till, spårtyp, trafikeringsregel | ⬜ |
-| 3.8.5 | Paneler: station, namn, fyra slot-chips A–D | ⬜ |
+| 3.8.1 | Tre numrerade sektioner i **ett** kort | 👁 |
+| 3.8.2 | Stationer: ordningsnummer i cirkel, signatur monospace 76px | 👁 |
+| 3.8.3 | Härledd länkbeskrivning per station | 👁 |
+| 3.8.4 | Sträckor: från, till, spårtyp, trafikeringsregel | 👁 |
+| 3.8.5 | Paneler: station, namn, fyra slot-chips A–D | 👁 |
 | 3.8.6 | **Genväg: *Bygg från stationsordningen*, idempotent** | ⬜ |
-| 3.8.7 | Låst av Cloud: `#f7f5f0`/`#8a857a`, märke "🔒 Låst av Cloud" | ⬜ |
-| 3.8.8 | Lokal: vita fält, märke "✎ Redigerbar" `#a44f33` | ⬜ |
+| 3.8.7 | Låst av Cloud: `#f7f5f0`/`#8a857a`, märke "🔒 Låst av Cloud" | 👁 |
+| 3.8.8 | Lokal: vita fält, märke "✎ Redigerbar" `#a44f33` | 🔨 |
+
+**Läget i steg 2:** det låsta läget är byggt, testat och visuellt verifierat —
+det är vyn folk faktiskt ser, eftersom Cloud äger banan i normalfallet. Fälten
+ritas som `div` med paketets ruta, inte som avstängda `input`: ett låst fält är
+ingen kontroll, och en skärmläsare ska inte kalla det "redigerbart textfält".
+
+Det **redigerbara** läget ritar samma rader och rätt märke, men fälten är ännu
+inte inmatningsbara och genvägen finns inte. Det är nästa block, tillsammans
+med sådd-kopplingen (`/v1/local-configuration/seed` finns men anropas inte av
+någon vy).
+
+En A–D-plats pekar på en **sträcka**, inte på en granne. Grannen är sträckans
+andra ände sedd från panelens station. `test_a_panel_slot_carries_the_connection_id_not_a_station`
+pinnar det, för uppslaget ser rätt ut även när det är fel — det renderar bara
+ett id i stället för ett namn.
 
 ### 3.9 BYGG › 3 Tidtabell
+
+> **P6 gäller här:** tidtabellen ska vara redigerbar även när grundrevisionen
+> kommer från Cloud, till skillnad från steg 2. Grinden som stänger den står
+> kvar — se ⛔ T3. Bygg inte det här steget som skrivskyddat.
 
 | # | Krav | Status |
 |---|---|---|

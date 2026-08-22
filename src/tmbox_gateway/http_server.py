@@ -39,7 +39,7 @@ from .local_config import (
     LocalConfigurationError,
     SQLiteLocalConfigurationStore,
 )
-from .models import Command, TrackConfig, UnknownTrackError, resolve_track_id
+from .models import Command, TrackConfig, TrackType, UnknownTrackError, resolve_track_id
 from .observability import log_event, use_correlation
 from .operations import SQLiteOperationsStore
 from .protocol_v2 import TMBoxStationService, find_track_conflict
@@ -1055,6 +1055,84 @@ class TrainMeetHTTPApplication:
             )
         return self.local_configuration_store.current()
 
+    def build_topology(self, client: PairedClient) -> dict[str, Any]:
+        """Stations, connections and A-D panels for BYGG step 2.
+
+        One shape whichever side the data comes from, so the view has a single
+        renderer and the difference between a Cloud package and a local draft
+        is one boolean rather than two code paths.
+
+        `locked` is decided here, never in the browser. A page that could work
+        out for itself whether editing is open would eventually get it wrong
+        and offer to edit a package Cloud owns.
+        """
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                "runtime_unavailable",
+                "Lokal lagring saknas",
+            )
+        locked = not self.runtime_store.editing_is_open()
+        if locked:
+            publication = self.runtime_store.active()
+            payload = publication.payload if publication is not None else {}
+            revision = publication.publication_id if publication is not None else None
+            # Cloud decides the order of the line; the server only reads it.
+            stations = sorted(
+                payload.get("stations") or [],
+                key=lambda station: int(station.get("diagram_order") or 0),
+            )
+        else:
+            draft: dict[str, Any] = {}
+            if self.local_configuration_store is not None:
+                draft = self.local_configuration_store.current().get("draft") or {}
+            payload = draft
+            revision = draft.get("revision")
+            # A draft has no diagram_order - the list *is* the order, which is
+            # what makes reordering rows mean something.
+            stations = list(payload.get("stations") or [])
+
+        return {
+            "locked": locked,
+            "source": "cloud" if locked else "lokal",
+            "revision": revision,
+            "stations": [
+                {
+                    "id": str(station["id"]),
+                    "code": str(station.get("code") or station["id"]),
+                    "name": str(station.get("name") or station["id"]),
+                    "order": index,
+                }
+                for index, station in enumerate(stations, start=1)
+            ],
+            "connections": [
+                {
+                    "id": str(connection["id"]),
+                    "station_a_id": str(connection.get("station_a_id") or ""),
+                    "station_b_id": str(connection.get("station_b_id") or ""),
+                    "track_type": str(
+                        connection.get("track_type") or TrackType.SINGLE.value
+                    ),
+                    "dispatch_mode_override": connection.get("dispatch_mode_override")
+                    or None,
+                }
+                for connection in payload.get("connections") or []
+            ],
+            "panels": [
+                {
+                    "id": str(panel["id"]),
+                    "station_id": str(panel.get("station_id") or ""),
+                    "name": str(panel.get("name") or ""),
+                    "slots": {
+                        key: (panel.get("slots") or {}).get(key) or None
+                        for key in ("A", "B", "C", "D")
+                    },
+                }
+                for panel in payload.get("panels") or []
+            ],
+        }
+
     def save_local_configuration(
         self,
         client: PairedClient,
@@ -1905,6 +1983,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     self.server.application.local_configuration(client),
                 )
+                return
+            if path == "/v1/build/topology":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.build_topology(client))
                 return
             if path == "/v1/timetable":
                 client = self._authenticated_client()

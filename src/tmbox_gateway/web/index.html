@@ -345,6 +345,46 @@
             <p id="source-message" class="form-message" role="status"></p>
           </section>
 
+          <section id="build-step-bana" class="build-panel hidden" data-build-panel="bana">
+            <header class="build-panel-heading with-badge">
+              <div class="build-panel-title">
+                <h2>Stationer, sträckor och paneler</h2>
+                <p>
+                  Ordningen i listan är banans ordning. Sträckor och A–D-paneler
+                  kan byggas ur den — du behöver inte fylla i samma sak tre gånger.
+                </p>
+              </div>
+              <span id="bana-lock-badge" class="lock-badge">–</span>
+            </header>
+
+            <p id="bana-lock-note" class="lock-note hidden"></p>
+
+            <div class="card topology-card">
+              <section class="topology-section">
+                <div class="topology-heading">
+                  <h3>1 · Stationer i ordning</h3>
+                </div>
+                <div id="bana-stations" class="topology-rows"></div>
+              </section>
+
+              <section class="topology-section">
+                <div class="topology-heading">
+                  <h3>2 · Sträckor</h3>
+                </div>
+                <div id="bana-connections" class="topology-rows"></div>
+              </section>
+
+              <section class="topology-section">
+                <div class="topology-heading">
+                  <h3>3 · TMBox-paneler A–D</h3>
+                </div>
+                <div id="bana-panels" class="topology-rows"></div>
+              </section>
+            </div>
+
+            <p id="bana-message" class="form-message" role="status"></p>
+          </section>
+
           <section id="build-step-server" class="build-panel hidden" data-build-panel="server">
             <header class="build-panel-heading">
               <h2>Server</h2>

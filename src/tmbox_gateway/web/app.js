@@ -447,6 +447,7 @@ function selectBuildStep(step) {
   if (sections.includes("software")) checkSoftwareUpdate();
   if (sections.includes("cloud")) refreshRuntime();
   if (selected === "kalla") refreshSourceChoice();
+  if (selected === "bana") refreshBuildTopology();
   appView.classList.remove("sidebar-open");
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -4001,7 +4002,18 @@ function updateStepSubtitles(modeState) {
     const revisions = (modeState.local_revisions || []).length;
     set("kalla", revisions ? `${source} · ${revisions} lokala revisioner` : source);
   }
-  set("bana", runtime.station_count != null ? `${runtime.station_count} stationer` : "");
+  // Stationer och sträckor, inte bara stationer: steg 2 handlar om banan, och
+  // en bana med stationer men utan sträckor är just det man vill se i räknaren.
+  const topology = state.topology;
+  if (topology) {
+    const parts = [plural(topology.stations.length, "station", "stationer")];
+    if (topology.connections.length) {
+      parts.push(plural(topology.connections.length, "sträcka", "sträckor"));
+    }
+    set("bana", parts.join(" · "));
+  } else {
+    set("bana", runtime.station_count != null ? `${runtime.station_count} stationer` : "");
+  }
   set("tid", runtime.train_count != null ? `${runtime.train_count} rörelser` : "");
   set("boxar", state.devices?.length != null ? `${state.devices.length} kopplade` : "");
   const version = document.querySelector("#software-version")?.dataset;
@@ -4011,3 +4023,211 @@ function updateStepSubtitles(modeState) {
 document.querySelectorAll(".source-card").forEach((card) => {
   card.addEventListener("click", () => chooseSource(card.dataset.source));
 });
+
+// --------------------------------------------------------- BYGG steg 2: Bana
+// Stationer, sträckor och A-D-paneler i ett kort (paketets 3.8). Allt ritas ur
+// /v1/build/topology, som svarar med samma form vare sig innehållet kommer
+// från en Cloud-publicering eller ett lokalt utkast.
+//
+// Läget kommer med i svaret som `locked`. Sidan räknar aldrig ut det själv -
+// en vy som gissar rätt nio gånger av tio erbjuder till slut redigering av ett
+// paket som Cloud äger.
+
+// "1 sträckor" är den sortens fel man slutar se efter en vecka och som en
+// utomstående ser direkt.
+function plural(count, one, many) {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+const TRACK_TYPE_LABELS = { single: "Enkelspår", double: "Dubbelspår" };
+const DISPATCH_RULE_LABELS = {
+  clearance: "Begär och bekräfta",
+  direct: "Direkt",
+};
+
+function topologyField(text, locked, extraClass = "") {
+  // Ett låst fält är ingen kontroll, så det ritas inte som en. Rutan är
+  // paketets, men ett <div> kan inte fokuseras, skickas eller läsas upp som
+  // "redigerbart textfält" av en skärmläsare.
+  const field = document.createElement("div");
+  field.className = extraClass ? `topology-field ${extraClass}` : "topology-field";
+  if (locked) field.dataset.locked = "true";
+  field.textContent = text;
+  return field;
+}
+
+function topologyIndex(number) {
+  const badge = document.createElement("span");
+  badge.className = "topology-index";
+  badge.textContent = String(number);
+  return badge;
+}
+
+function topologyEmpty(container, text) {
+  const note = document.createElement("p");
+  note.className = "topology-empty";
+  note.textContent = text;
+  container.append(note);
+}
+
+// Beskrivningen är härledd, inte lagrad: den säger vad som ligger framåt i
+// banan från den här stationen. Lagrad hade den kunnat bli osann i samma
+// sekund som någon ändrade en sträcka.
+function forwardDescription(station, next, connections) {
+  if (!next) return "Ändstation";
+  const link = connections.find(
+    (connection) =>
+      (connection.station_a_id === station.id && connection.station_b_id === next.id) ||
+      (connection.station_b_id === station.id && connection.station_a_id === next.id),
+  );
+  if (!link) return "Saknar sträcka framåt";
+  const track = TRACK_TYPE_LABELS[link.track_type] || "Sträcka";
+  return `${track} till ${next.name}`;
+}
+
+function renderTopologyStations(container, topology) {
+  container.replaceChildren();
+  const { stations, connections, locked } = topology;
+  if (!stations.length) {
+    topologyEmpty(container, "Inga stationer ännu.");
+    return;
+  }
+  stations.forEach((station, index) => {
+    const row = document.createElement("div");
+    row.className = "topology-row";
+    row.append(
+      topologyIndex(station.order),
+      topologyField(station.code, locked, "signature"),
+      topologyField(station.name, locked, "grow"),
+    );
+    const note = document.createElement("span");
+    note.className = "topology-note";
+    note.textContent = forwardDescription(station, stations[index + 1], connections);
+    row.append(note);
+    container.append(row);
+  });
+}
+
+function renderTopologyConnections(container, topology, names) {
+  container.replaceChildren();
+  const { connections, locked } = topology;
+  if (!connections.length) {
+    topologyEmpty(container, "Inga sträckor ännu.");
+    return;
+  }
+  connections.forEach((connection, index) => {
+    const row = document.createElement("div");
+    row.className = "topology-row";
+    // Ärver träffens läge är inte samma sak som något av lägena - det betyder
+    // att sträckan följer det som är satt på träffen. Därför en egen text.
+    const rule = connection.dispatch_mode_override
+      ? DISPATCH_RULE_LABELS[connection.dispatch_mode_override] ||
+        connection.dispatch_mode_override
+      : "Ärver träffens läge";
+    row.append(
+      topologyIndex(index + 1),
+      topologyField(names.get(connection.station_a_id) || "–", locked, "station-pick"),
+      topologyField(names.get(connection.station_b_id) || "–", locked, "station-pick"),
+      topologyField(TRACK_TYPE_LABELS[connection.track_type] || connection.track_type, locked, "station-pick"),
+      topologyField(rule, locked, "station-pick"),
+    );
+    container.append(row);
+  });
+}
+
+// En A-D-plats pekar på en *sträcka*, inte på en granne. Panelen sitter på en
+// station, och grannen är sträckans andra ände sedd därifrån. Att visa
+// sträckans id vore sant men obrukbart - det är grannens namn tågklareraren
+// läser på lådan.
+function slotNeighbour(panel, connectionId, connections, names) {
+  if (!connectionId) return null;
+  const link = connections.find((connection) => connection.id === connectionId);
+  if (!link) return null;
+  const other =
+    link.station_a_id === panel.station_id ? link.station_b_id : link.station_a_id;
+  return names.get(other) || other || null;
+}
+
+function renderTopologyPanels(container, topology, names) {
+  container.replaceChildren();
+  const { panels, connections, locked } = topology;
+  if (!panels.length) {
+    topologyEmpty(container, "Inga paneler ännu.");
+    return;
+  }
+  panels.forEach((panel, index) => {
+    const row = document.createElement("div");
+    row.className = "topology-row";
+    row.append(
+      topologyIndex(index + 1),
+      topologyField(names.get(panel.station_id) || "–", locked, "station-pick"),
+      topologyField(panel.name, locked, "station-pick"),
+    );
+    const slots = document.createElement("div");
+    slots.className = "topology-slots";
+    ["A", "B", "C", "D"].forEach((key) => {
+      const neighbour = slotNeighbour(
+        panel,
+        panel.slots ? panel.slots[key] : null,
+        connections,
+        names,
+      );
+      const chip = document.createElement("span");
+      chip.className = "slot-chip";
+      const letter = document.createElement("b");
+      letter.textContent = key;
+      const label = document.createElement("span");
+      if (neighbour) {
+        label.textContent = neighbour;
+      } else {
+        label.textContent = "–";
+        chip.dataset.empty = "true";
+      }
+      chip.append(letter, label);
+      slots.append(chip);
+    });
+    row.append(slots);
+    container.append(row);
+  });
+}
+
+async function refreshBuildTopology() {
+  const message = document.querySelector("#bana-message");
+  const badge = document.querySelector("#bana-lock-badge");
+  const note = document.querySelector("#bana-lock-note");
+  const stations = document.querySelector("#bana-stations");
+  const connections = document.querySelector("#bana-connections");
+  const panels = document.querySelector("#bana-panels");
+  if (!stations || !connections || !panels) return;
+
+  try {
+    const response = await authorizedFetch("/v1/build/topology");
+    if (!response.ok) {
+      if (message) setMessage(message, "Banan kunde inte läsas", "error");
+      return;
+    }
+    const topology = await response.json();
+    state.topology = topology;
+    const names = new Map(topology.stations.map((station) => [station.id, station.name]));
+
+    if (badge) {
+      badge.textContent = topology.locked ? "🔒 Låst av Cloud" : "✎ Redigerbar";
+      badge.dataset.locked = String(Boolean(topology.locked));
+    }
+    if (note) {
+      note.classList.toggle("hidden", !topology.locked);
+      note.textContent = topology.locked
+        ? "Banan kommer från TrainMeet Cloud, där den tolkats ur träffens underlag och granskats. " +
+          "Servern visar den men ändrar den inte. Byt källa i steg 1 om den ska redigeras här."
+        : "";
+    }
+    if (message) setMessage(message, "", "");
+
+    renderTopologyStations(stations, topology);
+    renderTopologyConnections(connections, topology, names);
+    renderTopologyPanels(panels, topology, names);
+    updateStepSubtitles(null);
+  } catch {
+    if (message) setMessage(message, "Banan kunde inte läsas", "error");
+  }
+}
