@@ -414,7 +414,7 @@
               </div>
               <div class="local-change-policy">
                 <span aria-hidden="true">↗</span>
-                <p><b>Lokalt först.</b> Ändringar sparas på den här servern. När servern är Cloud-kopplad skickas de automatiskt post för post som förbättringsförslag för central granskning.</p>
+                <p><b>Lokalt först.</b> Ändringar sparas på den här servern och stannar där. Flödet mot TrainMeet Cloud går bara åt ett håll: Cloud publicerar, servern hämtar.</p>
               </div>
             </form>
           </section>
@@ -431,7 +431,7 @@
             <form id="server-identity-form" class="server-identity-form">
               <div>
                 <b>Serveridentitet</b>
-                <span>Namnet visas lokalt och följer med förbättringsförslag till Cloud.</span>
+                <span>Namnet visas lokalt och när servern kopplas till Cloud.</span>
               </div>
               <label>Servernamn
                 <input id="admin-server-name" maxlength="80" placeholder="Exempel: Grimslöv driftserver" required>
@@ -506,7 +506,7 @@
                 <div>
                   <p class="eyebrow">TRAINMEET CLOUD</p>
                   <h2>Cloud-koppling</h2>
-                  <p>Hämta publicerade versioner. Cloud-kopplade lokala ändringar skickas automatiskt som förbättringsförslag till central granskning.</p>
+                  <p>Hämta publicerade versioner. Inget skickas tillbaka: TrainMeet Cloud är enda källan till en träffs innehåll.</p>
                 </div>
               </div>
               <div class="cloud-connection-summary">
@@ -538,7 +538,6 @@
                 <button id="runtime-check-update" class="secondary" type="button">Sök efter uppdatering</button>
                 <button id="runtime-download-update" class="secondary hidden" type="button">Hämta versionen</button>
                 <button id="runtime-activate-update" class="primary hidden" type="button">Aktivera hämtad version</button>
-                <button id="runtime-push-changes" class="primary hidden" type="button">Skicka förbättringsförslag</button>
               </div>
               <p id="runtime-auto-sync-hint" class="runtime-auto-sync-hint hidden" role="status"></p>
               <p id="runtime-message" class="form-message" role="status"></p>

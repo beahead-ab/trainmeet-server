@@ -285,7 +285,6 @@ def _reset_operational_state(database_path: Path, state_directory: Path) -> None
                 "train_readiness",
                 "local_configuration_current",
                 "local_configuration_revisions",
-                "cloud_change_outbox",
                 "runtime_publications",
                 "pairing_codes",
                 "client_panels",

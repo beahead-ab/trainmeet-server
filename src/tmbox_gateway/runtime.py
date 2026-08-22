@@ -467,19 +467,6 @@ class SQLiteRuntimeStore:
                 value TEXT NOT NULL,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
-            CREATE TABLE IF NOT EXISTS cloud_change_outbox (
-                id TEXT PRIMARY KEY,
-                meet_id TEXT NOT NULL,
-                base_publication_id TEXT,
-                entity_type TEXT NOT NULL,
-                entity_id TEXT NOT NULL,
-                operation TEXT NOT NULL CHECK(operation IN ('upsert', 'delete')),
-                payload_json TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                sent_at TEXT
-            );
-            CREATE INDEX IF NOT EXISTS cloud_change_outbox_pending
-            ON cloud_change_outbox(sent_at, created_at);
             """
         )
 
@@ -723,63 +710,6 @@ class SQLiteRuntimeStore:
     def cloud_auto_sync_enabled(self) -> bool:
         return self._setting("cloud_auto_sync") == "1"
 
-    def queue_cloud_changes(
-        self,
-        meet_id: str,
-        base_publication_id: str | None,
-        changes: list[dict[str, Any]],
-    ) -> list[str]:
-        queued: list[str] = []
-        with self._lock, self._connection:
-            for change in changes:
-                change_id = str(change.get("id") or uuid4())
-                entity_type = str(change.get("entity_type") or "").strip()
-                entity_id = str(change.get("entity_id") or "").strip()
-                operation = str(change.get("operation") or "upsert")
-                payload = change.get("payload") if isinstance(change.get("payload"), dict) else {}
-                if not entity_type or not entity_id or operation not in {"upsert", "delete"}:
-                    raise RuntimePublicationError("En lokal Cloud-ändring är ogiltig")
-                self._connection.execute(
-                    """INSERT INTO cloud_change_outbox(
-                         id, meet_id, base_publication_id, entity_type, entity_id, operation, payload_json
-                       ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (change_id, meet_id, base_publication_id, entity_type, entity_id, operation, json.dumps(payload, ensure_ascii=False)),
-                )
-                queued.append(change_id)
-        return queued
-
-    def pending_cloud_changes(self) -> list[dict[str, Any]]:
-        with self._lock:
-            rows = self._connection.execute(
-                """SELECT id,meet_id,base_publication_id,entity_type,entity_id,operation,payload_json,created_at
-                   FROM cloud_change_outbox WHERE sent_at IS NULL ORDER BY created_at,id"""
-            ).fetchall()
-        result = []
-        for row in rows:
-            item = {
-                "id": row[0], "meet_id": row[1], "base_publication_id": row[2],
-                "entity_type": row[3], "entity_id": row[4], "operation": row[5],
-                "payload": json.loads(row[6]), "created_at": row[7],
-            }
-            result.append(item)
-        return result
-
-    def mark_cloud_changes_sent(self, change_ids: list[str]) -> None:
-        if not change_ids:
-            return
-        with self._lock, self._connection:
-            self._connection.executemany(
-                "UPDATE cloud_change_outbox SET sent_at=CURRENT_TIMESTAMP WHERE id=?",
-                [(change_id,) for change_id in change_ids],
-            )
-
-    def pending_cloud_change_count(self) -> int:
-        with self._lock:
-            row = self._connection.execute(
-                "SELECT COUNT(*) FROM cloud_change_outbox WHERE sent_at IS NULL"
-            ).fetchone()
-        return int(row[0])
-
     def begin_installation(self) -> None:
         if self._setting("installation_required") is None:
             self._save_setting("installation_required", "1")
@@ -861,7 +791,6 @@ class SQLiteRuntimeStore:
                 "error": self._setting("runtime_error"),
                 "linked": self.link_token() is not None,
                 "server_name": self.server_name(),
-                "pending_cloud_changes": self.pending_cloud_change_count(),
                 "cloud_auto_sync": self.cloud_auto_sync_enabled(),
             }
         staged = self.latest_staged()
@@ -879,7 +808,6 @@ class SQLiteRuntimeStore:
             "station_count": len(publication.payload["stations"]),
             "linked": self.link_token() is not None,
             "server_name": self.server_name(),
-            "pending_cloud_changes": self.pending_cloud_change_count(),
             "cloud_auto_sync": self.cloud_auto_sync_enabled(),
             "available_publication_id": (
                 staged.publication_id

@@ -829,6 +829,16 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(403, denied.exception.code)
         self.assertFalse(self.server.factory_reset_requested)
 
+    def test_there_is_no_route_for_sending_anything_back_to_cloud(self):
+        """D1: Cloud publishes, the server fetches. Nothing goes upstream.
+
+        The code was removed; this checks the wire. A route that quietly comes
+        back would pass every other test in this file.
+        """
+        with self.assertRaises(HTTPError) as refused:
+            self._json_request("/v1/cloud/changes", {})
+        self.assertEqual(404, refused.exception.code)
+
     def _json_request(
         self,
         path: str,

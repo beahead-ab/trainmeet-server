@@ -618,7 +618,6 @@ Viktiga API:er:
 - `POST /v1/runtime/sync`
 - `GET/POST /v1/runtime/update`
 - `POST /v1/runtime/activate`
-- `POST /v1/cloud/changes`
 - `POST /v1/cloud/auto-sync`
 - `GET /v1/runtime`
 - `GET /v1/timetable?station_id=...`

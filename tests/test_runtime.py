@@ -312,21 +312,42 @@ class RuntimeStoreTests(unittest.TestCase):
             finally:
                 store.close()
 
-    def test_local_cloud_changes_are_queued_record_by_record(self):
+    def test_auto_sync_is_a_setting_about_fetching_not_sending(self):
+        """The only automatic traffic with Cloud is the server pulling (D1)."""
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
             try:
-                store.queue_cloud_changes("meet-1", "publication-1", [
-                    {"entity_type": "station", "entity_id": "station-a", "operation": "upsert", "payload": {"name": "A"}},
-                    {"entity_type": "panel", "entity_id": "panel-a", "operation": "delete", "payload": {}},
-                ])
-                pending = store.pending_cloud_changes()
-                self.assertEqual({"station", "panel"}, {item["entity_type"] for item in pending})
-                self.assertEqual(2, store.pending_cloud_change_count())
-                store.mark_cloud_changes_sent([pending[0]["id"]])
-                self.assertEqual(1, store.pending_cloud_change_count())
                 store.set_cloud_auto_sync(True)
                 self.assertTrue(store.cloud_auto_sync_enabled())
+                store.set_cloud_auto_sync(False)
+                self.assertFalse(store.cloud_auto_sync_enabled())
+            finally:
+                store.close()
+
+    def test_the_store_offers_no_way_to_send_anything_upstream(self):
+        """D1: Cloud publishes, the server fetches. Nothing goes back.
+
+        A negative test rather than a positive one, because the thing being
+        asserted is an absence - and an absence is exactly what quietly grows
+        back when someone adds a helpful little outbox.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
+            try:
+                for name in (
+                    "queue_cloud_changes",
+                    "pending_cloud_changes",
+                    "mark_cloud_changes_sent",
+                    "pending_cloud_change_count",
+                ):
+                    self.assertFalse(hasattr(store, name), f"{name} ska vara borta")
+                tables = {
+                    row[0]
+                    for row in store._connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    ).fetchall()
+                }
+                self.assertNotIn("cloud_change_outbox", tables)
             finally:
                 store.close()
 

@@ -144,33 +144,3 @@ def _read_json(request: Request, *, timeout: float) -> dict[str, Any]:
     return payload
 
 
-def push_change_proposals(
-    link_token: str,
-    proposals: list[dict[str, Any]],
-    endpoint_url: str = DEFAULT_RUNTIME_PUBLICATION_URL,
-    *,
-    server_name: str | None = None,
-    timeout: float = 20,
-) -> list[str]:
-    token = link_token.strip()
-    if not token:
-        raise CentralSyncError("Servern är inte kopplad till TrainMeet Cloud")
-    if not proposals:
-        return []
-    endpoint = f"{canonical_runtime_url(endpoint_url)}/proposals"
-    data = json.dumps({
-        "token": token,
-        "server_name": (server_name or "").strip(),
-        "proposals": proposals,
-    }, ensure_ascii=False).encode("utf-8")
-    request = Request(
-        endpoint,
-        data=data,
-        method="POST",
-        headers={"Accept": "application/json", "Content-Type": "application/json", "User-Agent": "TrainMeet-Server/0.7"},
-    )
-    payload = _read_json(request, timeout=timeout)
-    accepted = payload.get("accepted_ids")
-    if not isinstance(accepted, list):
-        raise CentralSyncError("TrainMeet Cloud bekräftade inte ändringarna")
-    return [str(item) for item in accepted]

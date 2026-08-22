@@ -89,7 +89,6 @@ class LocalServerStartupTests(unittest.TestCase):
                 CREATE TABLE train_readiness (value TEXT);
                 CREATE TABLE local_configuration_current (value TEXT);
                 CREATE TABLE local_configuration_revisions (value TEXT);
-                CREATE TABLE cloud_change_outbox (value TEXT);
                 CREATE TABLE runtime_publications (value TEXT);
                 CREATE TABLE pairing_codes (value TEXT);
                 CREATE TABLE client_panels (value TEXT);
@@ -104,7 +103,7 @@ class LocalServerStartupTests(unittest.TestCase):
                 "engine_state", "runtime_clock", "train_positions", "tkl_shifts",
                 "tkl_movement_states", "tkl_events", "train_readiness",
                 "local_configuration_current", "local_configuration_revisions",
-                "cloud_change_outbox", "runtime_publications", "pairing_codes",
+                "runtime_publications", "pairing_codes",
                 "client_panels", "discovered_devices",
             ):
                 connection.execute(f"INSERT INTO {table} VALUES ('data')")
