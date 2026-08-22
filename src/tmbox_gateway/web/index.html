@@ -164,27 +164,38 @@
             <nav class="build-steps" aria-label="Steg">
               <button type="button" class="build-step" data-build-step="kalla" aria-current="step">
                 <span class="build-step-number">1</span>
-                <span class="build-step-label">Träffen</span>
-                <span class="build-step-count hidden" data-step-count="kalla"></span>
+                <span class="build-step-text">
+                  <span class="build-step-label">Träffen</span>
+                  <small class="build-step-subtitle" data-step-subtitle="kalla"></small>
+                </span>
               </button>
               <button type="button" class="build-step" data-build-step="bana">
                 <span class="build-step-number">2</span>
-                <span class="build-step-label">Stationer och sträckor</span>
-                <span class="build-step-count hidden" data-step-count="bana"></span>
+                <span class="build-step-text">
+                  <span class="build-step-label">Stationer och sträckor</span>
+                  <small class="build-step-subtitle" data-step-subtitle="bana"></small>
+                </span>
               </button>
               <button type="button" class="build-step" data-build-step="tid">
                 <span class="build-step-number">3</span>
-                <span class="build-step-label">Tidtabell</span>
-                <span class="build-step-count hidden" data-step-count="tid"></span>
+                <span class="build-step-text">
+                  <span class="build-step-label">Tidtabell</span>
+                  <small class="build-step-subtitle" data-step-subtitle="tid"></small>
+                </span>
               </button>
               <button type="button" class="build-step" data-build-step="boxar">
                 <span class="build-step-number">4</span>
-                <span class="build-step-label">TMBoxar</span>
-                <span class="build-step-count hidden" data-step-count="boxar"></span>
+                <span class="build-step-text">
+                  <span class="build-step-label">TMBoxar</span>
+                  <small class="build-step-subtitle" data-step-subtitle="boxar"></small>
+                </span>
               </button>
               <button type="button" class="build-step" data-build-step="server">
                 <span class="build-step-number">5</span>
-                <span class="build-step-label">Server</span>
+                <span class="build-step-text">
+                  <span class="build-step-label">Server</span>
+                  <small class="build-step-subtitle" data-step-subtitle="server"></small>
+                </span>
               </button>
             </nav>
 
@@ -302,6 +313,42 @@
             </div>
             <span id="admin-section-state" class="revision-badge">Lokal server</span>
           </header>
+
+          <section id="build-step-kalla" class="build-panel hidden" data-build-panel="kalla">
+            <header class="build-panel-heading">
+              <h2>Var kommer träffen ifrån?</h2>
+              <p>
+                Ett val i stället för tre menypunkter. Valet avgör om stationer,
+                sträckor och tidtabell är låsta eller redigerbara i nästa steg.
+              </p>
+            </header>
+
+            <div class="source-cards" role="radiogroup" aria-label="Träffens källa">
+              <button type="button" class="source-card" data-source="cloud" role="radio" aria-checked="false">
+                <span class="source-card-head">
+                  <b>TrainMeet Cloud</b>
+                  <span class="source-check" aria-hidden="true"></span>
+                </span>
+                <span class="source-card-body">Cloud äger innehållet. Stationer och tidtabell är låsta här.</span>
+              </button>
+              <button type="button" class="source-card" data-source="lokal" role="radio" aria-checked="false">
+                <span class="source-card-head">
+                  <b>Lokalt utkast</b>
+                  <span class="source-check" aria-hidden="true"></span>
+                </span>
+                <span class="source-card-body">Servern är redaktör under träffen. Rätta tider och spår på plats.</span>
+              </button>
+              <button type="button" class="source-card" data-source="fil" role="radio" aria-checked="false">
+                <span class="source-card-head">
+                  <b>Importerad fil</b>
+                  <span class="source-check" aria-hidden="true"></span>
+                </span>
+                <span class="source-card-body">Ett exporterat driftpaket, validerat innan det aktiveras.</span>
+              </button>
+            </div>
+
+            <p id="source-message" class="form-message" role="status"></p>
+          </section>
 
           <div class="server-hero card admin-section-panel" data-admin-section="runtime">
             <div>

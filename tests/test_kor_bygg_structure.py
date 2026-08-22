@@ -123,5 +123,89 @@ class DesignTokenTests(unittest.TestCase):
         self.assertNotIn("fonts.gstatic.com", html)
 
 
+class SourceChoiceTests(unittest.TestCase):
+    """BYGG steg 1: källvalet styr faktisk låsning, inte bara märkning.
+
+    Det är hela poängen med sammanslagningen - tre menypunkter blir ett val
+    som styr resten. Valet är serverns driftläge, som redan låser
+    redigeringsvägarna sedan 1.2.0, så UI:t hittar inte på en egen sanning.
+    """
+
+    def setUp(self):
+        self.html = (WEB / "index.html").read_text(encoding="utf-8")
+        self.js = (WEB / "app.js").read_text(encoding="utf-8")
+        self.css = (WEB / "app.css").read_text(encoding="utf-8")
+
+    def test_the_three_sources_replace_three_menu_points(self):
+        for source in ("cloud", "lokal", "fil"):
+            self.assertIn(f'data-source="{source}"', self.html)
+        for text in ("TrainMeet Cloud", "Lokalt utkast", "Importerad fil"):
+            self.assertIn(text, self.html)
+
+    def test_the_choice_is_the_servers_operating_mode(self):
+        """Inte en etikett: cloud → cloud-linked, lokal → offline-meet."""
+        self.assertIn('cloud: "cloud-linked"', self.js)
+        self.assertIn('lokal: "offline-meet"', self.js)
+        self.assertIn('"/v1/operating-mode"', self.js)
+
+    def test_locking_is_read_from_the_server_never_decided_here(self):
+        """locked = source === "cloud" (DEL 5), men härledd ur serverns svar
+        så att UI och server inte kan tycka olika."""
+        self.assertIn("modeState.editing_open", self.js)
+        # dataset.sourceLocked är JS-formen av attributet data-source-locked,
+        # som CSS:en hakar på. Två stavningar av samma sak.
+        self.assertIn("dataset.sourceLocked", self.js)
+        self.assertIn('body[data-source-locked="true"]', self.css)
+
+    def test_going_back_to_cloud_shows_what_is_discarded(self):
+        """D4: aldrig tyst. Servern räknar; UI:t visar och frågar."""
+        self.assertIn("confirm_discard", self.js)
+        self.assertIn("discards_on_return", self.js)
+        self.assertIn("discard_local_revisions", self.js)
+
+    def test_the_selected_card_uses_the_packages_colours(self):
+        block = self.css[self.css.index(".source-card.selected {"):][:200]
+        self.assertIn("var(--accent-warm)", block)
+        self.assertIn("var(--accent-tint-light)", block)
+
+    def test_the_step_rail_subtitles_come_from_real_data(self):
+        """Ingen prototypdata: talen kommer ur /v1/runtime och /v1/devices."""
+        self.assertIn("state.runtime || {}", self.js)
+        self.assertIn("state.devices?.length", self.js)
+        self.assertNotIn("Cloud rev 12", self.js)
+        self.assertNotIn("499 rörelser", self.js)
+
+
+class CSPTests(unittest.TestCase):
+    """Serverns egen CSP är style-src 'self'.
+
+    En HTML-sträng med style="..." är ett inline-attribut och avvisas. Det låg
+    tyst i konsolen och gjorde att staplarna i översikten aldrig fick sin
+    bredd. CSSOM (element.style.width) omfattas inte och är vägen framåt.
+    """
+
+    @staticmethod
+    def _code_only(text: str) -> str:
+        """Utan radkommentarer.
+
+        En kommentar som *förklarar* att style="..." är förbjudet innehåller
+        style="..." och skulle annars fälla testet. Samma fälla som en
+        commit-text om en versionsmarkör.
+        """
+        return "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith(("//", "*", "/*"))
+        )
+
+    def test_no_inline_style_attribute_is_built_in_a_markup_string(self):
+        js = self._code_only((WEB / "app.js").read_text(encoding="utf-8"))
+        self.assertNotIn('style="width:', js)
+        self.assertNotIn("style='width:", js)
+        self.assertNotIn('setAttribute("style"', js)
+
+    def test_no_inline_style_attribute_in_the_markup(self):
+        html = (WEB / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn('style="', html)
+
+
 if __name__ == "__main__":
     unittest.main()

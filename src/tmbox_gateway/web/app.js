@@ -478,6 +478,9 @@ function selectBuildStep(step) {
   document.querySelectorAll(".admin-section-panel").forEach((panel) => {
     panel.classList.toggle("hidden", !sections.includes(panel.dataset.adminSection));
   });
+  document.querySelectorAll(".build-panel").forEach((panel) => {
+    panel.classList.toggle("hidden", panel.dataset.buildPanel !== selected);
+  });
   document.querySelectorAll("[data-build-step]").forEach((button) => {
     const active = button.dataset.buildStep === selected;
     button.toggleAttribute("aria-current", active);
@@ -486,6 +489,7 @@ function selectBuildStep(step) {
 
   if (sections.includes("software")) checkSoftwareUpdate();
   if (sections.includes("cloud")) refreshRuntime();
+  if (selected === "kalla") refreshSourceChoice();
   appView.classList.remove("sidebar-open");
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -1149,6 +1153,26 @@ async function openApplication() {
 // ------------------------------------------------------------ TKL-terminalen
 // Inbäddad enligt DEL 3.5. Iframen monteras först när fliken visas: en TKL som
 // ligger och kör i bakgrunden håller en MQTT-anslutning i onödan.
+/** Stationsväljaren ovanför den inbäddade terminalen (DEL 3.5). */
+function fillTklStations(stations) {
+  const select = document.querySelector("#tkl-station");
+  if (!select) return;
+  const signature = stations.map((station) => station.id).join("|");
+  if (select.dataset.signature === signature) return;
+  select.dataset.signature = signature;
+  select.replaceChildren();
+  for (const station of stations) {
+    const option = document.createElement("option");
+    option.value = station.id;
+    option.textContent = station.name || station.id;
+    select.append(option);
+  }
+  if (!select.dataset.bound) {
+    select.dataset.bound = "1";
+    select.addEventListener("change", mountTklFrame);
+  }
+}
+
 function mountTklFrame() {
   const frame = document.querySelector("#tkl-frame");
   if (!frame) return;
@@ -1528,6 +1552,12 @@ async function refreshDevices() {
   const response = await authorizedFetch("/v1/devices");
   if (!response.ok) return;
   const payload = await response.json();
+  // Samma svar föder både listan, stegräckan och TKL:s stationsväljare, så
+  // de kan inte visa olika många.
+  state.devices = payload.devices || [];
+  state.stations = payload.stations || [];
+  updateStepSubtitles(null);
+  fillTklStations(state.stations);
   const list = document.querySelector("#device-list");
   updateStationOptions(payload.stations || []);
   list.replaceChildren();
@@ -1573,6 +1603,10 @@ async function refreshRuntime() {
   const response = await authorizedFetch("/v1/runtime");
   if (!response.ok) return;
   const runtime = await response.json();
+  // Stegräckans underrubriker läser samma svar. Ett andra anrop skulle bara
+  // kunna ge ett annat tal än det vyn just visat.
+  state.runtime = runtime;
+  updateStepSubtitles(null);
   const status = document.querySelector("#runtime-status");
   status.replaceChildren();
   const row = document.createElement("div");
@@ -2125,11 +2159,34 @@ function renderRouteExplorer() {
     .sort((a, b) => b.count - a.count || a.station.name.localeCompare(b.station.name, "sv"));
   const maximum = Math.max(...stationCounts.map((item) => item.count), 1);
   const selectedRouteStationIDs = new Set((selected?.stops || []).map((stop) => stop.station_id));
-  document.querySelector("#overview-station-counts").innerHTML = stationCounts.map(({ station, count }) => `
-    <button type="button" data-station-id="${escapeHTML(station.id)}" class="station-count-row${station.id === state.selectedStationID ? " selected" : ""}${selectedRouteStationIDs.has(station.id) ? " on-route" : ""}">
-      <div><b>${escapeHTML(station.name)}</b><span>${count}</span></div>
-      <i><span style="width:${Math.round(count / maximum * 100)}%"></span></i>
-    </button>`).join("");
+  // Byggd med DOM-anrop i stället för innerHTML: ett style="width:N%" i en
+  // HTML-sträng är ett inline-attribut, och serverns egen CSP (style-src
+  // 'self') avvisar det. Staplarna har alltså aldrig fått sin bredd - felet
+  // låg tyst i konsolen. CSSOM (element.style.width) omfattas inte.
+  const countsHost = document.querySelector("#overview-station-counts");
+  countsHost.replaceChildren(...stationCounts.map(({ station, count }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.stationId = station.id;
+    button.className = "station-count-row";
+    if (station.id === state.selectedStationID) button.classList.add("selected");
+    if (selectedRouteStationIDs.has(station.id)) button.classList.add("on-route");
+
+    const label = document.createElement("div");
+    const name = document.createElement("b");
+    name.textContent = station.name;
+    const total = document.createElement("span");
+    total.textContent = String(count);
+    label.append(name, total);
+
+    const track = document.createElement("i");
+    const fill = document.createElement("span");
+    fill.style.width = `${Math.round(count / maximum * 100)}%`;
+    track.append(fill);
+
+    button.append(label, track);
+    return button;
+  }));
 
   const badge = document.querySelector("#overview-route-badge");
   badge.classList.toggle("hidden", !selected);
@@ -3847,3 +3904,117 @@ function renderTrafficTimeline(snapshot) {
 
   host.replaceChildren(...(items.length ? items : [emptyNote("Tidtabellen är tom.")]));
 }
+
+// ================================================== BYGG › 1 Träffen (3.7)
+// Källvalet är inte en etikett. Det är serverns driftläge, som redan finns
+// sedan 1.2.0 och redan låser redigeringsvägarna:
+//
+//   TrainMeet Cloud  ↔  cloud-linked   Cloud är redaktör, redigering låst
+//   Lokalt utkast    ↔  offline-meet   servern är redaktör, redigering öppen
+//   Importerad fil                     en åtgärd, inte ett läge
+//
+// Att gå tillbaka till Cloud kastar de lokala revisionerna, och servern
+// vägrar tills man sett vad som kastas och bekräftat. Den kontrollen ligger
+// i API:t, inte här - UI:t visar bara vad servern svarar.
+
+const SOURCE_MODES = { cloud: "cloud-linked", lokal: "offline-meet" };
+
+async function refreshSourceChoice() {
+  const message = document.querySelector("#source-message");
+  try {
+    const response = await authorizedFetch("/v1/operating-mode");
+    if (!response.ok) return;
+    const state = await response.json();
+    applySourceChoice(state.mode === "cloud-linked" ? "cloud" : "lokal", state);
+  } catch {
+    if (message) setMessage(message, "Driftläget kunde inte läsas", "error");
+  }
+}
+
+function applySourceChoice(source, modeState) {
+  document.querySelectorAll(".source-card").forEach((card) => {
+    const selected = card.dataset.source === source;
+    card.classList.toggle("selected", selected);
+    card.setAttribute("aria-checked", String(selected));
+  });
+  // locked = source === "cloud" (DEL 5). Härledd, aldrig satt: den kommer ur
+  // serverns svar, så UI och server kan inte tycka olika.
+  document.body.dataset.sourceLocked = String(!modeState.editing_open);
+  updateStepSubtitles(modeState);
+}
+
+async function chooseSource(source) {
+  const message = document.querySelector("#source-message");
+  if (source === "fil") {
+    // Importen är en åtgärd, inte ett läge. Den kräver att redigering är
+    // öppen, precis som varje annan skrivväg.
+    document.querySelector("#runtime-import")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
+  const mode = SOURCE_MODES[source];
+  if (!mode) return;
+  try {
+    const response = await authorizedFetch("/v1/operating-mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+    const payload = await response.json();
+    if (response.status === 409 && payload.code === "confirm_discard") {
+      // D4: aldrig tyst. Servern har räknat exakt vad som kastas.
+      await confirmDiscardAndSwitch(mode, message);
+      return;
+    }
+    if (!response.ok) throw new Error(payload.message || "Läget kunde inte bytas");
+    applySourceChoice(source, payload);
+    setMessage(message, "", "notice");
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  }
+}
+
+async function confirmDiscardAndSwitch(mode, message) {
+  const state = await (await authorizedFetch("/v1/operating-mode")).json();
+  const preview = state.discards_on_return || { revisions: 0, rows: [] };
+  const lines = preview.rows.slice(0, 12).map((row) => `  ${row.train_number || row.id}: ${row.change}`);
+  const more = preview.rows.length > 12 ? `\n  … och ${preview.rows.length - 12} till` : "";
+  const question =
+    `${preview.revisions} lokala revisioner kastas när Clouds version gäller igen.\n\n` +
+    `${lines.join("\n")}${more}\n\nFortsätta?`;
+  if (!confirm(question)) {
+    setMessage(message, "Läget är oförändrat.", "notice");
+    return;
+  }
+  const response = await authorizedFetch("/v1/operating-mode", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode, discard_local_revisions: true }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || "Läget kunde inte bytas");
+  applySourceChoice("cloud", payload);
+  setMessage(message, `${preview.revisions} lokala revisioner kastades.`, "notice");
+}
+
+/** Underrubrikerna i stegräckan, ur verklig data. */
+function updateStepSubtitles(modeState) {
+  const runtime = state.runtime || {};
+  const set = (step, text) => {
+    const host = document.querySelector(`[data-step-subtitle="${step}"]`);
+    if (host) host.textContent = text || "";
+  };
+  if (modeState) {
+    const source = modeState.editing_open ? "Lokalt utkast" : "Cloud";
+    const revisions = (modeState.local_revisions || []).length;
+    set("kalla", revisions ? `${source} · ${revisions} lokala revisioner` : source);
+  }
+  set("bana", runtime.station_count != null ? `${runtime.station_count} stationer` : "");
+  set("tid", runtime.train_count != null ? `${runtime.train_count} rörelser` : "");
+  set("boxar", state.devices?.length != null ? `${state.devices.length} kopplade` : "");
+  const version = document.querySelector("#software-version")?.dataset;
+  set("server", version?.version ? `${version.version}${version.build ? ` · build ${version.build}` : ""}` : "");
+}
+
+document.querySelectorAll(".source-card").forEach((card) => {
+  card.addEventListener("click", () => chooseSource(card.dataset.source));
+});

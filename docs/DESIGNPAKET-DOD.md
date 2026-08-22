@@ -34,9 +34,9 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 |---|---|---|
 | Översikt | KÖR › Översikt (omgjord) | ⬜ |
 | Aktiv träff | KÖR › Trafik | 👁 |
-| Cloud och synk | BYGG › 1, källa = Cloud | ⬜ |
-| Lokala ändringar | BYGG › 1, källa = Lokalt utkast | ⬜ |
-| Manuell import | BYGG › 1, källa = Importerad fil | ⬜ |
+| Cloud och synk | BYGG › 1, källa = Cloud | 👁 |
+| Lokala ändringar | BYGG › 1, källa = Lokalt utkast | 👁 |
+| Manuell import | BYGG › 1, källa = Importerad fil | 🔨 |
 | TMBoxar | BYGG › 4 | 🔨 |
 | TMBox-simulering | **Borttagen** | ✅ |
 | TMBox v2 | KÖR › TMBox v2 (oförändrad) | 👁 |
@@ -56,7 +56,7 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 |---|---|---|
 | 3.1.1 | Mörk list 50px, `#1f1e1d`, padding 0 22px, bara i byggläget | 👁 |
 | 3.1.2 | Vit rad 56px, botten-border 1px `#e8e5dc` | 👁 |
-| 3.1.3 | Logotypmärke 28×28 + träffnamn 16px/600 | 🔨 |
+| 3.1.3 | Logotypmärke 28×28 + träffnamn 16px/600 | ✅ |
 | 3.1.4 | Flikrad i mitten, bara i körläget | 👁 |
 | 3.1.5 | Träffklocka monospace 15px/600 `#4b7a4f` | 🔨 |
 | 3.1.6 | "● N boxar online" 12.5px `#706c61` | 🔨 |
@@ -104,7 +104,7 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | # | Krav | Status |
 |---|---|---|
 | 3.5.1 | Terminalen inbäddad i iframe | 🔨 |
-| 3.5.2 | Stationsväljare ovanför | ⬜ (väljaren är tom) |
+| 3.5.2 | Stationsväljare ovanför | ✅ (fylls ur /v1/devices) |
 | 3.5.3 | Knapp *Öppna i egen flik* | 🔨 |
 
 ### 3.6 KÖR › TMBox v2
@@ -117,10 +117,10 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 
 | # | Krav | Status |
 |---|---|---|
-| 3.7.1 | Tre källkort med radioknapp i auto-fit-rutnät | ⬜ |
-| 3.7.2 | Valt kort: kant `#c96442`, botten `#fdf6f3`, ifylld bock | ⬜ |
-| 3.7.3 | Ovalt kort: kant `#e8e5dc`, botten `#fff`, tom cirkel | ⬜ |
-| 3.7.4 | **Valet styr faktisk låsning av steg 2 och 3** | ⬜ |
+| 3.7.1 | Tre källkort med radioknapp i auto-fit-rutnät | 👁 |
+| 3.7.2 | Valt kort: kant `#c96442`, botten `#fdf6f3`, ifylld bock | 👁 uppmätt |
+| 3.7.3 | Ovalt kort: kant `#e8e5dc`, botten `#fff`, tom cirkel | 👁 |
+| 3.7.4 | **Valet styr faktisk låsning av steg 2 och 3** | 👁 via driftläget |
 | 3.7.5 | Cloud: revisionsrad med chip *Aktiv* | ⬜ |
 | 3.7.6 | Cloud: fyrstegs statuslista | ⬜ |
 | 3.7.7 | Lokalt: grunddataformulär i `minmax(150px, 1fr)` | ⬜ |
@@ -193,15 +193,15 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | # | Krav | Status |
 |---|---|---|
 | 5.1 | `mode`, `korTab`, `byggStep` | ✅ |
-| 5.2 | `source` styr låsning | ⬜ |
+| 5.2 | `source` styr låsning | ✅ |
 | 5.3 | `ttMode`, `ttStation`, `ttSelected` | ⬜ |
 | 5.4 | `trafikStation` | ✅ |
-| 5.5 | `locked = source === "cloud"` | ⬜ |
+| 5.5 | `locked = source === "cloud"` | ✅ härledd ur serversvaret |
 | 5.6 | Osparade ändringar räknas ur diffen mot aktiv revision | ⬜ |
 | 5.7 | Aktivering skapar `rev N+local-rN` | ⬜ (finns i API, ej i UI) |
 | 5.8 | *Granska och aktivera* visar diff och kräver bekräftelse | ⬜ |
 | 5.9 | *Lämna byggläget* — osparat ligger kvar som utkast | ⬜ |
-| 5.10 | Byte lokal → Cloud varnar om kastade revisioner | ⬜ (finns i API, ej i UI) |
+| 5.10 | Byte lokal → Cloud varnar om kastade revisioner | ✅ |
 
 ---
 
@@ -228,7 +228,7 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | K1 | Endast verkliga API:er, ingen prototypdata | ✅ hittills |
 | K2 | Tester körda före och efter varje block | ✅ |
 | K3 | Test: KÖR/BYGG | ✅ |
-| K4 | Test: källåsning | ⬜ |
+| K4 | Test: källåsning | ✅ |
 | K5 | Test: lokal revision och aktivering | ✅ (`test_local_revisions`) |
 | K6 | Test: TKL-iframe | ⬜ |
 | K7 | Test: tidtabellsgruppering | ⬜ |
@@ -236,7 +236,7 @@ och datakontrakt bevaras. Konflikter dokumenteras i **Avvikelser** sist.
 | K9 | Visuella regressionstester | ⬜ |
 | K10 | `prefers-reduced-motion` | ✅ |
 | K11 | Tangentbord, fokus, etiketter, kontrast | ⬜ |
-| K12 | Konsol fri från JS-, nät- och CSP-fel | 👁 |
+| K12 | Konsol fri från JS-, nät- och CSP-fel | 👁 **CSP-fel på main hittat och lagat** |
 | K13 | Inga hemligheter eller exempeldata incheckade | ✅ |
 | K14 | Dokumentation och versionsanteckningar | 🔨 |
 | K15 | Minst minor-version | 🔨 (`[minor]` i commit) |
@@ -284,7 +284,18 @@ Paketet säger "Inga typsnittsfiler behövs — allt är systemstackar".
 är förbjudna. Lokalt paketerad Inter uppfyller båda, och kravet "inga externa
 typsnitt eller CSP-fel" i uppdraget.
 
-### 3. D9 och D10 — driftsättning
+### 3. CSP-fel som redan låg på main
+
+`renderStationCounts` byggde HTML med `style="width:N%"` genom `innerHTML`.
+Det är ett inline-attribut och serverns egen CSP (`style-src 'self'`) avvisar
+det — så staplarna i översikten har **aldrig** fått sin bredd, och felet låg
+tyst i konsolen.
+
+Inte infört av det här arbetet, men uppdraget kräver en ren konsol, så det är
+lagat: elementen byggs med DOM-anrop och bredden sätts via CSSOM, som inte
+omfattas av `style-src`. Ett test håller fast det.
+
+### 4. D9 och D10 — driftsättning
 
 Proxyn i utvecklingsmiljön blockerar `trainmeet.app`, och det finns ingen
 SSH-åtkomst till Raspberry Pi:n. Driftsättning och driftkontroll kan inte
