@@ -42,18 +42,28 @@ def _candidates(install_root: Path | None) -> list[Path]:
 
 
 def product_version(install_root: Path | None = None) -> str:
-    """The SemVer string a person should see, e.g. `1.0.0`."""
+    """The SemVer string a person should see, e.g. `1.0.0`.
+
+    A sha found in a VERSION file is skipped rather than returned, and the
+    search continues. Two things put one there: an installation made before
+    this existed, and - for exactly one update - the *old* updater script,
+    which overwrites VERSION with the sha after the new installer has already
+    written the real number. The installer therefore also drops a copy beside
+    the code, where the old script does not reach, so the first update after
+    this change already shows 1.0.0 instead of "okänd".
+    """
+    saw_build_only = False
     for candidate in _candidates(install_root):
         value = _read(candidate)
         if not value:
             continue
-        # An installation from before this existed wrote the git sha into
-        # VERSION. That is a build, not a version, and saying "okänd" is
-        # honest where inventing a number would not be.
         if _BUILD_LIKE.match(value):
-            return UNKNOWN_VERSION
+            saw_build_only = True
+            continue
         return value
-    return DEVELOPMENT_VERSION
+    # Every candidate held a build. Saying "okänd" is honest where inventing a
+    # number for a tree we cannot identify would not be.
+    return UNKNOWN_VERSION if saw_build_only else DEVELOPMENT_VERSION
 
 
 def build_identifier(install_root: Path | None = None) -> str:

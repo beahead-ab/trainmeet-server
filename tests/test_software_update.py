@@ -161,15 +161,18 @@ class UpdateBackendTests(unittest.TestCase):
         """The transition, spelled out.
 
         Installations made before this change wrote the git sha into VERSION.
-        That is a build, not a version. Saying "okänd" is honest; inventing a
-        number for a tree we cannot identify would not be.
+        A sha is a build, so it is never echoed back as a version - the search
+        continues past it instead, which is what lets the first update after
+        this change show a real number rather than "okänd". Here the running
+        checkout is what answers, so the assertion is that the sha is read as
+        a build and does not become the version.
         """
         self._mac_installation()
         (self.root / "server" / "VERSION").write_text("abc12345\n", encoding="utf-8")
         platform, install_dir = self._as_mac()
         with platform, install_dir:
-            self.assertEqual(installed_version(), "okänd")
             self.assertEqual(installed_build(), "abc12345")
+            self.assertNotEqual(installed_version(), "abc12345")
 
 
 if __name__ == "__main__":

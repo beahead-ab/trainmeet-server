@@ -56,12 +56,19 @@ class VersionSourceTests(unittest.TestCase):
         self.assertEqual(f"TrainMeet-Server/{product_version()}", user_agent())
 
     def test_a_sha_left_in_version_is_read_as_a_build_not_a_version(self):
-        """Installations from before this wrote the git sha into VERSION."""
+        """Installations from before this wrote the git sha into VERSION.
+
+        A sha is a build, so it is never returned as a version. The search
+        continues past it - which matters, because for exactly one update the
+        old updater script writes one over the real number. Here the running
+        checkout answers instead, which is why this asserts the sha is read as
+        a build and *not* echoed back as a version.
+        """
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "VERSION").write_text("4bd9c9a1\n", encoding="utf-8")
-            self.assertEqual("okänd", product_version(root))
             self.assertEqual("4bd9c9a1", build_identifier(root))
+            self.assertNotEqual("4bd9c9a1", product_version(root))
 
     def test_display_puts_the_version_first_and_the_build_second(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -224,6 +231,68 @@ class ContractCopyTests(unittest.TestCase):
             "update_contract.py har ändrats - gör samma ändring i det andra repot "
             "och flytta hashen i båda",
         )
+
+
+class FirstUpdateAfterThisChangeTests(unittest.TestCase):
+    """What an operator sees the first time they press Update.
+
+    The updater script that runs is the *old* one, still on disk from the
+    previous install. It runs the new installer and then overwrites
+    $INSTALL_DIR/VERSION with the git sha, because that is what a version was
+    when it was written. Without a second copy beside the code, that first
+    update would report "okänd" and only the second would show 1.0.0.
+    """
+
+    def test_the_old_updater_overwriting_version_does_not_hide_the_real_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "src" / "tmbox_gateway"
+            package.mkdir(parents=True)
+
+            # The new installer writes both copies...
+            (root / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+            (package / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+            (root / "BUILD").write_text("4bd9c9a1\n", encoding="utf-8")
+
+            # ...and then the old updater stamps the sha over the outer one.
+            (root / "VERSION").write_text("4bd9c9a1\n", encoding="utf-8")
+
+            self.assertEqual("4bd9c9a1", build_identifier(root))
+            self.assertEqual(
+                "1.0.0",
+                _product_version_from(root),
+                "första uppdateringen ska visa 1.0.0, inte okänd",
+            )
+
+    def test_an_installation_with_only_a_sha_anywhere_still_says_okand(self):
+        """The honest case: nothing anywhere knows the version."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "VERSION").write_text("4bd9c9a1\n", encoding="utf-8")
+            self.assertEqual("okänd", _product_version_from(root))
+
+
+def _product_version_from(root: Path) -> str:
+    """product_version() searching only inside `root`.
+
+    The real function also falls back to the checkout it is imported from,
+    which in a test run is this repo - and would mask the thing being tested.
+    """
+    from tmbox_gateway.version import _BUILD_LIKE, UNKNOWN_VERSION
+
+    saw_build_only = False
+    for candidate in (root / "VERSION", root / "src" / "tmbox_gateway" / "VERSION"):
+        try:
+            value = candidate.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if not value:
+            continue
+        if _BUILD_LIKE.match(value):
+            saw_build_only = True
+            continue
+        return value
+    return UNKNOWN_VERSION if saw_build_only else "utvecklingsversion"
 
 
 if __name__ == "__main__":

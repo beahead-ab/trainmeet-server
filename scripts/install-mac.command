@@ -37,6 +37,9 @@ cp "$SERVER_DIR/README.md" "$INSTALL_DIR/README.md"
 # it cannot drift from what the code says about itself. BUILD is the commit.
 if [ -f "$SERVER_DIR/VERSION" ]; then
   cp "$SERVER_DIR/VERSION" "$INSTALL_DIR/VERSION"
+  # Second copy beside the code: the old updater overwrites the one above with
+  # the git sha right after we run, and does not know about this path.
+  cp "$SERVER_DIR/VERSION" "$INSTALL_DIR/src/tmbox_gateway/VERSION"
 else
   : > "$INSTALL_DIR/VERSION"
 fi
