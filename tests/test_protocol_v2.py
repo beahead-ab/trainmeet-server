@@ -12,7 +12,7 @@ from tmbox_gateway.identity import DisplayCapability, IdentityStore
 from tmbox_gateway.mqtt_v2 import TMBoxV2Gateway, device_topic
 from tmbox_gateway.operations import SQLiteOperationsStore
 from tmbox_gateway import protocol_v2
-from tmbox_gateway.protocol_v2 import TMBoxStationService
+from tmbox_gateway.protocol_v2 import find_track_conflict, TMBoxStationService
 from tmbox_gateway.runtime import RuntimePublication, SQLiteRuntimeStore
 
 
@@ -573,6 +573,8 @@ class ClearanceTests(ProtocolV2Base):
     def test_a_track_change_under_a_waiting_request_invalidates_it(self):
         clearance_id = self._request()["revision"]["key"]
 
+        # 1A, not 2A: 428 stands on 2A, and this test is about the clearance
+        # being invalidated, not about occupancy refusing the move.
         self._send(
             "command",
             {
@@ -580,7 +582,7 @@ class ClearanceTests(ProtocolV2Base):
                 "message_id": "track-move",
                 "device_id": DEVICE,
                 "action": "train.track.change",
-                "payload": {"movement_id": DEPARTURE, "track_id": "2A"},
+                "payload": {"movement_id": DEPARTURE, "track_id": "1A"},
             },
         )
 
@@ -829,3 +831,138 @@ class ReadinessAndLineTests(ProtocolV2Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TrackOccupancyTests(ProtocolV2Base):
+    """§8: one track, one non-departed movement, per station and day.
+
+    The reason `track_occupied` has always been in the contract's list of
+    rejections a client must handle. Until now it could not actually happen.
+    """
+
+    ARRIVAL = "movement-428-cda"
+
+    def _move(self, movement_id: str, track: str, *, message_id: str) -> dict:
+        self._send(
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": message_id,
+                "device_id": DEVICE,
+                "action": "train.track.change",
+                "payload": {"movement_id": movement_id, "track_id": track},
+            },
+        )
+        return self._acks()[-1]
+
+    def _depart(self, movement_id: str, *, message_id: str) -> dict:
+        for action, step in (
+            ("train.position.set", "pos"),
+            ("train.crew_ready.set", "crew"),
+            ("train.departed", "gone"),
+        ):
+            self._send(
+                "command",
+                {
+                    "protocol_version": 2,
+                    "message_id": f"{message_id}-{step}",
+                    "device_id": DEVICE,
+                    "action": action,
+                    "payload": {"movement_id": movement_id},
+                },
+            )
+        return self._acks()[-1]
+
+    # ------------------------------------------------------------- negative
+
+    def test_a_track_another_train_stands_on_is_refused(self):
+        """428 is scheduled onto 2A, so 421 cannot be moved there."""
+        acknowledgement = self._move(DEPARTURE, "2A", message_id="collide")
+        self.assertEqual("rejected", acknowledgement["status"])
+        self.assertEqual("track_occupied", acknowledgement["reason"])
+
+    def test_the_scheduled_track_counts_even_if_nobody_has_touched_it(self):
+        """Two trains put on one track by Cloud collide as surely as two by hand.
+
+        Nothing has been moved here - 428 holds 2A straight from the
+        timetable - so a check that only looked at live state would miss it.
+        """
+        movement = next(
+            row for row in self.service.snapshot_payload(STATION)["movements"]
+            if row["id"] == self.ARRIVAL
+        )
+        self.assertIsNone(movement["actualTrack"], "inget har flyttats i det här testet")
+        self.assertEqual("rejected", self._move(DEPARTURE, "2A", message_id="sched")["status"])
+
+    def test_a_refusal_leaves_the_track_where_it_was(self):
+        before = next(
+            row for row in self.service.snapshot_payload(STATION)["movements"]
+            if row["id"] == DEPARTURE
+        )["assignedTrackId"]
+        self._move(DEPARTURE, "2A", message_id="collide")
+        after = next(
+            row for row in self.service.snapshot_payload(STATION)["movements"]
+            if row["id"] == DEPARTURE
+        )["assignedTrackId"]
+        self.assertEqual(before, after)
+
+    # ------------------------------------------------------------- positive
+
+    def test_a_free_track_is_accepted(self):
+        self.assertEqual("accepted", self._move(DEPARTURE, "1A", message_id="free")["status"])
+
+    def test_moving_a_train_to_the_track_it_already_holds_is_not_a_collision(self):
+        """A movement never collides with itself."""
+        self._move(DEPARTURE, "1A", message_id="first")
+        self.assertEqual("accepted", self._move(DEPARTURE, "1A", message_id="again")["status"])
+
+    def test_a_departed_train_releases_its_track(self):
+        """The whole point of 'non-departed'."""
+        self._move(DEPARTURE, "1A", message_id="park")
+        self.assertEqual(
+            "track_occupied", self._move(self.ARRIVAL, "1A", message_id="blocked")["reason"]
+        )
+
+        self._depart(DEPARTURE, message_id="leave")
+        self.assertEqual(
+            "accepted", self._move(self.ARRIVAL, "1A", message_id="now-free")["status"]
+        )
+
+    def test_another_stations_row_holding_the_same_track_id_is_not_our_collision(self):
+        """The station filter, made load-bearing.
+
+        Catalogue ids are station-scoped in practice, so nothing in the normal
+        fixtures can tell whether the station check does anything - a mutation
+        that removed it survived every other test here. A malformed package
+        where two stations name the same track id is the case that separates
+        them, and §8 is explicit that the rule is per station.
+        """
+        publication = self.runtime_store.active()
+        rows = publication.payload["trains"]
+        intruder = dict(
+            next(row for row in rows if row["station_id"] != STATION),
+            id="movement-intruder",
+            track_id="track-cda-1a",
+            days="Dagl",
+        )
+        conflict = find_track_conflict(
+            rows + [intruder],
+            {},
+            STATION,
+            publication.payload["meet"]["active_day"],
+            DEPARTURE,
+            "track-cda-1a",
+        )
+        self.assertIsNone(conflict, "en rad på en annan station upptar inte vårt spår")
+
+        at_our_station = dict(intruder, station_id=STATION)
+        self.assertIsNotNone(
+            find_track_conflict(
+                rows + [at_our_station],
+                {},
+                STATION,
+                publication.payload["meet"]["active_day"],
+                DEPARTURE,
+                "track-cda-1a",
+            )
+        )

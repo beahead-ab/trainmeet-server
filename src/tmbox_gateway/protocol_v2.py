@@ -402,6 +402,17 @@ class TMBoxStationService:
                 raise CommandRejected("unknown_track") from error
             if track is None:
                 raise CommandRejected("unknown_track")
+            if find_track_conflict(
+                publication.payload["trains"],
+                self.operations_store.tkl_station_state(
+                    publication.publication_id, active_day, station_id
+                )["movements"],
+                station_id,
+                active_day,
+                movement_id,
+                track,
+            ) is not None:
+                raise CommandRejected("track_occupied")
         else:
             field, value = MOVEMENT_ACTIONS[action]
             if field == "arrival":
@@ -735,6 +746,50 @@ class TMBoxStationService:
             "revision": revision,
             "snapshot": self.snapshot_payload(station_id) if station_id else None,
         }
+
+
+def find_track_conflict(
+    rows: list[dict[str, Any]],
+    states: dict[str, dict[str, Any]],
+    station_id: str,
+    active_day: str,
+    movement_id: str,
+    track_id: str,
+) -> dict[str, Any] | None:
+    """The other movement already holding this track, if there is one.
+
+    `docs/tmbox.md` §8: a track can be assigned to one non-departed movement
+    per station and day. What counts as non-departed is read off the data
+    model rather than decided in advance, which is what issue #17 asked for.
+
+    A row carries an arrival leg and a departure leg together, so the thing
+    that releases a track is the departure leg reaching `departed`. A row with
+    no departure time never gets there: the train terminates and stands where
+    it stopped, so it holds its track for the rest of the day. That is not a
+    limitation of the model - it is what is true of a train parked on a track.
+
+    The track compared is the effective one, `actualTrack` if a TKL or a box
+    has moved the train and the timetable's `track_id` otherwise. Two trains
+    scheduled onto the same track by Cloud collide here just as surely as two
+    moved onto it by hand.
+    """
+    if not track_id:
+        return None
+    for row in rows:
+        other_id = str(row["id"])
+        if other_id == movement_id:
+            continue
+        if str(row["station_id"]) != station_id:
+            continue
+        if not matches_active_day(str(row["days"]), active_day):
+            continue
+        live = states.get(other_id, {})
+        if live.get("departure") == "departed":
+            continue
+        effective = live.get("actualTrack") or row.get("track_id")
+        if effective and str(effective) == track_id:
+            return row
+    return None
 
 
 def _allowed_actions(row: dict[str, Any], live: dict[str, Any]) -> list[str]:

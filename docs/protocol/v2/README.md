@@ -119,6 +119,11 @@ Avslagsorsaker (`reason`) som en klient måste kunna hantera:
 `unknown_track`, `track_occupied`, `not_assigned`, `station_mismatch`,
 `clearance_not_pending`, `clearance_expired`.
 
+`track_occupied` betyder att spåret redan är tilldelat en rörelse som inte
+avgått, på samma station och dag (`docs/tmbox.md` §8). En rad utan avgångstid
+avgår aldrig och håller sitt spår resten av dagen. Jämförelsen görs mot det
+effektiva spåret — `actualTrack` om någon flyttat tåget, annars tidtabellens.
+
 En box som får ett avslag visar orsaken och **väntar på nästa snapshot**. Den
 agerar aldrig på den gamla cachade datan igen.
 
