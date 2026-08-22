@@ -74,6 +74,10 @@ Starkast först. Den första som passar bestämmer:
 Skriver `VERSION`, synkar de härledda filerna, committar
 `Version X.Y.Z [skip version]` och sätter taggen `vX.Y.Z`.
 
+Taggen sätts **när numret saknar tagg**, inte bara när roboten höjde det. Ett
+nummer någon satt för hand är ett medvetet släppbeslut och förtjänar en tagg
+mer än en automatisk patch gör — förut fick det ingen alls.
+
 ## Om det inte fungerar
 
 **Push nekad.** Nästan alltid grenskydd: har `main` obligatorisk PR eller

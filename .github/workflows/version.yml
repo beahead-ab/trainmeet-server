@@ -65,22 +65,44 @@ jobs:
 
           if git diff --quiet; then
             echo "Inget att skriva - allt står redan på $VERSION."
-            exit 0
+          else
+            NEEDS_COMMIT=1
           fi
 
-          git add -A
-          git commit -m "Version $VERSION [skip version]"
+          if [ -n "${NEEDS_COMMIT:-}" ]; then
+            git add -A
+            git commit -m "Version $VERSION [skip version]"
+          fi
 
-          # Only a real bump earns a tag. Repairing a derived file is not a
-          # release, and a second tag on the same version would fail anyway.
-          if [ "$LEVEL" != 'skip' ]; then
+          # Tag whenever this version has no tag yet, not only when the robot
+          # bumped it. A version somebody set by hand is a deliberate release
+          # decision - it deserves a tag more than an automatic patch does, and
+          # it used to get none at all.
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "v$VERSION är redan taggad."
+          else
             git tag -a "v$VERSION" -m "Version $VERSION"
+            NEEDS_PUSH=1
+          fi
+
+          if [ -z "${NEEDS_COMMIT:-}${NEEDS_PUSH:-}" ]; then
+            echo "Ingenting att pusha."
+            exit 0
           fi
 
           # A merge that landed while this ran would make the push fail rather
           # than silently overwrite it; rebasing keeps both.
+          # The tag goes in its own refspec rather than relying on
+          # --follow-tags: that only carries tags pointing at commits being
+          # pushed, so a tag for a version that needed no commit would be
+          # left behind on the runner.
+          REFSPECS="HEAD:main"
+          if [ -n "${NEEDS_PUSH:-}" ]; then
+            REFSPECS="$REFSPECS refs/tags/v$VERSION"
+          fi
+
           for attempt in 1 2 3; do
-            if git push origin HEAD:main --follow-tags; then
+            if git push origin $REFSPECS; then
               echo "Version $VERSION"
               exit 0
             fi
