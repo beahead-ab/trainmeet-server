@@ -1061,6 +1061,7 @@ class TrainMeetHTTPApplication:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         self._require_admin(client)
+        self._require_editing_open()
         if self.local_configuration_store is None:
             raise HTTPAPIError(
                 HTTPStatus.SERVICE_UNAVAILABLE,
@@ -1091,6 +1092,112 @@ class TrainMeetHTTPApplication:
             ) from error
         return saved
 
+    def _require_editing_open(self) -> None:
+        """D3: while Cloud is the editor, the server refuses local changes.
+
+        A rule, not a recommendation. The mode is persistent state a person
+        set, never a reading of whether Cloud answered this second - a network
+        blip must not unlock editing, and a network recovering must not lock
+        it in the middle of somebody's work.
+        """
+        if self.runtime_store is None or self.runtime_store.editing_is_open():
+            return
+        raise HTTPAPIError(
+            HTTPStatus.CONFLICT,
+            "cloud_linked",
+            "Servern är kopplad till TrainMeet Cloud, som är redaktör. "
+            "Ta träffen offline för att redigera lokalt.",
+        )
+
+    def operating_mode_state(self, client: PairedClient) -> dict[str, Any]:
+        """What mode we are in, and what going back to Cloud would cost."""
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(
+                HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal lagring saknas"
+            )
+        revisions = self.runtime_store.local_revisions()
+        return {
+            "mode": self.runtime_store.operating_mode(),
+            "editing_open": self.runtime_store.editing_is_open(),
+            "linked": bool(self.runtime_store.link_token()),
+            "local_revisions": revisions,
+            "discards_on_return": self._discard_preview(revisions),
+        }
+
+    def _discard_preview(self, revisions: list[str]) -> dict[str, Any]:
+        """Exactly what going back to Cloud throws away (D4).
+
+        It must never happen silently. Counting revisions is not enough - an
+        operator needs to see which rows changed before agreeing to lose them.
+        """
+        if not revisions or self.local_configuration_store is None or self.runtime_store is None:
+            return {"revisions": 0, "rows": []}
+        draft = self.local_configuration_store.current().get("draft") or {}
+
+        # Compare against the Cloud publication the revisions were built on,
+        # not against whatever is active - once a local revision is activated,
+        # the active package *is* the edit, and comparing the draft to itself
+        # finds nothing. The base is what going back to Cloud restores.
+        base_id = draft.get("base_publication_id")
+        base = self.runtime_store.publication(base_id) if base_id else None
+        if base is None:
+            base = self.runtime_store.active()
+        rows: list[dict[str, Any]] = []
+        if base is not None:
+            published = {str(row["id"]): row for row in base.payload.get("trains") or []}
+            for row in draft.get("trains") or []:
+                before = published.get(str(row["id"]))
+                if before is None:
+                    rows.append({
+                        "id": row["id"], "train_number": row.get("train_number"),
+                        "change": "tillagd",
+                    })
+                    continue
+                for field, label in (
+                    ("arrival_time", "ankomst"),
+                    ("departure_time", "avgång"),
+                    ("track_id", "spår"),
+                ):
+                    if (before.get(field) or None) != (row.get(field) or None):
+                        rows.append({
+                            "id": row["id"], "train_number": row.get("train_number"),
+                            "change": f"{label} {before.get(field) or '–'} → {row.get(field) or '–'}",
+                        })
+            local_ids = {str(row["id"]) for row in draft.get("trains") or []}
+            for identifier, row in published.items():
+                if identifier not in local_ids:
+                    rows.append({
+                        "id": identifier, "train_number": row.get("train_number"),
+                        "change": "borttagen",
+                    })
+        return {"revisions": len(revisions), "rows": rows}
+
+    def set_operating_mode(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Move between modes. Explicit, and sticky once set."""
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(
+                HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal lagring saknas"
+            )
+        mode = str(payload.get("mode") or "")
+        if mode not in SQLiteRuntimeStore.OPERATING_MODES:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "unknown_mode", "Okänt driftläge")
+
+        # Going back to Cloud discards the local revisions, so it needs the
+        # operator to have seen what goes and said yes.
+        if mode == SQLiteRuntimeStore.CLOUD_LINKED:
+            revisions = self.runtime_store.local_revisions()
+            if revisions and payload.get("discard_local_revisions") is not True:
+                raise HTTPAPIError(
+                    HTTPStatus.CONFLICT,
+                    "confirm_discard",
+                    f"{len(revisions)} lokala revisioner kastas när Clouds version gäller igen. "
+                    "Bekräfta för att fortsätta.",
+                )
+        self.runtime_store.set_operating_mode(mode)
+        return self.operating_mode_state(client)
+
     def seed_local_configuration(self, client: PairedClient) -> dict[str, Any]:
         """Open the active Cloud package as an editable working copy (D2).
 
@@ -1099,6 +1206,7 @@ class TrainMeetHTTPApplication:
         thing worth correcting during a meet.
         """
         self._require_admin(client)
+        self._require_editing_open()
         if self.local_configuration_store is None:
             raise HTTPAPIError(
                 HTTPStatus.SERVICE_UNAVAILABLE, "local_configuration_unavailable",
@@ -1162,6 +1270,7 @@ class TrainMeetHTTPApplication:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         self._require_admin(client)
+        self._require_editing_open()
         if self.local_configuration_store is None or self.runtime_store is None:
             raise HTTPAPIError(
                 HTTPStatus.SERVICE_UNAVAILABLE,
@@ -1655,6 +1764,13 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     },
                 )
                 return
+            if path == "/v1/operating-mode":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.operating_mode_state(client),
+                )
+                return
             if path == "/v1/auth/status":
                 client = self._optional_authenticated_client()
                 access = self.server.application.identities.admin_access_summary()
@@ -1992,6 +2108,13 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     HTTPStatus.OK,
                     self.server.application.save_local_configuration(client, payload),
+                )
+                return
+            if path == "/v1/operating-mode":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.set_operating_mode(client, payload),
                 )
                 return
             if path == "/v1/local-configuration/seed":
