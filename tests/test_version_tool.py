@@ -201,10 +201,47 @@ class DecideTests(unittest.TestCase):
         self.assertEqual("major", self._decide(self.base))
 
     def test_skip_version_stops_it_even_with_another_marker(self):
-        """The bump commit itself carries this, and must never bump again."""
         self.repo.write("src/a.txt", "changed\n")
         self.repo.commit("Höj version [minor] [skip version]")
         self.assertEqual("skip", self._decide(self.base))
+
+    def test_prose_about_a_marker_is_not_a_marker(self):
+        """This is not hypothetical. On the first real run of the workflow,
+        a commit body explaining what [skip version] does contained the
+        literal string, and the job skipped for that reason rather than the
+        intended one. Markers are read from subject lines only.
+        """
+        self.repo.write("src/a.txt", "changed\n")
+        self.repo._git("add", "-A")
+        self.repo._git(
+            "commit", "-q", "-m", "Rätta ett fel",
+            "-m", "Robotens commit bär [skip version] så den inte triggar sig själv, "
+                  "och en brytande ändring skrivs [major].",
+        )
+        self.assertEqual("patch", self._decide(self.base))
+
+    def test_the_robots_own_commits_never_trigger_another_round(self):
+        """Identity, not text: prose cannot impersonate a committer."""
+        self.repo.write("src/a.txt", "changed\n")
+        self.repo._git("add", "-A")
+        self.repo._git(
+            "-c", "user.email=version@trainmeet.app", "-c", "user.name=trainmeet-version",
+            "commit", "-q", "-m", "Version 1.2.4",
+        )
+        self.assertEqual("skip", self._decide(self.base))
+
+    def test_a_human_commit_alongside_the_robots_still_counts(self):
+        """A range that is only robot commits is a loop; a range that mixes
+        them is a real merge that happens to include one."""
+        self.repo.write("src/a.txt", "changed\n")
+        self.repo.commit("En riktig ändring")
+        self.repo.write("VERSION", "1.2.3\n")
+        self.repo._git("add", "-A")
+        self.repo._git(
+            "-c", "user.email=version@trainmeet.app", "-c", "user.name=trainmeet-version",
+            "commit", "-q", "--allow-empty", "-m", "Version 1.2.3",
+        )
+        self.assertEqual("patch", self._decide(self.base))
 
     def test_a_merge_that_sets_the_version_itself_is_not_bumped_past_it(self):
         """The merge that introduces a version, or picks one by hand, has

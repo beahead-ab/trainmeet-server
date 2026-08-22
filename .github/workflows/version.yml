@@ -5,8 +5,11 @@
 # repos a merge to main is a deployable change. A change confined to docs,
 # README or .github ships nothing and mints nothing.
 #
-# The bump commit carries [skip version] so it cannot trigger this again -
-# without that guard the workflow would bump forever.
+# The loop guard lives in scripts/version.py and works on committer identity,
+# not on the message. A job-level `contains(head_commit.message, ...)` check
+# was the first attempt and was wrong: a commit body explaining what the
+# marker does contains the marker, which is exactly what happened on the very
+# first real run.
 name: version
 
 on:
@@ -25,7 +28,6 @@ permissions:
 jobs:
   bump:
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, '[skip version]') }}
     steps:
       - uses: actions/checkout@v5
         with:

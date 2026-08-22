@@ -35,8 +35,10 @@ Version 1.0.0 · build 4bd9c9a
 
 Automatiskt, vid varje merge till `main`. Du behöver inte göra något.
 
-Vill du styra nivån skriver du en markör var som helst i en commit som ingår
-i mergen — vanligast i PR-titeln, eftersom en squash-merge tar med den:
+Vill du styra nivån skriver du en markör i en commits **ämnesrad** — enklast
+i PR-titeln, eftersom en squash-merge gör den till ämnesrad. Markörer läses
+aldrig ur brödtexten, just för att en text *om* en markör inte ska vara en
+markör:
 
 | Markör | Från `1.4.2` | När |
 |---|---|---|
@@ -49,17 +51,23 @@ i mergen — vanligast i PR-titeln, eftersom en squash-merge tar med den:
 
 Starkast först. Den första som passar bestämmer:
 
-1. **`[skip version]`** — stoppar allt. Robotens egen commit bär den, så den
-   kan inte trigga sig själv.
-2. **`VERSION` ändrades i mergen** — någon har redan skrivit ett exakt
+1. **Alla commits i mergen är robotens egna** — då är det en loop, och den
+   stoppas. Kontrollen görs på *avsändaradress*
+   (`version@trainmeet.app`), inte på texten. Det var inte första försöket:
+   en vakt som letade efter `[skip version]` i meddelandet utlöstes av en
+   commit vars brödtext *förklarade* markören. Prosa kan inte utge sig för
+   att vara en avsändare.
+2. **`[skip version]`** i en commits **ämnesrad**.
+3. **`VERSION` ändrades i mergen** — någon har redan skrivit ett exakt
    nummer, och det ska inte höjas förbi. Det här är varför den merge som
    införde `1.0.0` inte blev `1.0.1`.
-3. **`[major]` / `[minor]` / `[patch]`** — starkaste markören i hela mergen
-   vinner. En brytande ändring bland flera commits gör hela släppet brytande.
-4. **Bara `docs/`, `README.md`, `.github/`, `LICENSE`, `.gitignore` ändrades**
+4. **`[major]` / `[minor]` / `[patch]`** i en **ämnesrad** — starkaste
+   markören i hela mergen vinner. En brytande ändring bland flera commits
+   gör hela släppet brytande.
+5. **Bara `docs/`, `README.md`, `.github/`, `LICENSE`, `.gitignore` ändrades**
    — ingenting skeppas, alltså ingen version. En stavfelsrättning ska inte
    ge ett släpp.
-5. **Annars `patch`** — en merge till main är en driftsättbar ändring här.
+6. **Annars `patch`** — en merge till main är en driftsättbar ändring här.
 
 ### Vad roboten gör
 
