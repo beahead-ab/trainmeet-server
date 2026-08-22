@@ -39,49 +39,84 @@
 
 :root {
   color-scheme: light;
-  /* Samma grundpalett som TrainMeet/Lovable. */
-  --background: hsl(40 20% 98%);
-  --foreground: hsl(0 0% 3.9%);
-  --card: hsl(0 0% 100%);
-  --card-foreground: hsl(0 0% 3.9%);
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(0 0% 3.9%);
-  --primary: hsl(220 70% 45%);
-  --primary-foreground: hsl(0 0% 100%);
-  --secondary: hsl(0 0% 96.1%);
-  --secondary-foreground: hsl(0 0% 9%);
-  --accent: hsl(215 60% 96%);
-  --accent-foreground: hsl(220 60% 30%);
-  --muted-surface: hsl(0 0% 96.1%);
-  --muted: hsl(0 0% 45.1%);
-  --border: hsl(0 0% 89.8%);
-  --ring: hsl(220 70% 50%);
-  --v2-bg: hsl(40 20% 98%);
-  --v2-card: hsl(0 0% 100%);
-  --radius: 16px;
-  --radius-sm: 14px;
-  --control-height: 40px;
+
+  /* ------------------------------------------------------------------ paket
+     Designtokens ur designpaketets DEL 6. Paketet är bindande för utseende,
+     så de här värdena är källan - och de är avsiktligt andra än de blå som
+     docs/ADMIN-UI-CONTRACT.md angav. Konflikten är dokumenterad där.
+
+     Rånamnen (--paper, --accent-warm ...) är paketets egna. De semantiska
+     namnen under dem är de befintliga komponenternas, ommappade hit, så att
+     hela adminen byter palett utan att varje regel skrivs om.               */
+  --paper: #faf9f5;          /* sidbakgrund, markerade listrader */
+  --surface-raised: #ffffff; /* kort, fält, paneler */
+  --surface-muted: #f7f5f0;  /* låsta fält */
+  --line-field: #e0dcd1;     /* fält, knappar */
+  --line-card: #e8e5dc;      /* kort */
+  --line-inner: #efece4;     /* radavdelare */
+  --ink-strong: #1f1e1d;     /* brödtext, rubriker */
+  --ink-muted: #706c61;      /* metadata, etiketter */
+  --ink-locked: #8a857a;     /* skrivskyddat innehåll */
+  --ink-faint: #a8a296;      /* ⋯-menyer */
+  --accent-warm: #c96442;    /* primärknapp, valt kort, aktiva markörer */
+  --accent-warm-dark: #a44f33;
+  --accent-tint: #f7efe9;
+  --accent-tint-light: #fdf6f3;
+  --accent-edge: #e6cfc7;
+  --go-green: #4b7a4f;
+  --go-green-dark: #3f6a43;
+  --go-green-tint: #f2f6f2;
+  --go-green-edge: #cfdccf;
+  --chrome-dark: #1f1e1d;    /* byggläges-topplock, aktiv flik */
+  --chrome-dark-text: #a1a1aa;
+
+  /* Semantiska namn, mappade på paketets värden. */
+  --background: var(--paper);
+  --foreground: var(--ink-strong);
+  --card: var(--surface-raised);
+  --card-foreground: var(--ink-strong);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--ink-strong);
+  --primary: var(--accent-warm);
+  --primary-foreground: #fff;
+  --secondary: var(--surface-muted);
+  --secondary-foreground: var(--ink-strong);
+  --accent: var(--accent-tint);
+  --accent-foreground: var(--accent-warm-dark);
+  --muted-surface: var(--surface-muted);
+  --muted: var(--ink-muted);
+  --border: var(--line-field);
+  --ring: var(--accent-warm);
+  --v2-bg: var(--paper);
+  --v2-card: var(--surface-raised);
+
+  /* Mått ur DEL 6. Kort 12px, fält och knappar 8px, chip 999px. */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-inner: 10px;
+  --control-height: 36px;
   --content-gap: 24px;
-  --trainmeet: var(--primary);
-  --trainmeet-dark: hsl(220 70% 36%);
-  --trainmeet-soft: var(--accent);
-  --ink: var(--foreground);
-  --surface: var(--card);
-  --line: var(--border);
+
+  --trainmeet: var(--accent-warm);
+  --trainmeet-dark: var(--accent-warm-dark);
+  --trainmeet-soft: var(--accent-tint);
+  --ink: var(--ink-strong);
+  --surface: var(--surface-raised);
+  --line: var(--line-card);
   --shadow: 0 1px 2px 0 rgba(0, 0, 0, .05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, .1), 0 2px 4px -2px rgba(0, 0, 0, .1);
-  --status-arrival: hsl(142 60% 40%);
-  --status-departure: hsl(0 70% 50%);
-  --status-warning-bg: hsl(45 100% 96%);
-  --status-warning-border: hsl(45 90% 55%);
-  --status-ready-bg: hsl(210 100% 96%);
-  --status-ready-border: hsl(210 70% 50%);
-  --status-goods: hsl(25 90% 50%);
-  --success: var(--status-arrival);
+  --status-arrival: var(--go-green);
+  --status-departure: #c0392b;
+  --status-warning-bg: #fdf6ea;
+  --status-warning-border: #d9a441;
+  --status-ready-bg: var(--go-green-tint);
+  --status-ready-border: var(--go-green);
+  --status-goods: var(--accent-warm-dark);
+  --success: var(--go-green);
   --warning: var(--status-warning-border);
   --danger: var(--status-departure);
-  --active-accent: hsl(37.7 92.1% 50.2%);
-  --active-accent-foreground: hsl(32 95% 30%);
+  --active-accent: var(--accent-warm);
+  --active-accent-foreground: var(--accent-warm-dark);
   --case: #b76f80;
   --lcd-blue: #0c4fe5;
   --lcd-text: #b9d8ff;
@@ -1589,3 +1624,249 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .technical-details dl { margin: 0.5rem 0 0; display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.8rem; }
 .technical-details dt { color: var(--muted, #6b7280); }
 .technical-details dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* ===================================================== KÖR / BYGG-skelettet
+   Designpaketets DEL 3.1 och DEL 6. Måtten här är paketets, inte ungefärliga:
+   50px mörk list, 56px applock, 236px sidopanel, 30px flikar.
+
+   Principen bakom hela strukturen: konfiguration och drift ska inte kunna
+   förväxlas. Byggläget ser därför annorlunda ut, inte bara annorlunda märkt. */
+
+.build-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 50px;
+  padding: 9px 22px;
+  background: var(--chrome-dark);
+  color: var(--paper);
+}
+.build-chrome-left { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.build-chrome-mark {
+  display: grid; width: 20px; height: 20px; place-items: center;
+  border-radius: 6px; background: var(--accent-warm); font-size: 11px;
+}
+.build-chrome-left b { font-size: 13px; font-weight: 600; }
+.build-chrome-note { color: rgba(250, 249, 245, .62); font-size: 13px; }
+.build-chrome-exit {
+  flex: 0 0 auto; min-height: 32px; padding: 0 14px;
+  border: 1px solid rgba(250, 249, 245, .28); border-radius: var(--radius-sm);
+  color: var(--paper); background: transparent;
+  font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.build-chrome-exit:hover { background: rgba(250, 249, 245, .08); }
+
+/* Applocket sitter under den mörka listen när den finns. */
+.page-shell > .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 56px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--line-card);
+  background: var(--surface-raised);
+}
+body[data-mode="bygg"] .page-shell > .topbar { top: 50px; }
+
+.topbar .brand-lockup { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.topbar .brand-lockup h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.topbar-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+
+.app-clock {
+  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-size: 15px; font-weight: 600; color: var(--go-green);
+}
+.app-devices { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-muted); }
+.app-devices i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); }
+.app-devices.online i { background: var(--go-green); }
+
+.enter-build {
+  min-height: 32px; padding: 0 13px;
+  border: 1px solid var(--line-field); border-radius: var(--radius-sm);
+  color: var(--ink-strong); background: var(--surface-raised);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.enter-build:hover { background: var(--paper); }
+
+/* Flikraden, bara i körläget. */
+.run-tabs { display: flex; gap: 2px; }
+.run-tab {
+  min-height: 30px; padding: 0 11px;
+  border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink-muted);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.run-tab:hover { background: var(--paper); color: var(--ink-strong); }
+.run-tab[aria-current="page"] { background: var(--chrome-dark); color: #fff; }
+body[data-mode="bygg"] .run-tabs { display: none; }
+body[data-mode="bygg"] .enter-build { display: none; }
+
+/* Sidopanelen, bara i byggläget. */
+.build-sidebar {
+  position: sticky; top: 106px; align-self: start;
+  width: 236px; flex: 0 0 236px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.build-steps { display: grid; gap: 2px; }
+.build-step {
+  display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 10px;
+  min-height: 34px; padding: 0 10px;
+  border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink-muted);
+  font-size: 13px; text-align: left; cursor: pointer;
+}
+.build-step:hover { background: var(--surface-raised); color: var(--ink-strong); }
+.build-step[aria-current="step"] { background: var(--surface-raised); color: var(--ink-strong); font-weight: 600; }
+.build-step-number {
+  display: grid; width: 20px; height: 20px; place-items: center;
+  border: 1px solid var(--line-field); border-radius: 50%;
+  font-size: 11px; font-weight: 600;
+}
+.build-step[aria-current="step"] .build-step-number {
+  border-color: var(--accent-warm); background: var(--accent-warm); color: #fff;
+}
+.build-step-count {
+  min-width: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--accent-tint); color: var(--accent-warm-dark);
+  font-size: 11px; font-weight: 600; text-align: center;
+}
+
+.unsaved-panel {
+  display: grid; gap: 8px; padding: 12px;
+  border: 1px solid var(--line-card); border-radius: var(--radius);
+  background: var(--surface-raised);
+}
+.unsaved-count { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink-strong); }
+.unsaved-panel.has-changes .unsaved-count { color: var(--accent-warm-dark); }
+.unsaved-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--ink-muted); }
+.unsaved-panel button { width: 100%; }
+
+/* Innehållsytan, DEL 3. */
+.server-workspace {
+  width: min(100%, 1400px);
+  margin: 0 auto;
+  padding: 22px 22px 48px;
+}
+body[data-mode="bygg"] .server-admin-shell {
+  display: flex; gap: 24px;
+  width: min(100%, 1400px); margin: 0 auto; padding: 22px 22px 48px;
+}
+body[data-mode="bygg"] .server-workspace { width: auto; margin: 0; padding: 0; flex: 1 1 auto; min-width: 0; }
+
+@media (max-width: 900px) {
+  .build-sidebar { position: static; width: auto; flex: none; }
+  body[data-mode="bygg"] .server-admin-shell { flex-direction: column; }
+  .run-tabs { overflow-x: auto; }
+}
+
+/* ======================================================= KÖR › Trafik (3.3)
+   Rörelse bara där den betyder något (DEL 7.7): det som väntar på en människa
+   pulserar, inget annat rör sig. Blinkar allt betyder blinkandet ingenting. */
+
+.section-eyebrow {
+  margin: 0 0 8px;
+  font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-muted);
+}
+.traffic-section { margin-bottom: 24px; }
+.traffic-filters {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.traffic-filters label { font-size: 13px; color: var(--ink-muted); }
+.traffic-only-deviations { display: inline-flex; align-items: center; gap: 6px; }
+
+.traffic-online-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.traffic-station-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
+
+.traffic-card {
+  display: grid; gap: 8px; padding: 14px;
+  border: 1px solid var(--line-card); border-radius: var(--radius);
+  background: var(--surface-raised);
+}
+.traffic-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.traffic-train-number {
+  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-size: 22px; font-weight: 600; color: var(--ink-strong);
+}
+.traffic-train-number.small { font-size: 13px; }
+.traffic-station-code {
+  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px; color: var(--ink-muted);
+}
+.traffic-leg { margin: 0; font-size: 13px; color: var(--ink-muted); }
+.traffic-times {
+  margin: 0; font-size: 12.5px; color: var(--ink-muted);
+  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+}
+
+.traffic-progress {
+  position: relative; height: 6px; border-radius: 999px;
+  background: var(--line-inner); overflow: hidden;
+}
+.traffic-progress i { display: block; height: 100%; width: 0; background: var(--accent-warm); }
+
+.traffic-chip {
+  justify-self: start; padding: 2px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+}
+.traffic-chip.on-time { background: var(--go-green-tint); border: 1px solid var(--go-green-edge); color: var(--go-green-dark); }
+.traffic-chip.late { background: var(--accent-tint-light); border: 1px solid var(--accent-edge); color: var(--accent-warm-dark); }
+
+.traffic-station-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.traffic-station-rows li {
+  display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 10px;
+  min-height: 34px; padding: 0 8px; border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.traffic-station-rows li + li { border-top: 1px solid var(--line-inner); }
+.traffic-time {
+  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px; color: var(--ink-strong);
+}
+.traffic-status { font-size: 12.5px; color: var(--ink-muted); }
+
+/* Det enda som rör sig: en rad som väntar på en människa. */
+.traffic-station-rows li.needs-attention {
+  background: var(--accent-tint-light);
+  animation: traffic-pulse 2s ease-in-out infinite;
+}
+@keyframes traffic-pulse {
+  0%, 100% { background: var(--accent-tint-light); }
+  50% { background: var(--accent-tint); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .traffic-station-rows li.needs-attention {
+    animation: none;
+    box-shadow: inset 3px 0 0 var(--accent-warm);
+  }
+}
+
+.traffic-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.traffic-timeline-row {
+  display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 10px;
+  min-height: 30px; padding: 0 8px; font-size: 13px;
+}
+.traffic-timeline-row.past { color: var(--ink-faint); }
+.traffic-timeline-row.next { color: var(--ink-strong); font-weight: 600; }
+.traffic-timeline-row.next .traffic-time::before {
+  content: "●"; margin-right: 6px; color: var(--go-green); font-size: 9px;
+}
+.traffic-timeline-row.future { color: var(--ink-muted); }
+.traffic-empty { margin: 0; font-size: 13px; color: var(--ink-muted); }
+
+/* ================================================= KÖR › TKL-terminal (3.5) */
+.tkl-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.tkl-toolbar label { font-size: 13px; color: var(--ink-muted); }
+.tkl-frame-wrap {
+  border: 1px solid var(--line-card); border-radius: var(--radius);
+  overflow: hidden; background: var(--surface-raised);
+}
+#tkl-frame { display: block; width: 100%; height: min(78vh, 900px); border: 0; }

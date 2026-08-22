@@ -15,11 +15,25 @@ Referens-URL för visuell verifiering är `https://trainmeet.app/meet/hela-huset
 
 ## Regler
 
-- Inter för all normal UI-text; DM Sans 600/700 endast för varumärke och navigationsrubriker.
-- Varm dokumentbakgrund, vita kort, tunna neutrala kanter, 16 px radie och diskreta skuggor.
-- Semantiska HSL-tokens. Råa färger reserveras för den fysiska TMBox-simuleringen.
-- Sticky topprad på 48 px med 70 % bakgrund, blur och saturation.
-- Helt runda knappar. Blå är primär åtgärd; amber/orange används inte som knappfärg.
+Serverns admin följer sedan 1.3.0 **designpaketet** (`design_handoff_trainmeet_server`),
+som är bindande för utseende, struktur och användarflöde. Det ersätter tre
+tidigare regler här som sa motsatsen — de står kvar nedan som historik, inte
+som krav:
+
+> ~~16 px radie~~ · ~~Sticky topprad på 48 px med blur~~ ·
+> ~~Helt runda knappar. Blå är primär åtgärd; amber/orange används inte som
+> knappfärg.~~
+
+Gällande värden, ur paketets DEL 6:
+
+- **Accent `#c96442`** är primär åtgärd. Den blå `hsl(220 70% 45%)` används inte längre.
+- Radie 12 px för kort, 8 px för fält och knappar, 999 px för chip.
+- Applock 56 px, vitt, med 1 px botten-border. I byggläget ligger en mörk list
+  på 50 px ovanför.
+- Inter för all normal UI-text, serverad lokalt. Monospace för alla tider,
+  tågnummer, stationssignaturer, boxkoder och IP-adresser.
+- Varm dokumentbakgrund `#faf9f5`, vita kort, tunna neutrala kanter.
+- Semantiska tokens; råa färger reserveras för TMBox v2-lådan.
 - Täta adminlistor och tabeller utan egna inre scrollcontainrar för formulär.
 - Synligt startläge, pågående läge, framgång och konkret fel för varje åtgärd.
 - Destruktiva åtgärder kräver ett tydligt bekräftelsesteg.

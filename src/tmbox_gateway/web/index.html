@@ -11,14 +11,40 @@
   </head>
   <body>
     <main class="page-shell">
-      <header class="topbar">
-        <div class="brand-lockup">
-          <img class="brand-mark" src="/trainmeet-logo.png" alt="TrainMeet">
-          <div>
-            <h1>TrainMeet Server</h1>
-          </div>
+      <!-- Applocket, DEL 3.1. Två rader: den mörka finns bara i byggläget,
+           den vita i båda. Konfiguration och drift ska inte kunna förväxlas -
+           det är hela poängen med att byggläget ser annorlunda ut. -->
+      <div id="build-chrome" class="build-chrome hidden">
+        <div class="build-chrome-left">
+          <span class="build-chrome-mark" aria-hidden="true">✎</span>
+          <b>Byggläge</b>
+          <span class="build-chrome-note" id="build-chrome-note">
+            Träffen fortsätter köra. Inget ändras för operatörerna förrän du aktiverar.
+          </span>
         </div>
-        <div id="connection" class="status offline"><span></span><b>Ej ansluten</b></div>
+        <button type="button" id="leave-build" class="build-chrome-exit">Lämna byggläget</button>
+      </div>
+
+      <header class="topbar" id="app-chrome">
+        <div class="brand-lockup">
+          <img class="brand-mark" src="/assets/ikon/trainmeet-ikon.svg" alt="" width="28" height="28">
+          <h1 id="app-meet-name">TrainMeet Server</h1>
+        </div>
+
+        <nav id="run-tabs" class="run-tabs" aria-label="Körläge">
+          <button type="button" class="run-tab" data-run-tab="oversikt" aria-current="page">Översikt</button>
+          <button type="button" class="run-tab" data-run-tab="trafik">Trafik</button>
+          <button type="button" class="run-tab" data-run-tab="skarmar">Skärmar</button>
+          <button type="button" class="run-tab" data-run-tab="tkl">TKL-terminal</button>
+          <button type="button" class="run-tab" data-run-tab="tmbox">TMBox v2</button>
+        </nav>
+
+        <div class="topbar-right">
+          <span id="app-clock" class="app-clock" aria-label="Träffklocka">–&#8202;–:–&#8202;–</span>
+          <span id="app-devices" class="app-devices"><i></i>Inga boxar</span>
+          <div id="connection" class="status offline"><span></span><b>Ej ansluten</b></div>
+          <button type="button" id="enter-build" class="enter-build">Bygg om träffen</button>
+        </div>
       </header>
 
       <section id="setup" class="card setup-card hidden">
@@ -131,29 +157,48 @@
         <button id="server-sidebar-toggle" class="server-sidebar-toggle" type="button" aria-label="Öppna servermenyn">☰</button>
         <button id="server-sidebar-overlay" class="server-sidebar-overlay" type="button" aria-label="Stäng servermenyn"></button>
         <div class="server-admin-shell">
-          <aside class="server-sidebar card" aria-label="Administration och funktioner">
-            <nav class="server-sidebar-nav" aria-label="Huvudvyer">
-              <p>Drift</p>
-              <button type="button" class="view-tab server-nav-item active" data-view="overview"><span aria-hidden="true">⌂</span>Översikt</button>
-              <button type="button" class="view-tab server-nav-item" data-view="admin" data-admin-section-target="runtime" data-requires-runtime><span aria-hidden="true">◉</span>Aktiv träff</button>
-
-              <p>Cloud och konfiguration</p>
-              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="cloud"><span aria-hidden="true">↻</span>Cloud och synk</button>
-              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="local"><span aria-hidden="true">⌘</span>Lokala ändringar</button>
-              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="import"><span aria-hidden="true">⇧</span>Manuell import</button>
-
-              <p>Enheter</p>
-              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="devices" data-requires-runtime><span aria-hidden="true">⌁</span>TMBoxar</button>
-              <button type="button" class="view-tab server-nav-item" data-view="simulator" data-requires-runtime><span aria-hidden="true">▦</span>TMBox-simulering</button>
-              <button type="button" class="view-tab server-nav-item" data-view="tmbox-v2" data-requires-runtime><span aria-hidden="true">▨</span>TMBox v2</button>
-              <a class="server-nav-link" href="/tkl/" data-requires-runtime><span aria-hidden="true">▤</span>TKL-terminal</a>
-              <button type="button" class="view-tab server-nav-item" data-view="displays" data-requires-runtime><span aria-hidden="true">▣</span>Skärmar och klocka</button>
-
-              <p>System</p>
-              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="access"><span aria-hidden="true">♙</span>Användare och åtkomst</button>
-              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="software"><span aria-hidden="true">↓</span>Programuppdatering</button>
-              <button type="button" class="server-nav-link admin-section-link" data-admin-section-target="system"><span aria-hidden="true">⚙</span>Server och nollställning</button>
+          <!-- Byggstegen, DEL 3. Numrerade cirklar i stället för ikoner:
+               steg har ordning, ikoner har det inte. Sidopanelen finns bara i
+               byggläget - körläget har flikraden i applocket i stället. -->
+          <aside id="build-sidebar" class="build-sidebar hidden" aria-label="Byggsteg">
+            <nav class="build-steps" aria-label="Steg">
+              <button type="button" class="build-step" data-build-step="kalla" aria-current="step">
+                <span class="build-step-number">1</span>
+                <span class="build-step-label">Träffen</span>
+                <span class="build-step-count hidden" data-step-count="kalla"></span>
+              </button>
+              <button type="button" class="build-step" data-build-step="bana">
+                <span class="build-step-number">2</span>
+                <span class="build-step-label">Stationer och sträckor</span>
+                <span class="build-step-count hidden" data-step-count="bana"></span>
+              </button>
+              <button type="button" class="build-step" data-build-step="tid">
+                <span class="build-step-number">3</span>
+                <span class="build-step-label">Tidtabell</span>
+                <span class="build-step-count hidden" data-step-count="tid"></span>
+              </button>
+              <button type="button" class="build-step" data-build-step="boxar">
+                <span class="build-step-number">4</span>
+                <span class="build-step-label">TMBoxar</span>
+                <span class="build-step-count hidden" data-step-count="boxar"></span>
+              </button>
+              <button type="button" class="build-step" data-build-step="server">
+                <span class="build-step-number">5</span>
+                <span class="build-step-label">Server</span>
+              </button>
             </nav>
+
+            <div id="unsaved-panel" class="unsaved-panel" aria-live="polite">
+              <p class="unsaved-count" id="unsaved-count">Inga osparade ändringar</p>
+              <p class="unsaved-note" id="unsaved-note">
+                Träffen kör på den aktiva versionen tills du aktiverar en ny.
+              </p>
+              <button type="button" id="review-and-activate" class="primary" disabled>
+                Granska och aktivera
+              </button>
+              <button type="button" id="save-draft" class="quiet" disabled>Spara utkast</button>
+            </div>
+
             <div class="server-sidebar-footer">
               <i></i><span><b id="sidebar-runtime-name">Ingen aktiv träff</b><small id="sidebar-runtime-status">Lokal server</small></span>
             </div>
@@ -593,33 +638,46 @@
           </section>
         </section>
 
-        <section id="simulator-view" class="view-panel simulator-view hidden" aria-live="polite">
-          <div class="simulator-intro">
-            <div>
-              <p class="eyebrow">TESTKLIENT</p>
-              <h2>TMBox-simulering</h2>
-              <p>Samma tangenter och serverstyrda trafiklogik som de fysiska boxarna, i valfri av de fyra displaystorlekarna.</p>
-            </div>
-            <div class="panel-picker card">
-              <label for="panel-select">Panel</label>
-              <select id="panel-select"></select>
-              <label for="lcd-geometry">Display</label>
-              <select id="lcd-geometry">
-                <option value="16x2">16 tecken × 2 rader</option>
-                <option value="20x2">20 tecken × 2 rader</option>
-                <option value="16x4">16 tecken × 4 rader</option>
-                <option value="20x4">20 tecken × 4 rader</option>
-              </select>
-            </div>
+        <section id="traffic-view" class="view-panel traffic-view hidden" aria-live="polite">
+          <div class="traffic-filters">
+            <label for="traffic-station">Station</label>
+            <select id="traffic-station"><option value="">Hela banan</option></select>
+            <label class="traffic-only-deviations">
+              <input type="checkbox" id="traffic-only-deviations">
+              Bara avvikelser
+            </label>
           </div>
 
-          <article class="tmbox-case">
-            <div class="lcd-module">
-              <div id="lcd" class="lcd" aria-label="TMBox display"></div>
-            </div>
-            <div id="keypad" class="keypad" aria-label="TMBox tangentbord"></div>
-          </article>
-          <p id="command-message" class="command-message" role="status"></p>
+          <section class="traffic-section" aria-labelledby="traffic-online-heading">
+            <h2 id="traffic-online-heading" class="section-eyebrow">På linjen just nu</h2>
+            <div id="traffic-online" class="traffic-online-grid"></div>
+          </section>
+
+          <section class="traffic-section" aria-labelledby="traffic-stations-heading">
+            <h2 id="traffic-stations-heading" class="section-eyebrow">Inne på stationerna</h2>
+            <div id="traffic-stations" class="traffic-station-grid"></div>
+          </section>
+
+          <section class="traffic-section" aria-labelledby="traffic-timeline-heading">
+            <h2 id="traffic-timeline-heading" class="section-eyebrow">Tidslinje</h2>
+            <ol id="traffic-timeline" class="traffic-timeline"></ol>
+          </section>
+        </section>
+
+        <section id="tkl-view" class="view-panel tkl-view hidden">
+          <div class="tkl-toolbar">
+            <label for="tkl-station">Station</label>
+            <select id="tkl-station"></select>
+            <a id="tkl-open-tab" class="quiet" href="/tkl/" target="_blank" rel="noopener">
+              Öppna i egen flik
+            </a>
+          </div>
+          <!-- Inbäddad, inte en egen flik: man ska inte tappa bort sig mellan
+               flikar under en träff. Knappen ovan finns för den som ändå vill
+               ha terminalen på en egen skärm. -->
+          <div class="tkl-frame-wrap">
+            <iframe id="tkl-frame" title="TKL-terminal" src="about:blank"></iframe>
+          </div>
         </section>
 
         <section id="tmbox-v2-view" class="view-panel tmbox-v2-view hidden" aria-live="polite">

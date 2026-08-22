@@ -83,8 +83,15 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="overview-topology"', html)
         self.assertIn('id="overview-route-list"', html)
         self.assertIn("TÅGRUTTER", html)
-        self.assertIn("Administration", html)
-        self.assertIn("TMBox-simulering", html)
+        # Den gamla sidopanelen ("Administration och funktioner") och
+        # TMBox-simuleringen finns inte längre: designpaketet ersätter tolv
+        # menypunkter med två lägen, och tar bort simuleringen eftersom v2
+        # räcker. Skalet kontrolleras därför mot den nya strukturen.
+        self.assertIn('id="run-tabs"', html)
+        self.assertIn('data-run-tab="trafik"', html)
+        self.assertIn('id="build-sidebar"', html)
+        self.assertIn('data-build-step="kalla"', html)
+        self.assertNotIn('id="simulator-view"', html)
         self.assertIn("AKTIV RUNTIME", html)
         self.assertIn("Aktiva sträckor", html)
         self.assertIn('id="copy-active-runtime"', html)
