@@ -605,14 +605,35 @@ den byts till accentfärgen.
 Samma resonemang som Avvikelse 7: en verklig säkerhetsskillnad väger tyngre än
 en etikett i en bild.
 
-### 6. 404 på `/terminal/config` — förbefintligt, inte det här blockets
+### 6. 404 på `/terminal/config` — **avsiktligt, ska inte lagas**
 
-Körfliken TKL bäddar in `/tkl/`, och paketets TKL-bygge frågar efter
-`/terminal/config`, som den här servern inte serverar. Det ger ett 404 i
-konsolen så snart TKL-fliken öppnas.
+Körfliken TKL bäddar in `/tkl/`, och terminalen frågar efter
+`/terminal/config` så snart fliken öppnas. Servern svarar 404, och det syns i
+konsolen.
 
-Kontrollerat att det inte kommer härifrån: felet reproduceras oförändrat med
-det här blockets ändringar `git stash`:ade. Hör till 3.5.1, som står 🔨.
+Det såg ut som en olöst avvikelse och bokfördes som en sådan. Det är fel.
+Anropet är terminalens sätt att ta reda på var den kör, och 404 är det
+förväntade svaret. `trainmeet-tkl/src/api.ts:223`:
+
+```js
+export async function loadTerminalConfig(): Promise<TerminalConfig> {
+  try {
+    return await readJSON<TerminalConfig>("/terminal/config");
+  } catch {
+    // When hosted by TrainMeet Server the browser keeps its own terminal profile.
+```
+
+Kör terminalen fristående med sin egen backend finns endpointen och svarar med
+en serversidig profil. Är den gäst hos TrainMeet Server finns den inte, och
+terminalen använder en webbläsarlokal profil i stället.
+
+**Lägg alltså inte till rutten här.** Gör man det får terminalen för sig att
+den är fristående, och den slutar läsa den profil den faktiskt har.
+
+Vill man bli av med bruset är rätt ställe `trainmeet-tkl`: låta terminalen
+fråga något Server *svarar* på i stället för att använda ett 404 som besked.
+Det är en ändring i ett annat repo och en ombyggd bundle, och den gör inget
+bättre för användaren — bara konsolen tystare.
 
 ### 7. Nollställningens rubrik säger inte alltid "Nollställ träffdata"
 
