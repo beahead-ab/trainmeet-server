@@ -1,0 +1,76 @@
+# Sets the version number on every merge to main.
+#
+# The level is read off the commits: an explicit [major], [minor] or [patch]
+# marker wins, strongest first, and the default is patch because on these
+# repos a merge to main is a deployable change. A change confined to docs,
+# README or .github ships nothing and mints nothing.
+#
+# The bump commit carries [skip version] so it cannot trigger this again -
+# without that guard the workflow would bump forever.
+name: version
+
+on:
+  push:
+    branches: [main]
+
+# One at a time. Two merges landing together would otherwise both compute a
+# next version from the same base and race to push it.
+concurrency:
+  group: version-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip version]') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide the level
+        id: decide
+        run: |
+          BEFORE='${{ github.event.before }}'
+          # A new branch, or a force-push that removed the old head, leaves
+          # nothing to compare against. Fall back to the previous commit.
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            BEFORE=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
+          fi
+          LEVEL=$(python3 scripts/version.py decide --range "$BEFORE..HEAD")
+          echo "level=$LEVEL" >> "$GITHUB_OUTPUT"
+          echo "Nivå: $LEVEL (från $BEFORE..HEAD)"
+
+      - name: Bump, commit and tag
+        if: steps.decide.outputs.level != 'skip'
+        run: |
+          git config user.name 'trainmeet-version'
+          git config user.email 'version@trainmeet.app'
+
+          VERSION=$(python3 scripts/version.py bump '${{ steps.decide.outputs.level }}')
+
+          if git diff --quiet; then
+            echo 'Inget att skriva - versionen stod redan rätt.'
+            exit 0
+          fi
+
+          git add -A
+          git commit -m "Version $VERSION [skip version]"
+          git tag -a "v$VERSION" -m "Version $VERSION"
+
+          # A merge that landed while this ran would make the push fail rather
+          # than silently overwrite it; rebasing keeps both.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main --follow-tags; then
+              echo "Version $VERSION"
+              exit 0
+            fi
+            echo "Push nekad, försök $attempt - hämtar och lägger om."
+            git fetch origin main
+            git rebase origin/main || exit 1
+          done
+          exit 1
