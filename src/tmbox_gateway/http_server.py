@@ -1091,6 +1091,32 @@ class TrainMeetHTTPApplication:
             ) from error
         return saved
 
+    def seed_local_configuration(self, client: PairedClient) -> dict[str, Any]:
+        """Open the active Cloud package as an editable working copy (D2).
+
+        The path that was missing: a server could always build a configuration
+        of its own, but never edit the one Cloud published - which is the only
+        thing worth correcting during a meet.
+        """
+        self._require_admin(client)
+        if self.local_configuration_store is None:
+            raise HTTPAPIError(
+                HTTPStatus.SERVICE_UNAVAILABLE, "local_configuration_unavailable",
+                "Lokal konfiguration är inte tillgänglig",
+            )
+        active = self.runtime_store.active() if self.runtime_store is not None else None
+        if active is None:
+            raise HTTPAPIError(
+                HTTPStatus.CONFLICT, "no_active_publication",
+                "Det finns ingen aktiv version att öppna. Hämta en från TrainMeet Cloud först.",
+            )
+        try:
+            return self.local_configuration_store.seed_from_publication(active.payload)
+        except LocalConfigurationError as error:
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST, "invalid_local_configuration", str(error)
+            ) from error
+
     def configure_cloud_auto_sync(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
         if self.runtime_store is None:
@@ -1962,6 +1988,13 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     HTTPStatus.OK,
                     self.server.application.save_local_configuration(client, payload),
+                )
+                return
+            if path == "/v1/local-configuration/seed":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.seed_local_configuration(client),
                 )
                 return
             if path == "/v1/local-configuration/activate":
