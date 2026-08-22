@@ -1,3 +1,42 @@
+/* ----------------------------------------------------------------- fonts
+   Inter, served from this server rather than fetched from Google.
+
+   The page used to link fonts.googleapis.com, which its own
+   Content-Security-Policy (`style-src 'self'`) refused on every load - a
+   console error on every page view, and a DNS lookup to an external host
+   that a server built to run a meet without internet should never need.
+
+   Four weights, latin only, ~92 kB in total. DM Sans is gone: it was used
+   for exactly one heading, and Inter at 700 carries it.                    */
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/fonts/inter-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/assets/fonts/inter-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/assets/fonts/inter-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/assets/fonts/inter-700.woff2") format("woff2");
+}
+
 :root {
   color-scheme: light;
   /* Samma grundpalett som TrainMeet/Lovable. */
@@ -49,7 +88,7 @@
   --key-panel: #171a21;
   --key: #090b10;
   --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-brand: "DM Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-brand: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 

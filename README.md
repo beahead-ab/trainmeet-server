@@ -467,6 +467,16 @@ låter är minst lika viktigt: en klarering som redan väntade, den första
 
 Ändringar sparas först som ett utkast och aktiveras uttryckligen. Om topologin ändras krävs serveromstart, så en pågående körning inte ändras tyst. Administrationsvyn har en knapp för kontrollerad omstart.
 
+<<<<<<< HEAD
+### Typsnitt
+
+Webbadmin serverar Inter från servern själv, i fyra vikter, latin, cirka
+92 kB totalt. Sidan hämtade tidigare typsnitt från Google Fonts, vilket
+serverns egen Content-Security-Policy (`style-src 'self'`) avvisade vid varje
+sidladdning — ett konsolfel per besök och en DNS-uppslagning mot en extern
+värd som en server byggd för att köra en träff utan internet aldrig ska
+behöva.
+=======
 ## Driftlägen
 
 | Läge | Cloud | Redigering på servern |
@@ -491,6 +501,7 @@ och att de lokala revisionerna kastas. Det sker **aldrig tyst**: servern visar
 först exakt vilka rader som ändrats, lagts till eller tagits bort, och kräver
 en bekräftelse. Finns inget lokalt att kasta krävs ingen bekräftelse — en
 bekräftelseruta för ingenting lär folk att klicka igenom dem.
+>>>>>>> origin/main
 
 ## Lokal och extern adminåtkomst
 
