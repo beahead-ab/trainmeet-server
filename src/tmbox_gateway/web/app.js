@@ -201,7 +201,6 @@ const runtimeMessage = document.querySelector("#runtime-message");
 const runtimeCheckUpdate = document.querySelector("#runtime-check-update");
 const runtimeDownloadUpdate = document.querySelector("#runtime-download-update");
 const runtimeActivateUpdate = document.querySelector("#runtime-activate-update");
-const runtimePushChanges = document.querySelector("#runtime-push-changes");
 const runtimeAutoSync = document.querySelector("#runtime-auto-sync");
 const runtimeAutoSyncHint = document.querySelector("#runtime-auto-sync-hint");
 const configForm = document.querySelector("#config-form");
@@ -674,22 +673,6 @@ factoryResetButton.addEventListener("click", async () => {
     state.restarting = false;
     factoryResetButton.disabled = false;
     setMessage(factoryResetMessage, error.message, "error");
-  }
-});
-
-runtimePushChanges.addEventListener("click", async () => {
-  setMessage(runtimeMessage, "Skickar förbättringsförslag till Cloud …");
-  runtimePushChanges.disabled = true;
-  try {
-    const response = await authorizedFetch("/v1/cloud/changes", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message || "Ändringarna kunde inte skickas");
-    setMessage(runtimeMessage, payload.message, "success");
-    await refreshRuntime();
-  } catch (error) {
-    setMessage(runtimeMessage, error.message, "error");
-  } finally {
-    runtimePushChanges.disabled = false;
   }
 });
 
@@ -1487,8 +1470,6 @@ async function refreshRuntime() {
   runtimeCheckUpdate.classList.toggle("hidden", !runtime.linked);
   runtimeAutoSync.checked = !!runtime.cloud_auto_sync;
   runtimeAutoSync.disabled = !runtime.linked;
-  runtimePushChanges.classList.toggle("hidden", !runtime.linked || !runtime.pending_cloud_changes);
-  runtimePushChanges.textContent = `Försök skicka väntande förslag igen${runtime.pending_cloud_changes ? ` (${runtime.pending_cloud_changes})` : ""}`;
   if (runtime.central_url) document.querySelector("#runtime-central-url").value = runtime.central_url;
   if (runtime.available_publication_id) {
     state.pendingPublicationID = runtime.available_publication_id;

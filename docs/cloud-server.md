@@ -31,8 +31,10 @@ att servern över huvud taget kan redigera en konfiguration.
 
 Cloud → server. Aldrig tillbaka.
 
-Servern föreslår inga ändringar uppströms, och Cloud tar inte emot några. Den
-befintliga förslagskön tas bort i sin helhet ur båda repona:
+Servern föreslår inga ändringar uppströms, och Cloud tar inte emot några.
+Förslagskön är **borttagen ur båda repona** — det här är alltså inte längre
+ett beslut som väntar på att genomföras, utan en beskrivning av hur det ser
+ut. Det som togs bort:
 
 - **Server:** tabellen `cloud_change_outbox` med index, `queue_cloud_changes`,
   `pending_cloud_changes`, `mark_cloud_changes_sent`,
@@ -45,7 +47,18 @@ befintliga förslagskön tas bort i sin helhet ur båda repona:
   **Förbättringsförslag** i admin-UI:t.
 
 Nedströmsvägen — sexsiffrig koppling, hämtning, auto-synk var femtonde sekund,
-uttrycklig aktivering — behålls oförändrad.
+uttrycklig aktivering — är oförändrad. `cloud_auto_sync` styr enbart hämtning;
+namnet till trots skickar den ingenting.
+
+Två negativa tester håller fast frånvaron, eftersom en frånvaro är precis vad
+som växer tillbaka i tysthet: `test_the_store_offers_no_way_to_send_anything_upstream`
+kontrollerar att varken metoderna eller tabellen finns kvar, och
+`test_there_is_no_route_for_sending_anything_back_to_cloud` kontrollerar
+tråden — att `POST /v1/cloud/changes` svarar 404.
+
+Befintliga databaser behåller en tom, föräldralös `cloud_change_outbox`-tabell.
+Den migreras inte bort: ingen kod rör den längre, och att skriva i en träffs
+databas för kosmetikans skull är inte värt risken.
 
 ## D2. Servern redigerar genom att producera en ny revision
 
