@@ -465,11 +465,22 @@
               </div>
               <span id="software-version" class="revision-badge">Läser version …</span>
             </div>
+
+            <p id="software-version-move" class="version-move hidden"></p>
+
+            <ol id="update-progress" class="update-progress hidden" aria-live="polite"></ol>
+
             <div class="inline-form">
               <button id="software-check" class="secondary" type="button">Sök efter uppdatering</button>
               <button id="software-install" class="restart hidden" type="button">Installera och starta om</button>
+              <button id="software-retry" class="restart hidden" type="button">Försök igen</button>
               <p id="software-update-message" class="form-message" role="status"></p>
             </div>
+
+            <details class="technical-details">
+              <summary>Teknisk information</summary>
+              <dl id="software-technical"></dl>
+            </details>
           </section>
 
           <section id="server-system-settings" class="card section-card admin-section-panel hidden" data-admin-section="system">

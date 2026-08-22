@@ -9,6 +9,11 @@ INSTALL_BACKUP="$INSTALL_DIR.rollback"
 SERVICE_UNIT=/etc/systemd/system/trainmeet-server.service
 SERVICE_UNIT_BACKUP="$STATE_DIR/trainmeet-server.service.rollback"
 
+# The stage names come from the shared contract in
+# src/tmbox_gateway/update_contract.py. TrainMeet Cloud writes the same ones
+# from a completely different updater, so an operator watching either sees the
+# same seven steps. Anything not in that list is rendered as a failure rather
+# than as a blank progress bar.
 status() {
   stage=$1
   message=$2
@@ -16,6 +21,19 @@ status() {
     "$stage" "$message" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS_FILE"
   chown trainmeet-server:trainmeet-server "$STATUS_FILE"
   chmod 0640 "$STATUS_FILE"
+}
+
+# A failure has to say *where* it happened: "broke while restarting" and
+# "broke while downloading" send an operator to two different places.
+fail_at() {
+  stage=$1
+  message=$2
+  rollback
+  printf '{"status":"failed","failed_stage":"%s","message":"%s","updated_at":"%s"}\n' \
+    "$stage" "$message" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS_FILE"
+  chown trainmeet-server:trainmeet-server "$STATUS_FILE"
+  chmod 0640 "$STATUS_FILE"
+  exit 1
 }
 
 rollback() {
@@ -32,13 +50,11 @@ rollback() {
 }
 
 fail() {
-  rollback
-  status failed "$1"
-  exit 1
+  fail_at installing "$1"
 }
 
 mkdir -p "$BACKUP_DIR"
-status downloading "Hämtar TrainMeet Server från GitHub"
+status checking "Söker efter en nyare version"
 
 # An installation from before the TMBox rename still holds tambox.db; the
 # server renames it on its next start, so back up whichever one is there.
@@ -51,20 +67,27 @@ for CANDIDATE in trainmeet.db tambox.db; do
 done
 
 URL=https://github.com/beahead-ab/trainmeet-server/archive/refs/heads/main.tar.gz
-VERSION=$(curl -fsSL https://github.com/beahead-ab/trainmeet-server/commit/main.patch | sed -n '1s/^From \([0-9a-f]\{8\}\).*/\1/p')
+BUILD=$(curl -fsSL https://github.com/beahead-ab/trainmeet-server/commit/main.patch | sed -n '1s/^From \([0-9a-f]\{8\}\).*/\1/p')
 
-if [ -z "$VERSION" ]; then
-  status failed "GitHub lämnade ingen giltig versionsinformation"
-  exit 1
+if [ -z "$BUILD" ]; then
+  fail_at checking "GitHub lämnade ingen giltig versionsinformation"
 fi
 
+status downloading "Hämtar TrainMeet Server från GitHub"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT INT TERM
-curl -fsSL "$URL" -o "$TMP/source.tar.gz"
+curl -fsSL "$URL" -o "$TMP/source.tar.gz" || fail_at downloading "Nedladdningen misslyckades"
+
+status verifying "Kontrollerar det hämtade paketet"
+tar -tzf "$TMP/source.tar.gz" >/dev/null 2>&1 || fail_at verifying "Det hämtade arkivet gick inte att läsa"
 tar -xzf "$TMP/source.tar.gz" -C "$TMP"
 SOURCE=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+# An archive that unpacks but is missing the installer would fail later in a
+# far more confusing place.
+[ -x "$SOURCE/scripts/install-raspberry-pi.sh" ] || fail_at verifying "Paketet saknar installationsskript"
+VERSION=$(tr -d '[:space:]' < "$SOURCE/VERSION" 2>/dev/null || true)
 
-status installing "Installerar version $VERSION"
+status installing "Installerar ${VERSION:-$BUILD}"
 
 rm -rf "$INSTALL_BACKUP"
 if [ -d "$INSTALL_DIR" ]; then
@@ -75,11 +98,34 @@ if [ -f "$SERVICE_UNIT" ]; then
   cp -a "$SERVICE_UNIT" "$SERVICE_UNIT_BACKUP"
 fi
 
-if ! TRAINMEET_INSTALL_VERSION="$VERSION" "$SOURCE/scripts/install-raspberry-pi.sh"; then
-  fail "Installationen misslyckades, återställde föregående version"
+if ! TRAINMEET_INSTALL_BUILD="$BUILD" "$SOURCE/scripts/install-raspberry-pi.sh"; then
+  fail_at installing "Installationen misslyckades, återställde föregående version"
 fi
 
-printf '%s\n' "$VERSION" > /opt/trainmeet-server/VERSION
-chmod 0644 /opt/trainmeet-server/VERSION
+# The installer wrote VERSION and BUILD and restarted the service as its last
+# step, so there is nothing to restart again here - a second restart would be
+# pure downtime. What is left is to wait for it to come back up.
+status restarting "Startar om TrainMeet Server"
+
+# The step that used to be missing entirely. `complete` was written before
+# the restart, so an operator was told the update worked while it had not yet
+# been tried even once.
+status health_check "Kontrollerar att tjänsten svarar"
+# The port comes from the effective ExecStart rather than the unit file: a
+# drop-in can override it, and that is exactly the kind of override that has
+# caused trouble here before. 8787 is the fallback the unit ships with.
+HEALTH_PORT=$(systemctl show trainmeet-server.service -p ExecStart --value \
+  | sed -n 's/.*--http-port \([0-9]\{1,5\}\).*/\1/p')
+[ -n "$HEALTH_PORT" ] || HEALTH_PORT=8787
+
+ATTEMPT=0
+until curl -fsS "http://127.0.0.1:$HEALTH_PORT/healthz" >/dev/null 2>&1; do
+  ATTEMPT=$((ATTEMPT + 1))
+  if [ "$ATTEMPT" -ge 30 ]; then
+    fail_at health_check "Tjänsten svarade inte efter uppdateringen, återställde föregående version"
+  fi
+  sleep 2
+done
+
 rm -rf "$INSTALL_BACKUP" "$SERVICE_UNIT_BACKUP"
-status complete "Version $VERSION installerades. Servern startar om."
+status complete "Version ${VERSION:-$BUILD} är installerad och svarar."

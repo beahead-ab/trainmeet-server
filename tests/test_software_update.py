@@ -5,8 +5,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from urllib.error import URLError
+
 from tmbox_gateway.software_update import (
     SoftwareUpdateError,
+    installed_build,
     installed_version,
     latest_version,
     start_update,
@@ -35,16 +38,40 @@ class _Response:
 
 class SoftwareUpdateTests(unittest.TestCase):
     @patch("tmbox_gateway.software_update.urlopen")
-    def test_latest_version_reads_commit_from_public_patch(self, open_url) -> None:
-        open_url.return_value = _Response(
-            b"From 3aec36552bfb15883cb30b70db19f3152466fc3f Mon Sep 17 00:00:00 2001\n",
-            "https://github.com/beahead-ab/trainmeet-server/commit/main.patch",
-        )
+    def test_latest_reads_the_commit_as_a_build_and_the_version_separately(self, open_url) -> None:
+        """The commit is build information; the version is its own thing."""
+        open_url.side_effect = [
+            _Response(
+                b"From 3aec36552bfb15883cb30b70db19f3152466fc3f Mon Sep 17 00:00:00 2001\n",
+                "https://github.com/beahead-ab/trainmeet-server/commit/main.patch",
+            ),
+            _Response(b"1.2.3\n", "https://raw.githubusercontent.com/.../VERSION"),
+        ]
 
         result = latest_version()
 
-        self.assertEqual(result["version"], "3aec3655")
-        self.assertIn("/commit/main.patch", open_url.call_args.args[0].full_url)
+        self.assertEqual(result["build"], "3aec3655")
+        self.assertEqual(result["version"], "1.2.3")
+
+    @patch("tmbox_gateway.software_update.urlopen")
+    def test_an_unreachable_version_file_does_not_break_the_check(self, open_url) -> None:
+        """The build already answers "is there an update"; the number is extra.
+
+        Losing the number should make the offer vaguer, not fail the check
+        and leave an operator unable to update at all.
+        """
+        open_url.side_effect = [
+            _Response(
+                b"From 3aec36552bfb15883cb30b70db19f3152466fc3f Mon Sep 17 00:00:00 2001\n",
+                "https://github.com/beahead-ab/trainmeet-server/commit/main.patch",
+            ),
+            URLError("no route"),
+        ]
+
+        result = latest_version()
+
+        self.assertEqual(result["build"], "3aec3655")
+        self.assertEqual(result["version"], "")
 
     @patch("tmbox_gateway.software_update.urlopen")
     def test_invalid_patch_is_reported_clearly(self, open_url) -> None:
@@ -123,10 +150,29 @@ class UpdateBackendTests(unittest.TestCase):
 
     def test_installed_version_follows_the_active_backend(self) -> None:
         self._mac_installation()
+        (self.root / "server" / "VERSION").write_text("1.4.0\n", encoding="utf-8")
+        (self.root / "server" / "BUILD").write_text("abc12345\n", encoding="utf-8")
+        platform, install_dir = self._as_mac()
+        with platform, install_dir:
+            self.assertEqual(installed_version(), "1.4.0")
+            self.assertEqual(installed_build(), "abc12345")
+
+    def test_an_installation_from_before_versions_reports_its_sha_as_a_build(self) -> None:
+        """The transition, spelled out.
+
+        Installations made before this change wrote the git sha into VERSION.
+        A sha is a build, so it is never echoed back as a version - the search
+        continues past it instead, which is what lets the first update after
+        this change show a real number rather than "okänd". Here the running
+        checkout is what answers, so the assertion is that the sha is read as
+        a build and does not become the version.
+        """
+        self._mac_installation()
         (self.root / "server" / "VERSION").write_text("abc12345\n", encoding="utf-8")
         platform, install_dir = self._as_mac()
         with platform, install_dir:
-            self.assertEqual(installed_version(), "abc12345")
+            self.assertEqual(installed_build(), "abc12345")
+            self.assertNotEqual(installed_version(), "abc12345")
 
 
 if __name__ == "__main__":

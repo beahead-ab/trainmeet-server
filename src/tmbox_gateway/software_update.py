@@ -6,8 +6,12 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+from .update_contract import normalise
+from .version import build_identifier, product_version, user_agent
 
 
 class SoftwareUpdateError(RuntimeError):
@@ -57,19 +61,31 @@ def supports_updates() -> bool:
 
 
 def installed_version() -> str:
+    """The SemVer a person should see. See `version.py` for where it lives."""
     backend = update_backend()
-    version_file = backend.version_file if backend else LINUX_INSTALL_DIR / "VERSION"
-    try:
-        return version_file.read_text(encoding="utf-8").strip() or "okänd"
-    except OSError:
-        return "utvecklingsversion"
+    install_root = backend.version_file.parent if backend else LINUX_INSTALL_DIR
+    return product_version(install_root)
+
+
+def installed_build() -> str:
+    """The git commit this code was built from - technical information."""
+    backend = update_backend()
+    install_root = backend.version_file.parent if backend else LINUX_INSTALL_DIR
+    return build_identifier(install_root)
 
 
 def latest_version() -> dict[str, str]:
+    """What is on `main` right now.
+
+    GitHub can tell us the commit cheaply; the SemVer lives in the repo's
+    VERSION file, so both are fetched. A build that differs is what decides
+    whether an update exists - the version number can stay put across several
+    fixes, and an operator still wants to be able to take them.
+    """
     # GitHubs vanliga patchadress saknar API:ts anonyma gräns på 60 anrop/timme,
     # som ofta delas av en hel driftleverantör.
     url = "https://github.com/beahead-ab/trainmeet-server/commit/main.patch"
-    request = Request(url, headers={"Accept": "text/plain", "User-Agent": "TrainMeet-Server/0.7"})
+    request = Request(url, headers={"Accept": "text/plain", "User-Agent": user_agent()})
     try:
         with urlopen(request, timeout=10) as response:
             payload = response.read()
@@ -78,15 +94,31 @@ def latest_version() -> dict[str, str]:
     match = re.match(rb"From ([0-9a-f]{40}) ", payload)
     if match is None:
         raise SoftwareUpdateError("GitHub lämnade ingen giltig versionsinformation")
-    return {"version": match.group(1).decode("ascii")[:8], "published_at": ""}
+    build = match.group(1).decode("ascii")[:8]
+    return {"version": _latest_product_version(), "build": build, "published_at": ""}
 
 
-def read_update_status(state_dir: Path) -> dict[str, str]:
+def _latest_product_version() -> str:
+    """`main`'s VERSION file, read raw so it needs no API token."""
+    url = "https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/VERSION"
+    request = Request(url, headers={"Accept": "text/plain", "User-Agent": user_agent()})
+    try:
+        with urlopen(request, timeout=10) as response:
+            value = response.read().decode("utf-8").strip()
+    except (HTTPError, URLError, TimeoutError):
+        # Not fatal: the build tells us whether an update exists. A missing
+        # version number makes the offer vaguer, not wrong.
+        return ""
+    return value
+
+
+def read_update_status(state_dir: Path) -> dict[str, Any]:
+    """What the updater script last wrote, in the shared contract's shape."""
     try:
         value = json.loads((state_dir / "update-status.json").read_text(encoding="utf-8"))
-        return value if isinstance(value, dict) else {"status": "idle"}
     except (OSError, json.JSONDecodeError):
-        return {"status": "idle", "message": "Ingen uppdatering pågår"}
+        value = {"status": "idle", "message": "Ingen uppdatering pågår"}
+    return normalise(value if isinstance(value, dict) else None)
 
 
 def start_update() -> None:

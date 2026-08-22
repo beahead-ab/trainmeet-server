@@ -33,7 +33,17 @@ rm -rf "$INSTALL_DIR/src"
 ditto "$SERVER_DIR/src" "$INSTALL_DIR/src"
 cp "$SERVER_DIR/pyproject.toml" "$INSTALL_DIR/pyproject.toml"
 cp "$SERVER_DIR/README.md" "$INSTALL_DIR/README.md"
-printf '%s\n' "${TRAINMEET_INSTALL_VERSION:-main}" > "$INSTALL_DIR/VERSION"
+# Two files: VERSION is the SemVer a person reads and comes from the repo, so
+# it cannot drift from what the code says about itself. BUILD is the commit.
+if [ -f "$SERVER_DIR/VERSION" ]; then
+  cp "$SERVER_DIR/VERSION" "$INSTALL_DIR/VERSION"
+  # Second copy beside the code: the old updater overwrites the one above with
+  # the git sha right after we run, and does not know about this path.
+  cp "$SERVER_DIR/VERSION" "$INSTALL_DIR/src/tmbox_gateway/VERSION"
+else
+  : > "$INSTALL_DIR/VERSION"
+fi
+printf '%s\n' "${TRAINMEET_INSTALL_BUILD:-${TRAINMEET_INSTALL_VERSION:-}}" > "$INSTALL_DIR/BUILD"
 
 # The update button runs the updater from the installed copy, so it has to be
 # reinstalled by every update as well.

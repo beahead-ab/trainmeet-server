@@ -1,0 +1,108 @@
+# Sets the version number on every merge to main.
+#
+# The level is read off the commits: an explicit [major], [minor] or [patch]
+# marker wins, strongest first, and the default is patch because on these
+# repos a merge to main is a deployable change. A change confined to docs,
+# README or .github ships nothing and mints nothing.
+#
+# The bump commit carries [skip version] so it cannot trigger this again -
+# without that guard the workflow would bump forever.
+name: version
+
+on:
+  push:
+    branches: [main]
+
+# One at a time. Two merges landing together would otherwise both compute a
+# next version from the same base and race to push it.
+concurrency:
+  group: version-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip version]') }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Decide the level
+        id: decide
+        run: |
+          BEFORE='${{ github.event.before }}'
+          # A new branch, or a force-push that removed the old head, leaves
+          # nothing to compare against. Fall back to the previous commit.
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            BEFORE=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
+          fi
+          LEVEL=$(python3 scripts/version.py decide --range "$BEFORE..HEAD")
+          echo "level=$LEVEL" >> "$GITHUB_OUTPUT"
+          echo "Nivå: $LEVEL (från $BEFORE..HEAD)"
+
+      - name: Bump if needed, sync always, commit and tag
+        run: |
+          git config user.name 'trainmeet-version'
+          git config user.email 'version@trainmeet.app'
+
+          LEVEL='${{ steps.decide.outputs.level }}'
+          if [ "$LEVEL" != 'skip' ]; then
+            VERSION=$(python3 scripts/version.py bump "$LEVEL")
+          else
+            # Still sync. A merge that set VERSION by hand skips the bump, and
+            # without this its derived files would sit on the old number -
+            # exactly the drift the whole mechanism exists to prevent.
+            VERSION=$(python3 scripts/version.py current)
+            python3 scripts/version.py sync
+          fi
+
+          if git diff --quiet; then
+            echo "Inget att skriva - allt står redan på $VERSION."
+            exit 0
+          fi
+
+          git add -A
+          git commit -m "Version $VERSION [skip version]"
+
+          # Only a real bump earns a tag. Repairing a derived file is not a
+          # release, and a second tag on the same version would fail anyway.
+          if [ "$LEVEL" != 'skip' ]; then
+            git tag -a "v$VERSION" -m "Version $VERSION"
+          fi
+
+          # A merge that landed while this ran would make the push fail rather
+          # than silently overwrite it; rebasing keeps both.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main --follow-tags; then
+              echo "Version $VERSION"
+              exit 0
+            fi
+            echo "Push nekad, försök $attempt - hämtar och lägger om."
+            git fetch origin main
+            git rebase origin/main || break
+          done
+
+          # Three refused pushes is not a race any more. The usual cause is
+          # branch protection on main: a required review or a required status
+          # check applies to this push too, and github-actions[bot] is not in
+          # the bypass list. Fail loudly - a version robot that gives up
+          # quietly leaves shipped code carrying the previous number.
+          cat >&2 <<'MESSAGE'
+
+          Versionen kunde inte pushas till main.
+
+          Vanligaste orsaken är grenskydd. Om main har "Require a pull request
+          before merging" eller obligatoriska statuskontroller gäller de här
+          pushen också. Lägg till github-actions[bot] under
+          "Allow specified actors to bypass required pull requests"
+          i grenskyddsregeln, eller stäng av grenskyddet för main.
+
+          Ingenting är trasigt i repot - versionen står kvar på det gamla
+          numret tills detta är löst.
+          MESSAGE
+          exit 1

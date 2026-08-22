@@ -41,7 +41,21 @@ install -d -m 0755 "$INSTALL_DIR"
 # database is in STATE_DIR and is never touched by this.
 rm -rf "$INSTALL_DIR/src"
 cp -R "$SERVER_DIR/src" "$INSTALL_DIR/"
-printf '%s\n' "${TRAINMEET_INSTALL_VERSION:-main}" > "$INSTALL_DIR/VERSION"
+# Two files, because they answer two questions. VERSION is the SemVer a
+# person reads and comes from the repo, so it cannot drift from what the code
+# says about itself. BUILD is the commit, which identifies the exact tree.
+if [ -f "$SERVER_DIR/VERSION" ]; then
+  install -m 0644 "$SERVER_DIR/VERSION" "$INSTALL_DIR/VERSION"
+  # A second copy beside the code. The updater script from before this change
+  # overwrites $INSTALL_DIR/VERSION with the git sha right after we run, and
+  # it knows nothing about this path - so the very first update already shows
+  # a real version number instead of "okänd".
+  install -m 0644 "$SERVER_DIR/VERSION" "$INSTALL_DIR/src/tmbox_gateway/VERSION"
+else
+  : > "$INSTALL_DIR/VERSION"
+fi
+printf '%s\n' "${TRAINMEET_INSTALL_BUILD:-${TRAINMEET_INSTALL_VERSION:-}}" > "$INSTALL_DIR/BUILD"
+chmod 0644 "$INSTALL_DIR/VERSION" "$INSTALL_DIR/BUILD"
 python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --disable-pip-version-check --quiet 'paho-mqtt>=2.1,<3'
 install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server.conf" /etc/mosquitto/conf.d/trainmeet-server.conf
