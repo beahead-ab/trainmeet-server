@@ -42,7 +42,7 @@ from .local_config import (
 from .models import Command, TrackConfig, UnknownTrackError, resolve_track_id
 from .observability import log_event, use_correlation
 from .operations import SQLiteOperationsStore
-from .protocol_v2 import TMBoxStationService
+from .protocol_v2 import TMBoxStationService, find_track_conflict
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
     DISPLAY_SCREENS,
@@ -737,6 +737,25 @@ class TrainMeetHTTPApplication:
             )
         except UnknownTrackError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "unknown_track", str(error)) from error
+        if actual_track:
+            publication = self.runtime_store.active() if self.runtime_store is not None else None
+            if publication is not None:
+                conflict = find_track_conflict(
+                    publication.payload["trains"],
+                    self.operations_store.tkl_station_state(
+                        snapshot["publication_id"], snapshot["active_day"], station_id
+                    )["movements"],
+                    station_id,
+                    snapshot["active_day"],
+                    movement_id,
+                    actual_track,
+                )
+                if conflict is not None:
+                    raise HTTPAPIError(
+                        HTTPStatus.CONFLICT,
+                        "track_occupied",
+                        f"Spåret är upptaget av tåg {conflict.get('train_number') or '?'}",
+                    )
         try:
             result = self.operations_store.update_tkl_movement(
                 snapshot["publication_id"],

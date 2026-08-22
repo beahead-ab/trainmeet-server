@@ -839,6 +839,61 @@ class HTTPServerTests(unittest.TestCase):
             self._json_request("/v1/cloud/changes", {})
         self.assertEqual(404, refused.exception.code)
 
+    def _tkl_client_on_station_a(self, package):
+        publication = self.runtime_store.install(package)
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        self.application.start_tkl_shift(
+            client,
+            {"station_id": "station-a", "operator_name": "Anna", "terminal_name": "CDA TKL 1"},
+        )
+        return client
+
+    def test_tkl_cannot_put_a_train_on_a_track_another_train_holds(self):
+        """D5 through the other door.
+
+        Both write paths land in the same store call, so the rule is applied
+        at both - a TKL terminal is refused exactly where a TMBox is.
+        """
+        package = runtime_package_v3()
+        # 202 runs on Sundays in the fixture and the active day is Saturday,
+        # so it holds nothing until it is put on the same day as 101.
+        for row in package["trains"]:
+            if row["id"] == "movement-202-a":
+                row["days"] = "Dagl"
+        client = self._tkl_client_on_station_a(package)
+
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.application.update_tkl_movement(
+                client,
+                {
+                    "station_id": "station-a",
+                    "movement_id": "movement-101-a",
+                    "arrival": "none",
+                    "departure": "positioned",
+                    "actual_track": "2",
+                    "event_type": "positioned",
+                },
+            )
+        self.assertEqual("track_occupied", refused.exception.code)
+        self.assertIn("202", str(refused.exception))
+
+    def test_a_train_running_on_another_day_holds_nothing(self):
+        """§8 says per station *and day*, and the fixture proves it matters."""
+        client = self._tkl_client_on_station_a(runtime_package_v3())
+        updated = self.application.update_tkl_movement(
+            client,
+            {
+                "station_id": "station-a",
+                "movement_id": "movement-101-a",
+                "arrival": "none",
+                "departure": "positioned",
+                "actual_track": "2",
+                "event_type": "positioned",
+            },
+        )
+        self.assertEqual("track-station-a-2", updated["movement"]["actualTrack"])
+
     def _json_request(
         self,
         path: str,

@@ -141,8 +141,24 @@ får därutöver:
   icke-avgången rörelse per station och dag.
 
 Beläggningskontrollen är körtidslogik, inte konfiguration, och gäller i båda
-driftlägena. Skärmen `SPAR 1A UPPTAGET` finns i protokollet och i flödesbilden
-men saknar serverstöd; det stödet hör hit.
+driftlägena. **Den finns nu.** Skärmen `SPAR 1A UPPTAGET` hade tidigare inget
+serverstöd — `track_occupied` stod i kontraktets lista över avslag utan att
+kunna inträffa.
+
+Vad som räknas som «icke-avgången» är avläst ur datamodellen: en tågrad bär
+ankomst och avgång tillsammans, så det som frigör ett spår är att avgången når
+`departed`. En rad utan avgångstid kommer aldrig dit — tåget slutar där och
+blir stående — och håller därför sitt spår resten av dagen. Det är inte en
+brist i modellen; det är vad som är sant om ett tåg som står på ett spår.
+
+Spåret som jämförs är det **effektiva**: `actualTrack` om någon flyttat tåget,
+annars tidtabellens `track_id`. Två tåg som Cloud lagt på samma spår krockar
+alltså lika säkert som två som flyttats dit för hand.
+
+Kontrollen ligger före `update_tkl_movement`, som båda skrivvägarna
+(`train.track.change` i protokoll v2 och `POST /v1/tkl/movement`) går genom.
+Boxen får `track_occupied`; TKL får `409 track_occupied` med tågnumret som
+står i vägen.
 
 ## D6. Ingen historik lämnar träffen
 
