@@ -173,23 +173,40 @@ def _git(*args: str) -> str:
     ).stdout
 
 
+#: The robot's own committer address. Recognising its commits by author is
+#: what stops the workflow triggering itself - a marker in the message cannot
+#: do that job, because prose about the marker *is* the marker.
+ROBOT_EMAIL = "version@trainmeet.app"
+
+
 def decide(commit_range: str) -> str:
     """major, minor, patch or skip - read off the commits in `range`.
 
     Precedence, strongest first:
 
-      1. `[skip version]`  - the loop guard the bump commit carries
-      2. VERSION was edited - somebody typed an exact number
-      3. `[major]`, `[minor]`, `[patch]` - strongest marker in the range wins
-      4. nothing outside docs/README/.github changed
-      5. `patch` - on these repos a merge to main is a deployable change
+      1. every commit is the robot's own - the loop guard
+      2. `[skip version]` in a commit *subject*
+      3. VERSION was edited - somebody typed an exact number
+      4. `[major]`, `[minor]`, `[patch]` in a subject - strongest wins
+      5. nothing outside docs/README/.github changed
+      6. `patch` - on these repos a merge to main is a deployable change
+
+    Markers are read from subject lines only, never bodies. A commit body
+    explaining what `[skip version]` does would otherwise *be* a
+    `[skip version]`, which is not hypothetical: it happened on the first
+    real run of this workflow, and only a second rule made the outcome
+    correct anyway.
     """
-    lowered = _git("log", "--format=%B", commit_range).lower()
+    subjects = _git("log", "--format=%s", commit_range).lower()
+    authors = [a.strip() for a in _git("log", "--format=%ae", commit_range).splitlines() if a.strip()]
     files = [line for line in _git("diff", "--name-only", commit_range).splitlines() if line]
 
-    # The loop guard, absolute: the bump commit carries this, and nothing may
-    # talk it out of stopping.
-    if "[skip version]" in lowered:
+    # The loop guard. Identity, not text: the robot cannot argue itself out of
+    # being the robot, and no amount of prose can impersonate it.
+    if authors and all(author == ROBOT_EMAIL for author in authors):
+        return "skip"
+
+    if "[skip version]" in subjects:
         return "skip"
 
     # Somebody already decided. A merge that sets VERSION itself - the one that
@@ -203,7 +220,7 @@ def decide(commit_range: str) -> str:
         return "skip"
 
     for level in LEVELS:
-        if f"[{level}]" in lowered:
+        if f"[{level}]" in subjects:
             return level
 
     # An empty range lands here too, and falls out as "skip" because all() over
