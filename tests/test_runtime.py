@@ -268,7 +268,7 @@ class RuntimeStoreTests(unittest.TestCase):
                 second = runtime_package_v3(publication_id="publication-v2-second")
                 store.install(first)
                 store.save_link_token("local-link-token")
-                store.install(second, activate=False)
+                store.stage_pending(second)
 
                 self.assertEqual(store.active().publication_id, "publication-v2-first")
                 self.assertEqual(store.latest_staged().publication_id, "publication-v2-second")
@@ -277,6 +277,7 @@ class RuntimeStoreTests(unittest.TestCase):
 
                 store.activate("publication-v2-second")
                 self.assertEqual(store.active().publication_id, "publication-v2-second")
+                self.assertIsNone(store.summary()["available_publication_id"])
             finally:
                 store.close()
 
