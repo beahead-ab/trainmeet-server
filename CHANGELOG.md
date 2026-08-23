@@ -3,6 +3,42 @@
 Versionsnumret sätts automatiskt vid merge till main. Se
 [docs/VERSIONING.md](docs/VERSIONING.md) för hur nivån bestäms.
 
+## 1.3.2
+
+Serveradministrationen flyttar ur byggflödet.
+
+### Inställningar som eget läge
+
+För att uppdatera programvaran fick en operatör trycka **Bygg om träffen** —
+ett flöde om träffens innehåll, som varnar att inget slår igenom förrän man
+aktiverar. Kugghjulet på översikten hette dessutom "Öppna administration" men
+landade i steg 1, som svarar på var träffen kommer ifrån.
+
+Att köra, att bygga och att administrera är tre olika saker:
+
+| Läge | Vad |
+|---|---|
+| KÖR | Det som händer under träffen |
+| BYGG | Träffens innehåll: källa, bana, tidtabell, TMBoxar |
+| **Inställningar** | Servern själv: identitet, åtkomst, programvara, Cloud-koppling, nollställning |
+
+Nås med kugghjulet i topplocket. Programuppdateringen är ett klick från
+översikten i stället för fyra. Innehållet är oflyttat i sak — samma sektioner,
+samma API-anrop, samma sju uppdateringssteg.
+
+BYGG har därför fyra steg, där designpaketet lägger serverinställningar som
+steg 5. Avvikelse 7 i `docs/DESIGNPAKET-DOD.md`.
+
+### Mindre
+
+- `currentMode()` svarade `kor` för allt utom `bygg`. Den hade inga anropare,
+  men samma tvåvägsval satt på startraden: ett sparat inställningsläge kunde
+  aldrig läsas tillbaka, så en omladdning landade i KÖR.
+- Flikraden hade `overflow-x: auto` men saknade `min-width: 0`, så den knuffade
+  i stället för att scrollas vid smala fönster.
+
+---
+
 ## 1.3.1
 
 Layoutfel som nådde produktion, och en version som säger vilken.

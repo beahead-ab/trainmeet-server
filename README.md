@@ -91,7 +91,7 @@ curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/in
 3. Öppna `http://127.0.0.1:8787`. Installationen skriver också ut Macens
    IP-adress och serverns sexsiffriga anslutningskod.
 4. Uppdatera senare med **Uppdatera TrainMeet Server** under
-   **System → Programuppdatering**. Databasen säkerhetskopieras först, och
+   **⚙ Inställningar → Programuppdatering**. Databasen säkerhetskopieras först, och
    misslyckas uppdateringen återställs föregående version automatiskt.
 
 ### Mac med Docker
@@ -169,7 +169,7 @@ sudo reboot
    efter omstart. Webbläsaren väntar på servern och återstartas om den stängs.
    Genvägen **Starta TrainMeet Server** läggs också på skrivbordet.
 6. Uppdatera i fortsättningen med **Uppdatera TrainMeet Server** under
-   **System → Programuppdatering** i webbgränssnittet. Data i
+   **⚙ Inställningar → Programuppdatering** i webbgränssnittet. Data i
    `/var/lib/trainmeet-server` bevaras.
 7. Kontrollera med `systemctl status trainmeet-server`, tryck `q` och avsluta
    SSH med `exit`.
@@ -247,7 +247,7 @@ curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/in
 Servern startar direkt. Kör därefter `sudo reboot` som ett eget kommando om
 Pi:n har skrivbord och ska visa TrainMeet Server på sin egen skärm; på Lite
 behövs ingen omstart. Uppdateringar görs sedan under
-**System → Programuppdatering**; befintlig träffkonfiguration och
+**⚙ Inställningar → Programuppdatering**; befintlig träffkonfiguration och
 trafikhistorik ligger kvar.
 
 Installationen lägger in Python, Mosquitto och mDNS/Bonjour, skapar
@@ -520,7 +520,7 @@ Helm-chartet gör detta automatiskt när `ingress.enabled=true`.
 ## Uppdatera från webbadmin
 
 På Raspberry Pi, Ubuntu, Debian och Mac kan en administratör öppna
-**System → Programuppdatering** och klicka på **Uppdatera TrainMeet Server**.
+**⚙ Inställningar → Programuppdatering** och klicka på **Uppdatera TrainMeet Server**.
 Uppdateringen hämtar alltid senaste versionen från `main`; det finns inget
 kanalval att ta ställning till.
 
