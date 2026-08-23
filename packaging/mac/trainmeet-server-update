@@ -43,17 +43,7 @@ fail() {
   fail_at installing "$1"
 }
 
-mkdir -p "$BACKUP_DIR"
 status checking "Söker efter en nyare version"
-
-# An installation from before the TMBox rename still holds tambox.db; the
-# server renames it on its next start, so back up whichever one is there.
-for CANDIDATE in trainmeet.db tambox.db; do
-  if [ -f "$STATE_DIR/$CANDIDATE" ]; then
-    cp "$STATE_DIR/$CANDIDATE" "$BACKUP_DIR/trainmeet-$(date -u +%Y%m%d-%H%M%S).db"
-    break
-  fi
-done
 
 URL=https://github.com/beahead-ab/trainmeet-server/archive/refs/heads/main.tar.gz
 BUILD=$(curl -fsSL https://github.com/beahead-ab/trainmeet-server/commit/main.patch | sed -n '1s/^From \([0-9a-f]\{8\}\).*/\1/p')
@@ -78,6 +68,31 @@ fi
 VERSION=$(tr -d '[:space:]' < "$SOURCE/VERSION" 2>/dev/null || true)
 
 status installing "Installerar ${VERSION:-$BUILD}"
+
+# The database is copied with SQLite's own backup API rather than with `cp`.
+# Every store in this server runs in WAL mode, so on a running server the
+# main file is a 4 KiB header and the meet itself sits in trainmeet.db-wal
+# beside it. Copying just the one file produced an empty database that still
+# answered `ok` to an integrity check: a backup that could not be told from
+# a good one until the day somebody needed it.
+#
+# It runs here rather than before the download for two reasons. There is no
+# point backing anything up for an update that never arrives, and running it
+# out of the freshly unpacked source means a fix to the backup code reaches
+# installations that are still on an older version.
+PYTHON="$INSTALL_DIR/venv/bin/python"
+[ -x "$PYTHON" ] || PYTHON=python3
+mkdir -p "$BACKUP_DIR"
+# An installation from before the TMBox rename still holds tambox.db; the
+# server renames it on its next start, so back up whichever one is there.
+for CANDIDATE in trainmeet.db tambox.db; do
+  if [ -f "$STATE_DIR/$CANDIDATE" ]; then
+    PYTHONPATH="$SOURCE/src" "$PYTHON" -m tmbox_gateway.backup create \
+      "$STATE_DIR/$CANDIDATE" "$BACKUP_DIR" "$(date -u +%Y%m%d-%H%M%S)" \
+      || fail_at installing "Säkerhetskopieringen misslyckades, avbröt före installationen"
+    break
+  fi
+done
 
 rm -rf "$INSTALL_BACKUP"
 cp -a "$INSTALL_DIR" "$INSTALL_BACKUP"

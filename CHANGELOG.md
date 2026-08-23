@@ -3,6 +3,50 @@
 Versionsnumret sätts automatiskt vid merge till main. Se
 [docs/VERSIONING.md](docs/VERSIONING.md) för hur nivån bestäms.
 
+## Nästa version
+
+Säkerhetskopian innehöll ingenting.
+
+### Databaskopian togs på ett sätt som inte fungerar
+
+Uppdateraren tog en kopia av databasen före varje installation, med `cp`. Men
+varje lager i servern öppnar SQLite i WAL-läge, vilket betyder att det som
+nyss skrevs ligger i `trainmeet.db-wal` bredvid huvudfilen tills något
+checkpointar — och på en server som kör är det aldrig. Det är exakt läget en
+uppdatering arbetar i.
+
+Kopian blev därför en tom databas på fyra kilobyte. Det svåra är att den inte
+går sönder: den öppnas utan protest, den saknar bara alla tabeller, och
+`PRAGMA integrity_check` svarar `ok`. Felet syns först den dag någon behöver
+kopian.
+
+Kopian tas nu med SQLites eget backup-API, som läser genom skrivloggen och
+tar en sammanhängande ögonblicksbild av en levande databas. Resultatet
+kontrolleras mot källan innan det sparas, och en kopia som innehåller mindre
+än källan kastas i stället för att sparas. Går kopieringen inte att genomföra
+avbryts uppdateringen innan installationen börjar.
+
+Kopieringen flyttades också till efter uppackningen. Det gör två saker: inget
+kopieras i onödan för en uppdatering som ändå aldrig kommer fram, och koden
+som kör är den nyhämtade — så den här rättningen når även installationer som
+fortfarande står på en äldre version.
+
+### Gamla kopior gallras
+
+Ingenting tog någonsin bort dem, på en maskin vars hela lagring är ett
+minneskort. De tio senaste sparas nu.
+
+### Att återställa en kopia går att göra
+
+Det fanns ingen väg tillbaka — varken knapp, kommando eller beskrivning.
+Handgreppet som ligger närmast till hands, att kopiera filen på plats, gör
+dessutom fel: lämnas `trainmeet.db-wal` kvar hör den till den gamla databasen
+och SQLite spelar tillbaka den *över* kopian. Återställningen ger då tillbaka
+just den data som skulle ersättas, och integritetskontrollen svarar `ok`.
+
+`tmbox_gateway.backup restore` gör det i rätt ordning, vägrar tomma kopior och
+finns beskrivet i README.
+
 ## 1.3.2
 
 Serveradministrationen flyttar ur byggflödet.
