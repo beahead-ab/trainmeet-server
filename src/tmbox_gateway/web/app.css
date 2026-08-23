@@ -896,8 +896,18 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 .config-form { gap: 17px; }
 .form-grid { display: grid; gap: 9px; }
-.basics-grid { grid-template-columns: minmax(230px, 2fr) repeat(3, minmax(150px, 1fr)); }
-.access-grid { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
+/* auto-fit, inte ett fast antal kolumner.
+   
+   Med `repeat(3, minmax(180px, 1fr))` kräver formuläret 3×180 plus luckor =
+   598px och svämmar över allt som är smalare. Medieförfrågan som fäller ihop
+   den lyssnar på *fönstrets* bredd, men den yta formuläret har beror på om
+   byggsidofältet står där: vid 924px fönster är innehållsytan 572px, och då
+   sticker formuläret ut 26px utan att någon medieförfrågan slår till.
+   
+   auto-fit räknar på den plats som faktiskt finns och lägger om till färre
+   kolumner i stället. */
+.basics-grid { grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); }
+.access-grid { grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); }
 .access-actions { grid-column: 1 / -1; }
 
 .editor-section { display: grid; gap: 7px; }

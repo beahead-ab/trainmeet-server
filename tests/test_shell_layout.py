@@ -89,3 +89,30 @@ class ControlShapeTests(unittest.TestCase):
 
     def test_a_link_among_buttons_carries_no_underline(self):
         self.assertIn("a.overview-action { text-decoration: none; }", CSS)
+
+
+class ContainerAwareGridTests(unittest.TestCase):
+    """Formulär som lägger om i stället för att sticka ut.
+
+    Ett fast antal kolumner med ett hårt minimum kräver en viss bredd. Är
+    ytan smalare svämmar formuläret över, och medieförfrågningar hjälper inte:
+    de lyssnar på **fönstrets** bredd, men den yta ett byggsteg har beror på
+    om sidofältet står där. Vid 924px fönster är innehållsytan 572px, och ett
+    formulär som kräver 598 sticker ut 26px utan att någon förfrågan slår till.
+
+    `auto-fit` räknar på den plats som faktiskt finns.
+    """
+
+    def test_no_form_grid_demands_a_fixed_number_of_wide_columns(self):
+        for selector in (".basics-grid", ".access-grid"):
+            body = _rule(selector)
+            with self.subTest(selector=selector):
+                self.assertIn("auto-fit", body, f"{selector} har fast kolumnantal")
+                self.assertNotIn("repeat(3,", body)
+
+    def test_the_minimum_can_never_exceed_the_space(self):
+        """`min(180px, 100%)` betyder "180px, eller allt som finns om det är
+        mindre" - alltså aldrig mer än ytan."""
+        for selector in (".basics-grid", ".access-grid"):
+            with self.subTest(selector=selector):
+                self.assertIn("min(", _rule(selector))
