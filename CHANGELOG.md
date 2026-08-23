@@ -3,6 +3,94 @@
 Versionsnumret sätts automatiskt vid merge till main. Se
 [docs/VERSIONING.md](docs/VERSIONING.md) för hur nivån bestäms.
 
+## Nästa version
+
+Säkerhetskopian innehöll ingenting.
+
+### Simulatorns förval är TMBox v2
+
+TMBox v2 är fastställd som ESP32-S3 med en 20×4-display. Simulatorn under
+KÖR → TMBox v2 startar därför i 20×4 i stället för 16×2, och väljaren märker
+ut vilken geometri som är produkten.
+
+Alla fyra går fortfarande att välja — en box rapporterar sin egen geometri och
+simulatorn ska kunna visa vilken som helst. Det som ändras är vad man ser utan
+att välja något.
+
+De boxar som redan finns är TMBox v1 Legacy, kör ESP8266 och en annan
+firmware, och pratar inte med den här servern alls. 16×2 var deras geometri,
+inte produktens.
+
+
+### TMBox-dokumentation i webbadmin
+
+Att veta vad boxen gör krävde en box, eller en fil att öppna lokalt. KÖR →
+TMBox v2 har nu tre vyer bredvid testklienten:
+
+**Flöden** visar tolv tangentsekvenser, körda genom samma tillståndsmaskin
+som boxen. Varje steg visar tangenten, vad boxen gjorde med den och skärmen
+som blev följden. Sekvenserna är firmwarens egna — de kommer ur
+`golden_traces.txt` — och stegen är härledda, inte skrivna.
+
+**Skärmkatalog** visar varje skärm boxen kan rita, i den geometri som är
+vald. Rutorna ritas av `tmbox-render.js` ur referensstationen Charlottendal,
+samma fixturer som `golden_frames.txt` är avtryckt ur, och ett test jämför de
+två.
+
+**Referens** samlar knappmodellen, inmatningslåset och — uttryckligen — vad
+firmwaren inte gör: D-tangenten har inget fall alls, `clearance.cancel` och
+`line.available.publish` saknas, och trafiköversikten är inte byggd.
+
+Referensstationen flyttade ut ur testharnesset till `tmbox-fixtures.js`, som
+både guldtestet i Node och sidan i webbläsaren laddar. Två kopior av en
+referensstation är två som glider isär.
+
+Scenariernas beskrivningar är det enda i vyn som är skrivet för hand, och en
+av dem var fel: den påstod att A och B ignoreras på ett linjemeddelande, när
+spåret säger att båda skickar ett `clearance.response`. Ett test jämför nu
+varje sådant påstående mot vad tangenten faktiskt gjorde.
+
+
+### Databaskopian togs på ett sätt som inte fungerar
+
+Uppdateraren tog en kopia av databasen före varje installation, med `cp`. Men
+varje lager i servern öppnar SQLite i WAL-läge, vilket betyder att det som
+nyss skrevs ligger i `trainmeet.db-wal` bredvid huvudfilen tills något
+checkpointar — och på en server som kör är det aldrig. Det är exakt läget en
+uppdatering arbetar i.
+
+Kopian blev därför en tom databas på fyra kilobyte. Det svåra är att den inte
+går sönder: den öppnas utan protest, den saknar bara alla tabeller, och
+`PRAGMA integrity_check` svarar `ok`. Felet syns först den dag någon behöver
+kopian.
+
+Kopian tas nu med SQLites eget backup-API, som läser genom skrivloggen och
+tar en sammanhängande ögonblicksbild av en levande databas. Resultatet
+kontrolleras mot källan innan det sparas, och en kopia som innehåller mindre
+än källan kastas i stället för att sparas. Går kopieringen inte att genomföra
+avbryts uppdateringen innan installationen börjar.
+
+Kopieringen flyttades också till efter uppackningen. Det gör två saker: inget
+kopieras i onödan för en uppdatering som ändå aldrig kommer fram, och koden
+som kör är den nyhämtade — så den här rättningen når även installationer som
+fortfarande står på en äldre version.
+
+### Gamla kopior gallras
+
+Ingenting tog någonsin bort dem, på en maskin vars hela lagring är ett
+minneskort. De tio senaste sparas nu.
+
+### Att återställa en kopia går att göra
+
+Det fanns ingen väg tillbaka — varken knapp, kommando eller beskrivning.
+Handgreppet som ligger närmast till hands, att kopiera filen på plats, gör
+dessutom fel: lämnas `trainmeet.db-wal` kvar hör den till den gamla databasen
+och SQLite spelar tillbaka den *över* kopian. Återställningen ger då tillbaka
+just den data som skulle ersättas, och integritetskontrollen svarar `ok`.
+
+`tmbox_gateway.backup restore` gör det i rätt ordning, vägrar tomma kopior och
+finns beskrivet i README.
+
 ## 1.3.2
 
 Serveradministrationen flyttar ur byggflödet.

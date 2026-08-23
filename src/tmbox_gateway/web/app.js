@@ -3404,7 +3404,10 @@ function v2El(id) { return document.querySelector(`#tmbox-v2-${id}`); }
 
 function v2Geometry() {
   const stored = localStorage.getItem("trainmeet.v2Geometry");
-  return V2_GEOMETRIES[stored] ? stored : "16x2";
+  // TMBox v2 är 20x4. Alla fyra går att välja - en box rapporterar sin egen
+  // geometri och simulatorn ska kunna visa vilken som helst - men förvalet
+  // ska vara produkten, inte den geometri v1-boxarna råkade ha.
+  return V2_GEOMETRIES[stored] ? stored : "20x4";
 }
 
 function startTMBoxV2() {
@@ -3438,6 +3441,216 @@ function buildV2Keypad() {
   }
 }
 
+//: De fyra vyerna under TMBox v2. Testklienten pratar med servern; de tre
+//: andra är dokumentation som ritas lokalt ur firmwarens egna fixturer.
+const TMBOX_PANES = ["klient", "floden", "skarmar", "referens"];
+
+function tmboxPane() {
+  const stored = localStorage.getItem("trainmeet.tmboxPane");
+  return TMBOX_PANES.includes(stored) ? stored : "klient";
+}
+
+//: Ritar en ruta i ett godtyckligt LCD-element.
+//
+// Radantal och kolumnbredd sätts som anpassade egenskaper via CSSOM, inte som
+// ett style-attribut i innerHTML. Serverns CSP är `style-src 'self'` utan
+// unsafe-inline, så det senare hade tyst blockerats.
+function paintFrame(element, geometry, lines) {
+  element.style.setProperty("--lcd-rows", geometry.rows);
+  element.style.setProperty("--lcd-cols", geometry.cols);
+  element.replaceChildren(...lines.map((text) => {
+    const line = document.createElement("div");
+    line.className = "lcd-line";
+    line.textContent = text;
+    return line;
+  }));
+}
+
+function tmboxDocGeometry() {
+  return V2_GEOMETRIES[v2Geometry()];
+}
+
+//: Skärmkatalogen: varje fall i fixturerna, renderat i vald geometri.
+function buildScreenCatalog() {
+  const host = document.querySelector("#tmbox-screen-catalog");
+  if (!host || typeof TMBoxFixtures === "undefined") return;
+  const geometry = tmboxDocGeometry();
+  const { config, snapshot, CASES, viewFor } = TMBoxFixtures;
+
+  host.replaceChildren(...CASES.map(([name, screen, movement]) => {
+    const card = document.createElement("article");
+    card.className = "tmbox-screen-card card";
+
+    const heading = document.createElement("h4");
+    heading.textContent = name;
+    card.append(heading);
+
+    const value = document.createElement("p");
+    value.className = "tmbox-screen-value";
+    value.textContent = `Screen::${screen}`;
+    card.append(value);
+
+    const lcd = document.createElement("div");
+    lcd.className = "lcd tmbox-mini-lcd";
+    lcd.setAttribute("aria-label", `Skärmen ${name}`);
+    paintFrame(lcd, geometry, TMBoxRender.render(geometry, viewFor(screen, movement), config, snapshot));
+    card.append(lcd);
+    return card;
+  }));
+}
+
+//: Flödeskartan. Sekvenserna körs genom samma tillståndsmaskin som boxen, så
+//: stegen är härledda - ingen ruta och inget utfall är skrivet för hand.
+function replayTrace(trace) {
+  const { config, twoMovements, withCases } = TMBoxFixtures;
+  const snapshot = trace.snapshot === "cases" ? withCases() : twoMovements();
+  if (trace.allowed.length && snapshot.movements.length) {
+    snapshot.movements[0].allowed_actions = trace.allowed;
+  }
+  const nav = new TMBoxNav.LocalNavigationState();
+  nav.show("StationOverview", 0);
+  let now = 10000;
+  const steps = [];
+  for (const key of trace.keys) {
+    const result = nav.press(key, now, config, snapshot);
+    now += trace.pace;
+    steps.push({
+      key,
+      outcome: result.outcome,
+      screen: nav.view.screen,
+      command: result.outcome === "Send" ? result.command : null,
+      // Rutan är den boxen visar *efter* trycket, vilket är det som gör
+      // sekvensen läsbar: man ser vad tangenten ledde till.
+      frame: TMBoxRender.render(tmboxDocGeometry(), nav.view, config, snapshot),
+    });
+  }
+  return { steps, snapshot };
+}
+
+function showFlow(name) {
+  const host = document.querySelector("#tmbox-flow-detail");
+  const trace = TMBoxFixtures.TRACES.find((item) => item.name === name);
+  if (!host || !trace) return;
+  localStorage.setItem("trainmeet.tmboxFlow", name);
+  document.querySelectorAll("#tmbox-flow-list .tmbox-flow-item").forEach((button) => {
+    const active = button.dataset.tmboxFlow === name;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+
+  const geometry = tmboxDocGeometry();
+  const parts = [];
+
+  const heading = document.createElement("h3");
+  heading.textContent = trace.title;
+  parts.push(heading);
+
+  const source = document.createElement("p");
+  source.className = "tmbox-flow-source";
+  source.textContent = `${trace.name} · tangenter ${trace.keys.split("").join(" ")} · ${trace.pace} ms mellan tryck`;
+  parts.push(source);
+
+  const note = document.createElement("p");
+  note.className = "tmbox-flow-note";
+  note.textContent = trace.note;
+  parts.push(note);
+
+  const list = document.createElement("ol");
+  list.className = "tmbox-step-list";
+  for (const step of replayTrace(trace).steps) {
+    const item = document.createElement("li");
+    item.className = `tmbox-step tmbox-step-${step.outcome.toLowerCase()}`;
+
+    const head = document.createElement("div");
+    head.className = "tmbox-step-head";
+
+    const pressed = document.createElement("span");
+    pressed.className = "tmbox-step-key";
+    pressed.textContent = step.key;
+    head.append(pressed);
+
+    const outcome = document.createElement("span");
+    outcome.className = "tmbox-step-outcome";
+    outcome.textContent = { Send: "Skickar", Redraw: "Ritar om", Ignored: "Ignoreras" }[step.outcome] || step.outcome;
+    head.append(outcome);
+
+    const screen = document.createElement("span");
+    screen.className = "tmbox-step-screen";
+    screen.textContent = `Screen::${step.screen}`;
+    head.append(screen);
+    item.append(head);
+
+    const lcd = document.createElement("div");
+    lcd.className = "lcd tmbox-mini-lcd";
+    paintFrame(lcd, geometry, step.frame);
+    item.append(lcd);
+
+    if (step.command) {
+      const wire = document.createElement("pre");
+      wire.className = "tmbox-step-command";
+      wire.textContent = JSON.stringify(step.command, null, 2);
+      item.append(wire);
+    }
+    list.append(item);
+  }
+  parts.push(list);
+  host.replaceChildren(...parts);
+}
+
+function buildFlowList() {
+  const host = document.querySelector("#tmbox-flow-list");
+  if (!host || typeof TMBoxFixtures === "undefined") return;
+  host.replaceChildren(...TMBoxFixtures.TRACES.map((trace) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tmbox-flow-item";
+    button.dataset.tmboxFlow = trace.name;
+    button.setAttribute("aria-pressed", "false");
+    button.textContent = trace.title;
+    return button;
+  }));
+  const remembered = localStorage.getItem("trainmeet.tmboxFlow");
+  const known = TMBoxFixtures.TRACES.some((trace) => trace.name === remembered);
+  showFlow(known ? remembered : TMBoxFixtures.TRACES[0].name);
+}
+
+//: Dokumentationsvyerna ritas om när geometrin byts, annars visar de rutor i
+//: en bredd som inte längre är vald.
+function redrawTMBoxDocs() {
+  if (typeof TMBoxFixtures === "undefined") return;
+  buildScreenCatalog();
+  const active = localStorage.getItem("trainmeet.tmboxFlow");
+  if (document.querySelector("#tmbox-flow-list")?.children.length) {
+    showFlow(TMBoxFixtures.TRACES.some((t) => t.name === active) ? active : TMBoxFixtures.TRACES[0].name);
+  }
+}
+
+function selectTMBoxPane(pane) {
+  const selected = TMBOX_PANES.includes(pane) ? pane : "klient";
+  localStorage.setItem("trainmeet.tmboxPane", selected);
+  TMBOX_PANES.forEach((name) => {
+    document.querySelector(`#tmbox-pane-${name}`)?.classList.toggle("hidden", name !== selected);
+  });
+  document.querySelectorAll(".tmbox-doc-tab").forEach((button) => {
+    const active = button.dataset.tmboxPane === selected;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+  if (selected === "skarmar") buildScreenCatalog();
+  if (selected === "floden" && !document.querySelector("#tmbox-flow-list")?.children.length) buildFlowList();
+}
+
+function bindTMBoxPanes() {
+  document.querySelectorAll(".tmbox-doc-tab").forEach((button) => {
+    button.addEventListener("click", () => selectTMBoxPane(button.dataset.tmboxPane));
+  });
+  document.querySelector("#tmbox-flow-list")?.addEventListener("click", (event) => {
+    const button = event.target.closest(".tmbox-flow-item");
+    if (button) showFlow(button.dataset.tmboxFlow);
+  });
+  selectTMBoxPane(tmboxPane());
+}
+
 function bindV2Controls() {
   const device = v2El("device");
   const station = v2El("station");
@@ -3456,7 +3669,9 @@ function bindV2Controls() {
   geometry.addEventListener("change", () => {
     localStorage.setItem("trainmeet.v2Geometry", geometry.value);
     drawV2();
+    redrawTMBoxDocs();
   });
+  bindTMBoxPanes();
 }
 
 async function loadV2Stations() {

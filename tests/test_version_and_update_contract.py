@@ -297,3 +297,57 @@ def _product_version_from(root: Path) -> str:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DatabaseBackupContractTests(unittest.TestCase):
+    """A backup taken with `cp` from a running server is an empty file.
+
+    Every store here opens SQLite in WAL mode, so the committed data lives in
+    `trainmeet.db-wal` until something checkpoints - which on a running
+    server is exactly never. Both updaters used to copy the main file alone
+    and produced a database with no tables in it that still answered `ok` to
+    an integrity check. These pin the shape of the fix, because the tempting
+    one-line "simplification" back to `cp` looks entirely reasonable.
+    """
+
+    SCRIPTS = ContractParityTests.SCRIPTS
+
+    def _body(self, script: Path) -> str:
+        return (ROOT / script).read_text(encoding="utf-8")
+
+    def test_neither_script_copies_the_database_with_cp(self):
+        for script in self.SCRIPTS:
+            with self.subTest(script=str(script)):
+                for line in self._body(script).splitlines():
+                    stripped = line.strip()
+                    if stripped.startswith("cp ") and "$STATE_DIR/$CANDIDATE" in stripped:
+                        self.fail(f"{script} kopierar databasen med cp: {stripped}")
+
+    def test_both_scripts_back_up_through_the_tested_module(self):
+        for script in self.SCRIPTS:
+            with self.subTest(script=str(script)):
+                self.assertIn("tmbox_gateway.backup", self._body(script))
+
+    def test_a_failed_backup_stops_the_update(self):
+        """No backup, no install. The point of the backup is the update."""
+        for script in self.SCRIPTS:
+            with self.subTest(script=str(script)):
+                body = self._body(script)
+                index = body.index("tmbox_gateway.backup")
+                self.assertIn("fail_at installing", body[index:index + 400])
+
+    def test_the_backup_runs_before_the_installer(self):
+        """Backing up after the install would back up the new state."""
+        for script in self.SCRIPTS:
+            with self.subTest(script=str(script)):
+                body = self._body(script)
+                self.assertLess(
+                    body.index("tmbox_gateway.backup"),
+                    body.index('TRAINMEET_INSTALL_BUILD="$BUILD"'),
+                )
+
+    def test_the_backup_runs_from_the_unpacked_source(self):
+        """So a fix to the backup code reaches older installations too."""
+        for script in self.SCRIPTS:
+            with self.subTest(script=str(script)):
+                self.assertIn('PYTHONPATH="$SOURCE/src"', self._body(script))

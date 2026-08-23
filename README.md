@@ -567,6 +567,42 @@ Vid fel markeras **steget där felet inträffade**, felmeddelandet visas och en
 knapp för att försöka igen dyker upp. Föregående version återställs
 automatiskt.
 
+### Säkerhetskopior och återställning
+
+Varje uppdatering lägger en kopia av databasen i `backups/` i statuskatalogen
+(`/var/lib/trainmeet-server/backups` på Raspberry Pi). De tio senaste sparas,
+äldre gallras automatiskt.
+
+Kopian tas med SQLites egna backup-API och inte med `cp`. Skillnaden är inte
+kosmetisk: servern kör SQLite i WAL-läge, så på en igång­varande server ligger
+det som nyss skrevs i `trainmeet.db-wal` bredvid huvudfilen, medan
+`trainmeet.db` kan vara ett tomt huvud på fyra kilobyte. En filkopia av bara
+huvudfilen ger därför en tom databas — som ändå öppnas utan protest och svarar
+`ok` på en integritetskontroll. Går säkerhetskopieringen inte att genomföra
+avbryts uppdateringen innan installationen börjar.
+
+**Att återställa en kopia.** Servern måste vara stoppad:
+
+```sh
+sudo systemctl stop trainmeet-server
+ls -la /var/lib/trainmeet-server/backups          # välj en kopia
+sudo -u trainmeet-server /opt/trainmeet-server/venv/bin/python \
+     -m tmbox_gateway.backup restore \
+     /var/lib/trainmeet-server/backups/trainmeet-ÅÅÅÅMMDD-HHMMSS.db \
+     /var/lib/trainmeet-server/trainmeet.db
+sudo systemctl start trainmeet-server
+```
+
+Kommandot vägrar återställa en tom kopia, skriver databasen på plats i ett
+steg och tar bort `trainmeet.db-wal` och `trainmeet.db-shm`. Det sista är
+inte städning utan själva poängen: lämnas skrivloggen kvar hör den till den
+gamla databasen, och SQLite spelar tillbaka den *över* kopian. Resultatet blir
+då exakt den data som skulle ersättas — och en integritetskontroll som ändå
+svarar `ok`. En återställning gjord med enbart `cp` misslyckas alltså tyst.
+
+Servern skapar en ny anslutningskod när den startar efter en återställning, så
+terminaler och TMBox-enheter behöver paras om.
+
 **Ett framgångsmeddelande kommer aldrig före hälsokontrollen.** Det gjorde det
 förut: `complete` skrevs innan omstarten, så en administratör fick veta att
 uppdateringen lyckats innan den ens hade provats en gång.

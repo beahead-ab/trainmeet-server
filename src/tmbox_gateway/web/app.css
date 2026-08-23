@@ -707,7 +707,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: #fff;
+  background: var(--surface-raised);
   --display-fg: #111827;
   --display-muted: #64748b;
   --display-line: rgba(15,23,42,.28);
@@ -2543,4 +2543,283 @@ select.topology-field.station-pick {
 .shortcut-box button:disabled {
   color: var(--ink-locked);
   cursor: not-allowed;
+}
+
+/* ── TMBox-dokumentation ──────────────────────────────────────────────
+   Fyra vyer under TMBox v2: testklienten som pratar med servern, och tre
+   som ritar firmwarens egna fixturer lokalt. Rutorna återanvänder .lcd så
+   att en skärm i katalogen ser ut exakt som i klienten - samma glas, samma
+   teckengrid, bara mindre. */
+
+.tmbox-doc-tabs {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  margin-bottom: 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tmbox-doc-tabs::-webkit-scrollbar { display: none; }
+
+.tmbox-doc-tab {
+  flex: none;
+  padding: 8px 15px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tmbox-doc-tab:hover { color: var(--ink-strong); }
+.tmbox-doc-tab.is-active {
+  border-bottom-color: var(--accent-warm);
+  color: var(--ink-strong);
+  font-weight: 600;
+}
+
+.tmbox-pane-lead {
+  max-width: 68ch;
+  margin: 0 0 20px;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ── Flödeskartan ─────────────────────────────────────────────────── */
+
+.tmbox-flow-layout {
+  display: grid;
+  grid-template-columns: minmax(210px, 250px) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.tmbox-flow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.tmbox-flow-item {
+  padding: 9px 12px;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+.tmbox-flow-item:hover { background: var(--paper); color: var(--ink-strong); }
+.tmbox-flow-item.is-active {
+  border-left-color: var(--accent-warm);
+  background: var(--paper);
+  color: var(--ink-strong);
+  font-weight: 600;
+}
+
+.tmbox-flow-detail { min-width: 0; }
+.tmbox-flow-detail h3 { margin: 0 0 6px; font-size: 19px; }
+
+.tmbox-flow-source {
+  margin: 0 0 10px;
+  color: var(--ink-locked);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.tmbox-flow-note {
+  max-width: 64ch;
+  margin: 0 0 20px;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.tmbox-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tmbox-step {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-card);
+  /* Utfallet syns i kanten innan man läst etiketten: ett ignorerat tryck ska
+     inte se ut som ett skickat kommando. */
+  border-left: 3px solid var(--ink-faint);
+  border-radius: 3px;
+  background: var(--surface-raised);
+}
+.tmbox-step-send { border-left-color: var(--accent-warm); }
+.tmbox-step-ignored { border-left-color: var(--ink-faint); opacity: .72; }
+
+.tmbox-step-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.tmbox-step-key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--ink-strong);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tmbox-step-outcome {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.tmbox-step-send .tmbox-step-outcome { color: var(--accent-warm-dark); }
+.tmbox-step-ignored .tmbox-step-outcome { color: var(--ink-locked); }
+.tmbox-step-redraw .tmbox-step-outcome { color: var(--ink-muted); }
+
+.tmbox-step-screen {
+  margin-left: auto;
+  color: var(--ink-locked);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.tmbox-step-command {
+  max-height: 260px;
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink-strong);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow: auto;
+}
+
+/* ── Skärmkatalogen ───────────────────────────────────────────────── */
+
+.tmbox-screen-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+  gap: 16px;
+}
+
+.tmbox-screen-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 15px 16px;
+}
+.tmbox-screen-card h4 {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+.tmbox-screen-value {
+  margin: 0;
+  color: var(--ink-locked);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+/* Rutorna i katalogen och i flödesstegen är samma glas som klientens, i
+   mindre skala. Bredden följer teckengridet, så 20 kolumner blir bredare
+   än 16 - precis som de fysiska displayerna skiljer sig. */
+.tmbox-mini-lcd {
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px 10px 7px;
+  font-size: clamp(11px, 2.4vw, 14px);
+}
+
+/* ── Referensvyn ──────────────────────────────────────────────────── */
+
+.tmbox-reference {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.tmbox-ref-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+}
+.tmbox-ref-card h3 { margin: 0; font-size: 17px; }
+.tmbox-ref-card p { margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 1.6; }
+
+.tmbox-keymap {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px 14px;
+  margin: 0;
+  font-size: 14px;
+}
+.tmbox-keymap dt {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tmbox-keymap dd { margin: 0; color: var(--ink-muted); line-height: 1.5; }
+
+.tmbox-gap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 0;
+  padding-left: 19px;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.tmbox-gap-list strong { color: var(--ink-strong); }
+
+.tmbox-ref-rule {
+  padding-top: 11px;
+  border-top: 1px solid var(--line-card);
+}
+
+.tmbox-mono { font-family: var(--font-mono); font-size: .92em; }
+
+@media (max-width: 760px) {
+  .tmbox-flow-layout { grid-template-columns: minmax(0, 1fr); }
+  .tmbox-flow-list {
+    flex-direction: row;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tmbox-flow-item {
+    flex: none;
+    border-left: 0;
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+  }
+  .tmbox-flow-item.is-active { border-left: 0; border-bottom-color: var(--accent-warm); }
 }

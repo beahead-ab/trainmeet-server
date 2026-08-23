@@ -2025,6 +2025,7 @@ class TrainMeetHTTPApplication:
             "/index.html": "index.html",
             "/assets/app.css": "app.css",
             "/assets/app.js": "app.js",
+            "/assets/tmbox-fixtures.js": "tmbox-fixtures.js",
             "/assets/tmbox-render.js": "tmbox-render.js",
             "/assets/tmbox-nav.js": "tmbox-nav.js",
             "/assets/tmbox-attention.js": "tmbox-attention.js",
