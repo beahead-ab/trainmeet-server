@@ -109,5 +109,57 @@ class CloudPackageContractTests(unittest.TestCase):
         self.assertIsNotNone(self.store.active())
 
 
+class RestartRecoveryTests(unittest.TestCase):
+    """Vad som står kvar när servern startas om.
+
+    En omstart sker vid varje programuppdatering och varje gång någon drar ur
+    sladden i en klubblokal. Det som gäller är att den aktiva publikationen
+    fortfarande är aktiv efteråt, och att en väntande fortfarande väntar - en
+    omstart får varken tappa träffen eller aktivera något av misstag.
+    """
+
+    def setUp(self) -> None:
+        self._dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._dir.cleanup)
+        self.path = Path(self._dir.name) / "runtime.db"
+        self.package = json.loads(PACKAGE.read_text(encoding="utf-8"))
+
+    def _reopen(self) -> SQLiteRuntimeStore:
+        store = SQLiteRuntimeStore(self.path)
+        self.addCleanup(store.close)
+        return store
+
+    def test_an_active_publication_is_still_active_after_a_restart(self) -> None:
+        first = self._reopen()
+        first.install(self.package, activate=True)
+        before = first.active().payload
+        first.close()
+
+        after = self._reopen().active()
+
+        self.assertIsNotNone(after, "träffen försvann vid omstart")
+        self.assertEqual(before, after.payload)
+
+    def test_a_waiting_revision_is_still_waiting_after_a_restart(self) -> None:
+        """Och aktiveras inte av omstarten. T4 gäller över en strömcykel."""
+
+        first = self._reopen()
+        first.install(self.package, activate=False)
+        first.close()
+
+        self.assertIsNone(self._reopen().active())
+
+    def test_activating_survives_a_restart(self) -> None:
+        first = self._reopen()
+        first.install(self.package, activate=False)
+        first.activate("publication-kontraktsprov-1")
+        first.close()
+
+        after = self._reopen().active()
+
+        self.assertIsNotNone(after)
+        self.assertEqual("publication-kontraktsprov-1", after.publication_id)
+
+
 if __name__ == "__main__":
     unittest.main()
