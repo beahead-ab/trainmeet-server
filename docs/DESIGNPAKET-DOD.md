@@ -146,9 +146,9 @@ men det är en egen designfråga och paketet beskriver ingen sådan markör.
 | TMBox v2 | KÖR › TMBox v2 (oförändrad) | 👁 |
 | TKL-terminal | KÖR › TKL (inbäddad) | 🔨 |
 | Skärmar och klocka | KÖR › Skärmar | 🔨 |
-| Användare och åtkomst | BYGG › 5 | 👁 |
-| Programuppdatering | BYGG › 5 | 👁 |
-| Server och nollställning | BYGG › 5 | 👁 |
+| Användare och åtkomst | Inställningar | 👁 |
+| Programuppdatering | Inställningar | 👁 |
+| Server och nollställning | Inställningar | 👁 |
 
 ---
 
