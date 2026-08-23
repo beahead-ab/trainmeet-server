@@ -838,6 +838,14 @@
             </div>
           </div>
 
+          <nav class="tmbox-doc-tabs" aria-label="TMBox-vyer">
+            <button type="button" class="tmbox-doc-tab is-active" data-tmbox-pane="klient" aria-pressed="true">Testklient</button>
+            <button type="button" class="tmbox-doc-tab" data-tmbox-pane="floden" aria-pressed="false">Flöden</button>
+            <button type="button" class="tmbox-doc-tab" data-tmbox-pane="skarmar" aria-pressed="false">Skärmkatalog</button>
+            <button type="button" class="tmbox-doc-tab" data-tmbox-pane="referens" aria-pressed="false">Referens</button>
+          </nav>
+
+          <div id="tmbox-pane-klient" class="tmbox-pane">
           <article class="tmbox-case">
             <div class="lcd-module">
               <div id="lcd-v2" class="lcd" aria-label="TMBox v2 display"></div>
@@ -853,6 +861,55 @@
             <summary>Senaste kvittens från servern</summary>
             <pre id="tmbox-v2-ack" class="tmbox-v2-ack">—</pre>
           </details>
+          </div>
+
+          <div id="tmbox-pane-floden" class="tmbox-pane hidden">
+            <p class="tmbox-pane-lead">Tolv tangentsekvenser, körda genom samma tillståndsmaskin som boxen. Varje steg visar tangenten, vad boxen gjorde med den och skärmen som blev följden — ritad av renderaren, inte avritad för hand. Sekvenserna är firmwarens egna: de kommer ur <code>golden_traces.txt</code>, och ett test faller om de två skiljer sig.</p>
+            <div class="tmbox-flow-layout">
+              <nav id="tmbox-flow-list" class="tmbox-flow-list" aria-label="Scenarier"></nav>
+              <div id="tmbox-flow-detail" class="tmbox-flow-detail"></div>
+            </div>
+          </div>
+
+          <div id="tmbox-pane-skarmar" class="tmbox-pane hidden">
+            <p class="tmbox-pane-lead">Varje skärm boxen kan visa, i den geometri som är vald ovan. Rutorna ritas av <code>tmbox-render.js</code> ur referensstationen Charlottendal med tågen 421 och 428 — samma fixturer som <code>golden_frames.txt</code> är avtryckt ur.</p>
+            <div id="tmbox-screen-catalog" class="tmbox-screen-catalog"></div>
+          </div>
+
+          <div id="tmbox-pane-referens" class="tmbox-pane hidden">
+            <div class="tmbox-reference">
+              <section class="card tmbox-ref-card">
+                <h3>Knappmodell</h3>
+                <dl class="tmbox-keymap">
+                  <dt>0–9</dt><dd>numerisk inmatning</dd>
+                  <dt>A</dt><dd>primär operativ handling — <span class="tmbox-mono">UPPSTÄLLT</span>, <span class="tmbox-mono">FÖRARE</span>, <span class="tmbox-mono">BEGÄR</span>, <span class="tmbox-mono">KLART</span>, <span class="tmbox-mono">AVGÅTT</span>, <span class="tmbox-mono">ANKOMMIT</span></dd>
+                  <dt>B</dt><dd>sekundär eller negativ — etiketten är alltid <span class="tmbox-mono">B=EJ</span></dd>
+                  <dt>C</dt><dd>nästa tåg, rad eller kommandosida</dd>
+                  <dt>D</dt><dd><em>specificerad men inte byggd</em> — tangenten sitter i knappsatsen och gör ingenting</dd>
+                  <dt>*</dt><dd>radera, tillbaka, initiera avbrott</dd>
+                  <dt>#</dt><dd>välj, OK, bekräfta data, kvittera visning</dd>
+                </dl>
+                <p class="tmbox-ref-rule"><strong>Säkerhetsregel:</strong> <span class="tmbox-mono">#</span> får aldrig lämna ett operativt beslut. <span class="tmbox-mono">KLART</span>, <span class="tmbox-mono">EJ KLART</span>, <span class="tmbox-mono">AVGÅTT</span> och <span class="tmbox-mono">ANKOMMIT</span> bekräftas alltid via A eller B. Regeln gäller i motorn och i varje klient — box, den här simulatorn, Swift-appen och TKL-terminalen. Ingen klient får göra undantag på egen hand.</p>
+              </section>
+
+              <section class="card tmbox-ref-card">
+                <h3>Inmatningslåset</h3>
+                <p>Ett tangenttryck inom <span class="tmbox-mono">500 ms</span> efter ett skärmbyte ignoreras. Det skyddar mot en studsande kontakt och mot att någon håller ner en tangent: ett operativt beslut ska aldrig falla ut av att skärmen just bytte under fingret.</p>
+                <p>De två sista scenarierna under <strong>Flöden</strong> visar låset i arbete — samma tangenter som fungerar i lugnt tempo blir <span class="tmbox-mono">Ignored</span> när de kommer för tätt.</p>
+              </section>
+
+              <section class="card tmbox-ref-card">
+                <h3>Vad boxen inte gör idag</h3>
+                <ul class="tmbox-gap-list">
+                  <li><strong>D-tangenten</strong> har inget fall i <span class="tmbox-mono">navigation.cpp</span>. Specen beskriver <span class="tmbox-mono">D=MER</span> och <span class="tmbox-mono">D=NÄRMAR SIG</span> som avsedd funktion, men ingen ruta i <span class="tmbox-mono">golden_frames.txt</span> innehåller <span class="tmbox-mono">MER</span>.</li>
+                  <li><strong><span class="tmbox-mono">clearance.cancel</span></strong> finns inte i firmwaren och har ingen tangent.</li>
+                  <li><strong><span class="tmbox-mono">line.available.publish</span></strong> finns inte i firmwaren och har ingen tangent.</li>
+                  <li><strong>Trafiköversikt</strong> med vänster/höger-topologi och <span class="tmbox-mono">TOMT</span>-logik är inte byggd.</li>
+                </ul>
+                <p class="tmbox-ref-rule">Listan står här för att den som läser en skärmbild rimligen antar att skärmen finns. Firmwaren i <span class="tmbox-mono">beahead-ab/trainmeet-tmbox</span> är originalet; den här sidan speglar den.</p>
+              </section>
+            </div>
+          </div>
         </section>
 
         <section id="displays-view" class="view-panel hidden">
@@ -987,6 +1044,7 @@
     </main>
     <!-- The layout and the state machine, mirrored from the firmware and held
          to it by golden_frames.txt and golden_traces.txt. -->
+    <script src="/assets/tmbox-fixtures.js?v=20260823-1" defer></script>
     <script src="/assets/tmbox-render.js?v=20260821-1" defer></script>
     <script src="/assets/tmbox-nav.js?v=20260821-1" defer></script>
     <script src="/assets/tmbox-attention.js?v=20260821-1" defer></script>

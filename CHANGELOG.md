@@ -7,6 +7,35 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 Säkerhetskopian innehöll ingenting.
 
+### TMBox-dokumentation i webbadmin
+
+Att veta vad boxen gör krävde en box, eller en fil att öppna lokalt. KÖR →
+TMBox v2 har nu tre vyer bredvid testklienten:
+
+**Flöden** visar tolv tangentsekvenser, körda genom samma tillståndsmaskin
+som boxen. Varje steg visar tangenten, vad boxen gjorde med den och skärmen
+som blev följden. Sekvenserna är firmwarens egna — de kommer ur
+`golden_traces.txt` — och stegen är härledda, inte skrivna.
+
+**Skärmkatalog** visar varje skärm boxen kan rita, i den geometri som är
+vald. Rutorna ritas av `tmbox-render.js` ur referensstationen Charlottendal,
+samma fixturer som `golden_frames.txt` är avtryckt ur, och ett test jämför de
+två.
+
+**Referens** samlar knappmodellen, inmatningslåset och — uttryckligen — vad
+firmwaren inte gör: D-tangenten har inget fall alls, `clearance.cancel` och
+`line.available.publish` saknas, och trafiköversikten är inte byggd.
+
+Referensstationen flyttade ut ur testharnesset till `tmbox-fixtures.js`, som
+både guldtestet i Node och sidan i webbläsaren laddar. Två kopior av en
+referensstation är två som glider isär.
+
+Scenariernas beskrivningar är det enda i vyn som är skrivet för hand, och en
+av dem var fel: den påstod att A och B ignoreras på ett linjemeddelande, när
+spåret säger att båda skickar ett `clearance.response`. Ett test jämför nu
+varje sådant påstående mot vad tangenten faktiskt gjorde.
+
+
 ### Databaskopian togs på ett sätt som inte fungerar
 
 Uppdateraren tog en kopia av databasen före varje installation, med `cp`. Men

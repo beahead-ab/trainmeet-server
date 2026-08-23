@@ -143,7 +143,7 @@ men det är en egen designfråga och paketet beskriver ingen sådan markör.
 | Manuell import | BYGG › 1, källa = Importerad fil | ⬜ kortet scrollar bara till den gamla panelen |
 | TMBoxar | BYGG › 4 | 🔨 |
 | TMBox-simulering | **Borttagen** | ✅ |
-| TMBox v2 | KÖR › TMBox v2 (oförändrad) | 👁 |
+| TMBox v2 | KÖR › TMBox v2 (testklient + tre dokumentationsvyer) | ✅ |
 | TKL-terminal | KÖR › TKL (inbäddad) | 🔨 |
 | Skärmar och klocka | KÖR › Skärmar | 🔨 |
 | Användare och åtkomst | Inställningar | 👁 |
@@ -215,7 +215,12 @@ men det är en egen designfråga och paketet beskriver ingen sådan markör.
 
 | # | Krav | Status |
 |---|---|---|
-| 3.6.1 | Oförändrad mot dagens vy | 👁 |
+| 3.6.1 | Testklienten oförändrad mot dagens vy | 👁 |
+| 3.6.2 | Fyra undervyer: Testklient, Flöden, Skärmkatalog, Referens | ✅ uppmätt |
+| 3.6.3 | Vald undervy: underkant `#c96442`, övriga `--ink-muted` | ✅ |
+| 3.6.4 | Skärmkatalogen ritar guldfilens rutor, inte avritade | ✅ testat |
+| 3.6.5 | Flödeskartan härleder varje steg ur tangentspåren | ✅ testat |
+| 3.6.6 | Geometrivalet slår igenom i alla undervyer | ✅ uppmätt |
 
 ### 3.7 BYGG › 1 Träffen
 
