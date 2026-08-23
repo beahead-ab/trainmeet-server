@@ -3,6 +3,79 @@
 Versionsnumret sätts automatiskt vid merge till main. Se
 [docs/VERSIONING.md](docs/VERSIONING.md) för hur nivån bestäms.
 
+## 1.3.1
+
+Layoutfel som nådde produktion, och en version som säger vilken.
+
+### KÖR fick hela fönstret
+
+Hela gränssnittet ritades i vänstra fjärdedelen av ett brett fönster. Skalet
+bar kvar tvåkolumnsgridden från de tolv menypunkterna: byggsidofältet är dolt i
+KÖR, men **grid-spåret fanns kvar**, så arbetsytan hamnade i det och mätte
+250 px mot ett 1392 px skal.
+
+Båda lägena sätter numera sin egen layout. Arbetsytan hade dessutom två regler
+med samma selektor, en för visning och en för bredd; de är sammanslagna,
+eftersom två ställen som båda sätter bredd glider isär.
+
+### Ett formulär som krävde mer plats än som fanns
+
+Vid 924 px svämmade formuläret för extern admininloggning över sitt steg med
+26 px. `repeat(3, minmax(180px, 1fr))` kräver 598 px, och ett byggsteg vid
+924 px fönster har 572 px — sidofältet tar resten. Medieförfrågan som skulle
+fällt ihop det lyssnar på fönstret, inte på ytan, så den slog aldrig till.
+`auto-fit` räknar på den plats som faktiskt finns.
+
+### Mindre
+
+- Kryssrutor och radioknappar fick den globala fältregelns fulla bredd och
+  14 px radie, och renderades som stora rundade fyrkanter.
+- Stationsväljaren i KÖR › Trafik sträckte sig över hela fönstret.
+- *Öppna TKL* bar webbläsarens länkunderstrykning bland knappar.
+
+---
+
+## 1.3.0
+
+Adminen byggd om mot designpaketet. Tolv menypunkter blir två lägen.
+
+### KÖR och BYGG
+
+Fem körflikar och fem byggsteg i stället för tolv menypunkter. `mode` på
+`body` är roten: enda variabeln som byter hela skelettet. Byggläget har eget
+mörkt topplock, numrerad stegräcka och en panel för osparade ändringar.
+
+BYGG steg 1 gör källvalet till serverns driftläge i stället för en etikett.
+Steg 2 visar stationer, sträckor och A–D-paneler ur ett enda API, med samma
+form vare sig innehållet kommer från Cloud eller ett lokalt utkast. Steg 5
+samlar de tre systemmenypunkterna.
+
+### Ingen tyst Cloud-aktivering
+
+Pollern hämtade var femtonde sekund och anropade `install()`, vars `activate`
+är `True` som standard, och sedan `request_restart()`. En operatör som rättat
+tre avgångstider kl 13 förlorade dem när Cloud publicerade kl 14 — och träffen
+startade om medan det hände.
+
+Nu hämtar den, lagrar, markerar som väntande och slutar. `/v1/runtime/pending`
+svarar med en **diff**, inte en räkning, och aktivering kräver att revisionens
+id skickas tillbaka.
+
+### Tidtabellen går att rätta i Cloud-läge
+
+Den gamla grinden stängde varje skrivväg medan Cloud var redaktör, vilket
+gjorde en rättad avgångstid omöjlig av samma skäl som en omritad bana. Under
+träffen *är* servern driften. Grinden gäller numera bara stationer, sträckor
+och paneler.
+
+### Mindre
+
+- Typsnitten serveras från servern i stället för från Google.
+- Ett CSP-fel som legat på `main` är lagat: stapelbredder sattes med
+  `style`-attribut, som serverns egen `style-src 'self'` avvisar.
+
+---
+
 ## 1.2.0
 
 Den första versionen där servern kan rätta en träff som redan är igång.
