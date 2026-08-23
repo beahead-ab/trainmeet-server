@@ -605,6 +605,33 @@ den byts till accentfärgen.
 Samma resonemang som Avvikelse 7: en verklig säkerhetsskillnad väger tyngre än
 en etikett i en bild.
 
+### 7. Inställningar är ett eget läge — paketet har fyra byggsteg nu
+
+Paketets DEL 3.11 lägger serveradministrationen som **BYGG steg 5**. Den ligger
+numera i ett tredje läge i stället, och BYGG har fyra steg.
+
+Skälet kommer från drift, inte från smak. För att uppdatera programvaran fick
+en operatör trycka **Bygg om träffen** — ett flöde som handlar om träffens
+innehåll och som varnar att ändringar inte slår igenom förrän man aktiverar.
+Att administrera servern hörde inte hemma bakom det. Kugghjulet på översikten
+hette dessutom "Öppna administration" men landade i steg 1, som svarar på var
+träffen kommer ifrån.
+
+Uppdelningen är nu:
+
+| Läge | Vad |
+|---|---|
+| **KÖR** | Det som händer under träffen |
+| **BYGG** | Träffens innehåll: källa, bana, tidtabell, TMBoxar |
+| **Inställningar** | Servern själv: identitet, åtkomst, programvara, Cloud-koppling, nollställning |
+
+Cloud-kortet flyttade med, eftersom det bär kopplingen och parkopplingen av
+lådor — båda serveradministration. Källvalet står kvar i BYGG steg 1: det
+handlar om var träffen kommer ifrån, inte om kopplingen.
+
+Innehållet är oförändrat. Samma sektioner, samma DOM, samma API-anrop och
+samma sju uppdateringssteg ur `update_contract.py`. Bara flyttade.
+
 ### 6. 404 på `/terminal/config` — **avsiktligt, ska inte lagas**
 
 Körfliken TKL bäddar in `/tkl/`, och terminalen frågar efter

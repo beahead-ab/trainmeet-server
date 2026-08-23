@@ -350,11 +350,21 @@ setupFinishForm.addEventListener("submit", async (event) => {
 // eftersom v2 räcker.
 
 const RUN_TABS = ["oversikt", "trafik", "skarmar", "tkl", "tmbox"];
-const BUILD_STEPS = ["kalla", "bana", "tid", "boxar", "server"];
+//: BYGG bygger träffen. Serveradministration ligger i sitt eget läge - se
+//: SETTINGS_SECTIONS nedan och docs/DESIGNPAKET-DOD.md, avvikelse 7.
+const BUILD_STEPS = ["kalla", "bana", "tid", "boxar"];
+
+//: Det tredje läget. Att administrera servern är varken drift eller bygge, och
+//: låg tidigare bakom "Bygg om träffen" - alltså bakom ett flöde som handlar om
+//: något helt annat. Programuppdateringen var fyra klick bort.
+const SETTINGS_SECTIONS = ["identity", "access", "software", "cloud", "system"];
 
 //: Vilka av dagens adminsektioner som hör till vilket byggsteg.
 const STEP_SECTIONS = {
-  kalla: ["runtime", "cloud", "local", "import"],
+  // "cloud" är flyttad till Inställningar: kortet bär Cloud-kopplingen och
+  // parkopplingen av TMBoxar, och båda är serveradministration. Källvalet i
+  // steg 1 handlar om var *träffen* kommer ifrån, inte om kopplingen.
+  kalla: ["runtime", "local", "import"],
   bana: [],
   tid: [],
   boxar: ["devices"],
@@ -362,7 +372,6 @@ const STEP_SECTIONS = {
   //: nollställning. Ordningen i listan är inte den som gäller på skärmen -
   //: den kommer ur DOM-ordningen - men den här är densamma, så de inte
   //: kan glida isär utan att någon märker det.
-  server: ["identity", "access", "software", "system"],
 };
 
 //: Vilken av dagens vypaneler som visas i vilken körflik.
@@ -378,17 +387,50 @@ function currentMode() {
   return document.body.dataset.mode === "bygg" ? "bygg" : "kor";
 }
 
+const MODES = ["kor", "bygg", "installningar"];
+
 function setMode(mode) {
-  const next = mode === "bygg" ? "bygg" : "kor";
+  const next = MODES.includes(mode) ? mode : "kor";
   document.body.dataset.mode = next;
   localStorage.setItem("trainmeet.mode", next);
   document.querySelector("#build-chrome").classList.toggle("hidden", next !== "bygg");
   document.querySelector("#build-sidebar").classList.toggle("hidden", next !== "bygg");
-  if (next === "kor") selectRunTab(state.runTab || "oversikt");
-  else selectBuildStep(state.buildStep || "kalla");
+  document.querySelector("#settings-chrome")?.classList.toggle("hidden", next !== "installningar");
+  if (next === "bygg") selectBuildStep(state.buildStep || "kalla");
+  else if (next === "installningar") showSettings();
+  else selectRunTab(state.runTab || "oversikt");
+}
+
+//: Inställningarna visar samma sektioner som förut, i samma DOM. Ingenting är
+//: omskrivet - bara flyttat ur ett flöde det inte hörde hemma i.
+function showSettings() {
+  Object.values(RUN_PANELS).forEach((selector) => {
+    const panel = document.querySelector(selector);
+    if (panel) panel.classList.add("hidden");
+  });
+  stopTMBoxV2();
+  unmountTklFrame();
+  stopTrafficView();
+
+  document.querySelectorAll(".build-panel").forEach((panel) => panel.classList.add("hidden"));
+  const adminView = document.querySelector("#admin-view");
+  if (adminView) adminView.classList.remove("hidden");
+  document.querySelectorAll(".admin-section-panel").forEach((panel) => {
+    panel.classList.toggle("hidden", !SETTINGS_SECTIONS.includes(panel.dataset.adminSection));
+  });
+  const heading = document.querySelector("#settings-heading");
+  if (heading) heading.classList.remove("hidden");
+
+  checkSoftwareUpdate();
+  refreshRuntime();
+  appView.classList.remove("sidebar-open");
+  window.scrollTo({ top: 0, behavior: "auto" });
 }
 
 function selectRunTab(tab) {
+  // Rubriken hör till inställningsläget och döljs här, annars står den kvar
+  // ovanför den här vyns innehåll.
+  document.querySelector("#settings-heading")?.classList.add("hidden");
   const selected = RUN_TABS.includes(tab) ? tab : "oversikt";
   state.runTab = selected;
   localStorage.setItem("trainmeet.runTab", selected);
@@ -417,6 +459,9 @@ function selectRunTab(tab) {
 }
 
 function selectBuildStep(step) {
+  // Rubriken hör till inställningsläget och döljs här, annars står den kvar
+  // ovanför den här vyns innehåll.
+  document.querySelector("#settings-heading")?.classList.add("hidden");
   const selected = BUILD_STEPS.includes(step) ? step : "kalla";
   state.buildStep = selected;
   localStorage.setItem("trainmeet.buildStep", selected);
@@ -480,11 +525,16 @@ const LEGACY_VIEW_TABS = {
   overview: "oversikt", displays: "skarmar", "tmbox-v2": "tmbox",
   simulator: "tmbox", admin: null,
 };
+document.querySelector("#open-settings")?.addEventListener("click", () => setMode("installningar"));
+document.querySelector("#leave-settings")?.addEventListener("click", () => setMode("kor"));
+
 document.querySelectorAll("[data-open-view]").forEach((button) => {
   button.addEventListener("click", () => {
     const target = LEGACY_VIEW_TABS[button.dataset.openView];
     if (target) { setMode("kor"); selectRunTab(target); }
-    else { setMode("bygg"); selectBuildStep("kalla"); }
+    // Kugghjulet hette "Öppna administration" men landade i BYGG steg 1, som
+    // handlar om var träffen kommer ifrån. Nu går det dit det säger.
+    else setMode("installningar");
   });
 });
 

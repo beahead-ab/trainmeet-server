@@ -632,6 +632,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 }
 .cloud-link-details > p { margin: 0 0 12px; color: var(--muted); font-size: var(--admin-supporting, 13px); }
 .cloud-link-details .inline-form { padding: 14px; border-radius: var(--radius-sm); background: var(--v2-bg); }
+/* Knappen tog hela raden. Det märktes inte i BYGG steg 1, där kolumnen var
+   smal; i Inställningar är ytan bredare och en 1255px "Koppla och hämta" ser
+   ut som ett fel. En knapp ska vara så bred som sin text. */
+.cloud-link-details .inline-form button { width: auto; justify-self: start; flex: none; }
 
 .meet-overview { width: 100%; margin: 0 auto; gap: 24px; }
 .meet-summary-card {
@@ -1772,6 +1776,32 @@ body[data-mode="kor"] .server-admin-shell {
   margin: 0 auto;
   padding: 22px 22px 48px;
 }
+
+/* Inställningar har inget sidofält och beter sig som KÖR. Utan en egen regel
+   ärver läget den gamla tvåkolumnsgridden - samma fälla som gav KÖR en 250px
+   arbetsyta. */
+body[data-mode="installningar"] .server-admin-shell {
+  display: block;
+  width: min(100%, 1400px);
+  margin: 0 auto;
+  padding: 22px 22px 48px;
+}
+
+/* Kugghjulet i topplocket. Samma form som grannarna, men utan text: det står
+   bredvid "Bygg om träffen" och skulle annars tävla med den. */
+.settings-button {
+  display: grid; place-items: center;
+  width: 34px; min-height: 34px; padding: 0;
+  border: 1px solid var(--line-field); border-radius: var(--radius-sm);
+  background: var(--surface-raised); color: var(--ink-muted);
+  font-size: 15px; cursor: pointer;
+}
+.settings-button:hover { border-color: var(--accent-edge); background: var(--accent-tint-light); color: var(--ink-strong); }
+body[data-mode="installningar"] .settings-button {
+  border-color: var(--accent-edge); background: var(--accent-tint); color: var(--accent-warm-dark);
+}
+body[data-mode="installningar"] .run-tabs,
+body[data-mode="installningar"] .enter-build { display: none; }
 
 body[data-mode="bygg"] .server-admin-shell {
   display: flex; gap: 24px;

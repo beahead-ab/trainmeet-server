@@ -27,12 +27,19 @@ class ShellStructureTests(unittest.TestCase):
             self.assertIn(f'data-run-tab="{tab}"', self.html)
         self.assertEqual(5, self.html.count('data-run-tab="'))
 
-    def test_the_five_build_steps_are_numbered_and_named(self):
-        for step in ("kalla", "bana", "tid", "boxar", "server"):
-            self.assertIn(f'data-build-step="{step}"', self.html)
-        for label in ("Träffen", "Stationer och sträckor", "Tidtabell", "TMBoxar", "Server"):
-            self.assertIn(label, self.html)
+    def test_the_build_steps_are_numbered_and_named(self):
+        """Fyra steg, inte fem.
 
+        Steg 5 hette Server och samlade serveradministrationen. Den ligger nu i
+        ett eget läge: att administrera servern är varken drift eller bygge, och
+        låg tidigare bakom knappen "Bygg om träffen" - alltså bakom ett flöde
+        som handlar om något annat. Se docs/DESIGNPAKET-DOD.md, avvikelse 7.
+        """
+        steps = re.findall(r'data-build-step="([a-z]+)"', self.html)
+        self.assertEqual(["kalla", "bana", "tid", "boxar"], steps)
+        for name in ("Träffen", "Stationer och sträckor", "Tidtabell", "TMBoxar"):
+            self.assertIn(name, self.html)
+        self.assertNotIn('data-build-step="server"', self.html)
     def test_the_old_twelve_point_menu_is_gone(self):
         """Tolv menypunkter blir två lägen. Den gamla navigationen ska inte
         ligga kvar dold - då är det tretton."""
@@ -177,13 +184,16 @@ class SourceChoiceTests(unittest.TestCase):
         self.assertNotIn("499 rörelser", self.js)
 
 
-class BuildStepFiveServerTests(unittest.TestCase):
-    """BYGG steg 5 - Server, paketets DEL 3.11.
+class ServerSettingsTests(unittest.TestCase):
+    """Inställningar - serveradministrationen, i ett eget läge.
 
-    Steget slår ihop tre av dagens menypunkter. Testerna håller fast att de
-    faktiskt hamnade där, i paketets ordning, och att inget av det som flyttade
-    tappades på vägen - särskilt de sju uppdateringsstegen, som kommer ur
-    servern och inte får byggas om i webbläsaren.
+    Innehållet är paketets DEL 3.11 plus Cloud-kopplingen. Det låg i BYGG steg
+    5 och nås nu utan att gå via "Bygg om träffen": det flödet handlar om
+    träffens innehåll, och serveradministration hör inte hemma bakom det.
+    Programuppdateringen var fyra klick bort och är ett.
+
+    Testerna håller fast att allt som flyttade kom fram, i paketets ordning,
+    och att de sju uppdateringsstegen fortfarande kommer ur servern.
     """
 
     def setUp(self):
@@ -191,13 +201,23 @@ class BuildStepFiveServerTests(unittest.TestCase):
         self.js = (WEB / "app.js").read_text(encoding="utf-8")
         self.css = (WEB / "app.css").read_text(encoding="utf-8")
 
-    def test_the_step_gathers_the_three_old_menu_points(self):
-        """Skärmkartan: Användare och åtkomst, Programuppdatering samt Server
-        och nollställning hamnar alla i steg 5."""
+    def test_the_settings_view_gathers_the_old_menu_points(self):
+        """Användare och åtkomst, Programuppdatering, Server och nollställning
+        - plus Cloud-kopplingen, som satt i steg 1 tillsammans med källvalet
+        fast den är serveradministration."""
         self.assertIn(
-            'server: ["identity", "access", "software", "system"]',
+            'const SETTINGS_SECTIONS = ["identity", "access", "software", "cloud", "system"];',
             self.js,
         )
+
+    def test_the_cloud_card_left_the_source_step(self):
+        """Steg 1 svarar på var träffen kommer ifrån. Kopplingen och
+        parkopplingen av lådor är något annat."""
+        self.assertIn('kalla: ["runtime", "local", "import"]', self.js)
+
+    def test_settings_is_its_own_mode(self):
+        self.assertIn('const MODES = ["kor", "bygg", "installningar"];', self.js)
+        self.assertIn("function showSettings()", self.js)
 
     def test_the_four_blocks_stand_in_the_packages_order(self):
         """DOM-ordningen är den som syns: identitet, inloggning, uppdatering,
@@ -211,9 +231,36 @@ class BuildStepFiveServerTests(unittest.TestCase):
         ]
         self.assertEqual(order, sorted(order))
 
-    def test_the_step_has_its_own_heading(self):
-        self.assertIn('data-build-panel="server"', self.html)
-        self.assertIn("<h2>Server</h2>", self.html)
+    def test_the_view_has_its_own_heading_and_chrome(self):
+        self.assertIn('id="settings-heading"', self.html)
+        self.assertIn("<h2>Inställningar</h2>", self.html)
+        self.assertIn('id="settings-chrome"', self.html)
+        self.assertNotIn('data-build-panel="server"', self.html)
+
+    def test_the_gear_opens_settings_and_not_the_source_step(self):
+        """Knappen hette "Öppna administration" men landade i BYGG steg 1, som
+        handlar om var träffen kommer ifrån. Det är felet ärendet beskriver."""
+        self.assertIn('else setMode("installningar");', self.js)
+        self.assertNotIn('else { setMode("bygg"); selectBuildStep("kalla"); }', self.js)
+
+    def test_the_settings_heading_does_not_follow_into_the_other_modes(self):
+        """Rubriken syntes ovanför BYGG steg 1 tills det här fångades.
+
+        showSettings() visade den, och ingenting dolde den igen. Testerna
+        kontrollerade läge och steg och gick igenom - felet syntes bara på en
+        skärmbild.
+        """
+        for view in ("function selectRunTab(tab) {", "function selectBuildStep(step) {"):
+            block = self.js.split(view, 1)[1][:400]
+            with self.subTest(view=view):
+                self.assertIn('#settings-heading', block)
+                self.assertIn('classList.add("hidden")', block)
+
+    def test_settings_is_reachable_from_the_top_bar(self):
+        """Utan en permanent ingång måste man gå via "Bygg om träffen" - alltså
+        via ett flöde som handlar om något annat."""
+        self.assertIn('id="open-settings"', self.html)
+        self.assertIn('setMode("installningar")', self.js)
 
     def test_identity_is_three_status_boxes_and_the_server_name(self):
         """3.11.1. Rutorna och namnfältet låg på var sitt håll förut."""

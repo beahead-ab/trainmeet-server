@@ -25,6 +25,19 @@
         <button type="button" id="leave-build" class="build-chrome-exit">Lämna byggläget</button>
       </div>
 
+      <!-- Inställningar är ett eget läge. Att administrera servern är varken
+           drift eller bygge, och låg tidigare bakom "Bygg om träffen". -->
+      <div id="settings-chrome" class="build-chrome hidden">
+        <div class="build-chrome-left">
+          <span class="build-chrome-mark" aria-hidden="true">⚙</span>
+          <b>Inställningar</b>
+          <span class="build-chrome-note">
+            Serverns identitet, åtkomst, programvara och Cloud-koppling. Träffen påverkas inte.
+          </span>
+        </div>
+        <button type="button" id="leave-settings" class="build-chrome-exit">Tillbaka till träffen</button>
+      </div>
+
       <header class="topbar" id="app-chrome">
         <div class="brand-lockup">
           <img class="brand-mark" src="/assets/ikon/trainmeet-ikon.svg" alt="" width="28" height="28">
@@ -43,6 +56,7 @@
           <span id="app-clock" class="app-clock" aria-label="Träffklocka">–&#8202;–:–&#8202;–</span>
           <span id="app-devices" class="app-devices"><i></i>Inga boxar</span>
           <div id="connection" class="status offline"><span></span><b>Ej ansluten</b></div>
+          <button type="button" id="open-settings" class="settings-button" aria-label="Inställningar" title="Inställningar">⚙</button>
           <button type="button" id="enter-build" class="enter-build">Bygg om träffen</button>
         </div>
       </header>
@@ -190,13 +204,6 @@
                   <small class="build-step-subtitle" data-step-subtitle="boxar"></small>
                 </span>
               </button>
-              <button type="button" class="build-step" data-build-step="server">
-                <span class="build-step-number">5</span>
-                <span class="build-step-text">
-                  <span class="build-step-label">Server</span>
-                  <small class="build-step-subtitle" data-step-subtitle="server"></small>
-                </span>
-              </button>
             </nav>
 
             <div id="unsaved-panel" class="unsaved-panel" aria-live="polite">
@@ -309,6 +316,15 @@
              skrevs inte längre av någon kod - den stod kvar och sa emot
              stegets egen rubrik i varje byggsteg. -->
         <section id="admin-view" class="view-panel hidden">
+          <header id="settings-heading" class="build-panel-heading hidden">
+            <div class="build-panel-title">
+              <h2>Inställningar</h2>
+              <p>
+                Servern själv: namn, inloggning, programvara, Cloud-koppling och
+                nollställning. Träffens innehåll byggs under <b>Bygg om träffen</b>.
+              </p>
+            </div>
+          </header>
           <section id="build-step-kalla" class="build-panel hidden" data-build-panel="kalla">
             <header class="build-panel-heading">
               <h2>Var kommer träffen ifrån?</h2>
@@ -417,15 +433,6 @@
             <p id="bana-message" class="form-message" role="status"></p>
           </section>
 
-          <section id="build-step-server" class="build-panel hidden" data-build-panel="server">
-            <header class="build-panel-heading">
-              <h2>Server</h2>
-              <p>
-                Identitet, inloggning, programversion och nollställning — det
-                som förr låg på tre separata menypunkter.
-              </p>
-            </header>
-          </section>
 
           <div class="server-hero card admin-section-panel" data-admin-section="runtime">
             <div>
