@@ -3404,7 +3404,10 @@ function v2El(id) { return document.querySelector(`#tmbox-v2-${id}`); }
 
 function v2Geometry() {
   const stored = localStorage.getItem("trainmeet.v2Geometry");
-  return V2_GEOMETRIES[stored] ? stored : "16x2";
+  // TMBox v2 är 20x4. Alla fyra går att välja - en box rapporterar sin egen
+  // geometri och simulatorn ska kunna visa vilken som helst - men förvalet
+  // ska vara produkten, inte den geometri v1-boxarna råkade ha.
+  return V2_GEOMETRIES[stored] ? stored : "20x4";
 }
 
 function startTMBoxV2() {

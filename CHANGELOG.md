@@ -7,6 +7,21 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 Säkerhetskopian innehöll ingenting.
 
+### Simulatorns förval är TMBox v2
+
+TMBox v2 är fastställd som ESP32-S3 med en 20×4-display. Simulatorn under
+KÖR → TMBox v2 startar därför i 20×4 i stället för 16×2, och väljaren märker
+ut vilken geometri som är produkten.
+
+Alla fyra går fortfarande att välja — en box rapporterar sin egen geometri och
+simulatorn ska kunna visa vilken som helst. Det som ändras är vad man ser utan
+att välja något.
+
+De boxar som redan finns är TMBox v1 Legacy, kör ESP8266 och en annan
+firmware, och pratar inte med den här servern alls. 16×2 var deras geometri,
+inte produktens.
+
+
 ### TMBox-dokumentation i webbadmin
 
 Att veta vad boxen gör krävde en box, eller en fil att öppna lokalt. KÖR →
