@@ -383,11 +383,26 @@ const RUN_PANELS = {
   tmbox: "#tmbox-v2-view",
 };
 
+const MODES = ["kor", "bygg", "installningar"];
+
+//: Vilket läge sidan står i. Enda stället som läser `data-mode`, så ett fjärde
+//: läge behöver bara läggas i MODES.
+//:
+//: Den kände tidigare bara `bygg` och `kor` och svarade `kor` för allt annat.
+//: Den hade noll anropsställen, så felet syntes aldrig - men samma tvåvägsval
+//: fanns på startraden längst ned, och där syntes det: setMode *skriver*
+//: `installningar` till localStorage, men starten kunde inte läsa tillbaka
+//: det. Lämnade man appen i Inställningar och laddade om hamnade man i KÖR.
 function currentMode() {
-  return document.body.dataset.mode === "bygg" ? "bygg" : "kor";
+  const stored = document.body.dataset.mode;
+  return MODES.includes(stored) ? stored : "kor";
 }
 
-const MODES = ["kor", "bygg", "installningar"];
+//: Vad ett sparat läge ska tolkas som vid start. Samma lista, ett ställe.
+function storedMode() {
+  const stored = localStorage.getItem("trainmeet.mode");
+  return MODES.includes(stored) ? stored : "kor";
+}
 
 function setMode(mode) {
   const next = MODES.includes(mode) ? mode : "kor";
@@ -501,7 +516,7 @@ function selectBuildStep(step) {
 // Kroppen ska bära ett läge från första bildrutan, inte först efter
 // inloggning: CSS hänger på body[data-mode] och en sida utan läge ritar
 // applocket fel under den halvsekund som inloggningen tar.
-document.body.dataset.mode = localStorage.getItem("trainmeet.mode") === "bygg" ? "bygg" : "kor";
+document.body.dataset.mode = storedMode();
 
 document.querySelector("#enter-build").addEventListener("click", () => setMode("bygg"));
 document.querySelector("#leave-build").addEventListener("click", () => setMode("kor"));

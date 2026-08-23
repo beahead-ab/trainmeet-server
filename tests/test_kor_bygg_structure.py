@@ -215,6 +215,32 @@ class ServerSettingsTests(unittest.TestCase):
         parkopplingen av lådor är något annat."""
         self.assertIn('kalla: ["runtime", "local", "import"]', self.js)
 
+    def test_the_mode_helpers_know_all_three_modes(self):
+        """currentMode() svarade `kor` för allt utom `bygg`.
+
+        Den hade noll anropsställen, så felet syntes aldrig där. Men samma
+        tvåvägsval fanns på startraden: setMode *skriver* `installningar` till
+        localStorage, och starten kunde inte läsa tillbaka det - lämnade man
+        appen i Inställningar och laddade om hamnade man i KÖR.
+
+        Båda läser numera MODES, så ett fjärde läge behöver bara läggas där.
+        """
+        for helper in ("function currentMode()", "function storedMode()"):
+            block = self.js.split(helper, 1)[1][:260]
+            with self.subTest(helper=helper):
+                self.assertIn("MODES.includes(", block)
+                self.assertNotIn('=== "bygg" ? "bygg" : "kor"', block)
+
+    def test_nothing_reads_the_mode_past_the_helpers(self):
+        """Ett andra ställe som tolkar `data-mode` är ett andra ställe som kan
+        glömma ett läge."""
+        reads = [line for line in self.js.splitlines()
+                 if "dataset.mode" in line and "dataset.mode =" not in line]
+        self.assertEqual(1, len(reads), f"fler än ett ställe läser läget: {reads}")
+
+    def test_the_boot_line_uses_the_helper(self):
+        self.assertIn("document.body.dataset.mode = storedMode();", self.js)
+
     def test_settings_is_its_own_mode(self):
         self.assertIn('const MODES = ["kor", "bygg", "installningar"];', self.js)
         self.assertIn("function showSettings()", self.js)
