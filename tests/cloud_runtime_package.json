@@ -1,0 +1,367 @@
+{
+  "autonomous_links": [],
+  "clock": {
+    "available_styles": [
+      "swiss",
+      "swedish",
+      "digital"
+    ],
+    "show_seconds": true,
+    "source": "local",
+    "speed": 1.0,
+    "start_time": "12:00",
+    "stop_reasons": [
+      {
+        "key": "trafikstopp",
+        "label": "Trafikstopp"
+      },
+      {
+        "key": "rast",
+        "label": "Rast"
+      },
+      {
+        "key": "tekniskt",
+        "label": "Tekniskt stopp"
+      }
+    ]
+  },
+  "connections": [
+    {
+      "dispatch_mode_override": null,
+      "display_order_a": 0,
+      "display_order_b": 0,
+      "display_side_a": "right",
+      "display_side_b": "left",
+      "evidence_services": 2,
+      "id": "connection-station-charlottendal-station-vasterhamn",
+      "inference_confidence": 0.67,
+      "inference_method": "consecutive_train_movements",
+      "station_a_id": "station-charlottendal",
+      "station_b_id": "station-vasterhamn",
+      "track_type": "single"
+    }
+  ],
+  "display": {
+    "default_theme": "dark",
+    "graph_station_order": [
+      "station-charlottendal",
+      "station-vasterhamn"
+    ],
+    "topology_branch_station_ids": [],
+    "topology_mainline_station_ids": [
+      "station-charlottendal",
+      "station-vasterhamn"
+    ]
+  },
+  "meet": {
+    "active_day": "Dagl",
+    "clock_time": "12:00",
+    "default_dispatch_mode": "clearance",
+    "id": "meet-kontraktsprov",
+    "name": "Kontraktsprovet",
+    "slug": "kontraktsprovet",
+    "timezone": "Europe/Stockholm",
+    "traffic_direction": "left"
+  },
+  "panels": [
+    {
+      "id": "panel-station-charlottendal",
+      "name": "CDA TMBox",
+      "slots": {
+        "A": "connection-station-charlottendal-station-vasterhamn",
+        "B": null,
+        "C": null,
+        "D": null
+      },
+      "station_id": "station-charlottendal"
+    },
+    {
+      "id": "panel-station-vasterhamn",
+      "name": "VST TMBox",
+      "slots": {
+        "A": "connection-station-charlottendal-station-vasterhamn",
+        "B": null,
+        "C": null,
+        "D": null
+      },
+      "station_id": "station-vasterhamn"
+    }
+  ],
+  "publication_id": "publication-kontraktsprov-1",
+  "published_at": "2026-09-05T08:00:00Z",
+  "routes": [
+    {
+      "arrival_time": null,
+      "days": "Lör",
+      "departure_time": "09:20",
+      "id": "service-421-lor-0",
+      "service_day_offset": 0,
+      "service_id": "service-421-lor",
+      "service_minute": 560,
+      "station_id": "station-charlottendal",
+      "station_name": "Charlottendal",
+      "stop_order": 0,
+      "train_number": "421"
+    },
+    {
+      "arrival_time": "09:41",
+      "days": "Lör",
+      "departure_time": null,
+      "id": "service-421-lor-1",
+      "service_day_offset": 0,
+      "service_id": "service-421-lor",
+      "service_minute": 581,
+      "station_id": "station-vasterhamn",
+      "station_name": "Västerhamn",
+      "stop_order": 1,
+      "train_number": "421"
+    },
+    {
+      "arrival_time": null,
+      "days": "Lör",
+      "departure_time": "10:05",
+      "id": "service-428-lor-0",
+      "service_day_offset": 0,
+      "service_id": "service-428-lor",
+      "service_minute": 605,
+      "station_id": "station-vasterhamn",
+      "station_name": "Västerhamn",
+      "stop_order": 0,
+      "train_number": "428"
+    },
+    {
+      "arrival_time": "10:26",
+      "days": "Lör",
+      "departure_time": null,
+      "id": "service-428-lor-1",
+      "service_day_offset": 0,
+      "service_id": "service-428-lor",
+      "service_minute": 626,
+      "station_id": "station-charlottendal",
+      "station_name": "Charlottendal",
+      "stop_order": 1,
+      "train_number": "428"
+    }
+  ],
+  "schema_version": 3,
+  "services": [
+    {
+      "days": "Lör",
+      "id": "service-421-lor",
+      "stops": [
+        {
+          "arrival_time": null,
+          "departure_time": "09:20",
+          "service_day_offset": 0,
+          "service_minute": 560,
+          "station_id": "station-charlottendal",
+          "station_name": "Charlottendal",
+          "stop_order": 0
+        },
+        {
+          "arrival_time": "09:41",
+          "departure_time": null,
+          "service_day_offset": 0,
+          "service_minute": 581,
+          "station_id": "station-vasterhamn",
+          "station_name": "Västerhamn",
+          "stop_order": 1
+        }
+      ],
+      "train_number": "421",
+      "train_type": "person"
+    },
+    {
+      "days": "Lör",
+      "id": "service-428-lor",
+      "stops": [
+        {
+          "arrival_time": null,
+          "departure_time": "10:05",
+          "service_day_offset": 0,
+          "service_minute": 605,
+          "station_id": "station-vasterhamn",
+          "station_name": "Västerhamn",
+          "stop_order": 0
+        },
+        {
+          "arrival_time": "10:26",
+          "departure_time": null,
+          "service_day_offset": 0,
+          "service_minute": 626,
+          "station_id": "station-charlottendal",
+          "station_name": "Charlottendal",
+          "stop_order": 1
+        }
+      ],
+      "train_number": "428",
+      "train_type": "person"
+    }
+  ],
+  "stations": [
+    {
+      "aliases": [],
+      "code": "CDA",
+      "diagram_order": 0,
+      "id": "station-charlottendal",
+      "is_autonomous": false,
+      "is_topology_branch": false,
+      "name": "Charlottendal",
+      "operating_points": [],
+      "tracks": [
+        {
+          "active": true,
+          "display_label": "1B",
+          "id": "track-station-charlottendal-1b",
+          "sort_order": 10
+        },
+        {
+          "active": true,
+          "display_label": "1A",
+          "id": "track-station-charlottendal-1a",
+          "sort_order": 20
+        }
+      ]
+    },
+    {
+      "aliases": [],
+      "code": "VST",
+      "diagram_order": 1,
+      "id": "station-vasterhamn",
+      "is_autonomous": false,
+      "is_topology_branch": false,
+      "name": "Västerhamn",
+      "operating_points": [],
+      "tracks": [
+        {
+          "active": true,
+          "display_label": "1",
+          "id": "track-station-vasterhamn-1",
+          "sort_order": 10
+        },
+        {
+          "active": true,
+          "display_label": "2",
+          "id": "track-station-vasterhamn-2",
+          "sort_order": 20
+        }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "active": true,
+      "display_label": "1B",
+      "id": "track-station-charlottendal-1b",
+      "operating_point_id": null,
+      "sort_order": 10,
+      "station_id": "station-charlottendal"
+    },
+    {
+      "active": true,
+      "display_label": "1A",
+      "id": "track-station-charlottendal-1a",
+      "operating_point_id": null,
+      "sort_order": 20,
+      "station_id": "station-charlottendal"
+    },
+    {
+      "active": true,
+      "display_label": "1",
+      "id": "track-station-vasterhamn-1",
+      "operating_point_id": null,
+      "sort_order": 10,
+      "station_id": "station-vasterhamn"
+    },
+    {
+      "active": true,
+      "display_label": "2",
+      "id": "track-station-vasterhamn-2",
+      "operating_point_id": null,
+      "sort_order": 20,
+      "station_id": "station-vasterhamn"
+    }
+  ],
+  "trains": [
+    {
+      "arrival_from": null,
+      "arrival_from_next": null,
+      "arrival_time": null,
+      "days": "Lör",
+      "departure_time": "09:20",
+      "departure_to": "VST",
+      "departure_to_next": null,
+      "id": "86271ee0-a095-4530-8ac0-3233e2a7bc7c",
+      "manual_sort_order": null,
+      "no_stop": false,
+      "note": "",
+      "service_id": "service-421-lor",
+      "sort_time": "09:20",
+      "station": "Charlottendal",
+      "station_id": "station-charlottendal",
+      "track_id": "track-station-charlottendal-1b",
+      "train_number": "421",
+      "train_type": "person"
+    },
+    {
+      "arrival_from": "VST",
+      "arrival_from_next": null,
+      "arrival_time": "10:26",
+      "days": "Lör",
+      "departure_time": null,
+      "departure_to": null,
+      "departure_to_next": null,
+      "id": "941aacef-4726-4817-821e-a7b0b33f3595",
+      "manual_sort_order": null,
+      "no_stop": false,
+      "note": "",
+      "service_id": "service-428-lor",
+      "sort_time": "10:26",
+      "station": "Charlottendal",
+      "station_id": "station-charlottendal",
+      "track_id": "track-station-charlottendal-1a",
+      "train_number": "428",
+      "train_type": "person"
+    },
+    {
+      "arrival_from": "CDA",
+      "arrival_from_next": null,
+      "arrival_time": "09:41",
+      "days": "Lör",
+      "departure_time": null,
+      "departure_to": null,
+      "departure_to_next": null,
+      "id": "4c1c2c23-e68d-430a-8cc0-e20e489819fb",
+      "manual_sort_order": null,
+      "no_stop": false,
+      "note": "",
+      "service_id": "service-421-lor",
+      "sort_time": "09:41",
+      "station": "Västerhamn",
+      "station_id": "station-vasterhamn",
+      "track_id": "track-station-vasterhamn-1",
+      "train_number": "421",
+      "train_type": "person"
+    },
+    {
+      "arrival_from": null,
+      "arrival_from_next": null,
+      "arrival_time": null,
+      "days": "Lör",
+      "departure_time": "10:05",
+      "departure_to": "CDA",
+      "departure_to_next": null,
+      "id": "cb5b5c82-8205-4e58-b0a1-6569a1539d1e",
+      "manual_sort_order": null,
+      "no_stop": false,
+      "note": "",
+      "service_id": "service-428-lor",
+      "sort_time": "10:05",
+      "station": "Västerhamn",
+      "station_id": "station-vasterhamn",
+      "track_id": "track-station-vasterhamn-2",
+      "train_number": "428",
+      "train_type": "person"
+    }
+  ]
+}
