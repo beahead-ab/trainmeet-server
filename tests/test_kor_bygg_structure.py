@@ -242,7 +242,18 @@ class BuildStepFiveServerTests(unittest.TestCase):
         for field in ("admin-username", "admin-password", "admin-password-confirm"):
             self.assertIn(f'id="{field}"', panel)
         self.assertIn('id="access-mode"', panel)
-        self.assertIn(".access-grid { grid-template-columns: repeat(3, minmax(180px, 1fr)); }", self.css)
+        # Tre kolumner när det finns plats, färre när det inte gör det.
+        #
+        # Testet pinnade tidigare strängen `repeat(3, minmax(180px, 1fr))`.
+        # Den formen kräver 598px och svämmade över byggstegets innehållsyta,
+        # som är 572px vid paketets 924px - sidofältet tar resten. Medie-
+        # förfrågan som skulle fällt ihop den lyssnar på fönstret, inte på
+        # ytan, så den slog aldrig till.
+        #
+        # Det som ska hålla är alltså inte antalet kolumner utan att formuläret
+        # lägger om i stället för att sticka ut.
+        self.assertIn(".access-grid { grid-template-columns: repeat(auto-fit,", self.css)
+        self.assertIn("minmax(min(180px, 100%), 1fr)); }", self.css)
 
     def test_the_access_chip_says_how_this_browser_is_connected(self):
         """Paketet skriver "Lokal åtkomst" i chippet. Det är inte en etikett
