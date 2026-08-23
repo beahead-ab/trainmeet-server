@@ -293,6 +293,15 @@ omordning av stationer.
 | 3.9.4 | Ändrade rader: orange kantmarkering + chip *Ändrad* | ⬜ |
 | 3.9.5 | **Massredigering av markerade rader** | ⬜ |
 | 3.9.6 | Kolumner enligt paketet | ⬜ |
+| 3.9.7 | Steget säger att vyn saknas i stället för att visa en tom sida | ✅ |
+
+> Steget hade varken panel eller sektion, så `selectBuildStep` dolde allt annat
+> och lämnade en tom yta. Rapporterat från drift som att sidan tog lång tid att
+> ladda — vilket är vad tomhet ser ut som när man väntar. Ingenting var
+> långsamt: alla fyra stegen svarade på en halv sekund. En platshållare säger
+> nu vad som gäller och pekar mot KÖR → Trafik. Den ersätts när vyn byggs, och
+> ett test i `tests/test_build_steps_show_something.py` faller då och påminner
+> om det.
 
 ### 3.10 BYGG › 4 TMBoxar
 

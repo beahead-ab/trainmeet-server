@@ -377,6 +377,39 @@
             <p id="source-message" class="form-message" role="status"></p>
           </section>
 
+          <!-- Steg 3 har ingen vy byggd än. Utan panel här döljer
+               selectBuildStep allt annat och lämnar en helt tom yta - och den
+               som klickar tror att sidan laddar. Hellre säga vad som gäller
+               än visa ingenting. Kraven står i DESIGNPAKET-DOD.md 3.9. -->
+          <section id="build-step-tid" class="build-panel hidden" data-build-panel="tid">
+            <header class="build-panel-heading">
+              <h2>Tidtabell</h2>
+              <p>Tågrörelserna på träffen: vilka tåg som går, när, och på vilket spår.</p>
+            </header>
+
+            <div class="shortcut-box">
+              <div>
+                <b>Vyn är inte byggd än</b>
+                <p>
+                  Tidtabellen finns och används — den kör träffen just nu — men
+                  det går ännu inte att läsa eller ändra den härifrån. Antalet
+                  rörelser står i steget till vänster.
+                </p>
+                <p>
+                  Under tiden: <b>KÖR → Trafik</b> visar rörelserna som de
+                  ligger, med filter på station och tåg.
+                </p>
+              </div>
+            </div>
+
+            <p class="lock-note">
+              När vyn byggs blir den redigerbar även när träffen kommer från
+              Cloud, till skillnad från stationer och sträckor. Servern är
+              runtime och tidtabellen är det som ändras under en träff; en
+              ändring här blir en lokal revision som du aktiverar själv.
+            </p>
+          </section>
+
           <section id="build-step-bana" class="build-panel hidden" data-build-panel="bana">
             <header class="build-panel-heading with-badge">
               <div class="build-panel-title">
