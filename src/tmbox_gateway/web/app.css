@@ -1707,7 +1707,14 @@ body[data-mode="bygg"] .page-shell > .topbar { top: 50px; }
 .enter-build:hover { background: var(--paper); }
 
 /* Flikraden, bara i körläget. */
-.run-tabs { display: flex; gap: 2px; }
+/* `min-width: 0` är det som gör att flikraden krymper i stället för att
+   svämma över. En flexbox ger sina barn `min-width: auto`, alltså minst deras
+   innehållsbredd - så fem flikar knuffade sig in under topplockets högra
+   grupp vid smala fönster i stället för att låta sig scrollas.
+   `overflow-x: auto` fanns redan, men fick aldrig något att göra. */
+.run-tabs { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.run-tabs::-webkit-scrollbar { display: none; }
+.run-tab { flex: none; }
 .run-tab {
   min-height: 30px; padding: 0 11px;
   border: 0; border-radius: var(--radius-sm);
