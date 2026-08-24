@@ -41,7 +41,7 @@
   color-scheme: light;
 
   /* ------------------------------------------------------------------ paket
-     Designtokens ur designpaketets DEL 6. Paketet är bindande för utseende,
+     Gemensamma designtokens för TrainMeets administrativa gränssnitt.
      så de här värdena är källan - och de är avsiktligt andra än de blå som
      docs/ADMIN-UI-CONTRACT.md angav. Konflikten är dokumenterad där.
 
@@ -1637,7 +1637,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .technical-details dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
 /* ===================================================== KÖR / BYGG-skelettet
-   Designpaketets DEL 3.1 och DEL 6. Måtten här är paketets, inte ungefärliga:
+   Fasta produktmått för TMBox v2-simulatorn:
    50px mörk list, 56px applock, 236px sidopanel, 30px flikar.
 
    Principen bakom hela strukturen: konfiguration och drift ska inte kunna

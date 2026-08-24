@@ -15,16 +15,8 @@ Referens-URL för visuell verifiering är `https://trainmeet.app/meet/hela-huset
 
 ## Regler
 
-Serverns admin följer sedan 1.3.0 **designpaketet** (`design_handoff_trainmeet_server`),
-som är bindande för utseende, struktur och användarflöde. Det ersätter tre
-tidigare regler här som sa motsatsen — de står kvar nedan som historik, inte
-som krav:
-
-> ~~16 px radie~~ · ~~Sticky topprad på 48 px med blur~~ ·
-> ~~Helt runda knappar. Blå är primär åtgärd; amber/orange används inte som
-> knappfärg.~~
-
-Gällande värden, ur paketets DEL 6:
+Följande värden är det gällande kontraktet för utseende, struktur och
+användarflöde:
 
 - **Accent `#c96442`** är primär åtgärd. Den blå `hsl(220 70% 45%)` används inte längre.
 - Radie 12 px för kort, 8 px för fält och knappar, 999 px för chip.

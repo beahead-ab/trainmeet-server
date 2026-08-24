@@ -84,7 +84,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="overview-route-list"', html)
         self.assertIn("TÅGRUTTER", html)
         # Den gamla sidopanelen ("Administration och funktioner") och
-        # TMBox-simuleringen finns inte längre: designpaketet ersätter tolv
+        # Den äldre TMBox-simuleringen finns inte längre; gränssnittet ersätter tolv
         # menypunkter med två lägen, och tar bort simuleringen eftersom v2
         # räcker. Skalet kontrolleras därför mot den nya strukturen.
         self.assertIn('id="run-tabs"', html)

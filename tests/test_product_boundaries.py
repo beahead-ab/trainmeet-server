@@ -2,7 +2,7 @@
 
 Ett dokument som säger "servern tolkar aldrig PDF:er" hindrar ingen från att
 lägga till en PDF-tolk. Det här gör det. Varje test här motsvarar en rad i
-docs/DESIGNPAKET-HANDOFF.md, beslut 2 och 3, och faller om gränsen suddas ut.
+docs/cloud-server.md och faller om gränsen suddas ut.
 
 De beslut som ännu inte är implementerade står som ⛔ i checklistan och har
 medvetet *inget* test här: ett test som påstår att nuläget är rätt vore värre
@@ -64,7 +64,7 @@ class NoDocumentInterpretationTests(unittest.TestCase):
                         root,
                         self.INTERPRETERS,
                         f"{path.name} importerar {name}. Tolkning hör hemma i "
-                        "trainmeet-cloud - se HANDOFF beslut 2.",
+                        "trainmeet-cloud - se docs/cloud-server.md.",
                     )
 
     def test_the_manual_import_accepts_a_json_operating_package(self):
