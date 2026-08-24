@@ -432,6 +432,11 @@ class TMBoxStationService:
             shift_id=None,
             event_type=action,
             crew_ready=crew_ready,
+            # Boxen har inga bokstäver och kan inte skriva en anteckning. Den
+            # skickar därför ingen, och lämnar den ifred. Vore det ett tomt
+            # fält i stället skulle varje spårbyte radera vad tågklareraren
+            # skrivit på terminalen.
+            operator_note=None,
         )
         if action in TRACK_ACTIONS:
             self.operations_store.invalidate_clearances_for_movement(

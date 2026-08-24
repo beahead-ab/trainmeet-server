@@ -211,6 +211,31 @@ class OperatorNoteTests(unittest.TestCase):
         )
         self.assertIsNone(snapshot["movements"][str(self.movement["id"])]["operatorNote"])
 
+    def test_a_box_changing_track_never_clears_a_note(self) -> None:
+        """Boxen har inga bokstäver och skickar aldrig någon anteckning.
+
+        Det farliga fallet Casper beskrev: tågklareraren skriver något på
+        terminalen, och nästa spårbyte från en TMBox raderar det.
+        """
+
+        self._write(operator_note="Kort tåg, stannar vid stoppbocken")
+
+        # Precis som protokollet anropar den: utan operator_note alls.
+        self.store.update_tkl_movement(
+            self.package["publication_id"], self.day,
+            str(self.movement["station_id"]), str(self.movement["id"]),
+            arrival="none", departure="positioned", actual_track="4",
+            updated_by="TMBOX-A7K2C3", shift_id=None, event_type="train.position.set",
+            crew_ready=False, operator_note=None,
+        )
+
+        snapshot = self.store.tkl_station_state(
+            self.package["publication_id"], self.day, str(self.movement["station_id"])
+        )
+        kept = snapshot["movements"][str(self.movement["id"])]
+        self.assertEqual("Kort tåg, stannar vid stoppbocken", kept["operatorNote"])
+        self.assertEqual("4", kept["actualTrack"])
+
     def test_an_empty_note_clears_it(self) -> None:
         """Att ta bort en anteckning ska gå, och skilja sig från att låta bli."""
 

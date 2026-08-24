@@ -868,6 +868,13 @@ class TrainMeetHTTPApplication:
                 updated_by=current_shift["operator_name"],
                 shift_id=current_shift["shift_id"],
                 event_type=str(payload.get("event_type") or "movement_updated")[:80],
+                # Saknas fältet lämnas anteckningen ifred. Ett anrop som bara
+                # byter spår ska inte råka radera vad någon annan skrivit.
+                operator_note=(
+                    str(payload["operator_note"])[:200]
+                    if payload.get("operator_note") is not None
+                    else None
+                ),
             )
         except ValueError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_movement", str(error)) from error
