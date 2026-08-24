@@ -234,17 +234,81 @@ class TrainMeetHTTPApplication:
                 if active is not None:
                     self.operations_store.ensure_publication(active)
 
-    def local_admin(self) -> PairedClient:
+    def local_admin(self, user: dict[str, object] | None = None) -> PairedClient:
         return PairedClient(
             client_id="local-web-admin",
-            display_name="Lokal administratör",
+            display_name=str(user["username"]) if user else "Lokal administratör",
             kind=DeviceKind.WEB_ADMIN,
             panel_ids=tuple(sorted(self.engine.config.panels)),
+            admin_user_id=str(user["user_id"]) if user and user.get("user_id") else None,
+            admin_role=str(user["role"]) if user else "owner",
         )
 
     def admin_access(self, client: PairedClient) -> dict[str, object]:
         self._require_admin(client)
         return self.identities.admin_access_summary()
+
+    # ------------------------------------------------------- användare
+
+    def _require_owner(self, client: PairedClient) -> None:
+        """Bara ägaren får ändra vilka som har tillgång.
+
+        En administratör kan allt annat på servern. Skillnaden är avsiktligt
+        smal: den som lagts till ska kunna sköta en träff fullt ut, men inte
+        kunna ge sig själv sällskap eller ta bort den som bjöd in hen.
+        """
+
+        self._require_admin(client)
+        if client.admin_role != "owner":
+            raise HTTPAPIError(
+                HTTPStatus.FORBIDDEN,
+                "owner_required",
+                "Bara ägaren kan lägga till och ta bort användare",
+            )
+
+    def admin_users(self, client: PairedClient) -> dict[str, Any]:
+        self._require_admin(client)
+        return {"users": self.identities.list_admin_users(), "role": client.admin_role}
+
+    def create_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_owner(client)
+        try:
+            user = self.identities.create_admin_user(
+                str(payload.get("username") or ""),
+                str(payload.get("password") or ""),
+                str(payload.get("role") or "admin"),
+            )
+        except AdminAccessError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
+        return {"user": user}
+
+    def delete_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_owner(client)
+        try:
+            self.identities.delete_admin_user(str(payload.get("user_id") or ""))
+        except AdminAccessError as error:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "invalid_admin_user", str(error)) from error
+        return {"users": self.identities.list_admin_users()}
+
+    def update_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Roll och lösenord. Rollen är ägarens ensak; lösenordet får var och
+        en byta på sig själv."""
+
+        self._require_admin(client)
+        user_id = str(payload.get("user_id") or "")
+        try:
+            if payload.get("role") is not None:
+                self._require_owner(client)
+                self.identities.set_admin_user_role(user_id, str(payload["role"]))
+            if payload.get("password") is not None:
+                # Var och en får byta sitt eget lösenord. Någon annans är
+                # ägarens ensak.
+                if client.admin_user_id != user_id:
+                    self._require_owner(client)
+                self.identities.set_admin_user_password(user_id, str(payload["password"]))
+        except AdminAccessError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
+        return {"user": self.identities.admin_user(user_id)}
 
     def configure_admin_access(
         self,
@@ -2253,6 +2317,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     self.server.application.installation_status(),
                 )
                 return
+            if path == "/v1/admin/users":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.admin_users(client))
+                return
             if path == "/v1/admin/access":
                 client = self._authenticated_client()
                 self._send_json(
@@ -2598,6 +2666,27 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     self.server.application.set_operating_mode(client, payload),
                 )
                 return
+            if path == "/v1/admin/users":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.CREATED,
+                    self.server.application.create_admin_user(client, self._read_json()),
+                )
+                return
+            if path == "/v1/admin/users/update":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.update_admin_user(client, self._read_json()),
+                )
+                return
+            if path == "/v1/admin/users/delete":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.delete_admin_user(client, self._read_json()),
+                )
+                return
             if path == "/v1/local-configuration/seed":
                 client = self._authenticated_client()
                 self._send_json(
@@ -2721,8 +2810,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         if self._has_automatic_local_admin():
             return self.server.application.local_admin()
         token = self._admin_session_token()
-        if token and self.server.application.identities.authenticate_admin_session(token):
-            return self.server.application.local_admin()
+        if token:
+            user = self.server.application.identities.admin_session_user(token)
+            if user is not None:
+                return self.server.application.local_admin(user)
         return None
 
     def _has_automatic_local_admin(self) -> bool:

@@ -95,6 +95,12 @@ class PairedClient:
     kind: DeviceKind
     panel_ids: tuple[str, ...]
     station_id: str | None = None
+    #: Vem som är inloggad, när det är en människa. En TMBox har ingen roll.
+    #: Förvalet är ägare: det är vad varje inloggning betydde innan
+    #: användarlistan fanns, och konsolgenvägen vid lådan fungerar likadant
+    #: som förut.
+    admin_user_id: str | None = None
+    admin_role: str = "owner"
 
 
 @dataclass(frozen=True)
@@ -193,8 +199,26 @@ class IdentityStore:
                 expires_at TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+
+            -- Flera personer kan sköta servern. Ägaren är den som dessutom får
+            -- lägga till och ta bort andra; en administratör kan allt annat.
+            --
+            -- Listan är serverns egen och delas inte med Cloud. En Pi i en
+            -- klubblokal ska fungera utan nät, och en användarlista som kräver
+            -- uppkoppling för att logga in vore fel sorts beroende.
+            CREATE TABLE IF NOT EXISTS admin_users (
+                user_id TEXT PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                password_salt BLOB,
+                password_digest BLOB,
+                role TEXT NOT NULL CHECK(role IN ('owner', 'admin')),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                must_change_password INTEGER NOT NULL DEFAULT 0
+            );
             """
         )
+        self._add_missing_columns("admin_sessions", {"user_id": "TEXT"})
         self._add_missing_columns(
             "admin_access",
             {"must_change_password": "INTEGER NOT NULL DEFAULT 0"},
@@ -220,6 +244,37 @@ class IdentityStore:
             ON CONFLICT(singleton) DO NOTHING
             """,
             (now,),
+        )
+        self._adopt_singleton_admin_as_owner(now)
+
+    def _adopt_singleton_admin_as_owner(self, now: str) -> None:
+        """Den befintliga administratören blir den första ägaren.
+
+        Servern hade en enda administratör i en singleton-rad. Den raden är
+        fortfarande sanningen om vem som är ägare - allt gammalt API pekar på
+        den - men den finns nu också i användarlistan, så att flera personer
+        kan finnas vid sidan av.
+
+        Det här får aldrig låsa ute någon. Saknas användarnamn eller lösenord
+        är installationen inte färdig, och då finns ingen ägare att adoptera.
+        """
+
+        if self._connection.execute("SELECT 1 FROM admin_users LIMIT 1").fetchone():
+            return
+        row = self._connection.execute(
+            "SELECT username, password_salt, password_digest, must_change_password"
+            " FROM admin_access WHERE singleton = 1"
+        ).fetchone()
+        if row is None or not str(row[0] or "").strip() or row[2] is None:
+            return
+        self._connection.execute(
+            """
+            INSERT INTO admin_users(
+                user_id, username, password_salt, password_digest,
+                role, created_at, updated_at, must_change_password
+            ) VALUES (?, ?, ?, ?, 'owner', ?, ?, ?)
+            """,
+            (secrets.token_hex(16), str(row[0]).strip(), row[1], row[2], now, now, int(row[3] or 0)),
         )
 
     def _add_missing_columns(self, table: str, columns: dict[str, str]) -> None:
@@ -707,12 +762,171 @@ class IdentityStore:
                         """,
                         (username, salt, digest, now.isoformat(), int(must_change_password)),
                     )
+                # Singleton-raden är ägarens uppgifter. Användarlistan ska
+                # spegla den, annars finns ägaren bara på ett av två ställen
+                # och listan blir fel så fort lösenordet sätts eller byts.
+                self._sync_owner_from_singleton_locked(now.isoformat())
                 self._connection.execute("COMMIT")
             except Exception:
                 if self._connection.in_transaction:
                     self._connection.execute("ROLLBACK")
                 raise
         return self.admin_access_summary()
+
+    def _sync_owner_from_singleton_locked(self, now: str) -> None:
+        row = self._connection.execute(
+            "SELECT username, password_salt, password_digest, must_change_password"
+            " FROM admin_access WHERE singleton = 1"
+        ).fetchone()
+        if row is None or not str(row[0] or "").strip() or row[2] is None:
+            return
+        username = str(row[0]).strip()
+        existing = self._connection.execute(
+            "SELECT user_id FROM admin_users WHERE role = 'owner' ORDER BY created_at LIMIT 1"
+        ).fetchone()
+        if existing is None:
+            self._connection.execute(
+                """
+                INSERT INTO admin_users(
+                    user_id, username, password_salt, password_digest,
+                    role, created_at, updated_at, must_change_password
+                ) VALUES (?, ?, ?, ?, 'owner', ?, ?, ?)
+                """,
+                (secrets.token_hex(16), username, row[1], row[2], now, now, int(row[3] or 0)),
+            )
+            return
+        self._connection.execute(
+            "UPDATE admin_users SET username = ?, password_salt = ?, password_digest = ?,"
+            " updated_at = ?, must_change_password = ? WHERE user_id = ?",
+            (username, row[1], row[2], now, int(row[3] or 0), existing[0]),
+        )
+
+    # ---------------------------------------------------------- användare
+
+    def list_admin_users(self) -> list[dict[str, object]]:
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT user_id, username, role, created_at, updated_at,"
+                " password_digest IS NOT NULL, must_change_password"
+                " FROM admin_users ORDER BY role DESC, username COLLATE NOCASE"
+            ).fetchall()
+        return [
+            {
+                "user_id": row[0],
+                "username": row[1],
+                "role": row[2],
+                "created_at": row[3],
+                "updated_at": row[4],
+                "password_configured": bool(row[5]),
+                "must_change_password": bool(row[6]),
+            }
+            for row in rows
+        ]
+
+    def admin_user(self, user_id: str) -> dict[str, object] | None:
+        return next(
+            (user for user in self.list_admin_users() if user["user_id"] == user_id), None
+        )
+
+    def create_admin_user(
+        self, username: str, password: str, role: str = "admin"
+    ) -> dict[str, object]:
+        username = username.strip()
+        if not ADMIN_USERNAME_PATTERN.fullmatch(username):
+            raise AdminAccessError(
+                "Användarnamnet måste vara 3–64 tecken och får innehålla bokstäver, siffror, punkt, bindestreck och @"
+            )
+        if not 8 <= len(password) <= 256:
+            raise AdminAccessError("Lösenordet måste vara 8–256 tecken")
+        if role not in {"owner", "admin"}:
+            raise AdminAccessError("Rollen måste vara ägare eller administratör")
+
+        now = datetime.now(timezone.utc).isoformat()
+        salt = secrets.token_bytes(16)
+        user_id = secrets.token_hex(16)
+        with self._lock:
+            existing = self._connection.execute(
+                "SELECT 1 FROM admin_users WHERE username = ? COLLATE NOCASE", (username,)
+            ).fetchone()
+            if existing:
+                raise AdminAccessError("Användarnamnet är upptaget")
+            self._connection.execute(
+                """
+                INSERT INTO admin_users(
+                    user_id, username, password_salt, password_digest,
+                    role, created_at, updated_at, must_change_password
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                """,
+                (user_id, username, salt, _admin_password_digest(password, salt), role, now, now),
+            )
+        return self.admin_user(user_id) or {}
+
+    def delete_admin_user(self, user_id: str) -> None:
+        """Den sista ägaren går inte att ta bort.
+
+        En server utan ägare har ingen som kan lägga till en - den vore låst
+        för alltid utan att någonting gått sönder.
+        """
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT role, username FROM admin_users WHERE user_id = ?", (user_id,)
+            ).fetchone()
+            if row is None:
+                raise AdminAccessError("Användaren finns inte")
+            if row[0] == "owner" and self._owner_count_locked() <= 1:
+                raise AdminAccessError(
+                    "Det måste finnas minst en ägare. Utse någon annan till ägare först."
+                )
+            self._connection.execute("DELETE FROM admin_users WHERE user_id = ?", (user_id,))
+            self._connection.execute("DELETE FROM admin_sessions WHERE user_id = ?", (user_id,))
+
+    def set_admin_user_role(self, user_id: str, role: str) -> dict[str, object]:
+        if role not in {"owner", "admin"}:
+            raise AdminAccessError("Rollen måste vara ägare eller administratör")
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT role FROM admin_users WHERE user_id = ?", (user_id,)
+            ).fetchone()
+            if row is None:
+                raise AdminAccessError("Användaren finns inte")
+            # Samma skäl som vid borttagning: en degradering får inte lämna
+            # servern utan ägare.
+            if row[0] == "owner" and role != "owner" and self._owner_count_locked() <= 1:
+                raise AdminAccessError(
+                    "Det måste finnas minst en ägare. Utse någon annan till ägare först."
+                )
+            self._connection.execute(
+                "UPDATE admin_users SET role = ?, updated_at = ? WHERE user_id = ?",
+                (role, datetime.now(timezone.utc).isoformat(), user_id),
+            )
+        return self.admin_user(user_id) or {}
+
+    def set_admin_user_password(self, user_id: str, password: str) -> dict[str, object]:
+        if not 8 <= len(password) <= 256:
+            raise AdminAccessError("Lösenordet måste vara 8–256 tecken")
+        salt = secrets.token_bytes(16)
+        with self._lock:
+            if self._connection.execute(
+                "SELECT 1 FROM admin_users WHERE user_id = ?", (user_id,)
+            ).fetchone() is None:
+                raise AdminAccessError("Användaren finns inte")
+            self._connection.execute(
+                "UPDATE admin_users SET password_salt = ?, password_digest = ?,"
+                " updated_at = ?, must_change_password = 0 WHERE user_id = ?",
+                (salt, _admin_password_digest(password, salt),
+                 datetime.now(timezone.utc).isoformat(), user_id),
+            )
+            # Ett byte av lösenord ska stänga ute den som satt inloggad med det
+            # gamla. Sessionerna för användaren rensas därför.
+            self._connection.execute("DELETE FROM admin_sessions WHERE user_id = ?", (user_id,))
+        return self.admin_user(user_id) or {}
+
+    def _owner_count_locked(self) -> int:
+        row = self._connection.execute(
+            "SELECT COUNT(*) FROM admin_users WHERE role = 'owner'"
+        ).fetchone()
+        return int(row[0]) if row else 0
 
     def create_admin_session(
         self,
@@ -727,27 +941,41 @@ class IdentityStore:
             return None
         now = now or datetime.now(timezone.utc)
         with self._lock:
+            # Användarlistan först. Singleton-raden finns kvar som ägarens
+            # uppgifter och som väg in för en installation som ännu inte
+            # migrerats - men den är inte längre den enda som kan logga in.
             row = self._connection.execute(
-                """
-                SELECT username, password_salt, password_digest
-                FROM admin_access WHERE singleton = 1
-                """
+                "SELECT user_id, username, password_salt, password_digest"
+                " FROM admin_users WHERE username = ? COLLATE NOCASE",
+                (username,),
             ).fetchone()
-            if (
-                row is None
-                or row[1] is None
-                or row[2] is None
-                or not hmac.compare_digest(username.encode("utf-8"), row[0].encode("utf-8"))
-                or not hmac.compare_digest(_admin_password_digest(password, row[1]), row[2])
-            ):
-                return None
+            user_id = None
+            if row is not None and row[2] is not None and row[3] is not None:
+                if not hmac.compare_digest(_admin_password_digest(password, row[2]), row[3]):
+                    return None
+                user_id = str(row[0])
+            else:
+                legacy = self._connection.execute(
+                    """
+                    SELECT username, password_salt, password_digest
+                    FROM admin_access WHERE singleton = 1
+                    """
+                ).fetchone()
+                if (
+                    legacy is None
+                    or legacy[1] is None
+                    or legacy[2] is None
+                    or not hmac.compare_digest(username.encode("utf-8"), legacy[0].encode("utf-8"))
+                    or not hmac.compare_digest(_admin_password_digest(password, legacy[1]), legacy[2])
+                ):
+                    return None
             token = secrets.token_urlsafe(32)
             self._connection.execute(
                 """
-                INSERT INTO admin_sessions(session_digest, expires_at, created_at)
-                VALUES (?, ?, ?)
+                INSERT INTO admin_sessions(session_digest, expires_at, created_at, user_id)
+                VALUES (?, ?, ?, ?)
                 """,
-                (_credential_digest(token), (now + ttl).isoformat(), now.isoformat()),
+                (_credential_digest(token), (now + ttl).isoformat(), now.isoformat(), user_id),
             )
         return token
 
@@ -773,6 +1001,26 @@ class IdentityStore:
                 )
                 return False
         return True
+
+    def admin_session_user(self, token: str, *, now: datetime | None = None) -> dict[str, object] | None:
+        """Vem sessionen tillhör, eller None om den inte gäller.
+
+        En session utan användare kommer från singleton-raden och räknas som
+        ägaren: det är vad den var innan listan fanns.
+        """
+
+        if not self.authenticate_admin_session(token, now=now):
+            return None
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT user_id FROM admin_sessions WHERE session_digest = ?",
+                (_credential_digest(token),),
+            ).fetchone()
+        if row is None:
+            return None
+        if row[0] is None:
+            return {"user_id": None, "username": str(self.admin_access_summary()["username"]), "role": "owner"}
+        return self.admin_user(str(row[0]))
 
     def revoke_admin_session(self, token: str) -> None:
         with self._lock:
