@@ -2033,6 +2033,97 @@ body[data-source-locked="true"] .build-panel textarea {
   color: var(--accent-warm-dark);
 }
 
+/* Användare. Tabellen följer tid-tabellens typografi så att de två listorna i
+   produkten ser ut att komma från samma hand. */
+.users-table { width: 100%; min-width: 420px; border-collapse: collapse; }
+.users-table th {
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid var(--line-field);
+  color: var(--ink-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  text-align: left;
+}
+.users-table td {
+  padding: 9px 12px 9px 0;
+  border-bottom: 1px solid var(--line-inner);
+  font-size: 14px;
+  vertical-align: middle;
+}
+.users-actions-head { text-align: right; }
+.users-name { font-weight: 500; }
+.users-state { color: var(--ink-muted); font-size: 13px; }
+.users-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 14px; }
+
+.role-chip {
+  display: inline-block; padding: 3px 10px;
+  border: 1px solid var(--line-field); border-radius: 999px;
+  background: var(--surface-raised); color: var(--ink-muted);
+  font-size: 11.5px; font-weight: 500; white-space: nowrap;
+}
+.role-chip.is-owner {
+  border-color: var(--accent-edge); background: var(--accent-tint-light);
+  color: var(--accent-warm-dark);
+}
+
+.link-button {
+  padding: 2px 0; border: 0; border-radius: 0;
+  background: none; color: var(--accent-warm-dark);
+  font-size: 13px; font-family: inherit; cursor: pointer;
+}
+.link-button:hover { text-decoration: underline; }
+.link-button.danger { color: var(--danger); }
+
+/* Koden ska gå att läsa högt utan att någon gissar fel, därför monospace och
+   stor stil. Den visas en gång och skrivs aldrig ned av programmet. */
+.users-code {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 14px 0 0; padding: 12px 14px;
+  border: 1px solid var(--accent-edge); border-radius: 10px;
+  background: var(--accent-tint-light);
+}
+.users-code p { max-width: 48ch; margin: 3px 0 0; font-size: 12.5px; color: var(--ink-muted); }
+.users-code code {
+  font-family: var(--font-mono); font-size: 20px; font-weight: 600;
+  letter-spacing: .08em; color: var(--accent-warm-dark);
+}
+
+.redeem-code { font-family: var(--font-mono); letter-spacing: .12em; text-transform: uppercase; }
+#redeem-open, #redeem-cancel { display: block; margin: 10px auto 0; }
+
+/* Fält, val och knapp på en rad. Knappen tar sin egen bredd i stället för en
+   hel kolumn: "Bjud in" är en liten åtgärd och ska se ut som en. */
+.users-invite {
+  display: flex; flex-wrap: wrap; align-items: end; gap: 12px 16px;
+  margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line-inner);
+}
+.users-invite-name { display: grid; gap: 5px; flex: 1 1 200px; max-width: 320px; }
+.users-invite button { flex: 0 0 auto; }
+.users-role-choice {
+  display: flex; align-items: center; gap: 8px;
+  flex: 1 1 240px; max-width: 34ch;
+  font-size: 13px; line-height: 1.35; color: var(--ink-muted);
+}
+.users-role-choice input { flex: 0 0 auto; width: auto; margin: 0; }
+
+.users-state-inline { display: none; }
+
+/* På en telefon får roll och läge ge plats åt åtgärderna. Att behöva rulla
+   tabellen i sidled för att komma åt "Ta bort" är samma sak som att den inte
+   finns. Båda flyttar in under namnet i stället, och tabellen blir två
+   kolumner: vem, och vad man kan göra. */
+@media (max-width: 560px) {
+  .users-table { min-width: 0; }
+  .users-table th:nth-child(2), .users-table th:nth-child(3),
+  .users-table td.users-role, .users-table td.users-state { display: none; }
+  .users-state-inline { display: block; margin-top: 3px; color: var(--ink-muted); font-size: 12px; font-weight: 400; line-height: 1.35; }
+  .users-table td, .users-table th { padding-right: 8px; }
+  .users-actions { flex-direction: column; align-items: flex-end; gap: 3px; }
+  .users-actions .link-button { white-space: normal; text-align: right; line-height: 1.3; }
+}
+
 .access-explainer { max-width: 62ch; margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-muted); }
 .access-password-state { margin: 6px 0 0; font-size: 12.5px; color: var(--go-green-dark); }
 .access-password-state.is-missing { color: var(--accent-warm-dark); }
@@ -2903,11 +2994,16 @@ select.topology-field.station-pick {
    och panelen måste få krympa - utan min-width: 0 vinner tabellens
    inneboende bredd över behållaren och hela vyn blir bredare än skärmen. */
 .build-panel { min-width: 0; }
-.build-panel .table-scroll {
+/* Bred tabell i smalt kort: den ska rulla i sig själv, aldrig dra ut sidan.
+   min-width: 0 behövs på kortet - utan den växer flexbarnet efter innehållet
+   i stället för att låta det rulla, och hela sidan börjar rulla i sidled. */
+.table-scroll {
+  min-width: 0;
   max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+#admin-users-settings { min-width: 0; }
 
 .tid-table { width: 100%; min-width: 720px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .tid-table th {

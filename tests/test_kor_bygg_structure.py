@@ -204,9 +204,13 @@ class ServerSettingsTests(unittest.TestCase):
     def test_the_settings_view_gathers_the_old_menu_points(self):
         """Användare och åtkomst, Programuppdatering, Server och nollställning
         - plus Cloud-kopplingen, som satt i steg 1 tillsammans med källvalet
-        fast den är serveradministration."""
+        fast den är serveradministration.
+
+        `users` kom till när servern fick fler än en användare: listan över
+        vilka som har tillgång hör hemma bredvid åtkomstkortet, inte i ett
+        byggsteg."""
         self.assertIn(
-            'const SETTINGS_SECTIONS = ["identity", "access", "software", "cloud", "system"];',
+            'const SETTINGS_SECTIONS = ["identity", "access", "users", "software", "cloud", "system"];',
             self.js,
         )
 
@@ -456,9 +460,10 @@ class ServerSettingsTests(unittest.TestCase):
                      ".server-step-card button.danger-action {",
                      ".server-step-card button:disabled {"):
             self.assertIn(rule, self.css)
-        # Alla fyra korten i steget bär klassen, annars faller något utanför.
-        self.assertEqual(4, self.html.count("server-step-card"))
+        # Alla korten i steget bär klassen, annars faller något utanför.
+        self.assertEqual(5, self.html.count("server-step-card"))
         for element_id in ("server-identity-settings", "admin-access-settings",
+                           "admin-users-settings",
                            "software-update-settings", "server-system-settings"):
             self.assertIn("server-step-card", self._panel(element_id)[:220])
 

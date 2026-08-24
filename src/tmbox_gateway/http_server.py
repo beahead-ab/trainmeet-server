@@ -273,21 +273,70 @@ class TrainMeetHTTPApplication:
     def create_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_owner(client)
         try:
-            user = self.identities.create_admin_user(
+            user = self.identities.invite_admin_user(
                 str(payload.get("username") or ""),
-                str(payload.get("password") or ""),
                 str(payload.get("role") or "admin"),
             )
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
+        self._record_user_change(client, "user.invited", str(user.get("username")))
         return {"user": user}
+
+    def reissue_admin_setup(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_owner(client)
+        try:
+            user = self.identities.reissue_admin_setup(str(payload.get("user_id") or ""))
+        except AdminAccessError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
+        self._record_user_change(client, "user.invitation_reissued", str(user.get("username")))
+        return {"user": user}
+
+    def redeem_admin_setup(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Utan inloggning, med flit: den inbjudne har inget konto att logga in
+        med förrän koden är inlöst. Koden är beviset."""
+
+        try:
+            user = self.identities.redeem_admin_setup(
+                str(payload.get("username") or ""),
+                str(payload.get("code") or ""),
+                str(payload.get("password") or ""),
+            )
+        except AdminAccessError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_setup_code", str(error)) from error
+        return {"user": user}
+
+    def _record_user_change(self, client: PairedClient, action: str, target: str) -> None:
+        """Vem gjorde vad mot vem. Utan det är en borttagen användare bara
+        någon som inte längre finns."""
+
+        if self.operations_store is None:
+            return
+        self.operations_store.record_audit_event(
+            correlation_id=f"admin-users-{target}",
+            source="web-admin",
+            actor=client.admin_user_id or "konsol",
+            action=action,
+            outcome="ok",
+            detail={"target": target, "by": client.display_name},
+        )
 
     def delete_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_owner(client)
+        user_id = str(payload.get("user_id") or "")
+        # Att ta bort sig själv är inte en behörighetsfråga utan ett misstag.
+        # Den som vill sluta ber någon annan ägare ta bort kontot.
+        if client.admin_user_id and client.admin_user_id == user_id:
+            raise HTTPAPIError(
+                HTTPStatus.CONFLICT,
+                "cannot_remove_self",
+                "Du kan inte ta bort ditt eget konto. Be en annan ägare göra det.",
+            )
+        target = (self.identities.admin_user(user_id) or {}).get("username", user_id)
         try:
-            self.identities.delete_admin_user(str(payload.get("user_id") or ""))
+            self.identities.delete_admin_user(user_id)
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.CONFLICT, "invalid_admin_user", str(error)) from error
+        self._record_user_change(client, "user.removed", str(target))
         return {"users": self.identities.list_admin_users()}
 
     def update_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
@@ -299,7 +348,16 @@ class TrainMeetHTTPApplication:
         try:
             if payload.get("role") is not None:
                 self._require_owner(client)
+                # Samma skäl som ovan: den som degraderar sig själv gör det av
+                # misstag oftare än med avsikt.
+                if client.admin_user_id == user_id and str(payload["role"]) != "owner":
+                    raise HTTPAPIError(
+                        HTTPStatus.CONFLICT,
+                        "cannot_demote_self",
+                        "Du kan inte ta bort din egen ägarroll. Be en annan ägare göra det.",
+                    )
                 self.identities.set_admin_user_role(user_id, str(payload["role"]))
+                self._record_user_change(client, "user.role_changed", user_id)
             if payload.get("password") is not None:
                 # Var och en får byta sitt eget lösenord. Någon annans är
                 # ägarens ensak.
@@ -2670,21 +2728,35 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 client = self._authenticated_client()
                 self._send_json(
                     HTTPStatus.CREATED,
-                    self.server.application.create_admin_user(client, self._read_json()),
+                    self.server.application.create_admin_user(client, payload),
                 )
                 return
             if path == "/v1/admin/users/update":
                 client = self._authenticated_client()
                 self._send_json(
                     HTTPStatus.OK,
-                    self.server.application.update_admin_user(client, self._read_json()),
+                    self.server.application.update_admin_user(client, payload),
+                )
+                return
+            if path == "/v1/admin/users/reissue":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.reissue_admin_setup(client, payload),
+                )
+                return
+            if path == "/v1/admin/users/redeem":
+                # Den inbjudne är inte inloggad än. Koden är hela beviset.
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.redeem_admin_setup(payload),
                 )
                 return
             if path == "/v1/admin/users/delete":
                 client = self._authenticated_client()
                 self._send_json(
                     HTTPStatus.OK,
-                    self.server.application.delete_admin_user(client, self._read_json()),
+                    self.server.application.delete_admin_user(client, payload),
                 )
                 return
             if path == "/v1/local-configuration/seed":

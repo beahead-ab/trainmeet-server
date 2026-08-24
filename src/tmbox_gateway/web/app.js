@@ -218,6 +218,54 @@ loginForm.addEventListener("submit", async (event) => {
   }
 });
 
+// Inlösning av inbjudan. Den som har en kod har ännu inget lösenord och kan
+// alltså inte logga in för att sätta det - därför går det här utan session.
+const redeemForm = document.querySelector("#redeem-form");
+
+function showRedeem(open) {
+  redeemForm?.classList.toggle("hidden", !open);
+  loginForm.classList.toggle("hidden", open);
+  document.querySelector("#login-intro")?.classList.toggle("hidden", open);
+  document.querySelector("#redeem-intro")?.classList.toggle("hidden", !open);
+  document.querySelector("#redeem-open")?.classList.toggle("hidden", open);
+  if (open) document.querySelector("#redeem-username").focus();
+}
+
+document.querySelector("#redeem-open")?.addEventListener("click", () => showRedeem(true));
+document.querySelector("#redeem-cancel")?.addEventListener("click", () => showRedeem(false));
+
+redeemForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const message = document.querySelector("#redeem-message");
+  setMessage(message, "");
+  const button = redeemForm.querySelector("button.primary");
+  button.disabled = true;
+  try {
+    const response = await fetch("/v1/admin/users/redeem", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.querySelector("#redeem-username").value,
+        code: document.querySelector("#redeem-code").value,
+        password: document.querySelector("#redeem-password").value,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.message || "Koden gick inte att lösa in");
+    document.querySelector("#redeem-password").value = "";
+    document.querySelector("#redeem-code").value = "";
+    showRedeem(false);
+    // The username field is left alone here too: the browser's own password
+    // manager may offer the account, and that is the user's choice.
+    document.querySelector("#login-username").focus();
+    setMessage(loginError, "Lösenordet är satt. Logga in.", "success");
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
 setupAdminForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = document.querySelector("#setup-admin-message");
@@ -357,7 +405,7 @@ const BUILD_STEPS = ["kalla", "bana", "tid", "boxar"];
 //: Det tredje läget. Att administrera servern är varken drift eller bygge, och
 //: låg tidigare bakom "Bygg om träffen" - alltså bakom ett flöde som handlar om
 //: något helt annat. Programuppdateringen var fyra klick bort.
-const SETTINGS_SECTIONS = ["identity", "access", "software", "cloud", "system"];
+const SETTINGS_SECTIONS = ["identity", "access", "users", "software", "cloud", "system"];
 
 //: Vilka av dagens adminsektioner som hör till vilket byggsteg.
 const STEP_SECTIONS = {
@@ -437,6 +485,7 @@ function showSettings() {
   if (heading) heading.classList.remove("hidden");
 
   checkSoftwareUpdate();
+  refreshUsers();
   refreshRuntime();
   appView.classList.remove("sidebar-open");
   window.scrollTo({ top: 0, behavior: "auto" });
@@ -525,6 +574,7 @@ document.querySelectorAll(".run-tab").forEach((button) => {
   button.addEventListener("click", () => selectRunTab(button.dataset.runTab));
 });
 bindTimetableStep();
+bindUsersSection();
 document.querySelectorAll("[data-build-step]").forEach((button) => {
   button.addEventListener("click", () => selectBuildStep(button.dataset.buildStep));
 });
@@ -3653,6 +3703,178 @@ function bindTMBoxPanes() {
   selectTMBoxPane(tmboxPane());
 }
 
+// ── Inställningar: användare ────────────────────────────────────────────
+//
+// Ägaren bjuder in; den inbjudne väljer sitt eget lösenord med en engångskod.
+// Ägaren känner alltså aldrig till någon annans lösenord - inte ens en kort
+// stund. Mönstret är be-a-legend-2:s, med koden överlämnad på plats i stället
+// för skickad med mejl, eftersom servern inte har någon e-post.
+//
+// En administratör ser listan men får inte ändra i den. Att veta vilka som har
+// tillgång är inte samma sak som att bestämma det.
+
+const users = { list: [], role: "admin", code: null };
+
+function usersEl(name) {
+  return document.querySelector(`#users-${name}`);
+}
+
+function renderUsers() {
+  const body = usersEl("rows");
+  if (!body) return;
+  const owner = users.role === "owner";
+
+  usersEl("role-chip").textContent = owner ? "Ägare" : "Administratör";
+  usersEl("invite-form")?.classList.toggle("hidden", !owner);
+
+  body.replaceChildren(...users.list.map((user) => {
+    const tr = document.createElement("tr");
+
+    const state = user.invitation_pending
+      ? "Inbjuden — har inte valt lösenord"
+      : "Aktiv";
+    const roleLabel = user.role === "owner" ? "Ägare" : "Administratör";
+
+    const name = document.createElement("td");
+    name.className = "users-name";
+    name.textContent = user.username;
+    // Läget står två gånger med flit: som egen kolumn när det finns plats,
+    // och som rad under namnet när kolumnen fälls bort på en telefon. CSS
+    // väljer vilken som syns, så det behövs ingen brytpunkt i koden.
+    const inline = document.createElement("small");
+    inline.className = "users-state-inline";
+    inline.textContent = `${roleLabel} · ${state}`;
+    name.append(inline);
+    tr.append(name);
+
+    const role = document.createElement("td");
+    role.className = "users-role";
+    const chip = document.createElement("span");
+    chip.className = user.role === "owner" ? "role-chip is-owner" : "role-chip";
+    chip.textContent = roleLabel;
+    role.append(chip);
+    tr.append(role);
+
+    const column = document.createElement("td");
+    column.className = "users-state";
+    column.textContent = state;
+    tr.append(column);
+
+    const actions = document.createElement("td");
+    actions.className = "users-actions";
+    if (owner) {
+      if (user.invitation_pending) {
+        actions.append(usersButton("Ny kod", () => reissueUserCode(user)));
+      }
+      actions.append(usersButton(
+        user.role === "owner" ? "Gör till administratör" : "Gör till ägare",
+        () => setUserRole(user, user.role === "owner" ? "admin" : "owner"),
+      ));
+      actions.append(usersButton("Ta bort", () => removeUser(user), "danger"));
+    }
+    tr.append(actions);
+    return tr;
+  }));
+}
+
+function usersButton(label, onClick, kind = "") {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = kind ? `link-button ${kind}` : "link-button";
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function showSetupCode(user) {
+  const box = usersEl("invite-code");
+  if (!box || !user?.setup_code) return;
+  usersEl("code-for").textContent = user.username;
+  usersEl("code-value").textContent = user.setup_code;
+  box.classList.remove("hidden");
+}
+
+async function refreshUsers() {
+  const message = usersEl("message");
+  try {
+    const response = await authorizedFetch("/v1/admin/users");
+    if (!response.ok) {
+      setMessage(message, "Användarna kunde inte läsas", "error");
+      return;
+    }
+    const payload = await response.json();
+    users.list = payload.users || [];
+    users.role = payload.role || "admin";
+    // Meddelandet lämnas som det är: varje åtgärd hämtar listan på nytt, och
+    // en nollställning här skulle sudda kvittot i samma andetag som det sätts.
+    renderUsers();
+  } catch {
+    setMessage(message, "Användarna kunde inte läsas", "error");
+  }
+}
+
+async function usersPost(path, body, whenOk) {
+  const message = usersEl("message");
+  try {
+    const response = await authorizedFetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setMessage(message, payload.message || "Åtgärden gick inte att utföra", "error");
+      return null;
+    }
+    whenOk?.(payload);
+    await refreshUsers();
+    return payload;
+  } catch {
+    setMessage(message, "Åtgärden gick inte att utföra", "error");
+    return null;
+  }
+}
+
+async function inviteUser(event) {
+  event.preventDefault();
+  const name = usersEl("invite-name").value.trim();
+  const owner = usersEl("invite-owner").checked;
+  const result = await usersPost(
+    "/v1/admin/users",
+    { username: name, role: owner ? "owner" : "admin" },
+    () => {
+      usersEl("invite-name").value = "";
+      usersEl("invite-owner").checked = false;
+      setMessage(usersEl("message"), `${name} är inbjuden. Lämna över koden.`, "success");
+    },
+  );
+  if (result) showSetupCode(result.user);
+}
+
+async function reissueUserCode(user) {
+  const result = await usersPost("/v1/admin/users/reissue", { user_id: user.user_id });
+  if (result) showSetupCode(result.user);
+}
+
+async function setUserRole(user, role) {
+  await usersPost("/v1/admin/users/update", { user_id: user.user_id, role }, () => {
+    setMessage(usersEl("message"), `${user.username} är nu ${role === "owner" ? "ägare" : "administratör"}`, "success");
+  });
+}
+
+async function removeUser(user) {
+  // Ett borttaget konto går inte att ångra, och namnet står i frågan så att
+  // ingen råkar ta bort fel person.
+  if (!window.confirm(`Ta bort ${user.username}? Kontot går inte att återskapa.`)) return;
+  await usersPost("/v1/admin/users/delete", { user_id: user.user_id }, () => {
+    setMessage(usersEl("message"), `${user.username} är borttagen`, "success");
+  });
+}
+
+function bindUsersSection() {
+  usersEl("invite-form")?.addEventListener("submit", inviteUser);
+}
+
 function bindV2Controls() {
   const device = v2El("device");
   const station = v2El("station");
@@ -4841,7 +5063,7 @@ async function tidSave() {
     }
     tid.revision = body.revision ?? tid.revision;
     tid.original = new Map(tid.rows.map((row) => [row.id, { ...row }]));
-    setMessage(message, `${changed.length} ändrade rader sparade. Aktivera i steg 1 när du är klar.`, "ok");
+    setMessage(message, `${changed.length} ändrade rader sparade. Aktivera i steg 1 när du är klar.`, "success");
     tidRenderRows();
     refreshPendingRevision();
   } catch {

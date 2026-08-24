@@ -17,6 +17,7 @@ from typing import Any
 PAIRING_HASH_ITERATIONS = 210_000
 CLIENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{3,64}$")
 ADMIN_USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9._@+-]{3,64}$")
+ADMIN_SETUP_TTL = timedelta(days=7)
 ADMIN_SESSION_TTL = timedelta(hours=12)
 # A connection code printed on the meeting's screens has to keep working for as
 # long as it is on display, so it may be issued without an expiry.
@@ -214,11 +215,20 @@ class IdentityStore:
                 role TEXT NOT NULL CHECK(role IN ('owner', 'admin')),
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                must_change_password INTEGER NOT NULL DEFAULT 0
+                must_change_password INTEGER NOT NULL DEFAULT 0,
+                -- Ägaren skriver aldrig någon annans lösenord. Den som bjuds
+                -- in får en engångskod och väljer sitt eget. Koden lämnas över
+                -- på plats - servern har ingen e-post, och den som bjuder in
+                -- står ändå i samma lokal.
+                setup_code_digest BLOB,
+                setup_expires_at TEXT
             );
             """
         )
         self._add_missing_columns("admin_sessions", {"user_id": "TEXT"})
+        self._add_missing_columns(
+            "admin_users", {"setup_code_digest": "BLOB", "setup_expires_at": "TEXT"}
+        )
         self._add_missing_columns(
             "admin_access",
             {"must_change_password": "INTEGER NOT NULL DEFAULT 0"},
@@ -807,7 +817,8 @@ class IdentityStore:
         with self._lock:
             rows = self._connection.execute(
                 "SELECT user_id, username, role, created_at, updated_at,"
-                " password_digest IS NOT NULL, must_change_password"
+                " password_digest IS NOT NULL, must_change_password,"
+                " setup_code_digest IS NOT NULL, setup_expires_at"
                 " FROM admin_users ORDER BY role DESC, username COLLATE NOCASE"
             ).fetchall()
         return [
@@ -819,6 +830,8 @@ class IdentityStore:
                 "updated_at": row[4],
                 "password_configured": bool(row[5]),
                 "must_change_password": bool(row[6]),
+                "invitation_pending": bool(row[7]),
+                "invitation_expires_at": row[8],
             }
             for row in rows
         ]
@@ -828,38 +841,96 @@ class IdentityStore:
             (user for user in self.list_admin_users() if user["user_id"] == user_id), None
         )
 
-    def create_admin_user(
-        self, username: str, password: str, role: str = "admin"
-    ) -> dict[str, object]:
+    def invite_admin_user(self, username: str, role: str = "admin") -> dict[str, object]:
+        """Skapa ett konto och en engångskod att lämna över.
+
+        Ägaren sätter inte någon annans lösenord. Den inbjudne löser in koden
+        och väljer sitt eget - då finns lösenordet aldrig hos någon annan, inte
+        ens en kort stund.
+
+        Koden lämnas över på plats. Servern har ingen e-post, och behöver ingen:
+        den som bjuder in står i samma klubblokal som den som bjuds in.
+        """
+
         username = username.strip()
         if not ADMIN_USERNAME_PATTERN.fullmatch(username):
             raise AdminAccessError(
                 "Användarnamnet måste vara 3–64 tecken och får innehålla bokstäver, siffror, punkt, bindestreck och @"
             )
-        if not 8 <= len(password) <= 256:
-            raise AdminAccessError("Lösenordet måste vara 8–256 tecken")
         if role not in {"owner", "admin"}:
             raise AdminAccessError("Rollen måste vara ägare eller administratör")
 
-        now = datetime.now(timezone.utc).isoformat()
-        salt = secrets.token_bytes(16)
+        now = datetime.now(timezone.utc)
+        code = "-".join(
+            "".join(secrets.choice("23456789ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(4))
+            for _ in range(2)
+        )
         user_id = secrets.token_hex(16)
         with self._lock:
-            existing = self._connection.execute(
+            if self._connection.execute(
                 "SELECT 1 FROM admin_users WHERE username = ? COLLATE NOCASE", (username,)
-            ).fetchone()
-            if existing:
+            ).fetchone():
                 raise AdminAccessError("Användarnamnet är upptaget")
             self._connection.execute(
                 """
                 INSERT INTO admin_users(
-                    user_id, username, password_salt, password_digest,
-                    role, created_at, updated_at, must_change_password
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                    user_id, username, role, created_at, updated_at,
+                    must_change_password, setup_code_digest, setup_expires_at
+                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?)
                 """,
-                (user_id, username, salt, _admin_password_digest(password, salt), role, now, now),
+                (user_id, username, role, now.isoformat(), now.isoformat(),
+                 _credential_digest(code), (now + ADMIN_SETUP_TTL).isoformat()),
             )
-        return self.admin_user(user_id) or {}
+        return {**(self.admin_user(user_id) or {}), "setup_code": code}
+
+    def reissue_admin_setup(self, user_id: str) -> dict[str, object]:
+        """En ny kod när den gamla gått ut eller kommit bort."""
+
+        now = datetime.now(timezone.utc)
+        code = "-".join(
+            "".join(secrets.choice("23456789ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(4))
+            for _ in range(2)
+        )
+        with self._lock:
+            if self._connection.execute(
+                "SELECT 1 FROM admin_users WHERE user_id = ?", (user_id,)
+            ).fetchone() is None:
+                raise AdminAccessError("Användaren finns inte")
+            self._connection.execute(
+                "UPDATE admin_users SET setup_code_digest = ?, setup_expires_at = ?,"
+                " updated_at = ? WHERE user_id = ?",
+                (_credential_digest(code), (now + ADMIN_SETUP_TTL).isoformat(),
+                 now.isoformat(), user_id),
+            )
+        return {**(self.admin_user(user_id) or {}), "setup_code": code}
+
+    def redeem_admin_setup(self, username: str, code: str, password: str) -> dict[str, object]:
+        """Den inbjudne löser in koden och väljer sitt lösenord."""
+
+        if not 8 <= len(password) <= 256:
+            raise AdminAccessError("Lösenordet måste vara 8–256 tecken")
+        now = datetime.now(timezone.utc)
+        digest = _credential_digest(str(code).strip().upper())
+        salt = secrets.token_bytes(16)
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT user_id, setup_code_digest, setup_expires_at FROM admin_users"
+                " WHERE username = ? COLLATE NOCASE",
+                (str(username).strip(),),
+            ).fetchone()
+            if row is None or row[1] is None:
+                raise AdminAccessError("Koden gäller inte")
+            if not hmac.compare_digest(bytes(row[1]), digest):
+                raise AdminAccessError("Koden gäller inte")
+            if row[2] and datetime.fromisoformat(row[2]) < now:
+                raise AdminAccessError("Koden har gått ut. Be ägaren om en ny.")
+            self._connection.execute(
+                "UPDATE admin_users SET password_salt = ?, password_digest = ?,"
+                " setup_code_digest = NULL, setup_expires_at = NULL,"
+                " must_change_password = 0, updated_at = ? WHERE user_id = ?",
+                (salt, _admin_password_digest(password, salt), now.isoformat(), row[0]),
+            )
+        return self.admin_user(str(row[0])) or {}
 
     def delete_admin_user(self, user_id: str) -> None:
         """Den sista ägaren går inte att ta bort.
@@ -874,7 +945,7 @@ class IdentityStore:
             ).fetchone()
             if row is None:
                 raise AdminAccessError("Användaren finns inte")
-            if row[0] == "owner" and self._owner_count_locked() <= 1:
+            if row[0] == "owner" and self._would_strand_the_server_locked(user_id):
                 raise AdminAccessError(
                     "Det måste finnas minst en ägare. Utse någon annan till ägare först."
                 )
@@ -892,7 +963,7 @@ class IdentityStore:
                 raise AdminAccessError("Användaren finns inte")
             # Samma skäl som vid borttagning: en degradering får inte lämna
             # servern utan ägare.
-            if row[0] == "owner" and role != "owner" and self._owner_count_locked() <= 1:
+            if row[0] == "owner" and role != "owner" and self._would_strand_the_server_locked(user_id):
                 raise AdminAccessError(
                     "Det måste finnas minst en ägare. Utse någon annan till ägare först."
                 )
@@ -922,11 +993,34 @@ class IdentityStore:
             self._connection.execute("DELETE FROM admin_sessions WHERE user_id = ?", (user_id,))
         return self.admin_user(user_id) or {}
 
-    def _owner_count_locked(self) -> int:
+    def _owner_count_locked(self, exclude_user_id: str | None = None) -> int:
+        """Ägare som faktiskt kan logga in.
+
+        En inbjuden ägare har ännu inget lösenord. Räknades hen med kunde den
+        sista riktiga ägaren tas bort så länge det låg en obesvarad inbjudan i
+        listan - och då hade servern ingen som kunde logga in och bjuda in en
+        ny. Koden kan ha gått ut, tappats bort eller aldrig lämnats över.
+        """
+
         row = self._connection.execute(
-            "SELECT COUNT(*) FROM admin_users WHERE role = 'owner'"
+            "SELECT COUNT(*) FROM admin_users"
+            " WHERE role = 'owner' AND password_digest IS NOT NULL"
+            " AND user_id IS NOT ?",
+            (exclude_user_id,),
         ).fetchone()
         return int(row[0]) if row else 0
+
+    def _would_strand_the_server_locked(self, user_id: str) -> bool:
+        """Blir servern utan ägare som kan logga in om user_id försvinner?
+
+        Frågan ställs om den som tas bort eller degraderas, inte om listan i
+        stort: att degradera en inbjuden ägare tar inte bort någon som kan
+        logga in, och ska inte nekas. Finns det ingen inloggningsbar ägare från
+        början - en installation som inte gjorts färdig - blockeras ingenting
+        heller. Man kan inte förlora det som inte finns.
+        """
+
+        return self._owner_count_locked() >= 1 and self._owner_count_locked(user_id) == 0
 
     def create_admin_session(
         self,

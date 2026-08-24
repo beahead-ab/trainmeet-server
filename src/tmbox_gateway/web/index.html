@@ -154,9 +154,18 @@
 
       <section id="login" class="card pairing-card hidden">
         <img class="pairing-icon" src="/trainmeet-logo.png" alt="TrainMeet">
-        <p class="eyebrow">EXTERN ADMIN</p>
-        <h2>Logga in på TrainMeet Server</h2>
-        <p>Lokalt på träffens nätverk öppnas admin automatiskt. Extern åtkomst kräver inloggning.</p>
+        <div id="login-intro">
+          <p class="eyebrow">EXTERN ADMIN</p>
+          <h2>Logga in på TrainMeet Server</h2>
+          <p>Lokalt på träffens nätverk öppnas admin automatiskt. Extern åtkomst kräver inloggning.</p>
+        </div>
+        <!-- Egen rubrik: den som löser in en inbjudan loggar inte in, utan
+             väljer sitt lösenord för första gången. -->
+        <div id="redeem-intro" class="hidden">
+          <p class="eyebrow">INBJUDAN</p>
+          <h2>Välj ditt lösenord</h2>
+          <p>Du har fått en kod av den som bjöd in dig. Den gäller en gång, och sedan loggar du in som vanligt.</p>
+        </div>
         <form id="login-form">
           <label for="login-username">Användarnamn</label>
           <input id="login-username" name="username" maxlength="64" autocomplete="username" required>
@@ -164,6 +173,21 @@
           <input id="login-password" name="password" type="password" autocomplete="current-password" required>
           <button type="submit" class="primary">Logga in</button>
           <p id="login-error" class="form-message error" role="alert"></p>
+        </form>
+        <!-- Den inbjudne har en kod men inget lösenord, och kan alltså inte
+             logga in för att sätta det. Därför ligger inlösningen bredvid
+             inloggningen och kräver ingen session - koden är beviset. -->
+        <button id="redeem-open" type="button" class="link-button">Jag har en inbjudningskod</button>
+        <form id="redeem-form" class="hidden">
+          <label for="redeem-username">Användarnamn</label>
+          <input id="redeem-username" maxlength="64" autocomplete="username" required>
+          <label for="redeem-code">Inbjudningskod</label>
+          <input id="redeem-code" class="redeem-code" maxlength="9" autocomplete="off" placeholder="XXXX-XXXX" required>
+          <label for="redeem-password">Välj lösenord</label>
+          <input id="redeem-password" type="password" minlength="8" autocomplete="new-password" required>
+          <button type="submit" class="primary">Sätt lösenord</button>
+          <button id="redeem-cancel" type="button" class="link-button">Tillbaka till inloggningen</button>
+          <p id="redeem-message" class="form-message" role="status"></p>
         </form>
       </section>
 
@@ -685,6 +709,53 @@
                här webbläsaren är inne (verkligt access_mode), raden under det
                om ett externt lösenord finns. Fältet för användarnamn fylls
                aldrig i av programmet - se refreshAuthStatus i app.js. -->
+          <!-- Användare. Ägaren bjuder in; den inbjudne väljer sitt eget
+               lösenord med en engångskod som lämnas över på plats. Ägaren
+               känner alltså aldrig till någon annans lösenord.
+
+               Mönstret är be-a-legend-2:s, där inbjudan går med mejl. Servern
+               har ingen e-post och behöver ingen: den som bjuder in står i
+               samma klubblokal som den som bjuds in. -->
+          <section id="admin-users-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="users">
+            <div class="section-heading compact-heading">
+              <div>
+                <h2>Användare</h2>
+                <p class="access-explainer">Ägaren lägger till och tar bort. En administratör kan sköta hela servern, men inte ändra vilka som har tillgång.</p>
+              </div>
+              <span id="users-role-chip" class="status-chip">–</span>
+            </div>
+
+            <div class="table-scroll">
+              <table id="users-table" class="users-table">
+                <thead>
+                  <tr><th>Användare</th><th>Roll</th><th>Läge</th><th class="users-actions-head">Åtgärder</th></tr>
+                </thead>
+                <tbody id="users-rows"></tbody>
+              </table>
+            </div>
+
+            <div id="users-invite-code" class="users-code hidden">
+              <div>
+                <b>Kod till <span id="users-code-for">–</span></b>
+                <p>Lämna över koden. Den gäller i sju dagar och kan bara användas en gång.</p>
+              </div>
+              <code id="users-code-value">–</code>
+            </div>
+
+            <form id="users-invite-form" class="users-invite hidden">
+              <label class="users-invite-name">Användarnamn
+                <input id="users-invite-name" maxlength="64" autocomplete="off" required>
+              </label>
+              <label class="users-role-choice">
+                <input id="users-invite-owner" type="checkbox">
+                <span>Ägare — får också lägga till och ta bort användare</span>
+              </label>
+              <button type="submit" class="primary">Bjud in</button>
+            </form>
+
+            <p id="users-message" class="form-message" role="status"></p>
+          </section>
+
           <section id="admin-access-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="access">
             <div class="section-heading compact-heading">
               <div>
