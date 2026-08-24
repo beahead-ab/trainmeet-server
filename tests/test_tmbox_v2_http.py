@@ -223,6 +223,30 @@ class TerminalWritesTheNoteTests(TMBoxV2HTTPTests):
 
         self.assertEqual("Väntar på lokförare", self._note())
 
+    def test_the_note_comes_back_to_the_client(self) -> None:
+        """Skrivvägen räcker inte — klienten måste kunna läsa den också.
+
+        Anteckningen följer med i det underlag TKL hämtar för sin station, så
+        en integrerad applikation med tangentbord kan visa och redigera den
+        utan någon egen ändpunkt.
+        """
+
+        self._update(arrival="none", departure="none", operator_note="Kort tåg, stannar vid stoppbocken")
+
+        context = self.application.tkl_context(self.client, STATION)
+
+        self.assertEqual(
+            "Kort tåg, stannar vid stoppbocken",
+            context["movements"][str(DEPARTURE)]["operatorNote"],
+        )
+
+    def test_a_note_longer_than_the_limit_is_cut(self) -> None:
+        """Tvåhundra tecken. En anteckning är en notering, inte ett protokoll."""
+
+        self._update(arrival="none", departure="none", operator_note="x" * 260)
+
+        self.assertEqual(200, len(self._note()))
+
     def test_the_terminal_can_clear_a_note(self) -> None:
         self._update(arrival="none", departure="none", operator_note="Väntar på lokförare")
         self._update(arrival="none", departure="none", operator_note="")
