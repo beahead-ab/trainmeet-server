@@ -893,7 +893,7 @@ class SQLiteRuntimeStore:
                 "server_name": self.server_name(),
                 "cloud_auto_sync": self.cloud_auto_sync_enabled(),
             }
-        staged = self.latest_staged()
+        pending = self.pending_publication()
         return {
             "configured": True,
             "schema_version": publication.schema_version,
@@ -910,8 +910,8 @@ class SQLiteRuntimeStore:
             "server_name": self.server_name(),
             "cloud_auto_sync": self.cloud_auto_sync_enabled(),
             "available_publication_id": (
-                staged.publication_id
-                if staged is not None and staged.publication_id != publication.publication_id
+                pending.publication_id
+                if pending is not None
                 else None
             ),
         }
