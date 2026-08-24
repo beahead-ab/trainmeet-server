@@ -25,19 +25,6 @@
         <button type="button" id="leave-build" class="build-chrome-exit">Lämna byggläget</button>
       </div>
 
-      <!-- Inställningar är ett eget läge. Att administrera servern är varken
-           drift eller bygge, och låg tidigare bakom "Bygg om träffen". -->
-      <div id="settings-chrome" class="build-chrome hidden">
-        <div class="build-chrome-left">
-          <span class="build-chrome-mark" aria-hidden="true">⚙</span>
-          <b>Inställningar</b>
-          <span class="build-chrome-note">
-            Serverns identitet, åtkomst, programvara och Cloud-koppling. Träffen påverkas inte.
-          </span>
-        </div>
-        <button type="button" id="leave-settings" class="build-chrome-exit">Tillbaka till träffen</button>
-      </div>
-
       <header class="topbar" id="app-chrome">
         <div class="brand-lockup">
           <img class="brand-mark" src="/assets/ikon/trainmeet-ikon.svg" alt="" width="28" height="28">
@@ -57,6 +44,10 @@
           <span id="app-devices" class="app-devices"><i></i>Inga boxar</span>
           <div id="connection" class="status offline"><span></span><b>Ej ansluten</b></div>
           <button type="button" id="open-settings" class="settings-button" aria-label="Inställningar" title="Inställningar">⚙</button>
+          <!-- Vägen tillbaka från Inställningar. Den mörka listen är bygglägets
+               och betyder "det här är inte träffen som kör" - Inställningar är
+               inte det läget, och lånade en varning den inte behövde. -->
+          <button type="button" id="leave-settings" class="leave-settings">Tillbaka till träffen</button>
           <button type="button" id="enter-build" class="enter-build">Bygg om träffen</button>
         </div>
       </header>

@@ -458,7 +458,6 @@ function setMode(mode) {
   localStorage.setItem("trainmeet.mode", next);
   document.querySelector("#build-chrome").classList.toggle("hidden", next !== "bygg");
   document.querySelector("#build-sidebar").classList.toggle("hidden", next !== "bygg");
-  document.querySelector("#settings-chrome")?.classList.toggle("hidden", next !== "installningar");
   if (next === "bygg") selectBuildStep(state.buildStep || "kalla");
   else if (next === "installningar") showSettings();
   else selectRunTab(state.runTab || "oversikt");

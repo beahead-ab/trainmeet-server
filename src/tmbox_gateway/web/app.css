@@ -1657,6 +1657,12 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   color: var(--paper);
 }
 .build-chrome-left { display: flex; align-items: center; gap: 11px; min-width: 0; }
+/* Listen ska vara en rad. Förklaringen är värd sin plats på en skärm som har
+   plats; på en telefon svällde den listen till 194px - en fjärdedel av
+   skärmen - för en mening man läser en gång. Uppmätt i Chromium på 360px. */
+@media (max-width: 720px) {
+  .build-chrome-note { display: none; }
+}
 .build-chrome-mark {
   display: grid; width: 20px; height: 20px; place-items: center;
   border-radius: 6px; background: var(--accent-warm); font-size: 11px;
@@ -1809,6 +1815,43 @@ body[data-mode="installningar"] .settings-button {
 }
 body[data-mode="installningar"] .run-tabs,
 body[data-mode="installningar"] .enter-build { display: none; }
+
+/* Vägen tillbaka finns bara när det finns något att gå tillbaka från. */
+.leave-settings {
+  display: none;
+  flex: 0 0 auto; min-height: 34px; padding: 0 14px;
+  border: 1px solid var(--line-field); border-radius: var(--radius-sm);
+  background: var(--surface-raised); color: var(--ink-strong);
+  font-size: 13px; font-weight: 500;
+}
+.leave-settings:hover { border-color: var(--accent-edge); background: var(--accent-tint-light); }
+body[data-mode="installningar"] .leave-settings { display: inline-flex; align-items: center; }
+
+/* Klockan och boxräknaren hör till träffen som kör. På en telefon tog de
+   platsen som vägen tillbaka behöver, och locket sköt ut sidan 52px i sidled.
+   I Inställningar tittar man inte på klockan. */
+@media (max-width: 680px) {
+  body[data-mode="installningar"] .app-clock,
+  body[data-mode="installningar"] .app-devices { display: none; }
+  /* Träffens namn får kortas i stället för att knuffa ut knappen. Utan
+     flex: 0 0 auto krymper högergruppen med och knappen svämmar ur den. */
+  body[data-mode="installningar"] .topbar-right { flex: 0 0 auto; }
+
+  /* Locket ska hålla en rad i alla lägen. På 360px bröts "TrainMeet Server"
+     och "Inga boxar" till två rader var och locket blev dubbelt så högt. */
+  .topbar .brand-lockup { min-width: 0; }
+  .topbar .brand-lockup h1 {
+    min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .app-devices { white-space: nowrap; }
+}
+
+/* Under 480px blir namnet en stump på ett par tecken. Då är det bättre borta:
+   sidrubriken "Inställningar" står ändå direkt under locket. */
+@media (max-width: 480px) {
+  body[data-mode="installningar"] .topbar .brand-lockup h1 { display: none; }
+}
 
 body[data-mode="bygg"] .server-admin-shell {
   display: flex; gap: 24px;

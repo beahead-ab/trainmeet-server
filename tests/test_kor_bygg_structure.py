@@ -261,11 +261,48 @@ class ServerSettingsTests(unittest.TestCase):
         ]
         self.assertEqual(order, sorted(order))
 
-    def test_the_view_has_its_own_heading_and_chrome(self):
+    def test_the_view_has_its_own_heading(self):
         self.assertIn('id="settings-heading"', self.html)
         self.assertIn("<h2>Inställningar</h2>", self.html)
-        self.assertIn('id="settings-chrome"', self.html)
         self.assertNotIn('data-build-panel="server"', self.html)
+
+    def test_the_dark_bar_belongs_to_build_mode_alone(self):
+        """Den mörka listen betyder "det här är inte träffen som kör".
+
+        Inställningar lånade den och lovade en fara som inte finns: ingenting
+        stageas, ingenting behöver aktiveras, träffen rullar på. Priset var två
+        klistrade lister på varandra och en rubrik som sa samma sak två gånger.
+
+        Vägen tillbaka ligger i applocket i stället, bredvid kugghjulet som
+        redan lyser i läget.
+        """
+        self.assertNotIn('id="settings-chrome"', self.html)
+        self.assertEqual(1, self.html.count(' class="build-chrome hidden"'))
+        topbar = self.html[self.html.index('<header class="topbar"'):]
+        topbar = topbar[: topbar.index("</header>")]
+        self.assertIn('id="leave-settings"', topbar)
+        self.assertIn('body[data-mode="installningar"] .leave-settings { display: inline-flex', self.css)
+        hidden = self.css[self.css.index(".leave-settings {"):][:60]
+        self.assertIn("display: none;", hidden)
+
+    def test_the_topbar_stays_one_line_on_a_phone(self):
+        """Uppmätt i Chromium på 360px: "TrainMeet Server" och "Inga boxar"
+        bröts till två rader var och locket blev dubbelt så högt. Namnet kortas
+        med ellips i stället, och i Inställningar - där knappen tillbaka
+        konkurrerar om samma rad - faller det bort helt under 480px."""
+        narrow = self.css[self.css.index("@media (max-width: 680px) {", self.css.index(".leave-settings {")):][:900]
+        self.assertIn("text-overflow: ellipsis", narrow)
+        self.assertIn(".app-devices { white-space: nowrap; }", narrow)
+        self.assertIn('body[data-mode="installningar"] .topbar-right { flex: 0 0 auto; }', narrow)
+        tiny = self.css[self.css.index("@media (max-width: 480px) {"):][:200]
+        self.assertIn('body[data-mode="installningar"] .topbar .brand-lockup h1 { display: none; }', tiny)
+
+    def test_the_build_bar_stays_one_line_on_a_phone(self):
+        """Uppmätt i Chromium på 360px: förklaringen radbröts till 194px höjd -
+        en fjärdedel av skärmen för en mening man läser en gång."""
+        rule = self.css.index(".build-chrome-note { display: none; }")
+        media = self.css.rindex("@media (max-width: 720px) {", 0, rule)
+        self.assertLess(rule - media, 120, "regeln ligger inte i telefonbrytpunkten")
 
     def test_the_gear_opens_settings_and_not_the_source_step(self):
         """Knappen hette "Öppna administration" men landade i BYGG steg 1, som
