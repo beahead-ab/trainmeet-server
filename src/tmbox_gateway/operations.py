@@ -65,6 +65,19 @@ class SQLiteOperationsStore:
             CREATE UNIQUE INDEX IF NOT EXISTS one_active_tkl_shift_per_station
                 ON tkl_shifts(publication_id, active_day, station_id)
                 WHERE status = 'active';
+            -- Vad som gör en rörelse till "samma rörelse" över en ny
+            -- publicering. Cloud myntar nya id vid varje omimport, så id
+            -- duger inte. Tågnummer, station och besöksordning är vad en
+            -- människa menar - och besöksordningen finns med för det
+            -- sällsynta fallet att ett tåg vänder och kommer tillbaka.
+            CREATE TABLE IF NOT EXISTS movement_identity (
+                publication_id TEXT NOT NULL,
+                movement_id TEXT NOT NULL,
+                train_number TEXT NOT NULL,
+                station_id TEXT NOT NULL,
+                stop_index INTEGER NOT NULL,
+                PRIMARY KEY(publication_id, movement_id)
+            );
             CREATE TABLE IF NOT EXISTS tkl_movement_states (
                 publication_id TEXT NOT NULL,
                 active_day TEXT NOT NULL,
@@ -73,6 +86,7 @@ class SQLiteOperationsStore:
                 arrival_status TEXT NOT NULL CHECK(arrival_status IN ('none', 'approaching', 'arrived')),
                 departure_status TEXT NOT NULL CHECK(departure_status IN ('none', 'positioned', 'ready', 'departed')),
                 actual_track TEXT,
+                operator_note TEXT,
                 updated_by TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 revision INTEGER NOT NULL DEFAULT 0,
@@ -195,6 +209,10 @@ class SQLiteOperationsStore:
             {
                 "revision": "INTEGER NOT NULL DEFAULT 0",
                 "crew_ready": "INTEGER NOT NULL DEFAULT 0",
+                # Operatörens egen anteckning på en avgång. Den hör till
+                # driften, inte till planen: Cloud äger tidtabellen men aldrig
+                # det tågklareraren skrivit under träffen.
+                "operator_note": "TEXT",
             },
         )
 
@@ -216,6 +234,7 @@ class SQLiteOperationsStore:
             ).fetchone()
             if row is not None and str(row[0]) == publication.publication_id:
                 return
+            previous_publication = str(row[0]) if row is not None else None
             clock = publication.payload.get("clock", {})
             start_time = str(
                 clock.get("start_time")
@@ -253,12 +272,107 @@ class SQLiteOperationsStore:
                         json.dumps(styles, ensure_ascii=False),
                     ),
                 )
-                self._connection.execute("DELETE FROM train_positions")
+                self._carry_operational_state_locked(previous_publication, publication)
                 self._connection.execute("COMMIT")
             except Exception:
                 if self._connection.in_transaction:
                     self._connection.execute("ROLLBACK")
                 raise
+
+    def _carry_operational_state_locked(
+        self, previous_publication: str | None, publication: RuntimePublication
+    ) -> None:
+        """Låt driften överleva en ny plan.
+
+        Cloud äger tidtabellen och skriver över den. Men vilket spår ett tåg
+        faktiskt fick, om det ankommit, och vad tågklareraren antecknat är
+        inte planen - det är vad som hände. Det ska inte försvinna för att
+        någon publicerade om mitt under träffen.
+
+        Rörelserna paras ihop på tågnummer, station och besöksordning, inte
+        på id: Cloud myntar nya id vid varje omimport. En rörelse som inte
+        finns kvar i den nya planen tappar sitt läge, och en ny rörelse börjar
+        rent - båda är rätt.
+        """
+
+        identities = _movement_identities(publication.payload)
+        self._connection.executemany(
+            "INSERT OR REPLACE INTO movement_identity"
+            " (publication_id, movement_id, train_number, station_id, stop_index)"
+            " VALUES (?, ?, ?, ?, ?)",
+            [
+                (publication.publication_id, movement_id, train, station, index)
+                for movement_id, train, station, index in identities
+            ],
+        )
+
+        if previous_publication is None:
+            self._connection.execute("DELETE FROM train_positions")
+            return
+
+        # Nyckel -> nytt rörelse-id i den publikation som just aktiverats.
+        arriving = {
+            (train, station, index): movement_id
+            for movement_id, train, station, index in identities
+        }
+
+        carried = 0
+        rows = self._connection.execute(
+            """
+            SELECT s.active_day, s.movement_id, s.station_id, s.arrival_status,
+                   s.departure_status, s.actual_track, s.operator_note,
+                   s.updated_by, s.updated_at, s.revision, s.crew_ready,
+                   i.train_number, i.stop_index
+            FROM tkl_movement_states AS s
+            JOIN movement_identity AS i
+              ON i.publication_id = s.publication_id AND i.movement_id = s.movement_id
+            WHERE s.publication_id = ?
+            """,
+            (previous_publication,),
+        ).fetchall()
+        for row in rows:
+            target = arriving.get((str(row[11]), str(row[2]), int(row[12])))
+            if target is None:
+                continue
+            self._connection.execute(
+                """
+                INSERT OR REPLACE INTO tkl_movement_states(
+                    publication_id, active_day, movement_id, station_id,
+                    arrival_status, departure_status, actual_track, operator_note,
+                    updated_by, updated_at, revision, crew_ready
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    publication.publication_id, row[0], target, row[2],
+                    row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10],
+                ),
+            )
+            carried += 1
+
+        # Passen hör till stationen, inte till planen. En station som finns
+        # kvar behåller sin tågklarerare.
+        stations = {str(station.get("id")) for station in publication.payload.get("stations") or []}
+        for shift in self._connection.execute(
+            "SELECT shift_id, active_day, station_id FROM tkl_shifts"
+            " WHERE publication_id = ? AND status != 'closed'",
+            (previous_publication,),
+        ).fetchall():
+            if str(shift[2]) in stations:
+                self._connection.execute(
+                    "UPDATE tkl_shifts SET publication_id = ? WHERE shift_id = ?",
+                    (publication.publication_id, shift[0]),
+                )
+
+        # Positionerna nycklas på tågnummer och överlever därför av sig själva.
+        # De rensas bara för tåg som inte längre finns i planen.
+        numbers = {train for _, train, _, _ in identities}
+        for existing in self._connection.execute(
+            "SELECT train_number FROM train_positions"
+        ).fetchall():
+            if str(existing[0]) not in numbers:
+                self._connection.execute(
+                    "DELETE FROM train_positions WHERE train_number = ?", (existing[0],)
+                )
 
     def clock_status(self, *, now: datetime | None = None) -> dict[str, Any]:
         moment = now or datetime.now(timezone.utc)
@@ -433,7 +547,7 @@ class SQLiteOperationsStore:
             movement_rows = self._connection.execute(
                 """
                 SELECT movement_id, arrival_status, departure_status, actual_track,
-                       updated_by, updated_at, revision, crew_ready
+                       updated_by, updated_at, revision, crew_ready, operator_note
                 FROM tkl_movement_states
                 WHERE publication_id = ? AND active_day = ? AND station_id = ?
                 ORDER BY updated_at
@@ -448,6 +562,7 @@ class SQLiteOperationsStore:
                     "arrival": row[1],
                     "departure": derived_departure(row[2], bool(row[7])),
                     "storedDeparture": row[2],
+                    "operatorNote": row[8],
                     "actualTrack": row[3],
                     "updated_by": row[4],
                     "updated_at": row[5],
@@ -598,6 +713,7 @@ class SQLiteOperationsStore:
         shift_id: str | None,
         event_type: str,
         crew_ready: bool | None = None,
+        operator_note: str | None = None,
     ) -> dict[str, Any]:
         if arrival not in {"none", "approaching", "arrived"}:
             raise ValueError("Ogiltigt ankomstläge")
@@ -610,6 +726,10 @@ class SQLiteOperationsStore:
             departure = "positioned"
             crew_ready = True
         track = (actual_track or "").strip() or None
+        # None betyder "lämna anteckningen som den är". Tom sträng betyder
+        # "ta bort den". En box som bara byter spår ska inte råka radera vad
+        # någon annan skrivit.
+        note = None if operator_note is None else (operator_note.strip() or None)
         now = _now_iso()
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
@@ -618,14 +738,20 @@ class SQLiteOperationsStore:
                     """
                     INSERT INTO tkl_movement_states(
                         publication_id, active_day, movement_id, station_id,
-                        arrival_status, departure_status, actual_track,
+                        arrival_status, departure_status, actual_track, operator_note,
                         updated_by, updated_at, revision, crew_ready
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
                     ON CONFLICT(publication_id, active_day, movement_id) DO UPDATE SET
                         station_id = excluded.station_id,
                         arrival_status = excluded.arrival_status,
                         departure_status = excluded.departure_status,
                         actual_track = excluded.actual_track,
+                        -- Flaggan sist i bindningen avgör om anteckningen
+                        -- alls var med i anropet. Utan den gick "lämna som
+                        -- den är" inte att skilja från "radera".
+                        operator_note = CASE WHEN ?
+                            THEN excluded.operator_note
+                            ELSE tkl_movement_states.operator_note END,
                         updated_by = excluded.updated_by,
                         updated_at = excluded.updated_at,
                         revision = tkl_movement_states.revision + 1,
@@ -639,9 +765,11 @@ class SQLiteOperationsStore:
                         arrival,
                         departure,
                         track,
+                        note,
                         updated_by,
                         now,
                         1 if crew_ready else 0,
+                        operator_note is not None,
                     ),
                 )
                 self._insert_tkl_event_locked(
@@ -679,6 +807,7 @@ class SQLiteOperationsStore:
             "storedDeparture": departure,
             "crewReady": bool(crew_ready),
             "actualTrack": track,
+            "operatorNote": note,
             "updated_by": updated_by,
             "updated_at": now,
             "revision": revision,
@@ -1432,6 +1561,42 @@ def _time_to_seconds(value: str | None) -> float:
     if not 0 <= hour <= 23 or not 0 <= minute <= 59 or not 0 <= second <= 59:
         raise ValueError("Klocktiden ska anges som TT:MM eller TT:MM:SS")
     return float(hour * 3600 + minute * 60 + second)
+
+
+def _movement_identities(payload: dict[str, Any]) -> list[tuple[str, str, str, int]]:
+    """Vad som identifierar varje rörelse, oberoende av dess id.
+
+    Tågnummer och station är det en människa menar med "samma rörelse".
+    Besöksordningen finns med för att ett tåg i sällsynta fall vänder och
+    kommer tillbaka till samma station samma dag - traditionellt går jämna
+    tågnummer åt ett håll och udda åt det andra, så det är ovanligt, men en
+    nyckel som stämmer nästan alltid är en nyckel som sviker obegripligt.
+    """
+
+    def minute(value: Any) -> int:
+        text = str(value or "")
+        if ":" not in text:
+            return 0
+        hours, _, minutes = text.partition(":")
+        try:
+            return int(hours) * 60 + int(minutes)
+        except ValueError:
+            return 0
+
+    rows = sorted(
+        (row for row in payload.get("trains") or [] if row.get("id")),
+        key=lambda row: minute(row.get("sort_time") or row.get("departure_time") or row.get("arrival_time")),
+    )
+    seen: dict[tuple[str, str], int] = {}
+    out = []
+    for row in rows:
+        train = str(row.get("train_number") or "")
+        station = str(row.get("station_id") or "")
+        key = (train, station)
+        index = seen.get(key, 0)
+        seen[key] = index + 1
+        out.append((str(row["id"]), train, station, index))
+    return out
 
 
 def _shift_from_row(row: tuple[Any, ...] | None) -> dict[str, Any] | None:
