@@ -377,36 +377,74 @@
             <p id="source-message" class="form-message" role="status"></p>
           </section>
 
-          <!-- Steg 3 har ingen vy byggd än. Utan panel här döljer
-               selectBuildStep allt annat och lämnar en helt tom yta - och den
-               som klickar tror att sidan laddar. Hellre säga vad som gäller
-               än visa ingenting. Kraven står i DESIGNPAKET-DOD.md 3.9. -->
+          <!-- BYGG steg 3. Tidtabellen är alltid redigerbar lokalt, även
+               när grundrevisionen kommer från Cloud: servern är runtime och
+               tidtabellen är det som ändras under en träff. Se DESIGNPAKET-DOD
+               3.9 och produktbeslut P6. -->
           <section id="build-step-tid" class="build-panel hidden" data-build-panel="tid">
-            <header class="build-panel-heading">
-              <h2>Tidtabell</h2>
-              <p>Tågrörelserna på träffen: vilka tåg som går, när, och på vilket spår.</p>
-            </header>
-
-            <div class="shortcut-box">
-              <div>
-                <b>Vyn är inte byggd än</b>
+            <header class="build-panel-heading with-badge">
+              <div class="build-panel-title">
+                <h2>Tidtabell</h2>
                 <p>
-                  Tidtabellen finns och används — den kör träffen just nu — men
-                  det går ännu inte att läsa eller ändra den härifrån. Antalet
-                  rörelser står i steget till vänster.
-                </p>
-                <p>
-                  Under tiden: <b>KÖR → Trafik</b> visar rörelserna som de
-                  ligger, med filter på station och tåg.
+                  Tågrörelserna på träffen. Grupperingen ändrar bara hur listan
+                  visas — raderna är desamma.
                 </p>
               </div>
+              <span id="tid-source-badge" class="lock-badge">–</span>
+            </header>
+
+            <div class="tid-controls">
+              <div class="segmented" role="group" aria-label="Gruppering">
+                <button type="button" class="segment is-active" data-tid-group="tid">Tid</button>
+                <button type="button" class="segment" data-tid-group="station">Station</button>
+                <button type="button" class="segment" data-tid-group="tag">Tåg</button>
+              </div>
+              <label class="tid-filter">
+                <span>Station</span>
+                <select id="tid-station"><option value="">Alla</option></select>
+              </label>
+              <label class="tid-filter tid-search">
+                <span>Sök</span>
+                <input id="tid-search" type="search" placeholder="Tågnummer, spår, anteckning" autocomplete="off">
+              </label>
+              <span id="tid-count" class="tid-count"></span>
+            </div>
+
+            <div id="tid-bulk" class="tid-bulk hidden" role="group" aria-label="Ändra markerade">
+              <b id="tid-bulk-count">0 markerade</b>
+              <label>Spår<input id="tid-bulk-track" type="text" size="4" autocomplete="off"></label>
+              <label>Dagar<input id="tid-bulk-days" type="text" size="6" autocomplete="off"></label>
+              <label>Flytta tid<input id="tid-bulk-shift" type="number" step="1" size="4" placeholder="min"></label>
+              <button type="button" id="tid-bulk-apply" class="primary">Ändra markerade</button>
+              <button type="button" id="tid-bulk-clear" class="link-button">Avmarkera</button>
+            </div>
+
+            <div class="table-scroll">
+              <table id="tid-table" class="tid-table">
+                <thead>
+                  <tr>
+                    <th class="tid-pick"><input type="checkbox" id="tid-all" aria-label="Markera alla"></th>
+                    <th>Tåg</th><th>Dagar</th><th>Station</th><th>Spår</th>
+                    <th>Ankomst</th><th>Avgång</th><th>Från</th><th>Till</th><th>Anteckning</th>
+                  </tr>
+                </thead>
+                <tbody id="tid-rows"></tbody>
+              </table>
+            </div>
+
+            <p id="tid-empty" class="tid-empty hidden">Inga rader matchar filtret.</p>
+
+            <div class="tid-actions">
+              <button type="button" id="tid-save" class="primary" disabled>Spara utkast</button>
+              <button type="button" id="tid-revert" class="link-button hidden">Ångra ändringar</button>
+              <p id="tid-message" class="form-message" role="status"></p>
             </div>
 
             <p class="lock-note">
-              När vyn byggs blir den redigerbar även när träffen kommer från
-              Cloud, till skillnad från stationer och sträckor. Servern är
-              runtime och tidtabellen är det som ändras under en träff; en
-              ändring här blir en lokal revision som du aktiverar själv.
+              Tidtabellen är redigerbar även när träffen kommer från Cloud, till
+              skillnad från stationer och sträckor. En sparad ändring blir en
+              lokal revision som du aktiverar själv — den slår aldrig igenom av
+              sig själv för operatörerna.
             </p>
           </section>
 

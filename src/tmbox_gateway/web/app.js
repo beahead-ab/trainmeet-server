@@ -509,6 +509,7 @@ function selectBuildStep(step) {
   if (selected === "kalla") refreshSourceChoice();
   if (selected === "kalla") refreshPendingRevision();
   if (selected === "bana") refreshBuildTopology();
+  if (selected === "tid") refreshBuildTimetable();
   appView.classList.remove("sidebar-open");
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -523,6 +524,7 @@ document.querySelector("#leave-build").addEventListener("click", () => setMode("
 document.querySelectorAll(".run-tab").forEach((button) => {
   button.addEventListener("click", () => selectRunTab(button.dataset.runTab));
 });
+bindTimetableStep();
 document.querySelectorAll("[data-build-step]").forEach((button) => {
   button.addEventListener("click", () => selectBuildStep(button.dataset.buildStep));
 });
@@ -4539,6 +4541,425 @@ function renderTopologyPanels(container, topology, names) {
     });
     row.append(slots);
     container.append(row);
+  });
+}
+
+// ── BYGG steg 3, tidtabellen ────────────────────────────────────────────
+//
+// Tre saker styr den här vyn.
+//
+// Grupperingen ändrar vad man ser, aldrig vad som finns. `tid.rows` rörs inte
+// av en gruppering eller ett filter - de bygger bara en ny lista att rita ur.
+// Annars skulle en sparning efter ett filter spara det man råkade titta på.
+//
+// Redigeringen är alltid öppen, även när grundrevisionen kommer från Cloud.
+// Servern är runtime; tidtabellen är det som ändras under en träff. Det är
+// skillnaden mot steg 2, och den är avsiktlig.
+//
+// Och en träff har lätt femhundra rörelser. Raderna byggs därför i ett svep i
+// ett DocumentFragment, utan lyssnare per rad - klick fångas på tbody.
+
+const tid = {
+  rows: [],          //: Det redigerade tillståndet. Enda sanningen.
+  original: new Map(), //: Som det såg ut när vyn lästes, för ändringsmärket.
+  stations: [],
+  tracks: [],
+  revision: null,
+  group: "tid",
+  station: "",
+  search: "",
+  selected: new Set(),
+  editing: null,
+};
+
+//: Fälten som går att ändra, och hur de visas. Ordningen är kolumnernas.
+const TID_COLUMNS = [
+  { key: "train_number", label: "Tåg", edit: true, cls: "mono" },
+  { key: "days", label: "Dagar", edit: true },
+  { key: "station", label: "Station", edit: false },
+  { key: "track", label: "Spår", edit: true, cls: "mono" },
+  { key: "arrival_time", label: "Ankomst", edit: true, cls: "mono" },
+  { key: "departure_time", label: "Avgång", edit: true, cls: "mono" },
+  { key: "arrival_from", label: "Från", edit: true },
+  { key: "departure_to", label: "Till", edit: true },
+  { key: "note", label: "Anteckning", edit: true },
+];
+
+function tidEl(name) {
+  return document.querySelector(`#tid-${name}`);
+}
+
+//: Minuter sedan midnatt, eller null om tiden inte går att läsa. Används både
+//: för sortering och för att flytta tider i massredigeringen.
+function tidMinutes(value) {
+  const match = /^(\d{1,2})[:.](\d{2})$/.exec(String(value || "").trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function tidClock(minutes) {
+  const wrapped = ((minutes % 1440) + 1440) % 1440;
+  return `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}`;
+}
+
+//: Har raden ändrats sedan den lästes? Jämför bara de fält som går att ändra -
+//: id och station_id rör vi aldrig.
+function tidChanged(row) {
+  const before = tid.original.get(row.id);
+  if (!before) return false;
+  return TID_COLUMNS.some((column) => String(row[column.key] ?? "") !== String(before[column.key] ?? ""));
+}
+
+function tidDirty() {
+  return tid.rows.some(tidChanged);
+}
+
+//: Vad som ska visas, givet filter och gruppering. Returnerar en platt lista
+//: av poster: antingen en rubrik eller en rad. Inget här ändrar tid.rows.
+function tidVisible() {
+  const needle = tid.search.trim().toLowerCase();
+  const rows = tid.rows.filter((row) => {
+    if (tid.station && row.station_id !== tid.station) return false;
+    if (!needle) return true;
+    return [row.train_number, row.track, row.note, row.arrival_from, row.departure_to, row.station]
+      .some((value) => String(value || "").toLowerCase().includes(needle));
+  });
+
+  if (tid.group === "tid") {
+    const sorted = [...rows].sort((a, b) => {
+      const left = tidMinutes(a.sort_time || a.departure_time || a.arrival_time);
+      const right = tidMinutes(b.sort_time || b.departure_time || b.arrival_time);
+      if (left === right) return String(a.train_number).localeCompare(String(b.train_number), "sv");
+      if (left === null) return 1;
+      if (right === null) return -1;
+      return left - right;
+    });
+    return sorted.map((row) => ({ row }));
+  }
+
+  const key = tid.group === "station" ? "station" : "train_number";
+  const groups = new Map();
+  for (const row of rows) {
+    const name = String(row[key] || "–");
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(row);
+  }
+  const out = [];
+  for (const name of [...groups.keys()].sort((a, b) => a.localeCompare(b, "sv", { numeric: true }))) {
+    const bucket = groups.get(name);
+    out.push({ heading: name, count: bucket.length });
+    bucket
+      .sort((a, b) => (tidMinutes(a.sort_time) ?? 9999) - (tidMinutes(b.sort_time) ?? 9999))
+      .forEach((row) => out.push({ row }));
+  }
+  return out;
+}
+
+function tidRenderRows() {
+  const body = tidEl("rows");
+  if (!body) return;
+  const items = tidVisible();
+  const fragment = document.createDocumentFragment();
+
+  for (const item of items) {
+    if (item.heading) {
+      const tr = document.createElement("tr");
+      tr.className = "tid-heading";
+      const cell = document.createElement("td");
+      cell.colSpan = TID_COLUMNS.length + 1;
+      cell.textContent = `${item.heading} · ${item.count} ${item.count === 1 ? "rad" : "rader"}`;
+      tr.append(cell);
+      fragment.append(tr);
+      continue;
+    }
+
+    const row = item.row;
+    const tr = document.createElement("tr");
+    tr.dataset.rowId = row.id;
+    if (tidChanged(row)) tr.classList.add("is-changed");
+    if (tid.selected.has(row.id)) tr.classList.add("is-picked");
+
+    const pick = document.createElement("td");
+    pick.className = "tid-pick";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = tid.selected.has(row.id);
+    box.setAttribute("aria-label", `Markera ${row.train_number} ${row.station}`);
+    pick.append(box);
+    tr.append(pick);
+
+    for (const column of TID_COLUMNS) {
+      const cell = document.createElement("td");
+      if (column.cls) cell.className = column.cls;
+      if (column.edit) cell.dataset.tidField = column.key;
+      cell.textContent = String(row[column.key] ?? "");
+      tr.append(cell);
+    }
+
+    if (tidChanged(row)) {
+      const chip = document.createElement("span");
+      chip.className = "tid-chip";
+      chip.textContent = "Ändrad";
+      tr.lastElementChild.append(chip);
+    }
+    fragment.append(tr);
+  }
+
+  body.replaceChildren(fragment);
+
+  const shown = items.filter((item) => item.row).length;
+  const count = tidEl("count");
+  if (count) count.textContent = `${shown} av ${tid.rows.length} rörelser`;
+  tidEl("empty")?.classList.toggle("hidden", shown > 0);
+  tidUpdateActions();
+}
+
+function tidUpdateActions() {
+  const dirty = tidDirty();
+  const save = tidEl("save");
+  if (save) save.disabled = !dirty;
+  tidEl("revert")?.classList.toggle("hidden", !dirty);
+  const bulk = tidEl("bulk");
+  bulk?.classList.toggle("hidden", tid.selected.size === 0);
+  const label = tidEl("bulk-count");
+  if (label) label.textContent = `${tid.selected.size} markerade`;
+}
+
+//: Byt en cell mot ett fält. En i taget - 499 rader gånger nio fält vore
+//: fyra tusen inmatningsrutor att bygga för ingenting.
+function tidEditCell(cell) {
+  if (tid.editing) tidCommitCell();
+  const tr = cell.closest("tr");
+  const row = tid.rows.find((item) => item.id === tr?.dataset.rowId);
+  const field = cell.dataset.tidField;
+  if (!row || !field) return;
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = String(row[field] ?? "");
+  input.className = "tid-input";
+  cell.replaceChildren(input);
+  input.focus();
+  input.select();
+  tid.editing = { cell, row, field };
+}
+
+function tidCommitCell() {
+  if (!tid.editing) return;
+  const { cell, row, field } = tid.editing;
+  const input = cell.querySelector("input");
+  tid.editing = null;
+  if (!input) return;
+  const value = input.value.trim();
+  row[field] = value;
+  // sort_time följer avgången när den finns, annars ankomsten. Utan det
+  // hamnar en ändrad tid på fel plats så fort vyn grupperas om.
+  if (field === "departure_time" || field === "arrival_time") {
+    row.sort_time = row.departure_time || row.arrival_time || "";
+  }
+  tidRenderRows();
+}
+
+function tidApplyBulk() {
+  const track = tidEl("bulk-track")?.value.trim() ?? "";
+  const days = tidEl("bulk-days")?.value.trim() ?? "";
+  const shift = Number(tidEl("bulk-shift")?.value ?? "");
+  let touched = 0;
+  for (const row of tid.rows) {
+    if (!tid.selected.has(row.id)) continue;
+    if (track) row.track = track;
+    if (days) row.days = days;
+    if (Number.isFinite(shift) && shift !== 0) {
+      for (const field of ["arrival_time", "departure_time"]) {
+        const minutes = tidMinutes(row[field]);
+        if (minutes !== null) row[field] = tidClock(minutes + shift);
+      }
+      row.sort_time = row.departure_time || row.arrival_time || "";
+    }
+    touched += 1;
+  }
+  setMessage(tidEl("message"), touched ? `${touched} rader ändrade` : "Inget att ändra", touched ? "ok" : "");
+  tidRenderRows();
+}
+
+async function tidSave() {
+  const message = tidEl("message");
+  const changed = tid.rows.filter(tidChanged);
+  if (!changed.length) return;
+  setMessage(message, "Sparar …", "");
+  try {
+    // Läs utkastet först. Ett utkast som skickas med bara `trains` skulle
+    // radera stationer, sträckor och paneler - butiken sparar det den får,
+    // inte en sammanslagning. Det som ändras här är tidtabellen och ingenting
+    // annat, så resten måste följa med oförändrad.
+    let current = await authorizedFetch("/v1/local-configuration");
+    if (!current.ok) {
+      setMessage(message, "Utkastet kunde inte läsas", "error");
+      return;
+    }
+    let state_ = await current.json();
+
+    // Kommer träffen från Cloud finns inget lokalt utkast att spara i, och en
+    // tidtabell vars rader pekar på stationer som inte står i utkastet vägras
+    // - med rätta. Sådden öppnar den aktiva publikationen som arbetskopia.
+    // Den kopierar, den ändrar ingenting: den aktiva träffen står orörd tills
+    // någon aktiverar en ny revision.
+    if (!(state_.draft?.stations || []).length) {
+      setMessage(message, "Öppnar träffen som arbetskopia …", "");
+      // Kroppen är tom av natur men måste finnas: servern avvisar en begäran
+      // utan innehåll innan den ens tittar på sökvägen.
+      const seeded = await authorizedFetch("/v1/local-configuration/seed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (!seeded.ok) {
+        const problem = await seeded.json().catch(() => ({}));
+        setMessage(message, problem.message || "Träffen kunde inte öppnas för redigering", "error");
+        return;
+      }
+      current = await authorizedFetch("/v1/local-configuration");
+      state_ = await current.json();
+    }
+    const draft = state_.draft || {};
+
+    const response = await authorizedFetch("/v1/local-configuration", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        draft: { ...draft, trains: tid.rows },
+        expected_revision: state_.revision ?? tid.revision,
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setMessage(message, body.message || "Utkastet kunde inte sparas", "error");
+      return;
+    }
+    tid.revision = body.revision ?? tid.revision;
+    tid.original = new Map(tid.rows.map((row) => [row.id, { ...row }]));
+    setMessage(message, `${changed.length} ändrade rader sparade. Aktivera i steg 1 när du är klar.`, "ok");
+    tidRenderRows();
+    refreshPendingRevision();
+  } catch {
+    setMessage(message, "Utkastet kunde inte sparas", "error");
+  }
+}
+
+async function refreshBuildTimetable() {
+  const body = tidEl("rows");
+  if (!body) return;
+  const message = tidEl("message");
+  try {
+    const response = await authorizedFetch("/v1/build/timetable");
+    if (!response.ok) {
+      setMessage(message, "Tidtabellen kunde inte läsas", "error");
+      return;
+    }
+    const payload = await response.json();
+    tid.rows = payload.rows || [];
+    tid.original = new Map(tid.rows.map((row) => [row.id, { ...row }]));
+    tid.stations = payload.stations || [];
+    tid.tracks = payload.tracks || [];
+    tid.revision = payload.revision ?? null;
+    tid.selected.clear();
+
+    const badge = tidEl("source-badge");
+    if (badge) {
+      badge.textContent = payload.base_from_cloud ? "✎ Redigerbar · grund från Cloud" : "✎ Redigerbar";
+      badge.dataset.locked = "false";
+    }
+
+    const picker = tidEl("station");
+    if (picker) {
+      const chosen = tid.station;
+      picker.replaceChildren();
+      const all = document.createElement("option");
+      all.value = "";
+      all.textContent = "Alla";
+      picker.append(all);
+      for (const station of tid.stations) {
+        const option = document.createElement("option");
+        option.value = station.id;
+        option.textContent = station.name;
+        picker.append(option);
+      }
+      picker.value = tid.stations.some((station) => station.id === chosen) ? chosen : "";
+      tid.station = picker.value;
+    }
+
+    setMessage(message, "", "");
+    tidRenderRows();
+  } catch {
+    setMessage(message, "Tidtabellen kunde inte läsas", "error");
+  }
+}
+
+function bindTimetableStep() {
+  document.querySelectorAll("[data-tid-group]").forEach((button) => {
+    button.addEventListener("click", () => {
+      tid.group = button.dataset.tidGroup;
+      document.querySelectorAll("[data-tid-group]").forEach((other) => {
+        other.classList.toggle("is-active", other === button);
+      });
+      tidRenderRows();
+    });
+  });
+
+  tidEl("station")?.addEventListener("change", (event) => {
+    tid.station = event.target.value;
+    tidRenderRows();
+  });
+  tidEl("search")?.addEventListener("input", (event) => {
+    tid.search = event.target.value;
+    tidRenderRows();
+  });
+
+  // En lyssnare på kroppen i stället för en per rad: 499 rader ska inte kosta
+  // 499 lyssnare, och raderna byts ut vid varje omritning.
+  const body = tidEl("rows");
+  body?.addEventListener("click", (event) => {
+    const box = event.target.closest('input[type="checkbox"]');
+    if (box) {
+      const id = box.closest("tr")?.dataset.rowId;
+      if (id) {
+        if (box.checked) tid.selected.add(id);
+        else tid.selected.delete(id);
+        box.closest("tr").classList.toggle("is-picked", box.checked);
+        tidUpdateActions();
+      }
+      return;
+    }
+    if (event.target.closest(".tid-input")) return;
+    const cell = event.target.closest("[data-tid-field]");
+    if (cell) tidEditCell(cell);
+  });
+  body?.addEventListener("keydown", (event) => {
+    if (!tid.editing) return;
+    if (event.key === "Enter") { event.preventDefault(); tidCommitCell(); }
+    if (event.key === "Escape") { tid.editing = null; tidRenderRows(); }
+  });
+  body?.addEventListener("focusout", (event) => {
+    if (tid.editing && event.target === tid.editing.cell.querySelector("input")) tidCommitCell();
+  });
+
+  tidEl("all")?.addEventListener("change", (event) => {
+    tid.selected.clear();
+    if (event.target.checked) {
+      tidVisible().forEach((item) => { if (item.row) tid.selected.add(item.row.id); });
+    }
+    tidRenderRows();
+  });
+  tidEl("bulk-apply")?.addEventListener("click", tidApplyBulk);
+  tidEl("bulk-clear")?.addEventListener("click", () => { tid.selected.clear(); tidRenderRows(); });
+  tidEl("save")?.addEventListener("click", tidSave);
+  tidEl("revert")?.addEventListener("click", () => {
+    tid.rows = tid.rows.map((row) => ({ ...(tid.original.get(row.id) || row) }));
+    setMessage(tidEl("message"), "Ändringarna är återställda", "");
+    tidRenderRows();
   });
 }
 

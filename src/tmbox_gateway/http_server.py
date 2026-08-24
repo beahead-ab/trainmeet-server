@@ -1146,6 +1146,115 @@ class TrainMeetHTTPApplication:
             )
         return self.local_configuration_store.current()
 
+    def build_timetable(self, client: PairedClient) -> dict[str, Any]:
+        """Tågrörelserna för BYGG steg 3.
+
+        Samma form oavsett var de kommer ifrån, precis som `build_topology` -
+        vyn ska ha en renderare och inte två kodvägar för Cloud och lokalt.
+
+        Till skillnad från steg 2 finns här ingen låsning. Tidtabellen är
+        alltid redigerbar lokalt, även när grundrevisionen kommer från Cloud:
+        servern är runtime och tidtabellen är det som ändras under en träff.
+        Cloud är säkerhetskopian. En ändring här blir en lokal revision som
+        någon aktiverar själv - den slår aldrig igenom av sig själv.
+
+        Stationer och spår följer med, för att vyn ska kunna visa namn i
+        stället för id och erbjuda de spår som faktiskt finns.
+        """
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                "runtime_unavailable",
+                "Lokal lagring saknas",
+            )
+
+        draft: dict[str, Any] = {}
+        if self.local_configuration_store is not None:
+            draft = self.local_configuration_store.current().get("draft") or {}
+
+        # Ett lokalt utkast vinner när det har rader: det är där någon just
+        # har redigerat. Saknas det läser vi den aktiva publikationen.
+        if draft.get("trains"):
+            payload = draft
+            source = "lokal"
+            revision = self.local_configuration_store.current().get("revision")
+        else:
+            publication = self.runtime_store.active()
+            payload = publication.payload if publication is not None else {}
+            source = "cloud" if publication is not None else "tom"
+            revision = self.local_configuration_store.current().get("revision") if self.local_configuration_store else None
+
+        stations = {
+            str(station["id"]): str(station.get("name") or station["id"])
+            for station in payload.get("stations") or []
+        }
+        codes = {
+            str(station["id"]): str(station.get("code") or "")
+            for station in payload.get("stations") or []
+        }
+        # Spåren ligger olika i de två källorna: runtime-paketet har dem platt
+        # på toppnivå med station_id, ett lokalt utkast har dem nästlade under
+        # stationen. Den skillnaden hör hemma här och ingen annanstans - vyn
+        # ska se en lista.
+        catalogue = list(payload.get("tracks") or [])
+        for station in payload.get("stations") or []:
+            for track in station.get("tracks") or []:
+                catalogue.append({**track, "station_id": station["id"]})
+        tracks = {
+            str(track["id"]): str(track.get("display_label") or track.get("label") or track["id"])
+            for track in catalogue
+        }
+
+        rows = []
+        for row in payload.get("trains") or []:
+            station_id = str(row.get("station_id") or "")
+            track_id = str(row.get("track_id") or "")
+            rows.append(
+                {
+                    "id": str(row.get("id") or ""),
+                    "train_number": str(row.get("train_number") or ""),
+                    "train_type": str(row.get("train_type") or "person"),
+                    "days": str(row.get("days") or "Dagl"),
+                    "station_id": station_id,
+                    "station": stations.get(station_id, str(row.get("station") or station_id)),
+                    "station_code": codes.get(station_id, ""),
+                    "track_id": track_id,
+                    "track": tracks.get(track_id, ""),
+                    "arrival_time": row.get("arrival_time") or "",
+                    "departure_time": row.get("departure_time") or "",
+                    "sort_time": row.get("sort_time") or "",
+                    "arrival_from": row.get("arrival_from") or "",
+                    "departure_to": row.get("departure_to") or "",
+                    "no_stop": bool(row.get("no_stop")),
+                    "note": str(row.get("note") or ""),
+                }
+            )
+
+        return {
+            # Ingen låsning här, till skillnad från steg 2. Fältet finns ändå
+            # så att vyn kan läsa samma nyckel i båda stegen.
+            "locked": False,
+            "source": source,
+            # Vyn ska inte jämföra källsträngar för att veta vad den tittar på.
+            # Samma regel som `locked` i build_topology: beslutet fattas här.
+            "base_from_cloud": source == "cloud",
+            "revision": revision,
+            "rows": rows,
+            "stations": [
+                {"id": str(station["id"]), "name": stations[str(station["id"])], "code": codes[str(station["id"])]}
+                for station in payload.get("stations") or []
+            ],
+            "tracks": [
+                {
+                    "id": str(track["id"]),
+                    "label": tracks[str(track["id"])],
+                    "station_id": str(track.get("station_id") or ""),
+                }
+                for track in catalogue
+            ],
+        }
+
     def build_topology(self, client: PairedClient) -> dict[str, Any]:
         """Stations, connections and A-D panels for BYGG step 2.
 
@@ -2246,6 +2355,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     HTTPStatus.OK, self.server.application.pending_revision_state(client)
                 )
+                return
+            if path == "/v1/build/timetable":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.build_timetable(client))
                 return
             if path == "/v1/build/topology":
                 client = self._authenticated_client()

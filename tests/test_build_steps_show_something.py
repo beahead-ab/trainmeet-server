@@ -72,36 +72,57 @@ class EveryBuildStepRendersSomethingTests(unittest.TestCase):
         ]
         self.assertEqual([], empty, "steg utan något att visa")
 
-    def test_the_timetable_step_says_the_view_is_missing(self) -> None:
-        """Så länge vyn inte är byggd ska steget säga det, inte tiga.
-
-        Kraven står i docs/DESIGNPAKET-DOD.md 3.9. När vyn byggs ersätts den
-        här texten, och då faller testet och påminner om att ta bort den.
-        """
+    def test_the_timetable_step_has_its_view(self) -> None:
+        """Platshållaren är ersatt. Det här är vad steget ska ha."""
 
         markup = _markup()
         start = markup.index('data-build-panel="tid"')
-        end = markup.index("</section>", start)
-        panel = markup[start:end]
+        panel = markup[start:markup.index("</section>", start)]
 
-        self.assertIn("inte byggd", panel)
-        self.assertIn("Trafik", panel, "peka läsaren dit rörelserna faktiskt syns")
+        for needed in ('data-tid-group="tid"', 'data-tid-group="station"',
+                       'data-tid-group="tag"', 'id="tid-station"', 'id="tid-search"',
+                       'id="tid-rows"', 'id="tid-bulk"', 'id="tid-save"'):
+            with self.subTest(needed=needed):
+                self.assertIn(needed, panel)
 
-    def test_the_timetable_step_is_not_described_as_read_only(self) -> None:
-        """Designpaketet är uttryckligt: bygg inte steget som skrivskyddat.
+    def test_grouping_never_touches_the_rows(self) -> None:
+        """3.9.2: grupperingen ändrar vyn, inte datan.
 
-        En platshållare får säga att vyn saknas, men den får inte lova att
-        tidtabellen bara går att titta på - den ska bli redigerbar även i
-        Cloud-läge, till skillnad från stationer och sträckor.
+        `tidVisible` får läsa `tid.rows` men aldrig skriva till dem. Skrev den
+        det skulle ett filter kunna spara det man råkade titta på.
         """
+
+        script = _script()
+        start = script.index("function tidVisible()")
+        body = script[start:script.index("\nfunction ", start + 10)]
+
+        self.assertNotIn("tid.rows =", body)
+        self.assertNotIn("tid.rows.push", body)
+        self.assertNotIn("tid.rows.splice", body)
+        self.assertIn("tid.rows.filter", body, "den ska läsa raderna")
+
+    def test_the_timetable_is_never_described_as_locked(self) -> None:
+        """P6: tidtabellen är redigerbar även när grunden kommer från Cloud."""
 
         markup = _markup()
         start = markup.index('data-build-panel="tid"')
         panel = markup[start:markup.index("</section>", start)]
 
         self.assertIn("redigerbar", panel)
-        for forbidden in ("skrivskyddad", "endast läsning", "bara läsa"):
+        for forbidden in ("skrivskyddad", "endast läsning", "låst av cloud"):
             self.assertNotIn(forbidden, panel.lower())
+
+    def test_the_rows_are_drawn_in_one_pass(self) -> None:
+        """Femhundra rader ska inte kosta femhundra lyssnare eller femhundra
+        insättningar i dokumentet."""
+
+        script = _script()
+        start = script.index("function tidRenderRows()")
+        body = script[start:script.index("\nfunction ", start + 10)]
+
+        self.assertIn("createDocumentFragment", body)
+        self.assertIn("replaceChildren", body)
+        self.assertNotIn("addEventListener", body, "lyssnare hör hemma på tbody, inte per rad")
 
 
 if __name__ == "__main__":

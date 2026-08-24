@@ -287,21 +287,27 @@ omordning av stationer.
 
 | # | Krav | Status |
 |---|---|---|
-| 3.9.1 | Segmenterad kontroll: Tid / Station / Tåg | ⬜ |
-| 3.9.2 | **Grupperingen ändrar vyn, inte datan** | ⬜ |
-| 3.9.3 | Stationsfilter och sökruta | ⬜ |
-| 3.9.4 | Ändrade rader: orange kantmarkering + chip *Ändrad* | ⬜ |
-| 3.9.5 | **Massredigering av markerade rader** | ⬜ |
-| 3.9.6 | Kolumner enligt paketet | ⬜ |
-| 3.9.7 | Steget säger att vyn saknas i stället för att visa en tom sida | ✅ |
+| 3.9.1 | Segmenterad kontroll: Tid / Station / Tåg | ✅ |
+| 3.9.2 | **Grupperingen ändrar vyn, inte datan** | ✅ testat |
+| 3.9.3 | Stationsfilter och sökruta | ✅ |
+| 3.9.4 | Ändrade rader: orange kantmarkering + chip *Ändrad* | ✅ |
+| 3.9.5 | **Massredigering av markerade rader** | ✅ spår, dagar, tidsförskjutning |
+| 3.9.6 | Kolumner enligt paketet | ✅ tåg, dagar, station, spår, ankomst, avgång, från, till, anteckning |
+| 3.9.7 | Redigering öppen även när grunden kommer från Cloud | ✅ sådd ur aktiv publikation |
 
-> Steget hade varken panel eller sektion, så `selectBuildStep` dolde allt annat
-> och lämnade en tom yta. Rapporterat från drift som att sidan tog lång tid att
-> ladda — vilket är vad tomhet ser ut som när man väntar. Ingenting var
-> långsamt: alla fyra stegen svarade på en halv sekund. En platshållare säger
-> nu vad som gäller och pekar mot KÖR → Trafik. Den ersätts när vyn byggs, och
-> ett test i `tests/test_build_steps_show_something.py` faller då och påminner
-> om det.
+> Steget hade varken panel eller sektion och lämnade en tom yta — rapporterat
+> från drift som att sidan tog lång tid att ladda. Ingenting var långsamt; det
+> fanns inget att rita.
+>
+> Vyn läser `/v1/build/timetable`, som svarar med samma form vare sig raderna
+> kommer ur en Cloud-publicering eller ett lokalt utkast. Sparningen läser
+> utkastet först och sår det ur den aktiva publikationen när det är tomt —
+> annars vägras en tidtabell vars rader pekar på stationer utkastet inte har,
+> vilket är just fallet när träffen kommer från Cloud.
+>
+> Uppmätt med 499 rörelser och elva stationer: steget öppnar på 119–130 ms,
+> omgruppering och sökning under 175 ms, och tabellen skrollar i sin egen ruta
+> så att sidan aldrig blir bredare än skärmen.
 
 ### 3.10 BYGG › 4 TMBoxar
 
