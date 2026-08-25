@@ -441,6 +441,12 @@ det:
 | Nollställningen som faktisk åtgärd | Spärren är provad på riktigt i webbläsaren - fel ord låser, NOLLSTÄLL låser upp - men knappen är **aldrig tryckt**. Servervägen är testad sedan tidigare (`/v1/server/factory-reset` i `test_http_server.py`). |
 | Extern admininloggning som inloggning | Formuläret sparar mot `/v1/admin/access`, men ingen inloggning utifrån är gjord: allt är kört från 127.0.0.1, där servern rapporterar `access_mode: local`. Chippets externa variant och `#reset-mode-summary`:s "Nollställ träffdata" är alltså sedda i koden, inte på skärmen. |
 
+> **Senare ändrat.** Raderna ovan är ett protokoll från mätningen och står
+> kvar som det. Servern kräver numera inloggning också på maskinen själv, så
+> `access_mode: local` uppträder bara under en installation som ännu inte satt
+> sitt lösenord. Chippet svarar på var webbläsaren står - "Vid servern" eller
+> "Över nätet" - och kortet heter "Inloggning". Se README, *Adminåtkomst*.
+
 ## Webbläsarbevis — BYGG 5 Server
 
 Kört i Chromium 1194 via Playwright mot en färdiginstallerad server (riktig

@@ -2360,7 +2360,15 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     {
                         "authenticated": client is not None,
-                        "access_mode": "local" if self._has_automatic_local_admin() else "external",
+                        # Läget svarar på hur man är inne. "local" betyder att
+                        # servern släpper in utan inloggning, och det gör den
+                        # numera bara innan det finns ett lösenord att logga in
+                        # med - alltså under installationen.
+                        "access_mode": "local" if self._installation_is_open() else "external",
+                        # Var man står är en annan fråga än vem man är. Den
+                        # avgör inte längre behörighet, men fabriksåterställning
+                        # kräver fortfarande att man står vid maskinen.
+                        "at_the_machine": self._at_the_machine(),
                         # No username. It used to be here, which both
                         # prefilled the login field and told any
                         # unauthenticated caller who the administrator is.
@@ -2808,7 +2816,7 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 response = self.server.application.factory_reset_server(
                     client,
                     payload,
-                    local_access=self._has_automatic_local_admin(),
+                    local_access=self._at_the_machine(),
                 )
                 self.server.request_factory_reset()
                 self._send_json(HTTPStatus.ACCEPTED, response)
@@ -2879,7 +2887,7 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         prefix = "Bearer "
         if authorization.startswith(prefix):
             return self.server.application.identities.authenticate(authorization[len(prefix) :])
-        if self._has_automatic_local_admin():
+        if self._installation_is_open():
             return self.server.application.local_admin()
         token = self._admin_session_token()
         if token:
@@ -2888,13 +2896,38 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return self.server.application.local_admin(user)
         return None
 
-    def _has_automatic_local_admin(self) -> bool:
+    def _installation_is_open(self) -> bool:
+        """Innan det finns ett lösenord finns det ingen att logga in som.
+
+        Servern gav tidigare full ägarbehörighet till alla som nådde den från
+        maskinen själv, alltid. Det var bekvämt och det var fel: när servern
+        fick flera användare med olika roller gällde inte rollgränsen vid
+        maskinen - vem som helst som kom åt tangentbordet var ägare.
+
+        Kvar är bara det fall där en inloggning inte kan finnas: en
+        installation som ännu inte satt sitt lösenord. Den öppningen stänger
+        sig själv i samma stund som den första administratören skapas.
+
+        Var du står är fortfarande en giltig fråga - se _is_direct_local_request
+        - men den avgör vad du får göra, inte vem du är.
+        """
+
         if self.server.application.config.force_external_auth:
             return False
-        if self._is_direct_local_request():
-            return True
         access = self.server.application.identities.admin_access_summary()
         return not access["password_configured"] and self._client_address_is_private()
+
+    def _at_the_machine(self) -> bool:
+        """Står webbläsaren på serverdatorn själv?
+
+        force_external_auth finns för att kunna köra servern som om den nåddes
+        utifrån. Då ska den frågan svara nej, annars vore läget inte det man
+        bad om.
+        """
+
+        if self.server.application.config.force_external_auth:
+            return False
+        return self._is_direct_local_request()
 
     def _is_direct_local_request(self) -> bool:
         if self._client_address_is_loopback():

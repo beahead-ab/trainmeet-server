@@ -509,12 +509,21 @@ class UserRoutesOverHTTPTests(unittest.TestCase):
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
         self.base = f"http://127.0.0.1:{self.server.server_port}"
+        self.cookie = self._sign_in("casper", "ett-langt-losenord")
+
+    def _sign_in(self, username: str, password: str) -> str:
+        """Servern kräver inloggning även på maskinen själv, så provet loggar
+        in på riktigt i stället för att luta sig mot var det står."""
+
+        token = self.identities.create_admin_session(username, password)
+        assert token is not None
+        return f"trainmeet_admin={token}"
 
     def _post(self, path: str, body: dict) -> tuple[int, dict]:
         request = Request(
             f"{self.base}{path}",
             data=json.dumps(body).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "Cookie": self.cookie},
             method="POST",
         )
         try:
@@ -547,7 +556,8 @@ class UserRoutesOverHTTPTests(unittest.TestCase):
         self.assertNotIn("benny", [user["username"] for user in remaining["users"]])
 
     def test_the_list_is_readable_over_http_too(self) -> None:
-        with urlopen(f"{self.base}/v1/admin/users", timeout=5) as response:
+        request = Request(f"{self.base}/v1/admin/users", headers={"Cookie": self.cookie})
+        with urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
         self.assertEqual("owner", payload["role"])
 
@@ -618,3 +628,76 @@ class UsableOwnerTests(unittest.TestCase):
         self.identities.redeem_admin_setup("lars", str(invited["setup_code"]), "ett-annat-losenord")
         self.identities.delete_admin_user(str(self.casper["user_id"]))
         self.assertEqual(["lars"], [u["username"] for u in self.identities.list_admin_users()])
+
+
+class RemovedUsersStayOutTests(unittest.TestCase):
+    """Ett borttaget konto ska inte kunna logga in.
+
+    Den första ägaren står på två ställen: i användarlistan och i den gamla
+    singleton-raden som fanns innan servern hade flera användare. Att ta bort
+    ägaren tog bara bort listraden. Singleton-raden låg kvar med namn och
+    lösenord, och inloggningen föll tillbaka på den när namnet inte fanns i
+    listan - alltså just när kontot var borttaget.
+
+    Gränssnittet visade en användare. Servern släppte in två. Fyndet kom av att
+    fråga vad som händer med den gamla raden när listan ändras, inte av något
+    test som gick sönder.
+    """
+
+    def setUp(self) -> None:
+        self._dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._dir.cleanup)
+        self.identities = IdentityStore(Path(self._dir.name) / "identity.db")
+        self.addCleanup(self.identities.close)
+        self.identities.configure_admin_access("casper", "det-gamla-losenordet")
+        invited = self.identities.invite_admin_user("lars", "owner")
+        self.identities.redeem_admin_setup("lars", str(invited["setup_code"]), "lars-eget-losenord")
+        self.casper = next(
+            user for user in self.identities.list_admin_users() if user["username"] == "casper"
+        )
+
+    def test_the_removed_owner_cannot_sign_in_afterwards(self) -> None:
+        self.identities.delete_admin_user(str(self.casper["user_id"]))
+        self.assertIsNone(self.identities.create_admin_session("casper", "det-gamla-losenordet"))
+
+    def test_the_remaining_owner_still_can(self) -> None:
+        self.identities.delete_admin_user(str(self.casper["user_id"]))
+        self.assertIsNotNone(self.identities.create_admin_session("lars", "lars-eget-losenord"))
+
+    def test_the_server_does_not_look_uninstalled_afterwards(self) -> None:
+        """Installationsluckan öppnar sig om servern ser ut att sakna lösenord.
+        Att ta bort den ursprungliga ägaren får inte se ut så."""
+
+        self.identities.delete_admin_user(str(self.casper["user_id"]))
+        summary = self.identities.admin_access_summary()
+        self.assertTrue(summary["password_configured"])
+        self.assertEqual("lars", summary["username"])
+
+    def test_a_ghost_left_by_an_older_version_is_refused_too(self) -> None:
+        """Servrar som redan uppdaterats bär spöket i sin databas.
+
+        Den gamla borttagningen tog bara bort listraden. Att laga borttagningen
+        hjälper alltså bara framtida borttagningar - en Pi som redan tagit bort
+        sin ursprungliga ägare har kvar singleton-raden med namn och lösenord.
+
+        Provet gör om det gamla felet med en rå DELETE, öppnar databasen igen
+        och kräver att inloggningen ändå säger nej: så snart listan finns är
+        den sanningen.
+        """
+
+        self.identities._connection.execute(  # noqa: SLF001 - härmar en äldre version
+            "DELETE FROM admin_users WHERE user_id = ?", (str(self.casper["user_id"]),)
+        )
+        self.identities.close()
+
+        reopened = IdentityStore(Path(self._dir.name) / "identity.db")
+        self.addCleanup(reopened.close)
+        self.assertEqual(["lars"], [u["username"] for u in reopened.list_admin_users()])
+        self.assertIsNone(reopened.create_admin_session("casper", "det-gamla-losenordet"))
+
+    def test_the_old_row_is_no_longer_a_way_in_once_the_list_exists(self) -> None:
+        """Även utan borttagning: listan är sanningen så snart den finns."""
+
+        self.identities.set_admin_user_password(str(self.casper["user_id"]), "ett-nytt-losenord")
+        self.assertIsNone(self.identities.create_admin_session("casper", "det-gamla-losenordet"))
+        self.assertIsNotNone(self.identities.create_admin_session("casper", "ett-nytt-losenord"))

@@ -690,7 +690,7 @@ adminAccessForm.addEventListener("submit", async (event) => {
       payload.password_configured ? "success" : "notice",
     );
     await refreshAuthStatus();
-    logoutButton.classList.toggle("hidden", state.authStatus?.access_mode !== "external");
+    logoutButton.classList.toggle("hidden", !state.authStatus?.authenticated);
     await refreshAdminAccess();
   } catch (error) {
     setMessage(adminAccessMessage, error.message, "error");
@@ -819,7 +819,7 @@ factoryResetConfirmation.addEventListener("input", () => {
 
 factoryResetButton.addEventListener("click", async () => {
   if (factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL") return;
-  const localFactoryReset = state.authStatus?.access_mode === "local";
+  const localFactoryReset = state.authStatus?.at_the_machine === true;
   const question = localFactoryReset
     ? "All lokal TrainMeet-data och administratören tas bort. Vill du fabriksåterställa nu?"
     : "Träffdata och anslutningar tas bort. Din administratörsinloggning behålls. Vill du fortsätta?";
@@ -1224,10 +1224,11 @@ panelEditor.addEventListener("change", (event) => {
 });
 
 async function openApplication() {
+  document.body.dataset.signedIn = "yes";
   setup.classList.add("hidden");
   login.classList.add("hidden");
   appView.classList.remove("hidden");
-  logoutButton.classList.toggle("hidden", state.authStatus?.access_mode !== "external");
+  logoutButton.classList.toggle("hidden", !state.authStatus?.authenticated);
   setMode(localStorage.getItem("trainmeet.mode") === "bygg" ? "bygg" : "kor");
   try {
     await Promise.all([
@@ -1240,7 +1241,7 @@ async function openApplication() {
     ]);
     setConnection(
       "online",
-      state.authStatus?.access_mode === "external" ? "Externt ansluten" : "Lokalt ansluten",
+      state.authStatus?.at_the_machine ? "Lokalt ansluten" : "Externt ansluten",
     );
     scheduleAdminRefresh();
   } catch (error) {
@@ -1361,14 +1362,14 @@ async function refreshAdminAccess() {
   if (!response.ok) throw new Error(payload.message || "Åtkomstinställningen kunde inte läsas");
   document.querySelector("#admin-username").value = payload.username || "";
 
-  // Chippet svarar på "hur är jag inne just nu", vilket är vad paketets
-  // "Lokal åtkomst" säger, och det kommer ur /v1/auth/status - inte ur en
-  // gissning här. Om ett externt lösenord finns är en annan fråga, och den
-  // står på egen rad i stället för att trängas in i samma chip.
-  const external = state.authStatus?.access_mode === "external";
+  // Chippet svarade förr på "hur är jag inne", och svaret var alltid samma
+  // sak som var man stod. Nu kräver servern inloggning överallt, så frågan
+  // som återstår är var den här webbläsaren står - det avgör om
+  // fabriksåterställningen är hela servern eller bara träffdata.
+  const atTheMachine = state.authStatus?.at_the_machine === true;
   const badge = document.querySelector("#access-mode");
-  badge.textContent = external ? "Extern inloggning" : "Lokal åtkomst";
-  badge.classList.toggle("active", external);
+  badge.textContent = atTheMachine ? "Vid servern" : "Över nätet";
+  badge.classList.toggle("active", !atTheMachine);
 
   const passwordState = document.querySelector("#access-password-state");
   passwordState.textContent = payload.password_configured
@@ -2330,7 +2331,7 @@ async function refreshAuthStatus() {
 }
 
 function configureResetMode() {
-  const localFactoryReset = state.authStatus?.access_mode === "local";
+  const localFactoryReset = state.authStatus?.at_the_machine === true;
   // Sammanfattningen är det enda som syns när blocket är hopfällt, så den ska
   // säga vilken av de två nollställningarna som gäller den här webbläsaren.
   document.querySelector("#reset-mode-summary").textContent = localFactoryReset
@@ -2398,6 +2399,10 @@ async function showLogin() {
   clearTimeout(state.snapshotTimer);
   clearTimeout(state.adminTimer);
   state.authStatus = { ...(state.authStatus || {}), authenticated: false };
+  // Flikar och lägesknappar leder ingenstans utan inloggning. De stod kvar
+  // bakom inloggningsrutan så länge servern ändå släppte in på maskinen -
+  // nu gör den inte det, och då ska de inte se ut som att de går att trycka på.
+  document.body.dataset.signedIn = "no";
   setup.classList.add("hidden");
   appView.classList.add("hidden");
   login.classList.remove("hidden");

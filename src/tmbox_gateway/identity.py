@@ -718,9 +718,19 @@ class IdentityStore:
                 FROM admin_access WHERE singleton = 1
                 """
             ).fetchone()
+            # Frågan "har servern ett lösenord?" avgör om installationen är
+            # öppen, och den ska gälla hela servern. Räknades bara singleton-
+            # raden skulle en server vars ursprungliga ägare tagits bort se
+            # oinstallerad ut och släppa in vem som helst på nätet igen.
+            listed = self._connection.execute(
+                "SELECT username FROM admin_users WHERE password_digest IS NOT NULL"
+                " ORDER BY role DESC, created_at LIMIT 1"
+            ).fetchone()
         return {
-            "username": row[0],
-            "password_configured": bool(row[1]),
+            # Formen är oförändrad när ingen lista finns: tom sträng betyder
+            # "ingen administratör än", och det svaret ska inte bli None.
+            "username": row[0] or (listed[0] if listed else row[0]),
+            "password_configured": bool(row[1]) or listed is not None,
             "updated_at": row[2],
             "must_change_password": bool(row[3]),
         }
@@ -951,6 +961,15 @@ class IdentityStore:
                 )
             self._connection.execute("DELETE FROM admin_users WHERE user_id = ?", (user_id,))
             self._connection.execute("DELETE FROM admin_sessions WHERE user_id = ?", (user_id,))
+            # Singleton-raden är den gamla installationens ägare. Namnger den
+            # den som just togs bort ska den inte fortsätta göra det - varken i
+            # gränssnittets sammanfattning eller som väg in.
+            self._connection.execute(
+                "UPDATE admin_access SET username = '', password_salt = NULL,"
+                " password_digest = NULL, updated_at = ?"
+                " WHERE singleton = 1 AND username = ? COLLATE NOCASE",
+                (datetime.now(timezone.utc).isoformat(), row[1]),
+            )
 
     def set_admin_user_role(self, user_id: str, role: str) -> dict[str, object]:
         if role not in {"owner", "admin"}:
@@ -1048,6 +1067,15 @@ class IdentityStore:
                 if not hmac.compare_digest(_admin_password_digest(password, row[2]), row[3]):
                     return None
                 user_id = str(row[0])
+            elif self._connection.execute(
+                "SELECT 1 FROM admin_users WHERE password_digest IS NOT NULL LIMIT 1"
+            ).fetchone():
+                # Finns det konton som kan logga in är listan sanningen, och den
+                # som inte står i den kommer inte in. Utan den här spärren levde
+                # en borttagen ägare kvar i singleton-raden och kunde logga in
+                # med sitt gamla lösenord - listan visade en person, servern
+                # släppte in två.
+                return None
             else:
                 legacy = self._connection.execute(
                     """

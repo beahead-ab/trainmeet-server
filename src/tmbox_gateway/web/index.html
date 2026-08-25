@@ -146,9 +146,9 @@
       <section id="login" class="card pairing-card hidden">
         <img class="pairing-icon" src="/trainmeet-logo.png" alt="TrainMeet">
         <div id="login-intro">
-          <p class="eyebrow">EXTERN ADMIN</p>
+          <p class="eyebrow">ADMIN</p>
           <h2>Logga in på TrainMeet Server</h2>
-          <p>Lokalt på träffens nätverk öppnas admin automatiskt. Extern åtkomst kräver inloggning.</p>
+          <p>Inloggning krävs, också på serverdatorn själv. Har du glömt lösenordet finns kommandot <code>tmbox_gateway.recover</code> i serverns terminal.</p>
         </div>
         <!-- Egen rubrik: den som löser in en inbjudan loggar inte in, utan
              väljer sitt lösenord för första gången. -->
@@ -750,11 +750,11 @@
           <section id="admin-access-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="access">
             <div class="section-heading compact-heading">
               <div>
-                <h2>Extern admininloggning</h2>
-                <p class="access-explainer">På serverdatorn öppnas admin utan inloggning. Andra enheter på nätet använder uppgifterna här.</p>
+                <h2>Inloggning</h2>
+                <p class="access-explainer">Inloggning krävs överallt, också på serverdatorn. Här byter du ägarens lösenord; andra användare sätter sina egna.</p>
                 <p id="access-password-state" class="access-password-state" role="status"></p>
               </div>
-              <span id="access-mode" class="status-chip">Lokal åtkomst</span>
+              <span id="access-mode" class="status-chip">Vid servern</span>
             </div>
             <form id="admin-access-form" class="form-grid access-grid">
               <label>Användarnamn

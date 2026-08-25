@@ -1816,6 +1816,14 @@ body[data-mode="installningar"] .settings-button {
 body[data-mode="installningar"] .run-tabs,
 body[data-mode="installningar"] .enter-build { display: none; }
 
+/* Utloggad: locket får visa vem servern är och hur den mår, inget att trycka på. */
+body[data-signed-in="no"] .run-tabs,
+body[data-signed-in="no"] .enter-build,
+body[data-signed-in="no"] .leave-settings,
+body[data-signed-in="no"] .settings-button,
+body[data-signed-in="no"] .app-clock,
+body[data-signed-in="no"] .app-devices { display: none; }
+
 /* Vägen tillbaka finns bara när det finns något att gå tillbaka från. */
 .leave-settings {
   display: none;

@@ -348,11 +348,12 @@ class ServerSettingsTests(unittest.TestCase):
         block = self.css[self.css.index(".identity-status-grid {"):][:220]
         self.assertIn("repeat(3, minmax(0, 1fr))", block)
 
-    def test_external_login_is_three_columns_with_a_chip(self):
-        """3.11.2."""
+    def test_the_login_card_is_three_columns_with_a_chip(self):
+        """3.11.2. Kortet hette "Extern admininloggning" så länge inloggningen
+        bara gällde utifrån. Nu gäller den överallt, och namnet med."""
         panel = self._panel("admin-access-settings")
-        self.assertIn("<h2>Extern admininloggning</h2>", panel)
-        self.assertIn("På serverdatorn öppnas admin utan inloggning", panel)
+        self.assertIn("<h2>Inloggning</h2>", panel)
+        self.assertIn("Inloggning krävs överallt, också på serverdatorn", panel)
         for field in ("admin-username", "admin-password", "admin-password-confirm"):
             self.assertIn(f'id="{field}"', panel)
         self.assertIn('id="access-mode"', panel)
@@ -369,12 +370,22 @@ class ServerSettingsTests(unittest.TestCase):
         self.assertIn(".access-grid { grid-template-columns: repeat(auto-fit,", self.css)
         self.assertIn("minmax(min(180px, 100%), 1fr)); }", self.css)
 
-    def test_the_access_chip_says_how_this_browser_is_connected(self):
-        """Paketet skriver "Lokal åtkomst" i chippet. Det är inte en etikett
-        utan serverns access_mode, som avgör både texten och vilken
-        nollställning knappen längre ned gör."""
-        self.assertIn('state.authStatus?.access_mode === "external"', self.js)
-        self.assertIn('"Extern inloggning" : "Lokal åtkomst"', self.js)
+    def test_the_access_chip_says_where_this_browser_stands(self):
+        """Chippet sa förr hur man var inne, och svaret var alltid detsamma som
+        var man stod: på maskinen slapp man logga in.
+
+        Servern kräver numera inloggning överallt, så den frågan är besvarad
+        innan chippet ritas. Kvar är platsen, och den betyder fortfarande något:
+        den avgör om nollställningen tar hela servern eller bara träffdata.
+        Texten kommer ur serverns svar, inte ur en gissning i webbläsaren."""
+        self.assertIn('state.authStatus?.at_the_machine === true', self.js)
+        self.assertIn('"Vid servern" : "Över nätet"', self.js)
+        self.assertNotIn("access_mode", self.js)
+
+    def test_the_way_out_belongs_to_being_logged_in(self):
+        """Utloggningsknappen doldes när man var inne utan inloggning. Nu finns
+        inget sådant läge kvar utom under installationen."""
+        self.assertIn('logoutButton.classList.toggle("hidden", !state.authStatus?.authenticated)', self.js)
 
     def test_the_login_username_field_is_never_filled_in_by_the_program(self):
         """Inloggningsfältet ska fortsätta vara tomt. Webbläsarens egen
