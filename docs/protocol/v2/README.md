@@ -4,10 +4,10 @@ Normativt kontrakt mellan en fysisk TMBox och TrainMeet Server. Kontraktet
 äger topics, meddelandekuvert, revisionsregler och tillståndsmaskiner. När
 koden och det här dokumentet säger olika saker är det en bugg i koden.
 
-Produktscopen är [`docs/tmbox.md`](https://github.com/beahead-ab/trainmeet-tmbox/blob/main/docs/tmbox.md)
-i `trainmeet-tmbox`; besluten bakom den ligger i `docs/underlag/` i samma
-repo. Det här dokumentet konkretiserar scopen till en trådnivå och är det
-enda stället fyra klientrepon behöver läsa för att tala samma språk.
+Produktbeskrivningen finns i
+[`docs/tmbox.md`](https://github.com/beahead-ab/trainmeet-tmbox/blob/main/docs/tmbox.md)
+i `trainmeet-tmbox`. Det här dokumentet konkretiserar den till trådnivå och
+är den normativa källan för klienter som använder protokollet.
 
 Kontraktet versioneras med servern. `trainmeet-tmbox` konsumerar en kopia.
 

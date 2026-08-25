@@ -388,7 +388,7 @@ setupFinishForm.addEventListener("submit", async (event) => {
 
 
 // ============================================================ KÖR och BYGG
-// Designpaketets DEL 5. `mode` är roten: den enda variabel som byter hela
+// `mode` är roten: den enda variabel som byter hela
 // sidans skelett. Körläget är default, eftersom det är det man ser under en
 // träff, och ingenting där får ändra konfigurationen.
 //
@@ -399,7 +399,7 @@ setupFinishForm.addEventListener("submit", async (event) => {
 
 const RUN_TABS = ["oversikt", "trafik", "skarmar", "tkl", "tmbox"];
 //: BYGG bygger träffen. Serveradministration ligger i sitt eget läge - se
-//: SETTINGS_SECTIONS nedan och docs/DESIGNPAKET-DOD.md, avvikelse 7.
+// Se SETTINGS_SECTIONS nedan för de separata inställningsområdena.
 const BUILD_STEPS = ["kalla", "bana", "tid", "boxar"];
 
 //: Det tredje läget. Att administrera servern är varken drift eller bygge, och

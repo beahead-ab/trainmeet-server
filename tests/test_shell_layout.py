@@ -11,7 +11,7 @@ den.
 Det är den sortens fel som inga befintliga tester kunde se, för markup och
 JavaScript var rätt. Bara måtten i en webbläsare avslöjar det, och de mäts
 inte här. Testerna nedan vaktar därför att reglerna som *gör* måtten rätt
-finns kvar - se docs/DESIGNPAKET-HANDOFF.md för mätkommandot.
+finns kvar och verifieras av testerna nedan.
 """
 
 from __future__ import annotations

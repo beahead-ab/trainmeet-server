@@ -1,6 +1,6 @@
 """KÖR och BYGG: två lägen i stället för tolv menypunkter.
 
-Designpaketet är bindande för struktur. Dessa tester håller fast det som är
+Produktens gränssnittskontrakt är bindande för struktur. Dessa tester håller fast det som är
 lätt att råka ändra tillbaka: att flikarna och stegen finns, att de heter rätt
 saker, och att TMBox-simuleringen faktiskt är borta - inte bara dold.
 
@@ -33,7 +33,7 @@ class ShellStructureTests(unittest.TestCase):
         Steg 5 hette Server och samlade serveradministrationen. Den ligger nu i
         ett eget läge: att administrera servern är varken drift eller bygge, och
         låg tidigare bakom knappen "Bygg om träffen" - alltså bakom ett flöde
-        som handlar om något annat. Se docs/DESIGNPAKET-DOD.md, avvikelse 7.
+        som handlar om något annat.
         """
         steps = re.findall(r'data-build-step="([a-z]+)"', self.html)
         self.assertEqual(["kalla", "bana", "tid", "boxar"], steps)
