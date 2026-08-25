@@ -522,6 +522,23 @@ den första administratören. Det finns inget förvalt användarnamn eller
 lösenord. Lösenordet lagras saltat och hashat; webbläsare får en tidsbegränsad
 HttpOnly-session efter inloggning.
 
+### Återställ från säkerhetskopia
+
+En kopia av databasen tas automatiskt före varje programuppdatering och sparas i
+`backups/` under datamappen; de tio senaste behålls. Under **Inställningar →
+System → Återställ från säkerhetskopia** listas de med datum, storlek och vilken
+träff de bär — namnet läses ur kopian, inte ur filnamnet. En kopia som inte går
+att lita på listas ändå, men går inte att välja.
+
+Att återställa byter ut **hela** databasen: träff, tidtabell, användare och
+parkopplade enheter blir de som fanns när kopian togs. Därför får bara ägaren
+göra det, och bekräftelsen är namnet på det som skrivs över — inte ett fast ord.
+
+Själva bytet sker inte medan servern kör. Webbgränssnittet lägger en lapp om
+vilken kopia som gäller, servern stänger sina anslutningar, och filen byts först
+därefter — samma ordning som nollställningen använder. Misslyckas det står den
+gamla databasen kvar orörd och tjänsten startar om ändå.
+
 ### Glömt lösenord
 
 Servern har ingen e-post och kan inte skicka en återställningslänk. Beviset är

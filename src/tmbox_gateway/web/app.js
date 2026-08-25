@@ -485,6 +485,7 @@ function showSettings() {
 
   checkSoftwareUpdate();
   refreshUsers();
+  refreshBackups();
   refreshRuntime();
   appView.classList.remove("sidebar-open");
   window.scrollTo({ top: 0, behavior: "auto" });
@@ -574,6 +575,7 @@ document.querySelectorAll(".run-tab").forEach((button) => {
 });
 bindTimetableStep();
 bindUsersSection();
+bindRestore();
 document.querySelectorAll("[data-build-step]").forEach((button) => {
   button.addEventListener("click", () => selectBuildStep(button.dataset.buildStep));
 });
@@ -812,6 +814,133 @@ runtimeForm.addEventListener("submit", async (event) => {
     button.disabled = false;
   }
 });
+
+// ── Återställning från säkerhetskopia ──────────────────────────────────
+//
+// Listan kommer från servern, som läser varje kopia och säger vilken träff den
+// bär och om den går att lita på. En trasig kopia visas ändå, gråad: den som
+// letar efter sin backup ska få veta att den finns och att den inte duger.
+//
+// Bekräftelsen är namnet på det som skrivs över, inte ett fast ord. Man ska
+// behöva läsa vad man håller på att förlora för att kunna skriva det.
+
+const restore = { chosen: null, overwrites: "" };
+
+function restoreEl(name) {
+  return document.querySelector(`#restore-${name}`);
+}
+
+function restoreClock(value) {
+  if (!value) return "okänt datum";
+  const when = new Date(value);
+  return Number.isNaN(when.getTime())
+    ? "okänt datum"
+    : when.toLocaleString("sv-SE", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function restoreSize(bytes) {
+  const mb = Number(bytes) / (1024 * 1024);
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(Number(bytes) / 1024))} kB`;
+}
+
+function renderBackups(backups) {
+  const list = restoreEl("list");
+  restoreEl("empty").classList.toggle("hidden", backups.length > 0);
+  list.replaceChildren(...backups.map((item) => {
+    const row = document.createElement("label");
+    row.className = item.usable ? "restore-row" : "restore-row is-broken";
+
+    const pick = document.createElement("input");
+    pick.type = "radio";
+    pick.name = "restore-backup";
+    pick.value = item.name;
+    pick.disabled = !item.usable;
+    pick.addEventListener("change", () => {
+      restore.chosen = item.name;
+      updateRestoreButton();
+    });
+    row.append(pick);
+
+    const text = document.createElement("span");
+    const when = document.createElement("b");
+    when.textContent = restoreClock(item.taken_at);
+    const what = document.createElement("small");
+    what.textContent = item.usable
+      ? `${item.meet_name || "Ingen aktiv träff"} · ${restoreSize(item.size_bytes)}`
+      : item.problem || "kopian går inte att använda";
+    text.append(when, what);
+    row.append(text);
+    return row;
+  }));
+}
+
+function updateRestoreButton() {
+  const typed = restoreEl("confirmation").value.trim().toLocaleLowerCase("sv-SE");
+  const expected = restore.overwrites.trim().toLocaleLowerCase("sv-SE");
+  restoreEl("start").disabled = !restore.chosen || !expected || typed !== expected;
+}
+
+async function refreshBackups() {
+  try {
+    const response = await authorizedFetch("/v1/server/backups");
+    if (!response.ok) return;
+    const payload = await response.json();
+    restore.overwrites = payload.overwrites || "";
+    restoreEl("overwrites").textContent = restore.overwrites || "–";
+    restoreEl("confirmation").placeholder = restore.overwrites || "Namnet på det som skrivs över";
+    renderBackups(payload.backups || []);
+    updateRestoreButton();
+  } catch {
+    setMessage(restoreEl("message"), "Säkerhetskopiorna kunde inte läsas", "error");
+  }
+}
+
+function bindRestore() {
+  restoreEl("confirmation")?.addEventListener("input", updateRestoreButton);
+  restoreEl("start")?.addEventListener("click", async () => {
+    const message = restoreEl("message");
+    if (!window.confirm(
+      `Servern återställs och startar om. Allt som hänt efter kopian försvinner, ${restore.overwrites} inkluderat.`,
+    )) return;
+    restoreEl("start").disabled = true;
+    try {
+      const response = await authorizedFetch("/v1/server/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          backup: restore.chosen,
+          confirmation: restoreEl("confirmation").value,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setMessage(message, payload.message || "Återställningen gick inte att starta", "error");
+        updateRestoreButton();
+        return;
+      }
+      const box = restoreEl("consequences");
+      box.replaceChildren(...(payload.consequences || []).map((line) => {
+        const p = document.createElement("p");
+        p.textContent = line;
+        return p;
+      }));
+      box.classList.remove("hidden");
+      setMessage(message, payload.message || "Servern återställs och startar om.", "notice");
+      // Samma väg som nollställningen: servern går ner en stund och
+      // webbläsaren väntar in den i stället för att visa ett tomt fel.
+      // Inloggningen kommer ur databasen som just byttes ut, så sessionen
+      // gäller inte nödvändigtvis efteråt - webbläsaren får fråga om på nytt.
+      state.restarting = true;
+      localStorage.removeItem("trainmeet.accessToken");
+      state.token = null;
+      setConnection("waiting", "Återställer och startar om");
+      await waitForServerReturn();
+    } catch {
+      setMessage(message, "Återställningen gick inte att starta", "error");
+      updateRestoreButton();
+    }
+  });
+}
 
 factoryResetConfirmation.addEventListener("input", () => {
   factoryResetButton.disabled = factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL";
@@ -2323,6 +2452,11 @@ async function refreshAuthStatus() {
   state.authStatus = await response.json();
   state.token = null;
   localStorage.removeItem("trainmeet.accessToken");
+  // Ett ställe bestämmer om locket visar knappar. Flaggan sattes tidigare i
+  // showLogin och openApplication, och missade därmed vägen in via en
+  // halvfärdig installation: efter en återställning stod "Tillbaka till
+  // träffen" kvar över inloggningsrutan. Uppmätt i en riktig omstart.
+  document.body.dataset.signedIn = state.authStatus?.authenticated ? "yes" : "no";
   // The username field is left alone. The application never fills it in -
   // the browser's own password manager may still offer a saved login, which
   // is the user's choice rather than ours.

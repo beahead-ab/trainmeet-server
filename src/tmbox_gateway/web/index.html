@@ -807,6 +807,26 @@
                knappen skrivs av configureResetMode ur verkligt access_mode:
                lokalt är det en fabriksåterställning, externt bara träffdatan. -->
           <section id="server-system-settings" class="card section-card reset-card server-step-card admin-section-panel hidden" data-admin-section="system">
+            <!-- Återställning. Kopiorna tas av uppdateraren före varje
+                 installation; vägen tillbaka låg bara i terminalen, vilket är
+                 fel plats den dagen man behöver den. Hopfälld som
+                 nollställningen: det här är inte något man gör i förbifarten. -->
+            <details class="reset-details">
+              <summary>Återställ från säkerhetskopia</summary>
+              <div class="reset-body">
+                <h3>Ta tillbaka en tidigare version av servern</h3>
+                <p>En kopia tas automatiskt före varje programuppdatering. Att återställa byter ut <b>hela</b> serverns databas — träff, tidtabell, användare och parkopplade enheter blir de som fanns när kopian togs.</p>
+                <div id="restore-list" class="restore-list" role="radiogroup" aria-label="Säkerhetskopior"></div>
+                <p id="restore-empty" class="restore-empty hidden">Inga säkerhetskopior finns än. Den första tas vid nästa programuppdatering.</p>
+                <div id="restore-consequences" class="restore-consequences hidden"></div>
+                <label for="restore-confirmation">Skriv <b id="restore-overwrites">–</b> för att bekräfta att den datan skrivs över</label>
+                <div class="factory-reset-row">
+                  <input id="restore-confirmation" autocomplete="off" placeholder="Namnet på det som skrivs över">
+                  <button id="restore-start" class="danger-action" type="button" disabled>Återställ och starta om</button>
+                </div>
+                <p id="restore-message" class="form-message" role="status"></p>
+              </div>
+            </details>
             <details class="reset-details">
               <summary id="reset-mode-summary">Nollställ träffdata</summary>
               <div class="reset-body">

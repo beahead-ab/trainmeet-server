@@ -16,6 +16,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
+from . import backup
 from .engine import TrafficEngine
 from .central_sync import (
     DEFAULT_RUNTIME_PUBLICATION_URL,
@@ -1233,6 +1234,92 @@ class TrainMeetHTTPApplication:
             "message": "TrainMeet Server nollställs och öppnar första installationen igen.",
         }
 
+    # ── Säkerhetskopior ────────────────────────────────────────────────
+
+    def _backup_dir(self) -> Path:
+        return Path(self.config.state_dir) / "backups"
+
+    def _current_meet_name(self) -> str:
+        """Vad som skrivs över. Träffens namn om det finns en, annars serverns.
+
+        Bekräftelsen ska namnge datan som försvinner, inte vara ett ord man
+        skriver av. NOLLSTÄLL duger för fabriksåterställningen, som alltid tar
+        allt; här beror det på vad som råkar ligga i servern just nu.
+        """
+
+        if self.runtime_store is None:
+            return "TrainMeet Server"
+        summary = self.runtime_store.summary()
+        return str(
+            summary.get("meet_name")
+            or summary.get("server_name")
+            or "TrainMeet Server"
+        )
+
+    def server_backups(self, client: PairedClient) -> dict[str, Any]:
+        self._require_admin(client)
+        return {
+            "supported": self.config.allow_restart,
+            "overwrites": self._current_meet_name(),
+            "backups": backup.available(self._backup_dir()),
+        }
+
+    def restore_backup(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Återställningen skriver över hela databasen - även användarna.
+
+        Därför ägaren och ingen annan: en administratör kan sköta servern, men
+        att byta ut vilka som har tillgång är ägarens ensak, och en
+        återställning gör precis det på omvägen.
+        """
+
+        self._require_owner(client)
+        if not self.config.allow_restart:
+            raise HTTPAPIError(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                "restore_unavailable",
+                "Återställning kräver att servern kan startas om, vilket det här körläget inte tillåter",
+            )
+
+        try:
+            path = backup.resolve(self._backup_dir(), str(payload.get("backup", "")))
+        except backup.BackupError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_backup", str(error)) from error
+
+        described = backup.describe(path)
+        if not described["usable"]:
+            raise HTTPAPIError(
+                HTTPStatus.CONFLICT,
+                "backup_not_usable",
+                f"Säkerhetskopian går inte att återställa: {described['problem']}",
+            )
+
+        overwrites = self._current_meet_name()
+        given = str(payload.get("confirmation", "")).strip()
+        if given.casefold() != overwrites.casefold():
+            raise HTTPAPIError(
+                HTTPStatus.BAD_REQUEST,
+                "restore_not_confirmed",
+                f"Skriv {overwrites} för att bekräfta att den datan skrivs över",
+            )
+
+        return {
+            "status": "restoring",
+            "backup": described,
+            "overwrote": overwrites,
+            "message": (
+                f"Servern återställs till kopian från {described['taken_at']} och startar om."
+            ),
+            # Hela databasen byts ut, inte bara träffen. Den som läser det här
+            # ska veta vad som händer med det som var inloggat och parkopplat.
+            "consequences": [
+                "Träffdata, tidtabell och driftläge blir det som fanns när kopian togs.",
+                "Inloggningar och lösenord blir också de som gällde då.",
+                "Enheter som parkopplats efter kopian måste parkopplas igen.",
+                "Anslutna skärmar och TMBoxar återansluter av sig själva efter omstarten.",
+            ],
+            "path": str(path),
+        }
+
     def software_update_status(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
         result: dict[str, Any] = {
@@ -2440,6 +2527,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.software_update_status(client))
                 return
+            if path == "/v1/server/backups":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.server_backups(client))
+                return
             if path == "/v1/snapshots":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.snapshots(client))
@@ -2821,6 +2912,15 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 self.server.request_factory_reset()
                 self._send_json(HTTPStatus.ACCEPTED, response)
                 return
+            if path == "/v1/server/restore":
+                client = self._authenticated_client()
+                response = self.server.application.restore_backup(client, payload)
+                # Ordningen är hela poängen: svaret går ut medan servern
+                # fortfarande kör, och filen byts först när tillsynsprocessen
+                # stängt alla anslutningar. En levande databas rörs aldrig.
+                self.server.request_restore(Path(str(response.pop("path"))))
+                self._send_json(HTTPStatus.ACCEPTED, response)
+                return
             if path == "/v1/server/update":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.ACCEPTED, self.server.application.update_software(client, payload))
@@ -3027,6 +3127,7 @@ class TrainMeetHTTPServer(ThreadingHTTPServer):
         self.restart_requested = False
         self.operational_reset_requested = False
         self.factory_reset_requested = False
+        self.restore_requested: Path | None = None
         super().__init__(address, TrainMeetRequestHandler)
 
     def request_restart(self) -> None:
@@ -3041,6 +3142,17 @@ class TrainMeetHTTPServer(ThreadingHTTPServer):
 
     def request_factory_reset(self) -> None:
         self.factory_reset_requested = True
+        self.request_restart()
+
+    def request_restore(self, backup_path: Path) -> None:
+        """Vilken kopia som ska läggas tillbaka när servern har stannat.
+
+        Återställningen får inte ske här: databasen är öppen, WAL-loggen lever,
+        och att byta filen under en igång-varande SQLite-anslutning är precis
+        det fel den här funktionen finns för att undvika.
+        """
+
+        self.restore_requested = backup_path
         self.request_restart()
 
     def request_operational_reset(self) -> None:

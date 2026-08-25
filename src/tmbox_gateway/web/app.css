@@ -597,6 +597,34 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 }
 .cloud-connection-flow li.is-complete i { color: var(--success); background: color-mix(in srgb, var(--success) 12%, var(--surface)); }
 
+/* Säkerhetskopior. Raderna ska gå att jämföra i en kolumn: datum först,
+   eftersom det är det man letar efter, och vad kopian bär under. */
+.restore-list { display: grid; gap: 6px; margin: 12px 0; }
+.restore-row {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center;
+  gap: 10px; padding: 9px 12px;
+  border: 1px solid var(--line-field); border-radius: var(--radius-sm);
+  background: var(--surface-raised); cursor: pointer;
+}
+.restore-row:hover { border-color: var(--accent-edge); }
+.restore-row input { width: auto; margin: 0; }
+.restore-row span { display: grid; gap: 2px; min-width: 0; }
+.restore-row b { font-size: 13.5px; font-weight: 600; }
+.restore-row small { color: var(--ink-muted); font-size: 12px; }
+/* En trasig kopia göms inte - den som letar efter sin backup ska se att den
+   finns och att den inte duger. */
+.restore-row.is-broken { border-style: dashed; background: var(--surface-muted); cursor: not-allowed; }
+.restore-row.is-broken b { color: var(--ink-muted); }
+.restore-row.is-broken small { color: var(--danger); }
+.restore-empty { margin: 12px 0; color: var(--ink-muted); font-size: 13px; }
+.restore-consequences {
+  margin: 12px 0; padding: 12px 14px;
+  border: 1px solid var(--line-field); border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+}
+.restore-consequences p { margin: 0 0 6px; font-size: 12.5px; line-height: 1.45; }
+.restore-consequences p:last-child { margin-bottom: 0; }
+
 .factory-reset-row { display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: 10px; }
 .danger-action { color: white; border-color: var(--danger); background: var(--danger); }
 .danger-action:hover:not(:disabled) { filter: brightness(.94); }
