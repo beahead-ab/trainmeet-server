@@ -10,9 +10,8 @@ fullskärmskomponenterna är grafisk källa.
 - Administrativa ytor har varm ljus bakgrund `#faf9f5`, vita kort, tunna
   neutrala kanter, 12 px hörnradie på kort och 8 px på fält och knappar, samt
   mycket diskret skugga.
-- Primärfärgen är `#c96442` och accentytan `#f7efe9`, enligt designpaketets
-  DEL 6. Den tidigare blå `hsl(220 70% 45%)` gäller inte längre för servern —
-  paketet är bindande för utseende och angav uttryckligen en varm accent.
+- Primärfärgen är `#c96442` och accentytan `#f7efe9`. Den varma accenten
+  används konsekvent i serverns administrativa gränssnitt.
 - Brödtext och kontroller använder Inter eller närmaste systemfont. Tider och
   tekniska värden använder en monospace-font.
 - Fullskärmsvyer använder samma mörka presentation som TrainMeet: svart
@@ -37,8 +36,7 @@ fullskärmskomponenterna är grafisk källa.
 
 ## TMBoxen är ett eget grafiskt objekt
 
-Den gamla v1-simuleringen är borttagen enligt designpaketet; det som avses
-nedan är TMBox v2-vyn.
+Det som avses nedan är TMBox v2-vyn.
 
 TMBox v2-vyn ska inte göras om till ett vanligt TrainMeet-kort. Den
 efterliknar den fysiska lådan med 16×2 LCD, samma skärmbredd som tangentbordet,

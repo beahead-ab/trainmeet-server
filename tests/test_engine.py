@@ -124,7 +124,7 @@ class TrafficEngineTests(unittest.TestCase):
         self.assertEqual(driver.engine.connections["connection-a-b"].state, ConnectionState.FREE)
         self.assertIn("A<LEK", driver.engine.snapshot("panel-a")["display"]["line1"])
 
-    def test_lovable_compatible_golden_display_frames(self):
+    def test_golden_display_frames(self):
         driver = EngineDriver()
         self.assertEqual(driver.engine.snapshot("panel-a")["display"], {
             "line1": "A<LEK           ",

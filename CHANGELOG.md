@@ -114,8 +114,7 @@ Nås med kugghjulet i topplocket. Programuppdateringen är ett klick från
 översikten i stället för fyra. Innehållet är oflyttat i sak — samma sektioner,
 samma API-anrop, samma sju uppdateringssteg.
 
-BYGG har därför fyra steg, där designpaketet lägger serverinställningar som
-steg 5. Avvikelse 7 i `docs/DESIGNPAKET-DOD.md`.
+BYGG har därför fyra steg, följt av serverinställningar som steg 5.
 
 ### Mindre
 
@@ -161,7 +160,7 @@ fällt ihop det lyssnar på fönstret, inte på ytan, så den slog aldrig till.
 
 ## 1.3.0
 
-Adminen byggd om mot designpaketet. Tolv menypunkter blir två lägen.
+Adminen byggd om. Tolv menypunkter blir två lägen.
 
 ### KÖR och BYGG
 
