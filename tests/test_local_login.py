@@ -231,6 +231,20 @@ class SignedOutChromeTests(unittest.TestCase):
         self.assertIn('document.body.dataset.signedIn = "no";', self.js)
         self.assertIn('document.body.dataset.signedIn = "yes";', self.js)
 
+    def test_the_flag_follows_the_servers_answer_not_the_path_taken(self) -> None:
+        """Flaggan sattes i showLogin och openApplication och missade vägen in
+        via en halvfärdig installation - efter en återställning stod "Tillbaka
+        till träffen" kvar över inloggningsrutan. Uppmätt i en riktig omstart.
+
+        refreshAuthStatus körs på varje väg in, så där hör beslutet hemma."""
+
+        block = self.js[self.js.index("async function refreshAuthStatus()"):]
+        block = block[: block.index("\n}")]
+        self.assertIn(
+            'document.body.dataset.signedIn = state.authStatus?.authenticated ? "yes" : "no";',
+            block,
+        )
+
     def test_the_controls_that_need_a_login_are_hidden_without_one(self) -> None:
         rule = self.css[self.css.index('body[data-signed-in="no"] .run-tabs'):]
         rule = rule[: rule.index("}")]

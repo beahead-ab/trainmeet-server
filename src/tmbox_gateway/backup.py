@@ -22,8 +22,10 @@ unless the copy holds as much as the source did.
 from __future__ import annotations
 
 import argparse
+import re
 import sqlite3
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 #: How many backups to keep. The updater takes one per update, and an
@@ -148,10 +150,18 @@ def restore(backup: Path, database: Path) -> None:
     if not backup.exists():
         raise BackupError(f"säkerhetskopian finns inte: {backup}")
 
-    connection = sqlite3.connect(backup)
+    try:
+        connection = sqlite3.connect(backup)
+    except sqlite3.DatabaseError as error:
+        raise BackupError(f"säkerhetskopian går inte att öppna: {error}") from error
     try:
         if _table_count(connection) == 0:
             raise BackupError(f"säkerhetskopian är tom: {backup}")
+    except sqlite3.DatabaseError as error:
+        # En fil som inte är en databas ser ut som en databas ända tills någon
+        # frågar den något. Felet ska bli det här modulens eget, så att den som
+        # anropar kan skilja "kopian duger inte" från ett programfel.
+        raise BackupError(f"säkerhetskopian går inte att läsa: {error}") from error
     finally:
         connection.close()
 
@@ -209,3 +219,99 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+#: Filnamnens form. Återställningen tar emot ett namn från webbläsaren och får
+#: aldrig läsa något annat än en säkerhetskopia i mappen: inga sökvägar, inga
+#: ".." och inget annat filnamn.
+BACKUP_NAME = re.compile(r"^trainmeet-[0-9]{8}-[0-9]{6}\.db$")
+
+
+def _meet_name(connection: sqlite3.Connection) -> str | None:
+    """Vilken träff kopian bär, läst ur kopian själv.
+
+    En lista med datum och storlek säger inte vad man återställer. Namnet gör
+    det, och det ska komma ur filen - inte ur ett filnamn som någon kan ha
+    döpt om.
+    """
+
+    try:
+        row = connection.execute(
+            "SELECT meet_name FROM runtime_publications"
+            " ORDER BY active DESC, installed_at DESC, rowid DESC LIMIT 1"
+        ).fetchone()
+    except sqlite3.DatabaseError:
+        return None
+    return str(row[0]) if row and row[0] else None
+
+
+def describe(path: Path) -> dict[str, object]:
+    """Vad en fil i backupmappen innehåller, och om den går att lita på.
+
+    En trasig kopia listas hellre än göms: den som letar efter sin backup ska
+    få veta att den finns och att den inte duger, inte undra var den tog vägen.
+    """
+
+    path = Path(path)
+    stamp = path.stem.removeprefix("trainmeet-")
+    described: dict[str, object] = {
+        "name": path.name,
+        "size_bytes": path.stat().st_size,
+        "taken_at": None,
+        "meet_name": None,
+        "usable": False,
+        "problem": None,
+    }
+    try:
+        described["taken_at"] = (
+            datetime.strptime(stamp, "%Y%m%d-%H%M%S").replace(tzinfo=timezone.utc).isoformat()
+        )
+    except ValueError:
+        described["taken_at"] = None
+
+    try:
+        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    except sqlite3.DatabaseError as error:
+        described["problem"] = "kopian går inte att öppna"
+        return described
+    try:
+        integrity = connection.execute("PRAGMA integrity_check").fetchone()
+        if not integrity or integrity[0] != "ok":
+            described["problem"] = "kopian klarar inte integritetskontrollen"
+            return described
+        if _table_count(connection) == 0:
+            described["problem"] = "kopian är tom"
+            return described
+        described["meet_name"] = _meet_name(connection)
+        described["usable"] = True
+    except sqlite3.DatabaseError as error:
+        described["problem"] = "kopian går inte att läsa - filen är skadad eller inte en databas"
+    finally:
+        connection.close()
+    return described
+
+
+def available(backup_dir: Path) -> list[dict[str, object]]:
+    """Kopiorna i mappen, nyast först."""
+
+    backup_dir = Path(backup_dir)
+    if not backup_dir.is_dir():
+        return []
+    found = [describe(path) for path in backup_dir.glob("trainmeet-*.db")]
+    return sorted(found, key=lambda item: str(item["name"]), reverse=True)
+
+
+def resolve(backup_dir: Path, name: str) -> Path:
+    """Filnamn från en webbläsare till en sökväg i backupmappen.
+
+    Namnet valideras mot mönstret och sökvägen kontrolleras mot mappen efteråt:
+    det första stoppar `../`, det andra stoppar en länk som pekar ut ur den.
+    """
+
+    if not BACKUP_NAME.fullmatch(str(name)):
+        raise BackupError("Det där är inget säkerhetskopienamn")
+    backup_dir = Path(backup_dir).resolve()
+    candidate = (backup_dir / str(name)).resolve()
+    if candidate.parent != backup_dir or not candidate.is_file():
+        raise BackupError("Säkerhetskopian finns inte")
+    return candidate

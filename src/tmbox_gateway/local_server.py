@@ -15,6 +15,7 @@ import time
 from datetime import timedelta
 from pathlib import Path
 
+from . import backup
 from .central_sync import DEFAULT_RUNTIME_PUBLICATION_URL
 from .engine import TrafficEngine
 from .http_server import HTTPServerConfig, TrainMeetHTTPApplication, TrainMeetHTTPServer
@@ -249,12 +250,40 @@ def main() -> None:
         _reset_operational_state(database_path, state_directory)
     elif server.factory_reset_requested:
         _reset_server_state(database_path, state_directory)
+    elif server.restore_requested is not None:
+        _restore_from_backup(server.restore_requested, database_path)
     if server.restart_requested:
         print("TrainMeet Server startar om …")
         os.execv(
             sys.executable,
             [sys.executable, "-m", "tmbox_gateway.local_server", *sys.argv[1:]],
         )
+
+
+def _restore_from_backup(backup_path: Path, database_path: Path) -> None:
+    """Lägg tillbaka kopian nu när ingen har databasen öppen.
+
+    Här, och ingen annanstans: alla stores är stängda, WAL-loggen är
+    checkpointad och processen är på väg att starta om. Skulle bytet ske medan
+    servern kör vore det samma fel som backupen en gång hade - en fil som ser
+    hel ut men inte är det.
+
+    Misslyckas det står den gamla databasen kvar orörd. Återställningen skriver
+    till ett tillfälligt namn och byter in det först när kopian ligger på plats,
+    så en avbruten återställning lämnar ingen halv databas efter sig.
+    """
+
+    try:
+        backup.restore(backup_path, database_path)
+    except Exception as error:  # noqa: BLE001 - se nedan
+        # Brett med flit, och bara här. Det här är sista koden som kör innan
+        # os.execv startar om tjänsten: ett undantag som slipper förbi lämnar
+        # servern nere i stället för att lämna den med sin gamla databas.
+        # Återställningen skriver till ett tillfälligt namn och byter in det
+        # sist, så ett avbrott kostar återställningen - inte databasen.
+        LOGGER.error("Återställningen misslyckades och databasen är orörd: %s", error)
+        return
+    LOGGER.warning("TrainMeet Server är återställd från %s och startar om", backup_path.name)
 
 
 def _reset_server_state(database_path: Path, state_directory: Path) -> None:
