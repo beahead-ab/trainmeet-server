@@ -51,3 +51,48 @@ class RetiredMenuNameTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecoveryInstructionTests(unittest.TestCase):
+    """Kommandot i README ska gå att klistra in.
+
+    Det är den enda vägen tillbaka in i en server vars lösenord är borta. En
+    felstavad modul eller en flagga som bytt namn upptäcks annars av den som
+    behöver den, den dagen hen inte kommer in.
+    """
+
+    def setUp(self) -> None:
+        self.readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    def test_the_module_and_its_flags_exist(self) -> None:
+        """Flaggorna provas genom att köra kommandot, inte genom att läsa det.
+
+        En tom mapp är ingen installation, så kommandot avbryter - men det gör
+        det efter att ha tolkat flaggorna, vilket är precis vad som prövas.
+        """
+
+        import tempfile
+        from tmbox_gateway import recover
+
+        self.assertIn("python -m tmbox_gateway.recover", self.readme)
+        for flag in ("--state-dir", "--user"):
+            self.assertIn(flag, self.readme)
+
+        with tempfile.TemporaryDirectory() as empty:
+            with self.assertRaises(SystemExit) as missing:
+                recover.main(["--state-dir", empty, "--user", "casper"])
+            self.assertIn("Hittar ingen installation", str(missing.exception))
+
+    def test_the_paths_are_the_ones_the_installation_uses(self) -> None:
+        updater = (ROOT / "packaging" / "raspberry-pi" / "trainmeet-server-update").read_text(
+            encoding="utf-8"
+        )
+        service = (ROOT / "packaging" / "raspberry-pi" / "trainmeet-server.service").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("STATE_DIR=/var/lib/trainmeet-server", updater)
+        self.assertIn("--state-dir /var/lib/trainmeet-server", self.readme)
+        self.assertIn("INSTALL_DIR=/opt/trainmeet-server", updater)
+        self.assertIn("/opt/trainmeet-server/venv/bin/python", self.readme)
+        user = next(line for line in service.splitlines() if line.startswith("User="))
+        self.assertIn(f"sudo -u {user.split('=', 1)[1]}", self.readme)

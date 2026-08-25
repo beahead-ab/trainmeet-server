@@ -25,19 +25,6 @@
         <button type="button" id="leave-build" class="build-chrome-exit">Lämna byggläget</button>
       </div>
 
-      <!-- Inställningar är ett eget läge. Att administrera servern är varken
-           drift eller bygge, och låg tidigare bakom "Bygg om träffen". -->
-      <div id="settings-chrome" class="build-chrome hidden">
-        <div class="build-chrome-left">
-          <span class="build-chrome-mark" aria-hidden="true">⚙</span>
-          <b>Inställningar</b>
-          <span class="build-chrome-note">
-            Serverns identitet, åtkomst, programvara och Cloud-koppling. Träffen påverkas inte.
-          </span>
-        </div>
-        <button type="button" id="leave-settings" class="build-chrome-exit">Tillbaka till träffen</button>
-      </div>
-
       <header class="topbar" id="app-chrome">
         <div class="brand-lockup">
           <img class="brand-mark" src="/assets/ikon/trainmeet-ikon.svg" alt="" width="28" height="28">
@@ -57,6 +44,10 @@
           <span id="app-devices" class="app-devices"><i></i>Inga boxar</span>
           <div id="connection" class="status offline"><span></span><b>Ej ansluten</b></div>
           <button type="button" id="open-settings" class="settings-button" aria-label="Inställningar" title="Inställningar">⚙</button>
+          <!-- Vägen tillbaka från Inställningar. Den mörka listen är bygglägets
+               och betyder "det här är inte träffen som kör" - Inställningar är
+               inte det läget, och lånade en varning den inte behövde. -->
+          <button type="button" id="leave-settings" class="leave-settings">Tillbaka till träffen</button>
           <button type="button" id="enter-build" class="enter-build">Bygg om träffen</button>
         </div>
       </header>
@@ -154,9 +145,18 @@
 
       <section id="login" class="card pairing-card hidden">
         <img class="pairing-icon" src="/trainmeet-logo.png" alt="TrainMeet">
-        <p class="eyebrow">EXTERN ADMIN</p>
-        <h2>Logga in på TrainMeet Server</h2>
-        <p>Lokalt på träffens nätverk öppnas admin automatiskt. Extern åtkomst kräver inloggning.</p>
+        <div id="login-intro">
+          <p class="eyebrow">ADMIN</p>
+          <h2>Logga in på TrainMeet Server</h2>
+          <p>Inloggning krävs, också på serverdatorn själv. Har du glömt lösenordet finns kommandot <code>tmbox_gateway.recover</code> i serverns terminal.</p>
+        </div>
+        <!-- Egen rubrik: den som löser in en inbjudan loggar inte in, utan
+             väljer sitt lösenord för första gången. -->
+        <div id="redeem-intro" class="hidden">
+          <p class="eyebrow">INBJUDAN</p>
+          <h2>Välj ditt lösenord</h2>
+          <p>Du har fått en kod av den som bjöd in dig. Den gäller en gång, och sedan loggar du in som vanligt.</p>
+        </div>
         <form id="login-form">
           <label for="login-username">Användarnamn</label>
           <input id="login-username" name="username" maxlength="64" autocomplete="username" required>
@@ -164,6 +164,21 @@
           <input id="login-password" name="password" type="password" autocomplete="current-password" required>
           <button type="submit" class="primary">Logga in</button>
           <p id="login-error" class="form-message error" role="alert"></p>
+        </form>
+        <!-- Den inbjudne har en kod men inget lösenord, och kan alltså inte
+             logga in för att sätta det. Därför ligger inlösningen bredvid
+             inloggningen och kräver ingen session - koden är beviset. -->
+        <button id="redeem-open" type="button" class="link-button">Jag har en inbjudningskod</button>
+        <form id="redeem-form" class="hidden">
+          <label for="redeem-username">Användarnamn</label>
+          <input id="redeem-username" maxlength="64" autocomplete="username" required>
+          <label for="redeem-code">Inbjudningskod</label>
+          <input id="redeem-code" class="redeem-code" maxlength="9" autocomplete="off" placeholder="XXXX-XXXX" required>
+          <label for="redeem-password">Välj lösenord</label>
+          <input id="redeem-password" type="password" minlength="8" autocomplete="new-password" required>
+          <button type="submit" class="primary">Sätt lösenord</button>
+          <button id="redeem-cancel" type="button" class="link-button">Tillbaka till inloggningen</button>
+          <p id="redeem-message" class="form-message" role="status"></p>
         </form>
       </section>
 
@@ -375,6 +390,76 @@
             </section>
 
             <p id="source-message" class="form-message" role="status"></p>
+          </section>
+
+          <!-- BYGG steg 3. Tidtabellen är alltid redigerbar lokalt, även
+               när grundrevisionen kommer från Cloud: servern är runtime och
+               tidtabellen är det som ändras under en träff. Produktbeslut P6. -->
+          <section id="build-step-tid" class="build-panel hidden" data-build-panel="tid">
+            <header class="build-panel-heading with-badge">
+              <div class="build-panel-title">
+                <h2>Tidtabell</h2>
+                <p>
+                  Tågrörelserna på träffen. Grupperingen ändrar bara hur listan
+                  visas — raderna är desamma.
+                </p>
+              </div>
+              <span id="tid-source-badge" class="lock-badge">–</span>
+            </header>
+
+            <div class="tid-controls">
+              <div class="segmented" role="group" aria-label="Gruppering">
+                <button type="button" class="segment is-active" data-tid-group="tid">Tid</button>
+                <button type="button" class="segment" data-tid-group="station">Station</button>
+                <button type="button" class="segment" data-tid-group="tag">Tåg</button>
+              </div>
+              <label class="tid-filter">
+                <span>Station</span>
+                <select id="tid-station"><option value="">Alla</option></select>
+              </label>
+              <label class="tid-filter tid-search">
+                <span>Sök</span>
+                <input id="tid-search" type="search" placeholder="Tågnummer, spår, anteckning" autocomplete="off">
+              </label>
+              <span id="tid-count" class="tid-count"></span>
+            </div>
+
+            <div id="tid-bulk" class="tid-bulk hidden" role="group" aria-label="Ändra markerade">
+              <b id="tid-bulk-count">0 markerade</b>
+              <label>Spår<input id="tid-bulk-track" type="text" size="4" autocomplete="off"></label>
+              <label>Dagar<input id="tid-bulk-days" type="text" size="6" autocomplete="off"></label>
+              <label>Flytta tid<input id="tid-bulk-shift" type="number" step="1" size="4" placeholder="min"></label>
+              <button type="button" id="tid-bulk-apply" class="primary">Ändra markerade</button>
+              <button type="button" id="tid-bulk-clear" class="link-button">Avmarkera</button>
+            </div>
+
+            <div class="table-scroll">
+              <table id="tid-table" class="tid-table">
+                <thead>
+                  <tr>
+                    <th class="tid-pick"><input type="checkbox" id="tid-all" aria-label="Markera alla"></th>
+                    <th>Tåg</th><th>Dagar</th><th>Station</th><th>Spår</th>
+                    <th>Ankomst</th><th>Avgång</th><th>Från</th><th>Till</th><th>Anteckning</th>
+                  </tr>
+                </thead>
+                <tbody id="tid-rows"></tbody>
+              </table>
+            </div>
+
+            <p id="tid-empty" class="tid-empty hidden">Inga rader matchar filtret.</p>
+
+            <div class="tid-actions">
+              <button type="button" id="tid-save" class="primary" disabled>Spara utkast</button>
+              <button type="button" id="tid-revert" class="link-button hidden">Ångra ändringar</button>
+              <p id="tid-message" class="form-message" role="status"></p>
+            </div>
+
+            <p class="lock-note">
+              Tidtabellen är redigerbar även när träffen kommer från Cloud, till
+              skillnad från stationer och sträckor. En sparad ändring blir en
+              lokal revision som du aktiverar själv — den slår aldrig igenom av
+              sig själv för operatörerna.
+            </p>
           </section>
 
           <section id="build-step-bana" class="build-panel hidden" data-build-panel="bana">
@@ -614,14 +699,61 @@
                här webbläsaren är inne (verkligt access_mode), raden under det
                om ett externt lösenord finns. Fältet för användarnamn fylls
                aldrig i av programmet - se refreshAuthStatus i app.js. -->
+          <!-- Användare. Ägaren bjuder in; den inbjudne väljer sitt eget
+               lösenord med en engångskod som lämnas över på plats. Ägaren
+               känner alltså aldrig till någon annans lösenord.
+
+               Mönstret är be-a-legend-2:s, där inbjudan går med mejl. Servern
+               har ingen e-post och behöver ingen: den som bjuder in står i
+               samma klubblokal som den som bjuds in. -->
+          <section id="admin-users-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="users">
+            <div class="section-heading compact-heading">
+              <div>
+                <h2>Användare</h2>
+                <p class="access-explainer">Ägaren lägger till och tar bort. En administratör kan sköta hela servern, men inte ändra vilka som har tillgång.</p>
+              </div>
+              <span id="users-role-chip" class="status-chip">–</span>
+            </div>
+
+            <div class="table-scroll">
+              <table id="users-table" class="users-table">
+                <thead>
+                  <tr><th>Användare</th><th>Roll</th><th>Läge</th><th class="users-actions-head">Åtgärder</th></tr>
+                </thead>
+                <tbody id="users-rows"></tbody>
+              </table>
+            </div>
+
+            <div id="users-invite-code" class="users-code hidden">
+              <div>
+                <b>Kod till <span id="users-code-for">–</span></b>
+                <p>Lämna över koden. Den gäller i sju dagar och kan bara användas en gång.</p>
+              </div>
+              <code id="users-code-value">–</code>
+            </div>
+
+            <form id="users-invite-form" class="users-invite hidden">
+              <label class="users-invite-name">Användarnamn
+                <input id="users-invite-name" maxlength="64" autocomplete="off" required>
+              </label>
+              <label class="users-role-choice">
+                <input id="users-invite-owner" type="checkbox">
+                <span>Ägare — får också lägga till och ta bort användare</span>
+              </label>
+              <button type="submit" class="primary">Bjud in</button>
+            </form>
+
+            <p id="users-message" class="form-message" role="status"></p>
+          </section>
+
           <section id="admin-access-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="access">
             <div class="section-heading compact-heading">
               <div>
-                <h2>Extern admininloggning</h2>
-                <p class="access-explainer">På serverdatorn öppnas admin utan inloggning. Andra enheter på nätet använder uppgifterna här.</p>
+                <h2>Inloggning</h2>
+                <p class="access-explainer">Inloggning krävs överallt, också på serverdatorn. Här byter du ägarens lösenord; andra användare sätter sina egna.</p>
                 <p id="access-password-state" class="access-password-state" role="status"></p>
               </div>
-              <span id="access-mode" class="status-chip">Lokal åtkomst</span>
+              <span id="access-mode" class="status-chip">Vid servern</span>
             </div>
             <form id="admin-access-form" class="form-grid access-grid">
               <label>Användarnamn

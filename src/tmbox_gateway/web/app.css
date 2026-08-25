@@ -1657,6 +1657,12 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   color: var(--paper);
 }
 .build-chrome-left { display: flex; align-items: center; gap: 11px; min-width: 0; }
+/* Listen ska vara en rad. Förklaringen är värd sin plats på en skärm som har
+   plats; på en telefon svällde den listen till 194px - en fjärdedel av
+   skärmen - för en mening man läser en gång. Uppmätt i Chromium på 360px. */
+@media (max-width: 720px) {
+  .build-chrome-note { display: none; }
+}
 .build-chrome-mark {
   display: grid; width: 20px; height: 20px; place-items: center;
   border-radius: 6px; background: var(--accent-warm); font-size: 11px;
@@ -1809,6 +1815,51 @@ body[data-mode="installningar"] .settings-button {
 }
 body[data-mode="installningar"] .run-tabs,
 body[data-mode="installningar"] .enter-build { display: none; }
+
+/* Utloggad: locket får visa vem servern är och hur den mår, inget att trycka på. */
+body[data-signed-in="no"] .run-tabs,
+body[data-signed-in="no"] .enter-build,
+body[data-signed-in="no"] .leave-settings,
+body[data-signed-in="no"] .settings-button,
+body[data-signed-in="no"] .app-clock,
+body[data-signed-in="no"] .app-devices { display: none; }
+
+/* Vägen tillbaka finns bara när det finns något att gå tillbaka från. */
+.leave-settings {
+  display: none;
+  flex: 0 0 auto; min-height: 34px; padding: 0 14px;
+  border: 1px solid var(--line-field); border-radius: var(--radius-sm);
+  background: var(--surface-raised); color: var(--ink-strong);
+  font-size: 13px; font-weight: 500;
+}
+.leave-settings:hover { border-color: var(--accent-edge); background: var(--accent-tint-light); }
+body[data-mode="installningar"] .leave-settings { display: inline-flex; align-items: center; }
+
+/* Klockan och boxräknaren hör till träffen som kör. På en telefon tog de
+   platsen som vägen tillbaka behöver, och locket sköt ut sidan 52px i sidled.
+   I Inställningar tittar man inte på klockan. */
+@media (max-width: 680px) {
+  body[data-mode="installningar"] .app-clock,
+  body[data-mode="installningar"] .app-devices { display: none; }
+  /* Träffens namn får kortas i stället för att knuffa ut knappen. Utan
+     flex: 0 0 auto krymper högergruppen med och knappen svämmar ur den. */
+  body[data-mode="installningar"] .topbar-right { flex: 0 0 auto; }
+
+  /* Locket ska hålla en rad i alla lägen. På 360px bröts "TrainMeet Server"
+     och "Inga boxar" till två rader var och locket blev dubbelt så högt. */
+  .topbar .brand-lockup { min-width: 0; }
+  .topbar .brand-lockup h1 {
+    min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .app-devices { white-space: nowrap; }
+}
+
+/* Under 480px blir namnet en stump på ett par tecken. Då är det bättre borta:
+   sidrubriken "Inställningar" står ändå direkt under locket. */
+@media (max-width: 480px) {
+  body[data-mode="installningar"] .topbar .brand-lockup h1 { display: none; }
+}
 
 body[data-mode="bygg"] .server-admin-shell {
   display: flex; gap: 24px;
@@ -2031,6 +2082,97 @@ body[data-source-locked="true"] .build-panel textarea {
 .status-chip.active {
   border-color: var(--accent-edge); background: var(--accent-tint-light);
   color: var(--accent-warm-dark);
+}
+
+/* Användare. Tabellen följer tid-tabellens typografi så att de två listorna i
+   produkten ser ut att komma från samma hand. */
+.users-table { width: 100%; min-width: 420px; border-collapse: collapse; }
+.users-table th {
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid var(--line-field);
+  color: var(--ink-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  text-align: left;
+}
+.users-table td {
+  padding: 9px 12px 9px 0;
+  border-bottom: 1px solid var(--line-inner);
+  font-size: 14px;
+  vertical-align: middle;
+}
+.users-actions-head { text-align: right; }
+.users-name { font-weight: 500; }
+.users-state { color: var(--ink-muted); font-size: 13px; }
+.users-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 14px; }
+
+.role-chip {
+  display: inline-block; padding: 3px 10px;
+  border: 1px solid var(--line-field); border-radius: 999px;
+  background: var(--surface-raised); color: var(--ink-muted);
+  font-size: 11.5px; font-weight: 500; white-space: nowrap;
+}
+.role-chip.is-owner {
+  border-color: var(--accent-edge); background: var(--accent-tint-light);
+  color: var(--accent-warm-dark);
+}
+
+.link-button {
+  padding: 2px 0; border: 0; border-radius: 0;
+  background: none; color: var(--accent-warm-dark);
+  font-size: 13px; font-family: inherit; cursor: pointer;
+}
+.link-button:hover { text-decoration: underline; }
+.link-button.danger { color: var(--danger); }
+
+/* Koden ska gå att läsa högt utan att någon gissar fel, därför monospace och
+   stor stil. Den visas en gång och skrivs aldrig ned av programmet. */
+.users-code {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 14px 0 0; padding: 12px 14px;
+  border: 1px solid var(--accent-edge); border-radius: 10px;
+  background: var(--accent-tint-light);
+}
+.users-code p { max-width: 48ch; margin: 3px 0 0; font-size: 12.5px; color: var(--ink-muted); }
+.users-code code {
+  font-family: var(--font-mono); font-size: 20px; font-weight: 600;
+  letter-spacing: .08em; color: var(--accent-warm-dark);
+}
+
+.redeem-code { font-family: var(--font-mono); letter-spacing: .12em; text-transform: uppercase; }
+#redeem-open, #redeem-cancel { display: block; margin: 10px auto 0; }
+
+/* Fält, val och knapp på en rad. Knappen tar sin egen bredd i stället för en
+   hel kolumn: "Bjud in" är en liten åtgärd och ska se ut som en. */
+.users-invite {
+  display: flex; flex-wrap: wrap; align-items: end; gap: 12px 16px;
+  margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line-inner);
+}
+.users-invite-name { display: grid; gap: 5px; flex: 1 1 200px; max-width: 320px; }
+.users-invite button { flex: 0 0 auto; }
+.users-role-choice {
+  display: flex; align-items: center; gap: 8px;
+  flex: 1 1 240px; max-width: 34ch;
+  font-size: 13px; line-height: 1.35; color: var(--ink-muted);
+}
+.users-role-choice input { flex: 0 0 auto; width: auto; margin: 0; }
+
+.users-state-inline { display: none; }
+
+/* På en telefon får roll och läge ge plats åt åtgärderna. Att behöva rulla
+   tabellen i sidled för att komma åt "Ta bort" är samma sak som att den inte
+   finns. Båda flyttar in under namnet i stället, och tabellen blir två
+   kolumner: vem, och vad man kan göra. */
+@media (max-width: 560px) {
+  .users-table { min-width: 0; }
+  .users-table th:nth-child(2), .users-table th:nth-child(3),
+  .users-table td.users-role, .users-table td.users-state { display: none; }
+  .users-state-inline { display: block; margin-top: 3px; color: var(--ink-muted); font-size: 12px; font-weight: 400; line-height: 1.35; }
+  .users-table td, .users-table th { padding-right: 8px; }
+  .users-actions { flex-direction: column; align-items: flex-end; gap: 3px; }
+  .users-actions .link-button { white-space: normal; text-align: right; line-height: 1.3; }
 }
 
 .access-explainer { max-width: 62ch; margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-muted); }
@@ -2822,4 +2964,179 @@ select.topology-field.station-pick {
     white-space: nowrap;
   }
   .tmbox-flow-item.is-active { border-left: 0; border-bottom-color: var(--accent-warm); }
+}
+
+/* ── BYGG steg 3, tidtabellen ──────────────────────────────────────────
+   499 rörelser är en normal träff, så tabellen är byggd för att ritas om
+   ofta: inga skuggor per rad, ingen animation, och markeringen ligger på
+   kanten i stället för på hela ytan. */
+
+.tid-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line-field);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+.segment {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.segment.is-active {
+  background: var(--surface-raised);
+  color: var(--ink-strong);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
+}
+
+.tid-filter { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tid-filter > span {
+  color: var(--ink-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.tid-filter select, .tid-filter input { width: auto; min-width: 170px; }
+.tid-search input { min-width: 240px; }
+
+.tid-count {
+  margin-left: auto;
+  color: var(--ink-locked);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Massredigering. Syns bara när något är markerat - en rad knappar som
+   aldrig gör något är en rad knappar man slutar läsa. */
+.tid-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-edge);
+  border-radius: 4px;
+  background: var(--accent-tint-light);
+}
+.tid-bulk > b { align-self: center; font-size: 14px; white-space: nowrap; }
+.tid-bulk label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-muted); }
+.tid-bulk input { width: auto; min-width: 88px; }
+.tid-bulk button { flex: none; width: auto; }
+
+/* Tio kolumner får inte trycka ut sidan. Tabellen skrollar i sin egen ruta,
+   och panelen måste få krympa - utan min-width: 0 vinner tabellens
+   inneboende bredd över behållaren och hela vyn blir bredare än skärmen. */
+.build-panel { min-width: 0; }
+/* Bred tabell i smalt kort: den ska rulla i sig själv, aldrig dra ut sidan.
+   min-width: 0 behövs på kortet - utan den växer flexbarnet efter innehållet
+   i stället för att låta det rulla, och hela sidan börjar rulla i sidled. */
+.table-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+#admin-users-settings { min-width: 0; }
+
+.tid-table { width: 100%; min-width: 720px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.tid-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 10px 8px 0;
+  border-bottom: 1px solid var(--line-field);
+  background: var(--paper);
+  color: var(--ink-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.tid-table td {
+  padding: 7px 10px 7px 0;
+  border-bottom: 1px solid var(--line-inner);
+  font-size: 14px;
+  vertical-align: baseline;
+}
+.tid-table td.mono { font-family: var(--font-mono); font-size: 13px; }
+.tid-table td[data-tid-field] { cursor: text; }
+.tid-table td[data-tid-field]:hover { background: var(--surface-muted); }
+
+.tid-pick { width: 30px; padding-right: 6px; }
+.tid-pick input { width: auto; min-height: 0; margin: 0; accent-color: var(--accent-warm); }
+
+.tid-heading td {
+  padding-top: 16px;
+  border-bottom: 1px solid var(--line-field);
+  color: var(--ink-strong);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+/* Ändrad rad: orange kant och ett märke. Kanten syns när man skummar,
+   märket säger varför. */
+.tid-table tr.is-changed td:first-child { box-shadow: inset 3px 0 0 var(--accent-warm); }
+.tid-table tr.is-picked td { background: var(--accent-tint-light); }
+
+.tid-chip {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 2px;
+  background: var(--accent-tint);
+  color: var(--accent-warm-dark);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.tid-input {
+  width: 100%;
+  min-width: 60px;
+  min-height: 0;
+  padding: 2px 5px;
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.tid-empty { margin: 18px 0; color: var(--ink-locked); font-size: 14px; }
+
+.tid-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: center;
+  margin-top: 18px;
+}
+.tid-actions button { flex: none; width: auto; }
+.tid-actions .form-message { margin: 0; }
+
+@media (max-width: 760px) {
+  .tid-count { margin-left: 0; }
+  .tid-search input, .tid-filter select, .tid-filter input { min-width: 0; width: 100%; }
+  .tid-filter { flex: 1 1 100%; }
 }

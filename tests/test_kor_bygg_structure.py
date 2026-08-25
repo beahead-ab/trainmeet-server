@@ -204,9 +204,13 @@ class ServerSettingsTests(unittest.TestCase):
     def test_the_settings_view_gathers_the_old_menu_points(self):
         """Användare och åtkomst, Programuppdatering, Server och nollställning
         - plus Cloud-kopplingen, som satt i steg 1 tillsammans med källvalet
-        fast den är serveradministration."""
+        fast den är serveradministration.
+
+        `users` kom till när servern fick fler än en användare: listan över
+        vilka som har tillgång hör hemma bredvid åtkomstkortet, inte i ett
+        byggsteg."""
         self.assertIn(
-            'const SETTINGS_SECTIONS = ["identity", "access", "software", "cloud", "system"];',
+            'const SETTINGS_SECTIONS = ["identity", "access", "users", "software", "cloud", "system"];',
             self.js,
         )
 
@@ -257,11 +261,48 @@ class ServerSettingsTests(unittest.TestCase):
         ]
         self.assertEqual(order, sorted(order))
 
-    def test_the_view_has_its_own_heading_and_chrome(self):
+    def test_the_view_has_its_own_heading(self):
         self.assertIn('id="settings-heading"', self.html)
         self.assertIn("<h2>Inställningar</h2>", self.html)
-        self.assertIn('id="settings-chrome"', self.html)
         self.assertNotIn('data-build-panel="server"', self.html)
+
+    def test_the_dark_bar_belongs_to_build_mode_alone(self):
+        """Den mörka listen betyder "det här är inte träffen som kör".
+
+        Inställningar lånade den och lovade en fara som inte finns: ingenting
+        stageas, ingenting behöver aktiveras, träffen rullar på. Priset var två
+        klistrade lister på varandra och en rubrik som sa samma sak två gånger.
+
+        Vägen tillbaka ligger i applocket i stället, bredvid kugghjulet som
+        redan lyser i läget.
+        """
+        self.assertNotIn('id="settings-chrome"', self.html)
+        self.assertEqual(1, self.html.count(' class="build-chrome hidden"'))
+        topbar = self.html[self.html.index('<header class="topbar"'):]
+        topbar = topbar[: topbar.index("</header>")]
+        self.assertIn('id="leave-settings"', topbar)
+        self.assertIn('body[data-mode="installningar"] .leave-settings { display: inline-flex', self.css)
+        hidden = self.css[self.css.index(".leave-settings {"):][:60]
+        self.assertIn("display: none;", hidden)
+
+    def test_the_topbar_stays_one_line_on_a_phone(self):
+        """Uppmätt i Chromium på 360px: "TrainMeet Server" och "Inga boxar"
+        bröts till två rader var och locket blev dubbelt så högt. Namnet kortas
+        med ellips i stället, och i Inställningar - där knappen tillbaka
+        konkurrerar om samma rad - faller det bort helt under 480px."""
+        narrow = self.css[self.css.index("@media (max-width: 680px) {", self.css.index(".leave-settings {")):][:900]
+        self.assertIn("text-overflow: ellipsis", narrow)
+        self.assertIn(".app-devices { white-space: nowrap; }", narrow)
+        self.assertIn('body[data-mode="installningar"] .topbar-right { flex: 0 0 auto; }', narrow)
+        tiny = self.css[self.css.index("@media (max-width: 480px) {"):][:200]
+        self.assertIn('body[data-mode="installningar"] .topbar .brand-lockup h1 { display: none; }', tiny)
+
+    def test_the_build_bar_stays_one_line_on_a_phone(self):
+        """Uppmätt i Chromium på 360px: förklaringen radbröts till 194px höjd -
+        en fjärdedel av skärmen för en mening man läser en gång."""
+        rule = self.css.index(".build-chrome-note { display: none; }")
+        media = self.css.rindex("@media (max-width: 720px) {", 0, rule)
+        self.assertLess(rule - media, 120, "regeln ligger inte i telefonbrytpunkten")
 
     def test_the_gear_opens_settings_and_not_the_source_step(self):
         """Knappen hette "Öppna administration" men landade i BYGG steg 1, som
@@ -307,11 +348,12 @@ class ServerSettingsTests(unittest.TestCase):
         block = self.css[self.css.index(".identity-status-grid {"):][:220]
         self.assertIn("repeat(3, minmax(0, 1fr))", block)
 
-    def test_external_login_is_three_columns_with_a_chip(self):
-        """3.11.2."""
+    def test_the_login_card_is_three_columns_with_a_chip(self):
+        """3.11.2. Kortet hette "Extern admininloggning" så länge inloggningen
+        bara gällde utifrån. Nu gäller den överallt, och namnet med."""
         panel = self._panel("admin-access-settings")
-        self.assertIn("<h2>Extern admininloggning</h2>", panel)
-        self.assertIn("På serverdatorn öppnas admin utan inloggning", panel)
+        self.assertIn("<h2>Inloggning</h2>", panel)
+        self.assertIn("Inloggning krävs överallt, också på serverdatorn", panel)
         for field in ("admin-username", "admin-password", "admin-password-confirm"):
             self.assertIn(f'id="{field}"', panel)
         self.assertIn('id="access-mode"', panel)
@@ -328,12 +370,22 @@ class ServerSettingsTests(unittest.TestCase):
         self.assertIn(".access-grid { grid-template-columns: repeat(auto-fit,", self.css)
         self.assertIn("minmax(min(180px, 100%), 1fr)); }", self.css)
 
-    def test_the_access_chip_says_how_this_browser_is_connected(self):
-        """Paketet skriver "Lokal åtkomst" i chippet. Det är inte en etikett
-        utan serverns access_mode, som avgör både texten och vilken
-        nollställning knappen längre ned gör."""
-        self.assertIn('state.authStatus?.access_mode === "external"', self.js)
-        self.assertIn('"Extern inloggning" : "Lokal åtkomst"', self.js)
+    def test_the_access_chip_says_where_this_browser_stands(self):
+        """Chippet sa förr hur man var inne, och svaret var alltid detsamma som
+        var man stod: på maskinen slapp man logga in.
+
+        Servern kräver numera inloggning överallt, så den frågan är besvarad
+        innan chippet ritas. Kvar är platsen, och den betyder fortfarande något:
+        den avgör om nollställningen tar hela servern eller bara träffdata.
+        Texten kommer ur serverns svar, inte ur en gissning i webbläsaren."""
+        self.assertIn('state.authStatus?.at_the_machine === true', self.js)
+        self.assertIn('"Vid servern" : "Över nätet"', self.js)
+        self.assertNotIn("access_mode", self.js)
+
+    def test_the_way_out_belongs_to_being_logged_in(self):
+        """Utloggningsknappen doldes när man var inne utan inloggning. Nu finns
+        inget sådant läge kvar utom under installationen."""
+        self.assertIn('logoutButton.classList.toggle("hidden", !state.authStatus?.authenticated)', self.js)
 
     def test_the_login_username_field_is_never_filled_in_by_the_program(self):
         """Inloggningsfältet ska fortsätta vara tomt. Webbläsarens egen
@@ -456,9 +508,10 @@ class ServerSettingsTests(unittest.TestCase):
                      ".server-step-card button.danger-action {",
                      ".server-step-card button:disabled {"):
             self.assertIn(rule, self.css)
-        # Alla fyra korten i steget bär klassen, annars faller något utanför.
-        self.assertEqual(4, self.html.count("server-step-card"))
+        # Alla korten i steget bär klassen, annars faller något utanför.
+        self.assertEqual(5, self.html.count("server-step-card"))
         for element_id in ("server-identity-settings", "admin-access-settings",
+                           "admin-users-settings",
                            "software-update-settings", "server-system-settings"):
             self.assertIn("server-step-card", self._panel(element_id)[:220])
 

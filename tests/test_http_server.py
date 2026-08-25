@@ -99,7 +99,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="runtime-import-file"', html)
         self.assertIn("Nytt lokalt utkast", html)
         self.assertIn('id="overview-graph"', html)
-        self.assertIn("Extern admininloggning", html)
+        self.assertIn("<h2>Inloggning</h2>", html)
         self.assertIn('id="login-form"', html)
         self.assertIn("Skärmar", html)
         self.assertIn('/trainmeet-logo.png', html)
@@ -927,9 +927,18 @@ class HTTPServerTests(unittest.TestCase):
             data = json.dumps(payload).encode("utf-8")
         if token:
             headers["Authorization"] = f"Bearer {token}"
+        # Kakan bärs vidare som en webbläsare gör. Testet loggade tidigare
+        # aldrig in: servern gav full behörighet till allt som kom från
+        # maskinen själv, så inloggningen syntes inte i flödet. Nu gör den det,
+        # och då måste provet hålla sin session precis som en webbläsare.
+        if getattr(self, "_cookie", None):
+            headers["Cookie"] = self._cookie
         request = Request(f"{self.base_url}{path}", data=data, headers=headers)
         with urlopen(request, timeout=2) as response:
             self.assertEqual(response.status, expected_status)
+            issued = response.headers.get("Set-Cookie")
+            if issued:
+                self._cookie = issued.split(";", 1)[0]
             return json.loads(response.read().decode("utf-8"))
 
     @staticmethod

@@ -276,8 +276,15 @@ class EditableViewTests(unittest.TestCase):
         self.assertIn("if (locked) {", renderer)
 
     def test_a_field_commits_on_change_not_on_every_keystroke(self):
-        """Saving per keystroke would write "L", "Le", "Lek" as three revisions."""
-        renderer = self.js.split("BYGG steg 2: Bana")[1]
+        """Saving per keystroke would write "L", "Le", "Lek" as three revisions.
+
+        Regeln gäller fält som skriver. Skivan tog tidigare allt efter
+        steg 2-markören, vilket räckte så länge steg 2 var det sista som
+        fanns - nu ligger steg 3 där, och dess sökruta filtrerar per
+        tangenttryck och skriver ingenting. Skivan slutar därför vid nästa
+        avsnitt i stället för vid filens slut.
+        """
+        renderer = self.js.split("BYGG steg 2: Bana")[1].split("BYGG steg 3")[0]
         self.assertIn('field.addEventListener("change", commit)', renderer)
         self.assertNotIn('addEventListener("input"', renderer)
 

@@ -234,17 +234,139 @@ class TrainMeetHTTPApplication:
                 if active is not None:
                     self.operations_store.ensure_publication(active)
 
-    def local_admin(self) -> PairedClient:
+    def local_admin(self, user: dict[str, object] | None = None) -> PairedClient:
         return PairedClient(
             client_id="local-web-admin",
-            display_name="Lokal administratör",
+            display_name=str(user["username"]) if user else "Lokal administratör",
             kind=DeviceKind.WEB_ADMIN,
             panel_ids=tuple(sorted(self.engine.config.panels)),
+            admin_user_id=str(user["user_id"]) if user and user.get("user_id") else None,
+            admin_role=str(user["role"]) if user else "owner",
         )
 
     def admin_access(self, client: PairedClient) -> dict[str, object]:
         self._require_admin(client)
         return self.identities.admin_access_summary()
+
+    # ------------------------------------------------------- användare
+
+    def _require_owner(self, client: PairedClient) -> None:
+        """Bara ägaren får ändra vilka som har tillgång.
+
+        En administratör kan allt annat på servern. Skillnaden är avsiktligt
+        smal: den som lagts till ska kunna sköta en träff fullt ut, men inte
+        kunna ge sig själv sällskap eller ta bort den som bjöd in hen.
+        """
+
+        self._require_admin(client)
+        if client.admin_role != "owner":
+            raise HTTPAPIError(
+                HTTPStatus.FORBIDDEN,
+                "owner_required",
+                "Bara ägaren kan lägga till och ta bort användare",
+            )
+
+    def admin_users(self, client: PairedClient) -> dict[str, Any]:
+        self._require_admin(client)
+        return {"users": self.identities.list_admin_users(), "role": client.admin_role}
+
+    def create_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_owner(client)
+        try:
+            user = self.identities.invite_admin_user(
+                str(payload.get("username") or ""),
+                str(payload.get("role") or "admin"),
+            )
+        except AdminAccessError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
+        self._record_user_change(client, "user.invited", str(user.get("username")))
+        return {"user": user}
+
+    def reissue_admin_setup(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_owner(client)
+        try:
+            user = self.identities.reissue_admin_setup(str(payload.get("user_id") or ""))
+        except AdminAccessError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
+        self._record_user_change(client, "user.invitation_reissued", str(user.get("username")))
+        return {"user": user}
+
+    def redeem_admin_setup(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Utan inloggning, med flit: den inbjudne har inget konto att logga in
+        med förrän koden är inlöst. Koden är beviset."""
+
+        try:
+            user = self.identities.redeem_admin_setup(
+                str(payload.get("username") or ""),
+                str(payload.get("code") or ""),
+                str(payload.get("password") or ""),
+            )
+        except AdminAccessError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_setup_code", str(error)) from error
+        return {"user": user}
+
+    def _record_user_change(self, client: PairedClient, action: str, target: str) -> None:
+        """Vem gjorde vad mot vem. Utan det är en borttagen användare bara
+        någon som inte längre finns."""
+
+        if self.operations_store is None:
+            return
+        self.operations_store.record_audit_event(
+            correlation_id=f"admin-users-{target}",
+            source="web-admin",
+            actor=client.admin_user_id or "konsol",
+            action=action,
+            outcome="ok",
+            detail={"target": target, "by": client.display_name},
+        )
+
+    def delete_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_owner(client)
+        user_id = str(payload.get("user_id") or "")
+        # Att ta bort sig själv är inte en behörighetsfråga utan ett misstag.
+        # Den som vill sluta ber någon annan ägare ta bort kontot.
+        if client.admin_user_id and client.admin_user_id == user_id:
+            raise HTTPAPIError(
+                HTTPStatus.CONFLICT,
+                "cannot_remove_self",
+                "Du kan inte ta bort ditt eget konto. Be en annan ägare göra det.",
+            )
+        target = (self.identities.admin_user(user_id) or {}).get("username", user_id)
+        try:
+            self.identities.delete_admin_user(user_id)
+        except AdminAccessError as error:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "invalid_admin_user", str(error)) from error
+        self._record_user_change(client, "user.removed", str(target))
+        return {"users": self.identities.list_admin_users()}
+
+    def update_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Roll och lösenord. Rollen är ägarens ensak; lösenordet får var och
+        en byta på sig själv."""
+
+        self._require_admin(client)
+        user_id = str(payload.get("user_id") or "")
+        try:
+            if payload.get("role") is not None:
+                self._require_owner(client)
+                # Samma skäl som ovan: den som degraderar sig själv gör det av
+                # misstag oftare än med avsikt.
+                if client.admin_user_id == user_id and str(payload["role"]) != "owner":
+                    raise HTTPAPIError(
+                        HTTPStatus.CONFLICT,
+                        "cannot_demote_self",
+                        "Du kan inte ta bort din egen ägarroll. Be en annan ägare göra det.",
+                    )
+                self.identities.set_admin_user_role(user_id, str(payload["role"]))
+                self._record_user_change(client, "user.role_changed", user_id)
+            if payload.get("password") is not None:
+                # Var och en får byta sitt eget lösenord. Någon annans är
+                # ägarens ensak.
+                if client.admin_user_id != user_id:
+                    self._require_owner(client)
+                self.identities.set_admin_user_password(user_id, str(payload["password"]))
+        except AdminAccessError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
+        return {"user": self.identities.admin_user(user_id)}
 
     def configure_admin_access(
         self,
@@ -868,6 +990,13 @@ class TrainMeetHTTPApplication:
                 updated_by=current_shift["operator_name"],
                 shift_id=current_shift["shift_id"],
                 event_type=str(payload.get("event_type") or "movement_updated")[:80],
+                # Saknas fältet lämnas anteckningen ifred. Ett anrop som bara
+                # byter spår ska inte råka radera vad någon annan skrivit.
+                operator_note=(
+                    str(payload["operator_note"])[:200]
+                    if payload.get("operator_note") is not None
+                    else None
+                ),
             )
         except ValueError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_movement", str(error)) from error
@@ -1145,6 +1274,115 @@ class TrainMeetHTTPApplication:
                 "Lokal konfigurationslagring saknas",
             )
         return self.local_configuration_store.current()
+
+    def build_timetable(self, client: PairedClient) -> dict[str, Any]:
+        """Tågrörelserna för BYGG steg 3.
+
+        Samma form oavsett var de kommer ifrån, precis som `build_topology` -
+        vyn ska ha en renderare och inte två kodvägar för Cloud och lokalt.
+
+        Till skillnad från steg 2 finns här ingen låsning. Tidtabellen är
+        alltid redigerbar lokalt, även när grundrevisionen kommer från Cloud:
+        servern är runtime och tidtabellen är det som ändras under en träff.
+        Cloud är säkerhetskopian. En ändring här blir en lokal revision som
+        någon aktiverar själv - den slår aldrig igenom av sig själv.
+
+        Stationer och spår följer med, för att vyn ska kunna visa namn i
+        stället för id och erbjuda de spår som faktiskt finns.
+        """
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                "runtime_unavailable",
+                "Lokal lagring saknas",
+            )
+
+        draft: dict[str, Any] = {}
+        if self.local_configuration_store is not None:
+            draft = self.local_configuration_store.current().get("draft") or {}
+
+        # Ett lokalt utkast vinner när det har rader: det är där någon just
+        # har redigerat. Saknas det läser vi den aktiva publikationen.
+        if draft.get("trains"):
+            payload = draft
+            source = "lokal"
+            revision = self.local_configuration_store.current().get("revision")
+        else:
+            publication = self.runtime_store.active()
+            payload = publication.payload if publication is not None else {}
+            source = "cloud" if publication is not None else "tom"
+            revision = self.local_configuration_store.current().get("revision") if self.local_configuration_store else None
+
+        stations = {
+            str(station["id"]): str(station.get("name") or station["id"])
+            for station in payload.get("stations") or []
+        }
+        codes = {
+            str(station["id"]): str(station.get("code") or "")
+            for station in payload.get("stations") or []
+        }
+        # Spåren ligger olika i de två källorna: runtime-paketet har dem platt
+        # på toppnivå med station_id, ett lokalt utkast har dem nästlade under
+        # stationen. Den skillnaden hör hemma här och ingen annanstans - vyn
+        # ska se en lista.
+        catalogue = list(payload.get("tracks") or [])
+        for station in payload.get("stations") or []:
+            for track in station.get("tracks") or []:
+                catalogue.append({**track, "station_id": station["id"]})
+        tracks = {
+            str(track["id"]): str(track.get("display_label") or track.get("label") or track["id"])
+            for track in catalogue
+        }
+
+        rows = []
+        for row in payload.get("trains") or []:
+            station_id = str(row.get("station_id") or "")
+            track_id = str(row.get("track_id") or "")
+            rows.append(
+                {
+                    "id": str(row.get("id") or ""),
+                    "train_number": str(row.get("train_number") or ""),
+                    "train_type": str(row.get("train_type") or "person"),
+                    "days": str(row.get("days") or "Dagl"),
+                    "station_id": station_id,
+                    "station": stations.get(station_id, str(row.get("station") or station_id)),
+                    "station_code": codes.get(station_id, ""),
+                    "track_id": track_id,
+                    "track": tracks.get(track_id, ""),
+                    "arrival_time": row.get("arrival_time") or "",
+                    "departure_time": row.get("departure_time") or "",
+                    "sort_time": row.get("sort_time") or "",
+                    "arrival_from": row.get("arrival_from") or "",
+                    "departure_to": row.get("departure_to") or "",
+                    "no_stop": bool(row.get("no_stop")),
+                    "note": str(row.get("note") or ""),
+                }
+            )
+
+        return {
+            # Ingen låsning här, till skillnad från steg 2. Fältet finns ändå
+            # så att vyn kan läsa samma nyckel i båda stegen.
+            "locked": False,
+            "source": source,
+            # Vyn ska inte jämföra källsträngar för att veta vad den tittar på.
+            # Samma regel som `locked` i build_topology: beslutet fattas här.
+            "base_from_cloud": source == "cloud",
+            "revision": revision,
+            "rows": rows,
+            "stations": [
+                {"id": str(station["id"]), "name": stations[str(station["id"])], "code": codes[str(station["id"])]}
+                for station in payload.get("stations") or []
+            ],
+            "tracks": [
+                {
+                    "id": str(track["id"]),
+                    "label": tracks[str(track["id"])],
+                    "station_id": str(track.get("station_id") or ""),
+                }
+                for track in catalogue
+            ],
+        }
 
     def build_topology(self, client: PairedClient) -> dict[str, Any]:
         """Stations, connections and A-D panels for BYGG step 2.
@@ -2122,7 +2360,15 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     {
                         "authenticated": client is not None,
-                        "access_mode": "local" if self._has_automatic_local_admin() else "external",
+                        # Läget svarar på hur man är inne. "local" betyder att
+                        # servern släpper in utan inloggning, och det gör den
+                        # numera bara innan det finns ett lösenord att logga in
+                        # med - alltså under installationen.
+                        "access_mode": "local" if self._installation_is_open() else "external",
+                        # Var man står är en annan fråga än vem man är. Den
+                        # avgör inte längre behörighet, men fabriksåterställning
+                        # kräver fortfarande att man står vid maskinen.
+                        "at_the_machine": self._at_the_machine(),
                         # No username. It used to be here, which both
                         # prefilled the login field and told any
                         # unauthenticated caller who the administrator is.
@@ -2136,6 +2382,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     self.server.application.installation_status(),
                 )
+                return
+            if path == "/v1/admin/users":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.admin_users(client))
                 return
             if path == "/v1/admin/access":
                 client = self._authenticated_client()
@@ -2246,6 +2496,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     HTTPStatus.OK, self.server.application.pending_revision_state(client)
                 )
+                return
+            if path == "/v1/build/timetable":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.build_timetable(client))
                 return
             if path == "/v1/build/topology":
                 client = self._authenticated_client()
@@ -2478,6 +2732,41 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     self.server.application.set_operating_mode(client, payload),
                 )
                 return
+            if path == "/v1/admin/users":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.CREATED,
+                    self.server.application.create_admin_user(client, payload),
+                )
+                return
+            if path == "/v1/admin/users/update":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.update_admin_user(client, payload),
+                )
+                return
+            if path == "/v1/admin/users/reissue":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.reissue_admin_setup(client, payload),
+                )
+                return
+            if path == "/v1/admin/users/redeem":
+                # Den inbjudne är inte inloggad än. Koden är hela beviset.
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.redeem_admin_setup(payload),
+                )
+                return
+            if path == "/v1/admin/users/delete":
+                client = self._authenticated_client()
+                self._send_json(
+                    HTTPStatus.OK,
+                    self.server.application.delete_admin_user(client, payload),
+                )
+                return
             if path == "/v1/local-configuration/seed":
                 client = self._authenticated_client()
                 self._send_json(
@@ -2527,7 +2816,7 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 response = self.server.application.factory_reset_server(
                     client,
                     payload,
-                    local_access=self._has_automatic_local_admin(),
+                    local_access=self._at_the_machine(),
                 )
                 self.server.request_factory_reset()
                 self._send_json(HTTPStatus.ACCEPTED, response)
@@ -2598,20 +2887,47 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         prefix = "Bearer "
         if authorization.startswith(prefix):
             return self.server.application.identities.authenticate(authorization[len(prefix) :])
-        if self._has_automatic_local_admin():
+        if self._installation_is_open():
             return self.server.application.local_admin()
         token = self._admin_session_token()
-        if token and self.server.application.identities.authenticate_admin_session(token):
-            return self.server.application.local_admin()
+        if token:
+            user = self.server.application.identities.admin_session_user(token)
+            if user is not None:
+                return self.server.application.local_admin(user)
         return None
 
-    def _has_automatic_local_admin(self) -> bool:
+    def _installation_is_open(self) -> bool:
+        """Innan det finns ett lösenord finns det ingen att logga in som.
+
+        Servern gav tidigare full ägarbehörighet till alla som nådde den från
+        maskinen själv, alltid. Det var bekvämt och det var fel: när servern
+        fick flera användare med olika roller gällde inte rollgränsen vid
+        maskinen - vem som helst som kom åt tangentbordet var ägare.
+
+        Kvar är bara det fall där en inloggning inte kan finnas: en
+        installation som ännu inte satt sitt lösenord. Den öppningen stänger
+        sig själv i samma stund som den första administratören skapas.
+
+        Var du står är fortfarande en giltig fråga - se _is_direct_local_request
+        - men den avgör vad du får göra, inte vem du är.
+        """
+
         if self.server.application.config.force_external_auth:
             return False
-        if self._is_direct_local_request():
-            return True
         access = self.server.application.identities.admin_access_summary()
         return not access["password_configured"] and self._client_address_is_private()
+
+    def _at_the_machine(self) -> bool:
+        """Står webbläsaren på serverdatorn själv?
+
+        force_external_auth finns för att kunna köra servern som om den nåddes
+        utifrån. Då ska den frågan svara nej, annars vore läget inte det man
+        bad om.
+        """
+
+        if self.server.application.config.force_external_auth:
+            return False
+        return self._is_direct_local_request()
 
     def _is_direct_local_request(self) -> bool:
         if self._client_address_is_loopback():

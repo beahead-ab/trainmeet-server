@@ -255,8 +255,10 @@ systemtjänsten `trainmeet-server` och lagrar driftsdata i
 `/var/lib/trainmeet-server`. Allt startar automatiskt efter en omstart.
 
 På Raspberry Pi OS Desktop konfigurerar installationen dessutom automatisk
-inloggning och startar Chromium med `http://127.0.0.1:8787/` som en maximerad
-serverapplikation. Den lokala sidan öppnas direkt utan extern admininloggning.
+inloggning i skrivbordet och startar Chromium med `http://127.0.0.1:8787/` som
+en maximerad serverapplikation. Sidan möter en inloggningsruta - servern kräver
+det även på maskinen själv - och sessionen håller i tolv timmar. Träffens
+skärmvyer under `/display/…` kräver ingen inloggning och påverkas inte.
 På Raspberry Pi OS Lite görs ingen skrivbords- eller webbläsarinstallation.
 
 Öppna därefter `http://trainmeet.local:8787` eller den IP-adress som
@@ -503,14 +505,37 @@ en bekräftelse. Finns inget lokalt att kasta krävs ingen bekräftelse — en
 bekräftelseruta för ingenting lär folk att klicka igenom dem.
 >>>>>>> origin/main
 
-## Lokal och extern adminåtkomst
+## Adminåtkomst
 
-Webbadmin öppnas direkt på datorn eller Raspberry Pi:n som kör servern. Vid en
-helt ny installation får den första administratören skapas från servern eller
-dess privata nätverk. Det finns inget förvalt användarnamn eller lösenord.
-Installationsguiden kräver ett eget användarnamn och ett lösenord på minst åtta
-tecken. Lösenordet lagras saltat och hashat; externa webbläsare får en
-tidsbegränsad HttpOnly-session efter inloggning.
+Webbadmin kräver inloggning, också på datorn eller Raspberry Pi:n som kör
+servern. Servern släppte tidigare in varje webbläsare på maskinen själv utan
+lösenord. Det var bekvämt så länge det bara fanns en administratör, men när
+servern fick flera användare med olika roller gällde rollgränsen överallt utom
+vid tangentbordet. Två frågor skiljs numera åt: **vem du är** avgörs av
+inloggningen, **var du står** avgör vad du får göra - fabriksåterställning av
+hela servern kräver fortfarande att webbläsaren körs på maskinen.
+
+Ett undantag finns kvar, och det stänger sig självt: en installation som ännu
+inte satt sitt lösenord släpper in från serverns privata nätverk, eftersom det
+inte finns någon att logga in som. Öppningen upphör i samma anrop som skapar
+den första administratören. Det finns inget förvalt användarnamn eller
+lösenord. Lösenordet lagras saltat och hashat; webbläsare får en tidsbegränsad
+HttpOnly-session efter inloggning.
+
+### Glömt lösenord
+
+Servern har ingen e-post och kan inte skicka en återställningslänk. Beviset är
+i stället fysisk åtkomst till maskinen:
+
+```bash
+sudo -u trainmeet-server /opt/trainmeet-server/venv/bin/python -m tmbox_gateway.recover \
+  --state-dir /var/lib/trainmeet-server --user <användarnamn>
+```
+
+Kommandot sätter inget lösenord. Det skriver ut en engångskod - samma sort som
+en inbjudan - och den som får koden väljer sitt eget lösenord under "Jag har en
+inbjudningskod" på inloggningssidan. Koden gäller i sju dagar och en gång. Utan
+`--user` listar kommandot kontona på servern.
 
 Bakom en reverse proxy eller Kubernetes Ingress ska servern startas med
 `--force-external-auth` eller `TRAINMEET_FORCE_EXTERNAL_AUTH=true`. Annars ser

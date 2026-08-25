@@ -146,3 +146,109 @@ class TMBoxV2HTTPTests(ProtocolV2Base):
         listed = self.application.tmbox_v2_stations(self.client)["stations"]
         self.assertIn(STATION, [entry["id"] for entry in listed])
         self.assertEqual(sorted(listed, key=lambda e: e["name"]), listed)
+
+
+class OperatorNoteSurvivesTheBoxTests(TMBoxV2HTTPTests):
+    """En TMBox får aldrig radera vad tågklareraren skrivit.
+
+    Boxen har fyra rader siffror och A/B/C — inga bokstäver. Den kan alltså
+    inte skriva en anteckning, och skickar därför ingen. Skulle den skicka ett
+    tomt fält i stället för inget fält skulle varje spårbyte tömma texten.
+
+    Det här provet går hela vägen genom protokollet, inte bara till lagret:
+    det var där den första versionen av testet missade.
+    """
+
+    def _note_of(self, movement_id: str) -> str | None:
+        publication = self.runtime_store.active()
+        state = self.operations_store.tkl_station_state(
+            publication.publication_id, publication.payload["meet"]["active_day"], STATION
+        )
+        return state["movements"].get(movement_id, {}).get("operatorNote")
+
+    def test_a_command_from_the_box_leaves_the_note_alone(self) -> None:
+        publication = self.runtime_store.active()
+        movement_id = str(DEPARTURE)
+        self.operations_store.update_tkl_movement(
+            publication.publication_id,
+            publication.payload["meet"]["active_day"],
+            STATION,
+            movement_id,
+            arrival="none", departure="none", actual_track=None,
+            updated_by="tkl", shift_id=None, event_type="test",
+            operator_note="Kort tåg, stannar vid stoppbocken",
+        )
+
+        self._command("train.position.set", {"movement_id": movement_id})
+
+        self.assertEqual("Kort tåg, stannar vid stoppbocken", self._note_of(movement_id))
+
+
+class TerminalWritesTheNoteTests(TMBoxV2HTTPTests):
+    """Terminalen är den enda som kan skriva anteckningen.
+
+    Boxen har inga bokstäver. Tågklareraren sitter vid en skärm, och det är
+    därifrån en beskrivning på en avgång kommer.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        publication = self.runtime_store.active()
+        self.publication_id = publication.publication_id
+        self.day = publication.payload["meet"]["active_day"]
+        # Passet måste vara igång innan rörelser får hanteras.
+        self.operations_store.start_tkl_shift(
+            self.publication_id, self.day, STATION,
+            operator_name="Casper", terminal_name="prov",
+        )
+
+    def _update(self, **payload) -> dict:
+        body = {"station_id": STATION, "movement_id": str(DEPARTURE), **payload}
+        return self.application.update_tkl_movement(self.client, body)
+
+    def _note(self) -> str | None:
+        state = self.operations_store.tkl_station_state(self.publication_id, self.day, STATION)
+        return state["movements"].get(str(DEPARTURE), {}).get("operatorNote")
+
+    def test_the_terminal_can_write_a_note(self) -> None:
+        self._update(arrival="none", departure="none", operator_note="Väntar på lokförare")
+
+        self.assertEqual("Väntar på lokförare", self._note())
+
+    def test_an_update_without_a_note_leaves_it_alone(self) -> None:
+        """Samma skydd som för boxen, men från terminalens håll."""
+
+        self._update(arrival="none", departure="none", operator_note="Väntar på lokförare")
+        self._update(arrival="arrived", departure="none")
+
+        self.assertEqual("Väntar på lokförare", self._note())
+
+    def test_the_note_comes_back_to_the_client(self) -> None:
+        """Skrivvägen räcker inte — klienten måste kunna läsa den också.
+
+        Anteckningen följer med i det underlag TKL hämtar för sin station, så
+        en integrerad applikation med tangentbord kan visa och redigera den
+        utan någon egen ändpunkt.
+        """
+
+        self._update(arrival="none", departure="none", operator_note="Kort tåg, stannar vid stoppbocken")
+
+        context = self.application.tkl_context(self.client, STATION)
+
+        self.assertEqual(
+            "Kort tåg, stannar vid stoppbocken",
+            context["movements"][str(DEPARTURE)]["operatorNote"],
+        )
+
+    def test_a_note_longer_than_the_limit_is_cut(self) -> None:
+        """Tvåhundra tecken. En anteckning är en notering, inte ett protokoll."""
+
+        self._update(arrival="none", departure="none", operator_note="x" * 260)
+
+        self.assertEqual(200, len(self._note()))
+
+    def test_the_terminal_can_clear_a_note(self) -> None:
+        self._update(arrival="none", departure="none", operator_note="Väntar på lokförare")
+        self._update(arrival="none", departure="none", operator_note="")
+
+        self.assertIsNone(self._note())
