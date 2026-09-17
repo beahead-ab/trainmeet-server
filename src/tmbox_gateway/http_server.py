@@ -72,6 +72,15 @@ ADMIN_COOKIE_MAX_AGE = 12 * 60 * 60
 def _tkl_engine_reason(reason: str) -> str:
     return {
         "connection_busy": "Sträckan är redan upptagen",
+        "channel_occupied": "Spåret på sträckan är redan upptaget",
+        "movement_already_requested": "Tåget har redan en pågående klarering",
+        "unknown_train_number": "Tågnumret saknar en passande rörelse på stationen denna trafikdag",
+        "ambiguous_train_number": "Tågnumret har flera rörelser. Välj den avsedda rörelsen i TKL",
+        "invalid_departure": "Avgång kan inte registreras i tågets nuvarande läge",
+        "invalid_arrival": "Ankomst kan inte registreras i tågets nuvarande läge",
+        "train_already_departed": "Tåget har redan avgått och klareringen kan inte återkallas",
+        "track_occupied": "Spåret är upptaget av ett annat tåg",
+        "unknown_track": "Spåret finns inte i stationens spårkatalog",
         "departure_not_reserved": "Tåget saknar beviljad klarering",
         "train_not_departed": "Tåget finns inte registrerat på sträckan",
         "request_no_longer_pending": "Klareringsförfrågan gäller inte längre",
@@ -234,6 +243,8 @@ class TrainMeetHTTPApplication:
                 active = self.runtime_store.active()
                 if active is not None:
                     self.operations_store.ensure_publication(active)
+                from .shared_traffic import SharedPanelTraffic
+                SharedPanelTraffic(self.engine, self.station_service)
 
     def local_admin(self, user: dict[str, object] | None = None) -> PairedClient:
         return PairedClient(
@@ -714,6 +725,8 @@ class TrainMeetHTTPApplication:
             {"id": connection["id"], **runtime_connections.get(connection["id"], {"state": "free"})}
             for connection in connections
         ]
+        if self.engine.shared_traffic is not None:
+            connection_states = self.engine.shared_traffic.connection_states()
         if self.operations_store is not None:
             clock = self.operations_store.clock_status()
             positions = self.operations_store.positions()
@@ -838,6 +851,9 @@ class TrainMeetHTTPApplication:
         connection_states = [
             state for state in snapshot["connection_states"] if state["id"] in related_connection_ids
         ]
+        if self.engine.shared_traffic is not None:
+            connection_states = [state for state in self.engine.shared_traffic.connection_states(station_id)
+                                 if state["id"] in related_connection_ids]
         trains = [train for train in snapshot["trains"] if train.get("station_id") == station_id]
         state = self.operations_store.tkl_station_state(
             snapshot["publication_id"],
@@ -954,6 +970,20 @@ class TrainMeetHTTPApplication:
         )["shift"]
         if current_shift is None:
             raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan tågrörelser hanteras")
+        if self.engine.shared_traffic is not None:
+            from .protocol_v2 import CommandRejected
+            try:
+                result = self.station_service.update_station_movement(
+                    current_shift["operator_name"], station_id, movement_id,
+                    {key: payload[key] for key in ("arrival", "departure", "actual_track", "operator_note")
+                     if key in payload and payload[key] is not None},
+                    shift_id=current_shift["shift_id"],
+                )
+            except (CommandRejected, ValueError) as error:
+                reason = error.reason if isinstance(error, CommandRejected) else str(error)
+                message = str(error) if str(error) != reason else _tkl_engine_reason(reason)
+                raise HTTPAPIError(HTTPStatus.CONFLICT, reason, message) from error
+            return {"movement": result}
         try:
             actual_track = resolve_track_id(
                 self.track_catalogue(), station_id, str(payload.get("actual_track") or "")
@@ -1082,6 +1112,9 @@ class TrainMeetHTTPApplication:
             )
         snapshot = self.display_snapshot()
         state = next((item for item in snapshot["connection_states"] if item["id"] == connection_id), None)
+        if self.engine.shared_traffic is not None:
+            state = next((item for item in self.engine.shared_traffic.connection_states(station_id)
+                          if item["id"] == connection_id), None)
         return {"action": action, "connection": state, "revision": self.engine.revision}
 
     def tkl_line_available(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1097,6 +1130,17 @@ class TrainMeetHTTPApplication:
         self._require_station_access(client, station_id)
         snapshot = self.display_snapshot()
         action = str(payload.get("action") or "publish")
+        if self.engine.shared_traffic is not None:
+            from .protocol_v2 import CommandRejected
+            operation = "line.available.acknowledge" if action == "acknowledge" else "line.available.publish"
+            try:
+                result = self.station_service.execute_station_command(
+                    client.client_id, station_id, operation,
+                    {key: payload[key] for key in ("message_id", "connection_id", "movement_id") if key in payload},
+                )
+            except CommandRejected as error:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, error.reason, str(error)) from error
+            return {"message": self.operations_store.line_message(result["revision"]["key"])}
         if action == "acknowledge":
             message_id = str(payload.get("message_id") or "")
             message = self.operations_store.line_message(message_id)

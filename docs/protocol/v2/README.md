@@ -25,10 +25,11 @@ rundresa per tangenttryck, ingen rundresa för att slå upp ett tåg.
 hastighet och kan stoppas. Boxen har ingen egen klocka; tiden kommer i
 snapshoten.
 
-**Ingen bro mellan v1 och v2.** Protokollen kör på skilda prefix
-(`tambox/v1/…` respektive `tmbox/v2/…`) så en gammal enhet aldrig råkar
-tolka v2-trafik. Det finns inget krav på att samma broker servar båda
-samtidigt i drift, och ingen översättning mellan dem byggs.
+**Två gränssnitt, en trafiklogik.** Protokollen kör på skilda prefix
+(`tambox/v1/…` respektive `tmbox/v2/…`) så en äldre enhet aldrig råkar
+tolka v2-trafik. Servern översätter v1:s knapptryckningar till samma
+stationskommandon som v2 och TKL använder. Ingen MQTT-till-MQTT-bro
+och inga separata klareringslager. Blandad drift är ett krav.
 
 **Ingen händelseuppspelning.** Det finns inget `last_event_id` och ingen
 uppspelning av missade händelser. Retained `assignment` + `config` +
@@ -267,10 +268,22 @@ dubbelspårsförbindelse har en oberoende kanal per riktning,
 `{connection_id}:{from_station_id}`, så motriktade rörelser aldrig blockerar
 varandra. Kanalen modelleras som två kanaler, inte som flaggor på en.
 
-`approved` avgör ärendet men frigör inte linjen. Kanalen hålls tills tåget är
-inne: mottagarstationens `train.arrived` för samma tågnummer frigör den. Ett
+`approved` avgör ärendet men frigör inte linjen. `train.departed` kräver
+ett beviljat ärende för den aktuella rörelsen; `train.arrived` får inte
+frigöra en reservation innan avgång registrerats. Avsändaren får återkalla
+en beviljad klarering fram till avgång, aldrig efteråt. Direktklarering
+skapar samma ärende men godkänner det automatiskt på servern.
+
+Kanalen hålls tills tåget är inne: mottagarstationens `train.arrived` för
+samma tågnummer frigör den. Ett
 `rejected`, `cancelled`, `expired` eller `invalidated_by_revision` frigör den
 direkt.
+
+`active_clearances` innehåller även `train_number` och `departed`, så att
+mottagaren kan visa både tågets identitet och om det faktiskt har avgått.
+Alla transportvägar använder samma kommandotransaktion. Ett godkänt svar,
+trafikändringen och kvittensen för dubblettskydd sparas innan nytt läge
+publiceras. Ändringar publiceras till båda stationerna oavsett klienttyp.
 
 ### 7.2 Linjen är ledig
 

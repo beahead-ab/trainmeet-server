@@ -104,6 +104,17 @@ class ProtocolV2Base(unittest.TestCase):
     def _retained(self) -> list[tuple[str, dict]]:
         return [(topic, payload) for topic, payload, retain in self.published if retain]
 
+    def _grant_departure(self, movement_id=DEPARTURE):
+        """Departure now has the same clearance prerequisite as v1/TKL."""
+        requested = self.service.execute_station_command(
+            DEVICE, STATION, "clearance.request",
+            {"movement_id": movement_id, "connection_id": "connection-cda-vst"},
+        )
+        self.service.execute_station_command(
+            NEIGHBOUR, "st-vst", "clearance.response",
+            {"clearance_id": requested["revision"]["key"], "approved": True},
+        )
+
 
 class ProtocolV2Tests(ProtocolV2Base):
     # ------------------------------------------------------------ retained
@@ -627,6 +638,8 @@ class ClearanceTests(ProtocolV2Base):
         )
         self.assertEqual(len(self.service.snapshot_payload("st-vst")["active_clearances"]), 1)
 
+        self.service.execute_station_command(DEVICE, STATION, "train.departed", {"movement_id": DEPARTURE})
+
         self._send_from(
             NEIGHBOUR,
             "command",
@@ -755,6 +768,7 @@ class ReadinessAndLineTests(ProtocolV2Base):
     def test_a_departed_train_offers_nothing_more_to_declare(self):
         self._command("a", "train.position.set", {"movement_id": DEPARTURE})
         self._command("b", "train.crew_ready.set", {"movement_id": DEPARTURE})
+        self._grant_departure()
         departed = self._movement(
             self._command("c", "train.departed", {"movement_id": DEPARTURE})["snapshot"]
         )
@@ -856,6 +870,7 @@ class TrackOccupancyTests(ProtocolV2Base):
         return self._acks()[-1]
 
     def _depart(self, movement_id: str, *, message_id: str) -> dict:
+        self._grant_departure(movement_id)
         for action, step in (
             ("train.position.set", "pos"),
             ("train.crew_ready.set", "crew"),

@@ -7,6 +7,7 @@ Här finns den publika dokumentationen för TrainMeet Server.
 - [Versionshantering](VERSIONING.md)
 - [Samspelet mellan Cloud och Server](cloud-server.md)
 - [TMBox-protokoll v2](protocol/v2/README.md)
+- [Gemensam trafik för ESP8266, ESP32 och TKL](shared-traffic.md)
 
 Installations- och driftinstruktioner finns i projektets
 [README](../README.md). Fel och förbättringsförslag hanteras i

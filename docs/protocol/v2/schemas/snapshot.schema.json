@@ -148,6 +148,12 @@
           },
           "to_station_id": {
             "type": "string"
+          },
+          "train_number": {
+            "type": "string"
+          },
+          "departed": {
+            "type": "boolean"
           }
         }
       }

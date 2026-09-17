@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,8 @@ class SQLiteOperationsStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._command_depth = 0
+        self._after_commit = []
         self._connection = sqlite3.connect(
             self.path,
             timeout=10,
@@ -699,6 +702,58 @@ class SQLiteOperationsStore:
                 raise
         return {"shift_id": shift_id, "status": status, "ended_at": now, "handover_note": note or None}
 
+    @property
+    def command_lock(self):
+        """One lock for validation and mutation, shared by every transport."""
+        return self._lock
+
+    @contextmanager
+    def atomic_command(self):
+        """Commit movement, clearance, journal and duplicate receipt together."""
+        callbacks = []
+        with self._lock:
+            name = "command_" + uuid4().hex
+            self._connection.execute(f"SAVEPOINT {name}")
+            self._command_depth += 1
+            callback_count = len(self._after_commit)
+            try:
+                yield
+                self._connection.execute(f"RELEASE SAVEPOINT {name}")
+            except BaseException:
+                self._connection.execute(f"ROLLBACK TO SAVEPOINT {name}")
+                self._connection.execute(f"RELEASE SAVEPOINT {name}")
+                del self._after_commit[callback_count:]
+                raise
+            finally:
+                self._command_depth -= 1
+            if self._command_depth == 0:
+                callbacks, self._after_commit = self._after_commit, []
+        for callback in callbacks:
+            callback()
+
+    def after_commit(self, callback) -> None:
+        with self._lock:
+            if self._command_depth:
+                if callback not in self._after_commit:
+                    self._after_commit.append(callback)
+                return
+        callback()
+
+    def save_panel_cache(self, session_id, fingerprint, revision, state) -> None:
+        """Same DB transaction as traffic; connection fields are projections.
+
+        SQLiteStateStore creates and reads this backwards-compatible envelope
+        at startup. Only this connection writes it during shared operation.
+        """
+        with self._lock:
+            self._connection.execute(
+                "INSERT INTO engine_state(session_id, config_fingerprint, revision, state_format_version, payload_json) "
+                "VALUES (?, ?, ?, 1, ?) ON CONFLICT(session_id) DO UPDATE SET "
+                "config_fingerprint = excluded.config_fingerprint, revision = excluded.revision, "
+                "payload_json = excluded.payload_json, updated_at = CURRENT_TIMESTAMP",
+                (session_id, fingerprint, revision, json.dumps(state, ensure_ascii=False)),
+            )
+
     def update_tkl_movement(
         self,
         publication_id: str,
@@ -732,7 +787,7 @@ class SQLiteOperationsStore:
         note = None if operator_note is None else (operator_note.strip() or None)
         now = _now_iso()
         with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._connection.execute("SAVEPOINT update_movement")
             try:
                 self._connection.execute(
                     """
@@ -795,10 +850,10 @@ class SQLiteOperationsStore:
                         (publication_id, active_day, movement_id),
                     ).fetchone()[0]
                 )
-                self._connection.execute("COMMIT")
+                self._connection.execute("RELEASE SAVEPOINT update_movement")
             except Exception:
-                if self._connection.in_transaction:
-                    self._connection.execute("ROLLBACK")
+                self._connection.execute("ROLLBACK TO SAVEPOINT update_movement")
+                self._connection.execute("RELEASE SAVEPOINT update_movement")
                 raise
         return {
             "movement_id": movement_id,
@@ -1070,7 +1125,7 @@ class SQLiteOperationsStore:
         self,
         publication_id: str,
         active_day: str,
-        station_id: str,
+        station_id: str | None,
     ) -> list[dict[str, Any]]:
         with self._lock:
             rows = self._connection.execute(
@@ -1078,10 +1133,10 @@ class SQLiteOperationsStore:
                 SELECT {_CLEARANCE_COLUMNS} FROM clearances
                 WHERE publication_id = ? AND active_day = ?
                   AND (status = 'waiting' OR (status = 'approved' AND settled_at IS NULL))
-                  AND (from_station_id = ? OR to_station_id = ?)
+                  AND (? IS NULL OR from_station_id = ? OR to_station_id = ?)
                 ORDER BY requested_at
                 """,
-                (publication_id, active_day, station_id, station_id),
+                (publication_id, active_day, station_id, station_id, station_id),
             ).fetchall()
         return [_clearance_from_row(row) for row in rows]
 
@@ -1103,8 +1158,10 @@ class SQLiteOperationsStore:
     ) -> dict[str, Any]:
         moment = now or datetime.now(timezone.utc)
         with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._connection.execute("SAVEPOINT request_clearance")
             try:
+                if self.open_clearance_on_channel(publication_id, active_day, channel_id):
+                    raise ValueError("channel_occupied")
                 self._connection.execute(
                     """
                     INSERT INTO clearances(
@@ -1136,10 +1193,10 @@ class SQLiteOperationsStore:
                     requested_by,
                     {"connection_id": connection_id, "channel_id": channel_id},
                 )
-                self._connection.execute("COMMIT")
+                self._connection.execute("RELEASE SAVEPOINT request_clearance")
             except Exception:
-                if self._connection.in_transaction:
-                    self._connection.execute("ROLLBACK")
+                self._connection.execute("ROLLBACK TO SAVEPOINT request_clearance")
+                self._connection.execute("RELEASE SAVEPOINT request_clearance")
                 raise
         return self.clearance(clearance_id)
 
@@ -1218,6 +1275,28 @@ class SQLiteOperationsStore:
             if updated.rowcount:
                 self._record_clearance_event_locked(clearance_id, "released", actor, {})
         return self.clearance(clearance_id)
+
+    def cancel_approved_clearance(self, clearance_id: str, actor: str) -> None:
+        with self._lock:
+            updated = self._connection.execute(
+                "UPDATE clearances SET status = 'cancelled', settled_at = ?, "
+                "updated_at = ?, revision = revision + 1 "
+                "WHERE clearance_id = ? AND status = 'approved' AND settled_at IS NULL",
+                (_now_iso(), _now_iso(), clearance_id),
+            )
+            if updated.rowcount:
+                self._record_clearance_event_locked(clearance_id, "cancelled", actor, {})
+
+    def case_context(self, clearance_id: str) -> tuple[str, str] | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT publication_id, active_day FROM clearances WHERE clearance_id = ?",
+                (clearance_id,),
+            ).fetchone()
+        return tuple(row) if row else None
+
+    def record_traffic_position(self, train_number: str, **position: Any) -> None:
+        self._upsert_position(train_number, **position)
 
     def _settle_clearance_locked(
         self,

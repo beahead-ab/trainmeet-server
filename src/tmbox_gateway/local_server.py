@@ -167,11 +167,7 @@ def main() -> None:
         gateway_id=args.gateway_id,
         identities=identities,
     )
-    gateway.client.connect(broker_host, args.mqtt_port, keepalive=10, clean_start=True)
-    gateway.client.loop_start()
-
-    # Protocol v2 runs beside v1 on its own prefix and its own client. There is
-    # no bridge between them; a box speaks one or the other.
+    # Different display/input protocols, one station service and traffic store.
     station_service = TMBoxStationService(runtime_store, operations_store, identities)
     v2_gateway = TMBoxV2Gateway(
         station_service,
@@ -180,7 +176,6 @@ def main() -> None:
         publish=lambda topic, payload, retain: None,
     )
     v2_adapter = MQTTV2Adapter(v2_gateway, host=broker_host, port=args.mqtt_port)
-    v2_adapter.connect()
     discovery_advertiser = _start_discovery_advertiser(
         args.mqtt_port, server_id=args.gateway_id
     )
@@ -208,6 +203,11 @@ def main() -> None:
         operations_store=operations_store,
         station_service=station_service,
     )
+    # Bind the shared traffic authority before accepting the first command.
+    station_service.subscribe(gateway._publish_snapshots)
+    gateway.client.connect(broker_host, args.mqtt_port, keepalive=10, clean_start=True)
+    gateway.client.loop_start()
+    v2_adapter.connect()
     server = TrainMeetHTTPServer((args.bind, args.http_port), application)
     cloud_sync_stop = threading.Event()
     cloud_sync_thread = threading.Thread(

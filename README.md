@@ -734,8 +734,11 @@ Protokollet mellan en fysisk TMBox och servern är specificerat i
 revisionsregler och tillståndsmaskiner, med JSON-scheman och kompletta
 exempel för både Charlottendal och den fiktiva testtopologin. Kontraktet är
 normativt — säger koden och dokumentet olika saker är det en bugg i koden.
-Den nuvarande MQTT-gatewayn talar fortfarande v1; v2-ytan byggs mot det här
-kontraktet.
+Servern tar emot både v1 (bland annat NodeMCU/ESP8266) och v2 (ESP32).
+Båda är passiva klienter till samma trafiklogik och SQLite-driftlager som
+TKL. v1:s A–D-meny tolkas på servern; v2 skickar kompletta kommandon.
+Skillnaden är gränssnitt och hårdvarufunktioner, inte trafikregler.
+Se [gemensam trafik och blandtest](docs/shared-traffic.md) före uppgradering.
 
 ## Lokal konfiguration och tidtabell
 

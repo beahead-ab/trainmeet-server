@@ -1,25 +1,24 @@
-"""TMBox protocol v2: the station-centred service behind the MQTT surface.
+"""Shared station operations behind v1 keypad, v2 MQTT and TKL HTTP.
 
 The contract this implements lives in docs/protocol/v2. A box is assigned one
 station, caches that station's config and snapshot in RAM, and speaks only to
 send a complete command. The server owns every decision; the box renders what
 comes back.
 
-Three things separate this from the v1 panel engine. A device is bound to a
-station rather than to A-D slots against connections. A command is a finished
-operational act, not a key press. And revision is scoped - per movement, per
-case, per station configuration - because one global counter would make an
-unrelated event at another station reject a command here.
+The v2 wire binds devices to stations and accepts complete actions with scoped
+revisions. The v1 server adapter translates its A-D key sessions to these same
+actions. Neither transport owns a second set of traffic decisions.
 """
 
 from __future__ import annotations
 
 import logging
+from functools import wraps
 from typing import Any, Callable
 from uuid import uuid4
 
 from .identity import DisplayCapability, IdentityStore
-from .models import SessionConfig, TrackType, UnknownTrackError, resolve_track_id
+from .models import DispatchMode, SessionConfig, TrackType, UnknownTrackError, resolve_track_id
 from .observability import log_event, use_correlation
 from .operations import SQLiteOperationsStore
 from .runtime import RuntimePublication, SQLiteRuntimeStore, matches_active_day
@@ -55,9 +54,27 @@ CLEARANCE_TTL_SECONDS = 300
 class CommandRejected(Exception):
     """A command the server refuses, carrying the reason a box should show."""
 
-    def __init__(self, reason: str):
-        super().__init__(reason)
+    def __init__(self, reason: str, message: str | None = None):
+        super().__init__(message or reason)
         self.reason = reason
+
+
+def _atomic(method):
+    @wraps(method)
+    def run(self, *args, **kwargs):
+        with self.operations_store.atomic_command():
+            return method(self, *args, **kwargs)
+    return run
+
+
+def _command(method):
+    @wraps(method)
+    def run(self, *args, **kwargs):
+        with self.operations_store.atomic_command():
+            result = method(self, *args, **kwargs)
+        self.operations_store.after_commit(self.notify_changed)
+        return result
+    return run
 
 
 class TMBoxStationService:
@@ -77,6 +94,85 @@ class TMBoxStationService:
         self.clock_source = clock_source or operations_store.clock_status
         self._cached_publication_id: str | None = None
         self._cached_session_config: SessionConfig | None = None
+        self._listeners: list[Callable[[], None]] = []
+
+    def subscribe(self, listener: Callable[[], None]) -> None:
+        self._listeners.append(listener)
+
+    def notify_changed(self) -> None:
+        for listener in self._listeners:
+            try:
+                listener()
+            except Exception:
+                LOGGER.exception("Kunde inte publicera gemensamt trafikläge")
+
+    @_command
+    def execute_station_command(
+        self, actor: str, station_id: str, action: str, body: dict[str, Any],
+        *, expected_revision: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Trusted server adapters call here AFTER their own access checks.
+
+        Keypad v1, HTTP TKL and MQTT v2 use precisely the same decisions. No
+        physical box owns a connection state or a separate clearance store.
+        """
+        config = self.session_config()
+        if config is None or station_id not in config.stations:
+            raise CommandRejected("unknown_station")
+        return self._apply(actor, station_id, {
+            "action": action, "payload": body, "expected_revision": expected_revision,
+        })
+
+    @_command
+    def update_station_movement(self, actor: str, station_id: str, movement_id: str, changes: dict[str, Any], *, shift_id: str | None = None):
+        """Adapt the TKL form to the same commands a physical box sends."""
+        publication = self.publication()
+        if publication is None:
+            raise CommandRejected("no_active_configuration")
+        day = self.runtime_store.active_day() or publication.active_day
+        movement = self._movement(publication, day, station_id, movement_id)
+        if movement is None:
+            raise CommandRejected("unknown_movement")
+        def live():
+            return self.operations_store.tkl_station_state(publication.publication_id, day, station_id)["movements"].get(movement_id, {})
+        def apply(action, **body):
+            return self._apply(actor, station_id, {"action": action, "payload": {"movement_id": movement_id, **body}}, shift_id=shift_id)
+        track = changes.get("actual_track")
+        if track:
+            try:
+                track = resolve_track_id(self.session_config().tracks, station_id, str(track))
+            except UnknownTrackError as error:
+                raise CommandRejected("unknown_track") from error
+        if track and track != (live().get("actualTrack") or movement.get("track_id")):
+            apply("train.track.change", track_id=track)
+        departure = changes.get("departure")
+        arrival = changes.get("arrival")
+        if departure is not None and departure != live().get("departure", "none"):
+            if departure in {"ready", "positioned"}:
+                if live().get("departure") == "departed":
+                    raise CommandRejected("invalid_departure")
+                apply("train.position.set")
+                apply(CREW_ACTION, crew_ready=departure == "ready")
+            elif departure == "departed":
+                apply("train.departed")
+            elif departure != "none":
+                raise CommandRejected("invalid_departure")
+            else:
+                raise CommandRejected("invalid_departure")
+        if arrival is not None and arrival != live().get("arrival", "none"):
+            if arrival not in {"approaching", "arrived"}:
+                raise CommandRejected("invalid_arrival")
+            apply("train." + arrival)
+        state = live()
+        if "operator_note" in changes:
+            state = self.operations_store.update_tkl_movement(
+                publication.publication_id, day, station_id, movement_id,
+                arrival=state.get("arrival", "none"), departure=state.get("storedDeparture", state.get("departure", "none")),
+                actual_track=state.get("actualTrack") or movement.get("track_id"),
+                crew_ready=state.get("crewReady", False), operator_note=str(changes["operator_note"])[:200],
+                updated_by=actor, shift_id=shift_id, event_type="operator_note_changed",
+            )
+        return state
 
     # ---------------------------------------------------------------- state
 
@@ -159,6 +255,7 @@ class TMBoxStationService:
             "display": capability.to_dict(),
         }
 
+    @_atomic
     def snapshot_payload(self, station_id: str) -> dict[str, Any] | None:
         """The station's live state, replaced wholesale on every publish."""
         publication = self.publication()
@@ -167,6 +264,11 @@ class TMBoxStationService:
             return None
         active_day = self.runtime_store.active_day() or publication.active_day
         state = self.operations_store.tkl_station_state(
+            publication.publication_id, active_day, station_id
+        )
+        clock = self.clock_source()
+        self._expire_due(publication.publication_id, active_day, clock)
+        clearances = self.operations_store.open_clearances_for_station(
             publication.publication_id, active_day, station_id
         )
         movements = []
@@ -178,6 +280,12 @@ class TMBoxStationService:
                 continue
             movement_id = str(row["id"])
             live = state["movements"].get(movement_id, {})
+            actions = _allowed_actions(row, live)
+            if "train.departed" in actions and not any(
+                case["movement_id"] == movement_id and case["from_station_id"] == station_id
+                and case["status"] == "approved" for case in clearances
+            ):
+                actions.remove("train.departed")
             revisions[movement_id] = int(live.get("revision", 0))
             movements.append(
                 {
@@ -190,14 +298,9 @@ class TMBoxStationService:
                     "assignedTrackId": live.get("actualTrack") or row.get("track_id"),
                     "actualTrack": live.get("actualTrack"),
                     "crewReady": bool(live.get("crewReady", False)),
-                    "allowed_actions": _allowed_actions(row, live),
+                    "allowed_actions": actions,
                 }
             )
-        clock = self.clock_source()
-        self._expire_due(publication.publication_id, active_day, clock)
-        clearances = self.operations_store.open_clearances_for_station(
-            publication.publication_id, active_day, station_id
-        )
         line_messages = self.operations_store.open_line_messages_for_station(
             publication.publication_id, active_day, station_id
         )
@@ -225,6 +328,8 @@ class TMBoxStationService:
                     "status": case["status"],
                     "from_station_id": case["from_station_id"],
                     "to_station_id": case["to_station_id"],
+                    "train_number": self.case_train_number(case),
+                    "departed": self.case_departed(case),
                 }
                 for case in clearances
             ],
@@ -246,6 +351,7 @@ class TMBoxStationService:
 
     # -------------------------------------------------------------- commands
 
+    @_command
     def handle_command(self, device_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Apply one complete command and return the acknowledgement for it.
 
@@ -334,11 +440,13 @@ class TMBoxStationService:
             raise CommandRejected("station_mismatch")
         return station_id
 
+    @_atomic
     def _apply(
         self,
         device_id: str,
         station_id: str,
         payload: dict[str, Any],
+        *, shift_id: str | None = None,
     ) -> dict[str, Any]:
         action = str(payload.get("action") or "")
         publication = self.publication()
@@ -390,6 +498,33 @@ class TMBoxStationService:
             departure = "positioned"
         crew_ready = bool(state.get("crewReady", False))
         track = state.get("actualTrack") or movement.get("track_id")
+        if departure == "departed" and action in {"train.position.set", CREW_ACTION, *TRACK_ACTIONS}:
+            raise CommandRejected("train_already_departed")
+        if action in {"train.position.set", CREW_ACTION} and not movement.get("departure_time"):
+            raise CommandRejected("invalid_departure")
+        if action == "train.approaching" and (not movement.get("arrival_time") or arrival == "arrived"):
+            raise CommandRejected("invalid_arrival")
+
+        # The line decision is the same for TKL, a 16x2 keypad and a v2 box.
+        # A departure declaration cannot bypass the receiving station.
+        if action == "train.departed":
+            if not movement.get("departure_time") or departure == "departed":
+                raise CommandRejected("invalid_departure")
+            cases = [case for case in self.open_cases(station_id)
+                     if case["from_station_id"] == station_id
+                     and case["movement_id"] == movement_id and case["status"] == "approved"]
+            if len(cases) != 1:
+                raise CommandRejected("departure_not_reserved")
+        else:
+            cases = []
+        if action == "train.arrived":
+            if not movement.get("arrival_time") or arrival == "arrived":
+                raise CommandRejected("invalid_arrival")
+            incoming = [case for case in self.open_cases(station_id)
+                        if case["to_station_id"] == station_id
+                        and self.case_train_number(case) == str(movement["train_number"])]
+            if incoming and (len(incoming) != 1 or not self.case_departed(incoming[0])):
+                raise CommandRejected("train_not_departed")
 
         if action == CREW_ACTION:
             crew_ready = bool((body.get("crew_ready", True)))
@@ -402,7 +537,7 @@ class TMBoxStationService:
                 raise CommandRejected("unknown_track") from error
             if track is None:
                 raise CommandRejected("unknown_track")
-            if find_track_conflict(
+            conflict = find_track_conflict(
                 publication.payload["trains"],
                 self.operations_store.tkl_station_state(
                     publication.publication_id, active_day, station_id
@@ -411,8 +546,9 @@ class TMBoxStationService:
                 active_day,
                 movement_id,
                 track,
-            ) is not None:
-                raise CommandRejected("track_occupied")
+            )
+            if conflict is not None:
+                raise CommandRejected("track_occupied", f"Spåret är upptaget av tåg {conflict.get('train_number') or '?'}")
         else:
             field, value = MOVEMENT_ACTIONS[action]
             if field == "arrival":
@@ -429,7 +565,7 @@ class TMBoxStationService:
             departure=departure,
             actual_track=track,
             updated_by=device_id,
-            shift_id=None,
+            shift_id=shift_id,
             event_type=action,
             crew_ready=crew_ready,
             # Boxen har inga bokstäver och kan inte skriva en anteckning. Den
@@ -449,6 +585,16 @@ class TMBoxStationService:
         if action == "train.arrived":
             self._release_on_arrival(
                 publication, active_day, station_id, movement, device_id
+            )
+            self.operations_store.record_traffic_position(
+                str(movement["train_number"]), status="station", station_id=station_id,
+            )
+        if action == "train.departed":
+            case = cases[0]
+            self.operations_store.record_traffic_position(
+                str(movement["train_number"]), status="connection",
+                connection_id=case["connection_id"], from_station_id=station_id,
+                to_station_id=case["to_station_id"],
             )
         return {
             "revision": {
@@ -487,6 +633,10 @@ class TMBoxStationService:
                 publication.publication_id, active_day, station_id
             )["movements"].get(movement_id, {})
             self._check_revision(payload, "movement", movement_id, int(state.get("revision", 0)))
+            if state.get("departure") == "departed":
+                raise CommandRejected("invalid_departure")
+            if any(case["movement_id"] == movement_id for case in self.open_cases(station_id)):
+                raise CommandRejected("movement_already_requested")
 
             channel_id = self.operations_store.channel_id(
                 connection.id,
@@ -498,6 +648,8 @@ class TMBoxStationService:
             )
             if occupied is not None:
                 raise CommandRejected("channel_occupied")
+            if not movement.get("departure_time"):
+                raise CommandRejected("invalid_departure")
 
             case = self.operations_store.request_clearance(
                 publication.publication_id,
@@ -512,6 +664,8 @@ class TMBoxStationService:
                 requested_by=device_id,
                 ttl_seconds=CLEARANCE_TTL_SECONDS,
             )
+            if (connection.dispatch_mode_override or config.default_dispatch_mode) == DispatchMode.DIRECT:
+                case = self.operations_store.settle_clearance(case["clearance_id"], "approved", device_id)
             return {
                 "revision": {
                     "scope": "case",
@@ -523,7 +677,17 @@ class TMBoxStationService:
         case = self.operations_store.clearance(str(body.get("clearance_id") or ""))
         if case is None:
             raise CommandRejected("unknown_clearance")
+        if self.operations_store.case_context(case["clearance_id"]) != (publication.publication_id, active_day):
+            raise CommandRejected("unknown_clearance")
         self._check_revision(payload, "case", case["clearance_id"], case["revision"])
+        if action == "clearance.cancel" and case["status"] == "approved" and case["settled_at"] is None:
+            if case["from_station_id"] != station_id:
+                raise CommandRejected("not_sender")
+            if self.case_departed(case):
+                raise CommandRejected("train_already_departed")
+            self.operations_store.cancel_approved_clearance(case["clearance_id"], device_id)
+            cancelled = self.operations_store.clearance(case["clearance_id"])
+            return {"revision": {"scope": "case", "key": case["clearance_id"], "value": cancelled["revision"]}}
         if case["status"] != "waiting":
             raise CommandRejected("clearance_not_pending")
 
@@ -638,9 +802,44 @@ class TMBoxStationService:
         ):
             if case["status"] != "approved" or case["to_station_id"] != station_id:
                 continue
-            if numbers.get(case["movement_id"]) != train_number:
+            if numbers.get(case["movement_id"]) != train_number or not self.case_departed(case):
                 continue
             self.operations_store.release_clearance(case["clearance_id"], actor)
+
+    def open_cases(self, station_id: str | None) -> list[dict[str, Any]]:
+        publication = self.publication()
+        if publication is None:
+            return []
+        day = self.runtime_store.active_day() or publication.active_day
+        self._expire_due(publication.publication_id, day, self.clock_source())
+        return self.operations_store.open_clearances_for_station(publication.publication_id, day, station_id)
+
+    def case_train_number(self, case: dict[str, Any]) -> str:
+        publication = self.publication()
+        return next((str(row["train_number"]) for row in publication.payload["trains"]
+                     if str(row["id"]) == case["movement_id"]), "") if publication else ""
+
+    def case_departed(self, case: dict[str, Any]) -> bool:
+        context = self.operations_store.case_context(case["clearance_id"])
+        if context is None:
+            return False
+        live = self.operations_store.tkl_station_state(*context, case["from_station_id"])["movements"]
+        return live.get(case["movement_id"], {}).get("departure") == "departed"
+
+    def resolve_number(self, station_id: str, number: str, *, arrival: bool = False) -> dict[str, Any]:
+        """Never guess between two timetable visits sharing a train number."""
+        publication = self.publication()
+        if publication is None:
+            raise CommandRejected("no_active_configuration")
+        day = self.runtime_store.active_day() or publication.active_day
+        matches = [row for row in publication.payload["trains"]
+                   if str(row["station_id"]) == station_id
+                   and str(row["train_number"]) == number
+                   and matches_active_day(str(row["days"]), day)
+                   and row.get("arrival_time" if arrival else "departure_time")]
+        if len(matches) != 1:
+            raise CommandRejected("ambiguous_train_number" if matches else "unknown_train_number")
+        return matches[0]
 
     def _expire_due(
         self,
