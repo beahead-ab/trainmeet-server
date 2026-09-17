@@ -169,6 +169,22 @@ class MQTTGatewayAdapter:
         )
         assigned_panel_ids = list(self.identities.panels_for_client(device_id))
         station_id = self.identities.station_for_client(device_id)
+        # Admin assigns a station now. A v1 keypad still needs one concrete
+        # A-D panel for both snapshots and command authorization. Resolve only
+        # an unambiguous panel of that already-authorized station; never choose
+        # an arbitrary panel, change an explicit assignment, or revive a
+        # disabled client (station_for_client returns None in that case).
+        if device.protocol_version == 1 and station_id and not assigned_panel_ids:
+            candidates = [
+                panel.id for panel in self.engine.config.panels.values()
+                if panel.station_id == station_id
+            ]
+            if len(candidates) == 1:
+                self.identities.bind_legacy_station_panel(
+                    device_id, station_id, candidates[0],
+                )
+                assigned_panel_ids = list(self.identities.panels_for_client(device_id))
+                station_id = self.identities.station_for_client(device_id)
         self.client.publish(
             f"tambox/v1/device/{device_id}/assignment",
             json.dumps(

@@ -194,6 +194,12 @@ class MQTTIntegrationTests(unittest.TestCase):
             temporary_directory.cleanup()
 
     def test_physical_box_needs_only_its_printed_code_and_device_id(self):
+        self._physical_box_flow(nodemcu=False)
+
+    def test_nodemcu_mqtt311_station_assignment_accepts_key_without_wall_clock(self):
+        self._physical_box_flow(nodemcu=True)
+
+    def _physical_box_flow(self, *, nodemcu):
         engine = TrafficEngine(sample_session(DispatchMode.CLEARANCE))
         temporary_directory = tempfile.TemporaryDirectory()
         identities = IdentityStore(Path(temporary_directory.name) / "identity.db")
@@ -206,14 +212,16 @@ class MQTTIntegrationTests(unittest.TestCase):
         gateway.client.connect("127.0.0.1", self.port, keepalive=10, clean_start=True)
         gateway.client.loop_start()
 
-        device_id = "esp32-integration-box"
+        device_id = "esp8266-aabbcc123456" if nodemcu else "esp32-integration-box"
+        device_code = "TBX-123456" if nodemcu else "TBX-A7K2"
         assignment_event = threading.Event()
         snapshot_event = threading.Event()
+        ack_event = threading.Event()
         received: dict[str, dict] = {}
         device = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=device_id,
-            protocol=mqtt.MQTTv5,
+            protocol=mqtt.MQTTv311 if nodemcu else mqtt.MQTTv5,
         )
 
         def publish_hello(active_client):
@@ -221,8 +229,9 @@ class MQTTIntegrationTests(unittest.TestCase):
                 f"tambox/v1/device/{device_id}/hello",
                 json.dumps(
                     {
-                        "device_code": "TBX-A7K2",
-                        "model": "TMBox ESP32-S3",
+                        "protocol_version": 1,
+                        "device_code": device_code,
+                        "model": "NodeMCU ESP8266 PCF8574" if nodemcu else "TMBox ESP32-S3",
                         "firmware_version": "0.1.0",
                     }
                 ),
@@ -234,6 +243,7 @@ class MQTTIntegrationTests(unittest.TestCase):
             del userdata, flags, reason_code, properties
             active_client.subscribe(f"tambox/v1/device/{device_id}/assignment", qos=1)
             active_client.subscribe(f"tambox/v1/client/{device_id}/snapshot/+", qos=1)
+            active_client.subscribe(f"tambox/v1/client/{device_id}/ack", qos=1)
             publish_hello(active_client)
 
         def on_message(active_client, userdata, message):
@@ -245,18 +255,26 @@ class MQTTIntegrationTests(unittest.TestCase):
             elif "/snapshot/" in message.topic:
                 received["snapshot"] = payload
                 snapshot_event.set()
+            elif message.topic.endswith("/ack"):
+                received["ack"] = payload
+                ack_event.set()
 
         device.on_connect = on_connect
         device.on_message = on_message
-        device.connect("127.0.0.1", self.port, keepalive=10, clean_start=True)
+        device.connect("127.0.0.1", self.port, keepalive=10,
+                       **({} if nodemcu else {"clean_start": True}))
         device.loop_start()
 
         try:
             self.assertTrue(assignment_event.wait(MESSAGE_TIMEOUT), "box discovery was not acknowledged")
             self.assertEqual(received["assignment"]["status"], "waiting_for_assignment")
-            self.assertEqual(identities.discovered_devices()[0].device_code, "TBX-A7K2")
+            self.assertEqual(identities.discovered_devices()[0].device_code, device_code)
 
-            identities.assign_discovered_device("TBX-A7K2", ("panel-b",))
+            if nodemcu:
+                # Same station-only assignment sent by the current admin UI.
+                identities.assign_discovered_device(device_code, station_id="station-b")
+            else:
+                identities.assign_discovered_device(device_code, ("panel-b",))
             assignment_event.clear()
             publish_hello(device)
 
@@ -265,6 +283,17 @@ class MQTTIntegrationTests(unittest.TestCase):
             self.assertEqual(received["assignment"]["assigned_panel_ids"], ["panel-b"])
             self.assertTrue(snapshot_event.wait(MESSAGE_TIMEOUT), "assigned box did not get its panel")
             self.assertEqual(received["snapshot"]["panel_id"], "panel-b")
+            if nodemcu:
+                snapshot = received["snapshot"]
+                device.publish(f"tambox/v1/client/{device_id}/command", json.dumps({
+                    "protocol_version": 1, "command_id": "nodemcu-boot-1",
+                    "client_id": device_id, "panel_id": "panel-b",
+                    "traffic_session_id": snapshot["traffic_session_id"],
+                    "expected_revision": snapshot["revision"],
+                    "action": "key_press", "key": "A", "device_uptime_ms": 1000,
+                }), qos=1, retain=False)
+                self.assertTrue(ack_event.wait(MESSAGE_TIMEOUT), "NodeMCU command was not acknowledged")
+                self.assertEqual(received["ack"]["status"], "accepted")
         finally:
             device.disconnect()
             device.loop_stop()

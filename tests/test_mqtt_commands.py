@@ -69,9 +69,11 @@ class DeviceHelloTests(unittest.TestCase):
         self.adapter._handle_device_hello("TMBOX-7A42F1", json.dumps(payload).encode())
 
     def _last_assignment(self) -> dict:
-        topic, body = self.adapter.client.publish.call_args.args[:2]
-        self.assertTrue(topic.endswith("/assignment"))
-        return json.loads(body)
+        for call in reversed(self.adapter.client.publish.call_args_list):
+            topic, body = call.args[:2]
+            if topic.endswith("/assignment"):
+                return json.loads(body)
+        self.fail("assignment was not published")
 
     def test_an_unassigned_box_is_told_to_wait(self):
         self._hello()

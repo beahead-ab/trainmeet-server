@@ -527,6 +527,28 @@ class IdentityStore:
         client = self.client(client_id)
         return client.station_id if client else None
 
+    def bind_legacy_station_panel(self, client_id: str, station_id: str, panel_id: str) -> None:
+        """Fill a v1 station's missing panel without changing its authorization.
+
+        The caller has resolved an unambiguous panel from the active config.
+        One conditional statement makes a concurrent disable, reassignment or
+        explicit panel choice win; this must never re-register/enable a client.
+        """
+        with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO client_panels (client_id, panel_id)
+                SELECT c.client_id, ? FROM clients c
+                JOIN discovered_devices d ON d.device_id = c.client_id
+                WHERE c.client_id = ? AND c.station_id = ? AND c.enabled = 1
+                  AND c.kind = ? AND d.protocol_version = 1
+                  AND NOT EXISTS (
+                    SELECT 1 FROM client_panels p WHERE p.client_id = c.client_id
+                  )
+                """,
+                (panel_id, client_id, station_id, DeviceKind.ESP32_PANEL.value),
+            )
+
     def enabled_clients(self) -> tuple[PairedClient, ...]:
         with self._lock:
             rows = self._connection.execute(
