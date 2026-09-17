@@ -200,9 +200,7 @@ def main() -> None:
         gateway_id=args.gateway_id,
         identities=identities,
     )
-
-    # Protocol v2 runs beside v1 on its own prefix and its own client. There is
-    # no bridge between them; a box speaks one or the other.
+    # Different display/input protocols, one station service and traffic store.
     station_service = TMBoxStationService(runtime_store, operations_store, identities)
     v2_gateway = TMBoxV2Gateway(
         station_service,
@@ -261,6 +259,8 @@ def main() -> None:
         publish_clock_to_devices(gateway, v2_gateway, identities)
     application.on_clock_changed = publish_clock
     # Attach the common lifecycle gate before either transport accepts input.
+    # Bind the shared traffic authority before accepting the first command.
+    station_service.subscribe(gateway._publish_snapshots)
     gateway.client.connect(broker_host, args.mqtt_port, keepalive=10, clean_start=True)
     gateway.client.loop_start()
     v2_adapter.connect()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from functools import wraps
 from threading import RLock
 from typing import Any, Callable
 from uuid import uuid4
@@ -21,6 +22,23 @@ from .models import (
     SessionConfig,
 )
 from .storage import ConfigurationMismatchError, CorruptStateError, StateStore, session_config_fingerprint
+
+
+def _shared_command(method):
+    @wraps(method)
+    def run(self, *args, **kwargs):
+        if self.shared_traffic is None:
+            return method(self, *args, **kwargs)
+        with self._lock:
+            checkpoint = self._checkpoint()
+            try:
+                with self.shared_traffic.service.operations_store.atomic_command():
+                    return method(self, *args, **kwargs)
+            except BaseException:
+                (self.revision, self.connections, self.panels,
+                 self.processed_commands, self.audit) = checkpoint
+                raise
+    return run
 
 
 class TrafficEngine:
@@ -49,6 +67,9 @@ class TrafficEngine:
         self.transition_observer: Callable[[dict[str, Any], dict[str, Any], datetime], None] | None = None
         self.clock_source: Callable[[], dict[str, Any]] | None = None
         self.runtime_guard: Callable[[], str | None] | None = None
+        self.shared_traffic = None
+        self.shared_state_restored = False
+        self._actor = "server"
         self._validate_config()
         if self.state_store is not None:
             try:
@@ -64,6 +85,7 @@ class TrafficEngine:
             if state is not None:
                 self._restore_state(state)
 
+    @_shared_command
     def press(self, command: Command, *, now: datetime | None = None) -> CommandAck:
         with self._lock:
             if self.runtime_guard and (reason := self.runtime_guard()):
@@ -94,6 +116,7 @@ class TrafficEngine:
                 self.config, self.config_fingerprint = old_config, old_fingerprint
                 raise
 
+    @_shared_command
     def perform(
         self,
         *,
@@ -113,6 +136,9 @@ class TrafficEngine:
         with self._lock:
             if self.runtime_guard and (reason := self.runtime_guard()):
                 return False, reason
+            self._actor = client_id
+            if self.shared_traffic is not None:
+                self.shared_traffic.refresh()
             if connection_id not in self.connections:
                 return False, "unknown_connection"
             moment = now or datetime.now(timezone.utc)
@@ -208,6 +234,8 @@ class TrafficEngine:
         }
 
     def _press_locked(self, command: Command, *, now: datetime | None = None) -> CommandAck:
+        if self.shared_traffic is not None:
+            self.shared_traffic.refresh()
         now = now or datetime.now(timezone.utc)
         previous = self.revision
 
@@ -234,6 +262,7 @@ class TrafficEngine:
         before_state = self.export_state()
         panel = self.config.panels[command.panel_id]
         runtime = self.panels[command.panel_id]
+        self._actor = command.client_id
         accepted, reason = self._handle_key(panel, runtime, command)
         if not accepted:
             ack = self._ack(command, "rejected", reason, previous)
@@ -268,8 +297,11 @@ class TrafficEngine:
         return ack
 
     def export_state(self) -> dict[str, Any]:
+        if self.shared_traffic is not None:
+            self.shared_traffic.refresh()
         return {
             "state_format_version": 1,
+            "traffic_source": "station_operations" if self.shared_traffic else "legacy_engine",
             "revision": self.revision,
             "connections": {
                 connection_id: {
@@ -354,6 +386,7 @@ class TrafficEngine:
         if not isinstance(revision, int) or revision < 0 or not isinstance(audit, list):
             raise CorruptStateError("Invalid persisted revision or audit journal")
 
+        self.shared_state_restored = state.get("traffic_source") == "station_operations"
         self.revision = revision
         self.connections = restored_connections
         self.panels = restored_panels
@@ -388,7 +421,9 @@ class TrafficEngine:
         if self.state_store is None:
             return
         try:
-            self.state_store.save(
+            save = (self.shared_traffic.service.operations_store.save_panel_cache
+                    if self.shared_traffic is not None else self.state_store.save)
+            save(
                 self.config.id,
                 self.config_fingerprint,
                 self.revision,
@@ -409,11 +444,15 @@ class TrafficEngine:
             return self._snapshot_locked(panel_id, language=language)
 
     def _snapshot_locked(self, panel_id: str, *, language: str = "sv") -> dict[str, Any]:
+        if self.shared_traffic is not None:
+            self.shared_traffic.refresh()
         panel = self.config.panels[panel_id]
         runtime = self.panels[panel_id]
+        connections = (self.shared_traffic.view(panel.station_id)
+                       if self.shared_traffic is not None else self.connections)
         clock = self.meeting_clock()
         line1, line2 = render_panel(
-            self.config, panel, runtime, self.connections, clock_time=clock["time"], language=language
+            self.config, panel, runtime, connections, clock_time=clock["time"], language=language
         )
 
         slots: dict[str, Any] = {}
@@ -424,7 +463,7 @@ class TrafficEngine:
                 slots[key] = {"key": key, "connection_id": None, "state": "unused", "side": side, "row": row}
                 continue
             connection = self.config.connections[connection_id]
-            connection_state = self.connections[connection_id]
+            connection_state = connections[connection_id]
             other_id = connection.other_station(panel.station_id)
             slots[key] = {
                 "key": key,
@@ -541,7 +580,8 @@ class TrafficEngine:
             connection_id = panel.slots.get(slot)
             if connection_id is None:
                 return False, "unused_slot"
-            line = self.connections[connection_id]
+            line = (self.shared_traffic.view(panel.station_id)[connection_id]
+                    if self.shared_traffic is not None else self.connections[connection_id])
             if line.state == ConnectionState.FREE:
                 runtime.mode = InteractionMode.ENTER_TRAIN
                 runtime.selected_slot = slot
@@ -665,6 +705,8 @@ class TrafficEngine:
         connection_id: str,
         train_number: str,
     ) -> tuple[bool, str | None]:
+        if self.shared_traffic is not None:
+            return self.shared_traffic.perform(self._actor, station_id, connection_id, "request", train_number)
         line = self.connections[connection_id]
         if line.state != ConnectionState.FREE:
             return False, "connection_busy"
@@ -691,6 +733,8 @@ class TrafficEngine:
         *,
         accept: bool,
     ) -> tuple[bool, str | None]:
+        if self.shared_traffic is not None:
+            return self.shared_traffic.perform(self._actor, station_id, connection_id, "accept" if accept else "reject")
         line = self.connections[connection_id]
         if line.state != ConnectionState.REQUESTED or line.to_station_id != station_id:
             return False, "request_no_longer_pending"
@@ -709,6 +753,8 @@ class TrafficEngine:
         *,
         expect: ConnectionState,
     ) -> tuple[bool, str | None]:
+        if self.shared_traffic is not None:
+            return self.shared_traffic.perform(self._actor, station_id, connection_id, "cancel")
         line = self.connections[connection_id]
         if line.state != expect or line.from_station_id != station_id:
             return False, (
@@ -721,6 +767,8 @@ class TrafficEngine:
         return True, None
 
     def depart_case(self, station_id: str, connection_id: str) -> tuple[bool, str | None]:
+        if self.shared_traffic is not None:
+            return self.shared_traffic.perform(self._actor, station_id, connection_id, "depart")
         line = self.connections[connection_id]
         if line.state != ConnectionState.RESERVED or line.from_station_id != station_id:
             return False, "departure_not_reserved"
@@ -728,6 +776,8 @@ class TrafficEngine:
         return True, None
 
     def arrive_case(self, station_id: str, connection_id: str) -> tuple[bool, str | None]:
+        if self.shared_traffic is not None:
+            return self.shared_traffic.perform(self._actor, station_id, connection_id, "arrive")
         line = self.connections[connection_id]
         if line.state != ConnectionState.OCCUPIED or line.to_station_id != station_id:
             return False, "train_not_departed"

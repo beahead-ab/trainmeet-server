@@ -553,6 +553,8 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(acknowledged["status"], "display_acknowledged")
 
     def test_tkl_clearance_actions_use_the_authoritative_traffic_engine(self):
+        publication = self.runtime_store.install(runtime_package_v3())
+        self.operations_store.ensure_publication(publication)
         client = self.application.local_admin()
         for station_id, operator_name in (("station-a", "Anna"), ("station-b", "Bertil")):
             self.application.start_tkl_shift(
@@ -763,7 +765,7 @@ class HTTPServerTests(unittest.TestCase):
 
         acknowledgement = self._json_request(
             "/v1/command",
-            {"panel_id": "panel-a", "expected_revision": 0, "key": "A"},
+            {"panel_id": "panel-a", "expected_revision": snapshots["snapshots"][0]["revision"], "key": "A"},
             token=token,
         )
         self.assertEqual(acknowledgement["status"], "accepted")

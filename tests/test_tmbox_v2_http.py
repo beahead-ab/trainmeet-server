@@ -221,7 +221,7 @@ class TerminalWritesTheNoteTests(TMBoxV2HTTPTests):
         """Samma skydd som för boxen, men från terminalens håll."""
 
         self._update(arrival="none", departure="none", operator_note="Väntar på lokförare")
-        self._update(arrival="arrived", departure="none")
+        self._update(arrival="none", departure="positioned")
 
         self.assertEqual("Väntar på lokförare", self._note())
 
