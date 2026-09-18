@@ -869,3 +869,10 @@ PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
 
 Den fysiska boxens firmware finns i [trainmeet-tmbox](https://github.com/beahead-ab/trainmeet-tmbox). Den nativa appen finns separat i [trainmeet-iphone](https://github.com/beahead-ab/trainmeet-iphone).
+
+## Välj EU eller US
+
+Överst i webbgränssnittet finns **EU-tågträff / US-tågträff**. EU öppnar
+servervyn med TKL och TMBox; US öppnar Dispatcher och därifrån Conductor.
+Bytet sker i samma flik och ändrar eller avslutar ingen körning.
+US-vyerna börjar på engelska. Se [US-pilotens omfattning](docs/TRAINMEET-US.md).

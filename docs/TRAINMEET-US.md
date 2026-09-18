@@ -106,3 +106,11 @@ Cloud-editor/publicering av US-paket, offline-identitetskontrakt, verifierade
 verkliga banor/regelprofiler, historisk TT&TO, avancerade villkor/ersättningar,
 returarkiv till Cloud och full fysisk terminaltest. Dessa ingår inte i den
 första vertikala pilotleveransen.
+
+## Val av EU eller US
+
+Överst i Server finns **EU-tågträff / US-tågträff**. US öppnar Dispatcher,
+med Conductor som egen vy. EU återgår till den befintliga servervyn med TKL.
+Länkarna öppnas i samma flik och ändrar inte sessioner, klocka eller tillstånd.
+En inloggning/parkoppling krävs fortfarande enligt respektive vys behörigheter.
+US behåller engelska som förvalt språk, separat från EU:s språkval.

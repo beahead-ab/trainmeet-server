@@ -9,11 +9,19 @@
     <title>TrainMeet Server</title>
     <link rel="stylesheet" href="/assets/app.css?v=20260815-1">
     <script src="/assets/i18n-messages.js" defer></script>
+    <script src="/assets/meet-type-messages.js" defer></script>
+    <link rel="stylesheet" href="/assets/meet-type.css">
     <script src="/assets/i18n.js" defer></script>
     <script src="/assets/i18n-init.js" defer></script>
   </head>
   <body>
-    <div class="language-toolbar"><label><span data-tm-text="Språk">Språk</span><select data-language-picker aria-label="Språk" data-tm-aria-label="Språk"></select></label></div>
+    <div class="language-toolbar">
+      <nav class="meet-type-nav" aria-label="Typ av tågträff" data-tm-aria-label="Operating session type" title="Att byta vy ändrar eller stoppar inte en körning." data-tm-title="Switching views does not change or stop an operating session.">
+        <a href="/" aria-current="page"><span data-tm-text="EU operating session">EU-tågträff</span></a>
+        <a href="/us/dispatcher"><span data-tm-text="US operating session">US-tågträff</span></a>
+      </nav>
+      <label><span data-tm-text="Språk">Språk</span><select data-language-picker aria-label="Språk" data-tm-aria-label="Språk"></select></label>
+    </div>
     <main class="page-shell">
       <!-- Applocket, DEL 3.1. Två rader: den mörka finns bara i byggläget,
            den vita i båda. Konfiguration och drift ska inte kunna förväxlas -
@@ -43,7 +51,6 @@
           <button type="button" class="run-tab" data-run-tab="skarmar"><tm-text data-tm-text="Skärmar">Skärmar</tm-text></button>
           <button type="button" class="run-tab" data-run-tab="tkl"><tm-text data-tm-text="TKL-terminal">TKL-terminal</tm-text></button>
           <button type="button" class="run-tab" data-run-tab="tmbox"><tm-text data-tm-text="TMBox v2">TMBox v2</tm-text></button>
-          <a class="run-tab us-entry" href="/us/dispatcher">US Dispatcher</a>
         </nav>
 
         <div class="topbar-right">

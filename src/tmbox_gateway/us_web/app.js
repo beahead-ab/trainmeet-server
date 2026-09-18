@@ -21,7 +21,7 @@ function createCommandID() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return 'us-' + Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
-document.querySelector(`nav a[href="/us/${conductorView?'conductor':'dispatcher'}"]`).setAttribute('aria-current', 'page');
+document.querySelector(`.topbar nav a[href="/us/${conductorView?'conductor':'dispatcher'}"]`).setAttribute('aria-current', 'page');
 
 async function api(path, body) {
   const controller = new AbortController();
