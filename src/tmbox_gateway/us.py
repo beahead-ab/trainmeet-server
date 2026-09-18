@@ -180,6 +180,8 @@ def warrant_text(package: dict, warrant: dict, run: dict) -> str:
     railroad = run.get('railroad', '').strip()
     symbol = run['symbol']
     train = f'{railroad} {symbol}' if railroad and not symbol.lower().startswith(railroad.lower() + ' ') else symbol
+    if run.get('service', '').strip():
+        train += ' · ' + run['service'].strip()
     lines = [f"Track Warrant {warrant['number']} · {train} · Train direction: {direction}"]
     for leg in warrant["path"]:
         segment = segments[leg["segment_id"]]

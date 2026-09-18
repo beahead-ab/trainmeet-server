@@ -186,7 +186,7 @@ function packageShelf() {
 
 function packagePreview(p) {
   const node=(id)=>p.nodes.find((n)=>n.id===id);
-  return html`<details open><summary>The railroad</summary><div class="package-table"><table><thead><tr><th>Track segment</th><th>From MP</th><th>To MP</th></tr></thead><tbody>${p.segments.map((s)=>html`<tr><td>${escape(s.name)}</td><td>${escape(node(s.from_node)?.name)} · ${escape(node(s.from_node)?.mp)}</td><td>${escape(node(s.to_node)?.name)} · ${escape(node(s.to_node)?.mp)}</td></tr>`).join('')}</tbody></table></div></details><details><summary>Train schedule & job instructions</summary>${p.runs.map((r)=>html`<h3>${escape(trainLabel(r))} · ${escape(t(r.direction==='east'?'Eastbound':'Westbound'))}</h3><p>${escape(r.service||'')}</p>${schedule(r,p)}`).join('')}</details>`;
+  return html`<details open><summary>The railroad</summary><div class="package-table"><table><thead><tr><th>Track segment</th><th>From MP</th><th>To MP</th></tr></thead><tbody>${p.segments.map((s)=>html`<tr><td>${escape(s.name)}</td><td>${escape(node(s.from_node)?.name)} · ${escape(node(s.from_node)?.mp)}</td><td>${escape(node(s.to_node)?.name)} · ${escape(node(s.to_node)?.mp)}</td></tr>`).join('')}</tbody></table></div></details><details><summary>Train schedule & job instructions</summary>${p.runs.map((r)=>html`<h3>${escape(trainLabel(r))} · ${escape(t(r.direction==='east'?'Eastbound':'Westbound'))}</h3>${schedule(r,p)}`).join('')}</details>`;
 }
 
 async function reviewPackage(id) {
@@ -223,7 +223,7 @@ function stripMap() {
   const rails=p.segments.map((s)=>html`<path class="tie" d="${path(s)}"/><path class="rail" d="${path(s)}"/>`).join('');
   const marks=p.nodes.map((n,i)=>{const v=xy(n),first=p.nodes.findIndex((other)=>other.territory_id===n.territory_id&&other.y===n.y)===i;return html`<circle class="point" cx="${v.x}" cy="${v.y}" r="5"/>${first?html`<path class="limit-guide" d="M62,${v.y}H565"/><text class="mp-label" x="15" y="${v.y+5}">${escape(n.mp)}</text><text x="380" y="${v.y+5}">${escape(n.name)}</text>`:''}`;}).join('');
   const bands=current.warrants.filter((w)=>!closed(w)).flatMap((w)=>w.path.map((leg)=>{const a=point(leg.segment_id,leg.from_mp),b=point(leg.segment_id,leg.to_mp);return html`<path class="authority-band ${holding(w)?'':'proposed'} ${state.selected===w.run_id?'chosen':''}" d="M${a.x-12},${a.y}L${b.x-12},${b.y}"/>`;})).join('');
-  const pins=current.runs.filter((r)=>r.position).map((r)=>{const v=point(r.position.segment_id,r.position.mp);return html`<g class="position-pin ${state.selected===r.id?'chosen':''}" tabindex="0" role="button" aria-label="Select ${escape(trainLabel(r))}, reported MP ${r.position.mp}" data-run="${escape(r.id)}"><circle class="position-dot" cx="${v.x}" cy="${v.y}" r="7"/><rect x="${v.x+14}" y="${v.y-15}" width="165" height="31" rx="9"/><text x="${v.x+24}" y="${v.y+5}">${escape(trainLabel(r))} ${r.direction==='east'?'↓':'↑'} · ${r.position.mp}</text><title>Reported ${escape(r.position.meet_time)} · ${escape(r.position.recorded_at)}</title></g>`;}).join('');
+  const pins=current.runs.filter((r)=>r.position).map((r)=>{const v=point(r.position.segment_id,r.position.mp);return html`<g class="position-pin ${state.selected===r.id?'chosen':''}" tabindex="0" role="button" aria-label="Select ${escape(trainLabel(r))}, reported MP ${r.position.mp}" data-run="${escape(r.id)}"><circle class="position-dot" cx="${v.x}" cy="${v.y}" r="7"/><rect x="${v.x+14}" y="${v.y-15}" width="165" height="31" rx="9"/><text x="${v.x+24}" y="${v.y+5}">${escape(trainLabel(r,false))} ${r.direction==='east'?'↓':'↑'} · ${r.position.mp}</text><title>Reported ${escape(r.position.meet_time)} · ${escape(r.position.recorded_at)}</title></g>`;}).join('');
   return html`<svg class="strip-map" viewBox="0 0 600 ${height}" role="img" aria-label="Schematic topology, reported train positions and track warrant limits"><text class="mp-label" x="15" y="27">MP</text><text class="track-name" x="125" y="27">${escape(p.territories.map((t)=>t.name).join(' / '))}</text>${rails}${bands}${marks}${pins}</svg>`;
 }
 
@@ -233,10 +233,11 @@ function renderConductor() {
   const warrants=current.warrants.filter((w)=>w.run_id===selected.id&&!closed(w));
   app.innerHTML=html`<div class="conductor-layout">${current.runs.length>1?html`<div>${current.runs.map(trainRow).join('')}</div>`:''}<section class="card"><p class="eyebrow">Conductor · assigned train</p><h1>${escape(trainLabel(selected))} <small>${escape(t(selected.direction==='east'?'Eastbound':'Westbound'))}</small></h1><p>${escape(current.name)}</p><p class="muted">${escape(selected.locomotive||t("Locomotive not specified"))} · ${escape(selected.conductor_name)}</p><p class="muted">${escape(positionLabel(selected))}</p><div class="actions">${button(selected.ready?t("Ready reported"):t("Ready to copy"),'ready')}${button(t("Report"),'report','',true)}${button(t("Request authority"),'request')}</div></section><section class="card"><h2>Your track warrants</h2>${warrants.map(warrantCard).join('')||html`<p class="muted">No authority issued. Timetable times do not authorize movement.</p>`}</section><section class="card"><h2>Train schedule & job instructions</h2>${schedule(selected)}</section><section class="card"><h2>Reports & confirmations</h2>${events(selected)}</section></div>`;
 }
-function trainLabel(r) {
+function trainLabel(r,includeService=true) {
   if(!r)return '';
   const railroad=r.railroad?.trim();
-  return railroad && !r.symbol.toLowerCase().startsWith(railroad.toLowerCase()+' ') ? `${railroad} ${r.symbol}` : r.symbol;
+  const identity=railroad && !r.symbol.toLowerCase().startsWith(railroad.toLowerCase()+' ') ? `${railroad} ${r.symbol}` : r.symbol;
+  return includeService && r.service?.trim() ? `${identity} · ${r.service.trim()}` : identity;
 }
 function schedule(r,p=session().package) {
   const eventLabels={arrive:'Arrival',depart:'Departure',pass:'Pass',switch:'Switching'};

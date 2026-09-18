@@ -195,7 +195,9 @@ test('US clock form and Cloud connection are explicit actions and not polled',as
 test('Cloud railroad identity and schedule event labels survive language changes',async()=>{
  const {api,data,app,language}=await setup('conductor');
  const r=data.session.runs[0];r.symbol='834';r.railroad='SP';r.schedule[0].event='switch';
+ r.service='Morning';
  api.render();assert.match(app.innerHTML,/SP 834/);assert.match(app.innerHTML,/Switching/);
  language.setLanguage('sv');api.render();assert.match(app.innerHTML,/SP 834/);assert.match(app.innerHTML,/Växling/);
  assert.equal(r.symbol,'834');assert.equal(r.schedule[0].event,'switch');
+ assert.match(app.innerHTML,/SP 834 · Morning/);
 });

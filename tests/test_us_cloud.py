@@ -71,6 +71,8 @@ class USCloudStoreTests(unittest.TestCase):
         warrant = {'number': '1', 'kind': 'proceed', 'path': [], 'notes': ''}
         self.assertIn('SP 834', warrant_text(self.p, warrant, r))
         self.assertNotIn('SP SP', warrant_text(self.p, warrant, {**r, 'symbol': 'SP 834'}))
+        self.assertIn('SP 834 · Morning', warrant_text(self.p, warrant, {**r, 'service': 'Morning'}))
+        self.assertIn('SP 834 · Evening', warrant_text(self.p, warrant, {**r, 'service': 'Evening'}))
         for field, value in [('railroad', []), ('service', 0)]:
             bad = copy.deepcopy(self.p)
             bad['runs'][0][field] = value
