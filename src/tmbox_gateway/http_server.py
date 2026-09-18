@@ -2440,6 +2440,7 @@ class TrainMeetHTTPApplication:
             "/assets/i18n.js": "i18n.js",
             "/assets/i18n-messages.js": "i18n-messages.js",
             "/assets/meet-type-messages.js": "meet-type-messages.js",
+            "/assets/us-cloud-messages.js": "us-cloud-messages.js",
             "/assets/meet-type.css": "meet-type.css",
             "/assets/i18n-init.js": "i18n-init.js",
             "/assets/tmbox-fixtures.js": "tmbox-fixtures.js",

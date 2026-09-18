@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+from html.parser import HTMLParser
 import tempfile
 import threading
 import unittest
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from urllib.parse import urljoin, urlsplit
 
 from session_fixture import sample_session
 from tmbox_gateway.central_sync import DEFAULT_RUNTIME_PUBLICATION_URL, CentralRuntimeDownload, CentralRuntimeManifest
@@ -113,6 +115,38 @@ class HTTPServerTests(unittest.TestCase):
             logo = response.read()
             self.assertEqual(response.headers.get_content_type(), "image/png")
         self.assertTrue(logo.startswith(b"\x89PNG\r\n\x1a\n"))
+
+    def test_all_runtime_pages_serve_their_scripts_and_styles_locally(self):
+        class Assets(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.urls = []
+
+            def handle_starttag(self, tag, attributes):
+                attributes = dict(attributes)
+                if tag == 'script' and attributes.get('src'):
+                    self.urls.append(attributes['src'])
+                if tag == 'link' and attributes.get('rel') == 'stylesheet':
+                    self.urls.append(attributes['href'])
+
+        # Follow the HTML references, rather than a hand-maintained list that
+        # can miss a newly added language bundle. Query strings and TKL's
+        # relative, hashed assets must work on the real HTTP routes too.
+        for route in ('/', '/tkl/', '/us/dispatcher', '/us/conductor', '/display/clock?style=swiss'):
+            with self.subTest(page=route):
+                page_url = self.base_url + route
+                with urlopen(page_url, timeout=2) as response:
+                    parser = Assets()
+                    parser.feed(response.read().decode('utf-8'))
+                self.assertTrue(parser.urls)
+                for asset in parser.urls:
+                    with self.subTest(page=route, asset=asset):
+                        asset_url = urljoin(page_url, asset)
+                        self.assertEqual(urlsplit(asset_url).netloc, urlsplit(self.base_url).netloc)
+                        with urlopen(asset_url, timeout=2) as response:
+                            self.assertEqual(response.status, 200)
+                            self.assertNotEqual(response.headers.get_content_type(), 'text/html')
+                            self.assertTrue(response.read())
 
     def test_clean_server_runs_the_complete_first_start_flow(self):
         self.runtime_store.begin_installation()
