@@ -500,6 +500,38 @@ class IdentityStore:
             panels = self._panel_ids_locked(row[0])
         return PairedClient(row[0], row[1], DeviceKind(row[2]), panels, row[3])
 
+    def enroll_physical_box(self, client_id: str) -> PairedClient:
+        """Enroll a discovered box without granting a station or changing one.
+
+        Code redemption is handled by the caller. Keep this atomic with admin
+        assignment: a repeated enrollment must never wipe an assigned station,
+        change panel grants or re-enable a disabled device.
+        """
+        with self._lock:
+            discovered = self._connection.execute(
+                "SELECT device_code FROM discovered_devices WHERE device_id = ?",
+                (client_id,),
+            ).fetchone()
+            if discovered is None:
+                raise InvalidClientError("Boxen har inte upptäckts ännu. Invänta MQTT-anslutningen.")
+            now = datetime.now(timezone.utc).isoformat()
+            self._connection.execute(
+                """INSERT OR IGNORE INTO clients (
+                    client_id, display_name, kind, credential_digest, enabled,
+                    created_at, last_paired_at, station_id
+                ) VALUES (?, ?, ?, ?, 1, ?, ?, NULL)""",
+                (client_id, discovered[0], DeviceKind.ESP32_PANEL.value,
+                 _credential_digest(secrets.token_urlsafe(32)), now, now),
+            )
+            row = self._connection.execute(
+                "SELECT display_name, kind, enabled, station_id FROM clients WHERE client_id = ?",
+                (client_id,),
+            ).fetchone()
+            if not row[2] or row[1] != DeviceKind.ESP32_PANEL.value:
+                raise InvalidClientError("Boxen är spärrad eller har fel enhetstyp. Kontakta administratören.")
+            return PairedClient(client_id, row[0], DeviceKind(row[1]),
+                                self._panel_ids_locked(client_id), row[3])
+
     def client(self, client_id: str) -> PairedClient | None:
         with self._lock:
             row = self._connection.execute(

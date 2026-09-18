@@ -11,10 +11,36 @@ from tmbox_gateway.identity import (
     IdentityStore,
     InvalidPairingCodeError,
     PairingService,
+    InvalidClientError,
 )
 
 
 class IdentityTests(unittest.TestCase):
+    def test_physical_enrollment_does_not_pick_a_station_or_grant_panels(self):
+        device_id = "esp8266-aabbccddeeff"
+        self.store.record_discovery(device_id, "TBX-DDEEFF")
+        enrolled = self.store.enroll_physical_box(device_id)
+        self.assertIsNone(enrolled.station_id)
+        self.assertEqual(enrolled.panel_ids, ())
+        self.assertEqual(enrolled.kind, DeviceKind.ESP32_PANEL)
+
+    def test_physical_enrollment_preserves_assignment_and_disabled_state(self):
+        device_id = "esp8266-aabbccddeeff"
+        self.store.record_discovery(device_id, "TBX-DDEEFF")
+        self.store.assign_discovered_device("TBX-DDEEFF", station_id="station-a")
+        self.store.bind_legacy_station_panel(device_id, "station-a", "panel-a")
+        enrolled = self.store.enroll_physical_box(device_id)
+        self.assertEqual(enrolled.station_id, "station-a")
+        self.assertEqual(enrolled.panel_ids, ("panel-a",))
+        self.store.disable_client(device_id)
+        with self.assertRaises(InvalidClientError):
+            self.store.enroll_physical_box(device_id)
+        self.assertIsNone(self.store.client(device_id))
+
+    def test_physical_enrollment_rejects_unknown_box(self):
+        with self.assertRaises(InvalidClientError):
+            self.store.enroll_physical_box("esp8266-aabbccddeeff")
+
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.store = IdentityStore(Path(self.temporary_directory.name) / "identity.db")
