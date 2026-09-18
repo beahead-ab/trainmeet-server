@@ -41,8 +41,10 @@ class RetiredMenuNameTests(unittest.TestCase):
     def test_the_replacement_name_is_the_one_the_interface_uses(self):
         """Annars byter testet bara ett fel namn mot ett annat."""
         html = (WEB / "index.html").read_text(encoding="utf-8")
-        self.assertIn("<h2>Inställningar</h2>", html)
-        self.assertIn("<h2>Programuppdatering</h2>", html)
+        for heading in ("Inställningar", "Programuppdatering"):
+            self.assertIn(
+                f'<h2><tm-text data-tm-text="{heading}">{heading}</tm-text></h2>', html
+            )
 
     def test_the_readme_names_the_settings_menu_somewhere(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

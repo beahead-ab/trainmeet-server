@@ -30,6 +30,7 @@ class DeviceKind(StrEnum):
     WEB_ADMIN = "web_admin"
     ESP32_PANEL = "esp32_panel"
     TKL_TERMINAL = "tkl_terminal"
+    US_CONDUCTOR = "us_conductor"
 
 
 class PairingError(RuntimeError):
@@ -314,7 +315,7 @@ class IdentityStore:
         now: datetime | None = None,
     ) -> str:
         """Issue a pairing code. A ttl of None never expires."""
-        if not panel_ids:
+        if not panel_ids and tuple(allowed_kinds) != (DeviceKind.US_CONDUCTOR,):
             raise ValueError("A pairing code must grant at least one panel")
         if not allowed_kinds:
             raise ValueError("A pairing code must allow at least one device kind")

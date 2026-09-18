@@ -1,0 +1,27 @@
+{
+  "schema": "trainmeet.us.runtime/1",
+  "profile": "tm-us-twc-manual-v1",
+  "publication_id": "fictional-training-v1",
+  "name": "Fictional US training — not a real operating plan",
+  "territories": [{"id": "training", "name": "Training Subdivision"}],
+  "nodes": [
+    {"id": "north-1", "territory_id": "training", "name": "North Yard", "mp": 10, "x": 30, "y": 0},
+    {"id": "south-1", "territory_id": "training", "name": "South Yard", "mp": 20, "x": 30, "y": 300},
+    {"id": "north-2", "territory_id": "training", "name": "North Yard · Main 2", "mp": 10, "x": 45, "y": 0},
+    {"id": "south-2", "territory_id": "training", "name": "South Yard · Main 2", "mp": 20, "x": 45, "y": 300}
+  ],
+  "segments": [
+    {"id": "main-1", "name": "Main 1", "from_node": "north-1", "to_node": "south-1"},
+    {"id": "main-2", "name": "Main 2", "from_node": "north-2", "to_node": "south-2"}
+  ],
+  "runs": [
+    {"id": "east", "symbol": "Training 101", "direction": "east", "schedule": [
+      {"node_id": "north-1", "time": "06:00", "work": "Depart"},
+      {"node_id": "south-1", "time": "06:30", "work": "Arrive"}
+    ]},
+    {"id": "west", "symbol": "Training 102", "direction": "west", "schedule": [
+      {"node_id": "south-2", "time": "06:05", "work": "Depart"},
+      {"node_id": "north-2", "time": "06:35", "work": "Arrive"}
+    ]}
+  ]
+}

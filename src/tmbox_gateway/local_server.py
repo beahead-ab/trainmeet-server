@@ -26,6 +26,7 @@ from .observability import configure_logging
 from .mqtt_adapter import MQTTGatewayAdapter
 from .mqtt_v2 import MQTTV2Adapter, TMBoxV2Gateway
 from .operations import SQLiteOperationsStore
+from .us import USStore
 from .protocol_v2 import TMBoxStationService
 from .runtime import RuntimePublicationError, SQLiteRuntimeStore
 from .software_update import supports_updates
@@ -105,6 +106,7 @@ def main() -> None:
     database_path = _database_path(state_directory)
     runtime_store = SQLiteRuntimeStore(database_path)
     operations_store = SQLiteOperationsStore(database_path)
+    us_store = USStore(database_path)
     local_configuration_store = SQLiteLocalConfigurationStore(database_path)
     try:
         active_publication = runtime_store.active()
@@ -207,6 +209,7 @@ def main() -> None:
         local_configuration_store=local_configuration_store,
         operations_store=operations_store,
         station_service=station_service,
+        us_store=us_store,
     )
     server = TrainMeetHTTPServer((args.bind, args.http_port), application)
     cloud_sync_stop = threading.Event()
@@ -239,6 +242,7 @@ def main() -> None:
         runtime_store.close()
         local_configuration_store.close()
         operations_store.close()
+        us_store.close()
         if broker is not None:
             broker.terminate()
             try:
@@ -304,6 +308,9 @@ def _reset_operational_state(database_path: Path, state_directory: Path) -> None
     try:
         connection.execute("PRAGMA foreign_keys=ON")
         with connection:
+            for table in ("us_events", "us_commands", "us_current", "us_sessions"):
+                if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+                    connection.execute(f"DELETE FROM {table}")
             for table in (
                 "engine_state",
                 "runtime_clock",

@@ -45,6 +45,7 @@ from .local_config import (
 from .models import Command, TrackConfig, TrackType, UnknownTrackError, resolve_track_id
 from .observability import log_event, use_correlation
 from .operations import SQLiteOperationsStore
+from .us import USStore, USError
 from .protocol_v2 import TMBoxStationService, find_track_conflict
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
@@ -197,6 +198,7 @@ class TrainMeetHTTPApplication:
         linked_runtime_fetcher: Callable[[str, str, bool], Any] | None = None,
         operations_store: SQLiteOperationsStore | None = None,
         station_service: TMBoxStationService | None = None,
+        us_store: USStore | None = None,
     ):
         self.engine = engine
         self.identities = identities
@@ -206,6 +208,7 @@ class TrainMeetHTTPApplication:
         self.local_configuration_store = local_configuration_store
         self.operations_store = operations_store
         self._station_service = station_service
+        self.us_store = us_store
         self.runtime_fetcher = runtime_fetcher or (
             lambda code, url: fetch_runtime_download(
                 code,
@@ -220,6 +223,7 @@ class TrainMeetHTTPApplication:
         )
         self.web_root = files("tmbox_gateway").joinpath("web")
         self.tkl_web_root = files("tmbox_gateway").joinpath("tkl")
+        self.us_web_root = files("tmbox_gateway").joinpath("us_web")
 
         if self.runtime_store is not None and self.runtime_store.central_url():
             saved_url = self.runtime_store.central_url() or ""
@@ -495,7 +499,7 @@ class TrainMeetHTTPApplication:
         try:
             result = self.pairing.pair(
                 pairing_code=str(payload.get("pairing_code", "")),
-                client_id=str(payload.get("client_id", "")),
+                client_id=f"us-{uuid4()}" if kind == DeviceKind.US_CONDUCTOR else str(payload.get("client_id", "")),
                 display_name=str(payload.get("display_name", "")),
                 kind=kind,
             )
@@ -520,9 +524,38 @@ class TrainMeetHTTPApplication:
             DeviceKind.WEB_ADMIN,
             DeviceKind.SWIFT_ADMIN,
             DeviceKind.TKL_TERMINAL,
+            DeviceKind.US_CONDUCTOR,
         }:
             response["access_token"] = result.access_token
         return response
+
+    def us_access(self, client: PairedClient) -> tuple[USStore, str, bool]:
+        if self.us_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "us_unavailable", "US runtime is not configured")
+        dispatcher = client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}
+        if not dispatcher and client.kind != DeviceKind.US_CONDUCTOR:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "us_access_required", "US dispatcher or conductor access required")
+        actor = f"user:{client.admin_user_id}" if client.admin_user_id else f"client:{client.client_id}"
+        return self.us_store, actor, dispatcher
+
+    def us_context(self, client: PairedClient) -> dict[str, Any]:
+        store, actor, dispatcher = self.us_access(client)
+        result = store.context(actor, dispatcher)
+        result["clock"] = self.operations_store.clock_status() if self.operations_store else {"time": self.engine.config.clock_time, "running": False}
+        if dispatcher:
+            result["conductors"] = [{"id": f"client:{c.client_id}", "name": c.display_name} for c in self.identities.enabled_clients() if c.kind == DeviceKind.US_CONDUCTOR]
+        return result
+
+    def us_command(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        store, actor, dispatcher = self.us_access(client)
+        action = str(payload.get("action", ""))
+        if action == "assign":
+            conductor = next((c for c in self.identities.enabled_clients() if c.kind == DeviceKind.US_CONDUCTOR and f"client:{c.client_id}" == payload.get("conductor_id")), None)
+            if conductor is None:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "unknown_conductor", "Select a paired conductor")
+            payload = {**payload, "conductor_name": conductor.display_name}
+        clock = self.operations_store.clock_status() if self.operations_store else {"time": self.engine.config.clock_time}
+        return store.execute(actor, dispatcher, action, payload, str(clock["time"]))
 
     def snapshots(self, client: PairedClient) -> dict[str, Any]:
         snapshots = self.engine.snapshots()
@@ -2334,6 +2367,11 @@ class TrainMeetHTTPApplication:
             )
 
     def static_asset(self, path: str) -> tuple[bytes, str] | None:
+        if path in {"/us", "/us/", "/us/dispatcher", "/us/conductor", "/us/app.js", "/us/style.css"}:
+            name = path.rsplit("/", 1)[-1]
+            if name not in {"app.js", "style.css"}:
+                name = "index.html"
+            return self.us_web_root.joinpath(name).read_bytes(), mimetypes.guess_type(name)[0] or "text/plain"
         if path.startswith("/tkl/"):
             relative_tkl = path.removeprefix("/tkl/") or "index.html"
             if ".." in Path(relative_tkl).parts:
@@ -2350,6 +2388,9 @@ class TrainMeetHTTPApplication:
             "/index.html": "index.html",
             "/assets/app.css": "app.css",
             "/assets/app.js": "app.js",
+            "/assets/i18n.js": "i18n.js",
+            "/assets/i18n-messages.js": "i18n-messages.js",
+            "/assets/i18n-init.js": "i18n-init.js",
             "/assets/tmbox-fixtures.js": "tmbox-fixtures.js",
             "/assets/tmbox-render.js": "tmbox-render.js",
             "/assets/tmbox-nav.js": "tmbox-nav.js",
@@ -2402,6 +2443,14 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path == "/v1/us/context":
+                self._send_json(HTTPStatus.OK, self.server.application.us_context(self._authenticated_client()))
+                return
+            if path == "/v1/us/command-status":
+                store, actor, _ = self.server.application.us_access(self._authenticated_client())
+                command_id = parse_qs(parsed.query).get("command_id", [""])[0]
+                self._send_json(HTTPStatus.OK, {"result": store.command_status(actor, command_id)})
+                return
             if path == "/tkl":
                 self.send_response(HTTPStatus.PERMANENT_REDIRECT)
                 self.send_header("Location", "/tkl/")
@@ -2609,6 +2658,8 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 self._send_bytes(HTTPStatus.OK, *asset)
                 return
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
+        except USError as error:
+            self._send_api_error(HTTPAPIError(HTTPStatus(error.status), "us_error", str(error)))
         except HTTPAPIError as error:
             self._send_api_error(error)
 
@@ -2616,6 +2667,16 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             payload = self._read_json()
+            if path == "/v1/us/commands":
+                self._send_json(HTTPStatus.OK, self.server.application.us_command(self._authenticated_client(), payload))
+                return
+            if path == "/v1/us/conductor-code":
+                client = self._authenticated_client()
+                self.server.application._require_admin(client)
+                self.server.application.us_access(client)
+                code = self.server.application.identities.issue_pairing_code([], allowed_kinds=(DeviceKind.US_CONDUCTOR,), label="US conductor", max_uses=1)
+                self._send_json(HTTPStatus.CREATED, {"code": code, "expires_in_minutes": 15})
+                return
             if path == "/v1/setup/admin":
                 if not self._client_address_is_private():
                     raise HTTPAPIError(
@@ -2940,6 +3001,8 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
+        except USError as error:
+            self._send_api_error(HTTPAPIError(HTTPStatus(error.status), "us_error", str(error)))
         except HTTPAPIError as error:
             self._send_api_error(error)
 

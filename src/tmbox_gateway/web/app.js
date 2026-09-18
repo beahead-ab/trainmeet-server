@@ -1,3 +1,4 @@
+const { t, html } = globalThis.TrainMeetI18n;
 const slotKeys = ["A", "B", "C", "D"];
 
 function createWebClientID() {
@@ -202,7 +203,7 @@ loginForm.addEventListener("submit", async (event) => {
       }),
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message || "Inloggningen misslyckades");
+    if (!response.ok) throw new Error(payload.message || t("Inloggningen misslyckades"));
     document.querySelector("#login-password").value = "";
     await refreshAuthStatus();
     const installation = await refreshSetupStatus();
@@ -636,7 +637,7 @@ runtimeImportFile.addEventListener("change", () => {
   runtimeImportValidate.disabled = !runtimeImportFile.files?.length;
   runtimeImportActivate.classList.add("hidden");
   runtimeImportReview.classList.add("hidden");
-  document.querySelector("#runtime-import-state").textContent = runtimeImportFile.files?.[0]?.name || "Ingen fil vald";
+  document.querySelector("#runtime-import-state").textContent = runtimeImportFile.files?.[0]?.name || t("Ingen fil vald");
   setMessage(runtimeImportMessage, "");
 });
 
@@ -655,7 +656,7 @@ logoutButton.addEventListener("click", async () => {
   state.snapshots.clear();
   clearTimeout(state.snapshotTimer);
   clearTimeout(state.adminTimer);
-  setConnection("offline", "Ej ansluten");
+  setConnection("offline", t("Ej ansluten"));
   appView.classList.add("hidden");
   await bootstrap();
 });
@@ -866,7 +867,7 @@ function renderBackups(backups) {
     when.textContent = restoreClock(item.taken_at);
     const what = document.createElement("small");
     what.textContent = item.usable
-      ? `${item.meet_name || "Ingen aktiv träff"} · ${restoreSize(item.size_bytes)}`
+      ? `${item.meet_name || t("Ingen aktiv träff")} · ${restoreSize(item.size_bytes)}`
       : item.problem || "kopian går inte att använda";
     text.append(when, what);
     row.append(text);
@@ -1457,8 +1458,8 @@ async function refreshInfo() {
   document.querySelector("#server-detail").textContent =
     `Kör lokalt · aktiv trafiksession: ${info.traffic_session_name}`;
   document.querySelector("#system-server-name").textContent = info.runtime?.server_name || info.gateway_id || "TrainMeet Server";
-  document.querySelector("#system-runtime-name").textContent = info.runtime?.configured ? info.runtime.meet_name : "Ingen aktiv träff";
-  document.querySelector("#system-cloud-state").textContent = info.runtime?.linked ? "Kopplad" : "Inte kopplad";
+  document.querySelector("#system-runtime-name").textContent = info.runtime?.configured ? info.runtime.meet_name : t("Ingen aktiv träff");
+  document.querySelector("#system-cloud-state").textContent = info.runtime?.linked ? t("Kopplad") : t("Inte kopplad");
   const serverNameInput = document.querySelector("#admin-server-name");
   if (document.activeElement !== serverNameInput) {
     serverNameInput.value = info.runtime?.server_name || info.gateway_id || "";
@@ -1469,9 +1470,9 @@ async function refreshInfo() {
     pill.classList.add("active");
     document.querySelector("#overview-runtime-state").textContent = "Lokalt aktiv";
     document.querySelector("#sidebar-runtime-name").textContent = info.runtime.meet_name;
-    document.querySelector("#sidebar-runtime-status").textContent = `${info.runtime.active_day} · ${info.runtime.linked ? "Cloud kopplad" : "lokal config"}`;
+    document.querySelector("#sidebar-runtime-status").textContent = `${info.runtime.active_day} · ${info.runtime.linked ? t("Cloud kopplad") : t("lokal config")}`;
   } else {
-    pill.textContent = info.runtime?.error ? "Konfigurationen behöver rättas" : "Ingen träff aktiverad";
+    pill.textContent = info.runtime?.error ? t("Konfigurationen behöver rättas") : t("Ingen träff aktiverad");
     pill.classList.remove("active");
     document.querySelector("#overview-runtime-state").textContent = info.runtime?.error
       ? "Konfigurationsfel"
@@ -1497,7 +1498,7 @@ async function refreshAdminAccess() {
   // fabriksåterställningen är hela servern eller bara träffdata.
   const atTheMachine = state.authStatus?.at_the_machine === true;
   const badge = document.querySelector("#access-mode");
-  badge.textContent = atTheMachine ? "Vid servern" : "Över nätet";
+  badge.textContent = atTheMachine ? t("Vid servern") : t("Över nätet");
   badge.classList.toggle("active", !atTheMachine);
 
   const passwordState = document.querySelector("#access-password-state");
@@ -1627,7 +1628,7 @@ function renderConfiguration() {
     : "Nytt utkast";
 
   stationEditor.innerHTML = config.stations.length
-    ? config.stations.map((station, index) => `
+    ? config.stations.map((station, index) => html`
       <div class="editor-row station-row" data-index="${index}">
         <span class="sequence-number">${index + 1}</span>
         <label>Kod<input data-field="code" maxlength="8" value="${escapeHTML(station.code)}"></label>
@@ -1641,7 +1642,7 @@ function renderConfiguration() {
     : emptyEditor("Inga stationer ännu", "Lägg till stationerna i den ordning de ligger på banan.");
 
   connectionEditor.innerHTML = config.connections.length
-    ? config.connections.map((connection, index) => `
+    ? config.connections.map((connection, index) => html`
       <div class="editor-row connection-row" data-index="${index}">
         <span class="sequence-number">${index + 1}</span>
         <label>Från<select data-field="station_a_id">${stationOptions(connection.station_a_id)}</select></label>
@@ -1660,13 +1661,13 @@ function renderConfiguration() {
     : emptyEditor("Inga sträckor ännu", "Bygg automatiskt från stationsordningen eller lägg till en sträcka manuellt.");
 
   panelEditor.innerHTML = config.panels.length
-    ? config.panels.map((panel, index) => `
+    ? config.panels.map((panel, index) => html`
       <div class="editor-row panel-row" data-index="${index}">
         <span class="sequence-number">${index + 1}</span>
         <label>Station<select data-field="station_id">${stationOptions(panel.station_id)}</select></label>
         <label class="grow">Panelnamn<input data-field="name" maxlength="100" value="${escapeHTML(panel.name)}"></label>
         <div class="slot-grid">
-          ${slotKeys.map((key) => `<label><b>${key}</b><select data-slot="${key}">${connectionOptions(panel.station_id, panel.slots[key])}</select></label>`).join("")}
+          ${slotKeys.map((key) => html`<label><b>${key}</b><select data-slot="${key}">${connectionOptions(panel.station_id, panel.slots[key])}</select></label>`).join("")}
         </div>
         <button type="button" class="icon-button danger" data-action="remove-panel" data-index="${index}" title="Ta bort">×</button>
       </div>`).join("")
@@ -1770,7 +1771,7 @@ function buildStationChain() {
 
 function stationOptions(selectedID) {
   return state.config.stations.map((station) =>
-    `<option value="${escapeHTML(station.id)}" ${station.id === selectedID ? "selected" : ""}>${escapeHTML(station.code)} · ${escapeHTML(station.name)}</option>`
+    html`<option value="${escapeHTML(station.id)}" ${station.id === selectedID ? "selected" : ""}>${escapeHTML(station.code)} · ${escapeHTML(station.name)}</option>`
   ).join("");
 }
 
@@ -1778,16 +1779,16 @@ function connectionOptions(stationID, selectedID) {
   const connections = state.config.connections.filter(
     (connection) => connection.station_a_id === stationID || connection.station_b_id === stationID,
   );
-  return `<option value="">Inte använd</option>${connections.map((connection) => {
+  return html`<option value="">Inte använd</option>${connections.map((connection) => {
     const otherID = connection.station_a_id === stationID ? connection.station_b_id : connection.station_a_id;
     const other = state.config.stations.find((station) => station.id === otherID);
-    const label = other ? `${other.code} · ${connection.track_type === "double" ? "dubbelspår" : "enkelspår"}` : "Okänd sträcka";
-    return `<option value="${escapeHTML(connection.id)}" ${connection.id === selectedID ? "selected" : ""}>${escapeHTML(label)}</option>`;
+    const label = other ? `${other.code} · ${connection.track_type === "double" ? t("dubbelspår") : t("enkelspår")}` : "Okänd sträcka";
+    return html`<option value="${escapeHTML(connection.id)}" ${connection.id === selectedID ? "selected" : ""}>${escapeHTML(label)}</option>`;
   }).join("")}`;
 }
 
 function emptyEditor(title, detail) {
-  return `<div class="empty-editor"><b>${escapeHTML(title)}</b><span>${escapeHTML(detail)}</span></div>`;
+  return html`<div class="empty-editor"><b>${escapeHTML(title)}</b><span>${escapeHTML(detail)}</span></div>`;
 }
 
 async function refreshDevices() {
@@ -1804,7 +1805,7 @@ async function refreshDevices() {
   updateStationOptions(payload.stations || []);
   list.replaceChildren();
   if (!payload.devices.length) {
-    list.innerHTML = '<div class="empty-status">Ingen fysisk TMBox har presenterat sig ännu.</div>';
+    list.innerHTML = html`<div class="empty-status">Ingen fysisk TMBox har presenterat sig ännu.</div>`;
     return;
   }
   for (const device of payload.devices) {
@@ -1858,9 +1859,9 @@ async function refreshRuntime() {
   const detail = document.createElement("small");
   if (runtime.configured) {
     title.textContent = runtime.meet_name;
-    detail.textContent = `${runtime.station_count} stationer · ${runtime.train_count} tågrörelser · ${runtime.linked ? "Cloud kopplad" : "lokal konfiguration"}`;
+    detail.textContent = `${runtime.station_count} stationer · ${runtime.train_count} tågrörelser · ${runtime.linked ? t("Cloud kopplad") : "lokal konfiguration"}`;
   } else {
-    title.textContent = runtime.error ? "Träffkonfigurationen kunde inte aktiveras" : "Ingen träff aktiverad";
+    title.textContent = runtime.error ? "Träffkonfigurationen kunde inte aktiveras" : t("Ingen träff aktiverad");
     detail.textContent = runtime.error
       ? `${runtime.error}. Hämta eller aktivera en rättad version; den tidigare versionen är sparad.`
       : "Koppla en konfigurationsserver eller bygg en lokal träff";
@@ -1891,7 +1892,7 @@ async function refreshRuntime() {
   cloudMeta.textContent = runtime.linked
     ? `${runtime.central_url || "TrainMeet Cloud"} · ${runtime.station_count} stationer · ${runtime.train_count} tågrörelser${publicationTime ? ` · publicerad ${publicationTime}` : ""}`
     : "Koppla en publicerad träff med en sexsiffrig kod.";
-  cloudState.textContent = runtime.linked ? "Kopplad" : "Inte kopplad";
+  cloudState.textContent = runtime.linked ? t("Kopplad") : t("Inte kopplad");
   cloudState.classList.toggle("active", runtime.linked);
   const cloudSteps = {
     server: document.querySelector("#cloud-step-server"),
@@ -1925,7 +1926,7 @@ async function refreshLocalClock() {
   const speedInput = document.querySelector("#local-clock-speed");
   if (document.activeElement !== speedInput) speedInput.value = Number(clock.speed || 1);
   const stateLabel = document.querySelector("#clock-state");
-  stateLabel.textContent = clock.running ? `Går · ${Number(clock.speed || 1)}×` : "Stoppad";
+  stateLabel.textContent = clock.running ? `Går · ${Number(clock.speed || 1)}×` : t("Stoppad");
   stateLabel.classList.toggle("clock-running", Boolean(clock.running));
   renderConnectionBadgeSettings(payload.connection || {});
 }
@@ -2095,11 +2096,11 @@ function renderStationInspector() {
   document.querySelector("#station-inspector-name").textContent = station.name;
   document.querySelector("#station-inspector-meta").textContent = `${station.code || "–"} · ${trains.length} tåg · ${connections.length} anslutna sträckor`;
   document.querySelector("#station-inspector-connections").innerHTML = neighbors.length
-    ? neighbors.map(({ station: neighbor, connection }) => `<span>${escapeHTML(neighbor.name)} · ${connection.track_type === "double" ? "dubbelspår" : "enkelspår"}</span>`).join("")
-    : "<span>Fristående station</span>";
+    ? neighbors.map(({ station: neighbor, connection }) => html`<span>${escapeHTML(neighbor.name)} · ${connection.track_type === "double" ? t("dubbelspår") : t("enkelspår")}</span>`).join("")
+    : html`<span>Fristående station</span>`;
   document.querySelector("#station-inspector-trains").innerHTML = trains.length
-    ? trains.slice(0, 5).map((train) => `<li><button type="button" data-train-number="${escapeHTML(train.trainNumber)}"><b>${escapeHTML(train.trainNumber)}</b><span>${escapeHTML(train.kind)} ${escapeHTML(train.time)}</span></button></li>`).join("")
-    : "<li>Inga tåg i tidtabellen.</li>";
+    ? trains.slice(0, 5).map((train) => html`<li><button type="button" data-train-number="${escapeHTML(train.trainNumber)}"><b>${escapeHTML(train.trainNumber)}</b><span>${escapeHTML(train.kind)} ${escapeHTML(train.time)}</span></button></li>`).join("")
+    : html`<li>Inga tåg i tidtabellen.</li>`;
   document.querySelector("#station-inspector-trains").querySelectorAll("button[data-train-number]").forEach((button) => {
     button.addEventListener("click", () => selectOverviewTrain(button.dataset.trainNumber));
   });
@@ -2120,7 +2121,7 @@ function updateRuntimeDataViews(snapshot, services) {
   document.querySelector("#admin-active-connections").textContent = connections.length;
   document.querySelector("#admin-active-trains").textContent = services.length;
   document.querySelector("#admin-active-clock").textContent = clockTime;
-  document.querySelector("#admin-active-station-list").innerHTML = orderedStations(snapshot).map((station) => `<span><b>${escapeHTML(station.code || "–")}</b>${escapeHTML(station.name)}</span>`).join("");
+  document.querySelector("#admin-active-station-list").innerHTML = orderedStations(snapshot).map((station) => html`<span><b>${escapeHTML(station.code || "–")}</b>${escapeHTML(station.name)}</span>`).join("");
   renderActiveRuntimePlan(snapshot);
 
   document.querySelector("#display-card-topology").textContent = `${stations.length} stationer · ${connections.length} sträckor`;
@@ -2144,10 +2145,10 @@ function renderActiveRuntimePlan(snapshot) {
       const endpointA = stationA?.code || stationA?.name || "?";
       const endpointB = stationB?.code || stationB?.name || "?";
       const keys = [connection.tambox_key_a, connection.tambox_key_b].filter(Boolean).join(" / ");
-      const detail = `${connection.track_type === "double" ? "Dubbelspår" : "Enkelspår"}${keys ? ` · ${keys}` : ""}`;
-      return `<div class="runtime-plan-row"><b>${escapeHTML(endpointA)} ↔ ${escapeHTML(endpointB)}</b><span>${escapeHTML(detail)}</span></div>`;
+      const detail = `${connection.track_type === "double" ? t("Dubbelspår") : t("Enkelspår")}${keys ? ` · ${keys}` : ""}`;
+      return html`<div class="runtime-plan-row"><b>${escapeHTML(endpointA)} ↔ ${escapeHTML(endpointB)}</b><span>${escapeHTML(detail)}</span></div>`;
     }).join("")
-    : '<div class="runtime-plan-empty">Inga aktiva sträckor.</div>';
+    : html`<div class="runtime-plan-empty">Inga aktiva sträckor.</div>`;
 
   const stationIDs = new Set(stations.map((station) => station.id));
   const panels = [...state.snapshots.values()]
@@ -2159,9 +2160,9 @@ function renderActiveRuntimePlan(snapshot) {
         const slot = panel.slots?.[key];
         return slot?.connection_id ? [`${key}→${slot.station_code || "?"}`] : [];
       }).join(" · ");
-      return `<div class="runtime-plan-row"><b>${escapeHTML(panel.panel_name)}</b><span>${escapeHTML(assignments || "Ingen A–D-koppling")}</span></div>`;
+      return html`<div class="runtime-plan-row"><b>${escapeHTML(panel.panel_name)}</b><span>${escapeHTML(assignments || "Ingen A–D-koppling")}</span></div>`;
     }).join("")
-    : '<div class="runtime-plan-empty">Panelerna läses in …</div>';
+    : html`<div class="runtime-plan-empty">Panelerna läses in …</div>`;
 
   document.querySelector("#admin-active-connection-label").textContent = `${connections.length} konfigurerade`;
   copyActiveRuntimeButton.disabled = stations.length === 0;
@@ -2207,7 +2208,7 @@ async function validateRuntimeImport() {
 
 function renderRuntimeImportReview(validation) {
   const counts = validation.counts;
-  document.querySelector("#runtime-import-facts").innerHTML = `
+  document.querySelector("#runtime-import-facts").innerHTML = html`
     <div><b>${counts.stations}</b><span>stationer</span></div>
     <div><b>${counts.operating_points}</b><span>driftplatser</span></div>
     <div><b>${counts.connections}</b><span>sträckor</span></div>
@@ -2216,14 +2217,14 @@ function renderRuntimeImportReview(validation) {
   const warningBox = document.querySelector("#runtime-import-warnings");
   warningBox.classList.toggle("hidden", validation.warnings.length === 0);
   warningBox.innerHTML = validation.warnings.length
-    ? `<b>Kontrollera före aktivering</b><ul>${validation.warnings.map((warning) => `<li>${escapeHTML(warning)}</li>`).join("")}</ul>`
+    ? html`<b>Kontrollera före aktivering</b><ul>${validation.warnings.map((warning) => html`<li>${escapeHTML(warning)}</li>`).join("")}</ul>`
     : "";
   document.querySelector("#runtime-import-stations").innerHTML = validation.stations.map((station) => {
     const operatingPoints = station.operating_points?.length
       ? station.operating_points.map((point) => `${point.name}: ${point.tracks.join(", ") || "inga spår"} · ${point.timetable_rows} rader`).join(" · ")
       : "";
-    return `<tr>
-      <th><b>${escapeHTML(station.code)}</b><span>${escapeHTML(station.name)}</span>${operatingPoints ? `<small>${escapeHTML(operatingPoints)}</small>` : ""}</th>
+    return html`<tr>
+      <th><b>${escapeHTML(station.code)}</b><span>${escapeHTML(station.name)}</span>${operatingPoints ? html`<small>${escapeHTML(operatingPoints)}</small>` : ""}</th>
       <td>${station.track_count}</td>
       <td>${station.connection_count}</td>
       <td>${station.panel_count}</td>
@@ -2356,19 +2357,19 @@ function renderRouteExplorer() {
   overviewRouteList.innerHTML = visibleServices.length
     ? visibleServices.map((service) => {
         const trainNumber = String(service.train_number);
-        return `<button type="button" data-train-number="${escapeHTML(trainNumber)}" class="route-number${trainNumber === state.selectedTrainNumber ? " active" : ""}">${escapeHTML(trainNumber)}</button>`;
+        return html`<button type="button" data-train-number="${escapeHTML(trainNumber)}" class="route-number${trainNumber === state.selectedTrainNumber ? " active" : ""}">${escapeHTML(trainNumber)}</button>`;
       }).join("")
-    : '<p class="route-empty">Inga tåg hittades.</p>';
+    : html`<p class="route-empty">Inga tåg hittades.</p>`;
 
   const selected = services.find((service) => String(service.train_number) === state.selectedTrainNumber);
   const detail = document.querySelector("#overview-route-detail");
   if (!selected) {
     detail.innerHTML = services.length
-      ? '<div class="route-detail-empty">Välj ett tåg i listan, banöversikten eller tågdiagrammet.</div>'
-      : '<div class="route-detail-empty">Tidtabellen saknar tågrutter.</div>';
+      ? html`<div class="route-detail-empty">Välj ett tåg i listan, banöversikten eller tågdiagrammet.</div>`
+      : html`<div class="route-detail-empty">Tidtabellen saknar tågrutter.</div>`;
   } else {
     const stops = [...(selected.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
-    detail.innerHTML = `
+    detail.innerHTML = html`
       <div class="route-detail-heading">
         <h3>${escapeHTML(selected.train_number)}</h3>
         <span>${stops.length} stopp</span>
@@ -2380,9 +2381,9 @@ function renderRouteExplorer() {
           const departure = stop.departure_time ? `avg ${String(stop.departure_time).slice(0, 5)}` : "";
           const times = [arrival, departure].filter(Boolean).join(" · ") || "tid saknas";
           const positionClass = index === 0 ? " first" : (index === stops.length - 1 ? " last" : "");
-          return `<li class="route-stop${positionClass}${stop.station_id === state.selectedStationID ? " selected" : ""}">
+          return html`<li class="route-stop${positionClass}${stop.station_id === state.selectedStationID ? " selected" : ""}">
             <i></i>
-            <button type="button" data-station-id="${escapeHTML(stop.station_id)}"><b>${escapeHTML(station?.name || stop.station_name || "Okänd station")}</b><span>${escapeHTML(times)}</span></button>
+            <button type="button" data-station-id="${escapeHTML(stop.station_id)}"><b>${escapeHTML(station?.name || stop.station_name || t("Okänd station"))}</b><span>${escapeHTML(times)}</span></button>
           </li>`;
         }).join("")}
       </ol>`;
@@ -2521,12 +2522,12 @@ function showSetup(installation) {
   }
   if (installation.runtime?.configured) {
     document.querySelector("#setup-active-day").value = installation.runtime.active_day || "Dagl";
-    document.querySelector("#setup-runtime-summary").innerHTML = `
+    document.querySelector("#setup-runtime-summary").innerHTML = html`
       <b>${escapeHTML(installation.runtime.meet_name)}</b>
       <span>${Number(installation.runtime.station_count || 0)} stationer · ${Number(installation.runtime.train_count || 0)} tågrörelser</span>
     `;
   }
-  setConnection("waiting", "Installation pågår");
+  setConnection("waiting", t("Installation pågår"));
 }
 
 async function showLogin() {
@@ -2578,11 +2579,14 @@ async function bootstrap() {
 
 function setConnection(kind, text) {
   connectionStatus.className = `status ${kind}`;
-  connectionStatus.querySelector("b").textContent = text;
+  const label = connectionStatus.querySelector("b");
+  label.dataset.tmText = text;
+  label.textContent = t(text);
 }
 
 function setMessage(element, text, kind = "") {
-  element.textContent = text || "";
+  element.dataset.tmText = text || "";
+  element.textContent = t(text || "");
   element.className = `form-message ${kind}`.trim();
 }
 
@@ -3070,11 +3074,11 @@ function renderDisplaySelection(snapshot) {
   panel.classList.toggle("hidden", !service && !station);
   if (service) {
     const stops = [...(service.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
-    panel.innerHTML = `<p>TÅG</p><b>${escapeHTML(service.train_number)}</b><span>${stops.length} stopp</span><small>${stops.map((stop) => escapeHTML((snapshot.stations || []).find((item) => item.id === stop.station_id)?.name || "?")).join(" → ")}</small>`;
+    panel.innerHTML = html`<p>TÅG</p><b>${escapeHTML(service.train_number)}</b><span>${stops.length} stopp</span><small>${stops.map((stop) => escapeHTML((snapshot.stations || []).find((item) => item.id === stop.station_id)?.name || "?")).join(" → ")}</small>`;
   } else if (station) {
     const rows = stationTrafficRows(snapshot, station.id);
     const connected = (snapshot.connections || []).filter((connection) => connection.station_a_id === station.id || connection.station_b_id === station.id).length;
-    panel.innerHTML = `<p>STATION</p><b>${escapeHTML(station.name)}</b><span>${escapeHTML(station.code || "–")} · ${rows.length} tåg · ${connected} sträckor</span><small>${rows.slice(0, 4).map((row) => `${escapeHTML(row.trainNumber)} ${escapeHTML(row.kind)} ${escapeHTML(row.time)}`).join(" · ") || "Inga tidtabellslag"}</small>`;
+    panel.innerHTML = html`<p>STATION</p><b>${escapeHTML(station.name)}</b><span>${escapeHTML(station.code || "–")} · ${rows.length} tåg · ${connected} sträckor</span><small>${rows.slice(0, 4).map((row) => `${escapeHTML(row.trainNumber)} ${escapeHTML(row.kind)} ${escapeHTML(row.time)}`).join(" · ") || "Inga tidtabellslag"}</small>`;
   }
 }
 
@@ -3236,18 +3240,18 @@ function clockSVG(style, darkBackground, showSeconds, stopped) {
     const length = major ? config.hourMarkerLength : config.minuteMarkerLength;
     const width = major ? config.hourMarkerWidth : config.minuteMarkerWidth;
     const start = 8 + config.bezelWidth;
-    return `<line x1="100" y1="${start}" x2="100" y2="${start + length}" stroke="${markerColor}" stroke-width="${width}" transform="rotate(${index * 6} 100 100)"/>`;
+    return html`<line x1="100" y1="${start}" x2="100" y2="${start + length}" stroke="${markerColor}" stroke-width="${width}" transform="rotate(${index * 6} 100 100)"/>`;
   }).join("");
   const numbers = config.hasNumbers ? Array.from({ length: 12 }, (_, index) => {
     const value = index === 0 ? 12 : index;
     const angle = (index * 30 - 90) * Math.PI / 180;
-    return `<text x="${100 + 68 * Math.cos(angle)}" y="${100 + 68 * Math.sin(angle)}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="bold" fill="${numberColor}" font-family="sans-serif">${value}</text>`;
+    return html`<text x="${100 + 68 * Math.cos(angle)}" y="${100 + 68 * Math.sin(angle)}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="bold" fill="${numberColor}" font-family="sans-serif">${value}</text>`;
   }).join("") : "";
-  const secondHand = showSeconds ? `<g data-clock-hand="second" transform="rotate(0 100 100)">
+  const secondHand = showSeconds ? html`<g data-clock-hand="second" transform="rotate(0 100 100)">
     <line x1="100" y1="118" x2="100" y2="${100 - config.secondHandLength}" stroke="${config.secondHandColor}" stroke-width="${config.secondHandWidth}" stroke-linecap="round"/>
-    ${config.secondBallRadius > 0 ? `<circle cx="100" cy="${100 - config.secondBallOffset}" r="${config.secondBallRadius}" fill="${config.secondHandColor}"/>` : ""}
+    ${config.secondBallRadius > 0 ? html`<circle cx="100" cy="${100 - config.secondBallOffset}" r="${config.secondBallRadius}" fill="${config.secondHandColor}"/>` : ""}
   </g>` : "";
-  return `<svg class="clock-face${stopped ? " stopped" : ""}" viewBox="0 0 200 200">
+  return html`<svg class="clock-face${stopped ? " stopped" : ""}" viewBox="0 0 200 200">
     <circle cx="100" cy="100" r="96" fill="none" stroke="${bezelColor}" stroke-width="${config.bezelWidth}"/>
     <circle cx="100" cy="100" r="${94 - config.bezelWidth / 2}" fill="${faceColor}"/>
     ${marks}
@@ -3355,7 +3359,7 @@ function renderClock(snapshot) {
   const signature = available.join("|");
   if (styleSelect.dataset.signature !== signature) {
     styleSelect.dataset.signature = signature;
-    styleSelect.innerHTML = available.map((value) => `<option value="${escapeHTML(value)}">${escapeHTML(clockStyleLabels[value] || value)}</option>`).join("");
+    styleSelect.innerHTML = available.map((value) => html`<option value="${escapeHTML(value)}">${escapeHTML(clockStyleLabels[value] || value)}</option>`).join("");
   }
   styleSelect.value = style;
   const seconds = currentClockSeconds(snapshot);
@@ -3370,10 +3374,10 @@ function renderClock(snapshot) {
   if (target.dataset.clockSignature !== renderSignature) {
     target.dataset.clockSignature = renderSignature;
     const face = style === "digital"
-      ? `<div class="clock-digital${stopped ? " stopped" : ""}"></div>`
+      ? html`<div class="clock-digital${stopped ? " stopped" : ""}"></div>`
       : clockSVG(style, darkBackground, showSeconds, stopped);
-    const reason = stopText ? `<div class="clock-stopped">${escapeHTML(stopText)}</div>` : "";
-    target.innerHTML = `<div class="clock-shell${style === "digital" ? " clock-shell--digital" : ""}">${face}${reason}</div>`;
+    const reason = stopText ? html`<div class="clock-stopped">${escapeHTML(stopText)}</div>` : "";
+    target.innerHTML = html`<div class="clock-shell${style === "digital" ? " clock-shell--digital" : ""}">${face}${reason}</div>`;
   }
   if (style === "digital") {
     const digital = target.querySelector(".clock-digital");
@@ -3388,7 +3392,7 @@ function renderDashboard(snapshot) {
   const target = document.querySelector("#dashboard-view");
   const activeConnections = (snapshot.connection_states || []).filter((state) => state.state !== "free").length;
   const activeTrains = (snapshot.train_positions || []).length;
-  target.innerHTML = `<div class="dashboard-column">
+  target.innerHTML = html`<div class="dashboard-column">
     <section class="display-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><p class="clock-meta">${Number(snapshot.clock?.speed || 1)}× · ${snapshot.clock?.running ? "Klockan går" : "Klockan är stoppad"}</p></section>
     <section class="display-card dashboard-stats">
       <div class="dashboard-stat"><b>${activeTrains}</b><span>aktiva tåg</span></div>
@@ -3442,7 +3446,7 @@ function renderConnectionBadge(snapshot) {
 function renderDisplay(snapshot) {
   displaySnapshot = snapshot;
   document.querySelector("#display-loading").classList.add("hidden");
-  document.querySelector("#display-title").textContent = `${snapshot.meet?.name || "TrainMeet"} · ${({ topology: "Banöversikt", graph: "Tågdiagram", clock: "Träffklocka", dashboard: "Översikt" })[displayKind]}`;
+  document.querySelector("#display-title").textContent = `${snapshot.meet?.name || "TrainMeet"} · ${({ topology: t("Banöversikt"), graph: "Tågdiagram", clock: t("Träffklocka"), dashboard: t("Översikt") })[displayKind]}`;
   document.querySelector("#display-day").textContent = snapshot.active_day || "Dagl";
   const isClock = displayKind === "clock";
   document.querySelector("#display-speed").classList.toggle("hidden", !isClock);
@@ -3456,7 +3460,7 @@ function renderDisplay(snapshot) {
   trainSelect.classList.toggle("hidden", !trainSelectable);
   if (trainSelect.dataset.signature !== trainSignature) {
     trainSelect.dataset.signature = trainSignature;
-    trainSelect.innerHTML = `<option value="">Alla tåg</option>${services.map((service) => `<option value="${escapeHTML(service.train_number)}">Tåg ${escapeHTML(service.train_number)}</option>`).join("")}`;
+    trainSelect.innerHTML = html`<option value="">Alla tåg</option>${services.map((service) => html`<option value="${escapeHTML(service.train_number)}">Tåg ${escapeHTML(service.train_number)}</option>`).join("")}`;
   }
   if (!services.some((service) => String(service.train_number) === state.displaySelectedTrainNumber)) state.displaySelectedTrainNumber = null;
   trainSelect.value = state.displaySelectedTrainNumber || "";
@@ -3862,7 +3866,7 @@ function renderUsers() {
   if (!body) return;
   const owner = users.role === "owner";
 
-  usersEl("role-chip").textContent = owner ? "Ägare" : "Administratör";
+  usersEl("role-chip").textContent = owner ? t("Ägare") : t("Administratör");
   usersEl("invite-form")?.classList.toggle("hidden", !owner);
 
   body.replaceChildren(...users.list.map((user) => {
@@ -3870,8 +3874,8 @@ function renderUsers() {
 
     const state = user.invitation_pending
       ? "Inbjuden — har inte valt lösenord"
-      : "Aktiv";
-    const roleLabel = user.role === "owner" ? "Ägare" : "Administratör";
+      : t("Aktiv");
+    const roleLabel = user.role === "owner" ? t("Ägare") : t("Administratör");
 
     const name = document.createElement("td");
     name.className = "users-name";
@@ -3908,7 +3912,7 @@ function renderUsers() {
         user.role === "owner" ? "Gör till administratör" : "Gör till ägare",
         () => setUserRole(user, user.role === "owner" ? "admin" : "owner"),
       ));
-      actions.append(usersButton("Ta bort", () => removeUser(user), "danger"));
+      actions.append(usersButton(t("Ta bort"), () => removeUser(user), "danger"));
     }
     tr.append(actions);
     return tr;
@@ -4436,7 +4440,7 @@ function renderTrafficOnline(snapshot) {
 
       const chip = document.createElement("span");
       chip.className = `traffic-chip ${late ? "late" : "on-time"}`;
-      chip.textContent = late ? `${Math.abs(away)} min sen` : "I tid";
+      chip.textContent = late ? `${Math.abs(away)} min sen` : t("I tid");
 
       card.append(number, leg, bar, times, chip);
       return { card, late };
@@ -4499,7 +4503,7 @@ function renderTrafficStations(snapshot) {
       const status = document.createElement("span");
       status.className = "traffic-status";
       // Härledd, aldrig lagrad: ett lagrat statusfält blir inaktuellt.
-      status.textContent = away === null ? "" : away < 0 ? "Avgått" : away <= 2 ? "Strax" : `${away} min`;
+      status.textContent = away === null ? "" : away < 0 ? t("Avgått") : away <= 2 ? "Strax" : `${away} min`;
       if (away !== null && away >= 0 && away <= 2) item.classList.add("needs-attention");
       item.append(time, train, status);
       list.append(item);
@@ -4649,7 +4653,7 @@ function updateStepSubtitles(modeState) {
   // en bana med stationer men utan sträckor är just det man vill se i räknaren.
   const topology = state.topology;
   if (topology) {
-    const parts = [plural(topology.stations.length, "station", "stationer")];
+    const parts = [plural(topology.stations.length, "station", t("stationer"))];
     if (topology.connections.length) {
       parts.push(plural(topology.connections.length, "sträcka", "sträckor"));
     }
@@ -5529,7 +5533,7 @@ async function withDraft(change) {
     // Omritningen nollar meddelanderaden, så kvittensen sätts efter den -
     // annars skrivs "Sparat" och raderas i samma andetag.
     await refreshBuildTopology();
-    setMessage(message, "Sparat", "success");
+    setMessage(message, t("Sparat"), "success");
   } catch {
     setMessage(message, "Ändringen sparades inte", "error");
   }
