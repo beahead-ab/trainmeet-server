@@ -17,7 +17,7 @@ for (const [id, value] of Object.entries(original.sv)) {
   messages[value] = row;
   if (row.en) messages[row.en] = row;
 }
-for (const line of fs.readFileSync(path.join(source, 'ui.txt'), 'utf8').split('\n')) {
+for (const line of ['ui.txt', 'release.txt'].flatMap((file) => fs.readFileSync(path.join(source, file), 'utf8').split('\n'))) {
   if (!line.trim() || line.startsWith('#')) continue;
   const fields = line.split('|');
   if (fields.length !== 5 || fields.some((field) => !field)) throw new Error('Expected en|sv|da|nb|de: ' + line);

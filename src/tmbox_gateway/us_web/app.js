@@ -4,7 +4,7 @@ const editor = document.querySelector('#editor');
 const conductorView = location.pathname.endsWith('/conductor');
 const readStored = (key) => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const store = (key, value) => { try { value ? sessionStorage.setItem(key, value) : sessionStorage.removeItem(key); } catch { /* in-memory state still works */ } };
-const state = { data: null, selected: '', online: false, busy: false, history: false, token: conductorView ? readStored('us-token') : null, pending: readStored(conductorView ? 'us-pending-conductor' : 'us-pending-dispatcher'), notice: '', signature: '' };
+const state = { data: null, selected: '', online: false, busy: false, history: false, loginVisible: false, token: conductorView ? readStored('us-token') : null, pending: readStored(conductorView ? 'us-pending-conductor' : 'us-pending-dispatcher'), notice: '', signature: '' };
 const pendingKey = conductorView ? 'us-pending-conductor' : 'us-pending-dispatcher';
 const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const labels = {draft:'Draft · not in effect',transmitted:'Transmitted · not in effect',received:'Received · not in effect',readback_pending:'Readback reported · not in effect',active:'In effect',release_requested:'Release reported · awaiting confirmation',closed:'Released',void:'Voided'};
@@ -12,8 +12,15 @@ const holding = (w) => ['active','release_requested'].includes(w.status);
 const closed = (w) => ['closed','void'].includes(w.status);
 const session = () => state.data?.session;
 const run = (id) => session()?.runs.find((r) => r.id === id);
-const disabled = () => !state.online || state.busy || Boolean(state.pending) || session()?.status === 'closed';
-const button = (label, action, extra='', primary=false) => html`<button type="button" data-action="${action}" ${extra} ${disabled()?'disabled':''} class="${primary?'primary':''}">${escape(t(label))}</button>`;
+const disabled = (action='') => !state.online || state.busy || Boolean(state.pending) || (session()?.status === 'closed' && !['import','create_session'].includes(action));
+const button = (label, action, extra='', primary=false) => html`<button type="button" data-action="${action}" ${extra} ${!['details','history'].includes(action)&&disabled(action)?'disabled':''} class="${primary?'primary':''}">${escape(t(label))}</button>`;
+// randomUUID is unavailable on ordinary LAN HTTP; getRandomValues still works.
+function createCommandID() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return crypto.randomUUID();
+  if (typeof globalThis.crypto?.getRandomValues !== 'function') throw new Error(t('Secure random numbers are unavailable. Use a current browser.'));
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return 'us-' + Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
 document.querySelector(`nav a[href="/us/${conductorView?'conductor':'dispatcher'}"]`).setAttribute('aria-current', 'page');
 
 async function api(path, body) {
@@ -37,8 +44,8 @@ function status() {
   const message = state.pending ? t("Command result is unconfirmed. No further operational actions are allowed until it is checked.") : !state.online && state.data ? t("Connection lost. Showing the last confirmed server state. Actions are blocked.") : t(state.notice);
   notice.hidden = !message;
   notice.innerHTML = html`${escape(message)}${state.pending?html`<button type="button" data-action="check-result">Check result</button>`:''}`;
-  document.querySelectorAll('[data-action]:not([data-action="check-result"]):not([data-action="history"]):not([data-action="details"])').forEach((el) => { el.disabled = disabled(); });
-  editor.querySelectorAll('button[type="submit"]').forEach((el) => { el.disabled = disabled(); });
+  document.querySelectorAll('[data-action]:not([data-action="check-result"]):not([data-action="history"]):not([data-action="details"])').forEach((el) => { el.disabled = disabled(el.dataset.action); });
+  editor.querySelectorAll('button[type="submit"]').forEach((el) => { el.disabled = disabled(el.form?.dataset.usAction); });
 }
 
 async function refresh(force=false) {
@@ -49,14 +56,18 @@ async function refresh(force=false) {
     if (force || signature !== state.signature) { state.signature = signature; render(); }
   } catch (error) {
     state.online = false;
+    if (error.status === 401) {
+      state.data = null; state.signature = ''; editor.close();
+      if (conductorView) { state.token = null; store('us-token', null); }
+    }
     if (error.status === 401 || !state.data) login(error.status === 401 ? '' : error.message);
   }
   status();
 }
 
 async function command(action, payload={}, revision=session()?.revision) {
-  if (disabled()) throw new Error(t("Wait for a confirmed connection and command result"));
-  const id = crypto.randomUUID();
+  if (disabled(action)) throw new Error(t("Wait for a confirmed connection and command result"));
+  const id = createCommandID();
   state.pending = id; store(pendingKey, id); state.busy = true; status();
   try {
     const result = await api('/v1/us/commands', {action, command_id:id, session_id:session()?.id, expected_revision:revision, ...payload});
@@ -85,7 +96,13 @@ async function checkResult() {
   } catch (error) { notify(error.message); }
 }
 
-function login(error='') {
+function login(error='', force=false) {
+  // Polling must never replace the form while someone is typing credentials.
+  if (state.loginVisible && !force) {
+    if (error) app.querySelector('.form-error').textContent = error;
+    return;
+  }
+  state.loginVisible = true;
   app.innerHTML = html`<section class="login"><p class="eyebrow">Train Meet US · ${conductorView?t("Conductor"):t("Train dispatcher")}</p><h1>${conductorView?t("Join your local session"):t("Sign in to dispatch")}</h1><p>${conductorView?t("Ask the dispatcher for a one-time connection code. The dispatcher assigns your train after you connect."):t("Use your existing TrainMeet Server administrator account. No Cloud connection is needed.")}</p><form id="access-form">${conductorView?html`<label>Your name<input name="name" autocomplete="name" required maxlength="80"></label><label>Connection code<input name="code" inputmode="numeric" autocomplete="one-time-code" required placeholder="123 456"></label>`:html`<label>Username<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label>`}<p class="form-error" role="alert">${escape(error)}</p><button class="primary" type="submit">${conductorView?t("Connect"):t("Sign in")}</button></form><p class="form-note">First installation? <a href="/">Open Server setup</a>.</p></section>`;
   app.querySelector('form').onsubmit = async (event) => {
     event.preventDefault(); const form=event.currentTarget, fields=new FormData(form), submit=form.querySelector('button'); submit.disabled=true;
@@ -106,6 +123,7 @@ function modal(title, content) {
 function bindForm(action, makePayload) {
   const revision=session()?.revision;
   const form=editor.querySelector('form');
+  form.dataset.usAction = action;
   form.onsubmit=async(event)=>{event.preventDefault(); const error=form.querySelector('.form-error'); error.textContent='';
     try { const payload=await makePayload(new FormData(form),form); await command(action,payload,revision); editor.close(); }
     catch(err){error.textContent=err.message;}
@@ -116,6 +134,7 @@ const formEnd = (label) => html`<p class="form-error" role="alert"></p><div clas
 
 function render() {
   if (conductorView && state.data.role !== 'conductor') { login(); return; }
+  state.loginVisible = false;
   const current=session();
   if (!current || current.status === 'closed') {
     app.innerHTML=html`<section class="welcome"><p class="eyebrow">${current?t("Session complete"):t("Local-first operations")}</p><h1>${current?t("Session safely closed"):t("Start a US session")}</h1><p>${state.data.role==='dispatcher'?t("Import a reviewed US runtime package. Its topology and timetable are frozen for this session; future Cloud changes cannot alter live authorities."):t("Waiting for the dispatcher to start a session and assign your train.")}</p>${state.data.role==='dispatcher'?button(t("Import US package"),'import','',true):''}${current?html`<p class="form-note">${escape(current.name)} · final revision ${current.revision} · history retained on the server</p>`:''}</section>`;status();return;
@@ -158,7 +177,7 @@ function renderDispatcher() {
   const current=session(), selected=run(state.selected);
   const pending=current.warrants.filter((w)=>!holding(w)&&!closed(w));
   const active=current.warrants.filter(holding), history=current.warrants.filter(closed);
-  app.innerHTML=html`<div class="page-heading"><div><p class="eyebrow">Train dispatcher · Track Warrant Control</p><h1>${escape(current.name)}</h1><p>Revision ${current.revision} · ${current.runs.length} train runs · ${active.length} held track warrants</p></div><div class="toolbar">${button(t("Connect conductor"),'pair')}${button(t("+ Extra train"),'extra')}${button(t("Finish session"),'finish_session')}</div></div><div class="board"><section class="column" aria-label="All train runs"><div class="column-head"><h2>All trains</h2><small>${current.runs.length} runs</small></div><div class="scroll train-list" data-scroll="trains">${current.runs.map(trainRow).join('')||html`<p class="empty">No scheduled runs. Add an extra train.</p>`}</div>${selected?html`<div class="column-head">${button(t("Train details"),'details')}${button(t("Assign"),'assign')}</div>`:''}</section><section class="column" aria-label="Track diagram"><div class="column-head"><h2>The railroad</h2><small>Reported positions · mileposts</small></div><div class="scroll map-viewport" data-scroll="map">${stripMap()}</div><div class="map-key"><span><i></i>Reserved authority limits</span><span><i class="draft"></i>Proposed · not in effect</span></div></section><section class="column" aria-label="Track warrants"><div class="column-head"><h2>Track warrants</h2>${selected?button(t("+ Draft"),'draft','',true):''}</div><div class="scroll warrant-list" data-scroll="warrants"><p class="list-label">Needs attention · ${pending.length}</p>${pending.map(warrantCard).join('')||html`<p class="muted">Nothing waiting.</p>`}<p class="list-label">In effect / release pending · ${active.length}</p>${active.map(warrantCard).join('')||html`<p class="muted">No reserved authority limits.</p>`}<p class="list-label">History · ${history.length}</p>${history.length?html`<button type="button" data-action="history">${state.history?t("Hide"):t("Show")} history</button>`:''}${state.history?history.map(warrantCard).join(''):''}</div></section></div>`;
+  app.innerHTML=html`<div class="page-heading"><div><p class="eyebrow">Train dispatcher · Track Warrant Control</p><h1>${escape(current.name)}</h1><p>Revision ${current.revision} · ${current.runs.length} train runs · ${active.length} track warrants reserving limits</p></div><div class="toolbar">${button(t("Connect conductor"),'pair')}${button(t("+ Extra train"),'extra')}${button(t("Finish session"),'finish_session')}</div></div><div class="board"><section class="column" aria-label="All train runs"><div class="column-head"><h2>All trains</h2><small>${current.runs.length} runs</small></div><div class="scroll train-list" data-scroll="trains">${current.runs.map(trainRow).join('')||html`<p class="empty">No scheduled runs. Add an extra train.</p>`}</div>${selected?html`<div class="column-head">${button(t("Train details"),'details')}${button(t("Assign"),'assign')}</div>`:''}</section><section class="column" aria-label="Track diagram"><div class="column-head"><h2>The railroad</h2><small>Reported positions · mileposts</small></div><div class="scroll map-viewport" data-scroll="map">${stripMap()}</div><div class="map-key"><span><i></i>Reserved authority limits</span><span><i class="draft"></i>Proposed · not in effect</span></div></section><section class="column" aria-label="Track warrants"><div class="column-head"><h2>Track warrants</h2>${selected?button(t("+ Draft"),'draft','',true):''}</div><div class="scroll warrant-list" data-scroll="warrants"><p class="list-label">Needs attention · ${pending.length}</p>${pending.map(warrantCard).join('')||html`<p class="muted">Nothing waiting.</p>`}<p class="list-label">In effect / release pending · ${active.length}</p>${active.map(warrantCard).join('')||html`<p class="muted">No reserved authority limits.</p>`}<p class="list-label">History · ${history.length}</p>${history.length?html`<button type="button" data-action="history">${state.history?t("Hide"):t("Show")} history</button>`:''}${state.history?history.map(warrantCard).join(''):''}</div></section></div>`;
 }
 
 function stripMap() {
@@ -179,7 +198,7 @@ function renderConductor() {
   const current=session(), selected=run(state.selected);
   if(!selected){app.innerHTML=html`<section class="welcome"><h1>Connected</h1><p>Waiting for the dispatcher to assign your train. This page updates automatically.</p></section>`;return;}
   const warrants=current.warrants.filter((w)=>w.run_id===selected.id&&!closed(w));
-  app.innerHTML=html`<div class="conductor-layout">${current.runs.length>1?html`<div>${current.runs.map(trainRow).join('')}</div>`:''}<section class="card"><p class="eyebrow">Conductor · assigned train</p><h1>${escape(selected.symbol)} <small>${escape(t(selected.direction==='east'?'Eastbound':'Westbound'))}</small></h1><p>${escape(current.name)}</p><p class="muted">${escape(selected.locomotive||t("Locomotive not specified"))} · ${escape(selected.conductor_name)}</p><p class="muted">${escape(positionLabel(selected))}</p><div class="actions">${button(selected.ready?t("Ready reported"):t("Ready to copy"),'ready')}${button(t("Report"),'report','',true)}${button(t("Request authority"),'request')}</div></section><section class="card"><h2>Your track warrants</h2>${warrants.map(warrantCard).join('')||html`<p class="muted">No authority issued. Timetable times do not authorize movement.</p>`}</section><section class="card"><h2>Timetable & work</h2>${schedule(selected)}</section><section class="card"><h2>Reports & confirmations</h2>${events(selected)}</section></div>`;
+  app.innerHTML=html`<div class="conductor-layout">${current.runs.length>1?html`<div>${current.runs.map(trainRow).join('')}</div>`:''}<section class="card"><p class="eyebrow">Conductor · assigned train</p><h1>${escape(selected.symbol)} <small>${escape(t(selected.direction==='east'?'Eastbound':'Westbound'))}</small></h1><p>${escape(current.name)}</p><p class="muted">${escape(selected.locomotive||t("Locomotive not specified"))} · ${escape(selected.conductor_name)}</p><p class="muted">${escape(positionLabel(selected))}</p><div class="actions">${button(selected.ready?t("Ready reported"):t("Ready to copy"),'ready')}${button(t("Report"),'report','',true)}${button(t("Request authority"),'request')}</div></section><section class="card"><h2>Your track warrants</h2>${warrants.map(warrantCard).join('')||html`<p class="muted">No authority issued. Timetable times do not authorize movement.</p>`}</section><section class="card"><h2>Train schedule & job instructions</h2>${schedule(selected)}</section><section class="card"><h2>Reports & confirmations</h2>${events(selected)}</section></div>`;
 }
 function schedule(r) { return r.schedule.map((s)=>html`<div class="schedule-row"><time>${escape(s.time)}</time><span>${escape(session().package.nodes.find((n)=>n.id===s.node_id)?.name)}<br><small>${escape(s.work||'')}</small></span></div>`).join('')||html`<p class="muted">Extra train · no planned stops.</p>`; }
 function events(r) { return session().events.filter((e)=>e.target_id===r.id||session().warrants.some((w)=>w.id===e.target_id&&w.run_id===r.id)).slice(0,20).map((e)=>html`<div class="event"><strong>${escape(e.meet_time)}</strong> · ${escape(e.action.replaceAll('_',' '))}<br><small>Revision ${e.revision} · ${escape(e.actor)} · ${escape(e.recorded_at)}</small></div>`).join('')||html`<p class="muted">No reports yet.</p>`; }
@@ -195,8 +214,8 @@ async function action(name, warrantId) {
   const selected=run(state.selected);
   if(name==='check-result'){await checkResult();return;}
   if(name==='history'){state.history=!state.history;render();return;}
-  if(name==='details'&&selected){modal(selected.symbol,html`<p class="form-note">Session-specific run: ${escape(selected.id)}</p><h3>Timetable & work</h3>${schedule(selected)}<h3>Recent operations</h3>${events(selected)}`);return;}
-  if(disabled())return;
+  if(name==='details'&&selected){modal(selected.symbol,html`<p class="form-note">Session-specific run: ${escape(selected.id)}</p><h3>Train schedule & job instructions</h3>${schedule(selected)}<h3>Recent operations</h3>${events(selected)}`);return;}
+  if(disabled(name))return;
   if(name==='import'){
     modal(t("Activate a reviewed US package"),html`<form><p class="form-note">Starts a new, separate US session. Does not modify EU traffic. No active US session can be replaced.</p><label>Runtime JSON file<input name="file" type="file" accept=".json,application/json" required></label><label class="confirm-label"><input type="checkbox" required>I reviewed the topology and the model-railroad test profile.</label>${formEnd(t("Start US session"))}</form>`);
     bindForm('create_session',async(fields)=>{const file=fields.get('file');if(file.size>2000000)throw new Error(t("Package is too large"));return{package:JSON.parse(await file.text())};});return;
@@ -241,7 +260,7 @@ TrainMeetI18n.subscribe(() => {
   const fields = [...app.querySelectorAll('input,select,textarea')].map((element) => ({name:element.name,value:element.value,checked:element.checked}));
   const focusedName = app.contains(document.activeElement) ? document.activeElement.name : null;
   if (state.data) render();
-  else login();
+  else login('', true);
   for (const saved of fields) {
     const element = [...app.querySelectorAll('input,select,textarea')].find((field) => field.name === saved.name);
     if (element) { element.value = saved.value; element.checked = saved.checked; }

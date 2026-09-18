@@ -15,7 +15,7 @@ function fixture(role='dispatcher') {
 
 // Execute the actual browser module with a minimal DOM surface. Rendering,
 // translation and action dialogs run as shipped, with no network or timers.
-async function setup(role='dispatcher') {
+async function setup(role='dispatcher', options={}) {
  const elements=new Map();
  function element(selector) {
   if(!elements.has(selector)) elements.set(selector,{innerHTML:'',textContent:'',dataset:{},
@@ -27,18 +27,24 @@ async function setup(role='dispatcher') {
   querySelector:element,querySelectorAll:()=>[],addEventListener(){},
   createElement:()=>({set innerHTML(value){this.value=value.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');}})};
  const data=fixture(role), requests=[];
- const context={document,navigator:{languages:['sv-SE']},location:{pathname:'/us/'+role,origin:'http://local.test'},
+ const context={document,navigator:{languages:['sv-SE']},location:{pathname:'/us/'+role,origin:'http://local.test'},crypto:require('node:crypto').webcrypto,
   localStorage:{getItem:key=>key==='trainmeet.language'?'sv':null,setItem(){}},sessionStorage:{getItem:()=>null,setItem(){},removeItem(){}},
   addEventListener(){},setTimeout:()=>0,clearTimeout(){},AbortController,
-  fetch:async(url,options)=>{requests.push({url,method:options.method});return {ok:true,json:async()=>data};}};
+  fetch:async(url,request)=>{requests.push({url,method:request.method});return {ok:!options.unauthenticated,status:options.unauthenticated?401:200,json:async()=>options.unauthenticated?{message:'Sign in required'}:data};}};
  context.window=context;
  vm.createContext(context);
  for(const file of ['web/i18n-messages.js','web/i18n.js']) vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),context);
  const source=fs.readFileSync(path.join(root,'us_web/app.js'),'utf8');
- const api=await vm.runInContext('(async()=>{'+source+'\nreturn {state,runStatus,warrantCard,stripMap,action,holding};})()',context);
- return {api,language:context.TrainMeetI18n,requests,app:element('#app'),editor:element('#editor'),data};
+ const api=await vm.runInContext('(async()=>{'+source+'\nreturn {state,runStatus,warrantCard,stripMap,action,holding,disabled,refresh,command,createCommandID,render};})()',context);
+ return {api,language:context.TrainMeetI18n,requests,app:element('#app'),editor:element('#editor'),data,context};
 }
 
+test('read-only train details remain available during writes and connection loss',async()=>{
+ const {api,app}=await setup();
+ api.state.selected='run-1';api.state.busy=true;api.state.online=false;api.render();
+ assert.match(app.innerHTML, /data-action="details"(?![^>]*disabled)[^>]*>/);
+ assert.match(app.innerHTML, /data-action="assign"[^>]*disabled/);
+});
 test('populated US dispatcher renders in English, including map marks, limits and train pins',async()=>{
  const {app,language}=await setup();
  assert.equal(language.getLanguage(),'en');
@@ -103,4 +109,45 @@ test('new US terminology has complete translations without changing direction or
  assert.match(source,/<option value="east">Eastbound<\/option>/);
  assert.match(source,/<option value="work">Work between … and …<\/option>/);
  assert.doesNotMatch(source,/returnhtml`/);
+});
+
+test('repeated unauthenticated polling never replaces the login form',async()=>{
+ const {api,app}=await setup('dispatcher',{unauthenticated:true});
+ assert.match(app.innerHTML,/access-form/);
+ app.innerHTML='FORM WITH UNSENT CREDENTIALS';
+ await api.refresh();await api.refresh();
+ assert.equal(app.innerHTML,'FORM WITH UNSENT CREDENTIALS');
+ assert.equal(api.state.online,false);
+});
+test('closed session permits importing the next session but blocks old traffic actions',async()=>{
+ const {api,data,app}=await setup();
+ data.session.status='closed';api.render();
+ assert.equal(api.disabled('import'),false);
+ assert.equal(api.disabled('create_session'),false);
+ assert.equal(api.disabled('activate'),true);
+ assert.match(app.innerHTML,/data-action="import"\s+class=/);
+ api.state.pending='unconfirmed';assert.equal(api.disabled('create_session'),true);
+ api.state.pending=null;api.state.online=false;assert.equal(api.disabled('import'),true);
+});
+test('LAN HTTP uses cryptographically random IDs without requiring randomUUID',async()=>{
+ const {api,context}=await setup();
+ context.crypto={getRandomValues:require('node:crypto').webcrypto.getRandomValues.bind(require('node:crypto').webcrypto)};
+ const ids=new Set(Array.from({length:100},()=>api.createCommandID()));
+ assert.equal(ids.size,100);assert.match([...ids][0],/^us-[0-9a-f]{32}$/);
+ context.crypto={};assert.throws(()=>api.createCommandID(),/Secure random numbers/);
+ assert.equal(api.state.pending,null);
+});
+test('expired authorization clears operational state and closes action dialogs',async()=>{
+ const {api,context,editor}=await setup();let closed=0;editor.close=()=>closed++;
+ context.fetch=async()=>({ok:false,status:401,json:async()=>({message:'Sign in required'})});
+ await api.refresh();assert.equal(api.state.data,null);assert.equal(api.state.online,false);
+ assert.equal(api.state.loginVisible,true);assert.equal(closed,1);
+});
+test('uncertain write result is not resent by polling or language changes',async()=>{
+ const {api,context,language}=await setup();const writes=[];
+ context.fetch=async(url,options)=>{if(options.method==='POST'){writes.push(url);throw new Error('Connection lost');}throw new Error('Still offline');};
+ await assert.rejects(api.command('ready',{run_id:'run-1'}),/Connection lost/);
+ assert.ok(api.state.pending);assert.equal(api.disabled('ready'),true);
+ await api.refresh();language.setLanguage('de');
+ assert.equal(writes.length,1);
 });

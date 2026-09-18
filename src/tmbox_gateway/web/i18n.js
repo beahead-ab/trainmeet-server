@@ -20,7 +20,10 @@
   const subscribers = new Set();
   const missing = new Set();
   function t(source, values = {}) {
-    const row = globalThis.TrainMeetMessages?.[source];
+    // Line wrapping in authored HTML is not part of a message's identity.
+    // Unknown text and interpolated domain values still remain byte-exact.
+    const row = globalThis.TrainMeetMessages?.[source]
+      || globalThis.TrainMeetMessages?.[String(source).trim().replace(/\s+/g, ' ')];
     const translated = row?.[language] || row?.en || source;
     if (!row?.[language] && source && /[a-zåäöæøü]/i.test(source)) missing.add(source);
     // Function replacement: values containing $&, $1 etc. remain literal.

@@ -101,3 +101,8 @@ test('reset confirmation remains the fixed API value in every UI language',()=>{
  assert.match(app,/JSON\.stringify\(\{ confirmation: "NOLLSTÄLL" \}\)/);
  assert.doesNotMatch(app,/confirmation:\s*t\(/);
 });
+test('authored message wrapping does not prevent lookup or change unknown source',()=>{
+ const {api}=setup({stored:'de'});
+ assert.equal(api.t('  Spara\n'), 'Speichern');
+ assert.equal(api.t('Cda\n  8266'), 'Cda\n  8266');
+});

@@ -4,6 +4,21 @@ TrainMeet Server är den lokala, självständiga driftsmiljön för en TrainMeet
 
 [TrainMeet Cloud](https://github.com/beahead-ab/trainmeet-cloud) bygger, validerar och publicerar konfigurationer och tolkar importerade tidtabeller. Själva träffen körs lokalt här. Flödet går bara åt ett håll: Cloud publicerar, den här servern hämtar. Ingenting synkas tillbaka.
 
+## US-körning och språk
+
+Servern innehåller även en separat **US TWC-pilot**. Välj **US Dispatcher** i
+webbgränssnittet eller öppna `/us/dispatcher`. Conductor öppnar `/us/conductor`
+och parkopplas med en engångskod; dispatcher tilldelar tåget.
+EU/TKL/TMBox använder sina befintliga trafikflöden och påverkas inte av US-start.
+
+Se [steg-för-steg för US-piloten](docs/TRAINMEET-US.md), dess tydliga
+begränsningar och den frivilliga, fiktiva övningsfilen. Inget exempel laddas
+automatiskt på en ny eller befintlig server.
+
+Språkväljaren stöder svenska, danska, norska (bokmål), engelska och tyska.
+US startar alltid på amerikansk engelska tills operatören själv väljer annat.
+[Översättningarnas omfattning och återstående arbete](docs/LANGUAGES.md).
+
 ## Välj installation
 
 | Plattform | Rekommenderad metod | När den passar |

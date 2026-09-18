@@ -39,7 +39,8 @@ See [US terminology review](US-TERMINOLOGY.md).
 
 ## Editing and building
 
-`translations/ui.txt` contains reviewed `en|sv|da|nb|de` rows. The five
+`translations/ui.txt` and `translations/release.txt` contain reviewed
+`en|sv|da|nb|de` rows. The five
 `legacy-*.json` files are snapshots of the earlier TrainMeet UI dictionaries;
 they are included so builds never depend on the old Lovable checkout.
 The generator checks that interpolation parameters match in all five languages;
@@ -100,4 +101,15 @@ The 19 JavaScript checks also pass. Existing markup assertions now account for
 the explicit translation wrappers; the restore-path assertion resolves macOS
 temporary-directory symlinks before comparing paths.
 
-Production Cloud/Server instances have not been updated by this change.
+Release-candidate verification (2026-09-18): 622 Server Python tests, 26 shared
+and US JavaScript checks, 338 Cloud Python tests, 15 Cloud UI tests, 27 TKL
+Python tests and 13 TKL UI tests pass. Both frontend production builds pass.
+Additional regression cases cover LAN HTTP command IDs, login polling,
+authorization expiry, closed-session restart, concurrent activation, parallel
+tracks, shared crossings, role boundaries and persisted restart state.
+
+A disposable browser session completed pairing → assignment → draft → transmit
+→ receipt → readback → activation → clear report → release → session closure.
+Conductor was visually checked at 390px and dispatcher on desktop; all five
+languages switched on the narrow completion screen without page overflow.
+This is not a substitute for a physical field trial or complete localization.

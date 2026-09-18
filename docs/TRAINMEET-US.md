@@ -3,7 +3,8 @@
 ## Verifierad inventering, 2026-09-18
 
 - Server: `beahead-ab/trainmeet-server`, bas `f9a7d6b` (1.4.2). Isolerad
-  worktree/branch `codex/trainmeet-us-twc`; inga driftsättningar ingår.
+  worktree/branch `codex/trainmeet-us-twc`. Leveransen omfattar denna pilot,
+  inte hela den framtida US-produktens regelprofiler och Cloud-editor.
 - Cloud: `beahead-ab/trainmeet-cloud`, lokal main `f17d06b` (1.0.12), ren.
   Cloud har Python/SQLite, React/TypeScript, roller/inbjudningar, filimport,
   versionslagrade publiceringar och serverkopplingar. Det är inte Supabase.
@@ -50,6 +51,37 @@ villkorad aktivering, ersättning av aktiv authority och TT&TO är senare steg.
 Bifogade ATSF/SP-bilder är referenser. Testbanan är avsiktligt fiktiv och laddas
 bara efter aktivt val; inga MP-tal eller spårantaganden från bilderna importeras.
 
+## Prova från början till slut
+
+1. Installera/uppdatera Server enligt README och skapa administratör vid första
+   installationen. Använd en separat testserver för övningen.
+2. Öppna **US Dispatcher** eller `http://SERVER:8787/us/dispatcher` och logga in
+   med den lokala serverns administratör. På HTTPS-installationer används
+   förstås serverns vanliga HTTPS-adress utan porttillägg.
+3. Välj **Import US package**. Välj `examples/us-twc-training.json` från detta
+   repo. Läs övningsbanan, bekräfta testprofilen och välj **Start US session**.
+   De två parallella spåren är avsiktligt fiktiva och oberoende.
+4. Välj **Connect conductor**. Öppna samma servers `/us/conductor` på telefonen,
+   ange namn och engångskoden. Markera Training 101 hos dispatcher och välj
+   **Assign**. Conductor får inte själv byta till ett annat tåg.
+5. Välj **+ Draft**, **Proceed**, Main 1, MP 10 till MP 20. Granska texten och
+   spara utkastet. **Transmit** gör det tillgängligt för conductor men ger
+   ännu inget körtillstånd.
+6. Conductor väljer **Acknowledge receipt**, läser tillbaka den exakta texten
+   via radio/telefon och väljer **Report readback**. Dispatcher kontrollerar
+   återläsningen och väljer **Verify readback & activate**. Först nu visas
+   **In effect**. Servern kontrollerar konflikter i samma transaktion.
+7. Använd **Report** för en verkligt observerad position. Tid eller position
+   flyttar aldrig tåget automatiskt och frigör aldrig dess tillstånd.
+8. När hela tåget lämnat gränserna väljer conductor **Report clear of limits**.
+   Gränserna förblir reserverade tills dispatcher väljer **Confirm release**.
+9. **Finish session** fungerar först när alla warrants är avslutade/makulerade.
+   Historiken sparas och en ny session får nya körnings-ID:n.
+
+I piloten väljs sträcka/MP i ett uttryckligt formulär. Dragmarkering i kartan
+från designskissen är ännu inte kopplad till driftens kommandon. Ett kartstreck
+eller en tidtabell ska aldrig uppfattas som ett utfärdat körtillstånd.
+
 ## Identitet, lokal drift och återanslutning
 
 Dispatcher använder serverns befintliga administratörskonto. Conductor är en
@@ -63,10 +95,14 @@ UI, font och ikon levereras från lokal server. Inga CDN eller Cloud-anrop under
 spel. Polling ger senast bekräftad revision. Vid avbrott markeras läget som
 inaktuellt och knappar spärras. Osäkert kommandoresultat klarläggs med en
 read-only statusfråga, aldrig genom automatisk omsändning eller offlinekö.
+Om servern ännu saknar ett bekräftat resultat för ett osäkert kommando kvarstår
+spärren. Fortsätt inte genom att rensa webbläsarens lagring: kontrollera
+serverhistoriken och utred avbrottet först. Automatisk återhämtning av ett
+bevisat aldrig mottaget kommando är en kvarvarande begränsning i piloten.
 
 ## Kvar efter första kedjan
 
 Cloud-editor/publicering av US-paket, offline-identitetskontrakt, verifierade
 verkliga banor/regelprofiler, historisk TT&TO, avancerade villkor/ersättningar,
-returarkiv till Cloud och full fysisk terminaltest. Ingen ny GitHub-repo eller
-produktionsdeployment utan separat beslut.
+returarkiv till Cloud och full fysisk terminaltest. Dessa ingår inte i den
+första vertikala pilotleveransen.
