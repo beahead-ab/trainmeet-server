@@ -353,11 +353,21 @@ class SQLiteOperationsStore:
         # kvar behåller sin tågklarerare.
         stations = {str(station.get("id")) for station in publication.payload.get("stations") or []}
         for shift in self._connection.execute(
-            "SELECT shift_id, active_day, station_id FROM tkl_shifts"
+            "SELECT shift_id, active_day, station_id, status FROM tkl_shifts"
             " WHERE publication_id = ? AND status != 'closed'",
             (previous_publication,),
         ).fetchall():
             if str(shift[2]) in stations:
+                # A restored/reactivated publication may already have an
+                # active operator. Keep that assignment and the older shift
+                # in its original publication; never replace either record
+                # or let the uniqueness check prevent the server starting.
+                if shift[3] == "active" and self._connection.execute(
+                    "SELECT 1 FROM tkl_shifts WHERE publication_id = ?"
+                    " AND active_day = ? AND station_id = ? AND status = 'active'",
+                    (publication.publication_id, shift[1], shift[2]),
+                ).fetchone() is not None:
+                    continue
                 self._connection.execute(
                     "UPDATE tkl_shifts SET publication_id = ? WHERE shift_id = ?",
                     (publication.publication_id, shift[0]),

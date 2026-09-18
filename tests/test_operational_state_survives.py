@@ -157,6 +157,27 @@ class OperationalStateSurvivesRepublishTests(unittest.TestCase):
 
         self.assertIsNone(self._state(self.first, str(self.movement["id"])))
 
+    def test_existing_target_operator_survives_restart_collision(self) -> None:
+        self.store.ensure_publication(_publication(self.first))
+        station = str(self.movement["station_id"])
+        second = self._republish()
+        old = self.store.start_tkl_shift(self.first["publication_id"], self.day, station, "Older", "Terminal A")
+        current = self.store.start_tkl_shift(second["publication_id"], self.day, station, "Current", "Terminal B")
+        self.store.ensure_publication(_publication(second))
+        self.store.ensure_publication(_publication(second))
+        self.assertEqual(current["shift_id"], self.store.tkl_station_state(second["publication_id"], self.day, station)["shift"]["shift_id"])
+        self.assertEqual(old["shift_id"], self.store.tkl_station_state(self.first["publication_id"], self.day, station)["shift"]["shift_id"])
+        self.assertEqual(second["publication_id"], self.store.clock_status()["publication_id"])
+
+    def test_shift_without_collision_still_moves_to_new_publication(self) -> None:
+        self.store.ensure_publication(_publication(self.first))
+        station = str(self.movement["station_id"])
+        old = self.store.start_tkl_shift(self.first["publication_id"], self.day, station, "Operator", "Terminal")
+        second = self._republish()
+        self.store.ensure_publication(_publication(second))
+        self.assertEqual(old["shift_id"], self.store.tkl_station_state(second["publication_id"], self.day, station)["shift"]["shift_id"])
+        self.assertIsNone(self.store.tkl_station_state(self.first["publication_id"], self.day, station)["shift"])
+
 
 class OperatorNoteTests(unittest.TestCase):
     """Anteckningen hör till driften och ska inte kunna raderas av misstag."""
