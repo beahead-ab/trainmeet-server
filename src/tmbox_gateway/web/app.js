@@ -345,6 +345,7 @@ setupCentralForm.addEventListener("submit", async (event) => {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
     setupSyncCodeBoxes.reset();
+    if (payload.operating_region === 'us') { location.assign('/us/dispatcher'); return; }
     showSetup(await refreshSetupStatus());
   } catch (error) {
     setMessage(message, error.message, "error");
@@ -806,6 +807,7 @@ runtimeForm.addEventListener("submit", async (event) => {
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
     setMessage(runtimeMessage, `3/3 · ${payload.message} Cloud-kopplingen är sparad på servern.`, payload.restart_required ? "notice" : "success");
     runtimeSyncCodeBoxes.reset();
+    if (payload.operating_region === 'us') { location.assign('/us/dispatcher'); return; }
     document.querySelector("#runtime-link-details").open = false;
     await Promise.all([refreshRuntime(), refreshInfo()]);
   } catch (error) {

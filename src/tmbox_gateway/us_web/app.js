@@ -12,7 +12,7 @@ const holding = (w) => ['active','release_requested'].includes(w.status);
 const closed = (w) => ['closed','void'].includes(w.status);
 const session = () => state.data?.session;
 const run = (id) => session()?.runs.find((r) => r.id === id);
-const disabled = (action='') => !state.online || state.busy || Boolean(state.pending) || (session()?.status === 'closed' && !['import','create_session'].includes(action));
+const disabled = (action='') => !state.online || state.busy || Boolean(state.pending) || (session()?.status === 'closed' && !['import','create_session','cloud','packages','review-package'].includes(action));
 const button = (label, action, extra='', primary=false) => html`<button type="button" data-action="${action}" ${extra} ${!['details','history'].includes(action)&&disabled(action)?'disabled':''} class="${primary?'primary':''}">${escape(t(label))}</button>`;
 // randomUUID is unavailable on ordinary LAN HTTP; getRandomValues still works.
 function createCommandID() {
@@ -25,7 +25,7 @@ document.querySelector(`.topbar nav a[href="/us/${conductorView?'conductor':'dis
 
 async function api(path, body) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), path === '/v1/us/cloud/download' ? 45000 : 8000);
   try {
     const response = await fetch(path, {method:body?'POST':'GET', credentials:'same-origin', cache:'no-store', signal:controller.signal,
       headers:{...(body?{'Content-Type':'application/json'}:{}), ...(state.token?{Authorization:`Bearer ${state.token}`}:{})}, ...(body?{body:JSON.stringify(body)}:{})});
@@ -52,7 +52,7 @@ async function refresh(force=false) {
   try {
     const next = await api('/v1/us/context');
     state.data = next; state.online = true;
-    const signature = JSON.stringify([next.session?.id,next.session?.revision,next.conductors,next.role]);
+    const signature = JSON.stringify([next.session?.id,next.session?.revision,next.conductors,next.role,next.packages,next.cloud]);
     if (force || signature !== state.signature) { state.signature = signature; render(); }
   } catch (error) {
     state.online = false;
@@ -137,7 +137,7 @@ function render() {
   state.loginVisible = false;
   const current=session();
   if (!current || current.status === 'closed') {
-    app.innerHTML=html`<section class="welcome"><p class="eyebrow">${current?t("Session complete"):t("Local-first operations")}</p><h1>${current?t("Session safely closed"):t("Start a US session")}</h1><p>${state.data.role==='dispatcher'?t("Import a reviewed US runtime package. Its topology and timetable are frozen for this session; future Cloud changes cannot alter live authorities."):t("Waiting for the dispatcher to start a session and assign your train.")}</p>${state.data.role==='dispatcher'?button(t("Import US package"),'import','',true):''}${current?html`<p class="form-note">${escape(current.name)} · final revision ${current.revision} · history retained on the server</p>`:''}</section>`;status();return;
+    app.innerHTML=html`<section class="welcome"><p class="eyebrow">${current?t("Session complete"):t("Local-first operations")}</p><h1>${current?t("Session safely closed"):t("Start a US session")}</h1><p>${state.data.role==='dispatcher'?t("Import a reviewed US runtime package. Its topology and timetable are frozen for this session; future Cloud changes cannot alter live authorities."):t("Waiting for the dispatcher to start a session and assign your train.")}</p>${state.data.role==='dispatcher'?html`<div class="actions">${button('Download from Cloud','cloud','',true)}${button(t("Import US package"),'import')}</div>${packageShelf()}`:''}${current?html`<p class="form-note">${escape(current.name)} · final revision ${current.revision} · history retained on the server</p>`:''}</section>`;status();return;
   }
   if (!run(state.selected)) state.selected=current.runs[0]?.id || '';
   const scrolls=[...app.querySelectorAll('[data-scroll]')].map((el)=>[el.dataset.scroll,el.scrollTop,el.scrollLeft]);
@@ -162,7 +162,7 @@ function positionLabel(r) {
 }
 function trainRow(r) {
   const warrants=session().warrants.filter((w)=>w.run_id===r.id&&!closed(w));
-  return html`<button type="button" class="train-row ${state.selected===r.id?'selected':''}" data-run="${escape(r.id)}" aria-pressed="${state.selected===r.id}"><span class="row-top"><strong>${escape(r.symbol)}</strong><span class="pill">${escape(t(r.direction==='east'?'Eastbound':'Westbound'))} ${r.direction==='east'?'↓':'↑'}</span></span><span>${runStatus(r)}</span><span class="sub">${r.schedule[0]?escape(t('Scheduled {time}', {time:r.schedule[0].time})):t("Extra train")} · ${escape(warrants.map((w)=>w.number).join(', ')||t("No warrants"))}</span><span class="sub">${escape(r.conductor_name || t("Conductor not assigned"))}</span><span class="sub">${escape(positionLabel(r))}</span></button>`;
+  return html`<button type="button" class="train-row ${state.selected===r.id?'selected':''}" data-run="${escape(r.id)}" aria-pressed="${state.selected===r.id}"><span class="row-top"><strong>${escape(trainLabel(r))}</strong><span class="pill">${escape(t(r.direction==='east'?'Eastbound':'Westbound'))} ${r.direction==='east'?'↓':'↑'}</span></span><span>${runStatus(r)}</span><span class="sub">${r.schedule[0]?escape(t('Scheduled {time}', {time:r.schedule[0].time})):t("Extra train")} · ${escape(warrants.map((w)=>w.number).join(', ')||t("No warrants"))}</span><span class="sub">${escape(r.conductor_name || t("Conductor not assigned"))}</span><span class="sub">${escape(positionLabel(r))}</span></button>`;
 }
 
 function warrantCard(w) {
@@ -170,14 +170,47 @@ function warrantCard(w) {
   const dispatcher=state.data.role==='dispatcher';
   const actionMap=dispatcher?{draft:['transmit','Transmit track warrant'],readback_pending:['activate','Verify readback & activate'],release_requested:['close_warrant','Confirm release']}:{transmitted:['receive','Acknowledge receipt'],received:['readback','Report readback'],active:['request_release','Report clear of limits']};
   const action=actionMap[w.status];
-  return html`<article class="warrant-card ${selected?'selected':''}"><button class="warrant-select" type="button" data-run="${escape(w.run_id)}" aria-pressed="${selected}"><span class="row-top"><strong>${escape(w.number)} · ${escape(r?.symbol)}</strong><span class="pill ${w.status==='active'?'active':!closed(w)?'pending':''}">${escape(t(labels[w.status]))}</span></span><pre>${escape(w.text.split('\n').slice(1).join('\n'))}</pre></button><small>${escape(Object.values(w.times).at(-1).meet_time)} · ${escape(w.kind==='work'?t("Work between limits"):t("Proceed"))}</small>${!holding(w)&&!closed(w)?html`<p class="state-help">Not authority to move.</p>`:''}${w.status==='release_requested'?html`<p class="state-help">Limits remain reserved until the dispatcher confirms release.</p>`:''}<div class="actions">${action?button(action[1],action[0],`data-warrant="${escape(w.id)}"`,true):''}${dispatcher&&['draft','transmitted','received','readback_pending'].includes(w.status)?button(t("Void"),'void',`data-warrant="${escape(w.id)}"`):''}</div></article>`;
+  return html`<article class="warrant-card ${selected?'selected':''}"><button class="warrant-select" type="button" data-run="${escape(w.run_id)}" aria-pressed="${selected}"><span class="row-top"><strong>${escape(w.number)} · ${escape(trainLabel(r))}</strong><span class="pill ${w.status==='active'?'active':!closed(w)?'pending':''}">${escape(t(labels[w.status]))}</span></span><pre>${escape(w.text.split('\n').slice(1).join('\n'))}</pre></button><small>${escape(Object.values(w.times).at(-1).meet_time)} · ${escape(w.kind==='work'?t("Work between limits"):t("Proceed"))}</small>${!holding(w)&&!closed(w)?html`<p class="state-help">Not authority to move.</p>`:''}${w.status==='release_requested'?html`<p class="state-help">Limits remain reserved until the dispatcher confirms release.</p>`:''}<div class="actions">${action?button(action[1],action[0],`data-warrant="${escape(w.id)}"`,true):''}${dispatcher&&['draft','transmitted','received','readback_pending'].includes(w.status)?button(t("Void"),'void',`data-warrant="${escape(w.id)}"`):''}</div></article>`;
 }
 
 function renderDispatcher() {
   const current=session(), selected=run(state.selected);
   const pending=current.warrants.filter((w)=>!holding(w)&&!closed(w));
   const active=current.warrants.filter(holding), history=current.warrants.filter(closed);
-  app.innerHTML=html`<div class="page-heading"><div><p class="eyebrow">Train dispatcher · Track Warrant Control</p><h1>${escape(current.name)}</h1><p>Revision ${current.revision} · ${current.runs.length} train runs · ${active.length} track warrants reserving limits</p></div><div class="toolbar">${button(t("Connect conductor"),'pair')}${button(t("+ Extra train"),'extra')}${button(t("Finish session"),'finish_session')}</div></div><div class="board"><section class="column" aria-label="All train runs"><div class="column-head"><h2>All trains</h2><small>${current.runs.length} runs</small></div><div class="scroll train-list" data-scroll="trains">${current.runs.map(trainRow).join('')||html`<p class="empty">No scheduled runs. Add an extra train.</p>`}</div>${selected?html`<div class="column-head">${button(t("Train details"),'details')}${button(t("Assign"),'assign')}</div>`:''}</section><section class="column" aria-label="Track diagram"><div class="column-head"><h2>The railroad</h2><small>Reported positions · mileposts</small></div><div class="scroll map-viewport" data-scroll="map">${stripMap()}</div><div class="map-key"><span><i></i>Reserved authority limits</span><span><i class="draft"></i>Proposed · not in effect</span></div></section><section class="column" aria-label="Track warrants"><div class="column-head"><h2>Track warrants</h2>${selected?button(t("+ Draft"),'draft','',true):''}</div><div class="scroll warrant-list" data-scroll="warrants"><p class="list-label">Needs attention · ${pending.length}</p>${pending.map(warrantCard).join('')||html`<p class="muted">Nothing waiting.</p>`}<p class="list-label">In effect / release pending · ${active.length}</p>${active.map(warrantCard).join('')||html`<p class="muted">No reserved authority limits.</p>`}<p class="list-label">History · ${history.length}</p>${history.length?html`<button type="button" data-action="history">${state.history?t("Hide"):t("Show")} history</button>`:''}${state.history?history.map(warrantCard).join(''):''}</div></section></div>`;
+  app.innerHTML=html`<div class="page-heading"><div><p class="eyebrow">Train dispatcher · Track Warrant Control</p><h1>${escape(current.name)}</h1><p>Revision ${current.revision} · ${current.runs.length} train runs · ${active.length} track warrants reserving limits</p><p>${escape(t(state.data.clock?.running?'US clock running':'US clock paused'))} · ${escape(state.data.clock?.speed||1)}×</p></div><div class="toolbar">${button('US clock','clock')}${button('Saved US packages','packages')}${button(t("Connect conductor"),'pair')}${button(t("+ Extra train"),'extra')}${button(t("Finish session"),'finish_session')}</div></div><div class="board"><section class="column" aria-label="All train runs"><div class="column-head"><h2>All trains</h2><small>${current.runs.length} runs</small></div><div class="scroll train-list" data-scroll="trains">${current.runs.map(trainRow).join('')||html`<p class="empty">No scheduled runs. Add an extra train.</p>`}</div>${selected?html`<div class="column-head">${button(t("Train details"),'details')}${button(t("Assign"),'assign')}</div>`:''}</section><section class="column" aria-label="Track diagram"><div class="column-head"><h2>The railroad</h2><small>Reported positions · mileposts</small></div><div class="scroll map-viewport" data-scroll="map">${stripMap()}</div><div class="map-key"><span><i></i>Reserved authority limits</span><span><i class="draft"></i>Proposed · not in effect</span></div></section><section class="column" aria-label="Track warrants"><div class="column-head"><h2>Track warrants</h2>${selected?button(t("+ Draft"),'draft','',true):''}</div><div class="scroll warrant-list" data-scroll="warrants"><p class="list-label">Needs attention · ${pending.length}</p>${pending.map(warrantCard).join('')||html`<p class="muted">Nothing waiting.</p>`}<p class="list-label">In effect / release pending · ${active.length}</p>${active.map(warrantCard).join('')||html`<p class="muted">No reserved authority limits.</p>`}<p class="list-label">History · ${history.length}</p>${history.length?html`<button type="button" data-action="history">${state.history?t("Hide"):t("Show")} history</button>`:''}${state.history?history.map(warrantCard).join(''):''}</div></section></div>`;
+}
+
+function packageShelf() {
+  return html`<section class="package-shelf"><h2>Saved US packages</h2><p class="form-note">Stored on this server. Internet is not required to start or run a downloaded session.</p>${(state.data.packages||[]).map((p)=>html`<article class="package-row"><div><strong>${escape(p.name)}</strong><p>${p.counts.runs} ${escape(t('train runs'))} · ${p.counts.segments} ${escape(t('track segments'))}</p><small>${escape(p.published_at||p.downloaded_at)} · ${escape(p.publication_id)}</small></div>${button('Review package','review-package',`data-package="${escape(p.publication_id)}"`)}</article>`).join('')||html`<p>No downloaded US package yet.</p>`}</section>`;
+}
+
+function packagePreview(p) {
+  const node=(id)=>p.nodes.find((n)=>n.id===id);
+  return html`<details open><summary>The railroad</summary><div class="package-table"><table><thead><tr><th>Track segment</th><th>From MP</th><th>To MP</th></tr></thead><tbody>${p.segments.map((s)=>html`<tr><td>${escape(s.name)}</td><td>${escape(node(s.from_node)?.name)} · ${escape(node(s.from_node)?.mp)}</td><td>${escape(node(s.to_node)?.name)} · ${escape(node(s.to_node)?.mp)}</td></tr>`).join('')}</tbody></table></div></details><details><summary>Train schedule & job instructions</summary>${p.runs.map((r)=>html`<h3>${escape(trainLabel(r))} · ${escape(t(r.direction==='east'?'Eastbound':'Westbound'))}</h3><p>${escape(r.service||'')}</p>${schedule(r,p)}`).join('')}</details>`;
+}
+
+async function reviewPackage(id) {
+  const p=state.data.packages?.find((item)=>item.publication_id===id);
+  if(!p)return;
+  const {package: details}=await api(`/v1/us/package?publication_id=${encodeURIComponent(id)}`);
+  const settings=p.session||{}, planning=p.planning||{}, canStart=!session()||session().status==='closed';
+  modal(t('Review US package'),html`<h3>${escape(p.name)}</h3><p class="form-note">${escape(p.publication_id)} · ${escape(p.source_url||t('Local JSON file'))}</p><p>${p.counts.territories} ${escape(t('territories'))} · ${p.counts.nodes} ${escape(t('named points'))} · ${p.counts.segments} ${escape(t('track segments'))} · ${p.counts.runs} ${escape(t('train runs'))}</p><p>US clock starts paused. EU traffic and its clock stay unchanged.</p><p>${escape(settings.clock_time||'12:00')} · ${escape(settings.clock_speed||1)}× · ${escape(settings.timezone||'')}</p><details><summary>Source instructions and dispatcher districts</summary><p class="form-note">Planning reference only. District permissions and Train Token handovers are not enforced in this profile.</p>${(planning.dispatcher_districts||[]).map((d)=>html`<h3>${escape(d.name)}</h3><p>${escape(d.instructions||'')}</p>`).join('')}${(planning.source_instructions||[]).map((n)=>html`<p>${escape(n.text)}</p>`).join('')}</details>${packagePreview(details)}${canStart?html`<form><label class="confirm-label"><input name="confirmed" type="checkbox" required>I reviewed the topology and the model-railroad test profile.</label>${formEnd(t('Start US session'))}</form>`:html`<p class="form-note">Finish the current session before starting another package. Downloading never changes live operations.</p>`}`);
+  if(canStart)bindForm('create_session',async(fields)=>({publication_id:p.publication_id,package_checksum:p.checksum,confirmed:fields.get('confirmed')==='on'}));
+}
+
+function bindDownload(path, makePayload) {
+  const form=editor.querySelector('form');
+  form.dataset.usAction='cloud';
+  form.onsubmit=async(event)=>{
+    event.preventDefault(); if(disabled('cloud'))return;
+    const error=form.querySelector('.form-error'); error.textContent='';
+    state.busy=true; status();
+    error.textContent=t('Downloading and validating the package…');
+    try {const result=await api(path,await makePayload(new FormData(form)));await refresh(true);await reviewPackage(result.package.publication_id);}
+    catch(err){error.textContent=err.message;}
+    finally{state.busy=false;status();}
+  };
+  status();
 }
 
 function stripMap() {
@@ -190,7 +223,7 @@ function stripMap() {
   const rails=p.segments.map((s)=>html`<path class="tie" d="${path(s)}"/><path class="rail" d="${path(s)}"/>`).join('');
   const marks=p.nodes.map((n,i)=>{const v=xy(n),first=p.nodes.findIndex((other)=>other.territory_id===n.territory_id&&other.y===n.y)===i;return html`<circle class="point" cx="${v.x}" cy="${v.y}" r="5"/>${first?html`<path class="limit-guide" d="M62,${v.y}H565"/><text class="mp-label" x="15" y="${v.y+5}">${escape(n.mp)}</text><text x="380" y="${v.y+5}">${escape(n.name)}</text>`:''}`;}).join('');
   const bands=current.warrants.filter((w)=>!closed(w)).flatMap((w)=>w.path.map((leg)=>{const a=point(leg.segment_id,leg.from_mp),b=point(leg.segment_id,leg.to_mp);return html`<path class="authority-band ${holding(w)?'':'proposed'} ${state.selected===w.run_id?'chosen':''}" d="M${a.x-12},${a.y}L${b.x-12},${b.y}"/>`;})).join('');
-  const pins=current.runs.filter((r)=>r.position).map((r)=>{const v=point(r.position.segment_id,r.position.mp);return html`<g class="position-pin ${state.selected===r.id?'chosen':''}" tabindex="0" role="button" aria-label="Select ${escape(r.symbol)}, reported MP ${r.position.mp}" data-run="${escape(r.id)}"><circle class="position-dot" cx="${v.x}" cy="${v.y}" r="7"/><rect x="${v.x+14}" y="${v.y-15}" width="165" height="31" rx="9"/><text x="${v.x+24}" y="${v.y+5}">${escape(r.symbol)} ${r.direction==='east'?'↓':'↑'} · ${r.position.mp}</text><title>Reported ${escape(r.position.meet_time)} · ${escape(r.position.recorded_at)}</title></g>`;}).join('');
+  const pins=current.runs.filter((r)=>r.position).map((r)=>{const v=point(r.position.segment_id,r.position.mp);return html`<g class="position-pin ${state.selected===r.id?'chosen':''}" tabindex="0" role="button" aria-label="Select ${escape(trainLabel(r))}, reported MP ${r.position.mp}" data-run="${escape(r.id)}"><circle class="position-dot" cx="${v.x}" cy="${v.y}" r="7"/><rect x="${v.x+14}" y="${v.y-15}" width="165" height="31" rx="9"/><text x="${v.x+24}" y="${v.y+5}">${escape(trainLabel(r))} ${r.direction==='east'?'↓':'↑'} · ${r.position.mp}</text><title>Reported ${escape(r.position.meet_time)} · ${escape(r.position.recorded_at)}</title></g>`;}).join('');
   return html`<svg class="strip-map" viewBox="0 0 600 ${height}" role="img" aria-label="Schematic topology, reported train positions and track warrant limits"><text class="mp-label" x="15" y="27">MP</text><text class="track-name" x="125" y="27">${escape(p.territories.map((t)=>t.name).join(' / '))}</text>${rails}${bands}${marks}${pins}</svg>`;
 }
 
@@ -198,9 +231,17 @@ function renderConductor() {
   const current=session(), selected=run(state.selected);
   if(!selected){app.innerHTML=html`<section class="welcome"><h1>Connected</h1><p>Waiting for the dispatcher to assign your train. This page updates automatically.</p></section>`;return;}
   const warrants=current.warrants.filter((w)=>w.run_id===selected.id&&!closed(w));
-  app.innerHTML=html`<div class="conductor-layout">${current.runs.length>1?html`<div>${current.runs.map(trainRow).join('')}</div>`:''}<section class="card"><p class="eyebrow">Conductor · assigned train</p><h1>${escape(selected.symbol)} <small>${escape(t(selected.direction==='east'?'Eastbound':'Westbound'))}</small></h1><p>${escape(current.name)}</p><p class="muted">${escape(selected.locomotive||t("Locomotive not specified"))} · ${escape(selected.conductor_name)}</p><p class="muted">${escape(positionLabel(selected))}</p><div class="actions">${button(selected.ready?t("Ready reported"):t("Ready to copy"),'ready')}${button(t("Report"),'report','',true)}${button(t("Request authority"),'request')}</div></section><section class="card"><h2>Your track warrants</h2>${warrants.map(warrantCard).join('')||html`<p class="muted">No authority issued. Timetable times do not authorize movement.</p>`}</section><section class="card"><h2>Train schedule & job instructions</h2>${schedule(selected)}</section><section class="card"><h2>Reports & confirmations</h2>${events(selected)}</section></div>`;
+  app.innerHTML=html`<div class="conductor-layout">${current.runs.length>1?html`<div>${current.runs.map(trainRow).join('')}</div>`:''}<section class="card"><p class="eyebrow">Conductor · assigned train</p><h1>${escape(trainLabel(selected))} <small>${escape(t(selected.direction==='east'?'Eastbound':'Westbound'))}</small></h1><p>${escape(current.name)}</p><p class="muted">${escape(selected.locomotive||t("Locomotive not specified"))} · ${escape(selected.conductor_name)}</p><p class="muted">${escape(positionLabel(selected))}</p><div class="actions">${button(selected.ready?t("Ready reported"):t("Ready to copy"),'ready')}${button(t("Report"),'report','',true)}${button(t("Request authority"),'request')}</div></section><section class="card"><h2>Your track warrants</h2>${warrants.map(warrantCard).join('')||html`<p class="muted">No authority issued. Timetable times do not authorize movement.</p>`}</section><section class="card"><h2>Train schedule & job instructions</h2>${schedule(selected)}</section><section class="card"><h2>Reports & confirmations</h2>${events(selected)}</section></div>`;
 }
-function schedule(r) { return r.schedule.map((s)=>html`<div class="schedule-row"><time>${escape(s.time)}</time><span>${escape(session().package.nodes.find((n)=>n.id===s.node_id)?.name)}<br><small>${escape(s.work||'')}</small></span></div>`).join('')||html`<p class="muted">Extra train · no planned stops.</p>`; }
+function trainLabel(r) {
+  if(!r)return '';
+  const railroad=r.railroad?.trim();
+  return railroad && !r.symbol.toLowerCase().startsWith(railroad.toLowerCase()+' ') ? `${railroad} ${r.symbol}` : r.symbol;
+}
+function schedule(r,p=session().package) {
+  const eventLabels={arrive:'Arrival',depart:'Departure',pass:'Pass',switch:'Switching'};
+  return r.schedule.map((s)=>html`<div class="schedule-row"><time>${escape(s.time)}</time><span>${escape(p.nodes.find((n)=>n.id===s.node_id)?.name)}<br><small>${escape(t(eventLabels[s.event]||''))}${s.event&&s.work?' · ':''}${escape(s.work||'')}</small></span></div>`).join('')||html`<p class="muted">Extra train · no planned stops.</p>`;
+}
 function events(r) { return session().events.filter((e)=>e.target_id===r.id||session().warrants.some((w)=>w.id===e.target_id&&w.run_id===r.id)).slice(0,20).map((e)=>html`<div class="event"><strong>${escape(e.meet_time)}</strong> · ${escape(e.action.replaceAll('_',' '))}<br><small>Revision ${e.revision} · ${escape(e.actor)} · ${escape(e.recorded_at)}</small></div>`).join('')||html`<p class="muted">No reports yet.</p>`; }
 
 function segmentOptions() {return session().package.segments.map((s)=>html`<option value="${escape(s.id)}">${escape(s.name)} · ${escape(s.id)}</option>`).join('');}
@@ -210,32 +251,44 @@ function setupLeg(el) {
   el.querySelector('select').onchange=setLimits;el.querySelector('.remove-leg').onclick=()=>el.remove();setLimits();
 }
 
-async function action(name, warrantId) {
+async function action(name, warrantId, packageId) {
   const selected=run(state.selected);
   if(name==='check-result'){await checkResult();return;}
   if(name==='history'){state.history=!state.history;render();return;}
-  if(name==='details'&&selected){modal(selected.symbol,html`<p class="form-note">Session-specific run: ${escape(selected.id)}</p><h3>Train schedule & job instructions</h3>${schedule(selected)}<h3>Recent operations</h3>${events(selected)}`);return;}
+  if(name==='details'&&selected){modal(trainLabel(selected),html`<p class="form-note">Session-specific run: ${escape(selected.id)}</p><h3>Train schedule & job instructions</h3>${schedule(selected)}<h3>Recent operations</h3>${events(selected)}`);return;}
   if(disabled(name))return;
+  if(name==='review-package'){await reviewPackage(packageId);return;}
+  if(name==='packages'){modal(t('Saved US packages'),html`<div class="actions">${button('Download from Cloud','cloud')}${button('Import US package','import')}</div>${packageShelf()}`);return;}
+  if(name==='cloud'){
+    const cloud=state.data.cloud||{};
+    modal(t('Download from Cloud'),html`<form><p>Only published US packages are downloaded. Live operations are never changed.</p><label>Config URL<input name="url" type="url" required value="${escape(cloud.url||'')}"></label><label>Six-digit session code<input name="code" inputmode="numeric" autocomplete="off" pattern="[0-9]{6}" maxlength="6" ${cloud.linked?'':'required'}></label>${cloud.linked?html`<p class="form-note">Leave the code empty to download the latest version from the saved connection.</p>`:''}${formEnd(t('Download package'))}</form>`);
+    bindDownload('/v1/us/cloud/download',async(fields)=>({central_url:fields.get('url'),sync_code:fields.get('code')}));return;
+  }
+  if(name==='clock'){
+    const clock=state.data.clock||{};
+    modal(t('US clock'),html`<form><p>Only this US session is affected. Clock time never grants movement authority.</p><label>Time<input name="time" type="time" step="1" required value="${escape(clock.time||'12:00:00')}"></label><label>Speed<input name="speed" type="number" min="0.1" max="60" step="any" required value="${escape(clock.speed||1)}"></label><label class="confirm-label"><input name="running" type="checkbox" ${clock.running?'checked':''}>Run US clock</label>${formEnd(t('Apply US clock'))}</form>`);
+    bindForm('clock',async(fields)=>({clock_time:fields.get('time'),clock_speed:Number(fields.get('speed')),running:fields.get('running')==='on',confirmed:true}));return;
+  }
   if(name==='import'){
-    modal(t("Activate a reviewed US package"),html`<form><p class="form-note">Starts a new, separate US session. Does not modify EU traffic. No active US session can be replaced.</p><label>Runtime JSON file<input name="file" type="file" accept=".json,application/json" required></label><label class="confirm-label"><input type="checkbox" required>I reviewed the topology and the model-railroad test profile.</label>${formEnd(t("Start US session"))}</form>`);
-    bindForm('create_session',async(fields)=>{const file=fields.get('file');if(file.size>2000000)throw new Error(t("Package is too large"));return{package:JSON.parse(await file.text())};});return;
+    modal(t('Import US package'),html`<form><p>Save a package locally, then review it before starting.</p><label>Runtime JSON file<input name="file" type="file" accept=".json,application/json" required></label>${formEnd(t('Review package'))}</form>`);
+    bindDownload('/v1/us/packages',async(fields)=>{const file=fields.get('file');if(file.size>2000000)throw new Error(t("Package is too large"));return{package:JSON.parse(await file.text())};});return;
   }
   if(name==='pair'){
     const result=await api('/v1/us/conductor-code',{});modal(t("Connect a conductor"),html`<p>Open <strong>${escape(location.origin)}/us/conductor</strong> on the conductor’s device.</p><div class="pair-code">${escape(result.code)}</div><p class="form-note">One use · expires in ${result.expires_in_minutes} minutes. After connection, select a train and choose Assign.</p>`);return;
   }
   if(name==='assign'&&selected){
-    modal(t('Assign {train}', {train:selected.symbol}),html`<form><label>Connected conductor<select name="conductor" required><option value="">Choose a conductor</option>${(state.data.conductors||[]).map((c)=>html`<option value="${escape(c.id)}">${escape(c.name)}</option>`).join('')}</select></label><p class="form-note">Assignment is controlled by the dispatcher. Finish any outstanding transmitted/active warrants before changing conductor.</p>${formEnd(t("Assign train"))}</form>`);bindForm('assign',(fields)=>({run_id:selected.id,conductor_id:fields.get('conductor')}));return;
+    modal(t('Assign {train}', {train:trainLabel(selected)}),html`<form><label>Connected conductor<select name="conductor" required><option value="">Choose a conductor</option>${(state.data.conductors||[]).map((c)=>html`<option value="${escape(c.id)}">${escape(c.name)}</option>`).join('')}</select></label><p class="form-note">Assignment is controlled by the dispatcher. Finish any outstanding transmitted/active warrants before changing conductor.</p>${formEnd(t("Assign train"))}</form>`);bindForm('assign',(fields)=>({run_id:selected.id,conductor_id:fields.get('conductor')}));return;
   }
   if(name==='extra'){
     modal(t("Add an extra train"),html`<form><label>Train symbol<input name="symbol" required maxlength="60" placeholder="Extra 401 East"></label><label>Direction<select name="direction"><option value="east">Eastbound</option><option value="west">Westbound</option></select></label><p class="form-note">A new run ID is created. The original timetable is unchanged.</p>${formEnd(t("Add train"))}</form>`);bindForm('extra',(fields)=>Object.fromEntries(fields));return;
   }
   if(name==='draft'&&selected){
-    modal(t('Draft · {train}', {train:selected.symbol}),html`<form><label>Authority type<select name="kind"><option value="proceed">Proceed from … to …</option><option value="work">Work between … and …</option></select></label><p class="form-note">Choose an ordered, connected track path. Limits may differ from the timetable. This draft gives no authority to move.</p><div id="legs">${legForm()}</div><button id="add-leg" type="button">+ Track segment</button><label>Additional information<textarea name="notes" maxlength="1000" placeholder="Not machine-validated. Do not hide track limits or conflict exceptions here."></textarea></label>${formEnd(t("Save draft for review"))}</form>`);
+    modal(t('Draft · {train}', {train:trainLabel(selected)}),html`<form><label>Authority type<select name="kind"><option value="proceed">Proceed from … to …</option><option value="work">Work between … and …</option></select></label><p class="form-note">Choose an ordered, connected track path. Limits may differ from the timetable. This draft gives no authority to move.</p><div id="legs">${legForm()}</div><button id="add-leg" type="button">+ Track segment</button><label>Additional information<textarea name="notes" maxlength="1000" placeholder="Not machine-validated. Do not hide track limits or conflict exceptions here."></textarea></label>${formEnd(t("Save draft for review"))}</form>`);
     setupLeg(editor.querySelector('.path-leg'));editor.querySelector('#add-leg').onclick=()=>{editor.querySelector('#legs').insertAdjacentHTML('beforeend',legForm());setupLeg(editor.querySelector('.path-leg:last-child'));};
     bindForm('draft',(fields,form)=>({run_id:selected.id,kind:fields.get('kind'),notes:fields.get('notes'),path:[...form.querySelectorAll('.path-leg')].map((el)=>({segment_id:el.querySelector('select').value,from_mp:Number(el.querySelector('[name=from]').value),to_mp:Number(el.querySelector('[name=to]').value)}))}));return;
   }
   if((name==='report'||name==='request')&&selected){
-    modal(t('Report · {train}', {train:selected.symbol}),html`<form><label>Report type<select name="kind"><option value="position">Position</option><option value="request" ${name==='request'?'selected':''}>Request new authority</option><option value="delay">Delay</option><option value="problem">Problem</option></select></label><div id="position-fields"><div class="form-row"><label>Track segment<select name="segment">${segmentOptions()}</select></label><label>Reported MP<input type="number" step="any" name="mp"></label></div></div><label>Report / uncertainty<textarea name="message" required maxlength="1000" placeholder="Front at MP… / stopped clear of… / estimate only…"></textarea></label><p class="form-note">Reports never release an authority. Use the warrant’s explicit release action.</p>${formEnd(t("Send report"))}</form>`);
+    modal(t('Report · {train}', {train:trainLabel(selected)}),html`<form><label>Report type<select name="kind"><option value="position">Position</option><option value="request" ${name==='request'?'selected':''}>Request new authority</option><option value="delay">Delay</option><option value="problem">Problem</option></select></label><div id="position-fields"><div class="form-row"><label>Track segment<select name="segment">${segmentOptions()}</select></label><label>Reported MP<input type="number" step="any" name="mp"></label></div></div><label>Report / uncertainty<textarea name="message" required maxlength="1000" placeholder="Front at MP… / stopped clear of… / estimate only…"></textarea></label><p class="form-note">Reports never release an authority. Use the warrant’s explicit release action.</p>${formEnd(t("Send report"))}</form>`);
     const kind=editor.querySelector('[name=kind]');const toggle=()=>{editor.querySelector('#position-fields').hidden=kind.value!=='position';editor.querySelector('[name=mp]').required=kind.value==='position';};kind.onchange=toggle;toggle();
     bindForm('report',(fields)=>({run_id:selected.id,kind:fields.get('kind'),message:fields.get('message'),...(fields.get('kind')==='position'?{position:{segment_id:fields.get('segment'),mp:Number(fields.get('mp'))}}:{})}));return;
   }
@@ -249,7 +302,7 @@ async function action(name, warrantId) {
 document.addEventListener('click', (event) => {
   const selection=event.target.closest('[data-run]');
   if(selection){state.selected=selection.dataset.run;render();return;}
-  const target=event.target.closest('[data-action]');if(target&&!target.disabled)action(target.dataset.action,target.dataset.warrant).catch((error)=>notify(error.message));
+  const target=event.target.closest('[data-action]');if(target&&!target.disabled)action(target.dataset.action,target.dataset.warrant,target.dataset.package).catch((error)=>notify(error.message));
 });
 document.addEventListener('keydown',(event)=>{const target=event.target.closest('g[data-run]');if(target&&['Enter',' '].includes(event.key)){event.preventDefault();state.selected=target.dataset.run;render();}});
 window.addEventListener('offline',()=>{state.online=false;status();});

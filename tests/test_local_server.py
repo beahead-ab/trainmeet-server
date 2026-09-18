@@ -97,6 +97,8 @@ class LocalServerStartupTests(unittest.TestCase):
                 CREATE TABLE runtime_settings (key TEXT PRIMARY KEY, value TEXT);
                 CREATE TABLE admin_access (username TEXT);
                 CREATE TABLE admin_sessions (token TEXT);
+                CREATE TABLE us_packages (value TEXT);
+                CREATE TABLE us_cloud_link (value TEXT);
                 """
             )
             for table in (
@@ -104,7 +106,7 @@ class LocalServerStartupTests(unittest.TestCase):
                 "tkl_movement_states", "tkl_events", "train_readiness",
                 "local_configuration_current", "local_configuration_revisions",
                 "runtime_publications", "pairing_codes",
-                "client_panels", "discovered_devices",
+                "client_panels", "discovered_devices", "us_packages", "us_cloud_link",
             ):
                 connection.execute(f"INSERT INTO {table} VALUES ('data')")
             connection.execute("INSERT INTO clients VALUES ('web_admin')")
@@ -125,6 +127,8 @@ class LocalServerStartupTests(unittest.TestCase):
             self.assertEqual(("Min server",), connection.execute("SELECT value FROM runtime_settings WHERE key='server_name'").fetchone())
             self.assertEqual([("web_admin",)], connection.execute("SELECT kind FROM clients").fetchall())
             self.assertEqual(0, connection.execute("SELECT COUNT(*) FROM runtime_publications").fetchone()[0])
+            self.assertEqual(0, connection.execute("SELECT COUNT(*) FROM us_packages").fetchone()[0])
+            self.assertEqual(0, connection.execute("SELECT COUNT(*) FROM us_cloud_link").fetchone()[0])
             self.assertIsNone(connection.execute("SELECT value FROM runtime_settings WHERE key='central_link_token'").fetchone())
             connection.close()
             self.assertFalse((state_directory / "connection-code.txt").exists())
