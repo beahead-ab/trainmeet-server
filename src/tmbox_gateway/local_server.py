@@ -308,7 +308,7 @@ def _reset_operational_state(database_path: Path, state_directory: Path) -> None
     try:
         connection.execute("PRAGMA foreign_keys=ON")
         with connection:
-            for table in ("us_events", "us_commands", "us_current", "us_sessions"):
+            for table in ("us_events", "us_commands", "us_current", "us_sessions", "us_packages", "us_cloud_link"):
                 if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
                     connection.execute(f"DELETE FROM {table}")
             for table in (

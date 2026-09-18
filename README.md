@@ -6,6 +6,12 @@ TrainMeet Server är den lokala, självständiga driftsmiljön för en TrainMeet
 
 ## US-körning och språk
 
+Publicera US-träffen i Cloud och välj **US Dispatcher → Download from Cloud**
+på Servern. Ange `https://cloud.trainmeet.app/config` och träffens sexsiffriga
+kod. Paketet sparas lokalt för granskning innan **Start US session**.
+US-klockan startar pausad; därefter behövs inget internet. Nya hämtningar
+ändrar aldrig pågående körning eller EU-drift. JSON-import finns också kvar.
+
 Servern innehåller även en separat **US TWC-pilot**. Välj **US Dispatcher** i
 webbgränssnittet eller öppna `/us/dispatcher`. Conductor öppnar `/us/conductor`
 och parkopplas med en engångskod; dispatcher tilldelar tåget.

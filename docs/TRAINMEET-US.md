@@ -1,6 +1,51 @@
 # Train Meet US — första vertikala leveransen
 
-## Verifierad inventering, 2026-09-18
+## Cloud → lokal US-körning
+
+Server kan hämta publicerade US-paket från **Cloud 1.2.0**. Cloud bygger och
+publicerar konfiguration; den lokala Servern ensam äger körning, klocka,
+Conductor-tilldelning och track warrants. EU:s paket, Cloud-koppling, klocka
+och trafikmotor ändras inte av en US-hämtning eller US-start.
+
+1. Publicera en granskad **US-träff** i Cloud och hämta dess sexsiffriga kod.
+2. Öppna **US Dispatcher → Download from Cloud** på den lokala Servern.
+3. Använd `https://cloud.trainmeet.app/config` (eller din egen Config-server)
+   och skriv in koden. **Download package** sparar och validerar lokalt;
+   ingen körning startar och ingen omstart krävs.
+4. Granska spårsegment, MP-gränser, tåg/tidtabell och källinstruktioner i
+   **Review US package**. Bekräfta testprofilen och välj **Start US session**.
+   En redan pågående session måste avslutas först.
+5. **US clock** använder Clouds föreslagna tid/hastighet men börjar pausad.
+   Dispatcher väljer när den ska gå. Klockan sparas lokalt och fortsätter
+   efter serveromstart om den lämnades igång; stoppa den före en planerad paus.
+6. Anslut och tilldela Conductor enligt driftstegen nedan. All fortsatt drift
+   fungerar utan internet, inklusive start av tidigare hämtade paket.
+
+**Saved US packages** visar lokalt sparade publiceringar. Ny hämtning kan
+göras under körning men ändrar aldrig den frysta sessionen. Lämna koden tom
+för att hämta senaste publiceringen via den sparade US-kopplingen. Byter du
+Config-server eller träff ska du ange den nya serverns adress **och kod**.
+US hämtar inte automatiskt i bakgrunden. En ny publicering används först vid
+nästa uttryckliga sessionsstart. JSON-import finns kvar för helt offline
+installation och går genom samma granskning.
+
+Första installationens vanliga **hämta config** känner också igen US-paket
+och leder vidare till Dispatcher. Lokalt administratörskonto krävs precis
+som för EU; Cloud-inloggningar och lösenord kopieras aldrig.
+
+Clouds dispatcher-distrikt och källinstruktioner visas som **planeringsunderlag**.
+Distriktsbegränsade behörigheter, Train Token-överlämning och historisk TT&TO
+är inte implementerade i denna profil. Den stöder en tidtabellsdag per session.
+Äldre redan startade pilotsessioner behåller sin tidigare klockkälla tills
+dispatcher uttryckligen ställer **US clock**; en uppdatering flyttar inte deras tid.
+
+Tekniskt: `us_packages` sparar oföränderliga paket med SHA-256-kontrollsumma;
+`us_cloud_link` håller US-kopplingen separat från EU. Samma publicerings-ID
+med annat innehåll avvisas. Start är revisions-/idempotensskyddad och låser
+in en kopia. Kopplingstoken skickas aldrig till webbläsaren. Befintlig backup
+omfattar tabellerna och serverns träffnollställning rensar även dessa.
+
+## Ursprunglig inventering, före Cloud 1.2.0
 
 - Server: `beahead-ab/trainmeet-server`, bas `f9a7d6b` (1.4.2). Isolerad
   worktree/branch `codex/trainmeet-us-twc`. Leveransen omfattar denna pilot,
@@ -59,7 +104,7 @@ bara efter aktivt val; inga MP-tal eller spårantaganden från bilderna importer
    med den lokala serverns administratör. På HTTPS-installationer används
    förstås serverns vanliga HTTPS-adress utan porttillägg.
 3. Välj **Import US package**. Välj `examples/us-twc-training.json` från detta
-   repo. Läs övningsbanan, bekräfta testprofilen och välj **Start US session**.
+   repo och **Review package**. Läs övningsbanan, bekräfta testprofilen och välj **Start US session**.
    De två parallella spåren är avsiktligt fiktiva och oberoende.
 4. Välj **Connect conductor**. Öppna samma servers `/us/conductor` på telefonen,
    ange namn och engångskoden. Markera Training 101 hos dispatcher och välj
@@ -102,7 +147,7 @@ bevisat aldrig mottaget kommando är en kvarvarande begränsning i piloten.
 
 ## Kvar efter första kedjan
 
-Cloud-editor/publicering av US-paket, offline-identitetskontrakt, verifierade
+Distriktsbehörigheter och Train Token-överlämning, offline-identitetskontrakt, verifierade
 verkliga banor/regelprofiler, historisk TT&TO, avancerade villkor/ersättningar,
 returarkiv till Cloud och full fysisk terminaltest. Dessa ingår inte i den
 första vertikala pilotleveransen.

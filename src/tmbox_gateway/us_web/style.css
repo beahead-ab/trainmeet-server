@@ -1,4 +1,5 @@
 tm-text { display: contents; }
+.package-shelf{display:grid;gap:12px;margin-top:24px;min-width:0}.package-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;border:1px solid hsl(var(--border));border-radius:12px;text-align:left}.package-row>div{min-width:0;overflow-wrap:anywhere}.package-row button{flex-shrink:0}dialog>p,dialog>details{margin:14px 0}dialog details p{white-space:pre-wrap;overflow-wrap:anywhere}dialog details h3{margin-top:12px}@media(max-width:600px){.package-row{align-items:flex-start;flex-direction:column}.package-row button{width:100%}}
 @font-face{font-family:Inter;src:url('/assets/fonts/inter-400.woff2') format('woff2');font-weight:400;font-display:swap}
 @font-face{font-family:Inter;src:url('/assets/fonts/inter-500.woff2') format('woff2');font-weight:500;font-display:swap}
 @font-face{font-family:Inter;src:url('/assets/fonts/inter-600.woff2') format('woff2');font-weight:600;font-display:swap}
@@ -13,3 +14,7 @@ tm-text { display: contents; }
 /* Operational status phrases must remain readable in every UI language. */
 .warrant-select .row-top, .train-row .row-top, .map-key { flex-wrap: wrap; }
 .warrant-select .row-top > *, .train-row .row-top > * { min-width: 0; overflow-wrap: anywhere; }
+.package-table {overflow-x:auto;max-width:100%;margin:12px 0}
+.package-table table {border-collapse:collapse;width:100%;font-size:.9rem}
+.package-table th,.package-table td {padding:10px;text-align:left;border-bottom:1px solid var(--border,#ddd);vertical-align:top}
+.package-table th {font-weight:600}

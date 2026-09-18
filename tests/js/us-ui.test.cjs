@@ -30,10 +30,10 @@ async function setup(role='dispatcher', options={}) {
  const context={document,navigator:{languages:['sv-SE']},location:{pathname:'/us/'+role,origin:'http://local.test'},crypto:require('node:crypto').webcrypto,
   localStorage:{getItem:key=>key==='trainmeet.language'?'sv':null,setItem(){}},sessionStorage:{getItem:()=>null,setItem(){},removeItem(){}},
   addEventListener(){},setTimeout:()=>0,clearTimeout(){},AbortController,
-  fetch:async(url,request)=>{requests.push({url,method:request.method});return {ok:!options.unauthenticated,status:options.unauthenticated?401:200,json:async()=>options.unauthenticated?{message:'Sign in required'}:data};}};
+  fetch:async(url,request)=>{requests.push({url,method:request.method});return {ok:!options.unauthenticated,status:options.unauthenticated?401:200,json:async()=>options.unauthenticated?{message:'Sign in required'}:url.startsWith('/v1/us/package?')?{package:{...data.session.package,runs:data.session.runs}}:data};}};
  context.window=context;
  vm.createContext(context);
- for(const file of ['web/i18n-messages.js','web/i18n.js']) vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),context);
+ for(const file of ['web/i18n-messages.js','web/us-cloud-messages.js','web/i18n.js']) vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),context);
  const source=fs.readFileSync(path.join(root,'us_web/app.js'),'utf8');
  const api=await vm.runInContext('(async()=>{'+source+'\nreturn {state,runStatus,warrantCard,stripMap,action,holding,disabled,refresh,command,createCommandID,render};})()',context);
  return {api,language:context.TrainMeetI18n,requests,app:element('#app'),editor:element('#editor'),data,context};
@@ -150,4 +150,54 @@ test('uncertain write result is not resent by polling or language changes',async
  assert.ok(api.state.pending);assert.equal(api.disabled('ready'),true);
  await api.refresh();language.setLanguage('de');
  assert.equal(writes.length,1);
+});
+
+test('Cloud packages are reviewed before start, and active sessions have no replacement action',async()=>{
+ const {api,data,editor,app}=await setup();
+ data.cloud={linked:true,url:'https://config.example.test/config'};
+ data.packages=[{publication_id:'v1',name:'Test <railroad>',checksum:'checksum',counts:{territories:1,nodes:2,segments:1,runs:1},session:{clock_time:'05:30',clock_speed:4},planning:{source_instructions:[{text:'<untrusted instruction>'}],dispatcher_districts:[]}}];
+ await api.action('review-package',undefined,'v1');
+ assert.match(editor.innerHTML,/Finish the current session/);
+ assert.doesNotMatch(editor.innerHTML,/<form>/);
+ assert.match(editor.innerHTML,/&lt;untrusted instruction&gt;/);
+ assert.match(editor.innerHTML,/<table>/);
+ assert.match(editor.innerHTML,/North Yard/);
+ data.session.status='closed';api.render();
+ assert.match(app.innerHTML,/data-package="v1"/);
+ await api.action('review-package',undefined,'v1');
+ assert.match(editor.innerHTML,/name="confirmed" type="checkbox" required/);
+ assert.match(editor.innerHTML,/US clock starts paused/);
+ assert.match(editor.innerHTML,/Test &lt;railroad&gt;/);
+ assert.match(editor.innerHTML,/Start US session/);
+});
+test('download and review copy has five languages without rewriting domain data',async()=>{
+ const {language}=await setup();
+ for(const locale of ['sv','da','nb','de','en']){
+   language.setLanguage(locale);
+   for(const term of ['Download from Cloud','Saved US packages','Review US package','US clock','Run US clock']){
+     assert.ok(language.t(term));
+     if(locale!=='en')assert.notEqual(language.t(term),term);
+   }
+ }
+});
+test('US clock form and Cloud connection are explicit actions and not polled',async()=>{
+ const {api,editor,requests,data}=await setup();
+ data.cloud={linked:true,url:'https://config.example.test/config'};
+ await api.action('clock');assert.match(editor.innerHTML,/Only this US session is affected/);
+ assert.match(editor.innerHTML,/name="speed" type="number" min="0.1" max="60" step="any"/);
+ await api.action('cloud');assert.match(editor.innerHTML,/Six-digit session code/);
+ assert.match(editor.innerHTML,/Leave the code empty/);
+ await api.refresh();await api.refresh();
+ assert.equal(requests.some(r=>r.url.includes('/cloud/')),false);
+ assert.equal(requests.some(r=>r.method==='POST'),false);
+});
+
+test('Cloud railroad identity and schedule event labels survive language changes',async()=>{
+ const {api,data,app,language}=await setup('conductor');
+ const r=data.session.runs[0];r.symbol='834';r.railroad='SP';r.schedule[0].event='switch';
+ r.service='Morning';
+ api.render();assert.match(app.innerHTML,/SP 834/);assert.match(app.innerHTML,/Switching/);
+ language.setLanguage('sv');api.render();assert.match(app.innerHTML,/SP 834/);assert.match(app.innerHTML,/Växling/);
+ assert.equal(r.symbol,'834');assert.equal(r.schedule[0].event,'switch');
+ assert.match(app.innerHTML,/SP 834 · Morning/);
 });

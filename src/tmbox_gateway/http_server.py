@@ -541,10 +541,44 @@ class TrainMeetHTTPApplication:
     def us_context(self, client: PairedClient) -> dict[str, Any]:
         store, actor, dispatcher = self.us_access(client)
         result = store.context(actor, dispatcher)
-        result["clock"] = self.operations_store.clock_status() if self.operations_store else {"time": self.engine.config.clock_time, "running": False}
+        if 'clock' not in result:
+            result["clock"] = self.operations_store.clock_status() if self.operations_store else {"time": self.engine.config.clock_time, "running": False}
         if dispatcher:
             result["conductors"] = [{"id": f"client:{c.client_id}", "name": c.display_name} for c in self.identities.enabled_clients() if c.kind == DeviceKind.US_CONDUCTOR]
+            link = store.cloud_link()
+            result['cloud'] = {'linked': bool(link), 'url': link[0] if link else DEFAULT_RUNTIME_PUBLICATION_URL}
+            result['packages'] = store.package_catalogue()
         return result
+
+    def us_stage_package(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        store, _, dispatcher = self.us_access(client)
+        if not dispatcher:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, 'us_dispatcher_required', 'Dispatcher access required')
+        return {'package': store.stage_package(payload.get('package')), 'staged': True, 'restart_required': False}
+
+    def us_cloud_download(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        store, _, dispatcher = self.us_access(client)
+        if not dispatcher:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, 'us_dispatcher_required', 'Dispatcher access required')
+        link = store.cloud_link()
+        code = str(payload.get('sync_code') or '').strip()
+        if code and (len(code) != 6 or not code.isascii() or not code.isdigit()):
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, 'invalid_sync_code', 'Enter a six-digit Cloud code')
+        if not code and not link:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, 'us_not_linked', 'Connect with a six-digit Cloud code first')
+        url = canonical_runtime_url(str(payload.get('central_url') or (link[0] if link else DEFAULT_RUNTIME_PUBLICATION_URL))) if code else link[0]
+        parsed = urlparse(url)
+        if parsed.scheme not in {'http', 'https'} or not parsed.netloc or parsed.username or parsed.password or parsed.fragment:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, 'invalid_central_url', 'Enter a full HTTP or HTTPS Config URL without credentials')
+        try:
+            download = self.runtime_fetcher(code, url) if code else self.linked_runtime_fetcher(link[1], url, False)
+        except CentralSyncError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, 'central_sync_failed', str(error)) from error
+        if not isinstance(download, CentralRuntimeDownload):
+            raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, 'invalid_us_download', 'Cloud returned no US package')
+        summary = store.stage_package(download.package, url=url, token=download.link_token,
+                                      expected_link=link if not code else None)
+        return {'package': summary, 'staged': True, 'linked': bool(store.cloud_link()), 'restart_required': False}
 
     def us_command(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         store, actor, dispatcher = self.us_access(client)
@@ -555,7 +589,12 @@ class TrainMeetHTTPApplication:
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "unknown_conductor", "Select a paired conductor")
             payload = {**payload, "conductor_name": conductor.display_name}
         clock = self.operations_store.clock_status() if self.operations_store else {"time": self.engine.config.clock_time}
-        return store.execute(actor, dispatcher, action, payload, str(clock["time"]))
+        result = store.execute(actor, dispatcher, action, payload, str(clock["time"]))
+        if action == 'create_session' and self.runtime_store and self.runtime_store.server_name() and self.runtime_store.installation_required() and self.runtime_store.active() is None:
+            # Explicitly starting a US session completes first-time setup too;
+            # it does not create/activate an EU publication or set the EU day.
+            self.runtime_store.complete_installation()
+        return result
 
     def snapshots(self, client: PairedClient) -> dict[str, Any]:
         snapshots = self.engine.snapshots()
@@ -2227,8 +2266,6 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "central_sync_failed", str(error)) from error
         if isinstance(result, CentralRuntimeDownload):
             package = result.package
-            if self.runtime_store is not None and result.link_token:
-                self.runtime_store.save_link_token(result.link_token)
         elif isinstance(result, dict):
             package = result
         else:
@@ -2237,12 +2274,24 @@ class TrainMeetHTTPApplication:
                 "central_sync_failed",
                 "TrainMeet skickade inget driftpaket",
             )
+        # Route by schema BEFORE touching EU connection tokens or publications.
+        # A US package is staged only; starting a session is an explicit US command.
+        if isinstance(package, dict) and package.get('schema') == 'trainmeet.us.runtime/1':
+            store, _, _ = self.us_access(client)
+            staged = store.stage_package(package, url=central_url,
+                                         token=result.link_token if isinstance(result, CentralRuntimeDownload) else None)
+            return {'operating_region': 'us', 'staged': True, 'package': staged,
+                    'linked': bool(store.cloud_link()), 'restart_required': False,
+                    'message': 'US-paketet är hämtat. Granska och starta det i US Dispatcher.',
+                    'open_url': '/us/dispatcher'}
         if self.runtime_store is not None:
             try:
                 self.runtime_store.save_central_url(central_url)
             except RuntimePublicationError as error:
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_central_url", str(error)) from error
         response = self.install_runtime(client, {"package": package})
+        if self.runtime_store is not None and isinstance(result, CentralRuntimeDownload) and result.link_token:
+            self.runtime_store.save_link_token(result.link_token)
         response["linked"] = self.runtime_store.link_token() is not None if self.runtime_store else False
         return response
 
@@ -2447,6 +2496,13 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         try:
             if path == "/v1/us/context":
                 self._send_json(HTTPStatus.OK, self.server.application.us_context(self._authenticated_client()))
+                return
+            if path == '/v1/us/package':
+                store, _, dispatcher = self.server.application.us_access(self._authenticated_client())
+                if not dispatcher:
+                    raise HTTPAPIError(HTTPStatus.FORBIDDEN, 'us_dispatcher_required', 'Dispatcher access required')
+                publication_id = parse_qs(parsed.query).get('publication_id', [''])[0]
+                self._send_json(HTTPStatus.OK, {'package': store.saved_package(publication_id)})
                 return
             if path == "/v1/us/command-status":
                 store, actor, _ = self.server.application.us_access(self._authenticated_client())
@@ -2671,6 +2727,12 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             payload = self._read_json()
             if path == "/v1/us/commands":
                 self._send_json(HTTPStatus.OK, self.server.application.us_command(self._authenticated_client(), payload))
+                return
+            if path == '/v1/us/packages':
+                self._send_json(HTTPStatus.CREATED, self.server.application.us_stage_package(self._authenticated_client(), payload))
+                return
+            if path == '/v1/us/cloud/download':
+                self._send_json(HTTPStatus.OK, self.server.application.us_cloud_download(self._authenticated_client(), payload))
                 return
             if path == "/v1/us/conductor-code":
                 client = self._authenticated_client()

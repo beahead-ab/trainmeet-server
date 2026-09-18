@@ -11,10 +11,13 @@ import json
 import math
 import sqlite3
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+from .us_clock import clock_settings, clock_status
 
 PROFILE = "tm-us-twc-manual-v1"
 SCHEMA = "trainmeet.us.runtime/1"
@@ -89,6 +92,19 @@ def validate_package(value: Any) -> dict:
             text(resource, "conflict_resource", 80)
     for run in runs.values():
         validate_run(run, nodes)
+    try:
+        clock_settings(package.get('session', {}))
+    except ValueError as error:
+        raise USError(str(error)) from error
+    planning = package.get('planning', {})
+    if not isinstance(planning, dict) or planning.get('runtime_enforced', False) is not False:
+        raise USError('Dispatcher districts are planning references, not enforced permissions in this profile')
+    for district in rows(planning.get('dispatcher_districts', []), 'dispatcher districts'):
+        text(district.get('name'), 'dispatcher district name')
+        if district.get('instructions'):
+            text(district['instructions'], 'dispatcher instructions', 4000)
+    for note in rows(planning.get('source_instructions', []), 'source instructions'):
+        text(note.get('text'), 'source instruction', 4000)
     # Reject NaN even in extension fields before persisting anything.
     try:
         json.dumps(package, allow_nan=False)
@@ -99,6 +115,9 @@ def validate_package(value: Any) -> dict:
 
 def validate_run(run: dict, nodes: dict) -> None:
     text(run.get("symbol"), "train symbol", 60)
+    for field in ('railroad', 'service'):
+        if field in run and (not isinstance(run[field], str) or len(run[field]) > 160):
+            raise USError(f'{field}: expected text up to 160 characters')
     if run.get("direction") not in {"east", "west"}:
         raise USError("Direction must be east or west")
     for stop in rows(run.get("schedule", []), "schedule", 200):
@@ -109,6 +128,10 @@ def validate_run(run: dict, nodes: dict) -> None:
             raise USError("Scheduled time must be HH:MM")
         if stop.get("work"):
             text(stop["work"], "scheduled work", 400)
+        if stop.get('event') is not None and stop['event'] not in {'arrive', 'depart', 'pass', 'switch'}:
+            raise USError('Unknown schedule event')
+        if type(stop.get('day_offset', 0)) is not int or stop.get('day_offset', 0) != 0:
+            raise USError('This US profile supports one timetable day per session')
 
 
 def validate_path(package: dict, value: Any) -> list[dict]:
@@ -154,7 +177,12 @@ def warrant_text(package: dict, warrant: dict, run: dict) -> str:
     # Generated once for a new draft, then stored verbatim. Never regenerate
     # existing warrants during a UI language change or lifecycle transition.
     direction = "EASTBOUND" if run["direction"] == "east" else "WESTBOUND"
-    lines = [f"Track Warrant {warrant['number']} · {run['symbol']} · Train direction: {direction}"]
+    railroad = run.get('railroad', '').strip()
+    symbol = run['symbol']
+    train = f'{railroad} {symbol}' if railroad and not symbol.lower().startswith(railroad.lower() + ' ') else symbol
+    if run.get('service', '').strip():
+        train += ' · ' + run['service'].strip()
+    lines = [f"Track Warrant {warrant['number']} · {train} · Train direction: {direction}"]
     for leg in warrant["path"]:
         segment = segments[leg["segment_id"]]
         territory = territories[nodes[segment["from_node"]]["territory_id"]]["name"]
@@ -188,10 +216,69 @@ class USStore:
             revision INTEGER NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL,
             target_id TEXT, meet_time TEXT NOT NULL, recorded_at TEXT NOT NULL,
             detail_json TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS us_packages (
+            publication_id TEXT PRIMARY KEY, package_json TEXT NOT NULL,
+            checksum TEXT NOT NULL, downloaded_at TEXT NOT NULL, source_url TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS us_cloud_link (
+            singleton INTEGER PRIMARY KEY CHECK(singleton=1), url TEXT NOT NULL, token TEXT NOT NULL);
         """)
 
     def close(self):
         self.db.close()
+
+    def cloud_link(self):
+        with self.lock:
+            row = self.db.execute('SELECT url,token FROM us_cloud_link WHERE singleton=1').fetchone()
+            return tuple(row) if row else None
+
+    def package_catalogue(self):
+        with self.lock:
+            return [self._package_summary(row) for row in self.db.execute('SELECT * FROM us_packages ORDER BY downloaded_at DESC,publication_id')]
+
+    def saved_package(self, publication_id):
+        with self.lock:
+            row = self.db.execute('SELECT package_json FROM us_packages WHERE publication_id=?', (text(publication_id, 'publication ID'),)).fetchone()
+            if row is None:
+                raise USError('Saved US package not found', 404)
+            return json.loads(row[0])
+
+    @staticmethod
+    def _package_summary(row):
+        package = json.loads(row['package_json'])
+        return {'publication_id': row['publication_id'], 'name': package['name'],
+                'checksum': row['checksum'], 'downloaded_at': row['downloaded_at'],
+                'published_at': package.get('published_at', ''), 'source_url': row['source_url'],
+                'counts': {key: len(package[key]) for key in ('territories', 'nodes', 'segments', 'runs')},
+                'session': package.get('session', {}), 'planning': package.get('planning', {})}
+
+    def stage_package(self, value, *, url='', token=None, expected_link=None):
+        package = validate_package(value)
+        encoded = json.dumps(package, sort_keys=True, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+        if len(encoded.encode()) > 2_000_000:
+            raise USError('US package is too large')
+        checksum = hashlib.sha256(encoded.encode()).hexdigest()
+        with self.lock:
+            self.db.execute('BEGIN IMMEDIATE')
+            try:
+                if expected_link is not None and self.cloud_link() != expected_link:
+                    raise USError('Cloud connection changed. Review and download again.', 409)
+                row = self.db.execute('SELECT * FROM us_packages WHERE publication_id=?', (package['publication_id'],)).fetchone()
+                if row and row['checksum'] != checksum:
+                    raise USError('A different package already uses this publication ID', 409)
+                if not row:
+                    self.db.execute('INSERT INTO us_packages VALUES(?,?,?,?,?)',
+                                    (package['publication_id'], encoded, checksum, datetime.now(timezone.utc).isoformat(), url))
+                if token:
+                    self.db.execute('INSERT INTO us_cloud_link VALUES(1,?,?) ON CONFLICT(singleton) DO UPDATE SET url=excluded.url,token=excluded.token', (url, token))
+                elif url and expected_link is None:
+                    # A one-off download from another Config server must not
+                    # silently leave the previous server selected for updates.
+                    self.db.execute('DELETE FROM us_cloud_link')
+                self.db.execute('COMMIT')
+            except BaseException:
+                self.db.execute('ROLLBACK')
+                raise
+        return next(item for item in self.package_catalogue() if item['publication_id'] == package['publication_id'])
 
     def _load(self, session_id: str) -> dict:
         row = self.db.execute("SELECT state_json FROM us_sessions WHERE id=?", (session_id,)).fetchone()
@@ -217,7 +304,10 @@ class USStore:
                     if not dispatcher:
                         state["package"]["runs"] = []
                 self.db.execute("COMMIT")
-                return {"actor": actor, "role": "dispatcher" if dispatcher else "conductor", "session": state}
+                result = {"actor": actor, "role": "dispatcher" if dispatcher else "conductor", "session": state}
+                if state and state.get('clock'):
+                    result['clock'] = clock_status(state['clock'])
+                return result
             except BaseException:
                 self.db.execute("ROLLBACK")
                 raise
@@ -250,10 +340,20 @@ class USStore:
                     current = self.db.execute("SELECT session_id FROM us_current WHERE singleton=1").fetchone()
                     if current and self._load(current[0])["status"] != "closed":
                         raise USError("Finish the current session before activating a new package", 409)
-                    package = validate_package(payload.get("package"))
+                    if payload.get('publication_id'):
+                        if payload.get('confirmed') is not True:
+                            raise USError('Review the package and confirm before starting')
+                        row = self.db.execute('SELECT * FROM us_packages WHERE publication_id=?', (payload['publication_id'],)).fetchone()
+                        if not row or row['checksum'] != payload.get('package_checksum'):
+                            raise USError('The selected package is unavailable or changed. Review it again.', 409)
+                        package = validate_package(json.loads(row['package_json']))
+                    else:
+                        package = validate_package(payload.get("package"))
                     state = {"id": str(uuid4()), "name": package["name"], "package": package,
-                             "package_checksum": hashlib.sha256(json.dumps(package, sort_keys=True).encode()).hexdigest(),
-                             "status": "running", "revision": 0, "runs": [], "warrants": [], "reports": []}
+                             "package_checksum": hashlib.sha256(json.dumps(package, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest(),
+                             "status": "running", "revision": 0, "runs": [], "warrants": [], "reports": [],
+                             "clock": clock_settings(package.get('session', {}))}
+                    meet_time = clock_status(state['clock'])['time']
                     for plan in package["runs"]:
                         state["runs"].append({**plan, "planned_id": plan["id"], "id": str(uuid4()), "conductor_id": None, "conductor_name": None, "position": None, "ready": False})
                     target = state["id"]
@@ -263,6 +363,8 @@ class USStore:
                         raise USError("Session is closed", 409)
                     if type(payload.get("expected_revision")) is not int or payload["expected_revision"] != state["revision"]:
                         raise USError("The session changed. Refresh and review before trying again.", 409)
+                    if state.get('clock'):
+                        meet_time = clock_status(state['clock'])['time']
                     target = self._apply(state, actor, dispatcher, action, payload, now, meet_time)
                 state["revision"] += 1
                 result = {"command_id": command_id, "session_id": state["id"], "revision": state["revision"], "target_id": target}
@@ -279,15 +381,27 @@ class USStore:
 
     def _apply(self, state: dict, actor: str, dispatcher: bool, action: str, payload: dict, now: str, meet_time: str) -> str:
         conductor_actions = {"receive", "readback", "request_release", "report", "ready"}
-        dispatcher_actions = {"draft", "transmit", "activate", "close_warrant", "void", "assign", "extra", "finish_session"}
+        dispatcher_actions = {"draft", "transmit", "activate", "close_warrant", "void", "assign", "extra", "finish_session", "clock"}
         if action not in conductor_actions | dispatcher_actions:
             raise USError("Unknown US action")
         if (action in dispatcher_actions) != dispatcher:
             raise USError("This action belongs to the other operating role", 403)
+        if action == 'clock':
+            if payload.get('confirmed') is not True or type(payload.get('running')) is not bool:
+                raise USError('Confirm the US clock change')
+            try:
+                new_clock = clock_settings(payload)
+            except ValueError as error:
+                raise USError(str(error)) from error
+            new_clock['running'] = payload['running']
+            state['clock'] = new_clock
+            return state['id']
         if action == "finish_session":
             if any(w["status"] not in TERMINAL for w in state["warrants"]):
                 raise USError("Close or void all warrants first", 409)
             state["status"] = "closed"
+            if state.get('clock'):
+                state['clock'].update(seconds=clock_status(state['clock'])['seconds'], running=False, anchor=time.time())
             return state["id"]
         if action == "extra":
             run = {"id": str(uuid4()), "symbol": payload.get("symbol"), "direction": payload.get("direction"), "locomotive": "", "schedule": [], "planned_id": None, "conductor_id": None, "conductor_name": None, "position": None, "ready": False}
