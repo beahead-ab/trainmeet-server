@@ -19,7 +19,7 @@ from tmbox_gateway.http_server import (
     TrainMeetHTTPApplication,
     TrainMeetHTTPServer,
 )
-from tmbox_gateway.identity import IdentityStore, PairingService
+from tmbox_gateway.identity import DeviceKind, IdentityStore, PairingService
 from tmbox_gateway.local_config import SQLiteLocalConfigurationStore
 from tmbox_gateway.models import DispatchMode
 from tmbox_gateway.operations import SQLiteOperationsStore
@@ -28,6 +28,48 @@ from runtime_fixture import runtime_package, runtime_package_v3
 
 
 class HTTPServerTests(unittest.TestCase):
+    def test_tmbox_code_enrolls_without_picking_a_station(self):
+        device_id = "esp8266-aabbccddeeff"
+        self.identities.record_discovery(device_id, "TBX-DDEEFF")
+        code = self.identities.issue_pairing_code(
+            ["panel-a"], code="654321", allowed_kinds=[DeviceKind.ESP32_PANEL],
+        )
+        request = Request(self.base_url + "/v1/tmbox/enroll", method="POST",
+                          data=json.dumps({"client_id": device_id, "pairing_code": code}).encode(),
+                          headers={"Content-Type": "application/json"})
+        with urlopen(request, timeout=2) as response:
+            self.assertEqual(response.status, 201)
+            body = json.load(response)
+        self.assertTrue(body["accepted"])
+        self.assertTrue(body["awaiting_station_assignment"])
+        self.assertIsNone(body["station_id"])
+        self.assertEqual(self.identities.panels_for_client(device_id), ())
+
+    def test_tmbox_code_invalid_and_rate_limited(self):
+        device_id = "esp8266-aabbccddeeff"
+        self.identities.record_discovery(device_id, "TBX-DDEEFF")
+        for index in range(6):
+            with self.assertRaises(HTTPAPIError) as caught:
+                self.application.enroll_tmbox({"client_id": device_id, "pairing_code": "000000"}, "test-peer")
+            self.assertEqual(int(caught.exception.status), 429 if index == 5 else 401)
+        self.assertIsNone(self.identities.client(device_id))
+
+    def test_tmbox_code_preserves_existing_station(self):
+        device_id = "esp8266-aabbccddeeff"
+        self.identities.record_discovery(device_id, "TBX-DDEEFF")
+        self.identities.assign_discovered_device("TBX-DDEEFF", station_id="station-a")
+        code = self.identities.issue_pairing_code(
+            ["panel-a"], code="654321", allowed_kinds=[DeviceKind.ESP32_PANEL],
+        )
+        result = self.application.enroll_tmbox({"client_id": device_id, "pairing_code": code}, "test-peer")
+        self.assertEqual(result["station_id"], "station-a")
+        self.assertFalse(result["awaiting_station_assignment"])
+
+    def test_tmbox_code_cannot_enroll_a_web_admin_id(self):
+        with self.assertRaises(HTTPAPIError) as caught:
+            self.application.enroll_tmbox({"client_id": "admin-123", "pairing_code": "123456"}, "test-peer")
+        self.assertEqual(int(caught.exception.status), 400)
+
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.identities = IdentityStore(Path(self.temporary_directory.name) / "identity.db")

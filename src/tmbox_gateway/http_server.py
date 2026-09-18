@@ -4,7 +4,9 @@ import json
 import ipaddress
 import logging
 import mimetypes
+import re
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
@@ -208,6 +210,8 @@ class TrainMeetHTTPApplication:
         self.local_configuration_store = local_configuration_store
         self.operations_store = operations_store
         self._station_service = station_service
+        self._box_enrollment_lock = threading.Lock()
+        self._box_enrollment_attempts: dict[str, list[float]] = {}
         self.us_store = us_store
         self.runtime_fetcher = runtime_fetcher or (
             lambda code, url: fetch_runtime_download(
@@ -528,6 +532,38 @@ class TrainMeetHTTPApplication:
         }:
             response["access_token"] = result.access_token
         return response
+
+    def enroll_tmbox(self, payload: dict[str, Any], peer: str) -> dict[str, Any]:
+        """Redeem a local connection code, without picking a station for a box."""
+        with self._box_enrollment_lock:
+            now = time.monotonic()
+            self._box_enrollment_attempts = {
+                key: [stamp for stamp in stamps if now - stamp < 60]
+                for key, stamps in self._box_enrollment_attempts.items()
+                if any(now - stamp < 60 for stamp in stamps)
+            }
+            attempts = self._box_enrollment_attempts.get(peer, [])
+            if len(attempts) >= 5 or (peer not in self._box_enrollment_attempts and len(self._box_enrollment_attempts) >= 128):
+                raise HTTPAPIError(HTTPStatus.TOO_MANY_REQUESTS, "pairing_rate_limited", "Vänta en minut innan nästa kodförsök.")
+            self._box_enrollment_attempts[peer] = [*attempts, now]
+            client_id = str(payload.get("client_id") or "")
+            if not re.fullmatch(r"esp8266-[0-9a-f]{12}", client_id):
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_device_id", "Ogiltigt NodeMCU-ID.")
+            grant = None
+            try:
+                grant = self.identities.reserve_pairing_code(
+                    str(payload.get("pairing_code") or ""), DeviceKind.ESP32_PANEL,
+                )
+                # Legacy name ESP32_PANEL is the existing physical-box kind,
+                # shared by MQTT v1 ESP8266 and ESP32 devices.
+                client = self.identities.enroll_physical_box(client_id)
+            except PairingError as error:
+                if grant is not None:
+                    self.identities.release_pairing_code(grant.pairing_id)
+                raise HTTPAPIError(HTTPStatus.UNAUTHORIZED, error.code, str(error)) from error
+            return {"accepted": True, "client_id": client.client_id,
+                    "station_id": client.station_id,
+                    "awaiting_station_assignment": not bool(client.station_id or client.panel_ids)}
 
     def us_access(self, client: PairedClient) -> tuple[USStore, str, bool]:
         if self.us_store is None:
@@ -2840,6 +2876,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/pair":
                 response = self.server.application.pair(payload, self.headers.get("Host", "localhost"))
                 self._send_json(HTTPStatus.CREATED, response)
+                return
+            if path == "/v1/tmbox/enroll":
+                self._send_json(HTTPStatus.CREATED, self.server.application.enroll_tmbox(payload, self.client_address[0]))
                 return
             if path == "/v1/command":
                 client = self._authenticated_client()
