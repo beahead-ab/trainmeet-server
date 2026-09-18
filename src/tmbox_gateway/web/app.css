@@ -1,3 +1,4 @@
+tm-text { display: contents; }
 /* ----------------------------------------------------------------- fonts
    Inter, served from this server rather than fetched from Google.
 
@@ -3168,3 +3169,6 @@ select.topology-field.station-pick {
   .tid-search input, .tid-filter select, .tid-filter input { min-width: 0; width: 100%; }
   .tid-filter { flex: 1 1 100%; }
 }
+.language-toolbar { min-height: 44px; display: flex; justify-content: flex-end; align-items: center; padding: 6px 20px; gap: 10px; background: #fafafa; color: #20242a; border-bottom: 1px solid #e5e7eb; }
+.language-toolbar label { display: inline-flex; align-items: center; gap: 10px; margin: 0; font-size: 14px; }
+.language-toolbar select { width: auto; min-width: 142px; min-height: 32px; padding: 4px 10px; font: inherit; }

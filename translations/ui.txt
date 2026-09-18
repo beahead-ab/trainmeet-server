@@ -1,0 +1,1024 @@
+# English|Svenska|Dansk|Norsk bokmål|Deutsch
+{count} train movements|{count} tågrörelser|{count} togbevægelser|{count} togbevegelser|{count} Zugbewegungen
+{count} tracks|{count} spår|{count} spor|{count} spor|{count} Gleise
+{count} sections|{count} sträckor|{count} strækninger|{count} strekninger|{count} Strecken
+Station tracks|Stationsspår|Stationsspor|Stasjonsspor|Betriebsstellengleise
+Connections|Anslutningar|Forbindelser|Tilkoblinger|Verbindungen
+Running|Går|Kører|Går|Läuft
+Not running|Står still|Står stille|Står stille|Steht
+Saving …|Sparar …|Gemmer …|Lagrer …|Wird gespeichert …
+Approaching|På väg in|På vej ind|På vei inn|Nähert sich
+Clearance required before departure|Klarering krävs före avgång|Tilladelse kræves før afgang|Tillatelse kreves før avgang|Fahrberechtigung vor Abfahrt erforderlich
+Notify TKL|Avisera TKL|Underret TKL|Varsle TKL|TKL benachrichtigen
+Choose track|Välj spår|Vælg spor|Velg spor|Gleis auswählen
+(unavailable)|(ej tillgängligt)|(ikke tilgængeligt)|(ikke tilgjengelig)|(nicht verfügbar)
+First start|Första starten|Første start|Første oppstart|Erster Start
+Setup in progress|Installation pågår|Installation i gang|Installasjon pågår|Einrichtung läuft
+Setup steps|Installationssteg|Installationstrin|Installasjonstrinn|Einrichtungsschritte
+Meet|Träff|Træf|Treff|Treffen
+Done|Klart|Færdig|Ferdig|Fertig
+Step 1 of 4|Steg 1 av 4|Trin 1 af 4|Trinn 1 av 4|Schritt 1 von 4
+Step 2 of 4|Steg 2 av 4|Trin 2 af 4|Trinn 2 av 4|Schritt 2 von 4
+Step 3 of 4|Steg 3 av 4|Trin 3 af 4|Trinn 3 av 4|Schritt 3 von 4
+Step 4 of 4|Steg 4 av 4|Trin 4 af 4|Trinn 4 av 4|Schritt 4 von 4
+Create the administrator|Skapa administratören|Opret administratoren|Opprett administratoren|Administrator anlegen
+Repeat password|Upprepa lösenord|Gentag adgangskode|Gjenta passord|Passwort wiederholen
+We will take it step by step. The server has no example stations or default login credentials.|Vi tar det steg för steg. Inga exempelstationer eller förvalda inloggningsuppgifter finns på servern.|Vi tager det trin for trin. Serveren har ingen eksempelstationer eller forudvalgte loginoplysninger.|Vi tar det trinn for trinn. Serveren har ingen eksempelstasjoner eller forhåndsvalgte innloggingsopplysninger.|Wir gehen Schritt für Schritt vor. Der Server enthält keine Beispielbetriebsstellen oder voreingestellten Zugangsdaten.
+Choose the credentials for administering the server from other devices.|Välj uppgifterna som ska användas när servern administreras från andra enheter.|Vælg de oplysninger, der bruges til at administrere serveren fra andre enheder.|Velg opplysningene som skal brukes til å administrere serveren fra andre enheter.|Wähle die Zugangsdaten zur Verwaltung des Servers von anderen Geräten.
+Login|Inloggning|Login|Innlogging|Anmeldung
+Name this server|Ge servern ett namn|Giv serveren et navn|Gi serveren et navn|Server benennen
+Connect the meet|Koppla träffen|Forbind træffet|Koble til treffet|Treffen verbinden
+Used to reset your password. Without an email address, the account cannot be recovered.|Används för att återställa lösenordet. Utan adress går kontot inte att komma tillbaka till.|Bruges til at nulstille adgangskoden. Uden en adresse kan kontoen ikke gendannes.|Brukes til å tilbakestille passordet. Uten en adresse kan kontoen ikke gjenopprettes.|Zum Zurücksetzen des Passworts. Ohne Adresse kann das Konto nicht wiederhergestellt werden.
+Enter your account's email address and we will send you a link to choose a new password.|Ange e-postadressen till ditt konto, så skickar vi en länk för att välja ett nytt lösenord.|Angiv kontoens e-mailadresse, så sender vi et link til at vælge en ny adgangskode.|Skriv inn kontoens e-postadresse, så sender vi en lenke for å velge et nytt passord.|Gib die E-Mail-Adresse deines Kontos ein. Wir senden dir einen Link zur Wahl eines neuen Passworts.
+The link is valid for one hour and can only be used once. Check your spam folder if it takes a while.|Länken gäller i en timme och kan bara användas en gång. Kolla skräpposten om brevet dröjer.|Linket gælder i en time og kan kun bruges én gang. Tjek spam, hvis brevet er forsinket.|Lenken gjelder i én time og kan bare brukes én gang. Sjekk søppelpost hvis brevet drøyer.|Der Link gilt eine Stunde und kann nur einmal verwendet werden. Prüfe bei Verzögerung den Spamordner.
+Ask the person who invited you to send a new invitation.|Be den som bjöd in dig att skicka en ny.|Bed den, der inviterede dig, om at sende en ny invitation.|Be den som inviterte deg, om å sende en ny invitasjon.|Bitte die einladende Person um eine neue Einladung.
+Request another change from your account settings.|Begär ett nytt byte från kontoinställningarna.|Anmod om en ny ændring fra kontoindstillingerne.|Be om en ny endring fra kontoinnstillingene.|Fordere die Änderung erneut in den Kontoeinstellungen an.
+Your account's email address has been updated. You have been signed out on all devices; sign in again.|E-postadressen på ditt konto är uppdaterad. Du loggades ut på alla enheter, så logga in igen.|Kontoens e-mailadresse er opdateret. Du er logget ud på alle enheder; log ind igen.|Kontoens e-postadresse er oppdatert. Du er logget ut på alle enheter; logg inn igjen.|Die E-Mail-Adresse wurde aktualisiert. Du wurdest auf allen Geräten abgemeldet. Melde dich erneut an.
+Email address changed|Adressen är bytt|Adressen er ændret|Adressen er endret|Adresse geändert
+Confirming email address|Bekräftar adressen|Bekræfter adressen|Bekrefter adressen|Adresse wird bestätigt
+Reading invitation…|Läser inbjudan…|Læser invitation…|Leser invitasjon…|Einladung wird geladen…
+If an account exists with that address, an email is on its way.|Finns ett konto med den adressen är ett brev på väg.|Hvis der findes en konto med adressen, er en e-mail på vej.|Hvis det finnes en konto med adressen, er en e-post på vei.|Falls ein Konto mit dieser Adresse existiert, ist eine E-Mail unterwegs.
+The invitation has expired or has already been used.|Inbjudan har gått ut eller är redan använd.|Invitationen er udløbet eller allerede brugt.|Invitasjonen er utløpt eller allerede brukt.|Die Einladung ist abgelaufen oder wurde bereits verwendet.
+has invited you to|har bjudit in dig till|har inviteret dig til|har invitert deg til|hat dich eingeladen zu
+. Your account will be linked to|. Kontot kopplas till|. Kontoen tilknyttes|. Kontoen knyttes til|. Das Konto wird verknüpft mit
+From source files to a verified operating package.|Från källfiler till ett verifierat driftpaket.|Fra kildefiler til en verificeret driftspakke.|Fra kildefiler til en verifisert driftspakke.|Von Quelldateien zu einem geprüften Betriebspaket.
+Drafts, publications and local server connections.|Utkast, publiceringar och lokala serverkopplingar.|Kladder, udgivelser og lokale serverforbindelser.|Utkast, publiseringer og lokale servertilkoblinger.|Entwürfe, Veröffentlichungen und lokale Serververbindungen.
+Basic meet settings|Träffens grundinställningar|Træffets grundindstillinger|Treffets grunninnstillinger|Grundeinstellungen des Treffens
+Dates, operations and the local meet clock's initial state.|Datum, trafikspel och den lokala träffklockans startläge.|Datoer, trafikspil og det lokale træfurs starttilstand.|Datoer, trafikkspill og den lokale treffklokkens starttilstand.|Termine, Betrieb und Startzustand der lokalen Modellzeituhr.
+Source files and AI interpretation|Källfiler och AI-tolkning|Kildefiler og AI-fortolkning|Kildefiler og KI-tolkning|Quelldateien und KI-Auswertung
+PDFs and images are read visually, normalized and queued for review.|PDF och bild läses visuellt, normaliseras och läggs i granskningskön.|PDF og billeder læses visuelt, normaliseres og sættes i kø til gennemgang.|PDF og bilder leses visuelt, normaliseres og legges i gjennomgangskøen.|PDFs und Bilder werden visuell gelesen, normalisiert und zur Prüfung vorgemerkt.
+Reviewed train movements|Granskade tågrörelser|Gennemgåede togbevægelser|Gjennomgåtte togbevegelser|Geprüfte Zugbewegungen
+A shared list after merging duplicates.|En gemensam lista efter dublettsammanslagning.|En fælles liste efter sammenlægning af dubletter.|En felles liste etter sammenslåing av duplikater.|Eine gemeinsame Liste nach dem Zusammenführen von Duplikaten.
+Stations, operating points and aliases|Stationer, driftplatser och alias|Stationer, driftssteder og aliaser|Stasjoner, driftssteder og aliaser|Betriebsstellen, Betriebspunkte und Aliasnamen
+Change station codes and collect source names without losing connections.|Ändra stationskoder och samla källnamn utan att förlora stationens kopplingar.|Skift stationskoder og saml kildenavne uden at miste stationens forbindelser.|Endre stasjonskoder og samle kildenavn uten å miste stasjonens forbindelser.|Betriebsstellenkürzel ändern und Quellnamen sammeln, ohne Verbindungen zu verlieren.
+Station connections|Stationernas samband|Stationernes forbindelser|Stasjonenes forbindelser|Verbindungen der Betriebsstellen
+Order, branches and single or double track.|Ordning, förgreningar och enkel- eller dubbelspår.|Rækkefølge, forgreninger og enkelt- eller dobbeltspor.|Rekkefølge, forgreninger og enkelt- eller dobbeltspor.|Reihenfolge, Abzweige und ein- oder zweigleisige Strecken.
+TMBoxes and ports|TMBoxar och portar|TMBoxe og porte|TMBoxer og porter|TMBoxen und Anschlüsse
+See each station's box and connect track sections to ports A–D.|Se varje stations låda och koppla banans sträckor till port A–D.|Se hver stations boks og tilslut banestrækninger til port A–D.|Se hver stasjons boks og koble banestrekninger til port A–D.|Jede Stationsbox anzeigen und Strecken mit den Anschlüssen A–D verbinden.
+Quality check|Kvalitetskontroll|Kvalitetskontrol|Kvalitetskontroll|Qualitätsprüfung
+Validate meet|Validera träffen|Valider træffet|Valider treffet|Treffen validieren
+Errors block publication and warnings require a deliberate decision.|Fel blockerar publicering och varningar kräver ett medvetet beslut.|Fejl blokerer udgivelse, og advarsler kræver en bevidst beslutning.|Feil blokkerer publisering, og advarsler krever en bevisst beslutning.|Fehler blockieren die Veröffentlichung; Warnungen erfordern eine bewusste Entscheidung.
+Publication and connection code|Publicering och anslutningskod|Udgivelse og tilslutningskode|Publisering og tilkoblingskode|Veröffentlichung und Verbindungscode
+Publish changes and manage the server connection code.|Publicera ändringar och hantera koden servrar kopplar sig med.|Udgiv ændringer og administrer servernes tilslutningskode.|Publiser endringer og administrer servernes tilkoblingskode.|Änderungen veröffentlichen und den Verbindungscode für Server verwalten.
+Local servers|Lokala servrar|Lokale servere|Lokale servere|Lokale Server
+Connected TrainMeet Servers|Anslutna TrainMeet Server|Tilsluttede TrainMeet Server|Tilkoblede TrainMeet Server|Verbundene TrainMeet Server
+Servers that have redeemed a connection code.|Servrar som har löst in en kopplingskod.|Servere, der har indløst en tilslutningskode.|Servere som har løst inn en tilkoblingskode.|Server, die einen Verbindungscode eingelöst haben.
+Installation|Installation|Installation|Installasjon|Installation
+Install TrainMeet Server|Installera TrainMeet Server|Installer TrainMeet Server|Installer TrainMeet Server|TrainMeet Server installieren
+Choose a platform and follow the steps in order. Commands can be copied directly.|Välj plattform och följ stegen i ordning. Kommandona kan kopieras direkt.|Vælg platform og følg trinnene i rækkefølge. Kommandoerne kan kopieres direkte.|Velg plattform og følg trinnene i rekkefølge. Kommandoene kan kopieres direkte.|Wähle eine Plattform und folge den Schritten. Die Befehle können direkt kopiert werden.
+Invite users and manage their details, passwords and permissions.|Bjud in och hantera användarnas uppgifter, lösenord och behörigheter.|Inviter brugere og administrer deres oplysninger, adgangskoder og rettigheder.|Inviter brukere og administrer opplysninger, passord og tilganger.|Benutzer einladen sowie Angaben, Passwörter und Berechtigungen verwalten.
+Your account and password, and your organization's Cloud settings.|Ditt konto och lösenord samt organisationens Cloud-inställningar.|Din konto og adgangskode samt organisationens Cloud-indstillinger.|Kontoen og passordet ditt samt organisasjonens Cloud-innstillinger.|Dein Konto und Passwort sowie die Cloud-Einstellungen der Organisation.
+from|från|fra|fra|von
+to|till|til|til|nach
+stations|stationer|stationer|stasjoner|Betriebsstellen
+stations ·|stationer ·|stationer ·|stasjoner ·|Betriebsstellen ·
+movements ·|rörelser ·|bevægelser ·|bevegelser ·|Bewegungen ·
+train movements|tågrörelser|togbevægelser|togbevegelser|Zugbewegungen
+train movements ·|tågrörelser ·|togbevægelser ·|togbevegelser ·|Zugbewegungen ·
+sections|sträckor|strækninger|strekninger|Strecken
+to review|att granska|til gennemgang|til gjennomgang|zu prüfen
+files|filer|filer|filer|Dateien
+pages|sidor|sider|sider|Seiten
+days|dagar|dage|dager|Tage
+imported|införda|importerede|importerte|importiert
+found train movements ·|hittade tågrörelser ·|fundne togbevægelser ·|funnede togbevegelser ·|gefundene Zugbewegungen ·
+connections|anslutningar|forbindelser|tilkoblinger|Verbindungen
+latest|senaste|seneste|siste|neueste
+Try again|Försök igen|Prøv igen|Prøv igjen|Erneut versuchen
+Waiting for server|Väntar på servern|Venter på serveren|Venter på serveren|Wartet auf den Server
+Queued|I kö|I kø|I kø|In Warteschlange
+Uploaded|Uppladdad|Uploadet|Lastet opp|Hochgeladen
+Imported|Införd|Importeret|Importert|Importiert
+Error|Fel|Fejl|Feil|Fehler
+Unknown station|Okänd station|Ukendt station|Ukjent stasjon|Unbekannte Betriebsstelle
+Waiting for your approval|Väntar på ditt godkännande|Venter på din godkendelse|Venter på godkjenningen din|Wartet auf deine Freigabe
+Imported into meet data|Införd i träffens data|Importeret i træffets data|Importert i treffets data|In die Treffendaten importiert
+Starting…|Startar…|Starter…|Starter…|Wird gestartet…
+Start with an empty meet|Börja med en tom träff|Begynd med et tomt træf|Start med et tomt treff|Mit einem leeren Treffen beginnen
+Enter a name first, then upload the station timetables.|Du anger namnet först och laddar sedan upp stationernas tidtabeller.|Angiv først navnet, og upload derefter stationernes køreplaner.|Skriv først inn navnet, og last deretter opp stasjonenes rutetabeller.|Gib zuerst den Namen ein und lade dann die Betriebsstellenfahrpläne hoch.
+Send test email|Skicka testmail|Send testmail|Send test-e-post|Test-E-Mail senden
+Send a test email to|Skicka ett testmail till|Send en testmail til|Send en test-e-post til|Test-E-Mail senden an
+Outbox|Utkorg|Udbakke|Utboks|Postausgang
+Email delivery|E-postleverans|E-maillevering|E-postlevering|E-Mail-Zustellung
+Change password|Byt lösenord|Skift adgangskode|Bytt passord|Passwort ändern
+Used for sign-in as well.|Används även vid inloggning.|Bruges også ved login.|Brukes også ved innlogging.|Wird auch zur Anmeldung verwendet.
+Confirm with your own password|Bekräfta med ditt eget lösenord|Bekræft med din egen adgangskode|Bekreft med ditt eget passord|Mit deinem eigenen Passwort bestätigen
+You remain signed in here. Other sessions and old reset links will be closed.|Du förblir inloggad här. Dina andra inloggningar och gamla återställningslänkar avslutas.|Du forbliver logget ind her. Andre sessioner og gamle nulstillingslinks afsluttes.|Du forblir innlogget her. Andre økter og gamle tilbakestillingslenker avsluttes.|Du bleibst hier angemeldet. Andere Sitzungen und alte Zurücksetzungslinks werden beendet.
+The invited person receives a link and chooses their own username and password.|Den inbjudna får ett brev med en länk och väljer själv användarnamn och lösenord.|Den inviterede modtager et link og vælger selv brugernavn og adgangskode.|Den inviterte får en lenke og velger selv brukernavn og passord.|Die eingeladene Person erhält einen Link und wählt selbst Benutzernamen und Passwort.
+Loading station and timetable…|Hämtar station och tidtabell…|Henter station og køreplan…|Henter stasjon og rutetabell…|Betriebsstelle und Fahrplan werden geladen…
+Current train movements|Aktuella tågrörelser|Aktuelle togbevægelser|Aktuelle togbevegelser|Aktuelle Zugbewegungen
+Station activity|Aktuellt på stationen|Aktuelt på stationen|Aktuelt på stasjonen|Aktuelles an der Betriebsstelle
+All-day timetable|Hela dagens tidtabell|Hele dagens køreplan|Hele dagens rutetabell|Gesamter Tagesfahrplan
+Confirm arrival|Bekräfta ankomst|Bekræft ankomst|Bekreft ankomst|Ankunft bestätigen
+Confirm station and continue|Bekräfta station och fortsätt|Bekræft station og fortsæt|Bekreft stasjon og fortsett|Betriebsstelle bestätigen und weiter
+Change server or station|Byt server eller station|Skift server eller station|Bytt server eller stasjon|Server oder Betriebsstelle wechseln
+From previous operator|Från föregående operatör|Fra forrige operatør|Fra forrige operatør|Vom vorherigen Bediener
+Notes|Anmärkning|Bemærkning|Merknad|Bemerkung
+Note|Anm|Bem|Merkn|Bem
+Arr from|Ank från|Ank fra|Ank fra|Ank von
+Dep to|Avg till|Afg til|Avg til|Abf nach
+Ongoing shift|Pågående trafikpass|Igangværende vagt|Pågående vakt|Laufender Dienst
+Return to start|Till startsidan|Til startsiden|Til startsiden|Zur Startseite
+Your server controls the traffic. Language does not change commands or data.|Servern styr trafiken. Språkvalet ändrar inte kommandon eller data.|Serveren styrer trafikken. Sprogvalget ændrer ikke kommandoer eller data.|Serveren styrer trafikken. Språkvalget endrer ikke kommandoer eller data.|Der Server steuert den Betrieb. Die Sprache ändert keine Befehle oder Daten.
+Build mode|Byggläge|Byggetilstand|Byggemodus|Aufbaumodus
+Back to meet|Tillbaka till träffen|Tilbage til træffet|Tilbake til treffet|Zurück zum Treffen
+Rebuild meet|Bygg om träffen|Ombyg træffet|Bygg om treffet|Treffen umbauen
+Operating mode|Körläge|Driftstilstand|Driftsmodus|Betriebsmodus
+No boxes|Inga boxar|Ingen bokse|Ingen bokser|Keine Boxen
+TKL terminal|TKL-terminal|TKL-terminal|TKL-terminal|TKL-Terminal
+Local meet clock|Lokal träffklocka|Lokalt træfur|Lokal treffklokke|Lokale Modellzeituhr
+Reason when stopping the clock|Orsak när klockan stoppas|Årsag når uret stoppes|Årsak når klokken stoppes|Grund beim Anhalten der Uhr
+For example, a technical stop|Till exempel tekniskt stopp|For eksempel teknisk stop|For eksempel teknisk stopp|Zum Beispiel technischer Halt
+At the server|Vid servern|Ved serveren|Ved serveren|Am Server
+Over the network|Över nätet|Over netværket|Over nettverket|Über das Netzwerk
+Locally active|Lokalt aktiv|Lokalt aktiv|Lokalt aktiv|Lokal aktiv
+No meet activated|Ingen träff aktiverad|Intet træf aktiveret|Ingen treff aktivert|Kein Treffen aktiviert
+Configuration needs correction|Konfigurationen behöver rättas|Konfigurationen skal rettes|Konfigurasjonen må rettes|Konfiguration muss korrigiert werden
+Conductor must acknowledge receipt and complete readback. This does not activate authority.|Conductor måste bekräfta mottagning och återläsa. Detta aktiverar inte körtillståndet.|Conductor skal bekræfte modtagelse og gentage ordren. Dette aktiverer ikke køretilladelsen.|Conductor må bekrefte mottak og lese tilbake. Dette aktiverer ikke kjøretillatelsen.|Der Conductor muss den Empfang bestätigen und den Befehl zurücklesen. Dies aktiviert keine Fahrberechtigung.
+I have received this exact warrant. Receipt is not readback and is not authority to move.|Jag har tagit emot exakt denna körorder. Mottagning är inte återläsning och ger inte tillstånd att köra.|Jeg har modtaget netop denne kørselsordre. Modtagelse er ikke gentagelse og giver ikke tilladelse til at køre.|Jeg har mottatt nøyaktig denne kjøreordren. Mottak er ikke tilbakelesning og gir ikke tillatelse til å kjøre.|Ich habe genau diesen Fahrbefehl empfangen. Empfang ist weder Rücklesen noch Fahrberechtigung.
+I have read back this exact warrant to the dispatcher by radio/telephone. I will wait for the dispatcher’s confirmation.|Jag har återläst exakt denna körorder till dispatchern via radio/telefon. Jag väntar på dispatcherns bekräftelse.|Jeg har gentaget netop denne ordre til dispatcheren via radio/telefon. Jeg venter på dispatcherens bekræftelse.|Jeg har lest tilbake nøyaktig denne ordren til dispatcheren via radio/telefon. Jeg venter på dispatcherens bekreftelse.|Ich habe genau diesen Fahrbefehl per Funk/Telefon zurückgelesen. Ich warte auf die Bestätigung des Dispatchers.
+I verified the conductor’s readback against this exact warrant. The server will check conflicts atomically before activating.|Jag har kontrollerat conductorns återläsning mot exakt denna körorder. Servern kontrollerar konflikter atomärt före aktivering.|Jeg har kontrolleret conductorens gentagelse mod netop denne ordre. Serveren kontrollerer konflikter atomisk før aktivering.|Jeg har kontrollert conductorens tilbakelesning mot nøyaktig denne ordren. Serveren kontrollerer konflikter atomisk før aktivering.|Ich habe das Rücklesen mit genau diesem Fahrbefehl abgeglichen. Der Server prüft vor Aktivierung atomar auf Konflikte.
+My train is clear of these limits and I am explicitly reporting this authority released. It remains held until the dispatcher confirms.|Mitt tåg är utanför dessa gränser och jag rapporterar uttryckligen körtillståndet frigivet. Det hålls tills dispatchern bekräftar.|Mit tog er fri af disse grænser, og jeg melder udtrykkeligt tilladelsen frigivet. Den holdes, indtil dispatcheren bekræfter.|Toget mitt er utenfor disse grensene, og jeg melder uttrykkelig tillatelsen frigitt. Den holdes til dispatcheren bekrefter.|Mein Zug hat diese Grenzen vollständig verlassen. Ich melde diese Fahrberechtigung ausdrücklich frei. Sie bleibt bis zur Bestätigung des Dispatchers belegt.
+I verified the conductor’s release report. Close this warrant and release its limits.|Jag har kontrollerat conductorns frigivningsrapport. Avsluta körordern och frigör gränserna.|Jeg har kontrolleret conductorens frigivelsesrapport. Afslut ordren og frigiv grænserne.|Jeg har kontrollert conductorens frigivelsesrapport. Avslutt ordren og frigi grensene.|Ich habe die Freigabemeldung des Conductors geprüft. Fahrbefehl abschließen und Grenzen freigeben.
+This is not an active authority. I have communicated that this warrant must not be used.|Detta är inget aktivt körtillstånd. Jag har meddelat att körordern inte får användas.|Dette er ikke en aktiv køretilladelse. Jeg har meddelt, at ordren ikke må bruges.|Dette er ikke en aktiv kjøretillatelse. Jeg har gitt beskjed om at ordren ikke må brukes.|Dies ist keine aktive Fahrberechtigung. Ich habe mitgeteilt, dass dieser Fahrbefehl nicht verwendet werden darf.
+Close this session. All warrants must already be closed or void; history is retained.|Avsluta trafikpasset. Alla körorder måste redan vara avslutade eller ogiltiga. Historiken bevaras.|Afslut sessionen. Alle ordrer skal allerede være afsluttet eller annulleret. Historikken bevares.|Avslutt økten. Alle ordrer må allerede være avsluttet eller annullert. Historikken beholdes.|Sitzung beenden. Alle Fahrbefehle müssen abgeschlossen oder ungültig sein. Der Verlauf bleibt erhalten.
+No authority issued. Timetable times do not authorize movement.|Inget körtillstånd utfärdat. Tidtabellstider ger inte tillstånd att köra.|Ingen køretilladelse udstedt. Køreplanstider giver ikke tilladelse til at køre.|Ingen kjøretillatelse utstedt. Rutetider gir ikke tillatelse til å kjøre.|Keine Fahrberechtigung erteilt. Fahrplanzeiten erteilen keine Fahrberechtigung.
+Reports never release an authority. Use the warrant’s explicit release action.|Rapporter frigör aldrig ett körtillstånd. Använd körorderns särskilda frigivningsåtgärd.|Rapporter frigiver aldrig en tilladelse. Brug ordrens særlige frigivelseshandling.|Rapporter frigir aldri en tillatelse. Bruk ordrens egen frigivelseshandling.|Meldungen geben keine Fahrberechtigung frei. Nutze die ausdrückliche Freigabeaktion des Fahrbefehls.
+Choose an ordered, connected track path. Limits may differ from the timetable. This draft gives no authority to move.|Välj en sammanhängande spårväg i ordning. Gränserna kan avvika från tidtabellen. Utkastet ger inte tillstånd att köra.|Vælg en sammenhængende sporvej i rækkefølge. Grænserne kan afvige fra køreplanen. Kladden giver ikke tilladelse til at køre.|Velg en sammenhengende sporvei i rekkefølge. Grensene kan avvike fra rutetabellen. Utkastet gir ikke tillatelse til å kjøre.|Wähle einen zusammenhängenden Gleisweg in Reihenfolge. Grenzen dürfen vom Fahrplan abweichen. Dieser Entwurf erteilt keine Fahrberechtigung.
+Waiting for the dispatcher to assign your train. This page updates automatically.|Väntar på att dispatchern tilldelar ditt tåg. Sidan uppdateras automatiskt.|Venter på, at dispatcheren tildeler dit tog. Siden opdateres automatisk.|Venter på at dispatcheren tildeler toget ditt. Siden oppdateres automatisk.|Warte auf die Zugzuweisung durch den Dispatcher. Diese Seite aktualisiert sich automatisch.
+Waiting for the dispatcher to start a session and assign your train.|Väntar på att dispatchern startar ett trafikpass och tilldelar ditt tåg.|Venter på, at dispatcheren starter en session og tildeler dit tog.|Venter på at dispatcheren starter en økt og tildeler toget ditt.|Warte darauf, dass der Dispatcher eine Sitzung startet und dir einen Zug zuweist.
+No scheduled runs. Add an extra train.|Inga planerade tåguppdrag. Lägg till ett extratåg.|Ingen planlagte togkørsler. Tilføj et ekstratog.|Ingen planlagte togoppdrag. Legg til et ekstratog.|Keine geplanten Zugfahrten. Füge einen Sonderzug hinzu.
+Extra train · no planned stops.|Extratåg · inga planerade stopp.|Ekstratog · ingen planlagte stop.|Ekstratog · ingen planlagte stopp.|Sonderzug · keine geplanten Halte.
+Import a reviewed US runtime package. Its topology and timetable are frozen for this session; future Cloud changes cannot alter live authorities.|Importera ett granskat US-driftpaket. Bana och tidtabell låses för trafikpasset. Senare Cloud-ändringar kan inte ändra aktiva körtillstånd.|Importer en gennemgået US-driftspakke. Bane og køreplan låses for sessionen. Senere Cloud-ændringer kan ikke ændre aktive tilladelser.|Importer en gjennomgått US-driftspakke. Bane og rutetabell låses for økten. Senere Cloud-endringer kan ikke endre aktive tillatelser.|Importiere ein geprüftes US-Betriebspaket. Gleisplan und Fahrplan sind für die Sitzung eingefroren; spätere Cloud-Änderungen verändern keine aktiven Fahrberechtigungen.
+Starts a new, separate US session. Does not modify EU traffic. No active US session can be replaced.|Startar ett nytt, separat US-trafikpass. EU-trafiken ändras inte. Ett aktivt US-trafikpass kan inte ersättas.|Starter en ny, separat US-session. EU-trafikken ændres ikke. En aktiv US-session kan ikke erstattes.|Starter en ny, separat US-økt. EU-trafikken endres ikke. En aktiv US-økt kan ikke erstattes.|Startet eine neue, getrennte US-Sitzung. Der EU-Betrieb bleibt unverändert. Eine aktive US-Sitzung kann nicht ersetzt werden.
+I reviewed the topology and the model-railroad test profile.|Jag har granskat banan och modelljärnvägens testprofil.|Jeg har gennemgået banen og modelbanens testprofil.|Jeg har gjennomgått banen og modelljernbanens testprofil.|Ich habe den Gleisplan und das Modellbahn-Testprofil geprüft.
+Assignment is controlled by the dispatcher. Finish any outstanding transmitted/active warrants before changing conductor.|Tilldelningen styrs av dispatchern. Avsluta alla utestående skickade eller aktiva körorder innan conductor byts.|Tildeling styres af dispatcheren. Afslut alle udestående sendte eller aktive ordrer før skift af conductor.|Tildeling styres av dispatcheren. Avslutt alle utestående sendte eller aktive ordrer før conductor byttes.|Die Zuweisung erfolgt durch den Dispatcher. Schließe ausstehende gesendete oder aktive Fahrbefehle ab, bevor der Conductor gewechselt wird.
+A new run ID is created. The original timetable is unchanged.|Ett nytt uppdrags-ID skapas. Originaltidtabellen ändras inte.|Et nyt kørsels-ID oprettes. Den oprindelige køreplan ændres ikke.|En ny oppdrags-ID opprettes. Den opprinnelige rutetabellen endres ikke.|Eine neue Fahrt-ID wird erstellt. Der ursprüngliche Fahrplan bleibt unverändert.
+Not machine-validated. Do not hide track limits or conflict exceptions here.|Inte maskinvaliderat. Lägg inte spårgränser eller konfliktundantag här.|Ikke maskinvalideret. Læg ikke sporgrænser eller konfliktundtagelser her.|Ikke maskinvalidert. Ikke legg sporgrenser eller konfliktunntak her.|Nicht maschinell geprüft. Hier keine Gleisgrenzen oder Konfliktausnahmen hinterlegen.
+Language|Språk|Sprog|Språk|Sprache
+Workspace|Arbetsyta|Arbejdsområde|Arbeidsområde|Arbeitsbereich
+Overview|Översikt|Oversigt|Oversikt|Übersicht
+Meets|Träffar|Træf|Treff|Treffen
+Configuration|Konfiguration|Konfiguration|Konfigurasjon|Konfiguration
+Meet settings|Träffinställningar|Træfindstillinger|Treffinnstillinger|Treffen-Einstellungen
+Timetable|Tidtabell|Køreplan|Rutetabell|Fahrplan
+Stations and aliases|Stationer och alias|Stationer og aliaser|Stasjoner og aliaser|Betriebsstellen und Aliasnamen
+Track and sections|Bana och sträckor|Bane og strækninger|Bane og strekninger|Gleise und Strecken
+Delivery|Leverans|Levering|Levering|Bereitstellung
+Validation|Validering|Validering|Validering|Validierung
+Publications|Publiceringar|Udgivelser|Publiseringer|Veröffentlichungen
+Connected servers|Anslutna servrar|Tilsluttede servere|Tilkoblede servere|Verbundene Server
+Users|Användare|Brugere|Brukere|Benutzer
+Install server|Installera server|Installer server|Installer server|Server installieren
+Settings|Inställningar|Indstillinger|Innstillinger|Einstellungen
+System|System|System|System|System
+Import|Import|Import|Import|Import
+Meet overview|Träfföversikt|Træfoversigt|Treffoversikt|Treffenübersicht
+All meets|Alla träffar|Alle træf|Alle treff|Alle Treffen
+New meet|Ny träff|Nyt træf|Nytt treff|Neues Treffen
+Choose a meet|Välj en träff|Vælg et træf|Velg et treff|Treffen auswählen
+Active meet|Aktiv träff|Aktivt træf|Aktivt treff|Aktives Treffen
+No active meet|Ingen aktiv träff|Intet aktivt træf|Ingen aktive treff|Kein aktives Treffen
+Private workspace|Privat arbetsyta|Privat arbejdsområde|Privat arbeidsområde|Privater Arbeitsbereich
+Cloud connected|Cloud ansluten|Cloud tilsluttet|Cloud tilkoblet|Cloud verbunden
+Cloud linked|Cloud kopplad|Cloud forbundet|Cloud tilkoblet|Cloud verknüpft
+Local config|lokal config|lokal config|lokal config|lokale Config
+Save draft|Spara utkast|Gem kladde|Lagre utkast|Entwurf speichern
+Save|Spara|Gem|Lagre|Speichern
+Saved|Sparat|Gemt|Lagret|Gespeichert
+Cancel|Avbryt|Annuller|Avbryt|Abbrechen
+Close|Stäng|Luk|Lukk|Schließen
+Back|Tillbaka|Tilbage|Tilbake|Zurück
+Continue|Fortsätt|Fortsæt|Fortsett|Weiter
+Next|Nästa|Næste|Neste|Weiter
+Add|Lägg till|Tilføj|Legg til|Hinzufügen
+Remove|Ta bort|Fjern|Fjern|Entfernen
+Delete|Radera|Slet|Slett|Löschen
+Edit|Redigera|Rediger|Rediger|Bearbeiten
+Copy|Kopiera|Kopiér|Kopier|Kopieren
+Copied|Kopierat|Kopieret|Kopiert|Kopiert
+Open|Öppna|Åbn|Åpne|Öffnen
+Search|Sök|Søg|Søk|Suchen
+Refresh|Uppdatera|Opdater|Oppdater|Aktualisieren
+Check|Kontrollera|Kontrollér|Kontroller|Prüfen
+Confirm|Bekräfta|Bekræft|Bekreft|Bestätigen
+Connect|Anslut|Tilslut|Koble til|Verbinden
+Connected|Ansluten|Tilsluttet|Tilkoblet|Verbunden
+Not connected|Ej ansluten|Ikke tilsluttet|Ikke tilkoblet|Nicht verbunden
+Offline|Offline|Offline|Frakoblet|Offline
+Linked|Kopplad|Forbundet|Tilkoblet|Verknüpft
+Not linked|Inte kopplad|Ikke forbundet|Ikke tilkoblet|Nicht verknüpft
+Connecting…|Ansluter…|Tilslutter…|Kobler til…|Verbindung wird hergestellt…
+Connecting …|Kopplar …|Forbinder …|Kobler til …|Verbindung wird hergestellt …
+Connection failed|Kopplingen misslyckades|Forbindelsen mislykkedes|Tilkoblingen mislyktes|Verbindung fehlgeschlagen
+Name|Namn|Navn|Navn|Name
+Your name|Ditt namn|Dit navn|Ditt navn|Dein Name
+Username|Användarnamn|Brugernavn|Brukernavn|Benutzername
+Email address|E-postadress|E-mailadresse|E-postadresse|E-Mail-Adresse
+Email address or username|E-postadress eller användarnamn|E-mailadresse eller brugernavn|E-postadresse eller brukernavn|E-Mail-Adresse oder Benutzername
+Password|Lösenord|Adgangskode|Passord|Passwort
+Repeat password|Upprepa lösenordet|Gentag adgangskoden|Gjenta passordet|Passwort wiederholen
+New password|Nytt lösenord|Ny adgangskode|Nytt passord|Neues Passwort
+Change password|Ändra lösenord|Skift adgangskode|Endre passord|Passwort ändern
+Save password|Spara lösenordet|Gem adgangskoden|Lagre passordet|Passwort speichern
+Sign in|Logga in|Log ind|Logg inn|Anmelden
+Sign out|Logga ut|Log ud|Logg ut|Abmelden
+Forgot password|Glömt lösenordet|Glemt adgangskoden|Glemt passordet|Passwort vergessen
+Forgot password?|Glömt lösenordet?|Glemt adgangskoden?|Glemt passordet?|Passwort vergessen?
+Create account|Skapa konto|Opret konto|Opprett konto|Konto erstellen
+Create your account|Skapa ditt konto|Opret din konto|Opprett kontoen din|Dein Konto erstellen
+Create the account|Skapa kontot|Opret kontoen|Opprett kontoen|Konto erstellen
+Create first administrator|Skapa första administratören|Opret den første administrator|Opprett første administrator|Ersten Administrator anlegen
+Create and continue|Skapa och fortsätt|Opret og fortsæt|Opprett og fortsett|Erstellen und fortfahren
+First installation|Första installationen|Første installation|Første installasjon|Erstinstallation
+Organization|Organisation|Organisation|Organisasjon|Organisation
+Role|Roll|Rolle|Rolle|Rolle
+Administrator|Administratör|Administrator|Administrator|Administrator
+Owner|Ägare|Ejer|Eier|Eigentümer
+Member|Medlem|Medlem|Medlem|Mitglied
+Active|Aktiv|Aktiv|Aktiv|Aktiv
+Inactive|Inaktiv|Inaktiv|Inaktiv|Inaktiv
+Invite|Bjud in|Inviter|Inviter|Einladen
+Add a user|Lägg till en användare|Tilføj en bruger|Legg til en bruker|Benutzer hinzufügen
+Send invitation|Skicka inbjudan|Send invitation|Send invitasjon|Einladung senden
+Users and permissions|Användare och behörighet|Brugere og rettigheder|Brukere og tilganger|Benutzer und Berechtigungen
+Send reset link|Skicka återställningslänk|Send nulstillingslink|Send lenke for tilbakestilling|Link zum Zurücksetzen senden
+Back to sign in|Tillbaka till inloggningen|Tilbage til login|Tilbake til innlogging|Zurück zur Anmeldung
+Go to sign in|Till inloggningen|Til login|Til innlogging|Zur Anmeldung
+Choose a new password|Välj ett nytt lösenord|Vælg en ny adgangskode|Velg et nytt passord|Neues Passwort wählen
+Passwords do not match.|Lösenorden är inte lika.|Adgangskoderne er ikke ens.|Passordene er ikke like.|Die Passwörter stimmen nicht überein.
+At least 6 characters.|Minst 6 tecken.|Mindst 6 tegn.|Minst 6 tegn.|Mindestens 6 Zeichen.
+At least 6 characters. No default account is created.|Minst 6 tecken. Inget standardkonto skapas.|Mindst 6 tegn. Der oprettes ingen standardkonto.|Minst 6 tegn. Ingen standardkonto opprettes.|Mindestens 6 Zeichen. Es wird kein Standardkonto angelegt.
+Sign-in failed|Inloggningen misslyckades|Login mislykkedes|Innlogging mislyktes|Anmeldung fehlgeschlagen
+Action failed|Åtgärden misslyckades|Handlingen mislykkedes|Handlingen mislyktes|Aktion fehlgeschlagen
+Something went wrong|Det gick inte|Det mislykkedes|Det gikk ikke|Vorgang fehlgeschlagen
+One moment…|Ett ögonblick…|Et øjeblik…|Et øyeblikk…|Einen Moment…
+Starting TrainMeet Cloud…|Startar TrainMeet Cloud…|Starter TrainMeet Cloud…|Starter TrainMeet Cloud…|TrainMeet Cloud wird gestartet…
+TrainMeet Cloud is private and requires an administrator account.|TrainMeet Cloud är privat och kräver administratörskonto.|TrainMeet Cloud er privat og kræver en administratorkonto.|TrainMeet Cloud er privat og krever en administratorkonto.|TrainMeet Cloud ist privat und erfordert ein Administratorkonto.
+Cloud starts empty. Create the account that can build and publish meets.|Cloud startar helt tomt. Skapa kontot som får bygga och publicera träffar.|Cloud starter tomt. Opret kontoen, der kan opbygge og udgive træf.|Cloud starter tomt. Opprett kontoen som kan bygge og publisere treff.|Cloud startet leer. Erstelle das Konto, das Treffen aufbauen und veröffentlichen darf.
+The change has been saved.|Ändringen är sparad.|Ændringen er gemt.|Endringen er lagret.|Die Änderung wurde gespeichert.
+Settings have been saved.|Inställningarna är sparade.|Indstillingerne er gemt.|Innstillingene er lagret.|Die Einstellungen wurden gespeichert.
+Changes have been published.|Ändringarna är publicerade.|Ændringerne er udgivet.|Endringene er publisert.|Die Änderungen wurden veröffentlicht.
+No changes since the last version.|Inga ändringar sedan senaste versionen.|Ingen ændringer siden sidste version.|Ingen endringer siden forrige versjon.|Keine Änderungen seit der letzten Version.
+AI ready|AI klar|AI klar|KI klar|KI bereit
+AI missing|AI saknas|AI mangler|KI mangler|KI fehlt
+Open menu|Öppna meny|Åbn menu|Åpne meny|Menü öffnen
+Close menu|Stäng meny|Luk menu|Lukk meny|Menü schließen
+Station|Station|Station|Stasjon|Betriebsstelle
+Stations|Stationer|Stationer|Stasjoner|Betriebsstellen
+Station code|Stationskod|Stationskode|Stasjonskode|Betriebsstellenkürzel
+Station aliases|Stationsalias|Stationsaliaser|Stasjonsaliaser|Aliasnamen
+Edit station|Redigera station|Rediger station|Rediger stasjon|Betriebsstelle bearbeiten
+New alias|Nytt alias|Nyt alias|Nytt alias|Neuer Aliasname
+Existing aliases|Befintliga alias|Eksisterende aliaser|Eksisterende aliaser|Vorhandene Aliasnamen
+Alternative name|Alternativt namn|Alternativt navn|Alternativt navn|Alternativer Name
+No aliases yet|Inga alias ännu|Ingen aliaser endnu|Ingen aliaser ennå|Noch keine Aliasnamen
+Optional|Valfritt|Valgfrit|Valgfritt|Optional
+From|Från|Fra|Fra|Von
+To|Till|Til|Til|Nach
+Train|Tåg|Tog|Tog|Zug
+Train number|Tågnummer|Tognummer|Tognummer|Zugnummer
+Track|Spår|Spor|Spor|Gleis
+Arrival|Ankomst|Ankomst|Ankomst|Ankunft
+Departure|Avgång|Afgang|Avgang|Abfahrt
+Arr|Ank|Ank|Ank|Ank
+Dep|Avg|Afg|Avg|Abf
+Time|Tid|Tid|Tid|Zeit
+Days|Dagar|Dage|Dager|Tage
+Day|Dag|Dag|Dag|Tag
+Date|Datum|Dato|Dato|Datum
+Status|Status|Status|Status|Status
+Direction|Riktning|Retning|Retning|Richtung
+All|Alla|Alle|Alle|Alle
+No results|Inga resultat|Ingen resultater|Ingen resultater|Keine Ergebnisse
+No trains|Inga tåg|Ingen tog|Ingen tog|Keine Züge
+Single track|Enkelspår|Enkeltspor|Enkeltspor|Eingleisig
+Double track|Dubbelspår|Dobbeltspor|Dobbeltspor|Zweigleisig
+single track|enkelspår|enkeltspor|enkeltspor|eingleisig
+double track|dubbelspår|dobbeltspor|dobbeltspor|zweigleisig
+Left|Vänster|Venstre|Venstre|Links
+Right|Höger|Højre|Høyre|Rechts
+Free port|Ledig port|Ledig port|Ledig port|Freier Anschluss
+Free|Ledig|Ledig|Ledig|Frei
+Left · upper|Vänster · övre|Venstre · øverst|Venstre · øvre|Links · oben
+Left · lower|Vänster · nedre|Venstre · nederst|Venstre · nedre|Links · unten
+Right · upper|Höger · övre|Højre · øverst|Høyre · øvre|Rechts · oben
+Right · lower|Höger · nedre|Højre · nederst|Høyre · nedre|Rechts · unten
+Import files|Importera filer|Importer filer|Importer filer|Dateien importieren
+Upload|Ladda upp|Upload|Last opp|Hochladen
+Source files|Källfiler|Kildefiler|Kildefiler|Quelldateien
+No file selected|Ingen fil vald|Ingen fil valgt|Ingen fil valgt|Keine Datei ausgewählt
+Approve and import|Bekräfta och för in|Bekræft og importer|Bekreft og importer|Bestätigen und importieren
+Interpret again|Gör om tolkningen|Fortolk igen|Tolk på nytt|Erneut auswerten
+Review|Granska|Gennemgå|Gjennomgå|Prüfen
+Publish|Publicera|Udgiv|Publiser|Veröffentlichen
+Version|Version|Version|Versjon|Version
+Connection code|Anslutningskod|Tilslutningskode|Tilkoblingskode|Verbindungscode
+Valid for (days)|Giltig i (dagar)|Gyldig i (dage)|Gyldig i (dager)|Gültig für (Tage)
+New connection code|Ny anslutningskod|Ny tilslutningskode|Ny tilkoblingskode|Neuer Verbindungscode
+Cloud settings|Cloud-inställningar|Cloud-indstillinger|Cloud-innstillinger|Cloud-Einstellungen
+Server name|Servernamn|Servernavn|Servernavn|Servername
+Server address|Serveradress|Serveradresse|Serveradresse|Serveradresse
+Local server|Lokal server|Lokal server|Lokal server|Lokaler Server
+No server is linked|Ingen server är kopplad|Ingen server er forbundet|Ingen server er tilkoblet|Kein Server verknüpft
+Software update|Programuppdatering|Programopdatering|Programvareoppdatering|Softwareaktualisierung
+Check for updates|Sök efter uppdatering|Søg efter opdatering|Se etter oppdateringer|Nach Updates suchen
+Installed version|Installerad version|Installeret version|Installert versjon|Installierte Version
+Available version|Tillgänglig version|Tilgængelig version|Tilgjengelig versjon|Verfügbare Version
+Update TrainMeet Server|Uppdatera TrainMeet Server|Opdater TrainMeet Server|Oppdater TrainMeet Server|TrainMeet Server aktualisieren
+Channel|Kanal|Kanal|Kanal|Kanal
+Backup|Säkerhetskopia|Sikkerhedskopi|Sikkerhetskopi|Sicherung
+Reset|Nollställ|Nulstil|Nullstill|Zurücksetzen
+Restore|Återställ|Gendan|Gjenopprett|Wiederherstellen
+Traffic|Trafik|Trafik|Trafikk|Betrieb
+Displays|Skärmar|Skærme|Skjermer|Anzeigen
+Meet clock|Träffklocka|Træfur|Treffklokke|Modellzeituhr
+Control the clock|Styr klockan|Styr uret|Styr klokken|Uhr steuern
+Speed|Hastighet|Hastighed|Hastighet|Geschwindigkeit
+Time of day|Klockslag|Klokkeslæt|Klokkeslett|Uhrzeit
+Stopped|Stoppad|Stoppet|Stoppet|Angehalten
+Set and start|Ställ och starta|Indstil og start|Still og start|Einstellen und starten
+Stop|Stoppa|Stop|Stopp|Anhalten
+Start|Starta|Start|Start|Starten
+Ready|Klar|Klar|Klar|Bereit
+Train ready|Tåg klart|Tog klar|Tog klart|Zug bereit
+Request train|Begär tåg|Anmod om tog|Be om tog|Zug anbieten
+Departed|Avgått|Afgået|Avgått|Abgefahren
+Arrived|Ankommit|Ankommet|Ankommet|Angekommen
+Train out|Tåg ut|Tog ude|Tog ut|Zug abgefahren
+Train in|Tåg in|Tog inde|Tog inn|Zug angekommen
+Choose station|Välj station|Vælg station|Velg stasjon|Betriebsstelle auswählen
+Choose server|Välj server|Vælg server|Velg server|Server auswählen
+Start shift|Starta trafikpass|Start vagt|Start vakt|Dienst beginnen
+Finish shift|Avsluta trafikpass|Afslut vagt|Avslutt vakt|Dienst beenden
+Handover|Lämna över|Overdrag|Overlever|Übergeben
+Portrait|Stående|Stående|Stående|Hochformat
+Landscape|Liggande|Liggende|Liggende|Querformat
+Orientation|Orientering|Orientering|Retning|Ausrichtung
+Terminal name|Terminalnamn|Terminalnavn|Terminalnavn|Terminalname
+Connection|Anslutning|Forbindelse|Tilkobling|Verbindung
+Network|Nätverk|Netværk|Nettverk|Netzwerk
+Connect to server|Anslut till server|Tilslut til server|Koble til server|Mit Server verbinden
+Local operations|Lokal drift|Lokal drift|Lokal drift|Lokaler Betrieb
+Dispatcher|Dispatcher|Dispatcher|Dispatcher|Dispatcher
+Conductor|Conductor|Conductor|Conductor|Conductor
+Server|Server|Server|Server|Server
+Operating views|Driftvyer|Driftsvisninger|Driftsvisninger|Betriebsansichten
+Connecting to the local TrainMeet Server…|Ansluter till lokal TrainMeet Server…|Tilslutter til lokal TrainMeet Server…|Kobler til lokal TrainMeet Server…|Verbindung zum lokalen TrainMeet Server wird hergestellt…
+Model railroad test profile · reported positions, never simulated movement|Modelljärnvägens testprofil · rapporterade positioner, aldrig simulerad rörelse|Modelbanens testprofil · rapporterede positioner, aldrig simuleret bevægelse|Modelljernbanens testprofil · rapporterte posisjoner, aldri simulert bevegelse|Modellbahn-Testprofil · gemeldete Positionen, keine simulierte Bewegung
+● Server connected|● Server ansluten|● Server tilsluttet|● Server tilkoblet|● Server verbunden
+● Offline · stale state|● Offline · tidigare läge|● Offline · tidligere tilstand|● Frakoblet · tidligere tilstand|● Offline · veralteter Stand
+Draft|Utkast|Kladde|Utkast|Entwurf
+Sent · not valid|Skickad · inte giltig|Sendt · ikke gyldig|Sendt · ikke gyldig|Gesendet · nicht gültig
+Received · not valid|Mottagen · inte giltig|Modtaget · ikke gyldig|Mottatt · ikke gyldig|Empfangen · nicht gültig
+Verify readback|Kontrollera återläsning|Kontrollér gentagelse|Kontroller tilbakelesning|Rücklesen prüfen
+Active authority|Aktivt körtillstånd|Aktiv køretilladelse|Aktiv kjøretillatelse|Aktive Fahrberechtigung
+Release requested|Frigivning begärd|Frigivelse anmodet|Frigivelse forespurt|Freigabe angefordert
+Closed|Avslutad|Afsluttet|Avsluttet|Abgeschlossen
+Void|Ogiltigförklara|Annuller|Annuller|Ungültig erklären
+Check result|Kontrollera resultat|Kontrollér resultat|Kontroller resultat|Ergebnis prüfen
+Server rejected the request|Servern avvisade begäran|Serveren afviste anmodningen|Serveren avviste forespørselen|Server hat die Anfrage abgelehnt
+Command result is unconfirmed. No further operational actions are allowed until it is checked.|Kommandots resultat är obekräftat. Inga fler trafikåtgärder tillåts innan det har kontrollerats.|Kommandoens resultat er ubekræftet. Ingen flere driftshandlinger er tilladt, før det er kontrolleret.|Kommandoresultatet er ubekreftet. Ingen flere driftshandlinger er tillatt før det er kontrollert.|Das Befehlsergebnis ist unbestätigt. Bis zur Prüfung sind weitere Betriebshandlungen gesperrt.
+Connection lost. Showing the last confirmed server state. Actions are blocked.|Anslutningen bröts. Senast bekräftade serverläge visas. Åtgärder är spärrade.|Forbindelsen er afbrudt. Senest bekræftede servertilstand vises. Handlinger er spærret.|Forbindelsen ble brutt. Sist bekreftede servertilstand vises. Handlinger er sperret.|Verbindung unterbrochen. Der letzte bestätigte Serverstand wird angezeigt. Aktionen sind gesperrt.
+Wait for a confirmed connection and command result|Invänta bekräftad anslutning och kommandoresultat|Vent på bekræftet forbindelse og kommandoresultat|Vent på bekreftet tilkobling og kommandoresultat|Bestätigte Verbindung und Befehlsergebnis abwarten
+Saved and confirmed by the server.|Sparat och bekräftat av servern.|Gemt og bekræftet af serveren.|Lagret og bekreftet av serveren.|Vom Server gespeichert und bestätigt.
+Join your local session|Anslut till ditt lokala trafikpass|Deltag i din lokale session|Koble til din lokale økt|Lokaler Sitzung beitreten
+Sign in to dispatch|Logga in som dispatcher|Log ind som dispatcher|Logg inn som dispatcher|Als Dispatcher anmelden
+Ask the dispatcher for a one-time connection code. The dispatcher assigns your train after you connect.|Be dispatchern om en engångskod. Dispatchern tilldelar ditt tåg när du har anslutit.|Bed dispatcheren om en engangskode. Dispatcheren tildeler dit tog, når du er tilsluttet.|Be dispatcheren om en engangskode. Dispatcheren tildeler toget ditt når du er tilkoblet.|Bitte den Dispatcher um einen Einmalcode. Nach der Verbindung weist er dir deinen Zug zu.
+Use your existing TrainMeet Server administrator account. No Cloud connection is needed.|Använd ditt befintliga administratörskonto på TrainMeet Server. Ingen Cloud-anslutning behövs.|Brug din eksisterende administratorkonto på TrainMeet Server. Ingen Cloud-forbindelse kræves.|Bruk din eksisterende administratorkonto på TrainMeet Server. Ingen Cloud-tilkobling trengs.|Verwende dein vorhandenes Administratorkonto auf TrainMeet Server. Keine Cloud-Verbindung erforderlich.
+First installation?|Första installationen?|Første installation?|Første installasjon?|Erstinstallation?
+Open Server setup|Öppna serverinstallationen|Åbn serveropsætning|Åpne serveroppsett|Server-Einrichtung öffnen
+Close dialog|Stäng dialog|Luk dialog|Lukk dialog|Dialog schließen
+Session complete|Trafikpass avslutat|Session afsluttet|Økt avsluttet|Sitzung beendet
+Local-first operations|Lokal drift utan Cloud-beroende|Lokal drift uden Cloud-afhængighed|Lokal drift uten Cloud-avhengighet|Lokaler Betrieb ohne Cloud-Abhängigkeit
+Session safely closed|Trafikpass säkert avslutat|Session sikkert afsluttet|Økt trygt avsluttet|Sitzung sicher beendet
+Start a US session|Starta ett US-trafikpass|Start en US-session|Start en US-økt|US-Sitzung starten
+Import US package|Importera US-paket|Importer US-pakke|Importer US-pakke|US-Paket importieren
+Under authority|Har körtillstånd|Har køretilladelse|Har kjøretillatelse|Mit Fahrberechtigung
+Awaiting authority|Inväntar körtillstånd|Afventer køretilladelse|Venter på kjøretillatelse|Wartet auf Fahrberechtigung
+Ready to copy|Redo att ta emot|Klar til at modtage|Klar til å motta|Bereit zum Empfang
+Not started|Inte startat|Ikke startet|Ikke startet|Nicht begonnen
+No position reported|Ingen position rapporterad|Ingen position rapporteret|Ingen posisjon rapportert|Keine Position gemeldet
+Extra train|Extratåg|Ekstratog|Ekstratog|Sonderzug
+No warrants|Inga körorder|Ingen kørselsordrer|Ingen kjøreordrer|Keine Fahrbefehle
+Conductor not assigned|Conductor inte tilldelad|Conductor ikke tildelt|Conductor ikke tildelt|Conductor nicht zugewiesen
+Transmit|Skicka|Send|Send|Senden
+Verify & activate|Kontrollera och aktivera|Kontrollér og aktivér|Kontroller og aktiver|Prüfen und aktivieren
+Confirm release|Bekräfta frigivning|Bekræft frigivelse|Bekreft frigivelse|Freigabe bestätigen
+Acknowledge receipt|Bekräfta mottagning|Bekræft modtagelse|Bekreft mottak|Empfang bestätigen
+Report readback|Rapportera återläsning|Rapportér gentagelse|Rapporter tilbakelesning|Rücklesen melden
+Report released|Rapportera frigivet|Rapportér frigivet|Rapporter frigitt|Freigabe melden
+Work between limits|Arbeta inom gränserna|Arbejd inden for grænserne|Arbeid innenfor grensene|Innerhalb der Grenzen arbeiten
+Proceed|Kör|Kør|Kjør|Fahren
+Not authority to move.|Ger inte tillstånd att köra.|Giver ikke tilladelse til at køre.|Gir ikke tillatelse til å kjøre.|Keine Fahrberechtigung.
+Still holds track limits until dispatcher closes.|Spårgränserna hålls tills dispatchern avslutar.|Sporgrænserne holdes, indtil dispatcheren afslutter.|Sporgrensene holdes til dispatcheren avslutter.|Die Gleisgrenzen bleiben bis zum Abschluss durch den Dispatcher belegt.
+Dispatcher desk · TWC|Dispatcherbord · TWC|Dispatcherbord · TWC|Dispatcherbord · TWC|Dispatcher-Arbeitsplatz · TWC
+Connect conductor|Anslut conductor|Tilslut conductor|Koble til conductor|Conductor verbinden
++ Extra train|+ Extratåg|+ Ekstratog|+ Ekstratog|+ Sonderzug
+Finish session|Avsluta trafikpasset|Afslut session|Avslutt økt|Sitzung beenden
+All trains|Alla tåg|Alle tog|Alle tog|Alle Züge
+All train runs|Alla tåguppdrag|Alle togkørsler|Alle togoppdrag|Alle Zugfahrten
+Train details|Tåguppgifter|Togoplysninger|Togopplysninger|Zugdetails
+Assign|Tilldela|Tildel|Tildel|Zuweisen
+Track diagram|Spårdiagram|Spordiagram|Spordiagram|Gleisplan
+The railroad|Banan|Banen|Banen|Die Strecke
+Reported positions · mileposts|Rapporterade positioner · mileposts|Rapporterede positioner · mileposts|Rapporterte posisjoner · mileposts|Gemeldete Positionen · Mileposts
+Active limits|Aktiva gränser|Aktive grænser|Aktive grenser|Aktive Grenzen
+Proposed · not valid|Föreslaget · inte giltigt|Foreslået · ikke gyldigt|Foreslått · ikke gyldig|Vorgeschlagen · nicht gültig
+Track warrants|Körorder (Track Warrants)|Kørselsordrer (Track Warrants)|Kjøreordrer (Track Warrants)|Fahrbefehle (Track Warrants)
+Warrants|Körorder|Kørselsordrer|Kjøreordrer|Fahrbefehle
++ Draft|+ Utkast|+ Kladde|+ Utkast|+ Entwurf
+Nothing waiting.|Inget väntar.|Intet venter.|Ingenting venter.|Nichts ausstehend.
+No active authorities.|Inga aktiva körtillstånd.|Ingen aktive køretilladelser.|Ingen aktive kjøretillatelser.|Keine aktiven Fahrberechtigungen.
+Hide|Dölj|Skjul|Skjul|Ausblenden
+Show|Visa|Vis|Vis|Anzeigen
+History|Historik|Historik|Historikk|Verlauf
+Your warrants|Dina körorder|Dine kørselsordrer|Dine kjøreordrer|Deine Fahrbefehle
+Timetable & work|Tidtabell och arbete|Køreplan og arbejde|Rutetabell og arbeid|Fahrplan und Arbeit
+Reports & confirmations|Rapporter och bekräftelser|Rapporter og bekræftelser|Rapporter og bekreftelser|Meldungen und Bestätigungen
+Report|Rapportera|Rapportér|Rapporter|Melden
+Request authority|Begär körtillstånd|Anmod om køretilladelse|Be om kjøretillatelse|Fahrberechtigung anfordern
+Ready reported|Redo rapporterat|Klar rapporteret|Klar rapportert|Bereitschaft gemeldet
+Locomotive not specified|Lok inte angivet|Lokomotiv ikke angivet|Lokomotiv ikke angitt|Lok nicht angegeben
+No reports yet.|Inga rapporter ännu.|Ingen rapporter endnu.|Ingen rapporter ennå.|Noch keine Meldungen.
+Track segment|Spåravsnitt|Sporafsnit|Sporavsnitt|Gleisabschnitt
+From MP|Från MP|Fra MP|Fra MP|Von MP
+To MP|Till MP|Til MP|Til MP|Bis MP
+Remove segment|Ta bort avsnitt|Fjern afsnit|Fjern avsnitt|Abschnitt entfernen
+Recent operations|Senaste åtgärder|Seneste handlinger|Siste handlinger|Letzte Vorgänge
+Activate a reviewed US package|Aktivera ett granskat US-paket|Aktivér en gennemgået US-pakke|Aktiver en gjennomgått US-pakke|Geprüftes US-Paket aktivieren
+Runtime JSON file|Driftpaket som JSON|Driftspakke som JSON|Driftspakke som JSON|JSON-Betriebspaket
+Start US session|Starta US-trafikpass|Start US-session|Start US-økt|US-Sitzung starten
+Package is too large|Paketet är för stort|Pakken er for stor|Pakken er for stor|Paket ist zu groß
+Connect a conductor|Anslut en conductor|Tilslut en conductor|Koble til en conductor|Conductor verbinden
+Connected conductor|Ansluten conductor|Tilsluttet conductor|Tilkoblet conductor|Verbundener Conductor
+Choose a conductor|Välj en conductor|Vælg en conductor|Velg en conductor|Conductor auswählen
+Assign train|Tilldela tåg|Tildel tog|Tildel tog|Zug zuweisen
+Add an extra train|Lägg till extratåg|Tilføj ekstratog|Legg til ekstratog|Sonderzug hinzufügen
+Train symbol|Tågbeteckning|Togbetegnelse|Togbetegnelse|Zugbezeichnung
+East|Öst|Øst|Øst|Ost
+West|Väst|Vest|Vest|West
+Add train|Lägg till tåg|Tilføj tog|Legg til tog|Zug hinzufügen
+Authority type|Typ av körtillstånd|Type køretilladelse|Type kjøretillatelse|Art der Fahrberechtigung
+Proceed from / to|Kör från / till|Kør fra / til|Kjør fra / til|Fahren von / bis
+Work between / and|Arbeta mellan / och|Arbejd mellem / og|Arbeid mellom / og|Arbeiten zwischen / und
++ Track segment|+ Spåravsnitt|+ Sporafsnit|+ Sporavsnitt|+ Gleisabschnitt
+Additional information|Ytterligare information|Yderligere oplysninger|Tilleggsinformasjon|Zusätzliche Informationen
+Save draft for review|Spara utkast för granskning|Gem kladde til gennemgang|Lagre utkast for gjennomgang|Entwurf zur Prüfung speichern
+Report type|Rapporttyp|Rapporttype|Rapporttype|Meldungstyp
+Position|Position|Position|Posisjon|Position
+Request new authority|Begär nytt körtillstånd|Anmod om ny køretilladelse|Be om ny kjøretillatelse|Neue Fahrberechtigung anfordern
+Delay|Försening|Forsinkelse|Forsinkelse|Verspätung
+Problem|Problem|Problem|Problem|Problem
+Reported MP|Rapporterad MP|Rapporteret MP|Rapportert MP|Gemeldeter MP
+Report / uncertainty|Rapport / osäkerhet|Rapport / usikkerhed|Rapport / usikkerhet|Meldung / Unsicherheit
+Send report|Skicka rapport|Send rapport|Send rapport|Meldung senden
+Transmit warrant|Skicka körorder|Send kørselsordre|Send kjøreordre|Fahrbefehl senden
+Verify readback & activate|Kontrollera återläsning och aktivera|Kontrollér gentagelse og aktivér|Kontroller tilbakelesning og aktiver|Rücklesen prüfen und aktivieren
+Report authority released|Rapportera körtillstånd frigivet|Rapportér køretilladelse frigivet|Rapporter kjøretillatelse frigitt|Freigabe der Fahrberechtigung melden
+Void unissued authority|Ogiltigförklara ej aktiverat tillstånd|Annuller ikke-aktiveret tilladelse|Annuller ikke-aktivert tillatelse|Nicht aktivierte Berechtigung ungültig erklären
+Finish US session|Avsluta US-trafikpass|Afslut US-session|Avslutt US-økt|US-Sitzung beenden
+# Terminal onboarding and shift lifecycle
+Connect the terminal to its station|Koppla terminalen till stationen|Forbind terminalen til stationen|Koble terminalen til stasjonen|Terminal mit der Betriebsstelle verbinden
+Your choice is saved on this device. After restarting, TKL opens at the selected station.|Valet sparas i apparaten. Efter nästa omstart öppnas TKL-vyn direkt på den valda stationen.|Valget gemmes på enheden. Efter genstart åbner TKL ved den valgte station.|Valget lagres på enheten. Etter omstart åpnes TKL ved den valgte stasjonen.|Die Auswahl wird auf diesem Gerät gespeichert. Nach dem Neustart öffnet sich TKL an der gewählten Betriebsstelle.
+Setup steps|Installationens steg|Opsætningens trin|Oppsettets trinn|Einrichtungsschritte
+Wi-Fi and network|Wi-Fi och nätverk|Wi-Fi og netværk|Wi-Fi og nettverk|WLAN und Netzwerk
+Scan for Wi-Fi|Sök Wi-Fi|Søg efter Wi-Fi|Søk etter Wi-Fi|WLAN suchen
+Choose Wi-Fi …|Välj Wi-Fi …|Vælg Wi-Fi …|Velg Wi-Fi …|WLAN auswählen …
+Wi-Fi password|Wi-Fi-lösenord|Wi-Fi-adgangskode|Wi-Fi-passord|WLAN-Passwort
+Search the network automatically|Sök automatiskt på nätverket|Søg automatisk på netværket|Søk automatisk på nettverket|Automatisch im Netzwerk suchen
+Connection code, for example 123-456|Anslutningskod, exempelvis 123-456|Forbindelseskode, f.eks. 123-456|Tilkoblingskode, f.eks. 123-456|Verbindungscode, z. B. 123-456
+Terminal name|Terminalens namn|Terminalens navn|Terminalens navn|Terminalname
+Display|Skärm|Skærm|Skjerm|Bildschirm
+No connection to TrainMeet Server|Ingen kontakt med TrainMeet Server|Ingen forbindelse til TrainMeet Server|Ingen forbindelse til TrainMeet Server|Keine Verbindung zu TrainMeet Server
+No operational actions are available until the server responds.|Inga trafikåtgärder kan utföras innan servern svarar.|Ingen driftshandlinger er mulige, før serveren svarer.|Ingen driftshandlinger er mulige før serveren svarer.|Bis der Server antwortet, sind keine Betriebshandlungen möglich.
+Enter the address of TrainMeet Server on the local network.|Ange adressen till TrainMeet Server på det lokala nätverket.|Angiv adressen på TrainMeet Server på det lokale netværk.|Angi adressen til TrainMeet Server på det lokale nettverket.|Gib die Adresse von TrainMeet Server im lokalen Netzwerk ein.
+Scanning for Wi-Fi …|Söker efter Wi-Fi …|Søger efter Wi-Fi …|Søker etter Wi-Fi …|WLAN wird gesucht …
+Connected to {name}.|Ansluten till {name}.|Forbundet til {name}.|Tilkoblet {name}.|Mit {name} verbunden.
+Connecting to {name} …|Ansluter till {name} …|Forbinder til {name} …|Kobler til {name} …|Verbindung zu {name} wird hergestellt …
+Choose a network and enter its password.|Välj nätverk och ange lösenord.|Vælg netværk og angiv adgangskode.|Velg nettverk og angi passord.|Wähle ein Netzwerk und gib das Passwort ein.
+No Wi-Fi networks found. Ethernet is still available.|Inga Wi-Fi-nätverk hittades. Ethernet kan fortfarande användas.|Ingen Wi-Fi-netværk fundet. Ethernet kan stadig bruges.|Ingen Wi-Fi-nettverk funnet. Ethernet kan fortsatt brukes.|Keine WLAN-Netzwerke gefunden. Ethernet kann weiterhin verwendet werden.
+Wi-Fi connection failed. Check the password.|Wi-Fi-anslutningen misslyckades. Kontrollera lösenordet.|Wi-Fi-forbindelsen mislykkedes. Kontrollér adgangskoden.|Wi-Fi-tilkoblingen mislyktes. Kontroller passordet.|WLAN-Verbindung fehlgeschlagen. Prüfe das Passwort.
+Searching for TrainMeet Server on the local network …|Söker efter TrainMeet Server på det lokala nätverket …|Søger efter TrainMeet Server på det lokale netværk …|Søker etter TrainMeet Server på det lokale nettverket …|TrainMeet Server wird im lokalen Netzwerk gesucht …
+Found {name}. Press Connect to load the meet.|Hittade {name}. Tryck Anslut för att läsa träffen.|Fandt {name}. Tryk Forbind for at indlæse træffet.|Fant {name}. Trykk Koble til for å laste treffet.|{name} gefunden. Drücke Verbinden, um das Treffen zu laden.
+Found {count} TrainMeet servers. Select one and connect.|Hittade {count} TrainMeet-servrar. Välj en och anslut.|Fandt {count} TrainMeet-servere. Vælg en og forbind.|Fant {count} TrainMeet-servere. Velg en og koble til.|{count} TrainMeet-Server gefunden. Wähle einen aus und verbinde dich.
+No server found automatically. Enter the address or check the network.|Ingen server hittades automatiskt. Ange adressen eller kontrollera nätverket.|Ingen server fundet automatisk. Angiv adressen eller kontrollér netværket.|Ingen server funnet automatisk. Angi adressen eller kontroller nettverket.|Kein Server automatisch gefunden. Gib die Adresse ein oder prüfe das Netzwerk.
+Contacting TrainMeet Server …|Kontaktar TrainMeet Server …|Kontakter TrainMeet Server …|Kontakter TrainMeet Server …|TrainMeet Server wird kontaktiert …
+Found {name} with {count} stations.|Hittade {name} med {count} stationer.|Fandt {name} med {count} stationer.|Fant {name} med {count} stasjoner.|{name} mit {count} Betriebsstellen gefunden.
+Server unreachable. Check the address, network and that TrainMeet Server is running.|Servern kunde inte nås. Kontrollera adress, nätverk och att TrainMeet Server är igång.|Serveren kunne ikke nås. Kontrollér adresse, netværk og at TrainMeet Server kører.|Serveren kunne ikke nås. Kontroller adresse, nettverk og at TrainMeet Server kjører.|Server nicht erreichbar. Prüfe Adresse, Netzwerk und ob TrainMeet Server läuft.
+Pairing the terminal …|Parkopplar terminalen …|Parrer terminalen …|Parer terminalen …|Terminal wird gekoppelt …
+Signing in …|Loggar in …|Logger ind …|Logger inn …|Anmeldung läuft …
+The terminal is authorized on TrainMeet Server.|Terminalen har behörighet till TrainMeet Server.|Terminalen er godkendt på TrainMeet Server.|Terminalen er godkjent på TrainMeet Server.|Das Terminal ist auf TrainMeet Server autorisiert.
+Sign-in failed.|Inloggningen misslyckades.|Login mislykkedes.|Innloggingen mislyktes.|Anmeldung fehlgeschlagen.
+The terminal profile could not be saved.|Terminalprofilen kunde inte sparas.|Terminalprofilen kunne ikke gemmes.|Terminalprofilen kunne ikke lagres.|Das Terminalprofil konnte nicht gespeichert werden.
+secured|låst|beskyttet|sikret|gesichert
+Pair the terminal|Parkoppla terminalen|Par terminalen|Par terminalen|Terminal koppeln
+Use the connection code from TrainMeet Server.|Använd anslutningskoden från TrainMeet Server.|Brug forbindelseskoden fra TrainMeet Server.|Bruk tilkoblingskoden fra TrainMeet Server.|Verwende den Verbindungscode von TrainMeet Server.
+Remote access requires the server administrator account.|Extern anslutning kräver serverns administratörskonto.|Ekstern adgang kræver serverens administratorkonto.|Ekstern tilgang krever serverens administratorkonto.|Fernzugriff erfordert das Administratorkonto des Servers.
+The terminal is paired and will be recognized automatically.|Terminalen är parkopplad och känns igen automatiskt.|Terminalen er parret og genkendes automatisk.|Terminalen er paret og gjenkjennes automatisk.|Das Terminal ist gekoppelt und wird automatisch erkannt.
+Signed in as {name}.|Inloggad som {name}.|Logget ind som {name}.|Logget inn som {name}.|Angemeldet als {name}.
+Pair the terminal again|Parkoppla terminalen igen|Par terminalen igen|Par terminalen på nytt|Terminal erneut koppeln
+Sign in to continue|Logga in för att fortsätta|Log ind for at fortsætte|Logg inn for å fortsette|Anmelden, um fortzufahren
+The terminal's previous authorization has expired. Enter the connection code from TrainMeet Server.|Terminalens tidigare behörighet gäller inte längre. Ange anslutningskoden från TrainMeet Server.|Terminalens tidligere adgang er udløbet. Angiv forbindelseskoden fra TrainMeet Server.|Terminalens tidligere tilgang er utløpt. Angi tilkoblingskoden fra TrainMeet Server.|Die bisherige Berechtigung des Terminals ist abgelaufen. Gib den Verbindungscode von TrainMeet Server ein.
+Your station and terminal profile remain after signing in.|Din station och terminalprofil finns kvar efter inloggningen.|Din station og terminalprofil bevares efter login.|Stasjonen og terminalprofilen beholdes etter innlogging.|Deine Betriebsstelle und dein Terminalprofil bleiben nach der Anmeldung erhalten.
+Connecting …|Ansluter …|Forbinder …|Kobler til …|Verbindung wird hergestellt …
+Take {station} into service|Ta {station} i tjänst|Tag {station} i tjeneste|Ta {station} i tjeneste|Dienst an {station} aufnehmen
+Check the context and start a shift before handling any train movements.|Kontrollera sammanhanget och starta ett trafikpass innan några tågrörelser hanteras.|Kontrollér oplysningerne og start en vagt, før togbevægelser håndteres.|Kontroller opplysningene og start en vakt før togbevegelser håndteres.|Prüfe die Angaben und beginne eine Schicht, bevor du Zugbewegungen bearbeitest.
+· started|· startat|· startet|· startet|· begonnen
+Operator|Operatör|Operatør|Operatør|Bediener
+{count} open sections to take over|{count} pågående sträckor att ta över|{count} aktive strækninger at overtage|{count} aktive strekninger å overta|{count} offene Streckenabschnitte zu übernehmen
+All sections clear|Alla sträckor fria|Alle strækninger frie|Alle strekninger frie|Alle Streckenabschnitte frei
+Starting …|Startar …|Starter …|Starter …|Wird gestartet …
+Take over the shift|Ta över trafikpasset|Overtag vagten|Overta vakten|Schicht übernehmen
+Station handed over|Stationen är överlämnad|Stationen er overdraget|Stasjonen er overlevert|Betriebsstelle übergeben
+Shift ended|Trafikpasset är avslutat|Vagten er afsluttet|Vakten er avsluttet|Schicht beendet
+{name} handled {count} completed train movements during this shift.|{name} hanterade {count} avslutade tågrörelser under det här terminalpasset.|{name} håndterede {count} afsluttede togbevægelser under denne vagt.|{name} håndterte {count} avsluttede togbevegelser under denne vakten.|{name} hat in dieser Schicht {count} abgeschlossene Zugbewegungen bearbeitet.
+The next operator can now take over.|Nästa operatör kan nu ta över.|Den næste operatør kan nu overtage.|Neste operatør kan nå overta.|Der nächste Bediener kann jetzt übernehmen.
+The station is no longer staffed in TKL.|Stationen är inte längre bemannad i TKL.|Stationen er ikke længere bemandet i TKL.|Stasjonen er ikke lenger bemannet i TKL.|Die Betriebsstelle ist in TKL nicht mehr besetzt.
+Needs attention|Kräver uppmärksamhet|Kræver opmærksomhed|Krever oppmerksomhet|Handlungsbedarf
+active operational cases|aktiva trafikärenden|aktive driftssager|aktive driftssaker|aktive Betriebsvorgänge
+Approve|Godkänn|Godkend|Godkjenn|Genehmigen
+Deny|Neka|Afvis|Avvis|Ablehnen
+Withdraw|Återkalla|Tilbagekald|Trekk tilbake|Zurückziehen
+Waiting for clearance|Väntar på klarering|Afventer køretilladelse|Venter på kjøretillatelse|Wartet auf Fahrerlaubnis
+Clearance requested|Begäran om klarering|Anmodning om køretilladelse|Forespørsel om kjøretillatelse|Fahrerlaubnis angefordert
+Clearance granted|Klarering beviljad|Køretilladelse givet|Kjøretillatelse gitt|Fahrerlaubnis erteilt
+Train waiting to depart|Tåg väntar på avgång|Tog venter på afgang|Tog venter på avgang|Zug wartet auf Abfahrt
+Train on the line|Tåg på linjen|Tog på strækningen|Tog på strekningen|Zug auf der Strecke
+Incoming train|Tåg på väg in|Ankommende tog|Innkommende tog|Einfahrender Zug
+Hold the station name for five seconds to open terminal administration|Håll in stationsnamnet i fem sekunder för terminaladministration|Hold stationsnavnet i fem sekunder for terminaladministration|Hold stasjonsnavnet i fem sekunder for terminaladministrasjon|Betriebsstellennamen fünf Sekunden gedrückt halten, um die Terminalverwaltung zu öffnen
+Messages|Meddelanden|Beskeder|Meldinger|Nachrichten
+Tools|Verktyg|Værktøjer|Verktøy|Werkzeuge
+Freight|Gods|Gods|Gods|Güterverkehr
+Now|Nu|Nu|Nå|Jetzt
+Theme|Tema|Tema|Tema|Darstellung
+Run first-time setup again|Kör första installationen igen|Kør førstegangsopsætning igen|Kjør førstegangsoppsett igjen|Ersteinrichtung erneut ausführen
+Software|Programvara|Software|Programvare|Software
+The same A–D connections as the physical TMBox. All commands go through TrainMeet Server.|Samma A–D-anslutningar som den fysiska TMBoxen. Alla kommandon ska gå genom TrainMeet Server.|Samme A–D-forbindelser som den fysiske TMBox. Alle kommandoer går gennem TrainMeet Server.|Samme A–D-tilkoblinger som den fysiske TMBox. Alle kommandoer går gjennom TrainMeet Server.|Dieselben A–D-Anschlüsse wie an der physischen TMBox. Alle Befehle laufen über TrainMeet Server.
+Open full TMBox simulation|Öppna full TMBox-simulering|Åbn fuld TMBox-simulering|Åpne full TMBox-simulering|Vollständige TMBox-Simulation öffnen
+Shift started|Trafikpass startat|Vagt startet|Vakt startet|Schicht begonnen
+Handover note|Överlämningsanteckning|Overdragelsesnotat|Overleveringsnotat|Übergabenotiz
+Optional information for the next operator|Valfri information till nästa operatör|Valgfri information til næste operatør|Valgfri informasjon til neste operatør|Optionale Informationen für den nächsten Bediener
+Hand over the station|Lämna över stationen|Overdrag stationen|Overlever stasjonen|Betriebsstelle übergeben
+· revision|· revision|· revision|· revisjon|· Revision
+Offline · last known state · operational actions blocked|Offline · visar senast kända läge · trafikåtgärder är spärrade|Offline · senest kendte tilstand · driftshandlinger er spærret|Frakoblet · sist kjente tilstand · driftshandlinger er sperret|Offline · letzter bekannter Stand · Betriebshandlungen gesperrt
+No train movements|Inga tågrörelser|Ingen togbevægelser|Ingen togbevegelser|Keine Zugbewegungen
+Open cases and the next trains|Pågående ärenden och de närmaste tågen|Aktive sager og de næste tog|Aktive saker og de neste togene|Offene Vorgänge und die nächsten Züge
+Other train movements in time order|Övriga tågrörelser i tidsordning|Øvrige togbevægelser i tidsorden|Andre togbevegelser i tidsrekkefølge|Weitere Zugbewegungen in zeitlicher Reihenfolge
+Archived train movements (|Arkiverade tågrörelser (|Arkiverede togbevægelser (|Arkiverte togbevegelser (|Archivierte Zugbewegungen (
+No archived train movements.|Inga arkiverade tågrörelser.|Ingen arkiverede togbevægelser.|Ingen arkiverte togbevegelser.|Keine archivierten Zugbewegungen.
+· on the line|· på linjen|· på strækningen|· på strekningen|· auf der Strecke
+· departed|· avgått|· afgået|· avgått|· abgefahren
+Prepare train|Ställ upp tåg|Klargør tog|Klargjør tog|Zug bereitstellen
+Prepared|Uppställt|Klargjort|Klargjort|Bereitgestellt
+This train has a note|Tåget har en anteckning|Toget har en note|Toget har et notat|Für diesen Zug liegt eine Notiz vor
+# Cloud account and editor details
+My account|Mitt konto|Min konto|Min konto|Mein Konto
+Signed in as|Inloggad som|Logget ind som|Logget inn som|Angemeldet als
+Repeat new password|Upprepa nytt lösenord|Gentag ny adgangskode|Gjenta nytt passord|Neues Passwort wiederholen
+Password changed. Use the new password next time you sign in.|Lösenordet är ändrat. Använd det nya lösenordet nästa gång du loggar in.|Adgangskoden er ændret. Brug den nye ved næste login.|Passordet er endret. Bruk det nye neste gang du logger inn.|Passwort geändert. Verwende bei der nächsten Anmeldung das neue Passwort.
+Edit user|Redigera användare|Rediger bruger|Rediger bruker|Benutzer bearbeiten
+Name / username|Namn / användarnamn|Navn / brugernavn|Navn / brukernavn|Name / Benutzername
+Leave blank to keep unchanged|Lämna tomt för att behålla|Lad stå tomt for at beholde|La stå tomt for å beholde|Leer lassen, um beizubehalten
+At least 6 characters. The old password is never displayed.|Minst 6 tecken. Det gamla lösenordet visas aldrig.|Mindst 6 tegn. Den gamle adgangskode vises aldrig.|Minst 6 tegn. Det gamle passordet vises aldri.|Mindestens 6 Zeichen. Das alte Passwort wird nie angezeigt.
+Required when changing an email address or someone else's password. Enter the password for|Krävs när du ändrar e-postadress eller någon annans lösenord. Ange lösenordet för|Kræves ved ændring af e-mailadresse eller en andens adgangskode. Angiv adgangskoden for|Kreves ved endring av e-postadresse eller en annens passord. Angi passordet for|Erforderlich bei Änderungen der E-Mail-Adresse oder des Passworts anderer Benutzer. Gib das Passwort ein für
+Email and password change immediately when saved. Previous sessions and reset links are revoked.|E-post och lösenord ändras direkt när du sparar. Användarens gamla inloggningar och återställningslänkar avslutas.|E-mail og adgangskode ændres straks ved lagring. Tidligere login og nulstillingslinks ophæves.|E-post og passord endres straks ved lagring. Tidligere innlogginger og tilbakestillingslenker oppheves.|E-Mail und Passwort werden beim Speichern sofort geändert. Bisherige Sitzungen und Zurücksetzungslinks werden ungültig.
+No password is sent by email.|Inget lösenord skickas via e-post.|Ingen adgangskode sendes via e-mail.|Ingen passord sendes via e-post.|Es wird kein Passwort per E-Mail versendet.
+Organization|Organisationen|Organisationen|Organisasjonen|Organisation
+users|användare|brugere|brukere|Benutzer
+Click a user to edit their name, email, role and password.|Klicka på en användare för att ändra namn, e-post, roll och lösenord.|Klik på en bruger for at ændre navn, e-mail, rolle og adgangskode.|Klikk på en bruker for å endre navn, e-post, rolle og passord.|Klicke auf einen Benutzer, um Name, E-Mail, Rolle und Passwort zu ändern.
+Member — builds and publishes meets|Medlem — bygger och publicerar träffar|Medlem — opretter og publicerer træf|Medlem — oppretter og publiserer treff|Mitglied — erstellt und veröffentlicht Treffen
+Administrator — also users and settings|Administratör — även användare och inställningar|Administrator — også brugere og indstillinger|Administrator — også brukere og innstillinger|Administrator — auch Benutzer und Einstellungen
+Owner — also software updates|Ägare — även programuppdatering|Ejer — også softwareopdatering|Eier — også programoppdatering|Eigentümer — auch Softwareupdates
+The check sends nothing and can run at any time. Test emails are actually sent.|Kontrollen skickar ingenting och går att köra när som helst. Testmailet skickar på riktigt.|Kontrollen sender intet og kan køres når som helst. Testmailen sendes faktisk.|Kontrollen sender ingenting og kan kjøres når som helst. Testmeldingen sendes faktisk.|Die Prüfung versendet nichts und kann jederzeit ausgeführt werden. Test-E-Mails werden tatsächlich gesendet.
+Ready to send. Sender|Klart att skicka. Avsändare|Klar til at sende. Afsender|Klar til å sende. Avsender|Versandbereit. Absender
+, reply to|, svar till|, svar til|, svar til|, Antwort an
+, via|, via|, via|, via|, über
+queued ·|i kö ·|i kø ·|i kø ·|in Warteschlange ·
+sent ·|skickade ·|sendte ·|sendte ·|gesendet ·
+failed|misslyckade|mislykkede|mislykkede|fehlgeschlagen
+Close without saving|Stäng utan att spara|Luk uden at gemme|Lukk uten å lagre|Ohne Speichern schließen
+All names below belong to the same station. Select the code shown on the layout and TMBox. Other names identify the station during import.|Alla beteckningar nedan hör till samma station. Välj vilken som ska visas på banan och i TMBox. Övriga används för att känna igen stationen vid import.|Alle betegnelser nedenfor hører til samme station. Vælg den, der vises på banen og TMBox. Øvrige navne genkender stationen ved import.|Alle betegnelsene nedenfor tilhører samme stasjon. Velg den som vises på banen og TMBox. Andre navn identifiserer stasjonen ved import.|Alle folgenden Bezeichnungen gehören zur selben Betriebsstelle. Wähle die auf der Anlage und TMBox angezeigte Kennung. Andere Namen dienen zur Erkennung beim Import.
+Names and codes|Beteckningar|Betegnelser|Betegnelser|Bezeichnungen
+Station codes must contain 1–12 letters or digits. Select another code before removing the current one.|Stationskoden ska vara 1–12 bokstäver eller siffror. Välj en annan kod innan du tar bort den nuvarande.|Stationskoden skal være 1–12 bogstaver eller tal. Vælg en anden kode, før den nuværende fjernes.|Stasjonskoden må være 1–12 bokstaver eller tall. Velg en annen kode før den nåværende fjernes.|Die Betriebsstellenkennung muss 1–12 Buchstaben oder Ziffern enthalten. Wähle vor dem Entfernen der aktuellen Kennung eine andere aus.
+Add a name or code|Lägg till en beteckning|Tilføj en betegnelse|Legg til en betegnelse|Bezeichnung hinzufügen
+For example CDA or Charlottendal C|T.ex. CDA eller Charlottendal C|F.eks. CDA eller Charlottendal C|F.eks. CDA eller Charlottendal C|Zum Beispiel CDA oder Charlottendal C
+Trains, tracks and connections are preserved. Saving updates the draft; publish a new version to distribute changes to TrainMeet Server.|Tåg, spår och kopplingar behålls. Spara uppdaterar utkastet; publicera en ny version när ändringarna ska hämtas av TrainMeet Server.|Tog, spor og forbindelser bevares. Gem opdaterer kladden; publicér en ny version for at sende ændringerne til TrainMeet Server.|Tog, spor og forbindelser beholdes. Lagre oppdaterer utkastet; publiser en ny versjon for å sende endringene til TrainMeet Server.|Züge, Gleise und Verbindungen bleiben erhalten. Speichern aktualisiert den Entwurf; veröffentliche eine neue Version, um Änderungen an TrainMeet Server zu verteilen.
+Meet archive|Träffarkiv|Træfarkiv|Treffarkiv|Treffenarchiv
+Meet name|Träffens namn|Træffets navn|Treffets navn|Name des Treffens
+Example: A house full of trains|Exempel: Hela huset fullt med tåg|Eksempel: Huset fuldt af tog|Eksempel: Huset fullt av tog|Beispiel: Ein Haus voller Züge
+Workflow|Arbetsgång|Arbejdsgang|Arbeidsflyt|Arbeitsablauf
+From source documents to runtime package|Från underlag till driftpaket|Fra kildemateriale til driftspakke|Fra kildemateriale til driftspakke|Von Quelldokumenten zum Betriebspaket
+About the meet|Om träffen|Om træffet|Om treffet|Über das Treffen
+Name, dates, URL name and active operating day.|Namn, datum, URL-namn och aktiv trafikdag.|Navn, datoer, URL-navn og aktiv driftsdag.|Navn, datoer, URL-navn og aktiv driftsdag.|Name, Datum, URL-Name und aktiver Betriebstag.
+Slug (URL)|Slug (URL)|Slug (URL)|Slug (URL)|URL-Kurzname
+From date|Från och med|Fra og med|Fra og med|Ab Datum
+Until date|Till och med|Til og med|Til og med|Bis einschließlich
+Active operating day|Aktiv trafikdag|Aktiv driftsdag|Aktiv driftsdag|Aktiver Betriebstag
+Time zone|Tidszon|Tidszone|Tidssone|Zeitzone
+Operating session|Trafikspel|Driftsspil|Trafikkspill|Betriebsspiel
+Default operating rules for all sections.|Grundregler som blir standard för alla sträckor.|Grundregler, der bliver standard for alle strækninger.|Grunnregler som blir standard for alle strekninger.|Grundregeln, die standardmäßig für alle Streckenabschnitte gelten.
+Traffic side|Trafikriktning|Kørselsside|Kjøreside|Fahrseite
+Left-hand running|Vänstertrafik|Venstrekørsel|Venstrekjøring|Linksverkehr
+Right-hand running|Högertrafik|Højrekørsel|Høyrekjøring|Rechtsverkehr
+Operating method|Trafikeringsmetod|Driftsmetode|Driftsmetode|Betriebsverfahren
+Train reporting — request and confirm|Tåganmälan – begär och bekräfta|Togmelding — anmod og bekræft|Togmelding — be om og bekreft|Zugmeldung — anfordern und bestätigen
+Automatic permission when the section is clear|Automatiskt medgivande när sträckan är ledig|Automatisk tilladelse når strækningen er fri|Automatisk tillatelse når strekningen er fri|Automatische Erlaubnis bei freiem Streckenabschnitt
+Start time and rate sent to the local server.|Starttid och hastighet som skickas till den lokala servern.|Starttid og hastighed sendes til den lokale server.|Starttid og hastighet sendes til den lokale serveren.|Startzeit und Zeitfaktor für den lokalen Server.
+Start time|Starttid|Starttid|Starttid|Startzeit
+1× real time|1× verklig tid|1× virkelig tid|1× virkelig tid|1× Echtzeit
+Save changes|Spara ändringar|Gem ændringer|Lagre endringer|Änderungen speichern
+Server processing|Servern bearbetar|Serveren behandler|Serveren behandler|Server verarbeitet
+queued|i kö|i kø|i kø|in Warteschlange
+You can leave this page. Processing continues on the server.|Du kan lämna sidan. Arbetet fortsätter på servern.|Du kan forlade siden. Arbejdet fortsætter på serveren.|Du kan forlate siden. Arbeidet fortsetter på serveren.|Du kannst diese Seite verlassen. Die Verarbeitung läuft auf dem Server weiter.
+PDF, JPEG or PNG · starts automatically on the server · up to 25 MB per file|PDF, JPEG eller PNG · servern startar automatiskt · upp till 25 MB per fil|PDF, JPEG eller PNG · serveren starter automatisk · op til 25 MB pr. fil|PDF, JPEG eller PNG · serveren starter automatisk · opptil 25 MB per fil|PDF, JPEG oder PNG · Server startet automatisch · bis 25 MB pro Datei
+Choose files|Välj filer|Vælg filer|Velg filer|Dateien auswählen
+Server import queue|Serverns importkö|Serverens importkø|Serverens importkø|Importwarteschlange des Servers
+Search all data…|Sök i all data…|Søg i alle data…|Søk i alle data…|Alle Daten durchsuchen …
+Sections|Sträckor|Strækninger|Strekninger|Streckenabschnitte
+Imports|Importer|Importer|Importer|Importe
+Review|Granskning|Gennemgang|Gjennomgang|Prüfung
+movements|rörelser|bevægelser|bevegelser|Bewegungen
+Sort time|Sorttid|Sorteringstid|Sorteringstid|Sortierzeit
+Sorting time|Sorteringstid|Sorteringstid|Sorteringstid|Sortierzeit
+Delete row|Ta bort rad|Slet række|Slett rad|Zeile löschen
+The station code is the abbreviation shown on the layout and TMBox. Aliases are other names used in source documents.|Stationskoden är förkortningen som visas på banan och i TMBox. Alias är alternativa namn från underlagen.|Stationskoden er forkortelsen på banen og TMBox. Aliasser er alternative navne fra kildematerialet.|Stasjonskoden er forkortelsen på banen og TMBox. Aliaser er alternative navn fra kildematerialet.|Die Betriebsstellenkennung ist die Abkürzung auf der Anlage und TMBox. Aliase sind alternative Namen aus den Quelldokumenten.
+Other names|Andra beteckningar|Andre betegnelser|Andre betegnelser|Weitere Bezeichnungen
+None yet|Inga ännu|Ingen endnu|Ingen ennå|Noch keine
+· Aliases|· Alias|· Aliasser|· Aliaser|· Aliase
+Automatically derived layout overview|Automatiskt härledd banöversikt|Automatisk udledt baneoversigt|Automatisk utledet baneoversikt|Automatisch abgeleitete Anlagenübersicht
+Layout derived from all train movements|Banmodell från alla tågrörelser|Banemodel fra alle togbevægelser|Banemodell fra alle togbevegelser|Anlagenmodell aus allen Zugbewegungen
+timetable rows|tidtabellsrader|køreplansrækker|rutetabellrader|Fahrplanzeilen
+confirmed sections|bevisade sträckor|bekræftede strækninger|bekreftede strekninger|nachgewiesene Streckenabschnitte
+weak links|svaga samband|svage sammenhænge|svake sammenhenger|schwache Zusammenhänge
+Cloud follows each train number and operating day through all station timetables. Stations are connected only when the same train appears at them consecutively. Main line and branches are placed automatically, independently of file upload order.|Cloud följer varje tågnummer och trafikdag genom samtliga stationstidtabeller. Två stationer kopplas bara ihop när samma tåg förekommer där efter varandra. Huvudlinje och grenar placeras sedan automatiskt; filernas uppladdningsordning styr inte banan.|Cloud følger hvert tognummer og hver driftsdag gennem alle stationskøreplaner. Stationer forbindes kun, når samme tog forekommer ved dem i rækkefølge. Hovedlinje og grene placeres automatisk, uafhængigt af filernes uploadrækkefølge.|Cloud følger hvert tognummer og hver driftsdag gjennom alle stasjonsrutetabeller. Stasjoner kobles bare sammen når samme tog forekommer der etter hverandre. Hovedlinje og grener plasseres automatisk, uavhengig av filenes opplastingsrekkefølge.|Cloud verfolgt jede Zugnummer und jeden Betriebstag durch alle Betriebsstellenfahrpläne. Betriebsstellen werden nur verbunden, wenn derselbe Zug dort unmittelbar nacheinander erscheint. Hauptstrecke und Zweige werden automatisch angeordnet, unabhängig von der Uploadreihenfolge.
+Derived sections|Härledda sträckor|Udledte strækninger|Utledede strekninger|Abgeleitete Streckenabschnitte
+Station A|Station A|Station A|Stasjon A|Betriebsstelle A
+Station B|Station B|Station B|Stasjon B|Betriebsstelle B
+Evidence|Underlag|Grundlag|Grunnlag|Nachweise
+Operating mode|Trafikläge|Driftsform|Driftsmodus|Betriebsart
+train sequences|tågkedjor|togkæder|togkjeder|Zugfolgen
+Meet default|Träffens standard|Træffets standard|Treffets standard|Treffenstandard
+Request and confirm|Begär och bekräfta|Anmod og bekræft|Be om og bekreft|Anfordern und bestätigen
+Automatic when clear|Automatiskt när ledigt|Automatisk når fri|Automatisk når ledig|Automatisch bei freier Strecke
+Four fixed ports|Fyra fasta portar|Fire faste porte|Fire faste porter|Vier feste Anschlüsse
+One box per station|En låda per station|En boks pr. station|En boks per stasjon|Eine Box pro Betriebsstelle
+A and B are on the left; C and D are on the right. The rails show whether the connected section is single or double track.|A och B sitter på lådans vänstra sida, C och D på den högra. Rälsen visar direkt om den kopplade sträckan är enkel- eller dubbelspår.|A og B sidder til venstre på boksen, C og D til højre. Skinnerne viser, om den tilsluttede strækning er enkelt- eller dobbeltsporet.|A og B sitter til venstre på boksen, C og D til høyre. Skinnene viser om den tilkoblede strekningen er enkelt- eller dobbeltsporet.|A und B befinden sich links an der Box, C und D rechts. Die Gleise zeigen, ob der verbundene Abschnitt ein- oder zweigleisig ist.
+of 4 connected|av 4 kopplade|af 4 tilsluttet|av 4 tilkoblet|von 4 verbunden
+Logical station box|Logisk stationsbox|Logisk stationsboks|Logisk stasjonsboks|Logische Betriebsstellenbox
+Save TMBoxes|Spara TMBoxar|Gem TMBoxe|Lagre TMBoxer|TMBoxen speichern
+Validating…|Validerar…|Validerer…|Validerer…|Wird geprüft …
+Choose validity period|Välj giltighetstid|Vælg gyldighedsperiode|Velg gyldighetsperiode|Gültigkeitsdauer wählen
+Review items|Granskningspunkter|Kontrolpunkter|Kontrollpunkter|Prüfpunkte
+Check the corresponding timetable row before marking it reviewed.|Kontrollera motsvarande rad i tidtabellen innan du markerar klar.|Kontrollér den tilsvarende køreplansrække, før du markerer den som klar.|Kontroller tilsvarende rad i rutetabellen før du markerer den som klar.|Prüfe die entsprechende Fahrplanzeile, bevor du sie als geprüft markierst.
+Mark reviewed|Markera kontrollerad|Markér kontrolleret|Marker kontrollert|Als geprüft markieren
+New version|Ny version|Ny version|Ny versjon|Neue Version
+Publish reviewed changes|Publicera granskade ändringar|Publicér gennemgåede ændringer|Publiser gjennomgåtte endringer|Geprüfte Änderungen veröffentlichen
+Connected servers receive the new version automatically or at the next manual check. Nothing else is needed here.|Redan kopplade servrar hämtar den nya versionen automatiskt (eller vid nästa manuella kontroll) — inget mer att göra här.|Tilsluttede servere henter den nye version automatisk eller ved næste manuelle kontrol. Intet mere kræves her.|Tilkoblede servere henter den nye versjonen automatisk eller ved neste manuelle kontroll. Ingenting mer trengs her.|Verbundene Server laden die neue Version automatisch oder bei der nächsten manuellen Prüfung. Hier ist nichts weiter nötig.
+Connect a new TrainMeet Server|Koppla en ny TrainMeet Server|Forbind en ny TrainMeet Server|Koble til en ny TrainMeet Server|Neuen TrainMeet Server verbinden
+The code stays the same when you publish. Servers already connected never need it again.|Koden är stabil över tid — den ändras inte när du publicerar. Servrar som redan har kopplat sig behöver den aldrig igen.|Koden ændres ikke, når du publicerer. Servere, der allerede er tilsluttet, behøver den aldrig igen.|Koden endres ikke når du publiserer. Servere som allerede er tilkoblet trenger den aldri igjen.|Der Code bleibt beim Veröffentlichen gleich. Bereits verbundene Server benötigen ihn nicht erneut.
+Valid until|Giltig till|Gyldig til|Gyldig til|Gültig bis
+Generate new code|Generera ny kod|Generér ny kode|Generer ny kode|Neuen Code erstellen
+Validity period|Giltighetstid|Gyldighedsperiode|Gyldighetsperiode|Gültigkeitsdauer
+1–3650 days|1–3650 dagar|1–3650 dage|1–3650 dager|1–3650 Tage
+The old code stops working immediately. Already connected servers are not affected.|Den gamla koden slutar fungera direkt. Redan kopplade servrar påverkas inte.|Den gamle kode holder straks op med at virke. Tilsluttede servere påvirkes ikke.|Den gamle koden slutter straks å virke. Tilkoblede servere påvirkes ikke.|Der alte Code wird sofort ungültig. Bereits verbundene Server sind nicht betroffen.
+Published versions|Publicerade versioner|Publicerede versioner|Publiserte versjoner|Veröffentlichte Versionen
+No published version|Ingen version publicerad|Ingen publiceret version|Ingen publisert versjon|Keine veröffentlichte Version
+The first publication creates a complete runtime package and a connection code.|Den första publiceringen skapar ett komplett driftpaket och en anslutningskod.|Den første publicering opretter en komplet driftspakke og en forbindelseskode.|Den første publiseringen oppretter en komplett driftspakke og en tilkoblingskode.|Die erste Veröffentlichung erstellt ein vollständiges Betriebspaket und einen Verbindungscode.
+Technical information|Teknisk information|Teknisk information|Teknisk informasjon|Technische Informationen
+Cloud identity|Cloud-identitet|Cloud-identitet|Cloud-identitet|Cloud-Identität
+AI import|AI-import|AI-import|AI-import|KI-Import
+Model|Modell|Model|Modell|Modell
+New OpenAI API key|Ny OpenAI API-nyckel|Ny OpenAI API-nøgle|Ny OpenAI API-nøkkel|Neuer OpenAI-API-Schlüssel
+Save settings|Spara inställningar|Gem indstillinger|Lagre innstillinger|Einstellungen speichern
+Downloads the latest main version, backs up data and replaces the container through the host update service.|Hämtar senaste versionen från main, säkerhetskopierar data och byter container via värdens uppdateringstjänst.|Henter seneste main-version, sikkerhedskopierer data og udskifter containeren via værtens opdateringstjeneste.|Henter siste main-versjon, sikkerhetskopierer data og bytter containeren via vertens oppdateringstjeneste.|Lädt die neueste main-Version, sichert die Daten und ersetzt den Container über den Updatedienst des Hosts.
+The previous version was restored automatically.|Föregående version återställdes automatiskt.|Den tidligere version blev gendannet automatisk.|Den forrige versjonen ble gjenopprettet automatisk.|Die vorherige Version wurde automatisch wiederhergestellt.
+Choose platform|Välj plattform|Vælg platform|Velg plattform|Plattform auswählen
+Recommended installation|Rekommenderad installation|Anbefalet installation|Anbefalt installasjon|Empfohlene Installation
+For a physical TrainMeet Server on the meet's local network.|För en fysisk TrainMeet Server på träffens lokala nätverk.|Til en fysisk TrainMeet Server på træffets lokale netværk.|For en fysisk TrainMeet Server på treffets lokale nettverk.|Für einen physischen TrainMeet Server im lokalen Netzwerk des Treffens.
+Install the operating system.|Installera operativsystemet.|Installér operativsystemet.|Installer operativsystemet.|Betriebssystem installieren.
+Connect to the network and open Terminal.|Anslut till nätverket och öppna Terminal.|Forbind til netværket og åbn Terminal.|Koble til nettverket og åpne Terminal.|Mit dem Netzwerk verbinden und Terminal öffnen.
+Install TrainMeet Server.|Installera TrainMeet Server.|Installér TrainMeet Server.|Installer TrainMeet Server.|TrainMeet Server installieren.
+Restart the Pi.|Starta om Pi:n.|Genstart Pi'en.|Start Pi-en på nytt.|Pi neu starten.
+Open the server.|Öppna servern.|Åbn serveren.|Åpne serveren.|Server öffnen.
+Complete first-time setup.|Slutför första installationen.|Afslut førstegangsopsætningen.|Fullfør førstegangsoppsettet.|Ersteinrichtung abschließen.
+Update later|Uppdatera senare|Opdatér senere|Oppdater senere|Später aktualisieren
+System → Software update|System → Programuppdatering|System → Softwareopdatering|System → Programoppdatering|System → Softwareupdate
+Install the prerequisites.|Installera förutsättningarna.|Installér forudsætningerne.|Installer forutsetningene.|Voraussetzungen installieren.
+Open PowerShell.|Öppna PowerShell.|Åbn PowerShell.|Åpne PowerShell.|PowerShell öffnen.
+Download and start the server.|Hämta och starta servern.|Hent og start serveren.|Last ned og start serveren.|Server herunterladen und starten.
+One command without Docker|Enradare utan Docker|Én kommando uden Docker|Én kommando uten Docker|Ein Befehl ohne Docker
+Open Terminal.|Öppna Terminal.|Åbn Terminal.|Åpne Terminal.|Terminal öffnen.
+Linux server|Linuxserver|Linuxserver|Linux-server|Linux-Server
+Connect by SSH for a remote server.|Anslut via SSH om servern är fjärrstyrd.|Forbind via SSH til en fjernserver.|Koble til via SSH for en ekstern server.|Bei einem entfernten Server per SSH verbinden.
+Install as a regular user.|Installera som vanlig användare.|Installér som almindelig bruger.|Installer som vanlig bruker.|Als normaler Benutzer installieren.
+Check the service.|Kontrollera tjänsten.|Kontrollér tjenesten.|Kontroller tjenesten.|Dienst prüfen.
+Advanced operation|Avancerad drift|Avanceret drift|Avansert drift|Erweiterter Betrieb
+Prepare your workstation.|Förbered arbetsdatorn.|Forbered arbejdscomputeren.|Klargjør arbeidsmaskinen.|Arbeitsrechner vorbereiten.
+Download and install the chart.|Hämta och installera chartet.|Hent og installér chartet.|Last ned og installer chartet.|Chart herunterladen und installieren.
+Check the installation.|Kontrollera installationen.|Kontrollér installationen.|Kontroller installasjonen.|Installation prüfen.
+Open securely.|Öppna säkert.|Åbn sikkert.|Åpne sikkert.|Sicher öffnen.
+Important|Viktigt|Vigtigt|Viktig|Wichtig
+Once the server is installed|När servern är installerad|Når serveren er installeret|Når serveren er installert|Nach der Serverinstallation
+Full README|Fullständig README|Komplet README|Fullstendig README|Vollständige README
+First connected|Först kopplad|Først tilsluttet|Først tilkoblet|Erstmals verbunden
+· last seen|· senast sedd|· sidst set|· sist sett|· zuletzt gesehen
+# Local Server navigation, setup and operations
+0 selected|0 markerade|0 markeret|0 valgt|0 ausgewählt
+1 · Stations in order|1 · Stationer i ordning|1 · Stationer i rækkefølge|1 · Stasjoner i rekkefølge|1 · Betriebsstellen in Reihenfolge
+1. Stations in order|1. Stationer i ordning|1. Stationer i rækkefølge|1. Stasjoner i rekkefølge|1. Betriebsstellen in Reihenfolge
+2 · Sections|2 · Sträckor|2 · Strækninger|2 · Strekninger|2 · Streckenabschnitte
+2. Sections|2. Sträckor|2. Strækninger|2. Strekninger|2. Streckenabschnitte
+3 · TMBox panels A–D|3 · TMBox-paneler A–D|3 · TMBox-paneler A–D|3 · TMBox-paneler A–D|3 · TMBox-Panels A–D
+3. TMBox panels|3. TMBox-paneler|3. TMBox-paneler|3. TMBox-paneler|3. TMBox-Panels
+12 hours|12 timmar|12 timer|12 timer|12 Stunden
+24 hours|24 timmar|24 timer|24 timer|24 Stunden
+3 days|3 dygn|3 døgn|3 døgn|3 Tage
+7 days|7 dygn|7 døgn|7 døgn|7 Tage
+Active runtime|Aktiv runtime|Aktiv drift|Aktiv drift|Aktiver Betrieb
+Connect TMBox|Anslut TMBox|Tilslut TMBox|Koble til TMBox|TMBox verbinden
+Address selected|Adress vald|Adresse valgt|Adresse valgt|Adresse ausgewählt
+Address, port and code for a TMBox. Shown on all displays by default.|Adress, port och kod som en TMBox behöver. Visas som standard på alla skärmar.|Adresse, port og kode til en TMBox. Vises som standard på alle skærme.|Adresse, port og kode til en TMBox. Vises som standard på alle skjermer.|Adresse, Port und Code für eine TMBox. Standardmäßig auf allen Anzeigen sichtbar.
+Active TMBox panels|Aktiva TMBox-paneler|Aktive TMBox-paneler|Aktive TMBox-paneler|Aktive TMBox-Panels
+Active sections|Aktiva sträckor|Aktive strækninger|Aktive strekninger|Aktive Streckenabschnitte
+Activate the new version|Aktivera den nya versionen|Aktivér den nye version|Aktiver den nye versjonen|Neue Version aktivieren
+Activate downloaded version|Aktivera hämtad version|Aktivér hentet version|Aktiver nedlastet versjon|Heruntergeladene Version aktivieren
+Connect a TMBox|Anslut en TMBox|Tilslut en TMBox|Koble til en TMBox|Eine TMBox verbinden
+Connecting to TrainMeet Server …|Ansluter till TrainMeet Server …|Forbinder til TrainMeet Server …|Kobler til TrainMeet Server …|Verbindung zu TrainMeet Server wird hergestellt …
+Note|Anteckning|Note|Notat|Notiz
+Automatic Cloud updates|Automatiska Cloud-uppdateringar|Automatiske Cloud-opdateringer|Automatiske Cloud-oppdateringer|Automatische Cloud-Updates
+Deselect|Avmarkera|Fravælg|Fjern valg|Auswahl aufheben
+A–D from the active runtime|A–D från körande runtime|A–D fra aktiv drift|A–D fra aktiv drift|A–D aus dem aktiven Betrieb
+Exceptions only|Bara avvikelser|Kun afvigelser|Bare avvik|Nur Abweichungen
+Build from station order|Bygg från stationsordningen|Byg ud fra stationsrækkefølgen|Bygg fra stasjonsrekkefølgen|Aus Betriebsstellenreihenfolge erstellen
+Build sections between stations and one A–D panel per station.|Bygg sträckor mellan stationerna och en A–D-panel per station.|Byg strækninger mellem stationerne og ét A–D-panel pr. station.|Bygg strekninger mellom stasjonene og ett A–D-panel per stasjon.|Streckenabschnitte zwischen Betriebsstellen und je ein A–D-Panel erstellen.
+Build steps|Byggsteg|Byggetrin|Byggetrinn|Aufbauschritte
+Start over without losing administrator access|Börja om utan att förlora administratörsåtkomsten|Start forfra uden at miste administratoradgang|Start på nytt uten å miste administratortilgang|Neu beginnen, ohne den Administratorzugang zu verlieren
+Cloud owns the content. Stations and timetables are locked here.|Cloud äger innehållet. Stationer och tidtabell är låsta här.|Cloud styrer indholdet. Stationer og køreplan er låst her.|Cloud styrer innholdet. Stasjoner og rutetabell er låst her.|Cloud verwaltet die Inhalte. Betriebsstellen und Fahrplan sind hier gesperrt.
+Cloud connection|Cloud-koppling|Cloud-forbindelse|Cloud-tilkobling|Cloud-Verbindung
+Cloud connection steps|Cloud-kopplingens steg|Trin for Cloud-forbindelse|Trinn for Cloud-tilkobling|Schritte zur Cloud-Verbindung
+Config server|Config-server|Config-server|Config-server|Config-Server
+The meet above is the server's active configuration. Copy it to edit it locally.|Den aktiva träffen ovan är serverns körande konfiguration. Kopiera den om du vill ändra den lokalt.|Træffet ovenfor er serverens aktive konfiguration. Kopiér det for at redigere lokalt.|Treffet ovenfor er serverens aktive konfigurasjon. Kopier det for å redigere lokalt.|Das obige Treffen ist die aktive Serverkonfiguration. Kopiere es zur lokalen Bearbeitung.
+Immediately when clear|Direkt om ledigt|Straks når fri|Straks når ledig|Sofort bei freier Strecke
+Immediately when the section is clear|Direkt om sträckan är ledig|Straks når strækningen er fri|Straks når strekningen er fri|Sofort bei freiem Streckenabschnitt
+You received a code from the person who invited you. Use it once, then sign in normally.|Du har fått en kod av den som bjöd in dig. Den gäller en gång, och sedan loggar du in som vanligt.|Du har fået en kode fra den, der inviterede dig. Brug den én gang, og log derefter ind som normalt.|Du har fått en kode fra den som inviterte deg. Bruk den én gang, og logg deretter inn som vanlig.|Du hast vom Einladenden einen Code erhalten. Verwende ihn einmal und melde dich danach wie gewohnt an.
+One revision pending|En revision väntar|En revision venter|En revisjon venter|Eine Revision steht aus
+Device|Enhet|Enhed|Enhet|Gerät
+An exported runtime package, validated before activation.|Ett exporterat driftpaket, validerat innan det aktiveras.|En eksporteret driftspakke, valideret før aktivering.|En eksportert driftspakke, validert før aktivering.|Ein exportiertes Betriebspaket, vor der Aktivierung geprüft.
+Fullscreen views|Fullskärmsvyer|Fuldskærmsvisninger|Fullskjermvisninger|Vollbildansichten
+Physical devices|Fysiska enheter|Fysiske enheder|Fysiske enheter|Physische Geräte
+Move down|Flytta ned|Flyt ned|Flytt ned|Nach unten
+Move up|Flytta upp|Flyt op|Flytt opp|Nach oben
+Shift time|Flytta tid|Flyt tid|Flytt tid|Zeit verschieben
+Flows|Flöden|Forløb|Forløp|Abläufe
+Ongoing sync|Fortsatt synk|Fortsat synkronisering|Videre synkronisering|Fortlaufende Synchronisierung
+Standalone station|Fristående station|Selvstændig station|Frittstående stasjon|Eigenständige Betriebsstelle
+Driver|Förare|Lokomotivfører|Lokfører|Triebfahrzeugführer
+Complete setup|Färdigställ installationen|Afslut opsætning|Fullfør oppsett|Einrichtung abschließen
+Review a complete runtime package|Granska ett komplett driftpaket|Gennemgå en komplet driftspakke|Gjennomgå en komplett driftspakke|Vollständiges Betriebspaket prüfen
+Review and activate|Granska och aktivera|Gennemgå og aktivér|Gjennomgå og aktiver|Prüfen und aktivieren
+Grouping|Gruppering|Gruppering|Gruppering|Gruppierung
+Speed (× real time)|Hastighet (× realtid)|Hastighed (× realtid)|Hastighet (× sanntid)|Zeitfaktor (× Echtzeit)
+Entire layout|Hela banan|Hele banen|Hele banen|Gesamte Anlage
+Fullscreen|Helskärm|Fuldskærm|Fullskjerm|Vollbild
+Fetch from active meet|Hämta från aktiva träffen|Hent fra aktivt træf|Hent fra aktivt treff|Aus aktivem Treffen laden
+Fetch stations, sections and timetable from the active meet as a starting point.|Hämta stationer, sträckor och tidtabell från den aktiva träffen att utgå ifrån.|Hent stationer, strækninger og køreplan fra det aktive træf som udgangspunkt.|Hent stasjoner, strekninger og rutetabell fra det aktive treffet som utgangspunkt.|Betriebsstellen, Streckenabschnitte und Fahrplan aus dem aktiven Treffen als Ausgangspunkt laden.
+Fetch the meet from TrainMeet Cloud|Hämta träffen från TrainMeet Cloud|Hent træffet fra TrainMeet Cloud|Hent treffet fra TrainMeet Cloud|Treffen von TrainMeet Cloud laden
+Download version|Hämta versionen|Hent versionen|Last ned versjonen|Version herunterladen
+Downloads the latest GitHub version, backs up the database and installs automatically.|Hämtar senaste versionen från GitHub, säkerhetskopierar databasen och installerar automatiskt.|Henter seneste version fra GitHub, sikkerhedskopierer databasen og installerer automatisk.|Henter siste versjon fra GitHub, sikkerhetskopierer databasen og installerer automatisk.|Lädt die neueste GitHub-Version, sichert die Datenbank und installiert automatisch.
+On time|I tid|Rettidig|I rute|Pünktlich
+Import and publishing|Import och publicering|Import og publicering|Import og publisering|Import und Veröffentlichung
+Invitation|Inbjudan|Invitation|Invitasjon|Einladung
+Import and activate|Importera och aktivera|Importer og aktivér|Importer og aktiver|Importieren und aktivieren
+Imported file|Importerad fil|Importeret fil|Importert fil|Importierte Datei
+Invitation code|Inbjudningskod|Invitationskode|Invitasjonskode|Einladungscode
+No active sections.|Inga aktiva sträckor.|Ingen aktive strækninger.|Ingen aktive strekninger.|Keine aktiven Streckenabschnitte.
+No unsaved changes|Inga osparade ändringar|Ingen ugemte ændringer|Ingen ulagrede endringer|Keine ungespeicherten Änderungen
+No rows match the filter.|Inga rader matchar filtret.|Ingen rækker matcher filteret.|Ingen rader samsvarer med filteret.|Keine Zeilen passen zum Filter.
+No backups yet. The first will be created at the next software update.|Inga säkerhetskopior finns än. Den första tas vid nästa programuppdatering.|Ingen sikkerhedskopier endnu. Den første oprettes ved næste softwareopdatering.|Ingen sikkerhetskopier ennå. Den første opprettes ved neste programoppdatering.|Noch keine Sicherungen. Die erste wird beim nächsten Softwareupdate erstellt.
+No trains found.|Inga tåg hittades.|Ingen tog fundet.|Ingen tog funnet.|Keine Züge gefunden.
+No trains in the timetable.|Inga tåg i tidtabellen.|Ingen tog i køreplanen.|Ingen tog i rutetabellen.|Keine Züge im Fahrplan.
+No Cloud connection|Ingen Cloud-koppling|Ingen Cloud-forbindelse|Ingen Cloud-tilkobling|Keine Cloud-Verbindung
+No physical TMBox has registered yet.|Ingen fysisk TMBox har presenterat sig ännu.|Ingen fysisk TMBox har registreret sig endnu.|Ingen fysisk TMBox har registrert seg ennå.|Noch keine physische TMBox registriert.
+No local meet selected|Ingen lokal träff vald|Intet lokalt træf valgt|Ingen lokalt treff valgt|Kein lokales Treffen ausgewählt
+No local version|Ingen lokal version|Ingen lokal version|Ingen lokal versjon|Keine lokale Version
+Inside stations|Inne på stationerna|Inde på stationerne|Inne på stasjonene|In den Betriebsstellen
+Install and restart|Installera och starta om|Installér og genstart|Installer og start på nytt|Installieren und neu starten
+Unused|Inte använd|Ikke brugt|Ikke brukt|Nicht verwendet
+I have an invitation code|Jag har en inbjudningskod|Jeg har en invitationskode|Jeg har en invitasjonskode|Ich habe einen Einladungscode
+Click a train to highlight its route|Klicka på ett tåg för att tända rutten|Klik på et tog for at fremhæve ruten|Klikk på et tog for å fremheve ruten|Zug anklicken, um den Laufweg hervorzuheben
+Configuration source|Konfigurationskälla|Konfigurationskilde|Konfigurasjonskilde|Konfigurationsquelle
+Clock style|Klockstil|Urtype|Klokkestil|Uhrstil
+Button model|Knappmodell|Knapmodel|Knappemodell|Tastenmodell
+Code on the box|Kod på lådan|Kode på boksen|Kode på boksen|Code auf der Box
+Code for|Kod till|Kode til|Kode til|Code für
+Code valid for|Koden gäller|Koden gælder|Koden gjelder|Code gültig für
+Configuration server|Konfigurationsserver|Konfigurationsserver|Konfigurasjonsserver|Konfigurationsserver
+Check before activation|Kontrollera före aktivering|Kontrollér før aktivering|Kontroller før aktivering|Vor Aktivierung prüfen
+Copy to local draft|Kopiera till lokalt utkast|Kopiér til lokal kladde|Kopier til lokalt utkast|In lokalen Entwurf kopieren
+Link|Koppla|Forbind|Koble til|Verbinden
+Connect or change meet|Koppla eller byt träff|Forbind eller skift træf|Koble til eller bytt treff|Treffen verbinden oder wechseln
+Pair a TMBox|Koppla en TMBox|Par en TMBox|Par en TMBox|TMBox koppeln
+Connect a published meet using a six-digit code.|Koppla en publicerad träff med en sexsiffrig kod.|Forbind et publiceret træf med en sekscifret kode.|Koble til et publisert treff med en sekssifret kode.|Veröffentlichtes Treffen mit einem sechsstelligen Code verbinden.
+Connect and download|Koppla och hämta|Forbind og hent|Koble til og hent|Verbinden und herunterladen
+Light|Ljust|Lyst|Lyst|Hell
+Sign in to TrainMeet Server|Logga in på TrainMeet Server|Log ind på TrainMeet Server|Logg inn på TrainMeet Server|Bei TrainMeet Server anmelden
+Local TrainMeet Server|Lokal TrainMeet Server|Lokal TrainMeet Server|Lokal TrainMeet Server|Lokaler TrainMeet Server
+Local traffic|Lokal trafik|Lokal trafik|Lokal trafikk|Lokaler Verkehr
+Local traffic server|Lokal trafikserver|Lokal trafikserver|Lokal trafikkserver|Lokaler Betriebsserver
+Local first.|Lokalt först.|Lokalt først.|Lokalt først.|Lokal zuerst.
+Local draft|Lokalt utkast|Lokal kladde|Lokalt utkast|Lokaler Entwurf
+Mode|Läge|Tilstand|Modus|Modus
+Add panel|Lägg till panel|Tilføj panel|Legg til panel|Panel hinzufügen
+Add section|Lägg till sträcka|Tilføj strækning|Legg til strekning|Streckenabschnitt hinzufügen
+Leave build mode|Lämna byggläget|Forlad byggetilstand|Forlat byggemodus|Aufbaumodus verlassen
+Share the code. Valid for seven days and usable once.|Lämna över koden. Den gäller i sju dagar och kan bara användas en gång.|Giv koden videre. Den gælder i syv dage og kan kun bruges én gang.|Gi koden videre. Den gjelder i sju dager og kan bare brukes én gang.|Gib den Code weiter. Er gilt sieben Tage und kann nur einmal verwendet werden.
+Loading active meet …|Läser aktiv träff …|Indlæser aktivt træf …|Laster aktivt treff …|Aktives Treffen wird geladen …
+Loading server status …|Läser in serverstatus …|Indlæser serverstatus …|Laster serverstatus …|Serverstatus wird geladen …
+Loading meet …|Läser in träffen …|Indlæser træffet …|Laster treffet …|Treffen wird geladen …
+Loading clock …|Läser klockan …|Indlæser ur …|Laster klokke …|Uhr wird geladen …
+Loading code …|Läser koden …|Indlæser kode …|Laster kode …|Code wird geladen …
+Loading station plan …|Läser stationsplanen …|Indlæser stationsplan …|Laster stasjonsplan …|Betriebsstellenplan wird geladen …
+Loading timetable …|Läser tidtabellen …|Indlæser køreplan …|Laster rutetabell …|Fahrplan wird geladen …
+Loading traffic state …|Läser trafikläget …|Indlæser driftstilstand …|Laster trafikkstatus …|Betriebszustand wird geladen …
+Loading version …|Läser version …|Indlæser version …|Laster versjon …|Version wird geladen …
+Manual|Manuell|Manuel|Manuell|Manuell
+Select all|Markera alla|Vælg alle|Velg alle|Alle auswählen
+Name of the data being overwritten|Namnet på det som skrivs över|Navnet på det, der overskrives|Navnet på det som overskrives|Name der zu überschreibenden Daten
+This name is shown in administration to distinguish servers.|Namnet visas i admin och hjälper er att skilja flera servrar åt.|Navnet vises i administrationen og hjælper med at skelne servere.|Navnet vises i administrasjonen og hjelper med å skille servere.|Dieser Name wird in der Verwaltung angezeigt, um Server zu unterscheiden.
+Reset meet data|Nollställ träffdata|Nulstil træfdata|Tilbakestill treffdata|Treffendaten zurücksetzen
+New local draft|Nytt lokalt utkast|Ny lokal kladde|Nytt lokalt utkast|Neuer lokaler Entwurf
+Panels|Paneler|Paneler|Paneler|Panels
+Loading panels …|Panelerna läses in …|Indlæser paneler …|Laster paneler …|Panels werden geladen …
+Panel name|Panelnamn|Panelnavn|Panelnavn|Panelname
+On the line now|På linjen just nu|På strækningen nu|På strekningen nå|Jetzt auf der Strecke
+Reference|Referens|Reference|Referanse|Referenz
+Scenarios|Scenarier|Scenarier|Scenarioer|Szenarien
+Seconds|Sekunder|Sekunder|Sekunder|Sekunden
+Last server acknowledgement|Senaste kvittens från servern|Seneste kvittering fra serveren|Siste kvittering fra serveren|Letzte Serverbestätigung
+Server checks every 15 seconds and activates new published versions when available.|Servern söker var 15:e sekund och aktiverar en ny publicerad version när den finns.|Serveren kontrollerer hvert 15. sekund og aktiverer nye publicerede versioner, når de er tilgængelige.|Serveren sjekker hvert 15. sekund og aktiverer nye publiserte versjoner når de er tilgjengelige.|Der Server prüft alle 15 Sekunden und aktiviert verfügbare neue Veröffentlichungen.
+The server is the editor during the meet. Correct times and tracks locally.|Servern är redaktör under träffen. Rätta tider och spår på plats.|Serveren er redaktør under træffet. Ret tider og spor lokalt.|Serveren er redaktør under treffet. Rett tider og spor lokalt.|Der Server dient während des Treffens als Editor. Zeiten und Gleise vor Ort korrigieren.
+The server's active station plan and timetable.|Serverns körande stationsplan och tidtabell.|Serverens aktive stationsplan og køreplan.|Serverens aktive stasjonsplan og rutetabell.|Aktiver Betriebsstellenplan und Fahrplan des Servers.
+Server station plan|Serverns stationsplan|Serverens stationsplan|Serverens stasjonsplan|Betriebsstellenplan des Servers
+Six-digit meet code, one digit per field|Sexsiffrig träffkod, en siffra per fält|Sekscifret træfkode, ét ciffer pr. felt|Sekssifret treffkode, ett siffer per felt|Sechsstelliger Treffencode, eine Ziffer pro Feld
+Digit 1 of 6|Siffra 1 av 6|Ciffer 1 af 6|Siffer 1 av 6|Ziffer 1 von 6
+Digit 2 of 6|Siffra 2 av 6|Ciffer 2 af 6|Siffer 2 av 6|Ziffer 2 von 6
+Digit 3 of 6|Siffra 3 av 6|Ciffer 3 af 6|Siffer 3 av 6|Ziffer 3 von 6
+Digit 4 of 6|Siffra 4 av 6|Ciffer 4 af 6|Siffer 4 av 6|Ziffer 4 von 6
+Digit 5 of 6|Siffra 5 av 6|Ciffer 5 af 6|Siffer 5 av 6|Ziffer 5 von 6
+Digit 6 of 6|Siffra 6 av 6|Ciffer 6 af 6|Siffer 6 av 6|Ziffer 6 von 6
+Enter|Skriv|Skriv|Skriv|Eingeben
+Enter the code on the box and choose its station.|Skriv koden på lådan och välj vilken station den ska tjänstgöra vid.|Skriv koden på boksen og vælg dens station.|Skriv koden på boksen og velg stasjonen den skal betjene.|Gib den Code auf der Box ein und wähle ihre Betriebsstelle.
+Meet displays|Skärmar på träffen|Skærme på træffet|Skjermer på treffet|Anzeigen beim Treffen
+Display catalog|Skärmkatalog|Skærmkatalog|Skjermkatalog|Anzeigenkatalog
+Finish and restart|Slutför och starta om|Afslut og genstart|Fullfør og start på nytt|Abschließen und neu starten
+Fastest path to an operational meet|Snabbaste vägen till en körbar träff|Hurtigste vej til et køreklar træf|Raskeste vei til et kjøreklart treff|Schnellster Weg zu einem betriebsbereiten Treffen
+Save sign-in|Spara inloggning|Gem login|Lagre innlogging|Anmeldung speichern
+Save and activate|Spara och aktivera|Gem og aktivér|Lagre og aktiver|Speichern und aktivieren
+Save and continue|Spara och fortsätt|Gem og fortsæt|Lagre og fortsett|Speichern und weiter
+Save server name|Spara servernamn|Gem servernavn|Lagre servernavn|Servernamen speichern
+Restart server|Starta om servern|Genstart serveren|Start serveren på nytt|Server neu starten
+Fast clock start time|Starttid på träffklockan|Starttid på modeluret|Starttid på modellklokken|Startzeit der Modellzeituhr
+Stations and sections|Stationer och sträckor|Stationer og strækninger|Stasjoner og strekninger|Betriebsstellen und Streckenabschnitte
+Stations, sections and panels|Stationer, sträckor och paneler|Stationer, strækninger og paneler|Stasjoner, strekninger og paneler|Betriebsstellen, Streckenabschnitte und Panels
+Station name|Stationsnamn|Stationsnavn|Stasjonsnavn|Betriebsstellenname
+Step|Steg|Trin|Trinn|Schritt
+Close server menu|Stäng servermenyn|Luk servermenuen|Lukk servermenyen|Servermenü schließen
+Close station information|Stäng stationsinformationen|Luk stationsinformationen|Lukk stasjonsinformasjonen|Betriebsstelleninformationen schließen
+Backups|Säkerhetskopior|Sikkerhedskopier|Sikkerhetskopier|Sicherungen
+Safety rule:|Säkerhetsregel:|Sikkerhedsregel:|Sikkerhetsregel:|Sicherheitsregel:
+Set password|Sätt lösenord|Angiv adgangskode|Angi passord|Passwort festlegen
+Search trains|Sök tåg|Søg tog|Søk tog|Züge suchen
+Search…|Sök…|Søg…|Søk…|Suchen …
+TMBox views|TMBox-vyer|TMBox-visninger|TMBox-visninger|TMBox-Ansichten
+TMBoxes|TMBoxar|TMBoxe|TMBoxer|TMBoxen
+Meet and station plan|Träff och stationsplan|Træf og stationsplan|Treff og stasjonsplan|Treffen und Betriebsstellenplan
+Restore an earlier server version|Ta tillbaka en tidigare version av servern|Gendan en tidligere serverversion|Gjenopprett en tidligere serverversjon|Frühere Serverversion wiederherstellen
+Test client|Testklient|Testklient|Testklient|Testclient
+The timetable has no train routes.|Tidtabellen saknar tågrutter.|Køreplanen har ingen togruter.|Rutetabellen har ingen togruter.|Der Fahrplan enthält keine Zuglaufwege.
+Until further notice|Tills vidare|Indtil videre|Inntil videre|Bis auf Weiteres
+Operating day|Trafikdag|Driftsdag|Driftsdag|Betriebstag
+Traffic overview|Trafiköversikt|Trafikoversigt|Trafikkoversikt|Betriebsübersicht
+TrainMeet Cloud has published a new version|TrainMeet Cloud har publicerat en ny version|TrainMeet Cloud har publiceret en ny version|TrainMeet Cloud har publisert en ny versjon|TrainMeet Cloud hat eine neue Version veröffentlicht
+Meet|Träffen|Træffet|Treffet|Treffen
+The meet keeps running. Nothing changes for operators until you activate.|Träffen fortsätter köra. Inget ändras för operatörerna förrän du aktiverar.|Træffet fortsætter. Intet ændres for operatørerne, før du aktiverer.|Treffet fortsetter. Ingenting endres for operatørene før du aktiverer.|Das Treffen läuft weiter. Bis zur Aktivierung ändert sich nichts für die Bediener.
+The meet runs on the active version until a new one is activated.|Träffen kör på den aktiva versionen tills du aktiverar en ny.|Træffet kører på den aktive version, indtil du aktiverer en ny.|Treffet kjører på den aktive versjonen til du aktiverer en ny.|Das Treffen läuft mit der aktiven Version, bis du eine neue aktivierst.
+The meet keeps running on the active version until activation.|Träffen kör vidare på den aktiva versionen tills du aktiverar.|Træffet fortsætter på den aktive version indtil aktivering.|Treffet fortsetter på den aktive versjonen til aktivering.|Das Treffen läuft bis zur Aktivierung mit der aktiven Version weiter.
+Meet source|Träffens källa|Træffets kilde|Treffets kilde|Quelle des Treffens
+Meet mode|Träffens läge|Træffets tilstand|Treffets modus|Treffenmodus
+Meet code|Träffkod|Træfkode|Treffkode|Treffencode
+Train graph|Tågdiagram|Togdiagram|Togdiagram|Bildfahrplan
+Train number, track, note|Tågnummer, spår, anteckning|Tognummer, spor, note|Tognummer, spor, notat|Zugnummer, Gleis, Notiz
+Train routes|Tågrutter|Togruter|Togruter|Zuglaufwege
+Draft is empty|Utkastet är tomt|Kladden er tom|Utkastet er tomt|Entwurf ist leer
+Validate file|Validera filen|Validér filen|Valider filen|Datei prüfen
+Where does the meet come from?|Var kommer träffen ifrån?|Hvor kommer træffet fra?|Hvor kommer treffet fra?|Woher stammt das Treffen?
+Each panel belongs to a station. Keys A–D connect directly to its sections.|Varje panel tillhör en station. Tangenterna A–D kopplas direkt till stationens sträckor.|Hvert panel tilhører en station. Tasterne A–D forbindes direkte til stationens strækninger.|Hvert panel tilhører en stasjon. Tastene A–D kobles direkte til stasjonens strekninger.|Jedes Panel gehört zu einer Betriebsstelle. Die Tasten A–D sind direkt ihren Streckenabschnitten zugeordnet.
+Version downloaded|Version hämtad|Version hentet|Versjon lastet ned|Version heruntergeladen
+Show connection details|Visa anslutningsuppgifter|Vis forbindelsesoplysninger|Vis tilkoblingsopplysninger|Verbindungsdaten anzeigen
+Show or hide seconds hand|Visa eller dölj sekundvisaren|Vis eller skjul sekundviseren|Vis eller skjul sekundviseren|Sekundenzeiger ein- oder ausblenden
+Choose your password|Välj ditt lösenord|Vælg din adgangskode|Velg passordet ditt|Eigenes Passwort wählen
+Choose a train in the list, layout overview or train graph.|Välj ett tåg i listan, banöversikten eller tågdiagrammet.|Vælg et tog i listen, baneoversigten eller togdiagrammet.|Velg et tog i listen, baneoversikten eller togdiagrammet.|Wähle einen Zug in der Liste, Anlagenübersicht oder im Bildfahrplan.
+Choose password|Välj lösenord|Vælg adgangskode|Velg passord|Passwort wählen
+Choose train|Välj tåg|Vælg tog|Velg tog|Zug auswählen
+Choose end stations, single or double track, and optionally an operating mode.|Välj ändstationer, enkel- eller dubbelspår och eventuellt eget trafikläge.|Vælg endestationer, enkelt- eller dobbeltspor og eventuelt driftsform.|Velg endestasjoner, enkelt- eller dobbeltspor og eventuelt driftsmodus.|Wähle Endbetriebsstellen, Ein- oder Zweigleisigkeit und gegebenenfalls eine eigene Betriebsart.
+Waiting for code|Väntar på kod|Venter på kode|Venter på kode|Wartet auf Code
+active trains|aktiva tåg|aktive tog|aktive tog|aktive Züge
+operating locations|driftplatser|driftssteder|driftssteder|Betriebsorte
+and|och|og|og|und
+stops|stopp|stop|stopp|Halte
+trains|tåg|tog|tog|Züge
+trains ·|tåg ·|tog ·|tog ·|Züge ·
+train routes|tågrutter|togruter|togruter|Zuglaufwege
+train runs today|tågturer idag|togkørsler i dag|togturer i dag|Zugfahrten heute
+occupied sections|upptagna sträckor|optagne strækninger|opptatte strekninger|belegte Streckenabschnitte
+Owner — may also add and remove users|Ägare — får också lägga till och ta bort användare|Ejer — kan også tilføje og fjerne brugere|Eier — kan også legge til og fjerne brukere|Eigentümer — darf auch Benutzer hinzufügen und entfernen
+Edit selected|Ändra markerade|Rediger valgte|Rediger valgte|Auswahl bearbeiten
+Discard changes|Ångra ändringar|Fortryd ændringer|Forkast endringer|Änderungen verwerfen
+Restore from backup|Återställ från säkerhetskopia|Gendan fra sikkerhedskopi|Gjenopprett fra sikkerhetskopi|Aus Sicherung wiederherstellen
+Restore and restart|Återställ och starta om|Gendan og genstart|Gjenopprett og start på nytt|Wiederherstellen und neu starten
+Actions|Åtgärder|Handlinger|Handlinger|Aktionen
+Open TKL|Öppna TKL|Åbn TKL|Åpne TKL|TKL öffnen
+Open administration|Öppna administration|Åbn administration|Åpne administrasjon|Verwaltung öffnen
+Open in a separate tab|Öppna i egen flik|Åbn i separat fane|Åpne i egen fane|In eigenem Tab öffnen
+Open server menu|Öppna servermenyn|Åbn servermenuen|Åpne servermenyen|Servermenü öffnen
+Open train graph →|Öppna tågdiagram →|Åbn togdiagram →|Åpne togdiagram →|Bildfahrplan öffnen →
+– stations · – trains|– stationer · – tåg|– stationer · – tog|– stasjoner · – tog|– Betriebsstellen · – Züge
+⛶ Fullscreen|⛶ Fullskärm|⛶ Fuldskærm|⛶ Fullskjerm|⛶ Vollbild
+Changing password…|Byter lösenord…|Ændrer adgangskode…|Endrer passord…|Passwort wird geändert …
+Saving…|Sparar…|Gemmer…|Lagrer…|Wird gespeichert …
+Save user|Spara användare|Gem bruger|Lagre bruker|Benutzer speichern
+You have unsaved changes|Du har osparade ändringar|Du har ugemte ændringer|Du har ulagrede endringer|Du hast ungespeicherte Änderungen
+All changes are saved|Alla ändringar är sparade|Alle ændringer er gemt|Alle endringer er lagret|Alle Änderungen sind gespeichert
+Port mapping has unsaved changes|Portmappningen har osparade ändringar|Porttilknytningen har ugemte ændringer|Porttilordningen har ulagrede endringer|Die Anschlusszuordnung hat ungespeicherte Änderungen
+All TMBoxes are saved|Alla TMBoxar är sparade|Alle TMBoxe er gemt|Alle TMBoxer er lagret|Alle TMBoxen sind gespeichert
+Publishing…|Publicerar…|Publicerer…|Publiserer…|Wird veröffentlicht …
+Publish changes|Publicera ändringar|Publicér ændringer|Publiser endringer|Änderungen veröffentlichen
+Creating…|Skapar…|Opretter…|Oppretter…|Wird erstellt …
+Replace code|Ersätt koden|Erstat koden|Erstatt koden|Code ersetzen
+Create code|Skapa kod|Opret kode|Opprett kode|Code erstellen
+API key configured|API-nyckel konfigurerad|API-nøgle konfigureret|API-nøkkel konfigurert|API-Schlüssel eingerichtet
+API key missing|API-nyckel saknas|API-nøgle mangler|API-nøkkel mangler|API-Schlüssel fehlt
+Station code · shown on the layout|Stationskod · visas på banan|Stationskode · vises på banen|Stasjonskode · vises på banen|Betriebsstellenkennung · auf der Anlage angezeigt
+Alternative name · used during import|Alternativt namn · används vid import|Alternativt navn · bruges ved import|Alternativt navn · brukes ved import|Alternativer Name · beim Import verwendet
+Import name · cannot be used as a short code|Namn vid import · kan inte väljas som kortkod|Importnavn · kan ikke bruges som kortkode|Importnavn · kan ikke brukes som kortkode|Importname · nicht als Kurzkennung verwendbar
+Remove {name}|Ta bort {name}|Fjern {name}|Fjern {name}|{name} entfernen
+Select another station code before removing this one.|Välj en annan stationskod innan du tar bort denna.|Vælg en anden stationskode, før denne fjernes.|Velg en annen stasjonskode før denne fjernes.|Wähle vor dem Entfernen dieser Kennung eine andere aus.
+Fast clock, speed {speed}×|Träffklocka, hastighet {speed}×|Modelur, hastighed {speed}×|Modellklokke, hastighet {speed}×|Modellzeituhr, Zeitfaktor {speed}×
+Connected to TrainMeet Server|Ansluten till TrainMeet Server|Forbundet til TrainMeet Server|Tilkoblet TrainMeet Server|Mit TrainMeet Server verbunden
+Offline — last known state|Offline – senast kända läge|Offline — senest kendte tilstand|Frakoblet — sist kjente tilstand|Offline — letzter bekannter Stand
+Voided|Ogiltigförklarad|Annulleret|Annullert|Ungültig
+Active ·|Aktiva ·|Aktive ·|Aktive ·|Aktiv ·
+Conductor · assigned train|Conductor · tilldelat tåg|Conductor · tildelt tog|Conductor · tildelt tog|Conductor · zugewiesener Zug
+History ·|Historik ·|Historik ·|Historikk ·|Verlauf ·
+Needs attention ·|Kräver uppmärksamhet ·|Kræver opmærksomhed ·|Krever oppmerksomhet ·|Handlungsbedarf ·
+Revision|Revision|Revision|Revisjon|Revision
+Schematic topology, reported train positions and track warrant limits|Schematisk bana, rapporterade tågpositioner och körordergränser|Skematisk bane, rapporterede togpositioner og kørselsordregrænser|Skjematisk bane, rapporterte togposisjoner og kjøreordregrenser|Schematischer Gleisplan, gemeldete Zugpositionen und Fahrbefehlsgrenzen
+Session-specific run:|Tåguppdrag i detta trafikpass:|Togkørsel i denne session:|Togoppdrag i denne økten:|Zugfahrt dieser Sitzung:
+active authorities|aktiva körtillstånd|aktive køretilladelser|aktive kjøretillatelser|aktive Fahrberechtigungen
+history|historik|historik|historikk|Verlauf
+runs|tåguppdrag|togkørsler|togoppdrag|Zugfahrten
+train runs ·|tåguppdrag ·|togkørsler ·|togoppdrag ·|Zugfahrten ·
+· final revision|· slutlig revision|· endelig revision|· endelig revisjon|· abschließende Revision
+· history retained on the server|· historik sparas på servern|· historik gemmes på serveren|· historikk lagres på serveren|· Verlauf bleibt auf dem Server
+One use · expires in|Engångskod · går ut om|Engangskode · udløber om|Engangskode · utløper om|Einmalcode · läuft ab in
+minutes. After connection, select a train and choose Assign.|minuter. Efter anslutning väljer du tåg och Tilldela.|minutter. Efter forbindelse skal du vælge tog og Tildel.|minutter. Etter tilkobling velger du tog og Tildel.|Minuten. Wähle nach der Verbindung einen Zug und Zuweisen.
+on the conductor’s device.|på conductorns enhet.|på conductorens enhed.|på conductorens enhet.|auf dem Gerät des Conductors.
+Scheduled {time}|Planerat {time}|Planlagt {time}|Planlagt {time}|Geplant {time}
+Assign {train}|Tilldela {train}|Tildel {train}|Tildel {train}|{train} zuweisen
+Draft · {train}|Utkast · {train}|Kladde · {train}|Utkast · {train}|Entwurf · {train}
+Report · {train}|Rapportera · {train}|Rapportér · {train}|Rapporter · {train}|Melden · {train}
+Server confirmed revision {revision}. No command was resent.|Servern bekräftade revision {revision}. Inget kommando skickades igen.|Serveren bekræftede revision {revision}. Ingen kommando blev sendt igen.|Serveren bekreftet revisjon {revision}. Ingen kommando ble sendt på nytt.|Server hat Revision {revision} bestätigt. Kein Befehl wurde erneut gesendet.
+No committed result found yet. Check again; the command will not be resent automatically.|Inget sparat resultat hittat ännu. Kontrollera igen; kommandot skickas inte om automatiskt.|Intet gemt resultat fundet endnu. Kontrollér igen; kommandoen sendes ikke automatisk igen.|Ingen lagret resultat funnet ennå. Kontroller igjen; kommandoen sendes ikke automatisk på nytt.|Noch kein gespeichertes Ergebnis gefunden. Erneut prüfen; der Befehl wird nicht automatisch erneut gesendet.
+No committed result yet; check again.|Inget sparat resultat ännu; kontrollera igen.|Intet gemt resultat endnu; kontrollér igen.|Ingen lagret resultat ennå; kontroller igjen.|Noch kein gespeichertes Ergebnis; erneut prüfen.
+Close this dialog, review the updated state and try again.|Stäng dialogen, granska det uppdaterade läget och försök igen.|Luk dialogen, gennemgå den opdaterede tilstand og prøv igen.|Lukk dialogen, gjennomgå den oppdaterte tilstanden og prøv igjen.|Schließe den Dialog, prüfe den aktualisierten Stand und versuche es erneut.
+# US operating terminology, reviewed 2026-09-18. See docs/US-TERMINOLOGY.md.
+Train dispatcher|Dispatcher (US)|Dispatcher (US)|Dispatcher (US)|Dispatcher (US)
+Train dispatcher · Track Warrant Control|Dispatcher · Track Warrant Control|Dispatcher · Track Warrant Control|Dispatcher · Track Warrant Control|Dispatcher · Track Warrant Control
+Draft · not in effect|Utkast · gäller inte|Kladde · ikke gældende|Utkast · ikke gjeldende|Entwurf · nicht in Kraft
+Transmitted · not in effect|Överfört · gäller inte|Overført · ikke gældende|Overført · ikke gjeldende|Übermittelt · nicht in Kraft
+Received · not in effect|Mottaget · gäller inte|Modtaget · ikke gældende|Mottatt · ikke gjeldende|Empfangen · nicht in Kraft
+Readback reported · not in effect|Återläsning rapporterad · gäller inte|Gentagelse rapporteret · ikke gældende|Tilbakelesning rapportert · ikke gjeldende|Rücklesen gemeldet · nicht in Kraft
+In effect|Gällande|Gældende|Gjeldende|In Kraft
+Authority in effect|Gällande körtillstånd|Gældende køretilladelse|Gjeldende kjøretillatelse|Fahrberechtigung in Kraft
+Release reported · awaiting confirmation|Frigivning rapporterad · inväntar bekräftelse|Frigivelse rapporteret · afventer bekræftelse|Frigivelse rapportert · venter på bekreftelse|Freigabe gemeldet · Bestätigung ausstehend
+Released|Frigivet|Frigivet|Frigitt|Freigegeben
+Voided|Makulerat|Annulleret|Annullert|Ungültig gemacht
+Eastbound|Östgående|Østgående|Østgående|Ostwärts
+Westbound|Västgående|Vestgående|Vestgående|Westwärts
+Transmit track warrant|Skicka Track Warrant|Send Track Warrant|Send Track Warrant|Track Warrant übermitteln
+Void track warrant|Makulera Track Warrant|Annuller Track Warrant|Annuller Track Warrant|Track Warrant ungültig machen
+Your track warrants|Dina Track Warrants|Dine Track Warrants|Dine Track Warrants|Deine Track Warrants
+Report clear of limits|Rapportera hela tåget fritt från gränserna|Meld hele toget fri af grænserne|Meld hele toget klart av grensene|Gesamten Zug außerhalb der Grenzen melden
+Limits remain reserved until the dispatcher confirms release.|Gränserna är fortsatt reserverade tills dispatchern bekräftar frigivning.|Grænserne er fortsat reserverede, indtil dispatcheren bekræfter frigivelse.|Grensene er fortsatt reservert til dispatcheren bekrefter frigivelse.|Die Grenzen bleiben reserviert, bis der Dispatcher die Freigabe bestätigt.
+Reserved authority limits|Reserverade tillståndsgränser|Reserverede tilladelsesgrænser|Reserverte tillatelsesgrenser|Reservierte Berechtigungsgrenzen
+Proposed · not in effect|Föreslaget · gäller inte|Foreslået · ikke gældende|Foreslått · ikke gjeldende|Vorgeschlagen · nicht in Kraft
+In effect / release pending ·|Gällande / frigivning väntar ·|Gældende / frigivelse afventer ·|Gjeldende / frigivelse venter ·|In Kraft / Freigabe ausstehend ·
+held track warrants|reserverande Track Warrants|reserverende Track Warrants|reserverende Track Warrants|Track Warrants mit reservierten Grenzen
+No reserved authority limits.|Inga reserverade tillståndsgränser.|Ingen reserverede tilladelsesgrænser.|Ingen reserverte tillatelsesgrenser.|Keine reservierten Berechtigungsgrenzen.
+Proceed from … to …|Kör från … till …|Kør fra … til …|Kjør fra … til …|Fahren von … bis …
+Work between … and …|Arbeta mellan … och …|Arbejd mellem … og …|Arbeid mellom … og …|Arbeiten zwischen … und …
+The conductor must acknowledge receipt and read back this track warrant. Transmitting it does not put it in effect.|Conductor ska bekräfta mottagningen och läsa tillbaka detta Track Warrant. Överföringen gör det inte gällande.|Conductor skal bekræfte modtagelsen og gentage dette Track Warrant. Overførslen gør det ikke gældende.|Conductor må bekrefte mottaket og lese tilbake dette Track Warrant. Overføringen gjør det ikke gjeldende.|Der Conductor muss den Empfang bestätigen und dieses Track Warrant zurücklesen. Die Übermittlung setzt es nicht in Kraft.
+I have received this exact track warrant. Receipt is not readback and does not authorize movement.|Jag har mottagit exakt detta Track Warrant. Mottagning är inte återläsning och ger inte tillstånd att köra.|Jeg har modtaget præcis dette Track Warrant. Modtagelse er ikke gentagelse og giver ikke tilladelse til at køre.|Jeg har mottatt nøyaktig dette Track Warrant. Mottak er ikke tilbakelesning og gir ikke tillatelse til å kjøre.|Ich habe genau dieses Track Warrant erhalten. Empfang ist kein Rücklesen und erteilt keine Fahrberechtigung.
+My entire train is clear of the limits shown on this track warrant. I am reporting clear and will not use this authority again. In this test profile, the limits remain reserved until the dispatcher confirms release.|Hela mitt tåg är fritt från gränserna i detta Track Warrant. Jag rapporterar detta och kommer inte att använda tillståndet igen. I testprofilen är gränserna fortsatt reserverade tills dispatchern bekräftar frigivning.|Hele mit tog er fri af grænserne i dette Track Warrant. Jeg melder dette og vil ikke bruge tilladelsen igen. I testprofilen forbliver grænserne reserverede, indtil dispatcheren bekræfter frigivelse.|Hele toget mitt er klart av grensene i dette Track Warrant. Jeg melder dette og vil ikke bruke tillatelsen igjen. I testprofilen forblir grensene reservert til dispatcheren bekrefter frigivelse.|Mein gesamter Zug hat die Grenzen dieses Track Warrant verlassen. Ich melde dies und werde diese Berechtigung nicht erneut nutzen. In diesem Testprofil bleiben die Grenzen reserviert, bis der Dispatcher die Freigabe bestätigt.
+I verified the conductor’s report that the entire train is clear of these limits. Confirm release and close this track warrant.|Jag har verifierat conductorns rapport att hela tåget är fritt från gränserna. Bekräfta frigivningen och avsluta detta Track Warrant.|Jeg har kontrolleret conductorens melding om, at hele toget er fri af grænserne. Bekræft frigivelsen og afslut dette Track Warrant.|Jeg har kontrollert conductorens melding om at hele toget er klart av grensene. Bekreft frigivelsen og avslutt dette Track Warrant.|Ich habe die Meldung des Conductors geprüft, dass der gesamte Zug die Grenzen verlassen hat. Freigabe bestätigen und dieses Track Warrant abschließen.

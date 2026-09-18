@@ -263,7 +263,7 @@ class ServerSettingsTests(unittest.TestCase):
 
     def test_the_view_has_its_own_heading(self):
         self.assertIn('id="settings-heading"', self.html)
-        self.assertIn("<h2>Inställningar</h2>", self.html)
+        self.assertIn('<h2><tm-text data-tm-text="Inställningar">Inställningar</tm-text></h2>', self.html)
         self.assertNotIn('data-build-panel="server"', self.html)
 
     def test_the_dark_bar_belongs_to_build_mode_alone(self):
@@ -333,7 +333,7 @@ class ServerSettingsTests(unittest.TestCase):
         """3.11.1. Rutorna och namnfältet låg på var sitt håll förut."""
         panel = self._panel("server-identity-settings")
         for label in ("SERVER", "AKTIV TRÄFF", "CLOUD"):
-            self.assertIn(f"<small>{label}</small>", panel)
+            self.assertIn(f'<small><tm-text data-tm-text="{label}">{label}</tm-text></small>', panel)
         self.assertIn('id="admin-server-name"', panel)
         self.assertIn("Spara servernamn", panel)
 
@@ -352,7 +352,7 @@ class ServerSettingsTests(unittest.TestCase):
         """3.11.2. Kortet hette "Extern admininloggning" så länge inloggningen
         bara gällde utifrån. Nu gäller den överallt, och namnet med."""
         panel = self._panel("admin-access-settings")
-        self.assertIn("<h2>Inloggning</h2>", panel)
+        self.assertIn('<h2><tm-text data-tm-text="Inloggning">Inloggning</tm-text></h2>', panel)
         self.assertIn("Inloggning krävs överallt, också på serverdatorn", panel)
         for field in ("admin-username", "admin-password", "admin-password-confirm"):
             self.assertIn(f'id="{field}"', panel)
@@ -379,7 +379,7 @@ class ServerSettingsTests(unittest.TestCase):
         den avgör om nollställningen tar hela servern eller bara träffdata.
         Texten kommer ur serverns svar, inte ur en gissning i webbläsaren."""
         self.assertIn('state.authStatus?.at_the_machine === true', self.js)
-        self.assertIn('"Vid servern" : "Över nätet"', self.js)
+        self.assertIn('atTheMachine ? t("Vid servern") : t("Över nätet")', self.js)
         self.assertNotIn("access_mode", self.js)
 
     def test_the_way_out_belongs_to_being_logged_in(self):

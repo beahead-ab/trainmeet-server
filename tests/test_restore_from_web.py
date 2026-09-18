@@ -154,7 +154,9 @@ class RestoreOverHTTPTests(unittest.TestCase):
         )
         self.assertEqual(HTTPStatus.ACCEPTED, status)
         self.assertEqual("restoring", payload["status"])
-        self.assertEqual(self.copy, self.server.restore_requested)
+        self.assertIsNotNone(self.server.restore_requested)
+        # macOS exposes its temporary directory through both /var and /private/var.
+        self.assertEqual(self.copy.resolve(), self.server.restore_requested.resolve())
         self.assertTrue(self.server.restart_requested)
         self.assertEqual(before, self.database.read_bytes(), "databasen rördes direkt")
         self.assertNotIn("path", payload, "sökvägen på disk hör inte hemma i svaret")

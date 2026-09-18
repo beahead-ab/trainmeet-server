@@ -99,7 +99,12 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="runtime-import-file"', html)
         self.assertIn("Nytt lokalt utkast", html)
         self.assertIn('id="overview-graph"', html)
-        self.assertIn("<h2>Inloggning</h2>", html)
+        self.assertIn('<h2><tm-text data-tm-text="Inloggning">Inloggning</tm-text></h2>', html)
+        self.assertIn('data-language-picker', html)
+        for asset in ("i18n.js", "i18n-messages.js", "i18n-init.js"):
+            with urlopen(f"{self.base_url}/assets/{asset}", timeout=2) as response:
+                self.assertEqual(response.status, 200)
+                self.assertTrue(response.read())
         self.assertIn('id="login-form"', html)
         self.assertIn("Skärmar", html)
         self.assertIn('/trainmeet-logo.png', html)
