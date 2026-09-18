@@ -1,0 +1,7 @@
+/* Scoped navigation only. No runtime mode or authority is changed here. */
+.language-toolbar { flex-wrap: wrap; justify-content: space-between; }
+.meet-type-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font: 400 14px/1.4 Inter, system-ui, sans-serif; }
+.meet-type-nav a { display: inline-flex; min-height: 40px; align-items: center; padding: 8px 14px; border: 1px solid #d9dde5; border-radius: 9px; color: #28364b; background: white; text-decoration: none; }
+.meet-type-nav a[aria-current] { background: #eff4ff; border-color: #255acb; color: #204ca7; font-weight: 500; }
+.meet-type-nav a:focus-visible { outline: 3px solid #255acb; outline-offset: 2px; }
+@media(max-width: 500px) { .language-toolbar { justify-content: flex-start; } }

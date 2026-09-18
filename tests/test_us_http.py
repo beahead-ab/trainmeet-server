@@ -80,7 +80,8 @@ class USHTTPTests(unittest.TestCase):
         self.assertEqual(receipt, self.request('/v1/us/command-status?command_id=' + command['command_id'], token='admin-token')[1]['result'])
 
     def test_us_assets_are_served_locally_without_cloud(self):
-        for path in ['/us/dispatcher', '/us/conductor', '/us/app.js', '/us/style.css']:
+        for path in ['/us/dispatcher', '/us/conductor', '/us/app.js', '/us/style.css',
+                     '/assets/meet-type.css', '/assets/meet-type-messages.js']:
             with self.subTest(path=path), urlopen(self.base + path, timeout=3) as response:
                 self.assertEqual(200, response.status)
                 content = response.read().decode()
