@@ -20,7 +20,7 @@ const root = path.resolve(__dirname, '../..');
       fixture.once('exit', () => {clearTimeout(timer); reject(new Error(diagnostics));});
     });
     browser = await chromium.launch({headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel: process.env.PLAYWRIGHT_CHANNEL} : {})});
-    const visitor = await browser.newContext({viewport: {width: 390, height: 844}});
+    const visitor = await browser.newContext({locale: 'sv-SE', viewport: {width: 390, height: 844}});
     page = await visitor.newPage();
     const errors = [], posts = [], requests = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -56,7 +56,7 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('#tmbox-v2-device').inputValue(), box.device_code);
     assert.equal(posts.filter(path => path === '/v1/browser-clients').length, 1, 'Reload reuses the box identity');
 
-    const admin = await browser.newContext();
+    const admin = await browser.newContext({locale: 'sv-SE'});
     assert.equal((await admin.request.post(urls.eu + '/v1/auth/login', {data: {username: 'smoke-admin', password: 'isolated-browser-test'}})).status(), 200);
     assert.equal((await admin.request.post(urls.eu + '/v1/devices/assign', {data: {device_code: box.device_code, station_id: 'station-a'}})).status(), 200);
     await page.waitForFunction(() => document.querySelector('#tmbox-v2-station').value === 'station-a');

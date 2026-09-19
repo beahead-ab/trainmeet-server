@@ -24,7 +24,7 @@ const root = path.resolve(__dirname, '../..');
     });
     browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) });
     const errors = [];
-    const page = await browser.newPage({ viewport: { width: 1280, height: 960 } });
+    const page = await browser.newPage({ locale: 'sv-SE', viewport: { width: 1280, height: 960 } });
     page.setDefaultTimeout(15000);
     page.on('pageerror', error => { errors.push(error.message); console.error('Browser:', error.message); });
     const requests = [];
