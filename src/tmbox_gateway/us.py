@@ -198,6 +198,7 @@ def warrant_text(package: dict, warrant: dict, run: dict) -> str:
 
 class USStore:
     def __init__(self, path: str | Path):
+        self.external_clock_source = None
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
@@ -390,7 +391,7 @@ class USStore:
                                 (json.dumps(state, allow_nan=False), state["revision"], state["id"]))
                 self.db.execute("INSERT INTO us_events(session_id,revision,actor,action,target_id,meet_time,recorded_at,detail_json) VALUES(?,?,?,?,?,?,?,?)",
                                 (state["id"], state["revision"], actor, "config_updated", package["publication_id"],
-                                 clock_status(state["clock"])["time"] if state.get("clock") else "",
+                                 self.meeting_clock(state["clock"])["time"] if state.get("clock") else "",
                                  datetime.now(timezone.utc).isoformat(), json.dumps({"previous_publication_id": old_publication, "publication_id": package["publication_id"]})))
                 self.db.execute("COMMIT")
                 return {"session_id": state["id"], "revision": state["revision"], "publication_id": package["publication_id"], "changed": True}
@@ -418,7 +419,7 @@ class USStore:
                 self.db.execute("COMMIT")
                 result = {"actor": actor, "role": "dispatcher" if dispatcher else "conductor", "session": state}
                 if state and state.get('clock'):
-                    result['clock'] = clock_status(state['clock'])
+                    result['clock'] = self.meeting_clock(state['clock'])
                 return result
             except BaseException:
                 self.db.execute("ROLLBACK")
@@ -465,7 +466,7 @@ class USStore:
                              "package_checksum": hashlib.sha256(json.dumps(package, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest(),
                              "status": "running", "revision": 0, "runs": [], "warrants": [], "reports": [],
                              "clock": clock_settings(package.get('session', {}))}
-                    meet_time = clock_status(state['clock'])['time']
+                    meet_time = self.meeting_clock(state['clock'])['time']
                     for plan in package["runs"]:
                         state["runs"].append({**plan, "planned_id": plan["id"], "id": str(uuid4()), "conductor_id": None, "conductor_name": None, "position": None, "ready": False})
                     target = state["id"]
@@ -480,7 +481,7 @@ class USStore:
                     if type(payload.get("expected_revision")) is not int or payload["expected_revision"] != state["revision"]:
                         raise USError("The session changed. Refresh and review before trying again.", 409)
                     if state.get('clock'):
-                        meet_time = clock_status(state['clock'])['time']
+                        meet_time = self.meeting_clock(state['clock'])['time']
                     target = self._apply(state, actor, dispatcher, action, payload, now, meet_time)
                 state["revision"] += 1
                 result = {"command_id": command_id, "session_id": state["id"], "revision": state["revision"], "target_id": target}
@@ -495,6 +496,10 @@ class USStore:
                 self.db.execute("ROLLBACK")
                 raise
 
+    def meeting_clock(self, clock):
+        external = self.external_clock_source() if self.external_clock_source else None
+        return external if external is not None else clock_status(clock)
+
     def _apply(self, state: dict, actor: str, dispatcher: bool, action: str, payload: dict, now: str, meet_time: str) -> str:
         conductor_actions = {"receive", "readback", "request_release", "report", "ready"}
         dispatcher_actions = {"draft", "transmit", "activate", "close_warrant", "void", "assign", "extra", "finish_session", "clock"}
@@ -503,6 +508,8 @@ class USStore:
         if (action in dispatcher_actions) != dispatcher:
             raise USError("This action belongs to the other operating role", 403)
         if action == 'clock':
+            if self.external_clock_source and self.external_clock_source() is not None:
+                raise USError('FastClock controls the time and speed. Use the server clock controls to start or stop.', 409)
             if payload.get('confirmed') is not True or type(payload.get('running')) is not bool:
                 raise USError('Confirm the US clock change')
             try:

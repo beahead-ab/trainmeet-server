@@ -106,6 +106,53 @@ class ProtocolV2Base(unittest.TestCase):
 
 
 class ProtocolV2Tests(ProtocolV2Base):
+    def test_config_preserves_cloud_ports_blanks_order_and_sides(self):
+        package = fictional_runtime_package()
+        package["publication_id"] = "remapped-ports"
+        connections = [item["id"] for item in package["connections"]]
+        panel = next(item for item in package["panels"] if item["station_id"] == STATION)
+        panel.update(slot_layout="columns", slots={"A": None, "B": connections[2], "C": connections[0], "D": connections[1]})
+        self.runtime_store.install(package)
+        self.gateway.publish_device_state(DEVICE)
+        payload = next(body for topic, body in self._retained() if topic.endswith("/config"))
+        self.assertEqual(payload["panels"][0]["slots"], panel["slots"])
+        self.assertEqual([row["connection_id"] for row in payload["connections"]], [connections[2], connections[0], connections[1]])
+        self.assertEqual([row["display_row"] for row in payload["connections"]], [1, 2, 3])
+        self.assertEqual([row["display_side"] for row in payload["connections"]], ["left", "right", "right"])
+        self.assertEqual(payload["connections"][0]["panel_slots"], [{"panel_id": panel["id"], "key": "B", "row": 2, "side": "left"}])
+
+    def test_multiple_panels_with_opposite_placements_do_not_invent_a_side(self):
+        package = fictional_runtime_package()
+        package["publication_id"] = "two-panels"
+        connection = package["connections"][0]["id"]
+        panel = next(item for item in package["panels"] if item["station_id"] == STATION)
+        panel.update(slot_layout="columns", slots={"A": connection, "B": None, "C": None, "D": None})
+        package["panels"].append({**panel, "id": "second-panel", "slots": {"A": None, "B": None, "C": connection, "D": None}})
+        self.runtime_store.install(package)
+        row = next(row for row in self.service.config_payload(STATION)["connections"] if row["connection_id"] == connection)
+        self.assertEqual(len(row["panel_slots"]), 2)
+        self.assertIsNone(row["display_side"])
+
+    def test_removed_box_waits_and_cannot_send_or_replay_commands(self):
+        command = {"protocol_version": 2, "message_id": "before-remove", "device_id": DEVICE,
+                   "action": "train.position.set", "payload": {"movement_id": DEPARTURE}}
+        self._send("command", command)
+        self.assertEqual(self._acks()[-1]["status"], "accepted")
+        before = self.service.snapshot_payload(STATION)
+        self.identities.remove_discovered_device(DEVICE)
+        self.published.clear()
+        self.gateway.publish_device_state(DEVICE)
+        self.assertEqual(len(self._retained()), 1)
+        self.assertEqual(self._retained()[0][1]["status"], "waiting_for_assignment")
+        for message_id in ("before-remove", "after-remove"):
+            self._send("command", {**command, "message_id": message_id})
+            self.assertEqual(self._acks()[-1]["reason"], "not_assigned")
+        self._send("hello", {"device_code": DEVICE})
+        self.assertEqual(self.identities.discovered_devices(), ())
+        self.assertEqual(self.service.snapshot_payload(STATION), before)
+        # History survives; the old acknowledgement is retained for audit.
+        self.assertIsNotNone(self.operations_store.device_command_response(DEVICE, "before-remove"))
+
     # ------------------------------------------------------------ retained
 
     def test_hello_answers_with_assignment_config_and_snapshot(self):
@@ -387,6 +434,10 @@ class ProtocolV2Tests(ProtocolV2Base):
         self.assertEqual(acknowledgement["status"], "accepted")
         self.assertEqual(acknowledgement["result"]["matches"][0]["movement_id"], DEPARTURE)
         self.assertFalse(acknowledgement["result"]["ambiguous"])
+        planned = acknowledgement["result"]["matches"][0]["departure_route"]
+        self.assertEqual(planned["status"], "resolved")
+        self.assertEqual(planned["to_station_code"], "VST")
+        self.assertEqual(planned["to_movement_id"], "movement-421-vst")
         self.assertEqual(
             acknowledgement["snapshot"]["revision"]["movements"][DEPARTURE], 0
         )

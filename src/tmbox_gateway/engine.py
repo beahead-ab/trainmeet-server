@@ -409,15 +409,18 @@ class TrafficEngine:
 
         slots: dict[str, Any] = {}
         for key in ("A", "B", "C", "D"):
+            row, side = panel.slot_position(key)
             connection_id = panel.slots.get(key)  # type: ignore[arg-type]
             if connection_id is None:
-                slots[key] = {"key": key, "connection_id": None, "state": "unused"}
+                slots[key] = {"key": key, "connection_id": None, "state": "unused", "side": side, "row": row}
                 continue
             connection = self.config.connections[connection_id]
             connection_state = self.connections[connection_id]
             other_id = connection.other_station(panel.station_id)
             slots[key] = {
                 "key": key,
+                "side": side,
+                "row": row,
                 "connection_id": connection_id,
                 "station_id": other_id,
                 "station_code": self.config.stations[other_id].code[:3].upper(),

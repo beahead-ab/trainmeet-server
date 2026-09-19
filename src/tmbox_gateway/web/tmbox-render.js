@@ -222,7 +222,10 @@
           ? view.selected_connection : 0;
         // A request has to name the line the train is taking; the box does not
         // invent a choice the operator has to make.
-        lines.push(spread("BEGAR MOT", connections[index].other_station_code, geometry.cols));
+        const connection = connections[index];
+        lines.push(connection.display_side === "left"
+          ? spread(connection.other_station_code, "BEGAR MOT", geometry.cols)
+          : spread("BEGAR MOT", connection.other_station_code, geometry.cols));
         lines.push("A=BEGAR  C=NASTA");
         if (geometry.rows >= 4) {
           lines.push(`${index + 1} AV ${connections.length}`);

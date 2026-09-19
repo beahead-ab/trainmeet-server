@@ -29,6 +29,173 @@ from runtime_fixture import runtime_package, runtime_package_v3
 
 
 class HTTPServerTests(unittest.TestCase):
+    def test_clock_source_http_is_admin_only_and_scoped_to_current_meet(self):
+        from unittest.mock import MagicMock
+        from test_external_clock import provider_status
+        self.application.external_clock.transport = MagicMock(return_value=provider_status())
+        generation = self.application.lifecycle.selected()["generation"]
+        payload = {"source": "fastclock", "clock_name": "Test", "user": "Dispatcher",
+                   "password": "clock-test-secret", "meet_generation": generation}
+        result = self._json_request("/v1/clock/source", payload)
+        self.assertEqual(result["clock"]["source"], "fastclock")
+        self.assertTrue(result["settings"]["has_password"])
+        self.assertNotIn("clock-test-secret", json.dumps(result))
+        self.assertNotIn("password", self._json_request("/v1/clock/source"))
+        self._public_refused("/v1/clock/source", {**payload, "meet_generation": generation + 1}, status=409)
+        self._public_refused("/v1/clock/source", payload, headers={"Origin": "https://unrelated.example"})
+        self.assertEqual(self.application.external_clock.transport.call_count, 1)
+        box = self._public_client()
+        self._public_refused("/v1/clock/source", token=box["access_token"])
+        self._public_refused("/v1/clock/source", payload, token=box["access_token"])
+        self._public_refused("/v1/clock/source", status=401)
+        self._public_refused("/v1/clock/source", payload, status=401)
+
+    def _public_client(self, workspace="tmbox", **extra):
+        self.identities.configure_admin_access("admin", "test-password")
+        return self._json_request("/v1/browser-clients", {"workspace": workspace, **extra}, expected_status=201)
+
+    def _public_refused(self, path, payload=None, token=None, status=403, headers=None):
+        request = Request(self.base_url + path, data=json.dumps(payload).encode() if payload is not None else None,
+                          headers={"Content-Type": "application/json", **({"Authorization": "Bearer " + token} if token else {}), **(headers or {})})
+        with self.assertRaises(HTTPError) as caught:
+            urlopen(request, timeout=2)
+        self.assertEqual(caught.exception.code, status)
+
+    def test_public_picker_does_not_unlock_administration(self):
+        self.identities.configure_admin_access("admin", "test-password")
+        context = self._json_request("/v1/workspaces")
+        self.assertEqual(context["available_workspaces"], ["administration", "tkl", "tmbox"])
+        self.assertTrue(context["public_clients_enabled"])
+        self.assertNotIn("cloud", context)
+        self.assertNotIn("access_token", json.dumps(context))
+        for path in ("/v1/server-context", "/v1/devices", "/v1/admin/users"):
+            self._public_refused(path, status=401)
+
+    def test_public_box_identity_is_generated_and_never_grants_admin(self):
+        box = self._public_client(client_id="admin", station_id="station-a", kind="web_admin", panel_ids=["panel-a"])
+        another = self._public_client()
+        self.assertNotEqual(box["client_id"], another["client_id"])
+        self.assertNotEqual(box["access_token"], another["access_token"])
+        current = self.identities.client(box["client_id"])
+        self.assertEqual(current.kind, DeviceKind.ESP32_PANEL)
+        self.assertIsNone(current.station_id)
+        self.assertEqual(current.panel_ids, ())
+        token = box["access_token"]
+        self.assertEqual(self._json_request("/v1/browser-clients/self", token=token)["device_code"], box["device_code"])
+        for path in ("/v1/devices", "/v1/admin/users"):
+            self._public_refused(path, token=token)
+        limited = self._json_request("/v1/server-context", token=token)
+        self.assertNotIn("administration", limited["available_workspaces"])
+        self.assertEqual(limited["cloud_update"], {})
+        self._public_refused("/v1/devices/assign", {"device_code": box["device_code"], "station_id": "station-a"}, token)
+        self._public_refused("/v1/tmbox-v2/assignment?device_id=" + another["client_id"], token=token)
+        self._public_refused("/v1/tmbox-v2/command", {"device_id": another["client_id"], "command": {}}, token)
+        self._public_refused("/v1/tmbox-v2/config?station_id=station-a", token=token)
+        self._public_refused("/v1/clock", {"running": True}, token)
+
+    def test_public_box_follows_admin_assignment_and_removal(self):
+        box = self._public_client()
+        token = box["access_token"]
+        self.identities.assign_discovered_device(box["device_code"], station_id="station-a")
+        assignment = self._json_request("/v1/tmbox-v2/assignment?device_id=" + box["client_id"], token=token)
+        self.assertEqual(assignment["station_id"], "station-a")
+        self._json_request("/v1/tmbox-v2/config?station_id=station-a", token=token)
+        self._public_refused("/v1/tmbox-v2/config?station_id=station-b", token=token)
+        self.identities.assign_discovered_device(box["device_code"], station_id="station-b")
+        self._public_refused("/v1/tmbox-v2/snapshot?station_id=station-a", token=token)
+        self._json_request("/v1/tmbox-v2/snapshot?station_id=station-b", token=token)
+        self.identities.remove_discovered_device(box["client_id"])
+        self._public_refused("/v1/browser-clients/self", token=token, status=401)
+
+    def test_public_tkl_waits_for_admin_and_follows_reassignment(self):
+        box = self._public_client("tkl", station_id="station-a", kind="web_admin", panel_ids=["panel-a"])
+        token = box["access_token"]
+        client = self.identities.client(box["client_id"])
+        self.assertEqual(client.kind, DeviceKind.TKL_TERMINAL)
+        self.assertIsNone(client.station_id)
+        self.assertEqual(client.panel_ids, ())
+        self._public_refused("/v1/tkl/context?station_id=station-a", token=token)
+        self._public_refused("/v1/devices/assign", {"device_code": box["device_code"], "station_id": "station-a"}, token)
+        self._public_refused("/v1/admin/users", token=token)
+        for path in ("shift/start", "movement", "line"):
+            self._public_refused("/v1/tkl/" + path, {"station_id": "station-a"}, token=token)
+        stale = self.identities.assign_discovered_device(box["device_code"], station_id="station-a")
+        self.assertEqual(stale.kind, DeviceKind.TKL_TERMINAL)
+        self.assertEqual(self._json_request("/v1/browser-clients/self", token=token)["station_id"], "station-a")
+        self._json_request("/v1/tkl/context?station_id=station-a", token=token)
+        self.identities.assign_discovered_device(box["device_code"], station_id="station-b")
+        self._public_refused("/v1/tkl/context?station_id=station-a", token=token)
+        with self.assertRaises(HTTPAPIError):
+            self.application._require_station_access(stale, "station-a")
+        self._json_request("/v1/tkl/context?station_id=station-b", token=token)
+        self.identities.remove_discovered_device(box["client_id"])
+        self._public_refused("/v1/browser-clients/self", token=token, status=401)
+        with self.assertRaises(HTTPAPIError):
+            self.application._require_station_access(stale, "station-a")
+
+    def test_unidentified_tkl_cannot_access_live_traffic(self):
+        self.identities.configure_admin_access("admin", "test-password")
+        self._public_refused("/v1/tkl/context?station_id=station-a", status=401)
+        for path in ("shift/start", "movement", "line"):
+            self._public_refused("/v1/tkl/" + path, {"station_id": "station-a"}, status=401)
+
+    def test_public_enrollment_rejects_cross_origin_proxy_and_external_mode(self):
+        from dataclasses import replace
+        for headers in ({"Origin": "https://not-the-server.example"}, {"Sec-Fetch-Site": "cross-site"}, {"X-Forwarded-For": "127.0.0.1"}, {"Forwarded": "for=192.168.0.5"}):
+            self._public_refused("/v1/browser-clients", {"workspace": "tmbox"}, headers=headers)
+        self.application.config = replace(self.application.config, force_external_auth=True)
+        self._public_refused("/v1/browser-clients", {"workspace": "tmbox"})
+        self.assertFalse(self._json_request("/v1/workspaces")["public_clients_enabled"])
+
+    def test_public_enrollment_is_rate_limited_and_workspace_is_allowlisted(self):
+        self._public_refused("/v1/browser-clients", {"workspace": "administration"}, status=400)
+        for _ in range(20):
+            self.application.create_browser_client({"workspace": "tmbox"}, "same-peer")
+        with self.assertRaises(HTTPAPIError) as caught:
+            self.application.create_browser_client({"workspace": "tmbox"}, "same-peer")
+        self.assertEqual(caught.exception.status, 429)
+
+    def test_admin_removes_box_over_http_and_publishes_revocation(self):
+        from unittest.mock import Mock
+        self.identities.record_discovery("box-one", "TBX-ONE")
+        box = self.identities.assign_discovered_device("TBX-ONE", ("panel-a",), station_id="station-a")
+        self.identities.register_client("admin-remove", "Admin", DeviceKind.WEB_ADMIN, "admin-token", ())
+        notify = self.application.on_device_assignment_changed = Mock()
+        before = self.engine.revision
+        result = self._json_request("/v1/devices/remove", {"device_id": "box-one"}, token="admin-token")
+        self.assertEqual(result, {"device_id": "box-one", "removed": True})
+        notify.assert_called_once_with("box-one")
+        self.assertEqual(self._json_request("/v1/devices", token="admin-token")["devices"], [])
+        self.assertEqual(self.engine.revision, before)
+        # A request authenticated just before removal must not use stale grants.
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.application.command(box, {"panel_id": "panel-a", "expected_revision": before, "key": "A"})
+        self.assertEqual(refused.exception.code, "panel_not_assigned")
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.application.tkl_context(box, "station-a")
+        self.assertEqual(refused.exception.code, "station_not_assigned")
+
+    def test_remove_requires_admin_and_known_device(self):
+        self.identities.configure_admin_access("admin", "test-password")
+        self.identities.record_discovery("box-one", "TBX-ONE")
+        self.identities.register_client("box-one", "Box", DeviceKind.ESP32_PANEL, "box-token", ())
+        self.identities.register_client("admin-remove", "Admin", DeviceKind.WEB_ADMIN, "admin-token", ())
+        for token, body, status in [(None, {"device_id": "box-one"}, 401), ("box-token", {"device_id": "box-one"}, 403), ("admin-token", {}, 400), ("admin-token", {"device_id": "missing"}, 404)]:
+            request = Request(self.base_url + "/v1/devices/remove", method="POST", data=json.dumps(body).encode(), headers={"Content-Type": "application/json", **({"Authorization": "Bearer " + token} if token else {})})
+            with self.assertRaises(HTTPError) as refused:
+                urlopen(request, timeout=2)
+            self.assertEqual(refused.exception.code, status)
+        self.assertEqual(len(self.identities.discovered_devices()), 1)
+
+    def test_remove_is_committed_even_if_broker_is_unavailable(self):
+        from unittest.mock import Mock
+        self.identities.record_discovery("box-one", "TBX-ONE")
+        admin = self.identities.register_client("admin-remove", "Admin", DeviceKind.WEB_ADMIN, "admin-token", ())
+        self.application.on_device_assignment_changed = Mock(side_effect=RuntimeError("offline"))
+        with self.assertLogs("tmbox_gateway.http", level="ERROR"):
+            self.application.remove_device(admin, {"device_id": "box-one"})
+        self.assertEqual(self.identities.discovered_devices(), ())
+
     def test_tmbox_code_enrolls_without_picking_a_station(self):
         device_id = "esp8266-aabbccddeeff"
         self.identities.record_discovery(device_id, "TBX-DDEEFF")

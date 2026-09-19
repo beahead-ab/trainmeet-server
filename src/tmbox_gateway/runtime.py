@@ -145,6 +145,8 @@ class RuntimePublication:
         if not panels:
             raise RuntimePublicationError("Driftpaketet innehåller inga TMBox-paneler")
         for panel in panels:
+            if panel.get("slot_layout", "rows") not in ("rows", "columns"):
+                raise RuntimePublicationError("En panel har en okänd portplacering")
             if _required_text(panel, "station_id") not in station_ids:
                 raise RuntimePublicationError("En panel hänvisar till en okänd station")
             slots = _required_object(panel, "slots")
@@ -357,6 +359,7 @@ class RuntimePublication:
                 station_id=value["station_id"],
                 name=value.get("name") or f"{stations[value['station_id']].code} TMBox",
                 slots={key: value["slots"].get(key) for key in ("A", "B", "C", "D")},
+                slot_layout=value.get("slot_layout", "rows"),
             )
             for value in self.payload["panels"]
         }
@@ -689,6 +692,15 @@ class SQLiteRuntimeStore:
         value = self._setting("clock_display:" + scope)
         return json.loads(value) if value else {}
 
+    def clock_source_settings(self, scope: str) -> dict[str, Any]:
+        from .external_clock import DEFAULT_SETTINGS
+        value = self._setting("clock_source:" + scope)
+        return {**DEFAULT_SETTINGS, **(json.loads(value) if value else {})}
+
+    def save_clock_source_settings(self, scope: str, settings: dict[str, Any]) -> None:
+        # Local runtime settings only: never part of the Cloud package/status.
+        self._save_setting("clock_source:" + scope, json.dumps(settings))
+
     def save_clock_display_settings(self, scope: str, style: str, show_seconds: bool) -> None:
         if style not in AVAILABLE_CLOCK_STYLES or not isinstance(show_seconds, bool):
             raise ValueError("Ogiltigt klockutseende")
@@ -733,7 +745,11 @@ class SQLiteRuntimeStore:
         return enabled
 
     def cloud_auto_sync_enabled(self) -> bool:
-        return self._setting("cloud_auto_sync") == "1"
+        stored = self._setting("cloud_auto_sync")
+        # Before automatic delivery existed EU servers already had a Cloud
+        # link, but no preference. Do not silently leave those servers paused.
+        # An administrator's explicit pause always survives upgrades/restarts.
+        return bool(self.link_token()) if stored is None else stored == "1"
 
     def begin_installation(self) -> None:
         if self._setting("installation_required") is None:

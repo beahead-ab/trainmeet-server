@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -111,7 +112,7 @@ class MQTTGatewayAdapter:
             client_id = topic_parts[3]
             message_kind = topic_parts[4]
             if message_kind == "presence":
-                self._publish_client_snapshots(client_id)
+                self._handle_presence(client_id, message.payload, retained=bool(message.retain))
                 client.ack(message.mid, message.qos)
                 return
             if message_kind != "command":
@@ -120,16 +121,12 @@ class MQTTGatewayAdapter:
             payload = json.loads(message.payload.decode("utf-8"))
             if payload.get("client_id") != client_id:
                 raise ValueError("Client id does not match command topic")
-            paired_client = self.identities.client(client_id) if self.identities is not None else None
-            gateway_clock = paired_client is not None and paired_client.kind == DeviceKind.ESP32_PANEL
-            command = _decode_command(
-                payload,
-                received_at=datetime.now(timezone.utc),
-                use_gateway_clock=gateway_clock,
-            )
-            if self.identities is not None and command.panel_id not in self.identities.panels_for_client(client_id):
+            # Revoke before decoding: physical boxes omit wall-clock fields.
+            # A removed box is no longer a paired client, but still deserves
+            # an explicit refusal instead of a misleading malformed-message log.
+            if self.identities is not None and str(payload.get("panel_id") or "") not in self.identities.panels_for_client(client_id):
                 ack = CommandAck(
-                    command_id=command.command_id,
+                    command_id=str(payload.get("command_id") or ""),
                     status="rejected",
                     reason="panel_not_assigned",
                     previous_revision=self.engine.revision,
@@ -137,6 +134,12 @@ class MQTTGatewayAdapter:
                     snapshots={},
                 )
             else:
+                paired_client = self.identities.client(client_id) if self.identities is not None else None
+                command = _decode_command(
+                    payload,
+                    received_at=datetime.now(timezone.utc),
+                    use_gateway_clock=paired_client is not None and paired_client.kind == DeviceKind.ESP32_PANEL,
+                )
                 ack = self.engine.press(command)
             ack_payload = ack.to_dict()
             if self.identities is not None:
@@ -162,7 +165,7 @@ class MQTTGatewayAdapter:
         if self.identities is None:
             return
         payload = json.loads(raw_payload.decode("utf-8"))
-        device = self.identities.record_discovery(
+        self.identities.record_discovery(
             device_id,
             str(payload["device_code"]),
             model=str(payload.get("model", "TMBox")),
@@ -171,6 +174,54 @@ class MQTTGatewayAdapter:
             protocol_version=int(payload.get("protocol_version", 1) or 1),
             display=DisplayCapability.parse(payload.get("display")),
         )
+        self.publish_device_assignment(device_id)
+
+    def _handle_presence(self, client_id: str, raw_payload: bytes, *, retained: bool) -> None:
+        payload = json.loads(raw_payload.decode("utf-8"))
+        if payload.get("status") != "online":
+            return
+        request_id = payload.get("request_id")
+        if request_id is None:
+            # Existing v1 clients use presence to ask for a fresh snapshot.
+            self._publish_client_snapshots(client_id)
+            return
+        if retained or not isinstance(request_id, str) or not 1 <= len(request_id) <= 96:
+            return  # A saved broker message is not evidence of a live device.
+        if self.identities is None:
+            return
+        self.identities.touch_discovered_device(client_id)
+        panels = self.identities.panels_for_client(client_id)
+        panel_id = payload.get("panel_id", "")
+        if panel_id not in panels:
+            if panel_id or panels:
+                # Recover a missed admin change; never grant what the box asks for.
+                self.publish_device_assignment(client_id)
+                return
+            reply = {"status": "waiting_for_assignment", "request_id": request_id}
+        else:
+            snapshot = self.engine.snapshots().get(panel_id)
+            if snapshot is None:
+                return  # Invalid config must not keep stale input alive.
+            token = _snapshot_token(snapshot)
+            if payload.get("state_token") != token:
+                self._publish_client_snapshots(client_id)
+                return
+            reply = {
+                "status": "current", "request_id": request_id,
+                "panel_id": panel_id, "state_token": token,
+            }
+        self.client.publish(
+            f"tambox/v1/client/{client_id}/state",
+            json.dumps(reply, ensure_ascii=False, separators=(",", ":")),
+            qos=1, retain=False,
+        )
+
+    def publish_device_assignment(self, device_id: str) -> None:
+        if self.identities is None:
+            return
+        device = self.identities.discovered_device_or_none(device_id)
+        if device is None:
+            return
         assigned_panel_ids = list(self.identities.panels_for_client(device_id))
         station_id = self.identities.station_for_client(device_id)
         # Admin assigns a station now. A v1 keypad still needs one concrete
@@ -233,12 +284,24 @@ class MQTTGatewayAdapter:
             snapshot = snapshots.get(panel_id)
             if snapshot is None:
                 continue
+            snapshot = {**snapshot, "state_token": _snapshot_token(snapshot)}
             self.client.publish(
                 f"tambox/v1/client/{client_id}/snapshot/{panel_id}",
                 json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")),
                 qos=1,
                 retain=True,
             )
+
+
+def _snapshot_token(snapshot: dict[str, Any]) -> str:
+    """Compare the complete authoritative view, including clock and session.
+
+    Revision alone does not change when the meeting clock advances or stops.
+    This is a content fingerprint, not a credential or an authorization grant.
+    """
+    return hashlib.sha256(json.dumps(
+        snapshot, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
 
 
 def _decode_command(

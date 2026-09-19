@@ -236,7 +236,7 @@ class IdentityStore:
         )
         # A device is assigned one station. Panels stay for the v1 clients
         # that still speak the panel protocol.
-        self._add_missing_columns("clients", {"station_id": "TEXT"})
+        self._add_missing_columns("clients", {"station_id": "TEXT", "browser_workspace": "TEXT"})
         self._add_missing_columns(
             "discovered_devices",
             {
@@ -245,6 +245,7 @@ class IdentityStore:
                 "display_rows": "INTEGER NOT NULL DEFAULT 2",
                 "display_cols": "INTEGER NOT NULL DEFAULT 16",
                 "charset": "TEXT NOT NULL DEFAULT 'ascii'",
+                "removed_at": "TEXT",
             },
         )
         now = datetime.now(timezone.utc).isoformat()
@@ -432,22 +433,33 @@ class IdentityStore:
         *,
         station_id: str | None = None,
         now: datetime | None = None,
+        reactivate_device: bool = False,
+        preserve_credential: bool = False,
+        browser_workspace: str | None = None,
     ) -> PairedClient:
         now = now or datetime.now(timezone.utc)
         digest = _credential_digest(credential)
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                created_at = self._connection.execute(
-                    "SELECT created_at FROM clients WHERE client_id = ?",
+                removed = self._connection.execute(
+                    "SELECT removed_at FROM discovered_devices WHERE device_id = ?",
                     (client_id,),
                 ).fetchone()
+                if removed and removed[0] and not reactivate_device:
+                    raise InvalidClientError("Boxen är borttagen. Be administratören koppla den igen med boxens kod.")
+                created_at = self._connection.execute(
+                    "SELECT created_at, credential_digest, enabled FROM clients WHERE client_id = ?",
+                    (client_id,),
+                ).fetchone()
+                if preserve_credential and created_at and created_at[2]:
+                    digest = created_at[1]
                 self._connection.execute(
                     """
                     INSERT INTO clients (
                         client_id, display_name, kind, credential_digest,
-                        enabled, created_at, last_paired_at, station_id
-                    ) VALUES (?, ?, ?, ?, 1, ?, ?, ?)
+                        enabled, created_at, last_paired_at, station_id, browser_workspace
+                    ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
                     ON CONFLICT(client_id) DO UPDATE SET
                         display_name = excluded.display_name,
                         kind = excluded.kind,
@@ -464,6 +476,7 @@ class IdentityStore:
                         created_at[0] if created_at else now.isoformat(),
                         now.isoformat(),
                         station_id,
+                        browser_workspace,
                     ),
                 )
                 self._connection.execute(
@@ -474,6 +487,11 @@ class IdentityStore:
                     "INSERT INTO client_panels (client_id, panel_id) VALUES (?, ?)",
                     [(client_id, panel_id) for panel_id in sorted(set(panel_ids))],
                 )
+                if reactivate_device:
+                    self._connection.execute(
+                        "UPDATE discovered_devices SET removed_at = NULL WHERE device_id = ?",
+                        (client_id,),
+                    )
                 self._connection.execute("COMMIT")
             except Exception:
                 if self._connection.in_transaction:
@@ -509,11 +527,13 @@ class IdentityStore:
         """
         with self._lock:
             discovered = self._connection.execute(
-                "SELECT device_code FROM discovered_devices WHERE device_id = ?",
+                "SELECT device_code, removed_at FROM discovered_devices WHERE device_id = ?",
                 (client_id,),
             ).fetchone()
             if discovered is None:
                 raise InvalidClientError("Boxen har inte upptäckts ännu. Invänta MQTT-anslutningen.")
+            if discovered[1]:
+                raise InvalidClientError("Boxen är borttagen. Be administratören koppla den igen med boxens kod.")
             now = datetime.now(timezone.utc).isoformat()
             self._connection.execute(
                 """INSERT OR IGNORE INTO clients (
@@ -711,6 +731,14 @@ class IdentityStore:
             )
         return self.discovered_device(device_id)
 
+    def touch_discovered_device(self, device_id: str, *, now: datetime | None = None) -> None:
+        """Record liveness without registration, reassigning or reviving a box."""
+        with self._lock:
+            self._connection.execute(
+                "UPDATE discovered_devices SET last_seen_at = ? WHERE device_id = ? AND removed_at IS NULL",
+                ((now or datetime.now(timezone.utc)).isoformat(), device_id),
+            )
+
     def discovered_device(self, device_id: str) -> DiscoveredDevice:
         with self._lock:
             row = self._connection.execute(
@@ -737,7 +765,7 @@ class IdentityStore:
             rows = self._connection.execute(
                 """
                 SELECT device_id, device_code, model, firmware_version, last_seen_at, hardware_version, protocol_version, display_rows, display_cols, charset
-                FROM discovered_devices ORDER BY last_seen_at DESC
+                FROM discovered_devices WHERE removed_at IS NULL ORDER BY last_seen_at DESC
                 """
             ).fetchall()
             return tuple(
@@ -766,18 +794,63 @@ class IdentityStore:
                 """,
                 (normalized,),
             ).fetchone()
-        if row is None:
-            raise InvalidClientError("Ingen inkopplad TMBox har den koden")
-        internal_credential = f"local-device:{row[0]}"
-        return self.register_client(
-            row[0],
-            f"{row[1]} {normalized}",
-            DeviceKind.ESP32_PANEL,
-            internal_credential,
-            panel_ids,
-            station_id=station_id,
-            now=now,
-        )
+            if row is None:
+                raise InvalidClientError("Ingen inkopplad TMBox har den koden")
+            self._require_physical_box_locked(row[0])
+            existing = self._connection.execute("SELECT kind FROM clients WHERE client_id = ?", (row[0],)).fetchone()
+            return self.register_client(
+                row[0],
+                f"{row[1]} {normalized}",
+                DeviceKind(existing[0]) if existing else DeviceKind.ESP32_PANEL,
+                secrets.token_urlsafe(32),
+                panel_ids,
+                station_id=station_id,
+                now=now,
+                reactivate_device=True,
+                preserve_credential=True,
+            )
+
+    def browser_workspace(self, client_id: str) -> str | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT browser_workspace FROM clients WHERE client_id = ? AND enabled = 1", (client_id,),
+            ).fetchone()
+            return row[0] if row else None
+
+    def _require_physical_box_locked(self, device_id: str) -> None:
+        row = self._connection.execute(
+            "SELECT kind, browser_workspace FROM clients WHERE client_id = ?", (device_id,),
+        ).fetchone()
+        if row and row[0] != DeviceKind.ESP32_PANEL.value and not (
+            row[0] == DeviceKind.TKL_TERMINAL.value and row[1] == "tkl"
+        ):
+            raise InvalidClientError("Enheten är inte en TMBox eller virtuell TKL")
+
+    def remove_discovered_device(self, device_id: str) -> None:
+        """Revoke a box, preserving traffic and a tombstone against rediscovery.
+
+        A retained MQTT hello must not undo the administrator's decision.
+        Only explicit assignment by its printed code brings the box back.
+        """
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self.discovered_device(device_id)  # Reject unknown IDs before writing.
+                self._require_physical_box_locked(device_id)
+                self._connection.execute(
+                    "UPDATE discovered_devices SET removed_at = COALESCE(removed_at, ?) WHERE device_id = ?",
+                    (datetime.now(timezone.utc).isoformat(), device_id),
+                )
+                self._connection.execute(
+                    "UPDATE clients SET enabled = 0, station_id = NULL, credential_digest = ? WHERE client_id = ?",
+                    (_credential_digest(secrets.token_urlsafe(32)), device_id),
+                )
+                self._connection.execute("DELETE FROM client_panels WHERE client_id = ?", (device_id,))
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
 
     def admin_access_summary(self) -> dict[str, object]:
         with self._lock:

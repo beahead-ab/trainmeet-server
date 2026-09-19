@@ -217,6 +217,8 @@ class MQTTIntegrationTests(unittest.TestCase):
         assignment_event = threading.Event()
         snapshot_event = threading.Event()
         ack_event = threading.Event()
+        state_event = threading.Event()
+        counts = {"assignment": 0, "snapshot": 0}
         received: dict[str, dict] = {}
         device = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
@@ -244,20 +246,27 @@ class MQTTIntegrationTests(unittest.TestCase):
             active_client.subscribe(f"tambox/v1/device/{device_id}/assignment", qos=1)
             active_client.subscribe(f"tambox/v1/client/{device_id}/snapshot/+", qos=1)
             active_client.subscribe(f"tambox/v1/client/{device_id}/ack", qos=1)
+            active_client.subscribe(f"tambox/v1/client/{device_id}/state", qos=1)
             publish_hello(active_client)
 
         def on_message(active_client, userdata, message):
             del active_client, userdata
             payload = json.loads(message.payload.decode("utf-8"))
             if message.topic.endswith("/assignment"):
+                counts["assignment"] += 1
                 received["assignment"] = payload
                 assignment_event.set()
             elif "/snapshot/" in message.topic:
+                counts["snapshot"] += 1
                 received["snapshot"] = payload
                 snapshot_event.set()
             elif message.topic.endswith("/ack"):
                 received["ack"] = payload
                 ack_event.set()
+            elif message.topic.endswith("/state"):
+                received["state"] = payload
+                received["state_retained"] = message.retain
+                state_event.set()
 
         device.on_connect = on_connect
         device.on_message = on_message
@@ -276,7 +285,8 @@ class MQTTIntegrationTests(unittest.TestCase):
             else:
                 identities.assign_discovered_device(device_code, ("panel-b",))
             assignment_event.clear()
-            publish_hello(device)
+            # Admin changes are pushed, without another registration from box.
+            gateway.publish_device_assignment(device_id)
 
             self.assertTrue(assignment_event.wait(MESSAGE_TIMEOUT), "assigned box did not get its mapping")
             self.assertEqual(received["assignment"]["status"], "assigned")
@@ -284,6 +294,24 @@ class MQTTIntegrationTests(unittest.TestCase):
             self.assertTrue(snapshot_event.wait(MESSAGE_TIMEOUT), "assigned box did not get its panel")
             self.assertEqual(received["snapshot"]["panel_id"], "panel-b")
             if nodemcu:
+                before = dict(counts)
+                for index in range(6):
+                    state_event.clear()
+                    device.publish(f"tambox/v1/client/{device_id}/presence", json.dumps({
+                        "status": "online", "request_id": f"boot-live-{index}",
+                        "panel_id": "panel-b", "state_token": received["snapshot"]["state_token"],
+                    }), qos=1, retain=False)
+                    self.assertTrue(state_event.wait(MESSAGE_TIMEOUT), "lightweight status reply missing")
+                    self.assertEqual("current", received["state"]["status"])
+                    self.assertEqual(f"boot-live-{index}", received["state"]["request_id"])
+                    self.assertFalse(received["state_retained"])
+                self.assertEqual(before, counts, "idle heartbeat resent assignment/display")
+                snapshot_event.clear()
+                device.publish(f"tambox/v1/client/{device_id}/presence", json.dumps({
+                    "status": "online", "request_id": "boot-refresh", "panel_id": "panel-b",
+                }), qos=1, retain=False)
+                self.assertTrue(snapshot_event.wait(MESSAGE_TIMEOUT), "explicit state request was not answered")
+                self.assertEqual(before["assignment"], counts["assignment"])
                 snapshot = received["snapshot"]
                 device.publish(f"tambox/v1/client/{device_id}/command", json.dumps({
                     "protocol_version": 1, "command_id": "nodemcu-boot-1",

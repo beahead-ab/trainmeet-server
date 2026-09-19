@@ -16,6 +16,65 @@ from tmbox_gateway.identity import (
 
 
 class IdentityTests(unittest.TestCase):
+    def test_remove_box_revokes_credentials_and_grants_but_preserves_other_clients(self):
+        self.store.record_discovery("box-one", "TBX-ONE")
+        self.store.register_client("box-one", "Box", DeviceKind.ESP32_PANEL, "old-token", ("panel-a",), station_id="station-a")
+        other = self.store.register_client("admin-one", "Admin", DeviceKind.WEB_ADMIN, "admin-token", ("panel-a",))
+        self.store.remove_discovered_device("box-one")
+        self.store.remove_discovered_device("box-one")  # Retry is safe.
+        self.assertIsNone(self.store.authenticate("old-token"))
+        self.assertIsNone(self.store.client("box-one"))
+        self.assertEqual(self.store.panels_for_client("box-one"), ())
+        self.assertIsNone(self.store.discovered_device("box-one").station_id)
+        self.assertEqual(self.store.discovered_devices(), ())
+        self.assertEqual(self.store.authenticate("admin-token"), other)
+
+    def test_removed_box_stays_removed_after_discovery_restart_and_enrollment(self):
+        self.store.record_discovery("box-one", "TBX-ONE")
+        self.store.remove_discovered_device("box-one")  # Never assigned.
+        self.store.close()
+        self.store = IdentityStore(Path(self.temporary_directory.name) / "identity.db")
+        self.store.record_discovery("box-one", "TBX-ONE", protocol_version=2)
+        self.assertEqual(self.store.discovered_devices(), ())
+        with self.assertRaises(InvalidClientError):
+            self.store.enroll_physical_box("box-one")
+        with self.assertRaises(InvalidClientError):
+            self.store.register_client("box-one", "Box", DeviceKind.ESP32_PANEL, "new-token", ("panel-a",))
+        self.assertIsNone(self.store.client("box-one"))
+
+    def test_only_explicit_assignment_restores_removed_box_without_old_grants(self):
+        self.store.record_discovery("box-one", "TBX-ONE")
+        self.store.register_client("box-one", "Box", DeviceKind.ESP32_PANEL, "old-token", ("panel-a",), station_id="station-a")
+        self.store.remove_discovered_device("box-one")
+        assigned = self.store.assign_discovered_device("TBX-ONE", station_id="station-b")
+        self.assertEqual(assigned.station_id, "station-b")
+        self.assertEqual(assigned.panel_ids, ())
+        self.assertEqual(len(self.store.discovered_devices()), 1)
+        self.assertIsNone(self.store.authenticate("old-token"))
+        self.assertIsNone(self.store.authenticate("local-device:box-one"))
+
+    def test_remove_unknown_device_or_admin_collision_does_not_change_admin(self):
+        admin = self.store.register_client("admin-one", "Admin", DeviceKind.WEB_ADMIN, "admin-token", ("panel-a",))
+        self.store.record_discovery("admin-one", "TBX-ADMIN")
+        for device_id in ("missing", "admin-one"):
+            with self.assertRaises(InvalidClientError):
+                self.store.remove_discovered_device(device_id)
+        with self.assertRaises(InvalidClientError):
+            self.store.assign_discovered_device("TBX-ADMIN", station_id="station-a")
+        self.assertEqual(self.store.authenticate("admin-token"), admin)
+        self.assertEqual(len(self.store.discovered_devices()), 1)
+
+    def test_remove_is_atomic_if_grant_revocation_fails(self):
+        import sqlite3
+        self.store.record_discovery("box-one", "TBX-ONE")
+        self.store.register_client("box-one", "Box", DeviceKind.ESP32_PANEL, "old-token", ("panel-a",), station_id="station-a")
+        self.store._connection.execute("CREATE TRIGGER fail_remove BEFORE DELETE ON client_panels BEGIN SELECT RAISE(ABORT, 'test failure'); END")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.store.remove_discovered_device("box-one")
+        self.assertEqual(len(self.store.discovered_devices()), 1)
+        self.assertEqual(self.store.authenticate("old-token").panel_ids, ("panel-a",))
+        self.assertEqual(self.store.station_for_client("box-one"), "station-a")
+
     def test_physical_enrollment_does_not_pick_a_station_or_grant_panels(self):
         device_id = "esp8266-aabbccddeeff"
         self.store.record_discovery(device_id, "TBX-DDEEFF")

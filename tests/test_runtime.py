@@ -232,6 +232,23 @@ class RuntimePublicationTests(unittest.TestCase):
 
 
 class RuntimeStoreTests(unittest.TestCase):
+    def test_legacy_link_enables_auto_sync_without_overriding_an_explicit_pause(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "runtime.db"
+            store = SQLiteRuntimeStore(path)
+            self.assertFalse(store.cloud_auto_sync_enabled())
+            store.save_link_token("legacy-link")
+            self.assertTrue(store.cloud_auto_sync_enabled())
+            store.set_cloud_auto_sync(False)
+            store.close()
+            store = SQLiteRuntimeStore(path)
+            try:
+                self.assertFalse(store.cloud_auto_sync_enabled())
+                store.set_cloud_auto_sync(True)
+                self.assertTrue(store.cloud_auto_sync_enabled())
+            finally:
+                store.close()
+
     def test_install_is_atomic_and_active_day_is_local(self):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteRuntimeStore(Path(directory) / "runtime.db")

@@ -186,8 +186,11 @@ loginForm.addEventListener("submit", async (event) => {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || t("Inloggningen misslyckades"));
     document.querySelector("#login-password").value = "";
-    sessionStorage.removeItem("trainmeet.workspace");
-    history.replaceState(null, "", location.pathname + "#workspaces");
+    // Continue to the protected workspace selected before signing in.
+    if (!location.hash || location.hash === "#workspaces") {
+      sessionStorage.setItem("trainmeet.workspace", "administration");
+      history.replaceState(null, "", location.pathname + "#overview");
+    }
     await refreshAuthStatus();
     const installation = await refreshSetupStatus();
     if (installation.required) {
@@ -381,8 +384,8 @@ const MODES = ["workspaces", ...Object.keys(WORKSPACE_PANELS)];
 const WORKSPACE_KEY = "trainmeet.workspace";
 const WORKSPACES = {
   administration: { title: "Drift och administration", detail: "Trafikläge, klocka och serverinställningar", path: "/#overview" },
-  tkl: { title: "TKL", detail: "Stationsarbetet i en egen arbetsyta", path: "/tkl/" },
-  tmbox: { title: "TMBox v2", detail: "Testa display, knappsats och boxens flöden", path: "/#tmbox" },
+  tkl: { title: "TKL", detail: "Starta klienten – administratören tilldelar station", path: "/tkl/" },
+  tmbox: { title: "TMBox", detail: "Testa display, knappsats och boxens flöden", path: "/#tmbox" },
   dispatcher: { title: "Dispatcher", detail: "Trafikledning för träffens territorier", path: "/us/dispatcher" },
   conductor: { title: "Conductor", detail: "Tåguppdrag och körtillstånd", path: "/us/conductor" },
 };
@@ -418,7 +421,7 @@ function availableWorkspaces() {
 }
 
 async function refreshServerContext() {
-  const response = await authorizedFetch("/v1/server-context", { cache: "no-store" });
+  const response = await authorizedFetch(state.authStatus?.authenticated ? "/v1/server-context" : "/v1/workspaces", { cache: "no-store" });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || "Serverns träff kunde inte läsas.");
   state.serverContext = payload;
@@ -531,8 +534,14 @@ function showSettings() {
 }
 
 function applyWorkspaceRoute() {
-  if (!state.authStatus?.authenticated) return;
   const route = location.hash.slice(1);
+  if (!state.authStatus?.authenticated && !["", "workspaces", "tmbox"].includes(route)) {
+    showLogin();
+    return;
+  }
+  setup.classList.add("hidden");
+  login.classList.add("hidden");
+  appView.classList.remove("hidden");
   document.querySelector("#application-menu").open = false;
   if (route === "settings") setMode("installningar");
   else if (route === "screens") setMode("skarmar");
@@ -548,7 +557,7 @@ function applyWorkspaceRoute() {
     setMode("kor");
     if (state.serverContext?.operating_region === "eu") document.querySelector("#overview-traffic").scrollIntoView();
   }
-  else if (route === "workspaces" || !sessionStorage.getItem(WORKSPACE_KEY)) setMode("workspaces");
+  else if (!route || route === "workspaces" || !sessionStorage.getItem(WORKSPACE_KEY)) setMode("workspaces");
   else if (sessionStorage.getItem(WORKSPACE_KEY) === "tmbox") {
     history.replaceState(null, "", "/#tmbox");
     setMode("tmbox");
@@ -575,26 +584,78 @@ bindRestore();
 // dirty-state protection and focus restoration. Background refresh never
 // rewrites fields in an open editor.
 const modalOrigins = new WeakMap();
+const modalSections = new WeakMap();
 const modalValues = new WeakMap();
+const modalControls = new WeakMap();
+function modalChanged(dialog) {
+  return (modalValues.get(dialog) || []).some(([input, value, checked]) => input.value !== value || input.checked !== checked);
+}
+function beginModalAction(element) {
+  const dialog = element?.closest("dialog");
+  if (!dialog) return true;
+  if (dialog.dataset.busy === "true") return false;
+  dialog.dataset.busy = "true";
+  dialog.setAttribute("aria-busy", "true");
+  const controls = [...dialog.querySelectorAll("button, input, select, textarea")].map(control => [control, control.disabled]);
+  modalControls.set(dialog, controls);
+  controls.forEach(([control]) => { control.disabled = true; });
+  return true;
+}
+function endModalAction(element) {
+  const dialog = element?.closest("dialog");
+  if (!dialog) return;
+  (modalControls.get(dialog) || []).forEach(([control, disabled]) => { control.disabled = disabled; });
+  modalControls.delete(dialog);
+  dialog.dataset.busy = "false";
+  dialog.removeAttribute("aria-busy");
+}
 function openModal(id) {
   const dialog = document.getElementById(id);
-  if (!dialog || dialog.open) return;
+  if (!dialog || dialog.open || document.querySelector("dialog[open]")) return;
   modalOrigins.set(dialog, document.activeElement);
+  if (id === "clock-source-modal") dialog.dataset.meetGeneration = String(state.serverContext?.selected_meet?.generation ?? "");
+  modalSections.set(dialog, document.activeElement?.closest("section"));
   modalValues.set(dialog, [...dialog.querySelectorAll("input, select, textarea")].map((input) => [input, input.value, input.checked]));
   dialog.dataset.dirty = "false";
   dialog.querySelectorAll(".form-message").forEach((message) => setMessage(message, ""));
   document.body.append(dialog);
   dialog.showModal();
+  const initial = dialog.querySelector('input:not([type="hidden"]):not(:disabled), select:not(:disabled), textarea:not(:disabled)')
+    || dialog.querySelector('.modal-actions [data-close-modal]');
+  initial?.focus({ preventScroll: true });
 }
 function cancelModal(dialog) {
-  if (dialog.querySelector('[type="submit"]:disabled') || dialog.dataset.busy === "true") return;
-  if (dialog.dataset.dirty === "true" && !window.confirm(t("Stäng utan att spara ändringarna?"))) return;
+  if (dialog.dataset.busy === "true") return;
+  if (modalChanged(dialog) && !window.confirm(t("Stäng utan att spara ändringarna?"))) return;
   for (const [input, value, checked] of modalValues.get(dialog) || []) { input.value = value; input.checked = checked; }
+  // Restore derived validation too, without triggering the code fields' input
+  // handlers (which move keyboard focus as digits are entered).
+  for (const [input] of modalValues.get(dialog) || []) input.dispatchEvent(new Event("change", { bubbles: true }));
+  if (dialog.id === "restore-modal") {
+    restore.chosen = dialog.querySelector('input[name="restore-backup"]:checked')?.value || null;
+    updateRestoreButton();
+  }
+  if (dialog.id === "reset-modal") factoryResetButton.disabled = factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL";
   dialog.close();
 }
-function finishModal(form) {
+let modalResultTimer;
+function finishModal(form, confirmation = null) {
   const dialog = form.closest("dialog");
-  if (dialog) { dialog.dataset.dirty = "false"; dialog.close(); }
+  if (dialog) {
+    let receipt = document.querySelector("#modal-result");
+    if (!receipt) {
+      receipt = document.createElement("p");
+      receipt.id = "modal-result";
+      receipt.setAttribute("role", "status");
+      document.body.append(receipt);
+    }
+    receipt.hidden = false;
+    receipt.textContent = t(confirmation || form.querySelector(".form-message.success")?.textContent || "Sparat.");
+    clearTimeout(modalResultTimer);
+    modalResultTimer = setTimeout(() => { receipt.hidden = true; }, 8000);
+    dialog.dataset.dirty = "false";
+    dialog.close();
+  }
 }
 function bindAdminModals() {
   document.querySelectorAll("dialog.admin-modal").forEach((dialog) => {
@@ -606,9 +667,24 @@ function bindAdminModals() {
     close.setAttribute("aria-label", t("Stäng"));
     close.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
     dialog.prepend(close);
-    dialog.addEventListener("input", () => { dialog.dataset.dirty = "true"; });
+    const dirty = () => { dialog.dataset.dirty = String(modalChanged(dialog)); };
+    dialog.addEventListener("input", dirty);
+    dialog.addEventListener("change", dirty);
     dialog.addEventListener("cancel", (event) => { event.preventDefault(); cancelModal(dialog); });
-    dialog.addEventListener("close", () => modalOrigins.get(dialog)?.focus());
+    dialog.addEventListener("close", () => {
+      endModalAction(dialog);
+      dialog.querySelectorAll('input[type="password"]').forEach(input => { input.value = ""; });
+      const origin = modalOrigins.get(dialog);
+      const fallback = document.querySelector(`[data-open-modal="${dialog.id}"]`)
+        || modalSections.get(dialog)?.querySelector('button:not(:disabled)')
+        || document.querySelector('#admin-view:not(.hidden) button:not(:disabled)')
+        || document.querySelector('#workspace-home');
+      if (origin?.isConnected) origin.focus({ preventScroll: true });
+      else fallback?.focus({ preventScroll: true });
+      modalOrigins.delete(dialog);
+      modalSections.delete(dialog);
+      modalValues.delete(dialog);
+    });
     dialog.querySelectorAll("[data-close-modal]").forEach((button) => button.addEventListener("click", () => cancelModal(dialog)));
   });
   document.querySelectorAll("[data-open-modal]").forEach((button) => button.addEventListener("click", () => openModal(button.dataset.openModal)));
@@ -649,6 +725,7 @@ logoutButton.addEventListener("click", async () => {
   localStorage.removeItem("trainmeet.accessToken");
   localStorage.removeItem("trainmeet.panelID");
   sessionStorage.removeItem(WORKSPACE_KEY);
+  history.replaceState(null, "", "/#workspaces");
   state.token = null;
   state.snapshots.clear();
   clearTimeout(state.snapshotTimer);
@@ -667,8 +744,7 @@ adminAccessForm.addEventListener("submit", async (event) => {
     setMessage(adminAccessMessage, "Lösenorden är inte likadana.", "error");
     return;
   }
-  const button = adminAccessForm.querySelector("button");
-  button.disabled = true;
+  if (!beginModalAction(adminAccessForm)) return;
   try {
     const response = await authorizedFetch("/v1/admin/access", {
       method: "POST",
@@ -696,15 +772,14 @@ adminAccessForm.addEventListener("submit", async (event) => {
   } catch (error) {
     setMessage(adminAccessMessage, error.message, "error");
   } finally {
-    button.disabled = false;
+    endModalAction(adminAccessForm);
   }
 });
 
 serverIdentityForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   setMessage(serverIdentityMessage, "");
-  const button = serverIdentityForm.querySelector("button");
-  button.disabled = true;
+  if (!beginModalAction(serverIdentityForm)) return;
   try {
     const response = await authorizedFetch("/v1/setup/server", {
       method: "POST",
@@ -719,7 +794,7 @@ serverIdentityForm.addEventListener("submit", async (event) => {
   } catch (error) {
     setMessage(serverIdentityMessage, error.message, "error");
   } finally {
-    button.disabled = false;
+    endModalAction(serverIdentityForm);
   }
 });
 
@@ -757,12 +832,42 @@ document.querySelector("#stop-local-clock").addEventListener("click", async () =
   });
 });
 
+function renderClockSourceFields() {
+  const fields = document.querySelector("#fastclock-fields");
+  fields.hidden = fields.disabled = document.querySelector("#clock-source").value !== "fastclock";
+}
+document.querySelector("#clock-source").addEventListener("change", renderClockSourceFields);
+document.querySelector("#clock-source-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const message = document.querySelector("#clock-source-message");
+  if (!beginModalAction(form)) return;
+  setMessage(message, t("Kontrollerar klockans anslutning …"), "notice");
+  const source = document.querySelector("#clock-source").value;
+  const data = { source, meet_generation: Number(form.closest("dialog").dataset.meetGeneration) };
+  if (source === "fastclock") {
+    Object.assign(data, { clock_name: document.querySelector("#fastclock-name").value.trim(),
+      user: document.querySelector("#fastclock-user").value.trim(),
+      poll_interval: Number(document.querySelector("#fastclock-interval").value) });
+    const password = document.querySelector("#fastclock-password").value;
+    if (password || document.querySelector("#fastclock-clear-password").checked) data.password = document.querySelector("#fastclock-clear-password").checked ? "" : password;
+  }
+  try {
+    const response = await authorizedFetch("/v1/clock/source", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || t("Klockan kunde inte uppdateras"));
+    document.querySelector("#fastclock-password").value = "";
+    finishModal(form);
+    await refreshLocalClock();
+  } catch (error) { setMessage(message, error.message, "error"); }
+  finally { endModalAction(form); }
+});
+
 document.querySelector("#clock-appearance-form").addEventListener("submit", async event => {
   event.preventDefault();
   const form = event.currentTarget;
   const message = document.querySelector("#clock-appearance-message");
-  const button = form.querySelector('button[type="submit"]');
-  button.disabled = true;
+  if (!beginModalAction(form)) return;
   try {
     const response = await authorizedFetch("/v1/clock", { method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -774,15 +879,14 @@ document.querySelector("#clock-appearance-form").addEventListener("submit", asyn
     finishModal(form);
     await refreshLocalClock();
   } catch (error) { setMessage(message, error.message, "error"); }
-  finally { button.disabled = false; }
+  finally { endModalAction(form); }
 });
 
 deviceForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = deviceForm.querySelector('button[type="submit"]');
-  if (button.disabled) return;
+  if (button.disabled || !beginModalAction(deviceForm)) return;
   setMessage(deviceMessage, "");
-  button.disabled = true;
   try {
     const response = await authorizedFetch("/v1/devices/assign", {
       method: "POST",
@@ -801,8 +905,37 @@ deviceForm.addEventListener("submit", async (event) => {
   } catch (error) {
     setMessage(deviceMessage, error.message, "error");
   } finally {
-    button.disabled = false;
+    endModalAction(deviceForm);
   }
+});
+
+document.querySelector("#device-remove-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('[type="submit"]');
+  if (button.disabled || !form.dataset.deviceId || !beginModalAction(form)) return;
+  const message = document.querySelector("#device-remove-message");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  setMessage(message, "");
+  button.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/devices/remove", {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device_id: form.dataset.deviceId }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || t("TMBoxen kunde inte tas bort."));
+    finishModal(form, "TMBoxen är borttagen.");
+    setMessage(document.querySelector("#device-list-message"), "TMBoxen är borttagen.", "success");
+    // Show the confirmed result without depending on another network request.
+    state.devices = state.devices.filter(device => device.device_id !== form.dataset.deviceId);
+    renderDevices({ devices: state.devices, stations: state.stations });
+  } catch (error) {
+    setMessage(message, error.name === "AbortError" ? "Servern svarade inte. Kontrollera listan innan du försöker igen." : error.message, "error");
+  } finally { clearTimeout(timeout); endModalAction(form); }
 });
 
 runtimeForm.addEventListener("submit", async (event) => {
@@ -814,8 +947,7 @@ runtimeForm.addEventListener("submit", async (event) => {
   }
   setMessage(runtimeMessage, "1/3 · Kontaktar Config-servern och kontrollerar träffkoden …");
   document.querySelector("#cloud-connection-state").textContent = "Kopplar …";
-  const button = runtimeForm.querySelector("button");
-  button.disabled = true;
+  if (!beginModalAction(runtimeForm)) return;
   try {
     const response = await authorizedFetch("/v1/runtime/sync", {
       method: "POST",
@@ -836,7 +968,7 @@ runtimeForm.addEventListener("submit", async (event) => {
     setMessage(runtimeMessage, error.message, "error");
     document.querySelector("#cloud-connection-state").textContent = "Kopplingen misslyckades";
   } finally {
-    button.disabled = false;
+    endModalAction(runtimeForm);
   }
 });
 
@@ -910,6 +1042,7 @@ async function refreshBackups() {
     const response = await authorizedFetch("/v1/server/backups");
     if (!response.ok) return;
     const payload = await response.json();
+    if (document.querySelector("#restore-modal").open) return;
     restore.overwrites = payload.overwrites || "";
     restoreEl("overwrites").textContent = restore.overwrites || "–";
     restoreEl("confirmation").placeholder = restore.overwrites || "Namnet på det som skrivs över";
@@ -924,10 +1057,12 @@ function bindRestore() {
   restoreEl("confirmation")?.addEventListener("input", updateRestoreButton);
   restoreEl("start")?.addEventListener("click", async () => {
     const message = restoreEl("message");
+    const dialog = document.querySelector("#restore-modal");
+    if (dialog.dataset.busy === "true") return;
     if (!window.confirm(
       `Servern återställs och startar om. Allt som hänt efter kopian försvinner, ${restore.overwrites} inkluderat.`,
     )) return;
-    restoreEl("start").disabled = true;
+    if (!beginModalAction(dialog)) return;
     try {
       const response = await authorizedFetch("/v1/server/restore", {
         method: "POST",
@@ -959,9 +1094,11 @@ function bindRestore() {
       localStorage.removeItem("trainmeet.accessToken");
       state.token = null;
       setConnection("waiting", "Återställer och startar om");
-      await waitForServerReturn();
+      await waitForServerReturn(message);
     } catch {
       setMessage(message, "Återställningen gick inte att starta", "error");
+    } finally {
+      endModalAction(dialog);
       updateRestoreButton();
     }
   });
@@ -972,13 +1109,15 @@ factoryResetConfirmation.addEventListener("input", () => {
 });
 
 factoryResetButton.addEventListener("click", async () => {
+  const dialog = document.querySelector("#reset-modal");
+  if (dialog.dataset.busy === "true") return;
   if (factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL") return;
   const localFactoryReset = state.authStatus?.at_the_machine === true;
   const question = localFactoryReset
     ? "All lokal TrainMeet-data och administratören tas bort. Vill du fabriksåterställa nu?"
     : "Träffdata och anslutningar tas bort. Din administratörsinloggning behålls. Vill du fortsätta?";
   if (!window.confirm(question)) return;
-  factoryResetButton.disabled = true;
+  if (!beginModalAction(dialog)) return;
   setMessage(factoryResetMessage, localFactoryReset
     ? "Fabriksåterställer servern och startar första installationen …"
     : "Nollställer träffdata och behåller din inloggning …", "notice");
@@ -999,11 +1138,12 @@ factoryResetButton.addEventListener("click", async () => {
     }
     setConnection("waiting", "Nollställer");
     setMessage(factoryResetMessage, payload.message, "notice");
-    await waitForServerReturn();
+    await waitForServerReturn(factoryResetMessage);
   } catch (error) {
     state.restarting = false;
-    factoryResetButton.disabled = false;
     setMessage(factoryResetMessage, error.message, "error");
+  } finally {
+    endModalAction(dialog);
   }
 });
 
@@ -1023,6 +1163,24 @@ runtimeCheckUpdate.addEventListener("click", async () => {
   } finally { runtimeCheckUpdate.disabled = false; }
 });
 
+document.querySelector("#cloud-auto-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const enabled = document.querySelector("#cloud-auto-enabled").checked;
+  if (!beginModalAction(form)) return;
+  try {
+    const response = await authorizedFetch("/v1/cloud/auto-sync", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || t("Inställningen kunde inte sparas."));
+    await refreshServerContext();
+    finishModal(form);
+  } catch (error) {
+    setMessage(form.querySelector(".form-message"), error.message, "error");
+  } finally { endModalAction(form); }
+});
+
 function renderCloudStatus() {
   const context = state.serverContext || {};
   const update = context.cloud_update || {};
@@ -1039,6 +1197,10 @@ function renderCloudStatus() {
     update.pending_publication_id ? "Ny config hämtad – väntar på säker aktivering." :
     "Senaste fungerande config används även utan internet.");
   runtimeCheckUpdate.disabled = !update.linked;
+  document.querySelector("#cloud-auto-edit").disabled = !update.linked;
+  if (!document.querySelector("#cloud-auto-modal").open) {
+    document.querySelector("#cloud-auto-enabled").checked = Boolean(update.auto_sync);
+  }
 }
 
 softwareCheck.addEventListener("click", checkSoftwareUpdate);
@@ -1244,13 +1406,18 @@ softwareRetry.addEventListener("click", async () => {
 restartButtons.forEach((button) => button.addEventListener("click", restartServer));
 
 async function openApplication() {
-  document.body.dataset.signedIn = "yes";
+  document.body.dataset.signedIn = state.authStatus?.authenticated ? "yes" : "no";
   setup.classList.add("hidden");
   login.classList.add("hidden");
   appView.classList.remove("hidden");
   logoutButton.classList.toggle("hidden", !state.authStatus?.authenticated);
   try {
     await refreshServerContext();
+    if (!state.authStatus?.authenticated) {
+      applyWorkspaceRoute();
+      setConnection("online", "Lokalt ansluten");
+      return;
+    }
     await Promise.all([
       refreshInfo(),
       refreshAdminAccess(),
@@ -1368,7 +1535,7 @@ async function restartServer() {
   }
 }
 
-async function waitForServerReturn() {
+async function waitForServerReturn(message = configMessage) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     try {
@@ -1384,7 +1551,7 @@ async function waitForServerReturn() {
   state.restarting = false;
   setRestartButtonsDisabled(false);
   setConnection("waiting", "Kontrollera servern");
-  setMessage(configMessage, "Servern har inte kommit tillbaka ännu. Kontrollera ström och nätverk.", "error");
+  setMessage(message, "Servern har inte kommit tillbaka ännu. Kontrollera ström och nätverk.", "error");
 }
 
 function setRestartButtonsVisible(required) {
@@ -1406,16 +1573,19 @@ async function refreshDevices() {
   const response = await authorizedFetch("/v1/devices");
   if (!response.ok) return;
   const payload = await response.json();
-  // Samma svar föder både listan, stegräckan och TKL:s stationsväljare, så
-  // de kan inte visa olika många.
+  // Admin sees physical TMBox and managed browser clients in the same list.
   state.devices = payload.devices || [];
   state.stations = payload.stations || [];
-  document.querySelector("#app-devices").textContent = `${state.devices.length} TMBox${state.devices.length === 1 ? "" : "ar"}`;
+  renderDevices({ devices: state.devices, stations: state.stations });
+}
+
+function renderDevices(payload) {
+  document.querySelector("#app-devices").textContent = `${state.devices.length} ${t("klienter")}`;
   const list = document.querySelector("#device-list");
   updateStationOptions(payload.stations || []);
   list.replaceChildren();
   if (!payload.devices.length) {
-    list.innerHTML = html`<div class="empty-status">Ingen fysisk TMBox har presenterat sig ännu.</div>`;
+    list.innerHTML = html`<div class="empty-status">${t("Inga anslutna klienter.")}</div>`;
     return;
   }
   for (const device of payload.devices) {
@@ -1443,12 +1613,28 @@ async function refreshDevices() {
       deviceStation.value = device.station_id || "";
       openModal("device-form-modal");
     });
-    row.append(edit);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "secondary device-remove";
+    remove.dataset.tmText = "Ta bort";
+    remove.textContent = t("Ta bort");
+    remove.addEventListener("click", () => {
+      document.querySelector("#device-remove-form").dataset.deviceId = device.device_id;
+      document.querySelector("#device-remove-code").textContent = device.device_code;
+      document.querySelector("#device-remove-station").textContent = assignment.textContent;
+      setMessage(document.querySelector("#device-list-message"), "");
+      openModal("device-remove-modal");
+    });
+    const actions = document.createElement("div");
+    actions.className = "device-actions";
+    actions.append(edit, remove);
+    row.append(actions);
     list.append(row);
   }
 }
 
 function updateStationOptions(stations) {
+  if (deviceStation.closest("dialog")?.open) return;
   const signature = stations.map((station) => `${station.id}:${station.code}`).join("|");
   if (deviceStation.dataset.signature === signature) return;
   deviceStation.dataset.signature = signature;
@@ -1507,10 +1693,38 @@ async function refreshLocalClock() {
   }
   stateLabel.textContent = clock.running ? t("Går · {speed}×", { speed: Number(clock.speed || 1) }) : t("Stoppad");
   stateLabel.classList.toggle("clock-running", Boolean(clock.running));
+  const external = clock.source === "fastclock";
+  const sourceStatus = document.querySelector("#clock-source-status");
+  sourceStatus.textContent = external
+    ? `${t("FastClock")} · ${clock.external_name || ""} · ${t(clock.available ? "Ansluten" : "Kontakt saknas – senast mottagna tid visas")}`
+    : t("Intern serverklocka");
+  sourceStatus.classList.toggle("error", external && !clock.available);
+  document.querySelector("#clock-adjust").disabled = external;
+  if (!document.querySelector("#clock-source-modal").open) {
+    const sourceResponse = await authorizedFetch("/v1/clock/source", { cache: "no-store" });
+    if (sourceResponse.ok && !document.querySelector("#clock-source-modal").open) {
+      const settings = await sourceResponse.json();
+      document.querySelector("#clock-source").value = settings.source || "internal";
+      document.querySelector("#fastclock-name").value = settings.clock_name || "";
+      document.querySelector("#fastclock-user").value = settings.user || "";
+      document.querySelector("#fastclock-password").value = "";
+      document.querySelector("#fastclock-clear-password").checked = false;
+      document.querySelector("#fastclock-interval").value = settings.poll_interval || 2;
+      document.querySelector("#fastclock-password-note").textContent = settings.has_password ? t("Sparat lösenord behålls om fältet lämnas tomt.") : "";
+      renderClockSourceFields();
+    }
+  }
   document.querySelector("#overview-clock").textContent = String(clock.time || "--:--").slice(0, 5);
   document.querySelector("#app-clock").textContent = String(clock.time || "--:--").slice(0, 5);
-  document.querySelector("#overview-clock-start").disabled = Boolean(clock.running) || !state.serverContext?.selected_meet;
-  document.querySelector("#overview-clock-stop").disabled = !clock.running;
+  updateClockControlAvailability();
+}
+
+function updateClockControlAvailability() {
+  const clock = state.clock || {};
+  const readOnly = clock.source === "fastclock" && !clock.can_control;
+  document.querySelector("#overview-clock-start").disabled = readOnly || Boolean(clock.running) || !state.serverContext?.selected_meet;
+  // Allow a deliberate stop even if external status is unknown.
+  document.querySelector("#overview-clock-stop").disabled = readOnly || (!clock.running && !(clock.source === "fastclock" && !clock.available));
 }
 
 function renderConnectionBadgeSettings(connection) {
@@ -1533,8 +1747,7 @@ async function saveConnectionBadgeSettings() {
   const container = document.querySelector("#connection-badge-screens");
   const message = document.querySelector("#connection-badge-message");
   const form = document.querySelector("#connection-badge-form");
-  const button = form.querySelector('[type="submit"]');
-  button.disabled = true;
+  if (!beginModalAction(form)) return;
   const screens = [...container.querySelectorAll("input[type=checkbox]")]
     .filter((input) => input.checked)
     .map((input) => input.value);
@@ -1562,11 +1775,12 @@ async function saveConnectionBadgeSettings() {
   } catch (error) {
     setMessage(message, error.message, "error");
   } finally {
-    button.disabled = false;
+    endModalAction(form);
   }
 }
 
 async function controlLocalClock(command) {
+  if (!beginModalAction(clockControlForm)) return;
   const buttons = [...clockControlForm.querySelectorAll("button"), document.querySelector("#overview-clock-start"), document.querySelector("#overview-clock-stop")];
   buttons.forEach((button) => { button.disabled = true; });
   const message = clockControlForm.closest("dialog").open ? clockControlMessage : document.querySelector("#overview-clock-message");
@@ -1590,8 +1804,8 @@ async function controlLocalClock(command) {
     setMessage(message, error.message, "error");
   } finally {
     buttons.forEach((button) => { button.disabled = false; });
-    document.querySelector("#overview-clock-start").disabled = Boolean(state.clock?.running) || !state.serverContext?.selected_meet;
-    document.querySelector("#overview-clock-stop").disabled = !state.clock?.running;
+    endModalAction(clockControlForm);
+    updateClockControlAvailability();
   }
 }
 
@@ -1859,7 +2073,7 @@ function handleConnectionError(error) {
   // v1-simuleringens meddelanderad är borta med den vyn; v2 har en egen.
   const target = document.querySelector("#tmbox-v2-message");
   if (target) setMessage(target, error.message, "error");
-  if (!state.authStatus?.authenticated) showLogin();
+  if (!state.authStatus?.authenticated && !["workspaces", "tmbox"].includes(currentMode())) showLogin();
 }
 
 async function refreshAuthStatus() {
@@ -1948,6 +2162,8 @@ function showSetup(installation) {
 async function showLogin() {
   clearTimeout(state.snapshotTimer);
   clearTimeout(state.adminTimer);
+  stopTMBoxV2();
+  document.querySelector("#application-menu").open = false;
   state.authStatus = { ...(state.authStatus || {}), authenticated: false };
   // Flikar och lägesknappar leder ingenstans utan inloggning. De stod kvar
   // bakom inloggningsrutan så länge servern ändå släppte in på maskinen -
@@ -1976,7 +2192,7 @@ async function bootstrap() {
       await openApplication();
       return;
     }
-    showLogin();
+    await openApplication();
     if (installation.required) {
       setMessage(
         loginError,
@@ -2712,6 +2928,7 @@ function formatClockTime(seconds) {
 }
 
 function currentClockTime(snapshot) {
+  if (snapshot.clock?.source === "fastclock" && !snapshot.clock?.last_sync) return "--:--:--";
   return formatClockTime(currentClockSeconds(snapshot));
 }
 
@@ -2758,12 +2975,13 @@ function renderClock(snapshot) {
   let style = snapshot.clock?.style || available[0];
   if (!available.includes(style)) style = available[0];
   const seconds = currentClockSeconds(snapshot);
-  const time = formatClockTime(seconds);
+  const time = currentClockTime(snapshot);
   const showSeconds = snapshot.clock?.show_seconds !== false;
   const displayTime = showSeconds ? time : time.slice(0, 5);
   const darkBackground = !document.querySelector("#display-app").classList.contains("light");
   const stopped = !snapshot.clock?.running;
-  const stopText = snapshot.clock?.running ? "" : `STOPPAD${snapshot.clock?.stopped_reason ? ` · ${snapshot.clock.stopped_reason}` : ""}`;
+  const externalMissing = snapshot.clock?.source === "fastclock" && !snapshot.clock.available;
+  const stopText = externalMissing ? t("FastClock: kontakt saknas") : snapshot.clock?.running ? "" : `STOPPAD${snapshot.clock?.stopped_reason ? ` · ${snapshot.clock.stopped_reason}` : ""}`;
   const renderSignature = [style, darkBackground, showSeconds, stopped, stopText].join("|");
   if (target.dataset.clockSignature !== renderSignature) {
     target.dataset.clockSignature = renderSignature;
@@ -2982,6 +3200,8 @@ const V2_GEOMETRIES = {
 };
 
 const tmboxV2 = {
+  browser: null,
+  connecting: null,
   timer: null,
   nav: null,
   config: { tracks: [], connections: [] },
@@ -3428,11 +3648,7 @@ async function refreshUsers() {
 async function usersPost(path, body, whenOk) {
   const modal = document.querySelector("dialog.admin-modal[open]");
   const message = modal?.querySelector(".modal-feedback") || usersEl("message");
-  if (modal?.dataset.busy === "true") return null;
-  if (modal) modal.dataset.busy = "true";
-  const buttons = [...(modal?.querySelectorAll("button") || [])];
-  const previousDisabled = buttons.map((button) => button.disabled);
-  buttons.forEach((button) => { button.disabled = true; });
+  if (!beginModalAction(modal)) return null;
   setMessage(message, "Sparar …");
   try {
     const response = await authorizedFetch(path, {
@@ -3452,8 +3668,7 @@ async function usersPost(path, body, whenOk) {
     setMessage(message, "Åtgärden gick inte att utföra", "error");
     return null;
   } finally {
-    if (modal) modal.dataset.busy = "false";
-    buttons.forEach((button, index) => { button.disabled = previousDisabled[index]; });
+    endModalAction(modal);
   }
 }
 
@@ -3489,7 +3704,7 @@ async function removeUser(user) {
   const result = await usersPost("/v1/admin/users/delete", { user_id: user.user_id }, () => {
     setMessage(usersEl("message"), `${user.username} är borttagen`, "success");
   });
-  if (result) finishModal(document.querySelector("#user-edit-form"));
+  if (result) finishModal(document.querySelector("#user-edit-form"), `${user.username} är borttagen`);
 }
 
 function editUser(user) {
@@ -3530,16 +3745,12 @@ function bindV2Controls() {
   const device = v2El("device");
   const station = v2El("station");
   const geometry = v2El("geometry");
-  device.value = localStorage.getItem("trainmeet.v2Device") || "";
+  device.value = "";
   geometry.value = v2Geometry();
-  device.addEventListener("change", () => {
-    localStorage.setItem("trainmeet.v2Device", device.value.trim());
-    refreshTMBoxV2();
-  });
-  station.addEventListener("change", () => {
-    localStorage.setItem("trainmeet.v2Station", station.value);
-    tmboxV2.configFor = null;
-    refreshTMBoxV2();
+  document.querySelector("#tmbox-browser-start").addEventListener("click", () => {
+    localStorage.removeItem("trainmeet.browser-tmbox");
+    tmboxV2.browser = null;
+    loadV2Stations().then(refreshTMBoxV2);
   });
   geometry.addEventListener("change", () => {
     localStorage.setItem("trainmeet.v2Geometry", geometry.value);
@@ -3550,43 +3761,53 @@ function bindV2Controls() {
 }
 
 async function loadV2Stations() {
-  const station = v2El("station");
+  if (tmboxV2.connecting) return tmboxV2.connecting;
+  tmboxV2.connecting = connectBrowserTMBox();
+  try { await tmboxV2.connecting; }
+  finally { tmboxV2.connecting = null; }
+}
+
+async function connectBrowserTMBox() {
   try {
-    const response = await authorizedFetch("/v1/tmbox-v2/stations");
+    let saved;
+    try { saved = JSON.parse(localStorage.getItem("trainmeet.browser-tmbox") || "null"); } catch { saved = null; }
+    const response = saved?.access_token
+      ? await fetch("/v1/browser-clients/self", { headers: { Authorization: `Bearer ${saved.access_token}` }, credentials: "omit", cache: "no-store" })
+      : await fetch("/v1/browser-clients", { method: "POST", credentials: "omit", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace: "tmbox" }) });
     const body = await response.json().catch(() => ({}));
-    // The server says why it will not run - no active meet, or a client
-    // without admin rights - and dropping that left an empty station list
-    // with no explanation, which looks exactly like a broken simulator.
-    if (!response.ok) {
-      station.innerHTML = "";
-      throw new Error(body.message || "Stationerna kunde inte hämtas");
-    }
-    const remembered = localStorage.getItem("trainmeet.v2Station");
-    station.innerHTML = "";
-    for (const entry of body.stations || []) {
-      const option = document.createElement("option");
-      option.value = entry.id;
-      option.textContent = entry.code ? `${entry.name} (${entry.code})` : entry.name;
-      station.append(option);
-    }
-    if (remembered && [...station.options].some((o) => o.value === remembered)) {
-      station.value = remembered;
-    }
+    if (!response.ok || body.workspace !== "tmbox") throw new Error(body.message || "TMBoxen kunde inte startas.");
+    tmboxV2.browser = { ...body, access_token: saved?.access_token || body.access_token };
+    localStorage.setItem("trainmeet.browser-tmbox", JSON.stringify(tmboxV2.browser));
+    v2El("device").value = body.device_code;
+    document.querySelector("#tmbox-browser-start").classList.add("hidden");
+    setMessage(v2El("message"), "");
   } catch (error) {
+    tmboxV2.browser = null;
+    document.querySelector("#tmbox-browser-start").classList.remove("hidden");
     setMessage(v2El("message"), error.message, "error");
   }
 }
 
+function boxFetch(path, options = {}) {
+  if (!tmboxV2.browser) throw new Error(t("TMBoxen kunde inte startas."));
+  return fetch(path, { ...options, credentials: "omit", cache: "no-store",
+    headers: { ...options.headers, Authorization: `Bearer ${tmboxV2.browser.access_token}` } });
+}
+
 async function refreshTMBoxV2() {
-  const deviceID = v2El("device").value.trim();
-  const stationID = v2El("station").value;
+  const deviceID = tmboxV2.browser?.client_id;
   const nav = tmboxV2.nav;
   if (!nav) return;
 
   if (deviceID) {
     try {
-      const response = await authorizedFetch(
+      const response = await boxFetch(
         `/v1/tmbox-v2/assignment?device_id=${encodeURIComponent(deviceID)}`);
+      if (response.status === 401 || response.status === 403) {
+        tmboxV2.browser = null;
+        document.querySelector("#tmbox-browser-start").classList.remove("hidden");
+        setMessage(v2El("message"), "Boxen är borttagen eller saknar behörighet. Be administratören om hjälp.", "error");
+      }
       tmboxV2.assignment = response.ok ? await response.json() : null;
     } catch { tmboxV2.assignment = null; }
   } else {
@@ -3596,25 +3817,46 @@ async function refreshTMBoxV2() {
   // A box that is not assigned shows KOPPLA BOXEN and nothing else - it has
   // no station to browse.
   if (!tmboxV2.assignment || tmboxV2.assignment.status !== "assigned") {
+    tmboxV2.configFor = null;
+    tmboxV2.config = { tracks: [], connections: [] };
+    tmboxV2.snapshot = { movements: [], active_clearances: [], line_messages: [], clock: {} };
+    v2El("station").replaceChildren();
     nav.show(tmboxV2.assignment ? "AwaitingAssignment" : "Identity", v2Now());
     drawV2();
     return;
   }
 
-  if (stationID && tmboxV2.configFor !== stationID) {
+  const stationID = tmboxV2.assignment.station_id;
+  if (!stationID) return;
+
+  const assignment = tmboxV2.assignment;
+  const configKey = JSON.stringify([stationID, assignment.meet_generation, assignment.publication_id, assignment.config_version]);
+  const sameScope = payload => ["meet_generation", "publication_id"].every(
+    key => assignment[key] === undefined || payload[key] === assignment[key]);
+  if (tmboxV2.configFor !== configKey) {
+    // A publication may remap the SAME station. Never keep its old config,
+    // or reuse a picker index against the new connection order.
+    tmboxV2.configFor = null;
+    tmboxV2.config = { tracks: [], connections: [] };
+    tmboxV2.snapshot = { movements: [], active_clearances: [], line_messages: [], clock: {} };
+    nav.show("LoadingStation", v2Now());
     try {
-      const response = await authorizedFetch(
+      const response = await boxFetch(
         `/v1/tmbox-v2/config?station_id=${encodeURIComponent(stationID)}`);
-      if (response.ok) {
-        tmboxV2.config = v2NormaliseConfig(await response.json());
-        tmboxV2.configFor = stationID;
+      const payload = await response.json();
+      if (response.ok && sameScope(payload)
+          && (assignment.config_version === undefined || payload.config_version === assignment.config_version)) {
+        tmboxV2.config = v2NormaliseConfig(payload);
+        v2El("station").replaceChildren(new Option(tmboxV2.config.name || stationID, stationID));
+        tmboxV2.configFor = configKey;
         tmboxV2.attention.forget();
       }
     } catch { /* the snapshot below reports the trouble */ }
+    if (tmboxV2.configFor !== configKey) { drawV2(); return; }
   }
 
   try {
-    const response = await authorizedFetch(
+    const response = await boxFetch(
       `/v1/tmbox-v2/snapshot?station_id=${encodeURIComponent(stationID)}`);
     if (!response.ok) {
       // The box has no authoritative state either way, so the screen is
@@ -3629,9 +3871,19 @@ async function refreshTMBoxV2() {
       return;
     }
     v2Signal(tmboxV2.attention.observeLink(true));
-    tmboxV2.snapshot = await response.json();
+    const snapshot = await response.json();
+    if (!sameScope(snapshot)
+        || (assignment.config_version !== undefined
+            && snapshot.revision?.config_version !== undefined
+            && snapshot.revision.config_version !== assignment.config_version)) {
+      tmboxV2.configFor = null;
+      nav.show("LoadingStation", v2Now());
+      drawV2();
+      return;
+    }
+    tmboxV2.snapshot = snapshot;
     v2Signal(tmboxV2.attention.observe(tmboxV2.snapshot));
-    if (["Identity", "AwaitingAssignment", "ServerGone", "SeekingServer"]
+    if (["Identity", "AwaitingAssignment", "ServerGone", "SeekingServer", "LoadingStation"]
         .includes(nav.view.screen)) {
       nav.show("StationOverview", v2Now());
     }
@@ -3694,7 +3946,7 @@ async function pressV2Key(key) {
   if (result.outcome === "Ignored") return;
   if (result.outcome === "Redraw") { drawV2(); return; }
 
-  const deviceID = v2El("device").value.trim();
+  const deviceID = tmboxV2.browser?.client_id;
   // A picker exists to answer one question. Once it is answered the operator
   // is back at the train, not still standing in the list.
   const previous = ["TrackPicker", "ConnectionPicker"].includes(nav.view.screen)
@@ -3716,13 +3968,14 @@ async function pressV2Key(key) {
     payload: v2Payload(result.command),
   };
   try {
-    const response = await authorizedFetch("/v1/tmbox-v2/command", {
+    const response = await boxFetch("/v1/tmbox-v2/command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device_id: deviceID, command }),
+      body: JSON.stringify({ device_id: deviceID, meet_generation: command.meet_generation, command }),
     });
     const ack = await response.json();
     v2El("ack").textContent = JSON.stringify(ack, null, 2);
+    if (!response.ok) throw new Error(ack.message || `HTTP ${response.status}`);
 
     // A lookup answers rather than changes anything, so it lands on a screen
     // instead of flashing KOMMANDO OK past the operator.

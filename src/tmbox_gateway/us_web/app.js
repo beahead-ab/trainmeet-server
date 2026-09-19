@@ -58,7 +58,7 @@ function status() {
   notice.hidden = !message;
   notice.innerHTML = html`${escape(message)}${state.pending?html`<button type="button" data-action="check-result">Check result</button>`:''}`;
   document.querySelectorAll('[data-action]:not([data-action="check-result"]):not([data-action="history"]):not([data-action="details"])').forEach((el) => { el.disabled = disabled(el.dataset.action); });
-  editor.querySelectorAll('button[type="submit"]').forEach((el) => { el.disabled = disabled(el.form?.dataset.usAction); });
+  editor.querySelectorAll('button[type="submit"]').forEach((el) => { el.disabled = editor.dataset.busy === 'true' || disabled(el.form?.dataset.usAction); });
 }
 
 async function refresh(force=false) {
@@ -151,23 +151,48 @@ function login(error='', force=false) {
   };
 }
 
+let editorOrigin, editorBaseline='';
+const editorValues = () => JSON.stringify([...editor.querySelectorAll('input,select,textarea')].map(el=>[el.name,el.value,el.checked]));
+function cancelEditor() {
+  if(editor.dataset.busy==='true')return;
+  if(editorValues()!==editorBaseline && !window.confirm(t('Close without saving changes?')))return;
+  editor.close();
+}
+editor.addEventListener('cancel',event=>{event.preventDefault();cancelEditor();});
+editor.addEventListener('close',()=>{
+  const replacement=editorOrigin?.dataset.action && [...app.querySelectorAll('[data-action]')].find(el=>el.dataset.action===editorOrigin.dataset.action && el.dataset.warrant===editorOrigin.dataset.warrant);
+  (editorOrigin?.isConnected?editorOrigin:replacement||document.querySelector('#workspace-home'))?.focus({preventScroll:true});
+  editorOrigin=null;
+});
 function modal(title, content) {
-  editor.innerHTML=html`<div class="dialog-head"><h2 id="dialog-title">${escape(title)}</h2><button type="button" data-close aria-label="Close dialog">×</button></div>${content}`;
-  editor.querySelector('[data-close]').onclick=()=>editor.close();
+  editorOrigin=document.activeElement;
+  editor.dataset.busy='false';
+  editor.innerHTML=html`<div class="dialog-head"><h2 id="dialog-title">${escape(title)}</h2><button type="button" data-close aria-label="${escape(t('Close'))}">×</button></div>${content}`;
+  if(!editor.querySelector('.dialog-actions'))editor.insertAdjacentHTML('beforeend',html`<div class="dialog-actions"><button type="button" data-close>${escape(t('Close'))}</button></div>`);
+  editor.querySelectorAll('[data-close]').forEach(button=>{button.onclick=cancelEditor;});
+  editorBaseline=editorValues();
   editor.showModal();
+  (editor.querySelector('input:not([type="hidden"]),select,textarea')||editor.querySelector('.dialog-actions [data-close]'))?.focus({preventScroll:true});
 }
 
 function bindForm(action, makePayload) {
   const revision=session()?.revision;
   const form=editor.querySelector('form');
   form.dataset.usAction = action;
+  // Path defaults are populated after modal() and before bindForm().
+  editorBaseline=editorValues();
   form.onsubmit=async(event)=>{event.preventDefault(); const error=form.querySelector('.form-error'); error.textContent='';
-    try { const payload=await makePayload(new FormData(form),form); await command(action,payload,revision); editor.close(); }
+    if(editor.dataset.busy==='true' || disabled(action))return;
+    const fields=new FormData(form);
+    const controls=[...editor.querySelectorAll('button,input,select,textarea')].map(el=>[el,el.disabled]);
+    editor.dataset.busy='true';editor.setAttribute('aria-busy','true');controls.forEach(([el])=>{el.disabled=true;});
+    try { const payload=await makePayload(fields,form); await command(action,payload,revision); editor.close(); }
     catch(err){error.textContent=err.message;}
+    finally{controls.forEach(([el,wasDisabled])=>{el.disabled=wasDisabled;});editor.dataset.busy='false';editor.removeAttribute('aria-busy');status();}
   };
   status();
 }
-const formEnd = (label) => html`<p class="form-error" role="alert"></p><div class="dialog-actions"><button class="primary" type="submit">${escape(t(label))}</button></div>`;
+const formEnd = (label) => html`<p class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" data-close>${escape(t('Cancel'))}</button><button class="primary" type="submit">${escape(t(label))}</button></div>`;
 
 function render() {
   if(state.contextBlocked || !state.data)return;
@@ -289,6 +314,10 @@ async function action(name, warrantId, packageId) {
   if(name==='review-package'){await reviewPackage(packageId);return;}
   if(name==='clock'){
     const clock=state.data.clock||{};
+    if(clock.source==='fastclock') {
+      location.href='/#settings';
+      return;
+    }
     modal(t('US clock'),html`<form><p>Only this US session is affected. Clock time never grants movement authority.</p><label>Time<input name="time" type="time" step="1" required value="${escape(clock.time||'12:00:00')}"></label><label>Speed<input name="speed" type="number" min="0.1" max="60" step="any" required value="${escape(clock.speed||1)}"></label><label class="confirm-label"><input name="running" type="checkbox" ${clock.running?'checked':''}>Run US clock</label>${formEnd(t('Apply US clock'))}</form>`);
     bindForm('clock',async(fields)=>({clock_time:fields.get('time'),clock_speed:Number(fields.get('speed')),running:fields.get('running')==='on',confirmed:true}));return;
   }

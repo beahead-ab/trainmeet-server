@@ -38,6 +38,28 @@ from .storage import SQLiteStateStore
 LOGGER = logging.getLogger("tmbox_gateway.server")
 
 
+def publish_clock_to_devices(gateway, v2_gateway, identities):
+    """Clock updates are snapshots, never repeated assignments/config."""
+    gateway._publish_snapshots()
+    for station_id in {c.station_id for c in identities.enabled_clients() if c.station_id}:
+        v2_gateway.publish_station_snapshot(station_id)
+
+
+def publish_config_to_devices(gateway, v2_gateway, identities):
+    """Push an adopted publication to both physical protocols immediately."""
+    gateway._publish_snapshots()
+    for device in identities.discovered_devices():
+        if device.protocol_version == 2:
+            v2_gateway.publish_device_state(device.device_id)
+        else:
+            gateway._handle_device_hello(device.device_id, json.dumps({
+                "device_code": device.device_code, "model": device.model,
+                "firmware_version": device.firmware_version,
+                "protocol_version": device.protocol_version,
+                "display": device.display.to_dict(),
+            }).encode())
+
+
 def _raise_keyboard_interrupt(_signum: int, _frame: object) -> None:
     raise KeyboardInterrupt
 
@@ -219,18 +241,18 @@ def main() -> None:
         lifecycle=lifecycle,
     )
     def publish_config():
-        gateway._publish_snapshots()
-        for device in identities.discovered_devices():
-            if device.protocol_version == 2:
-                v2_gateway.publish_device_state(device.device_id)
-            else:
-                gateway._handle_device_hello(device.device_id, json.dumps({
-                    "device_code": device.device_code, "model": device.model,
-                    "firmware_version": device.firmware_version,
-                    "protocol_version": device.protocol_version,
-                    "display": device.display.to_dict(),
-                }).encode())
+        publish_config_to_devices(gateway, v2_gateway, identities)
     application.on_config_applied = publish_config
+    def publish_device_assignment(device_id):
+        device = identities.discovered_device(device_id)
+        if device.protocol_version == 2:
+            v2_gateway.publish_device_state(device_id)
+        else:
+            gateway.publish_device_assignment(device_id)
+    application.on_device_assignment_changed = publish_device_assignment
+    def publish_clock():
+        publish_clock_to_devices(gateway, v2_gateway, identities)
+    application.on_clock_changed = publish_clock
     # Attach the common lifecycle gate before either transport accepts input.
     gateway.client.connect(broker_host, args.mqtt_port, keepalive=10, clean_start=True)
     gateway.client.loop_start()
@@ -244,6 +266,10 @@ def main() -> None:
         daemon=True,
     )
     cloud_sync_thread.start()
+    clock_stop = threading.Event()
+    clock_thread = threading.Thread(target=_external_clock_loop, args=(application, clock_stop),
+                                    name="trainmeet-fastclock", daemon=True)
+    clock_thread.start()
     signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
     signal.signal(signal.SIGINT, _raise_keyboard_interrupt)
     _print_ready(local_ip, args.http_port, args.mqtt_port, pairing_code)
@@ -253,6 +279,8 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nTMBox-servern stoppas …")
     finally:
+        clock_stop.set()
+        clock_thread.join()  # Bounded provider timeout; no database access after close.
         _stop_cloud_sync(application, cloud_sync_thread, cloud_sync_stop)
         server.shutdown()
         server.server_close()
@@ -362,6 +390,16 @@ def _reset_operational_state(database_path: Path, state_directory: Path) -> None
     LOGGER.warning(
         "TrainMeet Server träffdata är nollställd; administratör och serveridentitet behålls"
     )
+
+
+def _external_clock_loop(application, stop):
+    while not stop.is_set():
+        try:
+            application.poll_external_clock()
+        except Exception:
+            # No request URLs or provider credentials in logs.
+            LOGGER.warning("FastClock kunde inte uppdateras; försöker igen")
+        stop.wait(0.5)
 
 
 def _stop_cloud_sync(application, worker: threading.Thread, stop: threading.Event) -> None:

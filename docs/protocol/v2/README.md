@@ -131,6 +131,20 @@ Ett läsande kommando — idag bara `train.lookup` — får dessutom ett
 `result`-block i kvittensen. Skrivande kommandon har inget `result`; deras
 utfall syns i den bifogade snapshoten.
 
+`train.lookup.result.matches[]` innehåller även `service_id` och
+`departure_route`. Ruttinformationen är en läsning av den publicerade planen:
+
+- `status: resolved`: exakt service, trafikdag, avsändande/mottagande rörelse,
+  besöksordning, sträcka och mottagarens stationskod.
+- `status: terminal`: inget efterföljande besök i denna tågtur.
+- `status: unresolved`: `reason` för saknat eller tvetydigt underlag.
+
+Ett identifierat uppslag är **inte ett klartecken**. Det anger varken fysisk
+position eller rätt att avgå. Befintlig firmware kan ignorera extrafälten.
+Den kommande gemensamma trafikprofilen måste kontrollera progression,
+beläggning, behörighet och aktuella revisioner vid varje skrivning. Se
+[godkänd målbild och implementationsstatus](../../TMBOX-TRAIN-FIRST-REVISION-2026-09-19.md).
+
 ### 4.3 Retained `config` (server → box)
 
 Ändras bara vid ny driftpaket-aktivering. Ersätts i sin helhet vid varje
@@ -154,8 +168,27 @@ mottagning — ingen delta-logik.
 
 `tracks` är ett utdrag ur spårkatalogen för den tilldelade stationen, i den
 ordning spårväljaren ska visa dem. `connections` är stationens
-topologikonfiguration: vilka grannar som visas på vilken rad. Den ersätter v1:s
-fasta A–D-slots.
+topologikonfiguration. Funktionsknapparna är inte destinationer. Cloud har dock
+en fysisk vänster/höger-placering som även stationsbundna klienter ska bevara.
+
+Bakåtkompatibla tillägg för den placeringen:
+
+- `panels`: stationens paneler med `panel_id`, fullständig `slots` (även tomma
+  portar) och `slot_layout`. `columns` är Clouds A/B till vänster, C/D till
+  höger; `rows` är äldre pakets A/C till vänster, B/D till höger.
+- `connections[].panel_slots`: alla publicerade placeringar för sträckan som
+  `{panel_id, key, side, row}`. `row` är 1 eller 2; `side` är `left`/`right`.
+- `connections[].display_side`: den gemensamma sidan eller `null` om placering
+  saknas eller flera paneler motsäger varandra. Klienten ska då inte gissa.
+- `display_row`: sammanhängande listordning, inte fysisk LCD-rad. Mappade
+  sträckor följer portordningen, övriga incidenta sträckor följer därefter.
+- `assignment.config_version`: gör att även HTTP-klienter upptäcker en ny
+  config för samma station. Cache gäller station + träffgeneration +
+  publicering + configversion; gamla menyval får inte överleva ett byte.
+
+En publiceringsändring skickas till redan anslutna boxar vid säker aktivering.
+Det krävs inte en ny stationstilldelning. Se [synkrapporten](../../TMBOX-CLOUD-MAPPING-2026-09-19.md)
+för verifiering och skillnaden mot det planerade tågnummer-först-flödet.
 
 ### 4.4 Retained `snapshot` (server → box)
 

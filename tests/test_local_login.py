@@ -229,7 +229,7 @@ class SignedOutChromeTests(unittest.TestCase):
 
     def test_the_state_is_set_in_both_directions(self) -> None:
         self.assertIn('document.body.dataset.signedIn = "no";', self.js)
-        self.assertIn('document.body.dataset.signedIn = "yes";', self.js)
+        self.assertIn('document.body.dataset.signedIn = state.authStatus?.authenticated ? "yes" : "no";', self.js)
 
     def test_the_flag_follows_the_servers_answer_not_the_path_taken(self) -> None:
         """Flaggan sattes i showLogin och openApplication och missade vägen in

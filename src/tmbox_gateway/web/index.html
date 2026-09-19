@@ -139,6 +139,7 @@
       </section>
 
       <section id="login" class="card pairing-card hidden">
+        <a href="#workspaces">Tillbaka till arbetsytor</a>
         <img class="pairing-icon" src="/trainmeet-logo.png" alt="TrainMeet" data-tm-alt="TrainMeet">
         <div id="login-intro">
           <p class="eyebrow"><tm-text data-tm-text="ADMIN">ADMIN</tm-text></p>
@@ -320,11 +321,30 @@
               <div>
                 <p class="eyebrow"><tm-text data-tm-text="TRÄFFINSTÄLLNINGAR">TRÄFFINSTÄLLNINGAR</tm-text></p>
                 <h2><tm-text data-tm-text="Träffklocka">Träffklocka</tm-text></h2>
-                <p><tm-text data-tm-text="Klockan körs och sparas på TrainMeet Server. Alla skärmar använder samma tid även när internet saknas.">Klockan körs och sparas på TrainMeet Server. Alla skärmar använder samma tid även när internet saknas.</tm-text></p>
+                <p>Alla skärmar och TMBoxar hämtar tiden från denna server. Välj intern klocka eller anslut träffens FastClock.</p>
               </div>
               <span id="clock-state" class="revision-badge"><tm-text data-tm-text="Läser klockan …">Läser klockan …</tm-text></span>
             </div>
-<button type="button" class="secondary modal-launch" data-open-modal="clock-control-form-modal">Justera klockan</button>
+<p id="clock-source-status" class="form-message" role="status"></p>
+<button type="button" class="secondary modal-launch" data-open-modal="clock-source-modal">Anslut träffklocka</button>
+<dialog id="clock-source-modal" class="admin-modal" aria-labelledby="clock-source-title"><h2 id="clock-source-title">Anslut träffklocka</h2>
+<form id="clock-source-form">
+  <p>Inställningen gäller bara den här träffen på denna server. Inga klockuppgifter skickas till TrainMeet Cloud.</p>
+  <label>Klockkälla<select id="clock-source"><option value="internal">Intern serverklocka</option><option value="fastclock">FastClock · extern träffklocka</option></select></label>
+  <fieldset id="fastclock-fields" hidden disabled>
+    <label>Klocknamn<input id="fastclock-name" maxlength="100" autocomplete="off"></label>
+    <p>Servern läser från fastclock.azurewebsites.net. Klocknamnet måste stämma exakt.</p>
+    <label>Användare för start/stopp (valfritt)<input id="fastclock-user" maxlength="100" autocomplete="off"></label>
+    <label>Lösenord för start/stopp (valfritt)<input id="fastclock-password" type="password" maxlength="256" autocomplete="new-password"></label>
+    <p id="fastclock-password-note"></p>
+    <label class="switch-confirmation"><input id="fastclock-clear-password" type="checkbox"> Ta bort sparat klocklösenord</label>
+    <label>Hämtningsintervall (sekunder)<input id="fastclock-interval" type="number" min="2" max="30" value="2" required></label>
+  </fieldset>
+  <p>Utan styrningsuppgifter följer servern klockan. Tid och hastighet ändras i FastClock. Vid byte till intern klocka krävs Starta för att fortsätta.</p>
+  <p id="clock-source-message" class="form-message" role="status"></p>
+  <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara</button></div>
+</form></dialog>
+<button type="button" id="clock-adjust" class="secondary modal-launch" data-open-modal="clock-control-form-modal">Justera klockan</button>
 <dialog id="clock-control-form-modal" class="admin-modal" aria-labelledby="clock-control-form-title"><h2 id="clock-control-form-title">Justera klockan</h2>
 <form id="clock-control-form" class="clock-control-form">
               <label><tm-text data-tm-text="Klockslag
@@ -351,12 +371,12 @@
                 ">Orsak när klockan stoppas
                 </tm-text><input id="local-clock-reason" maxlength="100" placeholder="Till exempel tekniskt stopp" data-tm-placeholder="Till exempel tekniskt stopp">
               </label>
-              <div class="clock-control-actions">
-                <button class="primary" type="submit"><tm-text data-tm-text="Spara">Spara</tm-text></button>
-                <button id="stop-local-clock" class="secondary" type="button"><tm-text data-tm-text="Stoppa">Stoppa</tm-text></button>
-              </div>
               <p id="clock-control-message" class="form-message" role="status"></p>
-            <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
+              <div class="modal-actions clock-control-actions">
+                <button type="button" class="secondary" data-close-modal>Avbryt</button>
+                <button id="stop-local-clock" class="secondary" type="button"><tm-text data-tm-text="Stoppa">Stoppa</tm-text></button>
+                <button class="primary" type="submit"><tm-text data-tm-text="Spara">Spara</tm-text></button>
+              </div>
 </form>
 </dialog>
 <button type="button" class="secondary modal-launch" data-open-modal="clock-appearance-modal">Ändra klockans utseende</button>
@@ -366,7 +386,7 @@
 <label for="meet-clock-style">Klockstil</label><select id="meet-clock-style"></select>
 <label><input id="meet-clock-seconds" type="checkbox"> Visa sekunder</label>
 <p id="clock-appearance-message" class="form-message" role="status"></p>
-<button type="submit" class="primary">Spara</button><button type="button" data-close-modal>Avbryt</button>
+<div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara</button></div>
 </form></dialog>
           </section>
 
@@ -396,9 +416,8 @@
 <form id="server-identity-form" class="server-identity-form">
               <label for="admin-server-name"><tm-text data-tm-text="Servernamn">Servernamn</tm-text></label>
               <input id="admin-server-name" maxlength="80" placeholder="Exempel: Grimslöv driftserver" required data-tm-placeholder="Exempel: Grimslöv driftserver">
-              <button type="submit" class="secondary"><tm-text data-tm-text="Spara servernamn">Spara servernamn</tm-text></button>
               <p id="server-identity-message" class="form-message" role="status"></p>
-            <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
+              <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary"><tm-text data-tm-text="Spara servernamn">Spara servernamn</tm-text></button></div>
 </form>
 </dialog>
           </section>
@@ -449,8 +468,8 @@
                 <input id="users-invite-owner" type="checkbox">
                 <span><tm-text data-tm-text="Ägare — får också lägga till och ta bort användare">Ägare — får också lägga till och ta bort användare</tm-text></span>
               </label>
-              <button type="submit" class="primary"><tm-text data-tm-text="Bjud in">Bjud in</tm-text></button>
-            <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
+              <p class="modal-feedback form-message" role="status"></p>
+              <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary"><tm-text data-tm-text="Bjud in">Bjud in</tm-text></button></div>
 </form>
 </dialog>
 
@@ -481,11 +500,11 @@
                 ">Upprepa lösenord
                 </tm-text><input id="admin-password-confirm" type="password" minlength="8" autocomplete="new-password">
               </label>
-              <div class="config-actions access-actions">
-                <p id="admin-access-message" class="form-message" role="status"></p>
+              <p id="admin-access-message" class="form-message" role="status"></p>
+              <div class="modal-actions">
+                <button type="button" class="secondary" data-close-modal>Avbryt</button>
                 <button type="submit" class="primary"><tm-text data-tm-text="Spara inloggning">Spara inloggning</tm-text></button>
               </div>
-            <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
 </form>
 </dialog>
           </section>
@@ -532,11 +551,10 @@
                 <label for="restore-confirmation"><tm-text data-tm-text="Skriv ">Skriv </tm-text><b id="restore-overwrites">–</b><tm-text data-tm-text=" för att bekräfta att den datan skrivs över"> för att bekräfta att den datan skrivs över</tm-text></label>
                 <div class="factory-reset-row">
                   <input id="restore-confirmation" autocomplete="off" placeholder="Namnet på det som skrivs över" data-tm-placeholder="Namnet på det som skrivs över">
-                  <button id="restore-start" class="danger-action" type="button" disabled><tm-text data-tm-text="Återställ och starta om">Återställ och starta om</tm-text></button>
                 </div>
                 <p id="restore-message" class="form-message" role="status"></p>
               </div>
-            <button type="button" data-close-modal>Avbryt</button></dialog>
+            <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button id="restore-start" class="danger-action" type="button" disabled><tm-text data-tm-text="Återställ och starta om">Återställ och starta om</tm-text></button></div></dialog>
 <button type="button" class="secondary" id="reset-mode-summary" data-open-modal="reset-modal">Nollställ träffdata</button>
 <dialog id="reset-modal" class="admin-modal" aria-label="Nollställ träffdata"><div class="reset-body">
                 <h3 id="reset-mode-title"><tm-text data-tm-text="Börja om utan att förlora administratörsåtkomsten">Börja om utan att förlora administratörsåtkomsten</tm-text></h3>
@@ -544,17 +562,24 @@
                 <label for="factory-reset-confirmation"><tm-text data-tm-text="Skriv ">Skriv </tm-text><b><tm-text data-tm-text="NOLLSTÄLL">NOLLSTÄLL</tm-text></b><tm-text data-tm-text=" för att låsa upp knappen"> för att låsa upp knappen</tm-text></label>
                 <div class="factory-reset-row">
                   <input id="factory-reset-confirmation" autocomplete="off" autocapitalize="characters" placeholder="NOLLSTÄLL" data-tm-placeholder="NOLLSTÄLL">
-                  <button id="factory-reset-server" class="danger-action" type="button" disabled><tm-text data-tm-text="Nollställ träffdata">Nollställ träffdata</tm-text></button>
                 </div>
                 <p id="factory-reset-message" class="form-message" role="status"></p>
               </div>
-            <button type="button" data-close-modal>Avbryt</button></dialog>
+            <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button id="factory-reset-server" class="danger-action" type="button" disabled><tm-text data-tm-text="Nollställ träffdata">Nollställ träffdata</tm-text></button></div></dialog>
           </section>
 
           <section id="sync-and-devices" class="card section-card cloud-section-card admin-section-panel hidden" data-admin-section="cloud">
 <h2>Cloud-koppling och config</h2><p>Träffens innehåll ändras i Cloud. Publicerade uppdateringar hämtas automatiskt och används när det är säkert för pågående trafik.</p>
 <div class="cloud-connection-summary"><div><b id="cloud-connection-meet">Ingen träff vald</b><span id="cloud-connection-meta"></span></div><span id="cloud-connection-state" class="revision-badge">Inte kopplad</span></div>
-<p id="cloud-auto-status"></p><p id="cloud-version-state" role="status"></p><div class="cloud-actions"><button id="runtime-check-update" class="secondary" type="button">Sök configuppdatering</button><button type="button" class="secondary" data-open-modal="runtime-sync-form-modal">Koppla eller byt träff</button></div><p id="cloud-update-message" class="form-message" role="status"></p>
+<p id="cloud-auto-status"></p><p id="cloud-version-state" role="status"></p><div class="cloud-actions"><button id="runtime-check-update" class="secondary" type="button">Sök configuppdatering</button><button id="cloud-auto-edit" type="button" class="secondary" data-open-modal="cloud-auto-modal">Automatiska uppdateringar</button><button type="button" class="secondary" data-open-modal="runtime-sync-form-modal">Koppla eller byt träff</button></div><p id="cloud-update-message" class="form-message" role="status"></p>
+<dialog id="cloud-auto-modal" class="admin-modal" aria-labelledby="cloud-auto-title">
+<h2 id="cloud-auto-title">Automatiska uppdateringar</h2>
+<form id="cloud-auto-form">
+<p>Endast publicerade ändringar hämtas från Cloud. Pågående trafik skyddas innan en ny konfiguration används.</p>
+<label class="switch-confirmation"><input id="cloud-auto-enabled" type="checkbox"> Hämta publicerade uppdateringar automatiskt</label>
+<p class="form-message" role="status"></p>
+<div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara</button></div>
+</form></dialog>
 <dialog id="runtime-sync-form-modal" class="admin-modal" aria-labelledby="runtime-sync-form-title"><h2 id="runtime-sync-form-title">Koppla eller byt träff</h2>
 <form id="runtime-sync-form" class="inline-form"><p>Servern representerar en enda träff. Ett byte bevarar serverns användare och nätverk, men gamla stationstilldelningar följer inte med.</p><label class="switch-confirmation"><input id="confirm-meet-change" type="checkbox"> Jag vill byta serverns valda träff om koden gäller en annan träff.</label><p id="runtime-message" class="form-message" role="status"></p>
                   <label for="runtime-central-url"><tm-text data-tm-text="Config-server">Config-server</tm-text></label>
@@ -570,8 +595,7 @@
                     <input inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Siffra 6 av 6" data-tm-aria-label="Siffra 6 av 6">
                   </div>
                   <input id="runtime-sync-code" type="hidden">
-                  <button class="primary" type="submit"><tm-text data-tm-text="Koppla och hämta">Koppla och hämta</tm-text></button>
-                <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
+                  <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button class="primary" type="submit"><tm-text data-tm-text="Koppla och hämta">Koppla och hämta</tm-text></button></div>
 </form>
 </dialog>
 </section>
@@ -579,15 +603,15 @@
           <section id="device-management" class="card section-card admin-section-panel hidden" data-admin-section="devices">
               <div class="section-heading compact-heading">
                 <div>
-                  <p class="eyebrow"><tm-text data-tm-text="FYSISKA ENHETER">FYSISKA ENHETER</tm-text></p>
-                  <h2><tm-text data-tm-text="Koppla en TMBox">Koppla en TMBox</tm-text></h2>
-                  <p><tm-text data-tm-text="Skriv koden på lådan och välj vilken station den ska tjänstgöra vid.">Skriv koden på lådan och välj vilken station den ska tjänstgöra vid.</tm-text></p>
+                  <p class="eyebrow"><tm-text data-tm-text="ANSLUTNA KLIENTER">ANSLUTNA KLIENTER</tm-text></p>
+                  <h2><tm-text data-tm-text="TMBox och TKL">TMBox och TKL</tm-text></h2>
+                  <p><tm-text data-tm-text="Fysiska och virtuella klienter ansluter själva. Administratören tilldelar station via enhetskoden.">Fysiska och virtuella klienter ansluter själva. Administratören tilldelar station via enhetskoden.</tm-text></p>
                 </div>
               </div>
-<button type="button" class="secondary modal-launch" data-open-modal="device-form-modal">Koppla eller ändra TMBox</button>
-<dialog id="device-form-modal" class="admin-modal" aria-labelledby="device-form-title"><h2 id="device-form-title">Koppla eller ändra TMBox</h2>
+<button type="button" class="secondary modal-launch" data-open-modal="device-form-modal">Tilldela eller ändra station</button>
+<dialog id="device-form-modal" class="admin-modal" aria-labelledby="device-form-title"><h2 id="device-form-title">Tilldela eller ändra station</h2>
 <form id="device-form" class="device-form">
-                <label for="device-code"><tm-text data-tm-text="Kod på lådan">Kod på lådan</tm-text>
+                <label for="device-code"><tm-text data-tm-text="Enhetskod">Enhetskod</tm-text>
                 <input id="device-code" placeholder="TMBOX-A7K2C3" autocapitalize="characters" required data-tm-placeholder="TMBOX-A7K2C3">
                 </label>
                 <label for="device-station"><tm-text data-tm-text="Station">Station</tm-text>
@@ -600,6 +624,19 @@
                 </div>
 </form>
 </dialog>
+<dialog id="device-remove-modal" class="admin-modal" aria-labelledby="device-remove-title" aria-describedby="device-remove-description">
+  <h2 id="device-remove-title">Ta bort klient</h2>
+  <p><strong id="device-remove-code"></strong><br><span id="device-remove-station"></span></p>
+  <p id="device-remove-description">Boxen kopplas bort från stationen och kan inte längre styra trafiken. Träffens trafik och historik behålls. Du kan koppla boxen igen med dess kod.</p>
+  <form id="device-remove-form">
+    <p id="device-remove-message" class="form-message" role="status"></p>
+    <div class="modal-actions">
+      <button type="button" class="secondary" data-close-modal>Avbryt</button>
+      <button type="submit" class="danger-action">Ta bort klient</button>
+    </div>
+  </form>
+</dialog>
+              <p id="device-list-message" class="form-message" role="status"></p>
               <div id="device-list" class="status-list"></div>
           </section>
         </section>
@@ -607,18 +644,20 @@
         <section id="tmbox-v2-view" class="view-panel tmbox-v2-view hidden" aria-live="polite">
           <div class="simulator-intro">
             <div>
-              <p class="eyebrow"><tm-text data-tm-text="TESTKLIENT · PROTOKOLL V2">TESTKLIENT · PROTOKOLL V2</tm-text></p>
-              <h2><tm-text data-tm-text="TMBox v2">TMBox v2</tm-text></h2>
+              <p class="eyebrow">WEBBKLIENT</p>
+              <h2>TMBox</h2>
               <p><tm-text data-tm-text="Samma display, tangenter och lokala logik som en fysisk box. Skärmarna ritas av samma renderare som firmwaren, och tangenterna går genom samma tillståndsmaskin.">Samma display, tangenter och lokala logik som en fysisk box. Skärmarna ritas av samma renderare som firmwaren, och tangenterna går genom samma tillståndsmaskin.</tm-text></p>
             </div>
             <div class="panel-picker card">
               <label for="tmbox-v2-device"><tm-text data-tm-text="Enhet">Enhet</tm-text></label>
-              <input id="tmbox-v2-device" type="text" placeholder="TMBOX-A7K2C3" maxlength="32" autocomplete="off" data-tm-placeholder="TMBOX-A7K2C3">
+              <input id="tmbox-v2-device" type="text" readonly aria-label="Boxens kod">
+              <p>Visa boxens kod för administratören, som tilldelar station under Inställningar.</p>
+              <button id="tmbox-browser-start" type="button" class="secondary hidden">Starta ny TMBox</button>
               <label for="tmbox-v2-station"><tm-text data-tm-text="Station">Station</tm-text></label>
-              <select id="tmbox-v2-station"></select>
+              <select id="tmbox-v2-station" disabled></select>
               <label for="tmbox-v2-geometry"><tm-text data-tm-text="Display">Display</tm-text></label>
               <select id="tmbox-v2-geometry">
-                <option value="20x4" data-tm-text="20 tecken × 4 rader — TMBox v2">20 tecken × 4 rader — TMBox v2</option>
+                <option value="20x4">20 tecken × 4 rader</option>
                 <option value="16x2" data-tm-text="16 tecken × 2 rader">16 tecken × 2 rader</option>
                 <option value="20x2" data-tm-text="20 tecken × 2 rader">20 tecken × 2 rader</option>
                 <option value="16x4" data-tm-text="16 tecken × 4 rader">16 tecken × 4 rader</option>
@@ -652,9 +691,9 @@
           <div id="tmbox-pane-klient" class="tmbox-pane">
           <article class="tmbox-case">
             <div class="lcd-module">
-              <div id="lcd-v2" class="lcd" aria-label="TMBox v2 display" data-tm-aria-label="TMBox v2 display"></div>
+              <div id="lcd-v2" class="lcd" aria-label="TMBox display" data-tm-aria-label="TMBox display"></div>
             </div>
-            <div id="keypad-v2" class="keypad" aria-label="TMBox v2 tangentbord" data-tm-aria-label="TMBox v2 tangentbord"></div>
+            <div id="keypad-v2" class="keypad" aria-label="TMBox tangentbord" data-tm-aria-label="TMBox tangentbord"></div>
           </article>
 
           <p id="tmbox-v2-attention" class="tmbox-attention" role="status" aria-live="polite" hidden></p>
@@ -736,7 +775,7 @@
               </select>
             </label>
             <p id="connection-badge-message" class="form-message"></p>
-<button type="submit" class="primary">Spara</button><button type="button" data-close-modal>Avbryt</button></form></dialog>
+<div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara</button></div></form></dialog>
           </section>
         </section>
           </div>
@@ -751,10 +790,10 @@
           <label>Nytt lösenord (valfritt)<input id="user-edit-password" type="password" minlength="8" autocomplete="new-password"></label>
           <label>Upprepa lösenord<input id="user-edit-password-confirm" type="password" minlength="8" autocomplete="new-password"></label>
           <p class="modal-feedback form-message" role="status"></p>
-          <div class="modal-actions"><button type="submit" class="primary">Spara</button><button type="button" data-close-modal>Avbryt</button></div>
           <hr><button id="user-edit-reissue" type="button" class="secondary">Skapa ny inbjudningskod</button>
           <label class="users-delete-confirm"><input id="user-delete-confirm" type="checkbox"> Jag vill ta bort denna användare permanent.</label>
           <button id="user-edit-delete" type="button" class="danger-action" disabled>Ta bort användaren</button>
+          <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara</button></div>
         </form>
       </dialog>
       <section id="display-app" class="display-app hidden">

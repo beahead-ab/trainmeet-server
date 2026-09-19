@@ -126,18 +126,20 @@ class TMBoxV2HTTPTests(ProtocolV2Base):
         with self.assertRaises(HTTPAPIError):
             self.application.tmbox_v2_config(self.client, "st-nowhere")
 
-    def test_the_simulator_is_admin_only(self):
+    def test_box_http_access_is_limited_to_its_assigned_station_and_identity(self):
         box = PairedClient(
             client_id=DEVICE,
             display_name=DEVICE,
             kind=DeviceKind.ESP32_PANEL,
             panel_ids=(),
         )
+        self.assertEqual(self.application.tmbox_v2_assignment(box, DEVICE)["station_id"], STATION)
+        self.assertEqual(self.application.tmbox_v2_snapshot(box, STATION), self.service.snapshot_payload(STATION))
         for call in (
-            lambda: self.application.tmbox_v2_snapshot(box, STATION),
-            lambda: self.application.tmbox_v2_assignment(box, DEVICE),
+            lambda: self.application.tmbox_v2_snapshot(box, "st-someone-else"),
+            lambda: self.application.tmbox_v2_assignment(box, "another-box"),
             lambda: self.application.tmbox_v2_stations(box),
-            lambda: self.application.tmbox_v2_command(box, {"device_id": DEVICE, "command": {}}),
+            lambda: self.application.tmbox_v2_command(box, {"device_id": "another-box", "command": {}}),
         ):
             with self.assertRaises(HTTPAPIError):
                 call()

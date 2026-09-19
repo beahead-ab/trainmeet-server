@@ -1,4 +1,10 @@
 tm-text { display: contents; }
+#editor { max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; }
+#editor .dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+#editor .dialog-head > button { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; font-size: 28px; }
+#editor .dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; border-top: 1px solid hsl(var(--border)); padding-top: 16px; }
+#editor .dialog-actions > button { min-height: 44px; max-width: 100%; white-space: normal; }
+#editor[aria-busy="true"] { cursor: progress; }
 .package-shelf{display:grid;gap:12px;margin-top:24px;min-width:0}.package-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;border:1px solid hsl(var(--border));border-radius:12px;text-align:left}.package-row>div{min-width:0;overflow-wrap:anywhere}.package-row button{flex-shrink:0}dialog>p,dialog>details{margin:14px 0}dialog details p{white-space:pre-wrap;overflow-wrap:anywhere}dialog details h3{margin-top:12px}@media(max-width:600px){.package-row{align-items:flex-start;flex-direction:column}.package-row button{width:100%}}
 @font-face{font-family:Inter;src:url('/assets/fonts/inter-400.woff2') format('woff2');font-weight:400;font-display:swap}
 @font-face{font-family:Inter;src:url('/assets/fonts/inter-500.woff2') format('woff2');font-weight:500;font-display:swap}
