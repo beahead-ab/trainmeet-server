@@ -2,6 +2,12 @@
  * never translation keys. Uses the existing TrainMeet localization runtime. */
 (() => {
   const rows = [
+    ['TRÄFFINSTÄLLNINGAR', 'MEET SETTINGS', 'TRÆFINDSTILLINGER', 'TREFFINNSTILLINGER', 'TREFFENEINSTELLUNGEN'],
+    ['Ändra klockans utseende', 'Change clock appearance', 'Skift urets udseende', 'Endre klokkens utseende', 'Uhrdarstellung ändern'],
+    ['Klockans utseende', 'Clock appearance', 'Urets udseende', 'Klokkens utseende', 'Uhrdarstellung'],
+    ['Klockstil', 'Clock style', 'Urtype', 'Klokkestil', 'Uhrstil'],
+    ['Visa sekunder', 'Show seconds', 'Vis sekunder', 'Vis sekunder', 'Sekunden anzeigen'],
+    ['Gäller träffens klockskärmar på alla datorer. Sparas på TrainMeet Server.', 'Applies to the meet clock displays on all computers. Saved on TrainMeet Server.', 'Gælder træffets urvisninger på alle computere. Gemmes på TrainMeet Server.', 'Gjelder treffets klokkevisninger på alle datamaskiner. Lagres på TrainMeet Server.', 'Gilt für die Uhrenanzeigen des Treffens auf allen Computern. Wird auf TrainMeet Server gespeichert.'],
     ['Hem i arbetsytan', 'Workspace home', 'Arbejdsområdets startside', 'Arbeidsområdets startside', 'Startseite des Arbeitsbereichs'],
     ['Öppna menyn', 'Open menu', 'Åbn menu', 'Åpne meny', 'Menü öffnen'],
     ['Servermeny', 'Server menu', 'Servermenu', 'Servermeny', 'Servermenü'],
@@ -9,8 +15,13 @@
     ['Välj arbetsyta', 'Choose workspace', 'Vælg arbejdsområde', 'Velg arbeidsområde', 'Arbeitsbereich auswählen'],
     ['En server, en träff. Välj vad du vill arbeta med.', 'One server, one meet. Choose your workspace.', 'Én server, ét træf. Vælg dit arbejdsområde.', 'Én server, ett treff. Velg arbeidsområde.', 'Ein Server, ein Treffen. Arbeitsbereich auswählen.'],
     ['Drift och administration', 'Operations and administration', 'Drift og administration', 'Drift og administrasjon', 'Betrieb und Verwaltung'],
-    ['Översikt, klocka och serverinställningar', 'Overview, clock and server settings', 'Overblik, ur og serverindstillinger', 'Oversikt, klokke og serverinnstillinger', 'Übersicht, Uhr und Servereinstellungen'],
+    ['Trafikläge, klocka och serverinställningar', 'Traffic status, clock and server settings', 'Trafikstatus, ur og serverindstillinger', 'Trafikkstatus, klokke og serverinnstillinger', 'Betriebslage, Uhr und Servereinstellungen'],
+    ['Trafik just nu', 'Live traffic', 'Trafik lige nu', 'Trafikk akkurat nå', 'Aktueller Betrieb'],
+    ['Tåg på linjen, på stationerna och kommande händelser.', 'Trains on the line, at stations and upcoming events.', 'Tog på strækningen, på stationerne og kommende hændelser.', 'Tog på linjen, på stasjonene og kommende hendelser.', 'Züge auf der Strecke, in den Bahnhöfen und bevorstehende Ereignisse.'],
+    ['Tidtabell och tågrutter', 'Timetable and train routes', 'Køreplan og togruter', 'Rutetabell og togruter', 'Fahrplan und Zugläufe'],
     ['Stationsarbetet i en egen arbetsyta', 'Station operations in a dedicated workspace', 'Stationsarbejde i et særskilt arbejdsområde', 'Stasjonsarbeid i et eget arbeidsområde', 'Bahnhofsbetrieb in einem eigenen Arbeitsbereich'],
+    ['Testa display, knappsats och boxens flöden', 'Test the display, keypad and box workflows', 'Test display, tastatur og boksens forløb', 'Test display, tastatur og boksens arbeidsflyt', 'Display, Tastenfeld und Abläufe der Box testen'],
+    ['Öppna arbetsyta', 'Open workspace', 'Åbn arbejdsområde', 'Åpne arbeidsområde', 'Arbeitsbereich öffnen'],
     ['Trafikledning för träffens territorier', 'Dispatching for the meet territories', 'Trafikledelse for træffets territorier', 'Trafikkledelse for treffets territorier', 'Betriebsführung für die Territorien des Treffens'],
     ['Tåguppdrag och körtillstånd', 'Train jobs and movement authorities', 'Togopgaver og køretilladelser', 'Togoppdrag og kjøretillatelser', 'Zugaufträge und Fahrberechtigungen'],
     ['Ingen träff vald', 'No meet selected', 'Intet træf valgt', 'Ingen treff valgt', 'Kein Treffen ausgewählt'],

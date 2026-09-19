@@ -246,7 +246,7 @@ class SignedOutChromeTests(unittest.TestCase):
         )
 
     def test_the_controls_that_need_a_login_are_hidden_without_one(self) -> None:
-        rule = self.css[self.css.index('body[data-signed-in="no"] .run-tabs'):]
+        rule = self.css[self.css.index('body[data-signed-in="no"] .enter-build'):]
         rule = rule[: rule.index("}")]
         for control in (".enter-build", ".settings-button", ".leave-settings", ".app-clock"):
             self.assertIn(control, rule)

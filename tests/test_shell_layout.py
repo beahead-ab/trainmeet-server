@@ -56,7 +56,7 @@ class RunModeLayoutTests(unittest.TestCase):
     def test_both_modes_are_covered(self):
         """Ett läge utan egen regel faller tillbaka på den gamla gridden,
         vilket är precis felet som nådde produktion."""
-        for mode in ("kor", "workspaces", "installningar"):
+        for mode in ("kor", "workspaces", "installningar", "tmbox", "skarmar"):
             with self.subTest(mode=mode):
                 self.assertTrue(_rule(f'body[data-mode="{mode}"] .server-admin-shell'))
 
@@ -87,8 +87,11 @@ class ControlShapeTests(unittest.TestCase):
         self.assertIn("width: auto", body)
         self.assertIn("max-width", body)
 
-    def test_a_link_among_buttons_carries_no_underline(self):
-        self.assertIn("a.overview-action { text-decoration: none; }", CSS)
+    def test_live_traffic_cards_shrink_to_the_overview_width(self):
+        for selector, minimum in ((".traffic-online-grid", 300), (".traffic-station-grid", 290)):
+            with self.subTest(selector=selector):
+                self.assertIn(f"minmax(min({minimum}px, 100%), 1fr)", _rule(selector))
+        self.assertIn("min-width: 0", _rule(".meet-overview"))
 
 
 class ContainerAwareGridTests(unittest.TestCase):
@@ -116,3 +119,23 @@ class ContainerAwareGridTests(unittest.TestCase):
         for selector in (".basics-grid", ".access-grid"):
             with self.subTest(selector=selector):
                 self.assertIn("min(", _rule(selector))
+
+
+class ModalFormLayoutTests(unittest.TestCase):
+    def test_modal_inline_forms_reset_explicit_button_positions(self):
+        body = _rule(".admin-modal .inline-form > *")
+        self.assertIn("grid-column: 1 / -1", body)
+        self.assertIn("grid-row: auto", body)
+        self.assertNotIn(".device-form > button", CSS)
+
+    def test_device_assignment_uses_a_separate_save_cancel_footer(self):
+        web = Path(__file__).resolve().parents[1] / "src" / "tmbox_gateway" / "web"
+        html = (web / "index.html").read_text(encoding="utf-8")
+        form = re.search(r'<form id="device-form"[^>]*>(.*?)</form>', html, re.S).group(0)
+        self.assertNotIn("inline-form", form)
+        footer = form.split('<div class="modal-actions">', 1)[1]
+        self.assertIn('data-close-modal', footer)
+        self.assertIn('type="submit"', footer)
+        self.assertIn('data-tm-text="Spara"', footer)
+        js = (web / "app.js").read_text(encoding="utf-8")
+        self.assertIn("deviceForm.querySelector('button[type=\"submit\"]')", js)

@@ -239,6 +239,7 @@ class TrafficEngine:
                 "client_id": command.client_id,
                 "panel_id": command.panel_id,
                 "key": command.key,
+                **({"train_number": command.train_number} if command.train_number is not None else {}),
                 "previous_revision": previous,
                 "revision": self.revision,
                 "correlation_id": correlation_id() or command.command_id,
@@ -450,6 +451,7 @@ class TrafficEngine:
                 "train_number": runtime.train_number,
                 "owner_client_id": runtime.owner_client_id,
                 "allowed_keys": allowed_keys(runtime, panel),
+                "local_train_entry": True,
             },
             "slots": slots,
             "attention": {
@@ -496,6 +498,15 @@ class TrafficEngine:
             return "expired_command"
         if command.key not in {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "#", "*"}:
             return "unknown_key"
+        if command.train_number is not None:
+            if command.key != "#":
+                return "train_entry_requires_hash"
+            if (not isinstance(command.train_number, str)
+                    or not 1 <= len(command.train_number) <= 5
+                    or any(char not in "0123456789" for char in command.train_number)):
+                return "invalid_train_number"
+            if self.panels[command.panel_id].mode != InteractionMode.ENTER_TRAIN:
+                return "not_entering_train"
         return None
 
     def _handle_key(
@@ -546,6 +557,15 @@ class TrafficEngine:
             return False, "connection_busy"
 
         if runtime.mode == InteractionMode.ENTER_TRAIN:
+            if command.train_number is not None:
+                # Already validated, locked and owned by this client. Use the
+                # normal transition once; do not replay keys or partially save.
+                previous_number = runtime.train_number
+                runtime.train_number = command.train_number
+                accepted, reason = self._reserve_or_request(panel, runtime)
+                if not accepted:
+                    runtime.train_number = previous_number
+                return accepted, reason
             if key.isdigit():
                 if len(runtime.train_number) >= 5:
                     return False, "train_number_too_long"

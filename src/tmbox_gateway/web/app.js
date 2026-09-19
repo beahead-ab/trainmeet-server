@@ -372,20 +372,38 @@ setupFinishForm.addEventListener("submit", async (event) => {
 
 
 // Server workspaces select an interface, never a different meet or engine.
-const RUN_TABS = ["oversikt", "trafik", "skarmar", "tmbox"];
-const SETTINGS_SECTIONS = ["identity", "access", "users", "devices", "software", "cloud", "system"];
-const RUN_PANELS = {
-  oversikt: "#overview-view", trafik: "#traffic-view",
+const SETTINGS_SECTIONS = ["meet", "identity", "access", "users", "devices", "software", "cloud", "system"];
+const WORKSPACE_PANELS = {
+  kor: "#overview-view", installningar: "#admin-view",
   skarmar: "#displays-view", tmbox: "#tmbox-v2-view",
 };
-const MODES = ["workspaces", "kor", "installningar"];
+const MODES = ["workspaces", ...Object.keys(WORKSPACE_PANELS)];
 const WORKSPACE_KEY = "trainmeet.workspace";
 const WORKSPACES = {
-  administration: { title: "Drift och administration", detail: "Översikt, klocka och serverinställningar", path: "/#overview" },
+  administration: { title: "Drift och administration", detail: "Trafikläge, klocka och serverinställningar", path: "/#overview" },
   tkl: { title: "TKL", detail: "Stationsarbetet i en egen arbetsyta", path: "/tkl/" },
+  tmbox: { title: "TMBox v2", detail: "Testa display, knappsats och boxens flöden", path: "/#tmbox" },
   dispatcher: { title: "Dispatcher", detail: "Trafikledning för träffens territorier", path: "/us/dispatcher" },
   conductor: { title: "Conductor", detail: "Tåguppdrag och körtillstånd", path: "/us/conductor" },
 };
+
+// Local vector illustrations: no fonts, remote assets or meet data in markup.
+const WORKSPACE_ICONS = {
+  administration: '<rect x="12" y="18" width="72" height="54" rx="9"/><path d="M12 34h72M30 34v38M21 26h1m7 0h1m7 0h1M39 62V50m11 12V43m11 19v-8"/><circle class="workspace-icon-fill" cx="72" cy="66" r="15"/><path d="M72 58v8l5 3"/>',
+  tkl: '<path d="M17 65h62M25 74h46M30 65l-8 17m44-17 8 17"/><rect class="workspace-icon-fill" x="28" y="14" width="40" height="51" rx="10"/><path d="M28 38h40M48 22v16M37 51h1m20 0h1M38 22h20"/><path d="M15 28v22m66-22v22M11 28h8m58 0h8"/>',
+  tmbox: '<rect class="workspace-icon-fill" x="24" y="9" width="48" height="78" rx="10"/><rect x="31" y="18" width="34" height="22" rx="3"/><path d="M37 25h17m-17 7h23M34 50h3m10 0h3m10 0h3M34 60h3m10 0h3m10 0h3M34 70h3m10 0h3m10 0h3M34 79h3m10 0h3m10 0h3"/>',
+  dispatcher: '<path d="M13 69h22l27-41h21M13 28h22l27 41h21M48 49v-30"/><circle class="workspace-icon-fill" cx="13" cy="28" r="6"/><circle class="workspace-icon-fill" cx="83" cy="28" r="6"/><circle class="workspace-icon-fill" cx="13" cy="69" r="6"/><circle class="workspace-icon-fill" cx="83" cy="69" r="6"/><circle class="workspace-icon-fill" cx="48" cy="49" r="8"/><path d="M42 15h12"/>',
+  conductor: '<rect class="workspace-icon-fill" x="22" y="17" width="52" height="66" rx="8"/><rect x="36" y="10" width="24" height="14" rx="4"/><path d="m33 41 4 4 7-8m-11 24 4 4 7-8M51 41h12M51 61h12"/>',
+};
+
+function workspaceIcon(key) {
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("viewBox", "0 0 96 96");
+  icon.setAttribute("aria-hidden", "true");
+  icon.setAttribute("focusable", "false");
+  icon.innerHTML = WORKSPACE_ICONS[key];
+  return icon;
+}
 
 function currentMode() { return document.body.dataset.mode || "workspaces"; }
 function storedMode() { return sessionStorage.getItem(WORKSPACE_KEY) ? "kor" : "workspaces"; }
@@ -419,11 +437,10 @@ async function refreshServerContext() {
   renderWorkspacePicker();
   renderCloudStatus();
   const us = payload.operating_region === "us";
-  document.querySelectorAll('[data-run-tab="trafik"], [data-run-tab="tmbox"]').forEach((node) => { node.hidden = us; });
   document.querySelector("#us-runtime-summary").classList.toggle("hidden", !us);
   document.querySelectorAll('.display-launch-card[href="/display/topology"], .display-launch-card[href="/display/graph"], .display-launch-card[href="/display/dashboard"], .connection-badge-card')
     .forEach((node) => node.classList.toggle("hidden", us));
-  document.querySelectorAll("#overview-view .topology-overview-card, #overview-view .overview-routes-section, #overview-view .overview-graph-card")
+  document.querySelectorAll("#overview-view .topology-overview-card, #overview-traffic, #overview-timetable")
     .forEach((node) => node.classList.toggle("hidden", us));
   document.querySelector("#workspace-home").href = workspaceHome();
   return payload;
@@ -440,16 +457,30 @@ function renderWorkspacePicker() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "workspace-option";
+    button.dataset.workspace = key;
+    const illustration = document.createElement("span");
+    illustration.className = "workspace-illustration";
+    illustration.append(workspaceIcon(key));
     const title = document.createElement("strong");
+    title.id = `workspace-title-${key}`;
     title.textContent = t(entry.title);
     const detail = document.createElement("span");
+    detail.id = `workspace-detail-${key}`;
+    detail.className = "workspace-detail";
     detail.textContent = t(entry.detail);
-    button.append(title, detail);
+    button.setAttribute("aria-labelledby", title.id);
+    button.setAttribute("aria-describedby", detail.id);
+    const action = document.createElement("span");
+    action.className = "workspace-enter";
+    action.setAttribute("aria-hidden", "true");
+    action.textContent = t("Öppna arbetsyta") + " →";
+    button.append(illustration, title, detail, action);
     button.addEventListener("click", () => {
       sessionStorage.setItem(WORKSPACE_KEY, key);
-      if (key === "administration") {
-        location.hash = "overview";
-        setMode("kor");
+      if (key === "administration" || key === "tmbox") {
+        const hash = key === "tmbox" ? "#tmbox" : "#overview";
+        if (location.hash === hash) applyWorkspaceRoute();
+        else location.hash = hash;
       } else location.assign(entry.path);
     });
     host.append(button);
@@ -474,46 +505,29 @@ globalThis.TrainMeetI18n.subscribe(() => {
 function setMode(mode) {
   const next = MODES.includes(mode) ? mode : "workspaces";
   document.body.dataset.mode = next;
+  document.querySelector("#workspace-home").href = workspaceHome();
   document.querySelector("#workspace-picker").classList.toggle("hidden", next !== "workspaces");
   document.querySelector(".server-admin-shell").classList.toggle("hidden", next === "workspaces");
+  for (const [name, selector] of Object.entries(WORKSPACE_PANELS)) {
+    document.querySelector(selector).classList.toggle("hidden", name !== next);
+  }
   document.querySelector("#application-menu").open = false;
+  document.querySelector("#settings-heading").classList.toggle("hidden", next !== "installningar");
+  if (next !== "tmbox") stopTMBoxV2();
   if (next === "workspaces") {
-    stopTMBoxV2();
-    stopTrafficView();
     renderWorkspacePicker();
+  } else if (next === "tmbox") {
+    startTMBoxV2();
   } else if (next === "installningar") showSettings();
-  else selectRunTab(state.runTab || "oversikt");
+  else if (next === "kor" && state.serverContext?.operating_region === "eu") renderOverview(state.overviewSnapshot);
+  window.scrollTo({ top: 0, behavior: "auto" });
 }
 
 function showSettings() {
-  Object.values(RUN_PANELS).forEach((selector) => document.querySelector(selector)?.classList.add("hidden"));
-  stopTMBoxV2();
-  stopTrafficView();
-  document.querySelector("#admin-view").classList.remove("hidden");
   document.querySelectorAll(".admin-section-panel").forEach((panel) => {
     panel.classList.toggle("hidden", !SETTINGS_SECTIONS.includes(panel.dataset.adminSection));
   });
-  document.querySelector("#settings-heading").classList.remove("hidden");
   Promise.allSettled([checkSoftwareUpdate(), refreshUsers(), refreshBackups(), refreshRuntime(), refreshDevices()]);
-  window.scrollTo({ top: 0, behavior: "auto" });
-}
-
-function selectRunTab(tab) {
-  const us = state.serverContext?.operating_region === "us";
-  const selected = RUN_TABS.includes(tab) && !(us && ["trafik", "tmbox"].includes(tab)) ? tab : "oversikt";
-  state.runTab = selected;
-  document.querySelector("#settings-heading")?.classList.add("hidden");
-  for (const [name, selector] of Object.entries(RUN_PANELS)) {
-    document.querySelector(selector)?.classList.toggle("hidden", name !== selected);
-  }
-  document.querySelector("#admin-view").classList.add("hidden");
-  document.querySelectorAll(".run-tab").forEach((button) => {
-    if (button.dataset.runTab === selected) button.setAttribute("aria-current", "page");
-    else button.removeAttribute("aria-current");
-  });
-  if (selected === "tmbox") startTMBoxV2(); else stopTMBoxV2();
-  if (selected === "trafik") startTrafficView(); else stopTrafficView();
-  window.scrollTo({ top: 0, behavior: "auto" });
 }
 
 function applyWorkspaceRoute() {
@@ -521,10 +535,26 @@ function applyWorkspaceRoute() {
   const route = location.hash.slice(1);
   document.querySelector("#application-menu").open = false;
   if (route === "settings") setMode("installningar");
-  else if (route === "screens") { state.runTab = "skarmar"; setMode("kor"); }
+  else if (route === "screens") setMode("skarmar");
+  else if (route === "tmbox") {
+    if (!availableWorkspaces().includes("tmbox")) { setMode("workspaces"); return; }
+    sessionStorage.setItem(WORKSPACE_KEY, "tmbox");
+    setMode("tmbox");
+  }
+  else if (route === "traffic" && availableWorkspaces().includes("administration")) {
+    // Deprecated separate Traffic route: keep bookmarks, not the old view.
+    sessionStorage.setItem(WORKSPACE_KEY, "administration");
+    history.replaceState(null, "", "/#overview");
+    setMode("kor");
+    if (state.serverContext?.operating_region === "eu") document.querySelector("#overview-traffic").scrollIntoView();
+  }
   else if (route === "workspaces" || !sessionStorage.getItem(WORKSPACE_KEY)) setMode("workspaces");
+  else if (sessionStorage.getItem(WORKSPACE_KEY) === "tmbox") {
+    history.replaceState(null, "", "/#tmbox");
+    setMode("tmbox");
+  }
   else if (sessionStorage.getItem(WORKSPACE_KEY) !== "administration") location.assign(workspaceHome());
-  else { state.runTab = route === "traffic" ? "trafik" : "oversikt"; setMode("kor"); }
+  else setMode("kor");
 }
 
 document.body.dataset.mode = storedMode();
@@ -533,12 +563,10 @@ document.querySelector("#workspace-home").addEventListener("click", (event) => {
   event.preventDefault();
   const destination = workspaceHome();
   if (destination.startsWith("/#")) {
-    location.hash = destination.slice(2);
-    applyWorkspaceRoute();
+    const hash = destination.slice(1);
+    if (location.hash === hash) applyWorkspaceRoute();
+    else location.hash = hash;
   } else location.assign(destination);
-});
-document.querySelectorAll(".run-tab").forEach((button) => {
-  button.addEventListener("click", () => selectRunTab(button.dataset.runTab));
 });
 bindUsersSection();
 bindRestore();
@@ -708,7 +736,7 @@ clockControlForm.addEventListener("submit", async (event) => {
     return;
   }
   await controlLocalClock({
-    action: "start",
+    action: "set",
     time: document.querySelector("#local-clock-time").value,
     speed,
   });
@@ -721,10 +749,31 @@ document.querySelector("#stop-local-clock").addEventListener("click", async () =
   });
 });
 
+document.querySelector("#clock-appearance-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const message = document.querySelector("#clock-appearance-message");
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/clock", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "appearance", style: document.querySelector("#meet-clock-style").value,
+        show_seconds: document.querySelector("#meet-clock-seconds").checked }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || t("Klockan kunde inte uppdateras"));
+    finishModal(form);
+    await refreshLocalClock();
+  } catch (error) { setMessage(message, error.message, "error"); }
+  finally { button.disabled = false; }
+});
+
 deviceForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const button = deviceForm.querySelector('button[type="submit"]');
+  if (button.disabled) return;
   setMessage(deviceMessage, "");
-  const button = deviceForm.querySelector("button");
   button.disabled = true;
   try {
     const response = await authorizedFetch("/v1/devices/assign", {
@@ -1214,25 +1263,10 @@ async function openApplication() {
 
 
 
-// ------------------------------------------------------------------- Trafik
-let trafficTimer = null;
-
-function startTrafficView() {
-  renderTrafficView();
-  clearInterval(trafficTimer);
-  trafficTimer = setInterval(renderTrafficView, 4000);
-}
-
-function stopTrafficView() {
-  clearInterval(trafficTimer);
-  trafficTimer = null;
-}
-
 function updateRuntimeNavigation(configured) {
   document.querySelectorAll("[data-requires-runtime]").forEach((element) => {
     element.classList.toggle("hidden", !configured);
   });
-  if (!configured && ["tmbox", "skarmar", "trafik", "tkl"].includes(state.runTab)) selectRunTab("oversikt");
 }
 
 
@@ -1456,6 +1490,13 @@ async function refreshLocalClock() {
   const speedInput = document.querySelector("#local-clock-speed");
   if (!clockControlForm.closest("dialog").open) speedInput.value = Number(clock.speed || 1);
   const stateLabel = document.querySelector("#clock-state");
+  if (!document.querySelector("#clock-appearance-modal").open) {
+    const styleSelect = document.querySelector("#meet-clock-style");
+    const styles = clock.available_styles || Object.keys(clockStyleLabels);
+    styleSelect.replaceChildren(...styles.map(value => new Option(t(clockStyleLabels[value] || value), value)));
+    styleSelect.value = clock.style || styles[0];
+    document.querySelector("#meet-clock-seconds").checked = clock.show_seconds !== false;
+  }
   stateLabel.textContent = clock.running ? t("Går · {speed}×", { speed: Number(clock.speed || 1) }) : t("Stoppad");
   stateLabel.classList.toggle("clock-running", Boolean(clock.running));
   document.querySelector("#overview-clock").textContent = String(clock.time || "--:--").slice(0, 5);
@@ -1687,8 +1728,13 @@ function renderOverview(snapshot) {
   }
   renderOverviewTopology();
   renderStationInspector();
-  renderOverviewGraph(snapshot);
+  renderTraffic(snapshot);
+  if (document.querySelector("#overview-timetable").open) renderOverviewGraph(snapshot);
 }
+
+document.querySelector("#overview-timetable").addEventListener("toggle", (event) => {
+  if (event.target.open) renderOverviewGraph(state.overviewSnapshot);
+});
 
 function renderRouteExplorer() {
   const snapshot = state.overviewSnapshot;
@@ -2698,19 +2744,13 @@ function updateAnalogClockHands(target, seconds, style, running) {
 function renderClock(snapshot) {
   const target = document.querySelector("#clock-view");
   const available = snapshot.clock?.available_styles?.length ? snapshot.clock.available_styles : ["swiss", "swedish", "digital"];
-  let style = new URLSearchParams(location.search).get("style") || localStorage.getItem("trainmeet.clockStyle") || available[0];
+  // The meeting server owns presentation too. Retired localStorage/URL choices
+  // must not silently override an administrator's change on another computer.
+  let style = snapshot.clock?.style || available[0];
   if (!available.includes(style)) style = available[0];
-  const styleSelect = document.querySelector("#display-clock-style");
-  const signature = available.join("|");
-  if (styleSelect.dataset.signature !== signature) {
-    styleSelect.dataset.signature = signature;
-    styleSelect.innerHTML = available.map((value) => html`<option value="${escapeHTML(value)}">${escapeHTML(clockStyleLabels[value] || value)}</option>`).join("");
-  }
-  styleSelect.value = style;
   const seconds = currentClockSeconds(snapshot);
   const time = formatClockTime(seconds);
-  const localSeconds = localStorage.getItem("trainmeet.showSeconds");
-  const showSeconds = localSeconds === null ? snapshot.clock?.show_seconds !== false : localSeconds === "true";
+  const showSeconds = snapshot.clock?.show_seconds !== false;
   const displayTime = showSeconds ? time : time.slice(0, 5);
   const darkBackground = !document.querySelector("#display-app").classList.contains("light");
   const stopped = !snapshot.clock?.running;
@@ -2796,8 +2836,6 @@ function renderDisplay(snapshot) {
   const isClock = displayKind === "clock";
   document.querySelector("#display-speed").classList.toggle("hidden", !isClock);
   document.querySelector("#display-speed").textContent = `${Number(snapshot.clock?.speed || 1)}×`;
-  document.querySelector("#display-clock-style").classList.toggle("hidden", !isClock || (snapshot.clock?.available_styles?.length || 0) < 2);
-  document.querySelector("#display-seconds").classList.toggle("hidden", !isClock);
   const trainSelect = document.querySelector("#display-train-select");
   const trainSelectable = displayKind === "topology" || displayKind === "graph";
   const services = uniqueOverviewServices(snapshot);
@@ -2857,10 +2895,6 @@ async function initDisplay() {
     document.querySelector("#display-theme").textContent = isLight ? "Mörkt" : "Ljust";
     if (displaySnapshot) renderDisplay(displaySnapshot);
   });
-  document.querySelector("#display-clock-style").addEventListener("change", (event) => {
-    localStorage.setItem("trainmeet.clockStyle", event.target.value);
-    if (displaySnapshot) renderClock(displaySnapshot);
-  });
   document.querySelector("#display-train-select").addEventListener("change", (event) => {
     state.displaySelectedTrainNumber = event.target.value || null;
     state.displaySelectedStationID = null;
@@ -2870,13 +2904,6 @@ async function initDisplay() {
       graphLastCenteredSelection = null;
       renderGraph(displaySnapshot);
     }
-  });
-  document.querySelector("#display-seconds").addEventListener("click", () => {
-    const current = localStorage.getItem("trainmeet.showSeconds");
-    const serverDefault = displaySnapshot?.clock?.show_seconds !== false;
-    const next = current === null ? !serverDefault : current !== "true";
-    localStorage.setItem("trainmeet.showSeconds", String(next));
-    if (displaySnapshot) renderClock(displaySnapshot);
   });
   document.querySelector("#display-fullscreen").addEventListener("click", async () => {
     try {
@@ -3707,34 +3734,25 @@ function v2Payload(command) {
   return payload;
 }
 
-// ==================================================== KÖR › Trafik (DEL 3.3)
-// Vyn som ersätter dagens "Aktiv träff". Den svarar på två frågor: var är
-// tågen, och vem väntar på mig?
+// ==================================================== Unified live overview
+// Uses the overview's snapshot and refresh cycle, never a second polling loop.
 //
 // All data kommer från /v1/display — samma källa som trafikmotorn och
 // hallskärmarna. Ingenting här är exempeldata, och ingenting härleds på ett
 // annat sätt än motorn gör det.
 
-const trafficState = { station: "", onlyDeviations: false, snapshot: null };
+const trafficState = { station: "", onlyDeviations: false };
 
 document.querySelector("#traffic-station")?.addEventListener("change", (event) => {
   trafficState.station = event.target.value;
-  renderTrafficView();
+  renderTraffic(state.overviewSnapshot);
 });
 document.querySelector("#traffic-only-deviations")?.addEventListener("change", (event) => {
   trafficState.onlyDeviations = event.target.checked;
-  renderTrafficView();
+  renderTraffic(state.overviewSnapshot);
 });
 
-async function renderTrafficView() {
-  try {
-    const response = await authorizedFetch("/v1/display");
-    if (!response.ok) return;
-    trafficState.snapshot = await response.json();
-  } catch {
-    return; // nästa intervall försöker igen
-  }
-  const snapshot = trafficState.snapshot;
+function renderTraffic(snapshot) {
   if (!snapshot) return;
 
   fillTrafficStationFilter(snapshot);
@@ -3745,13 +3763,21 @@ async function renderTrafficView() {
 
 function fillTrafficStationFilter(snapshot) {
   const select = document.querySelector("#traffic-station");
-  if (!select || select.options.length > 1) return;
-  for (const station of snapshot.stations || []) {
+  if (!select) return;
+  const stations = snapshot.stations || [];
+  const signature = JSON.stringify(stations.map(({ id, name }) => [id, name]));
+  if (select.dataset.stations === signature) return;
+  select.dataset.stations = signature;
+  // Keep the all-stations option (and its localization metadata), replace data.
+  while (select.options.length > 1) select.remove(1);
+  for (const station of stations) {
     const option = document.createElement("option");
     option.value = station.id;
     option.textContent = station.name;
     select.append(option);
   }
+  if (!stations.some((station) => station.id === trafficState.station)) trafficState.station = "";
+  select.value = trafficState.station;
 }
 
 /** Minuter från träffklockan till `time`, som kan vara negativt. */

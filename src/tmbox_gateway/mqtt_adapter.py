@@ -266,6 +266,7 @@ def _decode_command(
         key=str(payload["key"]),
         sent_at=sent_at,
         expires_at=expires_at,
+        train_number=payload.get("train_number"),
     )
 
 

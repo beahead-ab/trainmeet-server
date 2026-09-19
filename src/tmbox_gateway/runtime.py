@@ -685,6 +685,16 @@ class SQLiteRuntimeStore:
     def central_url(self) -> str | None:
         return self._setting("central_runtime_url")
 
+    def clock_display_settings(self, scope: str) -> dict[str, Any]:
+        value = self._setting("clock_display:" + scope)
+        return json.loads(value) if value else {}
+
+    def save_clock_display_settings(self, scope: str, style: str, show_seconds: bool) -> None:
+        if style not in AVAILABLE_CLOCK_STYLES or not isinstance(show_seconds, bool):
+            raise ValueError("Ogiltigt klockutseende")
+        self._save_setting("clock_display:" + scope,
+                           json.dumps({"style": style, "show_seconds": show_seconds}))
+
     def connection_badge_screens(self) -> list[str]:
         """Screens showing the address and connection code. All of them by default."""
         stored = self._setting("connection_badge_screens")
