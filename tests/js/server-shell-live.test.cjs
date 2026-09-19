@@ -258,6 +258,7 @@ const root = path.resolve(__dirname, '../..');
     await page.getByRole('button', { name: /^TKL/ }).click();
     await page.waitForURL(urls.eu + '/tkl/');
     await page.getByRole('heading', {name:'Väntar på administratören'}).waitFor();
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('trainmeet-tkl.managed-client'))?.device_code);
     const tkl = await page.evaluate(() => JSON.parse(localStorage.getItem('trainmeet-tkl.managed-client')));
     await page.request.post(urls.eu + '/v1/devices/assign', {data:{device_code:tkl.device_code,station_id:'station-a'}});
     await screenshot('tkl-entry');

@@ -78,6 +78,7 @@ const root = path.resolve(__dirname, '../..');
     await page.getByRole('button', {name: 'TKL', exact: true}).click();
     await page.getByRole('heading', {name: 'Väntar på administratören'}).waitFor();
     assert.equal(await page.locator('main input, main select').count(), 0, 'Unassigned TKL cannot choose its station or login');
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('trainmeet-tkl.managed-client'))?.device_code);
     const tkl = await page.evaluate(() => JSON.parse(localStorage.getItem('trainmeet-tkl.managed-client')));
     const registrationCount = posts.filter(path => path === '/v1/browser-clients').length;
     await page.reload();
