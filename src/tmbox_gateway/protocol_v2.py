@@ -24,6 +24,7 @@ from .observability import log_event, use_correlation
 from .operations import SQLiteOperationsStore
 from .runtime import RuntimePublication, SQLiteRuntimeStore, matches_active_day
 from .lifecycle import MeetLifecycleError
+from .train_routes import describe_departure
 
 
 LOGGER = logging.getLogger("tmbox_gateway.protocol_v2")
@@ -120,6 +121,7 @@ class TMBoxStationService:
             "status": "assigned" if station_id else "waiting_for_assignment",
             "device_id": device_id,
             "device_code": device.display_name.split()[-1] if device else device_id,
+            "config_version": self.config_version(),
             "station_id": station_id,
             "station_code": station.code if station else None,
         }
@@ -137,13 +139,33 @@ class TMBoxStationService:
         if station is None:
             return None
         capability = display or DisplayCapability()
+        panels = sorted(
+            (panel for panel in config.panels.values() if panel.station_id == station_id),
+            key=lambda panel: panel.id,
+        )
+        placements: dict[str, list[dict[str, Any]]] = {}
+        for panel in panels:
+            for key in ("A", "B", "C", "D"):
+                connection_id = panel.slots.get(key)
+                if connection_id:
+                    row, side = panel.slot_position(key)
+                    placements.setdefault(connection_id, []).append(
+                        {"panel_id": panel.id, "key": key, "row": row, "side": side}
+                    )
+        # Keep Cloud's port order, including its explicit positions. Unmapped
+        # lines remain available for existing station-wide clients. A station
+        # with multiple panels must not silently inherit one arbitrary panel.
+        order_by_connection = {value: index for index, value in enumerate(placements)}
+        connections = sorted(
+            (connection for connection in config.connections.values()
+             if station_id in (connection.station_a_id, connection.station_b_id)),
+            key=lambda connection: (order_by_connection.get(connection.id, len(placements)), connection.id),
+        )
         rows = []
-        for order, connection in enumerate(
-            sorted(config.connections.values(), key=lambda entry: entry.id), start=1
-        ):
-            if station_id not in (connection.station_a_id, connection.station_b_id):
-                continue
+        for order, connection in enumerate(connections, start=1):
             other = config.stations.get(connection.other_station(station_id))
+            ports = placements.get(connection.id, [])
+            sides = {port["side"] for port in ports}
             rows.append(
                 {
                     "connection_id": connection.id,
@@ -153,6 +175,8 @@ class TMBoxStationService:
                         connection.dispatch_mode_override or config.default_dispatch_mode
                     ).value,
                     "display_row": order,
+                    "panel_slots": ports,
+                    "display_side": next(iter(sides)) if len(sides) == 1 else None,
                 }
             )
         return {
@@ -170,6 +194,11 @@ class TMBoxStationService:
                 for track in config.tracks_for_station(station_id)
             ],
             "connections": rows,
+            "panels": [
+                {"panel_id": panel.id, "slot_layout": panel.slot_layout,
+                 "slots": {key: panel.slots.get(key) for key in ("A", "B", "C", "D")}}
+                for panel in panels
+            ],
             "display": capability.to_dict(),
         }
 
@@ -697,10 +726,9 @@ class TMBoxStationService:
     ) -> dict[str, Any]:
         """Find a train number's movements at this station.
 
-        A train number can have several movements at one station on one day -
-        an arrival and a later departure. The meeting clock picks first; only
-        a genuinely ambiguous number comes back as a list for the box to page
-        through.
+        Every candidate remains explicit; clock time only sorts the list. The
+        planned next leg is resolved from service visits, never from time. This
+        additive metadata does not itself authorize a traffic transition.
         """
         body = payload.get("payload") or {}
         train_number = str(body.get("train_number") or "").strip()
@@ -714,6 +742,8 @@ class TMBoxStationService:
                 "departure_time": row.get("departure_time"),
                 "sort_time": row.get("sort_time"),
                 "track_id": row.get("track_id"),
+                "service_id": row.get("service_id"),
+                "departure_route": describe_departure(publication.payload, active_day, station_id, str(row["id"])),
             }
             for row in publication.payload["trains"]
             if str(row["station_id"]) == station_id

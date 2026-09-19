@@ -278,8 +278,8 @@ systemtjänsten `trainmeet-server` och lagrar driftsdata i
 
 På Raspberry Pi OS Desktop konfigurerar installationen dessutom automatisk
 inloggning i skrivbordet och startar Chromium med `http://127.0.0.1:8787/` som
-en maximerad serverapplikation. Sidan möter en inloggningsruta - servern kräver
-det även på maskinen själv - och sessionen håller i tolv timmar. Träffens
+en maximerad serverapplikation. Sidan visar arbetsytesväljaren utan inloggning.
+Drift och administration kräver inloggning även på maskinen själv, och adminsessionen håller i tolv timmar. Träffens
 skärmvyer under `/display/…` kräver ingen inloggning och påverkas inte.
 På Raspberry Pi OS Lite görs ingen skrivbords- eller webbläsarinstallation.
 
@@ -509,11 +509,35 @@ värd som en server byggd för att köra en träff utan internet aldrig ska
 behöva.
 ## Arbetsytor, inte byggläge
 
-Efter inloggning väljer du Drift och administration, TKL eller relevant US-roll.
+Arbetsytesväljaren är öppen utan inloggning. Drift och administration samt
+Inställningar kräver admininloggning först när de öppnas. Relevanta US-roller
+behåller sina befintliga åtkomstkrav.
 Hem leder till aktuell arbetsyta. Hamburgermenyn samlar Inställningar, Skärmar,
 Byt arbetsyta och Logga ut. Servern har inget byggläge och ingen offline-editor;
 ett nätavbrott påverkar inte den lokala driften eller låser upp configredigering.
 Se [Cloud förbereder, Server kör](docs/CLOUD-ONLY-SERVER.md).
+
+### Öppna klienter på lokalnätet
+
+- **TMBox** (utan versionsnummer i arbetsytesväljaren) skapar en egen
+  webbläsaridentitet och visar en boxkod. Precis som en fysisk box väntar den
+  på att admin tilldelar station under **Inställningar → TMBoxar**. Först då
+  kan den påverka trafikspelet. Den kan inte välja station, styra andra boxar
+  eller ändra serverinställningar. Identiteten återanvänds vid omladdning.
+  Borttagning av boxen spärrar också dess webbläsarnyckel.
+- **TKL** i väljaren öppnar `/tkl/`. Den får en egen enhetskod och väntar
+  på administratörens stationstilldelning, precis som TMBox. Ingen inloggning,
+  manuell serveradress eller stationsväljare visas. Admin kopplar även denna
+  klient under Inställningar. Omtilldelning byter arbetsstation; borttagning
+  spärrar klienten. Tidigare lokala stationsval ignoreras.
+- En uttryckligt separat demo finns kvar på `/tkl/?mode=demo` med två fiktiva
+  stationer. Den registreras inte och anropar aldrig det riktiga trafik-API:t.
+  Separat installerade Raspberry Pi-terminaler behåller sitt befintliga flöde.
+
+Anonym TMBox- och TKL-registrering tillåts bara direkt från privat/lokalt nätverk,
+inte i externt inloggningsläge eller bakom proxyhuvuden. Registreringen är
+frekvensbegränsad. Klientnyckeln används separat från adminens sessionskaka;
+en admin som testar en virtuell box ger alltså inte boxen adminbehörighet.
 
 ## Adminåtkomst
 

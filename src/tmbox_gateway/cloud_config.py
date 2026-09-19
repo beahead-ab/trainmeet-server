@@ -246,6 +246,7 @@ class CloudConfiguration:
         app.pairing.replace_valid_panels(set(app.engine.config.panels))
         app.refresh_connection_grants(new_meet=switching)
         app.lifecycle.complete_transition(ticket)
+        app.refresh_clock_source()
         app.lifecycle_error = ""
         if app.on_config_applied:
             try:

@@ -23,6 +23,7 @@ from uuid import uuid4
 from . import backup
 from .engine import TrafficEngine
 from .cloud_config import CloudConfiguration
+from .external_clock import ExternalClock, FastClockError, validate_settings as validate_clock_source
 from .lifecycle import SQLiteMeetLifecycle, MeetLifecycleError
 from .central_sync import (
     DEFAULT_RUNTIME_PUBLICATION_URL,
@@ -36,6 +37,7 @@ from .central_sync import (
 from .identity import (
     AdminAccessError,
     DeviceKind,
+    DisplayCapability,
     IdentityStore,
     PairingError,
     PairingService,
@@ -247,6 +249,7 @@ class TrainMeetHTTPApplication:
         self._station_service = station_service
         self._box_enrollment_lock = threading.Lock()
         self._box_enrollment_attempts: dict[str, list[float]] = {}
+        self._browser_enrollment_attempts: dict[str, list[float]] = {}
         self.us_store = us_store
         self.lifecycle = lifecycle or (SQLiteMeetLifecycle(runtime_store.path) if runtime_store else None)
         self.lifecycle_error = ""
@@ -262,6 +265,13 @@ class TrainMeetHTTPApplication:
         self.cloud_config = CloudConfiguration(self) if self.lifecycle else None
         self.on_config_applied = None
         self.on_device_assignment_changed = None
+        self.on_clock_changed = None
+        self.external_clock = ExternalClock()
+        self.refresh_clock_source()
+        if self.operations_store:
+            self.operations_store.external_clock_source = lambda: self.external_clock.status("eu")
+        if self.us_store:
+            self.us_store.external_clock_source = lambda: self.external_clock.status("us")
         if self.lifecycle and us_store and (self.lifecycle.selected() or {}).get("region") == "us":
             old_link = us_store.cloud_link()
             if old_link and not runtime_store.link_token():
@@ -356,6 +366,55 @@ class TrainMeetHTTPApplication:
             return self.cloud_config.check()
         except (CentralSyncError, RuntimePublicationError, USError) as error:
             raise HTTPAPIError(HTTPStatus.CONFLICT, "config_update_failed", str(error)) from error
+
+    @runtime_view
+    def public_workspaces(self) -> dict[str, Any]:
+        """Navigation is public; no credentials, Cloud link or admin data."""
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        region = selected["region"] if selected else None
+        return {
+            "selected_meet": ({"id": selected["meet_id"], "name": selected.get("meet_name", ""),
+                               "publication_id": selected["publication_id"], "operating_region": region,
+                               "generation": selected["generation"]} if selected else None),
+            "operating_region": region,
+            "available_workspaces": ["administration"] + (["tkl", "tmbox"] if region == "eu" else ["dispatcher", "conductor"] if region == "us" else []),
+        }
+
+    @runtime_view
+    def create_browser_client(self, payload: dict[str, Any], peer: str) -> dict[str, Any]:
+        if self.lifecycle:
+            self.lifecycle.assert_selected("eu")
+        workspace = payload.get("workspace")
+        if workspace not in {"tmbox", "tkl"}:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_workspace", "Välj TMBox eller TKL.")
+        # Called only from the same-origin LAN enrollment route. No caller-
+        # supplied identity, station, kind or grants can enter registration.
+        now = time.monotonic()
+        with self._box_enrollment_lock:
+            self._browser_enrollment_attempts = {key: [stamp for stamp in values if now - stamp < 3600]
+                                                for key, values in self._browser_enrollment_attempts.items()
+                                                if values and now - values[-1] < 3600}
+            attempts = self._browser_enrollment_attempts.setdefault(peer, [])
+            if len(attempts) >= 20 or len(self._browser_enrollment_attempts) > 1024:
+                raise HTTPAPIError(HTTPStatus.TOO_MANY_REQUESTS, "too_many_clients", "För många nya klienter. Försök igen senare.")
+            attempts.append(now)
+        client_id = f"browser-{workspace}-{uuid4().hex}"
+        token = secrets.token_urlsafe(32)
+        kind = DeviceKind.TKL_TERMINAL if workspace == "tkl" else DeviceKind.ESP32_PANEL
+        client = self.identities.register_client(client_id, f"Webb {workspace.upper()}", kind, token, (), browser_workspace=workspace)
+        self.identities.record_discovery(client_id, f"WEB-{uuid4().hex[:8].upper()}",
+                                         model=f"{'TKL' if workspace == 'tkl' else 'TMBox'} · webbläsare", protocol_version=2,
+                                         display=DisplayCapability(rows=4, cols=20))
+        return {**self.browser_client(client), "access_token": token}
+
+    def browser_client(self, client: PairedClient) -> dict[str, Any]:
+        workspace = self.identities.browser_workspace(client.client_id)
+        current = self.identities.client(client.client_id)
+        if not workspace or current is None:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "browser_client_required", "Klienten är inte en aktiv webbklient")
+        device = self.identities.discovered_device_or_none(client.client_id)
+        return {"client_id": client.client_id, "workspace": workspace,
+                "station_id": current.station_id, "device_code": device.device_code if device else None}
 
     def local_admin(self, user: dict[str, object] | None = None) -> PairedClient:
         return PairedClient(
@@ -702,6 +761,9 @@ class TrainMeetHTTPApplication:
         result = store.context(actor, dispatcher)
         if 'clock' not in result:
             result["clock"] = {"time": "12:00:00", "running": False, "configured": False, "scope": "us"}
+        external = self.external_clock.status("us")
+        if external is not None:
+            result["clock"] = external
         if dispatcher:
             result["conductors"] = [{"id": f"client:{c.client_id}", "name": c.display_name} for c in self.identities.enabled_clients() if c.kind == DeviceKind.US_CONDUCTOR]
             selected = self.lifecycle.selected() if self.lifecycle else None
@@ -839,13 +901,13 @@ class TrainMeetHTTPApplication:
         return self._station_service
 
     def tmbox_v2_assignment(self, client: PairedClient, device_id: str) -> dict[str, Any]:
-        self._require_admin(client)
+        self._require_box_access(client, device_id)
         if not device_id:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "device_required", "Ange en enhet")
         return self.station_service.assignment_payload(device_id)
 
     def tmbox_v2_config(self, client: PairedClient, station_id: str) -> dict[str, Any]:
-        self._require_admin(client)
+        self._require_station_access(client, station_id)
         payload = self.station_service.config_payload(station_id)
         if payload is None:
             raise HTTPAPIError(
@@ -854,7 +916,7 @@ class TrainMeetHTTPApplication:
         return payload
 
     def tmbox_v2_snapshot(self, client: PairedClient, station_id: str) -> dict[str, Any]:
-        self._require_admin(client)
+        self._require_station_access(client, station_id)
         payload = self.station_service.snapshot_payload(station_id)
         if payload is None:
             raise HTTPAPIError(
@@ -864,8 +926,8 @@ class TrainMeetHTTPApplication:
 
     @runtime_command("eu")
     def tmbox_v2_command(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        self._require_admin(client)
         device_id = str(payload.get("device_id") or "").strip()
+        self._require_box_access(client, device_id)
         if not device_id:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "device_required", "Ange en enhet")
         envelope = payload.get("command")
@@ -876,6 +938,13 @@ class TrainMeetHTTPApplication:
         # A rejection is an answer, not a transport failure: the box renders
         # the reason on its display, so the simulator has to receive it too.
         return self.station_service.handle_command(device_id, envelope)
+
+    def _require_box_access(self, client: PairedClient, device_id: str) -> None:
+        if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
+            return
+        current = self.identities.client(client.client_id)
+        if current is None or current.kind != DeviceKind.ESP32_PANEL or device_id != current.client_id:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "box_not_assigned", "Du kan bara använda din egen TMBox")
 
     def tmbox_v2_stations(self, client: PairedClient) -> dict[str, Any]:
         """Which stations the simulator can stand in for, and which boxes exist."""
@@ -1403,7 +1472,7 @@ class TrainMeetHTTPApplication:
         if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
             return
         current = self.identities.client(client.client_id)
-        if current is None and client.kind == DeviceKind.ESP32_PANEL:
+        if current is None and client.kind in {DeviceKind.ESP32_PANEL, DeviceKind.TKL_TERMINAL}:
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "station_not_assigned", "Terminalen har inte tillgång till stationen")
         if current is not None:
             client = current
@@ -1421,6 +1490,77 @@ class TrainMeetHTTPApplication:
             return f"{selected['region']}:{selected['meet_id']}"
         return f"eu:{self.engine.config.id}"
 
+    def refresh_clock_source(self):
+        if self.runtime_store:
+            scope = self._clock_scope()
+            self.external_clock.configure(scope, self.runtime_store.clock_source_settings(scope))
+
+    def clock_source_settings(self, client):
+        self._require_admin(client)
+        if not self.runtime_store:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "clock_unavailable", "Klockinställningarna kan inte sparas")
+        settings = self.runtime_store.clock_source_settings(self._clock_scope())
+        return {k: v for k, v in settings.items() if k != "password"} | {"has_password": bool(settings.get("password"))}
+
+    def configure_clock_source(self, client, payload):
+        # Probe is read-only and outside the traffic lock. Recheck both meet and
+        # settings before committing so a delayed response cannot select a clock
+        # for a different meet or overwrite another administrator's change.
+        with self.engine._lock:
+            self._require_admin(client)
+            if not self.runtime_store or not self.lifecycle:
+                raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "clock_unavailable", "Koppla en träff först.")
+            selected = self.lifecycle.selected()
+            self.lifecycle.assert_selected((selected or {}).get("region", ""))
+            if type(payload.get("meet_generation")) is not int or payload["meet_generation"] != selected["generation"]:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_meet_context", "Träffen har ändrats. Läs in sidan igen.")
+            scope = self._clock_scope()
+            previous = self.runtime_store.clock_source_settings(scope)
+            try:
+                settings = validate_clock_source(payload, previous)
+            except FastClockError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_source", str(error)) from None
+        try:
+            sample = self.external_clock.probe(settings) if settings["source"] == "fastclock" else None
+        except FastClockError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "external_clock_unavailable", str(error)) from None
+        with self.engine._lock:
+            self._require_admin(client)
+            if (self.lifecycle.selected() != selected or self.lifecycle.transition()
+                    or self.runtime_store.clock_source_settings(scope) != previous):
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_meet_context", "Träffen eller klockinställningen har ändrats. Läs in sidan igen.")
+            old_clock = self.external_clock.status()
+            self.runtime_store.save_clock_source_settings(scope, settings)
+            self.external_clock.configure(scope, settings, sample)
+            # Switching back never revives an old, still-running internal clock.
+            # Keep the last received time and require an explicit Start.
+            if old_clock is not None and settings["source"] == "internal":
+                last_time = old_clock["time"] if old_clock.get("last_sync") else None
+                if selected["region"] == "eu" and self.operations_store:
+                    self.operations_store.configure_clock(time_value=last_time, running=False)
+                elif selected["region"] == "us" and self.us_store:
+                    context = self.us_store.context("clock-source", True)
+                    if context.get("session") and context["session"]["status"] != "closed":
+                        self.us_command(client, {"action": "clock", "command_id": str(uuid4()), "confirmed": True,
+                            "session_id": context["session"]["id"], "expected_revision": context["session"]["revision"],
+                            "clock_time": last_time or context["clock"]["time"], "clock_speed": context["clock"]["speed"], "running": False})
+            self.notify_clock_changed()
+            return {"settings": self.clock_source_settings(client), "clock": self.clock_status(client)}
+
+    def notify_clock_changed(self):
+        if self.on_clock_changed:
+            try:
+                self.on_clock_changed()
+            except Exception:
+                LOGGER.warning("Klockan sparades men kunde inte skickas till alla boxar ännu")
+
+    def poll_external_clock(self):
+        changed = self.external_clock.poll()
+        if changed:
+            with self.engine._lock:
+                self.notify_clock_changed()
+        return changed
+
     def _clock_display(self, clock: dict[str, Any]) -> dict[str, Any]:
         settings = self.runtime_store.clock_display_settings(self._clock_scope()) if self.runtime_store else {}
         styles = clock.get("available_styles") or list(AVAILABLE_CLOCK_STYLES)
@@ -1432,7 +1572,7 @@ class TrainMeetHTTPApplication:
         selected = self.lifecycle.selected() if self.lifecycle else None
         if selected and selected["region"] == "us":
             result = self.us_context(client)
-            return self._clock_display({**result["clock"], "configured": bool(result["session"])})
+            return self._clock_display({**result["clock"], "configured": bool(result["session"]) or result["clock"].get("source") == "fastclock"})
         return self._clock_display(self.operations_store.clock_status() if self.operations_store else {"configured": False, "running": False})
 
     @runtime_command()
@@ -1446,6 +1586,26 @@ class TrainMeetHTTPApplication:
             if style not in current["available_styles"] or not isinstance(seconds, bool):
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock", "Välj ett giltigt klockutseende och sekundvisning")
             self.runtime_store.save_clock_display_settings(self._clock_scope(), style, seconds)
+            return self.clock_status(client)
+        if self.external_clock.status() is not None:
+            action = payload.get("action")
+            if action not in {"start", "stop"}:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "external_clock_readonly", "Tid och hastighet ändras i FastClock när extern klocka används.")
+            selected = self.lifecycle.selected() if self.lifecycle else None
+            try:
+                self.external_clock.control(action, payload.get("reason", ""))
+            except FastClockError as error:
+                self.notify_clock_changed()
+                raise HTTPAPIError(HTTPStatus.BAD_GATEWAY, "external_clock_control", str(error)) from None
+            if action == "start" and selected and selected["region"] == "us" and self.external_clock.status().get("running"):
+                # A failed/unconfirmed provider command must not create a new
+                # local operating session as a side effect.
+                context = self.us_context(client)
+                if not context.get("session") or context["session"]["status"] == "closed":
+                    package = next(p for p in self.us_store.package_catalogue() if p["publication_id"] == selected["publication_id"])
+                    self.us_command(client, {"action": "create_session", "command_id": str(uuid4()), "confirmed": True,
+                        "publication_id": selected["publication_id"], "package_checksum": package["checksum"]})
+            self.notify_clock_changed()
             return self.clock_status(client)
         selected = self.lifecycle.selected() if self.lifecycle else None
         if selected and selected["region"] == "us":
@@ -2779,8 +2939,18 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/server-context":
                 self._send_json(HTTPStatus.OK, self.server.application.server_context(self._authenticated_client()))
                 return
+            if path == "/v1/workspaces":
+                self._send_json(HTTPStatus.OK, {**self.server.application.public_workspaces(),
+                                               "public_clients_enabled": self._public_clients_allowed()})
+                return
+            if path == "/v1/browser-clients/self":
+                self._send_json(HTTPStatus.OK, self.server.application.browser_client(self._authenticated_client()))
+                return
             if path == "/v1/clock":
                 self._send_json(HTTPStatus.OK, self.server.application.clock_status(self._authenticated_client()))
+                return
+            if path == "/v1/clock/source":
+                self._send_json(HTTPStatus.OK, self.server.application.clock_source_settings(self._authenticated_client()))
                 return
             if path == "/v1/us/context":
                 self._send_json(HTTPStatus.OK, self.server.application.us_context(self._authenticated_client()))
@@ -3030,6 +3200,15 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             payload = self._read_json()
+            if path in {"/v1/browser-clients", "/v1/clock/source"}:
+                origin = self.headers.get("Origin")
+                if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get("Sec-Fetch-Site") == "cross-site":
+                    raise HTTPAPIError(HTTPStatus.FORBIDDEN, "same_origin_required", "Öppna sidan från den lokala TrainMeet Server")
+            if path == "/v1/browser-clients":
+                if not self._public_clients_allowed():
+                    raise HTTPAPIError(HTTPStatus.FORBIDDEN, "local_network_required", "Öppna klienten direkt på den lokala TrainMeet Server")
+                self._send_json(HTTPStatus.CREATED, self.server.application.create_browser_client(payload, self.client_address[0]))
+                return
             if path in {"/v1/local-configuration", "/v1/local-configuration/seed", "/v1/local-configuration/build",
                         "/v1/local-configuration/activate", "/v1/operating-mode", "/v1/runtime/install", "/v1/us/packages"}:
                 self.server.application._require_admin(self._authenticated_client())
@@ -3388,6 +3567,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     self.server.application.control_clock(client, payload),
                 )
                 return
+            if path == "/v1/clock/source":
+                self._send_json(HTTPStatus.OK, self.server.application.configure_clock_source(self._authenticated_client(), payload))
+                return
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
         except MeetLifecycleError as error:
             self._send_api_error(HTTPAPIError(HTTPStatus.CONFLICT, "meet_context_conflict", str(error)))
@@ -3506,6 +3688,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         except ValueError:
             return False
         return address.is_loopback or address.is_private or address.is_link_local
+
+    def _public_clients_allowed(self) -> bool:
+        return (self._client_address_is_private() and not self.server.application.config.force_external_auth
+                and not any(self.headers.get(name) for name in ("Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto")))
 
     def _admin_session_token(self) -> str | None:
         cookie_header = self.headers.get("Cookie")

@@ -66,8 +66,10 @@ class ShellStructureTests(unittest.TestCase):
             self.assertIn(f'<form id="{name}"', self.html[start:end])
             self.assertIn("data-close-modal", self.html[start:end])
         self.assertIn('dialog.showModal()', self.js)
-        self.assertIn('modalOrigins.get(dialog)?.focus()', self.js)
-        self.assertIn('dialog.dataset.dirty === "true"', self.js)
+        self.assertIn('modalOrigins.get(dialog)', self.js)
+        self.assertIn('modalChanged(dialog)', self.js)
+        self.assertIn('beginModalAction', self.js)
+        self.assertIn('endModalAction', self.js)
 
     def test_software_and_config_updates_remain_separate(self):
         self.assertIn('id="runtime-check-update"', self.html)

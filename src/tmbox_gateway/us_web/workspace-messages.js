@@ -1,6 +1,7 @@
 /* UI copy only: never translate issued authorities or imported meet content. */
 (() => {
   const rows = [
+    ['Close without saving changes?','Stäng utan att spara ändringarna?','Luk uden at gemme ændringerne?','Lukk uten å lagre endringene?','Ohne Speichern der Änderungen schließen?'],
     ['Menu','Meny','Menu','Meny','Menü'],
     ['Workspace menu','Arbetsytemeny','Arbejdsområdemenu','Arbeidsområdemeny','Arbeitsbereich-Menü'],
     ['Settings','Inställningar','Indstillinger','Innstillinger','Einstellungen'],

@@ -16,6 +16,7 @@ class SQLiteOperationsStore:
     """Persistent local clock and last-known train positions for display clients."""
 
     def __init__(self, path: str | Path):
+        self.external_clock_source = None
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
@@ -550,6 +551,9 @@ class SQLiteOperationsStore:
                 )
 
     def clock_status(self, *, now: datetime | None = None) -> dict[str, Any]:
+        external = self.external_clock_source() if self.external_clock_source else None
+        if external is not None:
+            return external
         moment = now or datetime.now(timezone.utc)
         with self._lock:
             row = self._connection.execute(

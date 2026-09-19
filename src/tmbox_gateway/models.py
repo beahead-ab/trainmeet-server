@@ -95,6 +95,14 @@ class PanelConfig:
     station_id: str
     name: str
     slots: dict[SlotKey, str | None]
+    # Legacy packages placed A/B across the first row. Cloud now draws A/B
+    # down the left side. Keep the convention explicit, not inferred from IDs.
+    slot_layout: str = "rows"
+
+    def slot_position(self, key: SlotKey) -> tuple[int, str]:
+        order = "ACBD" if self.slot_layout == "columns" else "ABCD"
+        index = order.index(key)
+        return index // 2 + 1, "left" if index % 2 == 0 else "right"
 
 
 @dataclass(frozen=True)

@@ -20,7 +20,7 @@ async function setup(role='dispatcher', options={}) {
  function element(selector) {
   if(!elements.has(selector)) elements.set(selector,{innerHTML:'',textContent:'',dataset:{},
    querySelectorAll:()=>[],querySelector:(key)=>key===':focus'?null:element(selector+' '+key),
-   contains:()=>false,setAttribute(){},showModal(){},close(){},classList:{toggle(){}}});
+   contains:()=>false,setAttribute(){},removeAttribute(){},addEventListener(){},focus(){},insertAdjacentHTML(_where,html){this.innerHTML+=html;},showModal(){},close(){},classList:{toggle(){}}});
   return elements.get(selector);
  }
  const document={documentElement:{lang:'',dataset:{i18nScope:'us'}},body:element('body'),activeElement:null,

@@ -69,13 +69,14 @@ def render_panel(
         runtime = connection_runtime[connection_id]
         other_id = connection.other_station(panel.station_id)
         other_code = config.stations[other_id].code[:3].upper()
-        tokens[key] = _slot_token(key, panel.station_id, other_code, runtime)
+        tokens[key] = _slot_token(key, panel.station_id, other_code, runtime, panel=panel)
 
-    line1 = fit_line(tokens["A"], tokens["B"])
+    positions = {panel.slot_position(key): token for key, token in tokens.items()}
+    line1 = fit_line(positions[(1, "left")], positions[(1, "right")])
     # The idle row shows meeting time, so the caller passes the live clock.
     # Without one the publication start time is the only honest fallback.
-    line2_right = tokens["D"] or (clock_time or config.clock_time)[:5]
-    line2 = fit_line(tokens["C"], line2_right)
+    line2_right = positions[(2, "right")] or (clock_time or config.clock_time)[:5]
+    line2 = fit_line(positions[(2, "left")], line2_right)
     return line1, line2
 
 
@@ -106,10 +107,10 @@ def _render_interaction(
         from_code = config.stations[line.from_station_id or other_id].code[:3].upper()
         return fit_line(f"Från {from_code} {train}"), fit_line("A=KLART", "B=EJ")
     if runtime.mode == InteractionMode.READY_DEPARTURE:
-        arrow = _departure_symbol(runtime.selected_slot)
+        arrow = _departure_symbol(runtime.selected_slot, panel)
         return fit_line(f"{train}{arrow}{other_code}", "KLAR"), fit_line("A=Avg", "*=Avb")
     if runtime.mode == InteractionMode.CONFIRM_DEPARTURE:
-        arrow = _departure_symbol(runtime.selected_slot)
+        arrow = _departure_symbol(runtime.selected_slot, panel)
         return fit_line(f"{train}{arrow}{other_code}", "Tåg ut?"), fit_line("A=AVGÅTT", "B=EJ")
     if runtime.mode == InteractionMode.CONFIRM_CANCEL:
         return fit_line("Avbryt begäran?"), fit_line("#=Ja", "*=Nej")
@@ -124,13 +125,14 @@ def _slot_token(
     station_id: str,
     other_code: str,
     runtime: ConnectionRuntime,
+    *, panel: PanelConfig,
 ) -> str:
     if runtime.state == ConnectionState.FREE:
-        marker = _arrow(key, outgoing=True)
+        marker = _arrow(key, outgoing=True, panel=panel)
         label = other_code
     else:
         outgoing = runtime.from_station_id == station_id
-        marker = _arrow(key, outgoing=outgoing)
+        marker = _arrow(key, outgoing=outgoing, panel=panel)
         if runtime.state == ConnectionState.REQUESTED:
             marker = "~" if outgoing else "!"
         elif runtime.state == ConnectionState.RESERVED:
@@ -140,15 +142,15 @@ def _slot_token(
             marker = "!" if outgoing else "~"
         label = runtime.train_number or other_code
 
-    if key in {"A", "C"}:
+    if panel.slot_position(key)[1] == "left":
         return f"{key}{marker}{label}"
     return f"{label}{marker}{key}"
 
 
-def _arrow(key: SlotKey, *, outgoing: bool) -> str:
-    points_left = (key in {"A", "C"} and outgoing) or (key in {"B", "D"} and not outgoing)
+def _arrow(key: SlotKey, *, outgoing: bool, panel: PanelConfig) -> str:
+    points_left = (panel.slot_position(key)[1] == "left") == outgoing
     return "<" if points_left else ">"
 
 
-def _departure_symbol(key: SlotKey) -> str:
-    return "◀" if key in {"A", "C"} else "▶"
+def _departure_symbol(key: SlotKey, panel: PanelConfig) -> str:
+    return "◀" if panel.slot_position(key)[1] == "left" else "▶"

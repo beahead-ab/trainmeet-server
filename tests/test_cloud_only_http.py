@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from runtime_fixture import runtime_package_v3
 from test_us_cloud import cloud_package as us_package
@@ -18,6 +18,10 @@ from tmbox_gateway.models import unconfigured_session, ConnectionState
 from tmbox_gateway.operations import SQLiteOperationsStore
 from tmbox_gateway.runtime import SQLiteRuntimeStore
 from tmbox_gateway.us import USStore
+from tmbox_gateway.local_server import publish_config_to_devices
+from tmbox_gateway.mqtt_adapter import MQTTGatewayAdapter
+from tmbox_gateway.mqtt_v2 import TMBoxV2Gateway
+from tmbox_gateway.protocol_v2 import TMBoxStationService
 
 
 class CloudOnlyDeliveryTests(unittest.TestCase):
@@ -80,6 +84,38 @@ class CloudOnlyDeliveryTests(unittest.TestCase):
         self.assertEqual("second", self.app.engine.config.id)
         self.assertEqual(before[:1] + ("second",) + before[2:], after)
         self.assertIsNone(self.app.lifecycle.transition())
+
+    def test_mapping_update_waits_for_traffic_then_pushes_to_both_box_protocols(self):
+        self.connect()
+        self.identities.record_discovery("box-8266", "TBX-8266", protocol_version=1)
+        self.identities.assign_discovered_device("TBX-8266", ("panel-a",), station_id="station-a")
+        self.identities.record_discovery("box-32", "TBX-32", protocol_version=2)
+        self.identities.assign_discovered_device("TBX-32", station_id="station-a")
+        v1 = MQTTGatewayAdapter(self.app.engine, identities=self.identities)
+        v1.client = MagicMock()
+        packets = []
+        service = TMBoxStationService(self.runtime, self.operations, self.identities)
+        v2 = TMBoxV2Gateway(service, self.identities, gateway_id="test", publish=lambda topic, body, retain: packets.append((topic, body)))
+        self.app.on_config_applied = lambda: publish_config_to_devices(v1, v2, self.identities)
+        self.offered["publication_id"] = "ports-on-right"
+        self.offered["panels"][0].update(slot_layout="columns", slots={"A": None, "B": None, "C": "connection-a-b", "D": None})
+        self.app.engine.connections["connection-a-b"].state = ConnectionState.OCCUPIED
+        self.assertTrue(self.app.auto_sync_cloud_runtime()["pending"])
+        self.assertEqual(self.app.engine.config.panels["panel-a"].slots["A"], "connection-a-b")
+        self.assertEqual(packets, [])
+        v1.client.publish.assert_not_called()
+        self.app.engine.connections["connection-a-b"].state = ConnectionState.FREE
+        self.assertTrue(self.app.check_config_update(self.admin)["activated"])
+        snapshot = self.app.engine.snapshot("panel-a")
+        self.assertIsNone(snapshot["slots"]["A"]["connection_id"])
+        self.assertEqual(snapshot["slots"]["C"]["side"], "right")
+        published = [json.loads(call.args[1]) for call in v1.client.publish.call_args_list]
+        self.assertTrue(any(body.get("slots", {}).get("C", {}).get("side") == "right" for body in published))
+        config = next(body for topic, body in packets if topic.endswith("/config"))
+        self.assertEqual(config["connections"][0]["display_side"], "right")
+        self.assertEqual(config["panels"][0]["slots"], self.offered["panels"][0]["slots"])
+        self.assertEqual(self.identities.client("box-8266").station_id, "station-a")
+        self.assertEqual(self.identities.client("box-32").station_id, "station-a")
 
     def test_open_traffic_waits_then_adopts_on_next_check(self):
         self.connect()
