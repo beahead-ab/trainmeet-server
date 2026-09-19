@@ -52,6 +52,7 @@ from .models import Command, ConnectionState, InteractionMode, TrackConfig, Trac
 from .observability import log_event, use_correlation
 from .operations import SQLiteOperationsStore
 from .us import USStore, USError
+from .us_clock import clock_settings as validate_us_clock_settings
 from .protocol_v2 import TMBoxStationService, find_track_conflict
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
@@ -328,6 +329,8 @@ class TrainMeetHTTPApplication:
         workspaces = ["administration"] if admin else []
         if region == "eu" and (admin or client.kind == DeviceKind.TKL_TERMINAL):
             workspaces.append("tkl")
+        if region == "eu" and admin:
+            workspaces.append("tmbox")
         if region == "us":
             if admin:
                 workspaces.append("dispatcher")
@@ -789,6 +792,7 @@ class TrainMeetHTTPApplication:
                 key=str(payload["key"]),
                 sent_at=now,
                 expires_at=now + timedelta(seconds=5),
+                train_number=payload.get("train_number"),
             )
         except (KeyError, TypeError, ValueError) as error:
             raise HTTPAPIError(
@@ -977,6 +981,7 @@ class TrainMeetHTTPApplication:
             meet = {"id": selected["meet_id"], "name": selected.get("meet_name", ""), "operating_region": "us"}
             publication_id = selected["publication_id"]
             positions = []
+        clock = self._clock_display(clock)
         return {
             "protocol_version": 1,
             "revision": self.engine.revision,
@@ -1402,48 +1407,79 @@ class TrainMeetHTTPApplication:
         if not station_panels.intersection(client.panel_ids):
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "station_not_assigned", "Terminalen har inte tillgång till stationen")
 
+    def _clock_scope(self) -> str:
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        if selected:
+            return f"{selected['region']}:{selected['meet_id']}"
+        return f"eu:{self.engine.config.id}"
+
+    def _clock_display(self, clock: dict[str, Any]) -> dict[str, Any]:
+        settings = self.runtime_store.clock_display_settings(self._clock_scope()) if self.runtime_store else {}
+        styles = clock.get("available_styles") or list(AVAILABLE_CLOCK_STYLES)
+        style = settings.get("style", styles[0])
+        return {**clock, "available_styles": styles, "style": style if style in styles else styles[0],
+                "show_seconds": settings.get("show_seconds", clock.get("show_seconds", True))}
+
     def clock_status(self, client: PairedClient) -> dict[str, Any]:
         selected = self.lifecycle.selected() if self.lifecycle else None
         if selected and selected["region"] == "us":
             result = self.us_context(client)
-            return {**result["clock"], "configured": bool(result["session"])}
-        return self.operations_store.clock_status() if self.operations_store else {"configured": False, "running": False}
+            return self._clock_display({**result["clock"], "configured": bool(result["session"])})
+        return self._clock_display(self.operations_store.clock_status() if self.operations_store else {"configured": False, "running": False})
 
     @runtime_command()
     def control_clock(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
+        if payload.get("action") == "appearance":
+            if self.runtime_store is None:
+                raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "clock_unavailable", "Klockinställningarna kan inte sparas")
+            current = self.clock_status(client)
+            style, seconds = payload.get("style"), payload.get("show_seconds")
+            if style not in current["available_styles"] or not isinstance(seconds, bool):
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock", "Välj ett giltigt klockutseende och sekundvisning")
+            self.runtime_store.save_clock_display_settings(self._clock_scope(), style, seconds)
+            return self.clock_status(client)
         selected = self.lifecycle.selected() if self.lifecycle else None
         if selected and selected["region"] == "us":
             store, actor, _ = self.us_access(client)
             context = store.context(actor, True)
+            action = payload.get("action")
+            if action not in {"start", "stop", "speed", "set"}:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_action", "Okänt klockkommando")
+            # Reject malformed edits before creating a first session or touching
+            # the current one. Missing fields retain the session/package defaults.
+            try:
+                validate_us_clock_settings({
+                    **({"clock_time": payload["time"]} if "time" in payload else {}),
+                    **({"clock_speed": payload["speed"]} if "speed" in payload else {}),
+                })
+            except ValueError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock", str(error)) from error
             if context["session"] is None or context["session"]["status"] == "closed":
-                if payload.get("action") != "start":
+                if payload.get("action") not in {"start", "set"}:
                     raise HTTPAPIError(HTTPStatus.CONFLICT, "session_not_started", "Starta US-körningen först.")
                 package = next(p for p in store.package_catalogue() if p["publication_id"] == selected["publication_id"])
                 self.us_command(client, {"action": "create_session", "command_id": str(uuid4()), "confirmed": True,
                     "publication_id": selected["publication_id"], "package_checksum": package["checksum"]})
                 context = store.context(actor, True)
-            action = payload.get("action")
-            if action not in {"start", "stop", "speed"}:
-                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_action", "Okänt klockkommando")
             clock = context["clock"]
             self.us_command(client, {"action": "clock", "command_id": str(uuid4()), "confirmed": True,
                 "session_id": context["session"]["id"], "expected_revision": context["session"]["revision"],
                 "clock_time": payload.get("time") or clock["time"], "clock_speed": payload.get("speed", clock["speed"]),
-                "running": action == "start" or (action == "speed" and clock["running"])})
+                "running": action == "start" or (action in {"speed", "set"} and clock["running"])})
             return self.clock_status(client)
         if self.operations_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "clock_unavailable", "Den lokala klockan är inte tillgänglig")
         action = str(payload.get("action") or "")
         try:
-            if action == "start":
-                if payload.get("speed") is not None:
-                    self.operations_store.set_speed(float(payload["speed"]))
-                return self.operations_store.start_clock(time_value=payload.get("time"))
+            if action in {"start", "set", "speed"}:
+                self.operations_store.configure_clock(time_value=payload.get("time"),
+                    speed=float(payload["speed"]) if payload.get("speed") is not None else None,
+                    running=True if action == "start" else None)
+                return self.clock_status(client)
             if action == "stop":
-                return self.operations_store.stop_clock(str(payload.get("reason") or "") or None)
-            if action == "speed":
-                return self.operations_store.set_speed(float(payload.get("speed", 1)))
+                self.operations_store.stop_clock(str(payload.get("reason") or "") or None)
+                return self.clock_status(client)
         except (TypeError, ValueError) as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock", str(error)) from error
         raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_action", "Okänt klockkommando")
@@ -3495,6 +3531,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
 class TrainMeetHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+    # A browser fetches scripts, fonts and snapshots concurrently. The default
+    # backlog of five can reset asset connections during a page load on macOS.
+    request_queue_size = 64
 
     def __init__(
         self,

@@ -27,12 +27,6 @@
           <h1 id="app-meet-name"><tm-text data-tm-text="TrainMeet Server">TrainMeet Server</tm-text></h1>
         </a>
 
-        <nav id="run-tabs" class="run-tabs" aria-label="Körläge" data-tm-aria-label="Körläge">
-          <button type="button" class="run-tab" data-run-tab="oversikt" aria-current="page"><tm-text data-tm-text="Översikt">Översikt</tm-text></button>
-          <button type="button" class="run-tab" data-run-tab="trafik"><tm-text data-tm-text="Trafik">Trafik</tm-text></button>
-          <button type="button" class="run-tab" data-run-tab="tmbox"><tm-text data-tm-text="TMBox v2">TMBox v2</tm-text></button>
-        </nav>
-
         <div class="topbar-right">
           <span id="app-clock" class="app-clock" aria-label="Träffklocka" data-tm-aria-label="Träffklocka">–&#8202;–:–&#8202;–</span>
           <span id="app-devices" class="app-devices"><i></i><tm-text data-tm-text="Inga boxar">Inga boxar</tm-text></span>
@@ -217,7 +211,6 @@
           <div class="overview-actions">
             <button type="button" id="overview-clock-start" class="primary">Starta / fortsätt</button>
             <button type="button" id="overview-clock-stop" class="secondary">Stoppa</button>
-            <button type="button" data-open-modal="clock-control-form-modal" class="quiet">Justera klockan</button>
             <div class="overview-live-meta">
               <span id="overview-clock">--:--</span>
               <span id="overview-day"><tm-text data-tm-text="Dagl">Dagl</tm-text></span>
@@ -249,6 +242,31 @@
             <div id="overview-route-badge" class="overview-route-badge hidden"></div>
           </section>
 
+          <section id="overview-traffic" class="card overview-section traffic-view" aria-labelledby="overview-traffic-heading">
+            <header class="overview-section-heading">
+              <div><h2 id="overview-traffic-heading">Trafik just nu</h2><p class="overview-kicker">Tåg på linjen, på stationerna och kommande händelser.</p></div>
+            </header>
+            <div class="traffic-filters">
+              <label for="traffic-station"><tm-text data-tm-text="Station">Station</tm-text></label>
+              <select id="traffic-station"><option value="" data-tm-text="Hela banan">Hela banan</option></select>
+              <label class="traffic-only-deviations"><input type="checkbox" id="traffic-only-deviations"><tm-text data-tm-text="Bara avvikelser">Bara avvikelser</tm-text></label>
+            </div>
+            <section class="traffic-section" aria-labelledby="traffic-online-heading">
+              <h3 id="traffic-online-heading" class="section-eyebrow"><tm-text data-tm-text="På linjen just nu">På linjen just nu</tm-text></h3>
+              <div id="traffic-online" class="traffic-online-grid"></div>
+            </section>
+            <section class="traffic-section" aria-labelledby="traffic-stations-heading">
+              <h3 id="traffic-stations-heading" class="section-eyebrow"><tm-text data-tm-text="Inne på stationerna">Inne på stationerna</tm-text></h3>
+              <div id="traffic-stations" class="traffic-station-grid"></div>
+            </section>
+            <details class="traffic-section traffic-history">
+              <summary id="traffic-timeline-heading" class="section-eyebrow"><tm-text data-tm-text="Tidslinje">Tidslinje</tm-text></summary>
+              <ol id="traffic-timeline" class="traffic-timeline"></ol>
+            </details>
+          </section>
+
+          <details id="overview-timetable" class="overview-timetable">
+            <summary>Tidtabell och tågrutter</summary>
           <section class="overview-routes-section">
             <header class="overview-routes-heading">
               <p class="overview-kicker"><tm-text data-tm-text="TÅGRUTTER (">TÅGRUTTER (</tm-text><span id="overview-route-count">0</span><tm-text data-tm-text=" TÅG)"> TÅG)</tm-text></p>
@@ -285,6 +303,7 @@
               </div>
             </div>
           </section>
+          </details>
         </section>
 
         <section id="admin-view" class="view-panel hidden">
@@ -294,6 +313,60 @@
               <p>Servern, användare och anslutna enheter. Träffens innehåll ändras i TrainMeet Cloud och uppdateras automatiskt här.</p>
             </div>
           </header>
+          <section class="card section-card clock-control-card admin-section-panel" data-admin-section="meet">
+            <div class="section-heading compact-heading">
+              <div>
+                <p class="eyebrow"><tm-text data-tm-text="TRÄFFINSTÄLLNINGAR">TRÄFFINSTÄLLNINGAR</tm-text></p>
+                <h2><tm-text data-tm-text="Träffklocka">Träffklocka</tm-text></h2>
+                <p><tm-text data-tm-text="Klockan körs och sparas på TrainMeet Server. Alla skärmar använder samma tid även när internet saknas.">Klockan körs och sparas på TrainMeet Server. Alla skärmar använder samma tid även när internet saknas.</tm-text></p>
+              </div>
+              <span id="clock-state" class="revision-badge"><tm-text data-tm-text="Läser klockan …">Läser klockan …</tm-text></span>
+            </div>
+<button type="button" class="secondary modal-launch" data-open-modal="clock-control-form-modal">Justera klockan</button>
+<dialog id="clock-control-form-modal" class="admin-modal" aria-labelledby="clock-control-form-title"><h2 id="clock-control-form-title">Justera klockan</h2>
+<form id="clock-control-form" class="clock-control-form">
+              <label><tm-text data-tm-text="Klockslag
+                ">Klockslag
+                </tm-text><input id="local-clock-time" type="time" step="1" value="12:00:00">
+              </label>
+              <label><tm-text data-tm-text="Hastighet (× realtid)
+                ">Hastighet (× realtid)
+                </tm-text><input id="local-clock-speed" type="text" inputmode="decimal" list="clock-speed-options" autocomplete="off" value="1">
+                <datalist id="clock-speed-options">
+                  <option value="1"></option>
+                  <option value="2"></option>
+                  <option value="3"></option>
+                  <option value="4"></option>
+                  <option value="5"></option>
+                  <option value="6"></option>
+                  <option value="7"></option>
+                  <option value="8"></option>
+                  <option value="9"></option>
+                  <option value="10"></option>
+                </datalist>
+              </label>
+              <label><tm-text data-tm-text="Orsak när klockan stoppas
+                ">Orsak när klockan stoppas
+                </tm-text><input id="local-clock-reason" maxlength="100" placeholder="Till exempel tekniskt stopp" data-tm-placeholder="Till exempel tekniskt stopp">
+              </label>
+              <div class="clock-control-actions">
+                <button class="primary" type="submit"><tm-text data-tm-text="Spara">Spara</tm-text></button>
+                <button id="stop-local-clock" class="secondary" type="button"><tm-text data-tm-text="Stoppa">Stoppa</tm-text></button>
+              </div>
+              <p id="clock-control-message" class="form-message" role="status"></p>
+            <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
+</form>
+</dialog>
+<button type="button" class="secondary modal-launch" data-open-modal="clock-appearance-modal">Ändra klockans utseende</button>
+<dialog id="clock-appearance-modal" class="admin-modal" aria-labelledby="clock-appearance-title"><h2 id="clock-appearance-title">Klockans utseende</h2>
+<form id="clock-appearance-form">
+<p>Gäller träffens klockskärmar på alla datorer. Sparas på TrainMeet Server.</p>
+<label for="meet-clock-style">Klockstil</label><select id="meet-clock-style"></select>
+<label><input id="meet-clock-seconds" type="checkbox"> Visa sekunder</label>
+<p id="clock-appearance-message" class="form-message" role="status"></p>
+<button type="submit" class="primary">Spara</button><button type="button" data-close-modal>Avbryt</button>
+</form></dialog>
+          </section>
 
 
 
@@ -523,35 +596,6 @@
           </section>
         </section>
 
-        <section id="traffic-view" class="view-panel traffic-view hidden" aria-live="polite">
-          <div class="traffic-filters">
-            <label for="traffic-station"><tm-text data-tm-text="Station">Station</tm-text></label>
-            <select id="traffic-station"><option value="" data-tm-text="Hela banan">Hela banan</option></select>
-            <label class="traffic-only-deviations">
-              <input type="checkbox" id="traffic-only-deviations"><tm-text data-tm-text="
-              Bara avvikelser
-            ">
-              Bara avvikelser
-            </tm-text></label>
-          </div>
-
-          <section class="traffic-section" aria-labelledby="traffic-online-heading">
-            <h2 id="traffic-online-heading" class="section-eyebrow"><tm-text data-tm-text="På linjen just nu">På linjen just nu</tm-text></h2>
-            <div id="traffic-online" class="traffic-online-grid"></div>
-          </section>
-
-          <section class="traffic-section" aria-labelledby="traffic-stations-heading">
-            <h2 id="traffic-stations-heading" class="section-eyebrow"><tm-text data-tm-text="Inne på stationerna">Inne på stationerna</tm-text></h2>
-            <div id="traffic-stations" class="traffic-station-grid"></div>
-          </section>
-
-          <section class="traffic-section" aria-labelledby="traffic-timeline-heading">
-            <h2 id="traffic-timeline-heading" class="section-eyebrow"><tm-text data-tm-text="Tidslinje">Tidslinje</tm-text></h2>
-            <ol id="traffic-timeline" class="traffic-timeline"></ol>
-          </section>
-        </section>
-
-
         <section id="tmbox-v2-view" class="view-panel tmbox-v2-view hidden" aria-live="polite">
           <div class="simulator-intro">
             <div>
@@ -700,51 +744,6 @@
             <p id="connection-badge-message" class="form-message"></p>
 <button type="submit" class="primary">Spara</button><button type="button" data-close-modal>Avbryt</button></form></dialog>
           </section>
-          <section class="card section-card clock-control-card">
-            <div class="section-heading compact-heading">
-              <div>
-                <p class="eyebrow"><tm-text data-tm-text="LOKAL TRÄFFKLOCKA">LOKAL TRÄFFKLOCKA</tm-text></p>
-                <h2><tm-text data-tm-text="Styr klockan">Styr klockan</tm-text></h2>
-                <p><tm-text data-tm-text="Klockan körs och sparas på TrainMeet Server. Alla skärmar använder samma tid även när internet saknas.">Klockan körs och sparas på TrainMeet Server. Alla skärmar använder samma tid även när internet saknas.</tm-text></p>
-              </div>
-              <span id="clock-state" class="revision-badge"><tm-text data-tm-text="Läser klockan …">Läser klockan …</tm-text></span>
-            </div>
-<button type="button" class="secondary modal-launch" data-open-modal="clock-control-form-modal">Justera klockan</button>
-<dialog id="clock-control-form-modal" class="admin-modal" aria-labelledby="clock-control-form-title"><h2 id="clock-control-form-title">Justera klockan</h2>
-<form id="clock-control-form" class="clock-control-form">
-              <label><tm-text data-tm-text="Klockslag
-                ">Klockslag
-                </tm-text><input id="local-clock-time" type="time" step="1" value="12:00:00">
-              </label>
-              <label><tm-text data-tm-text="Hastighet (× realtid)
-                ">Hastighet (× realtid)
-                </tm-text><input id="local-clock-speed" type="text" inputmode="decimal" list="clock-speed-options" autocomplete="off" value="1">
-                <datalist id="clock-speed-options">
-                  <option value="1"></option>
-                  <option value="2"></option>
-                  <option value="3"></option>
-                  <option value="4"></option>
-                  <option value="5"></option>
-                  <option value="6"></option>
-                  <option value="7"></option>
-                  <option value="8"></option>
-                  <option value="9"></option>
-                  <option value="10"></option>
-                </datalist>
-              </label>
-              <label><tm-text data-tm-text="Orsak när klockan stoppas
-                ">Orsak när klockan stoppas
-                </tm-text><input id="local-clock-reason" maxlength="100" placeholder="Till exempel tekniskt stopp" data-tm-placeholder="Till exempel tekniskt stopp">
-              </label>
-              <div class="clock-control-actions">
-                <button class="primary" type="submit"><tm-text data-tm-text="Ställ och starta">Ställ och starta</tm-text></button>
-                <button id="stop-local-clock" class="secondary" type="button"><tm-text data-tm-text="Stoppa">Stoppa</tm-text></button>
-              </div>
-              <p id="clock-control-message" class="form-message" role="status"></p>
-            <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
-</form>
-</dialog>
-          </section>
         </section>
           </div>
         </div>
@@ -771,8 +770,6 @@
           <div class="display-toolbar-actions">
             <span id="display-speed" class="display-badge hidden">1×</span>
             <select id="display-train-select" class="display-select hidden" aria-label="Välj tåg" data-tm-aria-label="Välj tåg"><option value="" data-tm-text="Alla tåg">Alla tåg</option></select>
-            <select id="display-clock-style" class="display-select hidden" aria-label="Klockstil" data-tm-aria-label="Klockstil"></select>
-            <button id="display-seconds" class="hidden" type="button" aria-label="Visa eller dölj sekundvisaren" data-tm-aria-label="Visa eller dölj sekundvisaren"><tm-text data-tm-text="Sekunder">Sekunder</tm-text></button>
             <span id="display-day" class="display-badge"><tm-text data-tm-text="Dagl">Dagl</tm-text></span>
             <span id="display-live" class="display-live"><i></i><tm-text data-tm-text=" Ansluten"> Ansluten</tm-text></span>
             <button id="display-theme" type="button"><tm-text data-tm-text="Ljust">Ljust</tm-text></button>

@@ -56,7 +56,7 @@ class RunModeLayoutTests(unittest.TestCase):
     def test_both_modes_are_covered(self):
         """Ett läge utan egen regel faller tillbaka på den gamla gridden,
         vilket är precis felet som nådde produktion."""
-        for mode in ("kor", "workspaces", "installningar"):
+        for mode in ("kor", "workspaces", "installningar", "tmbox", "skarmar"):
             with self.subTest(mode=mode):
                 self.assertTrue(_rule(f'body[data-mode="{mode}"] .server-admin-shell'))
 
@@ -87,8 +87,11 @@ class ControlShapeTests(unittest.TestCase):
         self.assertIn("width: auto", body)
         self.assertIn("max-width", body)
 
-    def test_a_link_among_buttons_carries_no_underline(self):
-        self.assertIn("a.overview-action { text-decoration: none; }", CSS)
+    def test_live_traffic_cards_shrink_to_the_overview_width(self):
+        for selector, minimum in ((".traffic-online-grid", 300), (".traffic-station-grid", 290)):
+            with self.subTest(selector=selector):
+                self.assertIn(f"minmax(min({minimum}px, 100%), 1fr)", _rule(selector))
+        self.assertIn("min-width: 0", _rule(".meet-overview"))
 
 
 class ContainerAwareGridTests(unittest.TestCase):

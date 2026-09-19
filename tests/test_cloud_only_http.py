@@ -12,7 +12,7 @@ from test_us_cloud import cloud_package as us_package
 from tmbox_gateway.central_sync import CentralRuntimeDownload, CentralRuntimeManifest, CentralSyncError
 from tmbox_gateway.engine import TrafficEngine
 from tmbox_gateway.http_server import TrainMeetHTTPApplication, HTTPServerConfig, HTTPAPIError
-from tmbox_gateway.identity import IdentityStore, PairingService, DeviceKind
+from tmbox_gateway.identity import IdentityStore, PairingService, DeviceKind, PairedClient
 from tmbox_gateway.lifecycle import MeetLifecycleError
 from tmbox_gateway.models import unconfigured_session, ConnectionState
 from tmbox_gateway.operations import SQLiteOperationsStore
@@ -54,10 +54,19 @@ class CloudOnlyDeliveryTests(unittest.TestCase):
         self.assertFalse(result["restart_required"])
         self.assertEqual("first", self.app.engine.config.id)
         self.assertEqual("eu", self.app.server_context(self.admin)["operating_region"])
-        self.assertEqual(["administration", "tkl"], self.app.server_context(self.admin)["available_workspaces"])
+        self.assertEqual(["administration", "tkl", "tmbox"], self.app.server_context(self.admin)["available_workspaces"])
         self.assertTrue(self.runtime.cloud_auto_sync_enabled())
         self.assertIsNone(self.app._eu_runtime_guard())
         self.assertTrue(self.app.config.connection_code)
+
+    def test_tmbox_workspace_requires_eu_meet_and_admin(self):
+        self.assertEqual(["administration"], self.app.server_context(self.admin)["available_workspaces"])
+        self.connect()
+        terminal = PairedClient("terminal", "TKL", DeviceKind.TKL_TERMINAL, ("panel-a",))
+        self.assertEqual(["tkl"], self.app.server_context(terminal)["available_workspaces"])
+        self.offered = us_package()
+        self.connect(confirm_meet_change=True)
+        self.assertEqual(["administration", "dispatcher"], self.app.server_context(self.admin)["available_workspaces"])
 
     def test_automatic_update_preserves_exact_clock_and_does_not_restart(self):
         self.connect()

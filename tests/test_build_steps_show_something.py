@@ -16,7 +16,7 @@ class CloudOnlyViewTests(unittest.TestCase):
             self.assertNotIn(retired, JS)
 
     def test_every_runtime_panel_has_markup(self):
-        for panel in ("overview-view", "traffic-view", "displays-view", "tmbox-v2-view"):
+        for panel in ("overview-view", "overview-traffic", "displays-view", "tmbox-v2-view"):
             self.assertIn(f'id="{panel}"', HTML)
             self.assertIn(f'#{panel}', JS)
 

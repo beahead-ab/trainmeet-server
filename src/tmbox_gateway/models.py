@@ -226,6 +226,8 @@ class Command:
     key: str
     sent_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: datetime | None = None
+    # Optional v1 extension: one confirmed local input, never replayed digits.
+    train_number: str | None = None
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
@@ -582,6 +583,28 @@ class SQLiteOperationsStore:
             "show_seconds": bool(row[6]),
             "available_styles": json.loads(row[7]),
         }
+
+    def configure_clock(self, *, time_value: str | None = None, speed: float | None = None,
+                        running: bool | None = None) -> dict[str, Any]:
+        # Validate everything before a single write. In particular a bad time
+        # must not first change the rate, and saving must not implicitly start.
+        if speed is not None and (not math.isfinite(speed) or speed <= 0):
+            raise ValueError("Klockhastigheten måste vara ett ändligt tal större än noll")
+        requested_seconds = _time_to_seconds(time_value) if time_value else None
+        with self._lock:
+            now = datetime.now(timezone.utc)
+            status = self.clock_status(now=now)
+            if not status["configured"]:
+                raise ValueError("Ingen träffklocka är konfigurerad")
+            self._connection.execute(
+                "UPDATE runtime_clock SET base_seconds = ?, base_recorded_at = ?, speed = ?, "
+                "running = ?, stopped_reason = ? WHERE singleton = 1",
+                (requested_seconds if requested_seconds is not None else _time_to_seconds(status["time"]),
+                 _datetime_iso(now), speed if speed is not None else status["speed"],
+                 int(status["running"] if running is None else running),
+                 None if running else status.get("stopped_reason")),
+            )
+            return self.clock_status(now=now)
 
     def start_clock(
         self,

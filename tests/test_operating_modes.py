@@ -32,7 +32,7 @@ class OperatingModeTests(CloudDeliveryFixture):
             state = self.application.server_context(self.client)
             self.assertEqual("cloud", state["config_authority"])
             self.assertFalse(state["local_editing"])
-            self.assertEqual(["administration", "tkl"], state["available_workspaces"])
+            self.assertEqual(["administration", "tkl", "tmbox"], state["available_workspaces"])
 
     def test_old_editor_post_routes_are_gone_even_for_admin(self):
         before = self.runtime.active()

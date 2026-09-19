@@ -12,11 +12,27 @@ class ShellStructureTests(unittest.TestCase):
         self.js = (WEB / "app.js").read_text()
         self.css = (WEB / "app.css").read_text()
 
-    def test_only_operational_tabs_remain(self):
-        self.assertEqual(["oversikt", "trafik", "tmbox"], re.findall(r'data-run-tab="([^"]+)"', self.html))
+    def test_single_overview_retires_the_operational_tabs(self):
+        self.assertNotIn('data-run-tab=', self.html)
+        self.assertNotIn('run-tabs', self.css)
+        for retired in ('RUN_TABS', 'RUN_PANELS', 'selectRunTab', 'trafficTimer', 'renderTrafficView'):
+            self.assertNotIn(retired, self.js)
+        self.assertIn('renderTraffic(snapshot)', self.js)
+        self.assertNotIn('id="traffic-view"', self.html)
+        self.assertIn('id="overview-traffic"', self.html)
         self.assertNotIn('data-build-step=', self.html)
         self.assertNotIn('id="tkl-frame"', self.html)
+        for retired_selector in ('#tkl-frame', '.tkl-toolbar', '.tkl-frame-wrap', '.overview-action {'):
+            self.assertNotIn(retired_selector, self.css)
         self.assertIn('path: "/tkl/"', self.js)
+        self.assertIn('path: "/#tmbox"', self.js)
+
+    def test_workspace_cards_have_local_decorative_icons_and_accessible_labels(self):
+        self.assertIn('const WORKSPACE_ICONS', self.js)
+        self.assertIn('button.setAttribute("aria-labelledby", title.id)', self.js)
+        self.assertIn('button.setAttribute("aria-describedby", detail.id)', self.js)
+        self.assertIn('icon.setAttribute("aria-hidden", "true")', self.js)
+        self.assertIn('.workspace-option:focus-visible', self.css)
 
     def test_menu_is_single_settings_entry(self):
         self.assertEqual(1, self.html.count('id="open-settings"'))
