@@ -189,9 +189,36 @@ const root = path.resolve(__dirname, '../..');
     assert.equal((await (await clockScreen.request.get(urls.eu + '/v1/display')).json()).clock.speed, 4.3);
     await page.locator('#overview-clock-stop').click();
     await clockScreen.waitForFunction(() => document.querySelector('.clock-digital')?.classList.contains('stopped'));
-    await screenContext.close();
+    // A request can hang after a Wi-Fi interruption while the client keeps
+    // drawing its old clock. Recovery must not wait for the OS TCP timeout.
+    let releaseHungRequest;
+    let hungRequestSeen;
+    const hungSeen = new Promise(resolve => { hungRequestSeen = resolve; });
+    const held = new Promise(resolve => { releaseHungRequest = resolve; });
+    let intercepted = false;
+    await clockScreen.route('**/v1/display', async route => {
+      if (!intercepted) {
+        intercepted = true;
+        hungRequestSeen();
+        await held;
+        await route.abort().catch(() => {});
+      } else await route.continue();
+    });
+    await hungSeen;
     await page.locator('#application-menu summary').click();
     await page.locator('#open-settings').click();
+    await page.locator('[data-open-modal="clock-control-form-modal"]').click();
+    await page.locator('#local-clock-time').fill('22:17:00');
+    await page.locator('#local-clock-speed').fill('2');
+    await page.locator('#clock-control-form button[type="submit"]').click();
+    await page.locator('#clock-control-form-modal').waitFor({ state: 'hidden' });
+    try {
+      await clockScreen.waitForFunction(() => document.querySelector('.clock-digital')?.textContent === '22:17:00', null, { timeout: 11000 });
+    } finally {
+      releaseHungRequest();
+      await clockScreen.unrouteAll({ behavior: 'wait' });
+    }
+    await screenContext.close();
     await screenshot('eu-settings');
     await page.locator('#workspace-home').click();
     await page.locator('#overview-view').waitFor({ state: 'visible' });

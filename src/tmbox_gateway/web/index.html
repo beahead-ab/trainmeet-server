@@ -16,9 +16,6 @@
     <script src="/assets/i18n-init.js" defer></script>
   </head>
   <body>
-    <div class="language-toolbar">
-      <label><span data-tm-text="Språk">Språk</span><select data-language-picker aria-label="Språk" data-tm-aria-label="Språk"></select></label>
-    </div>
     <main class="page-shell">
 
       <header class="topbar" id="app-chrome">
@@ -313,6 +310,11 @@
               <p>Servern, användare och anslutna enheter. Träffens innehåll ändras i TrainMeet Cloud och uppdateras automatiskt här.</p>
             </div>
           </header>
+          <section id="language-settings" class="card section-card admin-section-panel" data-admin-section="language">
+            <h2 data-tm-text="Språk">Språk</h2>
+            <p data-tm-text="Språkvalet gäller den här webbläsaren. Träffens innehåll ändras inte.">Språkvalet gäller den här webbläsaren. Träffens innehåll ändras inte.</p>
+            <label class="settings-language-choice"><span data-tm-text="Språk">Språk</span><select data-language-picker aria-label="Språk" data-tm-aria-label="Språk"></select></label>
+          </section>
           <section class="card section-card clock-control-card admin-section-panel" data-admin-section="meet">
             <div class="section-heading compact-heading">
               <div>
@@ -417,6 +419,9 @@
               <span id="users-role-chip" class="status-chip">–</span>
             </div>
 
+            <div class="users-toolbar">
+              <button type="button" class="primary modal-launch" data-open-modal="users-invite-form-modal" id="users-invite-open">Lägg till användare</button>
+            </div>
             <div class="table-scroll">
               <table id="users-table" class="users-table">
                 <thead>
@@ -434,7 +439,6 @@
               <code id="users-code-value">–</code>
             </div>
 
-<button type="button" class="secondary modal-launch" data-open-modal="users-invite-form-modal" id="users-invite-open">Lägg till användare</button>
 <dialog id="users-invite-form-modal" class="admin-modal" aria-labelledby="users-invite-form-title"><h2 id="users-invite-form-title">Lägg till användare</h2>
 <form id="users-invite-form" class="users-invite">
               <label class="users-invite-name"><tm-text data-tm-text="Användarnamn
@@ -629,6 +633,22 @@
             <button type="button" class="tmbox-doc-tab" data-tmbox-pane="referens" aria-pressed="false"><tm-text data-tm-text="Referens">Referens</tm-text></button>
           </nav>
 
+          <div id="tmbox-doc-controls" class="card tmbox-doc-controls hidden">
+            <label for="tmbox-doc-profile">Dokumenterad enhet
+              <select id="tmbox-doc-profile">
+                <option value="esp32">ESP32 · protokoll V2</option>
+                <option value="esp8266">ESP8266 · protokoll V1 · 16×2</option>
+              </select>
+            </label>
+            <label for="tmbox-doc-geometry">Exempeldisplay
+              <select id="tmbox-doc-geometry">
+                <option value="20x4">20×4</option><option value="16x2">16×2</option>
+                <option value="20x2">20×2</option><option value="16x4">16×4</option>
+              </select>
+            </label>
+            <p id="tmbox-doc-scope">Skrivskyddad dokumentation. Detta byter inte station eller fysisk enhet.</p>
+          </div>
+
           <div id="tmbox-pane-klient" class="tmbox-pane">
           <article class="tmbox-case">
             <div class="lcd-module">
@@ -648,7 +668,8 @@
           </div>
 
           <div id="tmbox-pane-floden" class="tmbox-pane hidden">
-            <p class="tmbox-pane-lead"><tm-text data-tm-text="Tolv tangentsekvenser, körda genom samma tillståndsmaskin som boxen. Varje steg visar tangenten, vad boxen gjorde med den och skärmen som blev följden — ritad av renderaren, inte avritad för hand. Sekvenserna är firmwarens egna: de kommer ur ">Tolv tangentsekvenser, körda genom samma tillståndsmaskin som boxen. Varje steg visar tangenten, vad boxen gjorde med den och skärmen som blev följden — ritad av renderaren, inte avritad för hand. Sekvenserna är firmwarens egna: de kommer ur </tm-text><code>golden_traces.txt</code><tm-text data-tm-text=", och ett test faller om de två skiljer sig.">, och ett test faller om de två skiljer sig.</tm-text></p>
+            <div id="tmbox-operation-guide" class="tmbox-operation-guide"></div>
+            <p id="tmbox-flow-scope" class="tmbox-pane-lead"></p>
             <div class="tmbox-flow-layout">
               <nav id="tmbox-flow-list" class="tmbox-flow-list" aria-label="Scenarier" data-tm-aria-label="Scenarier"></nav>
               <div id="tmbox-flow-detail" class="tmbox-flow-detail"></div>
@@ -656,43 +677,12 @@
           </div>
 
           <div id="tmbox-pane-skarmar" class="tmbox-pane hidden">
-            <p class="tmbox-pane-lead"><tm-text data-tm-text="Varje skärm boxen kan visa, i den geometri som är vald ovan. Rutorna ritas av ">Varje skärm boxen kan visa, i den geometri som är vald ovan. Rutorna ritas av </tm-text><code>tmbox-render.js</code><tm-text data-tm-text=" ur referensstationen Charlottendal med tågen 421 och 428 — samma fixturer som "> ur referensstationen Charlottendal med tågen 421 och 428 — samma fixturer som </tm-text><code>golden_frames.txt</code><tm-text data-tm-text=" är avtryckt ur."> är avtryckt ur.</tm-text></p>
+            <p id="tmbox-screen-scope" class="tmbox-pane-lead"></p>
             <div id="tmbox-screen-catalog" class="tmbox-screen-catalog"></div>
           </div>
 
           <div id="tmbox-pane-referens" class="tmbox-pane hidden">
-            <div class="tmbox-reference">
-              <section class="card tmbox-ref-card">
-                <h3><tm-text data-tm-text="Knappmodell">Knappmodell</tm-text></h3>
-                <dl class="tmbox-keymap">
-                  <dt>0–9</dt><dd><tm-text data-tm-text="numerisk inmatning">numerisk inmatning</tm-text></dd>
-                  <dt><tm-text data-tm-text="A">A</tm-text></dt><dd><tm-text data-tm-text="primär operativ handling — ">primär operativ handling — </tm-text><span class="tmbox-mono"><tm-text data-tm-text="UPPSTÄLLT">UPPSTÄLLT</tm-text></span>, <span class="tmbox-mono"><tm-text data-tm-text="FÖRARE">FÖRARE</tm-text></span>, <span class="tmbox-mono"><tm-text data-tm-text="BEGÄR">BEGÄR</tm-text></span>, <span class="tmbox-mono"><tm-text data-tm-text="KLART">KLART</tm-text></span>, <span class="tmbox-mono"><tm-text data-tm-text="AVGÅTT">AVGÅTT</tm-text></span>, <span class="tmbox-mono"><tm-text data-tm-text="ANKOMMIT">ANKOMMIT</tm-text></span></dd>
-                  <dt><tm-text data-tm-text="B">B</tm-text></dt><dd><tm-text data-tm-text="sekundär eller negativ — etiketten är alltid ">sekundär eller negativ — etiketten är alltid </tm-text><span class="tmbox-mono"><tm-text data-tm-text="B=EJ">B=EJ</tm-text></span></dd>
-                  <dt><tm-text data-tm-text="C">C</tm-text></dt><dd><tm-text data-tm-text="nästa tåg, rad eller kommandosida">nästa tåg, rad eller kommandosida</tm-text></dd>
-                  <dt><tm-text data-tm-text="D">D</tm-text></dt><dd><em><tm-text data-tm-text="specificerad men inte byggd">specificerad men inte byggd</tm-text></em><tm-text data-tm-text=" — tangenten sitter i knappsatsen och gör ingenting"> — tangenten sitter i knappsatsen och gör ingenting</tm-text></dd>
-                  <dt>*</dt><dd><tm-text data-tm-text="radera, tillbaka, initiera avbrott">radera, tillbaka, initiera avbrott</tm-text></dd>
-                  <dt>#</dt><dd><tm-text data-tm-text="välj, OK, bekräfta data, kvittera visning">välj, OK, bekräfta data, kvittera visning</tm-text></dd>
-                </dl>
-                <p class="tmbox-ref-rule"><strong><tm-text data-tm-text="Säkerhetsregel:">Säkerhetsregel:</tm-text></strong> <span class="tmbox-mono">#</span><tm-text data-tm-text=" får aldrig lämna ett operativt beslut. "> får aldrig lämna ett operativt beslut. </tm-text><span class="tmbox-mono"><tm-text data-tm-text="KLART">KLART</tm-text></span>, <span class="tmbox-mono"><tm-text data-tm-text="EJ KLART">EJ KLART</tm-text></span>, <span class="tmbox-mono"><tm-text data-tm-text="AVGÅTT">AVGÅTT</tm-text></span><tm-text data-tm-text=" och "> och </tm-text><span class="tmbox-mono"><tm-text data-tm-text="ANKOMMIT">ANKOMMIT</tm-text></span><tm-text data-tm-text=" bekräftas alltid via A eller B. Regeln gäller i motorn och i varje klient — box, den här simulatorn, Swift-appen och TKL-terminalen. Ingen klient får göra undantag på egen hand."> bekräftas alltid via A eller B. Regeln gäller i motorn och i varje klient — box, den här simulatorn, Swift-appen och TKL-terminalen. Ingen klient får göra undantag på egen hand.</tm-text></p>
-              </section>
-
-              <section class="card tmbox-ref-card">
-                <h3><tm-text data-tm-text="Inmatningslåset">Inmatningslåset</tm-text></h3>
-                <p><tm-text data-tm-text="Ett tangenttryck inom ">Ett tangenttryck inom </tm-text><span class="tmbox-mono"><tm-text data-tm-text="500 ms">500 ms</tm-text></span><tm-text data-tm-text=" efter ett skärmbyte ignoreras. Det skyddar mot en studsande kontakt och mot att någon håller ner en tangent: ett operativt beslut ska aldrig falla ut av att skärmen just bytte under fingret."> efter ett skärmbyte ignoreras. Det skyddar mot en studsande kontakt och mot att någon håller ner en tangent: ett operativt beslut ska aldrig falla ut av att skärmen just bytte under fingret.</tm-text></p>
-                <p><tm-text data-tm-text="De två sista scenarierna under ">De två sista scenarierna under </tm-text><strong><tm-text data-tm-text="Flöden">Flöden</tm-text></strong><tm-text data-tm-text=" visar låset i arbete — samma tangenter som fungerar i lugnt tempo blir "> visar låset i arbete — samma tangenter som fungerar i lugnt tempo blir </tm-text><span class="tmbox-mono"><tm-text data-tm-text="Ignored">Ignored</tm-text></span><tm-text data-tm-text=" när de kommer för tätt."> när de kommer för tätt.</tm-text></p>
-              </section>
-
-              <section class="card tmbox-ref-card">
-                <h3><tm-text data-tm-text="Vad boxen inte gör idag">Vad boxen inte gör idag</tm-text></h3>
-                <ul class="tmbox-gap-list">
-                  <li><strong><tm-text data-tm-text="D-tangenten">D-tangenten</tm-text></strong><tm-text data-tm-text=" har inget fall i "> har inget fall i </tm-text><span class="tmbox-mono"><tm-text data-tm-text="navigation.cpp">navigation.cpp</tm-text></span><tm-text data-tm-text=". Specen beskriver ">. Specen beskriver </tm-text><span class="tmbox-mono"><tm-text data-tm-text="D=MER">D=MER</tm-text></span><tm-text data-tm-text=" och "> och </tm-text><span class="tmbox-mono"><tm-text data-tm-text="D=NÄRMAR SIG">D=NÄRMAR SIG</tm-text></span><tm-text data-tm-text=" som avsedd funktion, men ingen ruta i "> som avsedd funktion, men ingen ruta i </tm-text><span class="tmbox-mono"><tm-text data-tm-text="golden_frames.txt">golden_frames.txt</tm-text></span><tm-text data-tm-text=" innehåller "> innehåller </tm-text><span class="tmbox-mono"><tm-text data-tm-text="MER">MER</tm-text></span>.</li>
-                  <li><strong><span class="tmbox-mono"><tm-text data-tm-text="clearance.cancel">clearance.cancel</tm-text></span></strong><tm-text data-tm-text=" finns inte i firmwaren och har ingen tangent."> finns inte i firmwaren och har ingen tangent.</tm-text></li>
-                  <li><strong><span class="tmbox-mono"><tm-text data-tm-text="line.available.publish">line.available.publish</tm-text></span></strong><tm-text data-tm-text=" finns inte i firmwaren och har ingen tangent."> finns inte i firmwaren och har ingen tangent.</tm-text></li>
-                  <li><strong><tm-text data-tm-text="Trafiköversikt">Trafiköversikt</tm-text></strong><tm-text data-tm-text=" med vänster/höger-topologi och "> med vänster/höger-topologi och </tm-text><span class="tmbox-mono"><tm-text data-tm-text="TOMT">TOMT</tm-text></span><tm-text data-tm-text="-logik är inte byggd.">-logik är inte byggd.</tm-text></li>
-                </ul>
-                <p class="tmbox-ref-rule"><tm-text data-tm-text="Listan står här för att den som läser en skärmbild rimligen antar att skärmen finns. Firmwaren i ">Listan står här för att den som läser en skärmbild rimligen antar att skärmen finns. Firmwaren i </tm-text><span class="tmbox-mono"><tm-text data-tm-text="beahead-ab/trainmeet-tmbox">beahead-ab/trainmeet-tmbox</tm-text></span><tm-text data-tm-text=" är originalet; den här sidan speglar den."> är originalet; den här sidan speglar den.</tm-text></p>
-              </section>
-            </div>
+            <div id="tmbox-reference-content" class="card tmbox-ref-card"></div>
           </div>
         </section>
 
@@ -807,6 +797,8 @@
     <!-- The layout and the state machine, mirrored from the firmware and held
          to it by golden_frames.txt and golden_traces.txt. -->
     <script src="/assets/tmbox-fixtures.js?v=20260823-1" defer></script>
+    <script src="/assets/tmbox-legacy-catalog.js?v=20260919-1" defer></script>
+    <script src="/assets/tmbox-guide.js?v=20260919-1" defer></script>
     <script src="/assets/tmbox-render.js?v=20260821-1" defer></script>
     <script src="/assets/tmbox-nav.js?v=20260821-1" defer></script>
     <script src="/assets/tmbox-attention.js?v=20260821-1" defer></script>

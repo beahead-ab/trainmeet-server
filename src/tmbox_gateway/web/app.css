@@ -1256,6 +1256,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .display-app.light { color-scheme: light; --display-bg: hsl(40 20% 98%); --display-fg: #111827; --display-muted: #64748b; --display-line: rgba(15,23,42,.28); --display-card: #fff; --display-primary: hsl(220 70% 45%); background: var(--display-bg); color: var(--display-fg); }
 .display-toolbar { position: fixed; z-index: 10; top: 0; left: 0; right: 0; min-height: 48px; padding: max(.5rem, env(safe-area-inset-top)) 1rem .5rem; display: flex; align-items: center; gap: .9rem; background: color-mix(in srgb, var(--display-bg) 70%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--display-fg) 5%, transparent); backdrop-filter: blur(24px) saturate(1.5); transition: opacity 300ms ease, transform 300ms ease; }
 .display-toolbar.hidden-toolbar { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+.display-offline .display-toolbar.hidden-toolbar { opacity: 1; transform: none; pointer-events: auto; }
+.display-offline .display-live { display: inline-flex; }
 .display-back { color: var(--display-fg); text-decoration: none; font-size: .86rem; }
 .display-toolbar > strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .display-toolbar-actions { margin-left: auto; display: flex; align-items: center; gap: .55rem; }
@@ -2747,6 +2749,13 @@ select.topology-field.station-pick {
 }
 
 .tmbox-flow-detail { min-width: 0; }
+.tmbox-doc-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin-block: 16px; }
+.tmbox-doc-controls label { display: grid; gap: 6px; }
+.tmbox-doc-controls p { flex-basis: 100%; margin: 0; color: var(--muted); }
+.tmbox-operation-guide { display: grid; gap: 12px; margin-bottom: 24px; }
+.tmbox-operation-guide .card { padding: 20px; min-width: 0; }
+.tmbox-operation-guide summary { cursor: pointer; font-weight: 600; }
+.tmbox-operation-guide li, #tmbox-reference-content li { margin-block: 10px; }
 .tmbox-flow-detail h3 { margin: 0 0 6px; font-size: 19px; }
 
 .tmbox-flow-source {
@@ -3117,9 +3126,8 @@ select.topology-field.station-pick {
   .tid-search input, .tid-filter select, .tid-filter input { min-width: 0; width: 100%; }
   .tid-filter { flex: 1 1 100%; }
 }
-.language-toolbar { min-height: 44px; display: flex; justify-content: flex-end; align-items: center; padding: 6px 20px; gap: 10px; background: #fafafa; color: #20242a; border-bottom: 1px solid #e5e7eb; }
-.language-toolbar label { display: inline-flex; align-items: center; gap: 10px; margin: 0; font-size: 14px; }
-.language-toolbar select { width: auto; min-width: 142px; min-height: 32px; padding: 4px 10px; font: inherit; }
+.settings-language-choice { display: grid; gap: 8px; max-width: 340px; }
+.users-toolbar { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
 
 /* Cloud authors; this shell only operates one selected meet. */
 body[data-mode="workspaces"] .server-admin-shell { display: block; }
@@ -3177,7 +3185,10 @@ body[data-signed-in="no"] .application-menu { display: none; }
 .status-row small { overflow-wrap: anywhere; }
 .admin-modal { box-sizing: border-box; width: min(620px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: clamp(20px, 4vw, 32px); border: 1px solid #dce0e8; border-radius: 20px; background: var(--surface-raised, white); color: var(--ink-strong); overflow-y: auto; box-shadow: 0 24px 90px #0004; }
 .admin-modal::backdrop { background: #0c17266b; }
-.admin-modal h2 { margin: 0 0 22px; font-size: 24px; line-height: 1.3; }
+.admin-modal h2 { margin: 0 0 22px; padding-right: 48px; font-size: 24px; line-height: 1.3; }
+.admin-modal .modal-close { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 44px; height: 44px; min-width: 44px; padding: 10px; border: 0; border-radius: 50%; background: transparent; color: var(--ink-strong); cursor: pointer; }
+.admin-modal .modal-close:hover { background: #0000000a; }
+.admin-modal .modal-close svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .admin-modal form, .admin-modal .inline-form, .admin-modal .access-grid, .admin-modal .clock-control-form, .admin-modal .users-invite { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 16px; }
 /* Reset former inline-form placement too, not just its column template.
    Otherwise submit and cancel occupy the same explicit grid cell. */

@@ -79,7 +79,7 @@
   //: Vyn som ett givet fall renderas ur. Samma fält som firmwarens View.
   function viewFor(screen, movement) {
     return {
-      screen, device_code: "TMBOX-A7K2C3", selected_movement: movement,
+      screen, device_code: "TMBOX-A7K2C3", access_point_name: "TMBox-Setup", selected_movement: movement,
       selected_track: 0, selected_connection: 0, selected_case: 0,
       reason: "unknown_train_number",
       lookup_digits: "42", selected_match: 0,
@@ -133,8 +133,8 @@
   // Ordningen får inte kastas om - guldfilen jämförs rad för rad.
   const TRACES = [
     { name: "browse-and-position", keys: "CCA*", snapshot: "two", allowed: ["train.position.set"], pace: UNHURRIED,
-      title: "Bläddra och ställa upp",
-      note: "C stegar mellan tågen, A utför den primära handlingen på det valda, * går tillbaka till stationsöversikten." },
+      title: "Bläddra och utföra nästa handling",
+      note: "C väljer först tåg 421, nästa C väljer inkommande 428. A skickar train.approaching i just denna gamla profil. * går tillbaka. Det är inte det föreslagna förenklade ankomstflödet." },
     { name: "track-change-refused-then-allowed", keys: "CBA", snapshot: "two", allowed: ["train.position.set"], pace: UNHURRIED,
       title: "Spårbyte nekas, uppställning tillåts",
       note: "B ignoreras eftersom rörelsen inte tillåter spårbyte. Boxen svarar inte med ett felmeddelande - den gör ingenting, vilket är skillnaden mot en knapp som är trasig." },
@@ -148,8 +148,8 @@
       title: "Fyrkant öppnar ärendet, B avslår",
       note: "Samma väg in, motsatt svar. Både bifall och avslag går via A eller B, aldrig via #." },
     { name: "line-message-only-acknowledges", keys: "##AB", snapshot: "cases", allowed: [], pace: UNHURRIED,
-      title: "Linjemeddelandet kan bara kvitteras",
-      note: "Det andra trycket på # ignoreras: # kvitterar visning, och när korgen redan är öppen finns inget mer att kvittera. Klareringen som ligger där svaras fortfarande på med A eller B - det operativa beslutet lämnar aldrig fyrkanten." },
+      title: "Upprepade klarteckensknappar (tekniskt test)",
+      note: "Det andra trycket på # ignoreras. Klareringskorgen har prioritet framför linjemeddelandet. A och B skapar var sitt svar i denna frysta fixtur; ingen serverkvittens spelas upp och detta bevisar inte att båda svaren accepteras i drift." },
     { name: "star-always-returns", keys: "C#*", snapshot: "cases", allowed: [], pace: UNHURRIED,
       title: "Stjärna tar alltid tillbaka",
       note: "# ignoreras inne på en rörelse - det finns ingen visning att kvittera där. * tar tillbaka till stationsöversikten oavsett hur långt in man är." },
@@ -170,7 +170,14 @@
       note: "Låset skyddar särskilt här: ett operativt beslut får aldrig falla ut av att någon råkar hålla ner en tangent." },
   ];
 
-  const api = { config, snapshot, CASES, GEOMETRIES, viewFor,
+  // Lifecycle screens missing from the original golden demonstration set.
+  // Keep CASES stable: firmware owns that set's exact order and golden output.
+  const EXTRA_CASES = [
+    ["no-network", "NoNetwork", -1], ["setup-wifi", "SetupPortal", -1],
+    ["seeking-server", "SeekingServer", -1], ["server-gone", "ServerGone", -1],
+    ["sending", "Sending", -1],
+  ];
+  const api = { config, snapshot, CASES, EXTRA_CASES, GEOMETRIES, viewFor,
                 twoMovements, withCases, TRACES, UNHURRIED, HURRIED };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else global.TMBoxFixtures = api;
