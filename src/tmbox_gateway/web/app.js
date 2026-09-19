@@ -771,8 +771,9 @@ document.querySelector("#clock-appearance-form").addEventListener("submit", asyn
 
 deviceForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const button = deviceForm.querySelector('button[type="submit"]');
+  if (button.disabled) return;
   setMessage(deviceMessage, "");
-  const button = deviceForm.querySelector("button");
   button.disabled = true;
   try {
     const response = await authorizedFetch("/v1/devices/assign", {

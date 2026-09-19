@@ -108,6 +108,48 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#device-list').getByText('TBX-SMOKE', { exact: true }).waitFor();
     assert.equal(await page.locator('#device-management').isVisible(), true);
     assert.equal(await page.locator('#device-form').isVisible(), false);
+    // The old inline grid placed submit and cancel in the same cell. Merely
+    // asserting visibility misses a save button covered by the cancel button.
+    async function checkDeviceDialog() {
+      const save = page.locator('#device-form button[type="submit"]');
+      const cancel = page.locator('#device-form [data-close-modal]');
+      const a = await save.boundingBox(), b = await cancel.boundingBox();
+      assert.ok(a && b && (a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y),
+        'TMBox save and cancel must not overlap: ' + JSON.stringify({ save: a, cancel: b }));
+      await save.scrollIntoViewIfNeeded();
+      assert.ok(await save.evaluate(node => {
+        const box = node.getBoundingClientRect();
+        return node.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+      }), 'TMBox save must be clickable, not covered by another control');
+      const dialog = await page.locator('#device-form-modal').boundingBox();
+      assert.ok(dialog.x >= 0 && dialog.x + dialog.width <= page.viewportSize().width + 1);
+    }
+    for (const [width, station] of [[1280, 'station-a'], [360, 'station-b']]) {
+      await page.setViewportSize({ width, height: width === 360 ? 780 : 960 });
+      await page.locator('#device-list .status-row').filter({ hasText: 'TBX-SMOKE' }).getByRole('button', { name: 'Ändra station', exact: true }).click();
+      await page.locator('#device-station').selectOption(station);
+      await checkDeviceDialog();
+      await screenshot('device-edit-' + width);
+      await page.locator('#device-form button[type="submit"]').click();
+      await page.locator('#device-form-modal').waitFor({ state: 'hidden' });
+      assert.equal((await (await page.request.get(urls.eu + '/v1/devices')).json()).devices[0].station_id, station);
+      await page.reload();
+      await page.locator('#device-list .status-row').filter({ hasText: 'TBX-SMOKE' }).getByRole('button', { name: 'Ändra station', exact: true }).click();
+      assert.equal(await page.locator('#device-station').inputValue(), station, 'Saved station survives reload');
+      await page.locator('#device-form [data-close-modal]').click();
+    }
+    await page.setViewportSize({ width: 1280, height: 960 });
+    await page.locator('#device-list .status-row').filter({ hasText: 'TBX-SMOKE' }).getByRole('button', { name: 'Ändra station', exact: true }).click();
+    await page.locator('#device-code').fill('TBX-UNKNOWN');
+    await page.locator('#device-station').selectOption('station-a');
+    await page.locator('#device-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.querySelector('#device-message').textContent.includes('Ingen inkopplad TMBox'));
+    assert.equal(await page.locator('#device-form-modal').isVisible(), true);
+    assert.equal(await page.locator('#device-code').inputValue(), 'TBX-UNKNOWN');
+    assert.equal(await page.locator('#device-station').inputValue(), 'station-a');
+    assert.equal((await (await page.request.get(urls.eu + '/v1/devices')).json()).devices[0].station_id, 'station-b');
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('#device-form [data-close-modal]').click();
     // Two separate browser contexts (different computers) follow the server,
     // even when an old local preference or bookmarked URL says otherwise.
     const screenContext = await browser.newContext();

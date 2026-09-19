@@ -119,3 +119,23 @@ class ContainerAwareGridTests(unittest.TestCase):
         for selector in (".basics-grid", ".access-grid"):
             with self.subTest(selector=selector):
                 self.assertIn("min(", _rule(selector))
+
+
+class ModalFormLayoutTests(unittest.TestCase):
+    def test_modal_inline_forms_reset_explicit_button_positions(self):
+        body = _rule(".admin-modal .inline-form > *")
+        self.assertIn("grid-column: 1 / -1", body)
+        self.assertIn("grid-row: auto", body)
+        self.assertNotIn(".device-form > button", CSS)
+
+    def test_device_assignment_uses_a_separate_save_cancel_footer(self):
+        web = Path(__file__).resolve().parents[1] / "src" / "tmbox_gateway" / "web"
+        html = (web / "index.html").read_text(encoding="utf-8")
+        form = re.search(r'<form id="device-form"[^>]*>(.*?)</form>', html, re.S).group(0)
+        self.assertNotIn("inline-form", form)
+        footer = form.split('<div class="modal-actions">', 1)[1]
+        self.assertIn('data-close-modal', footer)
+        self.assertIn('type="submit"', footer)
+        self.assertIn('data-tm-text="Spara"', footer)
+        js = (web / "app.js").read_text(encoding="utf-8")
+        self.assertIn("deviceForm.querySelector('button[type=\"submit\"]')", js)

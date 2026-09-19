@@ -582,14 +582,18 @@
               </div>
 <button type="button" class="secondary modal-launch" data-open-modal="device-form-modal">Koppla eller ändra TMBox</button>
 <dialog id="device-form-modal" class="admin-modal" aria-labelledby="device-form-title"><h2 id="device-form-title">Koppla eller ändra TMBox</h2>
-<form id="device-form" class="inline-form device-form">
-                <label for="device-code"><tm-text data-tm-text="Kod på lådan">Kod på lådan</tm-text></label>
+<form id="device-form" class="device-form">
+                <label for="device-code"><tm-text data-tm-text="Kod på lådan">Kod på lådan</tm-text>
                 <input id="device-code" placeholder="TMBOX-A7K2C3" autocapitalize="characters" required data-tm-placeholder="TMBOX-A7K2C3">
-                <label for="device-station"><tm-text data-tm-text="Station">Station</tm-text></label>
-                <select id="device-station"></select>
-                <button class="primary" type="submit"><tm-text data-tm-text="Koppla">Koppla</tm-text></button>
+                </label>
+                <label for="device-station"><tm-text data-tm-text="Station">Station</tm-text>
+                <select id="device-station" required></select>
+                </label>
                 <p id="device-message" class="form-message" role="status"></p>
-              <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
+                <div class="modal-actions">
+                  <button type="button" class="secondary" data-close-modal>Avbryt</button>
+                  <button class="primary" type="submit"><tm-text data-tm-text="Spara">Spara</tm-text></button>
+                </div>
 </form>
 </dialog>
               <div id="device-list" class="status-list"></div>
