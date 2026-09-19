@@ -22,4 +22,4 @@ jobs:
         with:
           node-version: 22
       - name: Test localization, Cloud-only shell and US browser behavior
-        run: node --test tests/js/i18n.test.cjs tests/js/shell-i18n.test.cjs tests/js/us-ui.test.cjs
+        run: node --test tests/js/i18n.test.cjs tests/js/shell-i18n.test.cjs tests/js/us-ui.test.cjs tests/js/tmbox-catalog.test.cjs

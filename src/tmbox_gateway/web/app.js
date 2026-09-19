@@ -372,7 +372,7 @@ setupFinishForm.addEventListener("submit", async (event) => {
 
 
 // Server workspaces select an interface, never a different meet or engine.
-const SETTINGS_SECTIONS = ["meet", "identity", "access", "users", "devices", "software", "cloud", "system"];
+const SETTINGS_SECTIONS = ["language", "meet", "identity", "access", "users", "devices", "software", "cloud", "system"];
 const WORKSPACE_PANELS = {
   kor: "#overview-view", installningar: "#admin-view",
   skarmar: "#displays-view", tmbox: "#tmbox-v2-view",
@@ -598,6 +598,14 @@ function finishModal(form) {
 }
 function bindAdminModals() {
   document.querySelectorAll("dialog.admin-modal").forEach((dialog) => {
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "modal-close";
+    close.dataset.closeModal = "";
+    close.dataset.tmAriaLabel = "Stäng";
+    close.setAttribute("aria-label", t("Stäng"));
+    close.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    dialog.prepend(close);
     dialog.addEventListener("input", () => { dialog.dataset.dirty = "true"; });
     dialog.addEventListener("cancel", (event) => { event.preventDefault(); cancelModal(dialog); });
     dialog.addEventListener("close", () => modalOrigins.get(dialog)?.focus());
@@ -2020,6 +2028,7 @@ const svgNS = "http://www.w3.org/2000/svg";
 let displaySnapshot = null;
 let displaySnapshotReceivedAt = null;
 let displayPollTimer = null;
+let displayRequest = null;
 let displayToolbarTimer = null;
 let displayTickTimer = null;
 let displayClockAnchorSeconds = null;
@@ -2864,21 +2873,36 @@ function renderDisplay(snapshot) {
 
 async function pollDisplay() {
   clearTimeout(displayPollTimer);
+  displayRequest?.abort();
+  const request = new AbortController();
+  displayRequest = request;
+  const deadline = setTimeout(() => request.abort(), 5000);
   const live = document.querySelector("#display-live");
   try {
-    const response = await fetch("/v1/display", { cache: "no-store" });
+    const response = await fetch("/v1/display", { cache: "no-store", signal: request.signal });
     if (!response.ok) throw new Error("Servern svarade inte");
     const payload = await response.json();
+    if (displayRequest !== request || request.signal.aborted) return;
     displaySnapshotReceivedAt = performance.now();
     syncDisplayClock(payload, displaySnapshotReceivedAt);
     live.classList.remove("offline");
+    document.querySelector("#display-app").classList.remove("display-offline");
     live.lastChild.textContent = " Ansluten";
     renderDisplay(payload);
   } catch {
+    if (displayRequest !== request) return;
     live.classList.add("offline");
+    document.querySelector("#display-app").classList.add("display-offline");
     live.lastChild.textContent = " Återansluter";
+  } finally {
+    clearTimeout(deadline);
+    // A resumed tab may have started a newer request; an old response must
+    // neither replace the current clock nor schedule a second polling loop.
+    if (displayRequest === request) {
+      displayRequest = null;
+      displayPollTimer = setTimeout(pollDisplay, 1000);
+    }
   }
-  displayPollTimer = setTimeout(pollDisplay, 1000);
 }
 
 async function initDisplay() {
@@ -2929,6 +2953,11 @@ async function initDisplay() {
     displayTickTimer = requestAnimationFrame(animateClock);
   };
   displayTickTimer = requestAnimationFrame(animateClock);
+  window.addEventListener("online", pollDisplay);
+  window.addEventListener("pageshow", pollDisplay);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") pollDisplay();
+  });
   pollDisplay();
 }
 
@@ -3033,7 +3062,62 @@ function paintFrame(element, geometry, lines) {
 }
 
 function tmboxDocGeometry() {
-  return V2_GEOMETRIES[v2Geometry()];
+  return tmboxLegacyDocs() ? { cols: 16, rows: 2 }
+    : V2_GEOMETRIES[localStorage.getItem("trainmeet.tmboxDocGeometry")] || V2_GEOMETRIES["20x4"];
+}
+
+function tmboxLegacyDocs() {
+  return localStorage.getItem("trainmeet.tmboxDocProfile") === "esp8266";
+}
+
+function documentationFlows() {
+  return tmboxLegacyDocs() ? TMBoxLegacyCatalog.flows.map((flow) => ({ ...flow, name: flow.id })) : TMBoxFixtures.TRACES;
+}
+
+function buildTMBoxGuide() {
+  const legacy = tmboxLegacyDocs();
+  const host = document.querySelector("#tmbox-operation-guide");
+  host.replaceChildren(...(legacy ? [] : TMBoxGuide).map((flow, index) => {
+    const section = document.createElement("details");
+    section.className = "card";
+    const title = document.createElement("summary");
+    title.textContent = `${index + 1}. ${flow.title} — ${flow.status}`;
+    const list = document.createElement("ol");
+    list.replaceChildren(...flow.steps.map((text) => {
+      const step = document.createElement("li"); step.textContent = text; return step;
+    }));
+    section.append(title, list); return section;
+  }));
+  document.querySelector("#tmbox-flow-scope").textContent = legacy
+    ? "Åtta flöden genom den verkliga V1-servermotorn. Varje steg visar operatör, tangent, skärm och linjetillstånd efter åtgärden. Exemplen är skrivskyddade och skickar ingen trafik."
+    : "Ovan: 13 granskade funktionsflöden med kända luckor. Nedan: 12 tekniska tangentsekvenser mot frysta data. Dessa visar lokal navigation, inte ett komplett flöde med serverkvittens eller uppdaterade tillstånd.";
+  document.querySelector("#tmbox-screen-scope").textContent = legacy
+    ? "Åtta interaktionslägen från V1-motorn och 18 start-/nät-/diagnostikexempel från ESP8266-firmwaren, på fast 16×2. Firmware-exemplen är dokumenterade texter, inte körda hårdvarutest. Sista två gäller bara diagnostikbygget; hårdvarutestets andra rad ändras om knappsatsen saknas."
+    : "Samtliga 19 skärmtyper i ESP32-navigationen: 20 exempel, eftersom rörelsedetaljen har två varianter. De ursprungliga 15 exemplen jämförs med firmwarets guldfil; fem nät-/livscykelskärmar kompletterar katalogen. Alla fyra displayformat kan förhandsvisas.";
+  const reference = document.querySelector("#tmbox-reference-content");
+  const title = document.createElement("h3");
+  title.textContent = legacy ? "ESP8266 · V1 · dagens knappmodell" : "ESP32 · V2 · dagens knappmodell";
+  const lines = legacy ? [
+    "A–D väljer motstation från viloläget (högst fyra). I dialoger ändras betydelsen: A ger klart, bekräftar avgång eller ankomst; B nekar eller lämnar bekräftelse.",
+    "Siffror buffras lokalt. # skickar hela tågnumret. * lämnar inmatningen; inne i en väntande begäran återtar * däremot trafikärendet direkt.",
+    "Reserverat tåg återtas med * följt av #. Ett redan avgånget tåg ska tas emot och kan inte återtas genom detta flöde.",
+    "Både klartecken och direkttrafik finns. Faktiskt ankomstspår kan inte väljas här idag.",
+    "Klockan visas bara i viloläget, och D-slotten kan ta dess plats. Profilen är fast 16×2 idag.",
+  ] : [
+    "Siffror buffras lokalt. A söker tåg, B suddar. C bläddrar bland resultat; # väljer. * är lokal Tillbaka och återtar inte en begäran.",
+    "A väljer första tillåtna primärhandling. B kan betyda spårval eller neka beroende på vy. C bläddrar. D har ingen åtgärd idag.",
+    "# öppnar klareringskorgen före linjemeddelanden från översikten. A ger klart eller kvitterar, B nekar klarering. Läsning av ett linjemeddelande är inte ett körtillstånd.",
+    "500 ms lås efter skärmbyte skyddar nästa beslut; det är separat från fysisk knappavstudsning.",
+    "Kända luckor: avgång efter klartecken kan fastna i Begär, direkttrafik och återtagning saknar fullständigt tangentflöde, ankomstspår kan inte sparas atomärt. Närmar sig finns ännu och föreslås tas bort ur boxflödet.",
+  ];
+  const list = document.createElement("ul");
+  list.replaceChildren(...lines.map((text) => { const li = document.createElement("li"); li.textContent = text; return li; }));
+  const scope = document.createElement("p");
+  scope.textContent = "Granskat mot Server 1.8.0 och TMBox 0.4.6. En produktversion betyder ännu inte samma trafikflöde på båda enheterna. Planerade förändringar är inte tillgängliga funktioner.";
+  reference.replaceChildren(title, list, scope);
+  const picker = document.querySelector("#tmbox-doc-geometry");
+  picker.disabled = legacy;
+  picker.value = legacy ? "16x2" : localStorage.getItem("trainmeet.tmboxDocGeometry") || "20x4";
 }
 
 //: Skärmkatalogen: varje fall i fixturerna, renderat i vald geometri.
@@ -3041,9 +3125,14 @@ function buildScreenCatalog() {
   const host = document.querySelector("#tmbox-screen-catalog");
   if (!host || typeof TMBoxFixtures === "undefined") return;
   const geometry = tmboxDocGeometry();
-  const { config, snapshot, CASES, viewFor } = TMBoxFixtures;
+  const { config, snapshot, CASES, EXTRA_CASES, viewFor } = TMBoxFixtures;
+  const legacy = tmboxLegacyDocs();
+  const cases = legacy ? [
+    ...TMBoxLegacyCatalog.screens.map((screen) => [screen.name, `InteractionMode::${screen.name}`, screen.lines]),
+    ...TMBoxLegacyDeviceScreens.map(([name, ...lines]) => [name, "Firmware · dokumenterat textexempel", lines.map(line => line.slice(0, 16).padEnd(16))]),
+  ] : [...CASES, ...EXTRA_CASES];
 
-  host.replaceChildren(...CASES.map(([name, screen, movement]) => {
+  host.replaceChildren(...cases.map(([name, screen, movement]) => {
     const card = document.createElement("article");
     card.className = "tmbox-screen-card card";
 
@@ -3053,13 +3142,13 @@ function buildScreenCatalog() {
 
     const value = document.createElement("p");
     value.className = "tmbox-screen-value";
-    value.textContent = `Screen::${screen}`;
+    value.textContent = legacy ? screen : `Screen::${screen}`;
     card.append(value);
 
     const lcd = document.createElement("div");
     lcd.className = "lcd tmbox-mini-lcd";
     lcd.setAttribute("aria-label", `Skärmen ${name}`);
-    paintFrame(lcd, geometry, TMBoxRender.render(geometry, viewFor(screen, movement), config, snapshot));
+    paintFrame(lcd, geometry, legacy ? movement : TMBoxRender.render(geometry, viewFor(screen, movement), config, snapshot));
     card.append(lcd);
     return card;
   }));
@@ -3095,7 +3184,8 @@ function replayTrace(trace) {
 
 function showFlow(name) {
   const host = document.querySelector("#tmbox-flow-detail");
-  const trace = TMBoxFixtures.TRACES.find((item) => item.name === name);
+  const legacy = tmboxLegacyDocs();
+  const trace = documentationFlows().find((item) => item.name === name);
   if (!host || !trace) return;
   localStorage.setItem("trainmeet.tmboxFlow", name);
   document.querySelectorAll("#tmbox-flow-list .tmbox-flow-item").forEach((button) => {
@@ -3113,17 +3203,18 @@ function showFlow(name) {
 
   const source = document.createElement("p");
   source.className = "tmbox-flow-source";
-  source.textContent = `${trace.name} · tangenter ${trace.keys.split("").join(" ")} · ${trace.pace} ms mellan tryck`;
+  source.textContent = legacy ? `V1-servermotor · ${trace.steps.length} steg` : `${trace.name} · tangenter ${trace.keys.split("").join(" ")} · ${trace.pace} ms mellan tryck`;
   parts.push(source);
 
   const note = document.createElement("p");
   note.className = "tmbox-flow-note";
-  note.textContent = trace.note;
+  note.textContent = legacy ? "CDA och LEK är två olika operatörer. LCD-raderna kommer från servermotorn efter accepterat kommando." : trace.note;
   parts.push(note);
 
   const list = document.createElement("ol");
   list.className = "tmbox-step-list";
-  for (const step of replayTrace(trace).steps) {
+  const steps = legacy ? trace.steps.map((step) => ({ ...step, outcome: "Accepted", screen: step.mode, frame: step.lines })) : replayTrace(trace).steps;
+  for (const step of steps) {
     const item = document.createElement("li");
     item.className = `tmbox-step tmbox-step-${step.outcome.toLowerCase()}`;
 
@@ -3137,7 +3228,7 @@ function showFlow(name) {
 
     const outcome = document.createElement("span");
     outcome.className = "tmbox-step-outcome";
-    outcome.textContent = { Send: "Skickar", Redraw: "Ritar om", Ignored: "Ignoreras" }[step.outcome] || step.outcome;
+    outcome.textContent = legacy ? `${step.actor} · ${step.line_state}` : { Send: "Skickar", Redraw: "Ritar om", Ignored: "Ignoreras" }[step.outcome] || step.outcome;
     head.append(outcome);
 
     const screen = document.createElement("span");
@@ -3145,6 +3236,9 @@ function showFlow(name) {
     screen.textContent = `Screen::${step.screen}`;
     head.append(screen);
     item.append(head);
+    if (legacy) {
+      const instruction = document.createElement("p"); instruction.textContent = step.instruction; item.append(instruction);
+    }
 
     const lcd = document.createElement("div");
     lcd.className = "lcd tmbox-mini-lcd";
@@ -3166,7 +3260,9 @@ function showFlow(name) {
 function buildFlowList() {
   const host = document.querySelector("#tmbox-flow-list");
   if (!host || typeof TMBoxFixtures === "undefined") return;
-  host.replaceChildren(...TMBoxFixtures.TRACES.map((trace) => {
+  buildTMBoxGuide();
+  const flows = documentationFlows();
+  host.replaceChildren(...flows.map((trace) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "tmbox-flow-item";
@@ -3176,8 +3272,8 @@ function buildFlowList() {
     return button;
   }));
   const remembered = localStorage.getItem("trainmeet.tmboxFlow");
-  const known = TMBoxFixtures.TRACES.some((trace) => trace.name === remembered);
-  showFlow(known ? remembered : TMBoxFixtures.TRACES[0].name);
+  const known = flows.some((trace) => trace.name === remembered);
+  showFlow(known ? remembered : flows[0].name);
 }
 
 //: Dokumentationsvyerna ritas om när geometrin byts, annars visar de rutor i
@@ -3185,15 +3281,15 @@ function buildFlowList() {
 function redrawTMBoxDocs() {
   if (typeof TMBoxFixtures === "undefined") return;
   buildScreenCatalog();
-  const active = localStorage.getItem("trainmeet.tmboxFlow");
-  if (document.querySelector("#tmbox-flow-list")?.children.length) {
-    showFlow(TMBoxFixtures.TRACES.some((t) => t.name === active) ? active : TMBoxFixtures.TRACES[0].name);
-  }
+  buildFlowList();
 }
 
 function selectTMBoxPane(pane) {
   const selected = TMBOX_PANES.includes(pane) ? pane : "klient";
   localStorage.setItem("trainmeet.tmboxPane", selected);
+  document.querySelector("#tmbox-doc-controls")?.classList.toggle("hidden", selected === "klient");
+  document.querySelector("#tmbox-v2-device")?.closest(".panel-picker")?.classList.toggle("hidden", selected !== "klient");
+  if (selected !== "klient") buildTMBoxGuide();
   TMBOX_PANES.forEach((name) => {
     document.querySelector(`#tmbox-pane-${name}`)?.classList.toggle("hidden", name !== selected);
   });
@@ -3207,6 +3303,14 @@ function selectTMBoxPane(pane) {
 }
 
 function bindTMBoxPanes() {
+  const profile = document.querySelector("#tmbox-doc-profile");
+  profile.value = tmboxLegacyDocs() ? "esp8266" : "esp32";
+  profile.addEventListener("change", () => {
+    localStorage.setItem("trainmeet.tmboxDocProfile", profile.value); redrawTMBoxDocs();
+  });
+  document.querySelector("#tmbox-doc-geometry")?.addEventListener("change", (event) => {
+    localStorage.setItem("trainmeet.tmboxDocGeometry", event.target.value); redrawTMBoxDocs();
+  });
   document.querySelectorAll(".tmbox-doc-tab").forEach((button) => {
     button.addEventListener("click", () => selectTMBoxPane(button.dataset.tmboxPane));
   });

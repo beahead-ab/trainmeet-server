@@ -66,12 +66,16 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       ['en', 'Choose workspace', 'Operations and administration'],
       ['de', 'Arbeitsbereich auswählen', 'Betrieb und Verwaltung'],
     ]) {
+      await page.goto('http://127.0.0.1:9999/#settings');
       await page.locator('[data-language-picker]').selectOption(language);
+      await page.goto('http://127.0.0.1:9999/#workspaces');
       assert.equal(await page.locator('#workspace-heading').innerText(), heading);
       assert.equal(await page.locator('#workspace-options button strong').first().innerText(), administration);
       assert.equal(await page.locator('[data-operating-mode], #build-view, #build-sidebar').count(), 0);
     }
+    await page.goto('http://127.0.0.1:9999/#settings');
     await page.locator('[data-language-picker]').selectOption('sv');
+    await page.goto('http://127.0.0.1:9999/#workspaces');
     await screenshot('workspace-chooser');
     await page.getByRole('button', { name: 'TMBox v2', exact: true }).focus();
     await page.keyboard.press('Enter');
@@ -80,6 +84,35 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#keypad-v2 button').count(), 16);
     assert.equal(await page.locator('#workspace-home').getAttribute('href'), '/#tmbox');
     await screenshot('tmbox-workspace');
+    const writesBeforeDocs = calls.filter(([method]) => method === 'POST').length;
+    await page.locator('[data-tmbox-pane="skarmar"]').click();
+    assert.equal(await page.locator('.tmbox-screen-card').count(), 20);
+    assert.equal(await page.locator('#tmbox-v2-device').isVisible(), false);
+    for (const geometry of ['16x2', '20x2', '16x4', '20x4']) {
+      await page.locator('#tmbox-doc-geometry').selectOption(geometry);
+      const [cols, rows] = geometry.split('x').map(Number);
+      assert.equal(await page.locator('.tmbox-screen-card .lcd-line').count(), rows * 20);
+      const lines = await page.locator('.tmbox-screen-card .lcd-line').allTextContents();
+      assert.ok(lines.every(line => line.length === cols));
+    }
+    await screenshot('tmbox-esp32-catalog');
+    await page.locator('[data-tmbox-pane="floden"]').click();
+    assert.equal(await page.locator('#tmbox-operation-guide details').count(), 13);
+    assert.equal(await page.locator('.tmbox-flow-item').count(), 12);
+    await page.locator('#tmbox-doc-profile').selectOption('esp8266');
+    assert.equal(await page.locator('.tmbox-flow-item').count(), 8);
+    assert.equal(await page.locator('#tmbox-doc-geometry').isDisabled(), true);
+    for (const button of await page.locator('.tmbox-flow-item').all()) {
+      await button.click();
+      assert.ok(await page.locator('.tmbox-step').count() >= 2);
+    }
+    await screenshot('tmbox-esp8266-flow');
+    await page.locator('[data-tmbox-pane="skarmar"]').click();
+    assert.equal(await page.locator('.tmbox-screen-card').count(), 26);
+    await page.locator('[data-tmbox-pane="referens"]').click();
+    assert.match(await page.locator('#tmbox-reference-content').innerText(), /ESP8266/);
+    assert.equal(calls.filter(([method]) => method === 'POST').length, writesBeforeDocs);
+    await page.locator('[data-tmbox-pane="klient"]').click();
     await page.reload();
     await page.locator('#tmbox-v2-view').waitFor({ state: 'visible' });
     await page.locator('#application-menu summary').click();
@@ -137,6 +170,30 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.locator('#application-menu summary').click();
     await page.locator('#open-settings').click();
     await page.locator('#users-rows button').waitFor();
+    assert.equal(await page.locator('[data-language-picker]').count(), 1);
+    assert.equal(await page.locator('#language-settings [data-language-picker]').isVisible(), true);
+    const addUser = await page.locator('#users-invite-open').boundingBox();
+    const userTable = await page.locator('#users-table').boundingBox();
+    assert.ok(addUser.y + addUser.height <= userTable.y, 'Add user is above, not stuck against the bottom row');
+    const modalIds = await page.locator('dialog.admin-modal').evaluateAll(nodes => nodes.map(node => node.id));
+    assert.equal(modalIds.length, 11);
+    for (const width of [1200, 360]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const id of modalIds) {
+        await page.evaluate(id => openModal(id), id);
+        const dialog = page.locator('#' + id);
+        assert.equal(await dialog.locator(':scope > .modal-close').count(), 1);
+        const close = dialog.locator(':scope > .modal-close');
+        const bounds = await dialog.boundingBox(), button = await close.boundingBox();
+        assert.ok(button.width >= 44 && button.height >= 44, id + ': touch target');
+        assert.ok(button.x > bounds.x + bounds.width / 2 && button.x + button.width <= bounds.x + bounds.width, id + ': top right');
+        assert.ok(button.y >= bounds.y && button.y <= bounds.y + 20, id + ': top edge');
+        assert.equal(await close.getAttribute('aria-label'), 'Stäng');
+        await close.click();
+        await dialog.waitFor({ state: 'hidden' });
+      }
+    }
+    await page.setViewportSize({ width: 1200, height: 900 });
     assert.equal(await page.locator('#device-management').isVisible(), true);
     assert.equal(await page.locator('#users-invite-form').isVisible(), false);
     await page.locator('[data-language-picker]').selectOption('en');
@@ -149,7 +206,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.evaluate(() => refreshInfo());
     assert.equal(await page.locator('#admin-server-name').inputValue(), 'Unsubmitted name');
     page.once('dialog', dialog => dialog.accept());
-    await page.locator('#server-identity-form-modal [data-close-modal]').click();
+    await page.locator('#server-identity-form-modal > .modal-close').click();
     await page.locator('#users-rows button').click();
     assert.equal(await page.locator('#user-edit-modal').isVisible(), true);
     await page.locator('#user-edit-password').fill('password1');
@@ -158,16 +215,17 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.match(await page.locator('#user-edit-form .modal-feedback').innerText(), /inte likadana/);
     assert.equal(calls.some(call => call[1] === '/v1/admin/users/update'), false);
     page.once('dialog', dialog => dialog.accept());
-    await page.locator('#user-edit-modal [data-close-modal]').click();
+    await page.locator('#user-edit-modal > .modal-close').click();
     await page.locator('#runtime-check-update').click();
     assert.equal(calls.some(call => call[0] === 'POST' && call[1] === '/v1/config/check'), true);
     await page.locator('#workspace-home').click();
     await page.locator('#overview-view').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#overview-view').isVisible(), true);
     await page.setViewportSize({ width: 360, height: 780 });
+    await page.goto('http://127.0.0.1:9999/#settings');
+    await page.locator('[data-language-picker]').selectOption('de');
     await page.goto('http://127.0.0.1:9999/#workspaces');
     await page.locator('#workspace-picker').waitFor({ state: 'visible' });
-    await page.locator('[data-language-picker]').selectOption('de');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await screenshot('workspace-chooser-mobile');
     await page.goto('http://127.0.0.1:9999/#settings');
@@ -179,7 +237,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     const rect = await page.locator('#device-form-modal').boundingBox();
     assert.ok(rect.x >= 0 && rect.x + rect.width <= 361, JSON.stringify(rect));
     await screenshot('mobile-device-modal');
-    await page.locator('#device-form-modal [data-close-modal]').click();
+    await page.locator('#device-form-modal > .modal-close').click();
     await page.locator('[data-language-picker]').selectOption('sv');
     region = 'us';
     await page.goto('http://127.0.0.1:9999/#workspaces');

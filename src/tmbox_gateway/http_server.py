@@ -2687,6 +2687,8 @@ class TrainMeetHTTPApplication:
             "/assets/meet-type.css": "meet-type.css",
             "/assets/i18n-init.js": "i18n-init.js",
             "/assets/tmbox-fixtures.js": "tmbox-fixtures.js",
+            "/assets/tmbox-legacy-catalog.js": "tmbox-legacy-catalog.js",
+            "/assets/tmbox-guide.js": "tmbox-guide.js",
             "/assets/tmbox-render.js": "tmbox-render.js",
             "/assets/tmbox-nav.js": "tmbox-nav.js",
             "/assets/tmbox-attention.js": "tmbox-attention.js",
