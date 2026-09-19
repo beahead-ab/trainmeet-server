@@ -5,14 +5,16 @@ import ipaddress
 import logging
 import mimetypes
 import re
+import secrets
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
+from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
@@ -20,6 +22,8 @@ from uuid import uuid4
 
 from . import backup
 from .engine import TrafficEngine
+from .cloud_config import CloudConfiguration
+from .lifecycle import SQLiteMeetLifecycle, MeetLifecycleError
 from .central_sync import (
     DEFAULT_RUNTIME_PUBLICATION_URL,
     CentralRuntimeDownload,
@@ -44,7 +48,7 @@ from .local_config import (
     build_from_station_order,
     local_configuration_from_publication,
 )
-from .models import Command, TrackConfig, TrackType, UnknownTrackError, resolve_track_id
+from .models import Command, ConnectionState, InteractionMode, TrackConfig, TrackType, UnknownTrackError, resolve_track_id
 from .observability import log_event, use_correlation
 from .operations import SQLiteOperationsStore
 from .us import USStore, USError
@@ -70,6 +74,35 @@ LOGGER = logging.getLogger("tmbox_gateway.http")
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
 ADMIN_COOKIE_NAME = "trainmeet_admin"
 ADMIN_COOKIE_MAX_AGE = 12 * 60 * 60
+
+
+def runtime_command(region=None):
+    """Serialize operational HTTP commands with config activation and MQTT."""
+    def decorate(method):
+        @wraps(method)
+        def guarded(self, *args, **kwargs):
+            with self.engine._lock:
+                if self.lifecycle:
+                    selected = self.lifecycle.selected()
+                    self.lifecycle.assert_selected(region or (selected or {}).get("region", ""))
+                    payload = args[1] if len(args) > 1 and isinstance(args[1], dict) else {}
+                    generation = payload.get("meet_generation")
+                    scoped_required = bool(self.runtime_store and self.runtime_store._setting("require_scoped_commands") == "true")
+                    # US warrants already carry mandatory session ID+revision.
+                    if len(args) > 1 and isinstance(args[1], dict) and region != "us" and ((generation is not None and (type(generation) is not int or generation != selected["generation"]))
+                                           or (scoped_required and generation is None)):
+                        raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_meet_context", "Träffen eller configen har ändrats. Läs in arbetsytan igen innan du fortsätter.")
+                return method(self, *args, **kwargs)
+        return guarded
+    return decorate
+
+
+def runtime_view(method):
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        with self.engine._lock:
+            return method(self, *args, **kwargs)
+    return guarded
 
 
 def _tkl_engine_reason(reason: str) -> str:
@@ -201,6 +234,7 @@ class TrainMeetHTTPApplication:
         operations_store: SQLiteOperationsStore | None = None,
         station_service: TMBoxStationService | None = None,
         us_store: USStore | None = None,
+        lifecycle: SQLiteMeetLifecycle | None = None,
     ):
         self.engine = engine
         self.identities = identities
@@ -213,6 +247,25 @@ class TrainMeetHTTPApplication:
         self._box_enrollment_lock = threading.Lock()
         self._box_enrollment_attempts: dict[str, list[float]] = {}
         self.us_store = us_store
+        self.lifecycle = lifecycle or (SQLiteMeetLifecycle(runtime_store.path) if runtime_store else None)
+        self.lifecycle_error = ""
+        if self.lifecycle:
+            self.engine._lock = self.lifecycle.lock
+            try:
+                self.lifecycle.bootstrap(runtime_store.active(), us_store.current_session() if us_store else None)
+            except MeetLifecycleError as error:
+                self.lifecycle_error = str(error)
+            self.engine.runtime_guard = self._eu_runtime_guard
+            if self._station_service:
+                self._station_service.lifecycle = self.lifecycle
+        self.cloud_config = CloudConfiguration(self) if self.lifecycle else None
+        self.on_config_applied = None
+        if self.lifecycle and us_store and (self.lifecycle.selected() or {}).get("region") == "us":
+            old_link = us_store.cloud_link()
+            if old_link and not runtime_store.link_token():
+                runtime_store.save_central_url(old_link[0])
+                runtime_store.save_link_token(old_link[1])
+                runtime_store.set_cloud_auto_sync(True)
         self.runtime_fetcher = runtime_fetcher or (
             lambda code, url: fetch_runtime_download(
                 code,
@@ -240,8 +293,65 @@ class TrainMeetHTTPApplication:
             self.engine.set_clock_source(self.operations_store.clock_status)
             if self.runtime_store is not None:
                 active = self.runtime_store.active()
-                if active is not None:
+                if active is not None and not self._eu_runtime_guard():
                     self.operations_store.ensure_publication(active)
+
+    def _eu_runtime_guard(self):
+        if not self.lifecycle:
+            return None
+        try:
+            self.lifecycle.assert_selected("eu", publication_id=self.engine.config.id)
+        except MeetLifecycleError:
+            return "wrong_session"
+        return None
+
+    def refresh_connection_grants(self, *, new_meet=False):
+        """Refresh allowed panels after hot activation; keep admin sessions intact."""
+        panels = sorted(self.engine.config.panels)
+        self.identities.revoke_pairing_codes(label="Lokal enkel parkoppling")
+        code = ""
+        if panels:
+            code = self.config.connection_code if not new_meet else ""
+            code = code or f"{secrets.randbelow(1000000):06d}"
+            hours = self.runtime_store.connection_code_validity_hours()
+            code = self.identities.issue_pairing_code(panels,
+                allowed_kinds=[DeviceKind.SWIFT_PANEL, DeviceKind.SWIFT_ADMIN, DeviceKind.WEB_ADMIN,
+                               DeviceKind.TKL_TERMINAL, DeviceKind.ESP32_PANEL],
+                ttl=timedelta(hours=hours) if hours else None, max_uses=50,
+                label="Lokal enkel parkoppling", code=code)
+        self.config = replace(self.config, connection_code=code)
+
+    def server_context(self, client: PairedClient) -> dict[str, Any]:
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        region = selected["region"] if selected else None
+        admin = client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}
+        workspaces = ["administration"] if admin else []
+        if region == "eu" and (admin or client.kind == DeviceKind.TKL_TERMINAL):
+            workspaces.append("tkl")
+        if region == "us":
+            if admin:
+                workspaces.append("dispatcher")
+            if client.kind == DeviceKind.US_CONDUCTOR:
+                workspaces.append("conductor")
+        return {
+            "selected_meet": ({"id": selected["meet_id"], "name": selected.get("meet_name", ""),
+                               "publication_id": selected["publication_id"], "operating_region": region,
+                               "generation": selected["generation"]} if selected else None),
+            "operating_region": region, "available_workspaces": workspaces,
+            "cloud_update": self.cloud_config.status() if self.cloud_config and admin else {},
+            "config_authority": "cloud", "local_editing": False,
+            "transition_pending": bool(self.lifecycle and self.lifecycle.transition()),
+            "error": self.lifecycle_error or None,
+        }
+
+    def check_config_update(self, client: PairedClient) -> dict[str, Any]:
+        self._require_admin(client)
+        if not self.cloud_config:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal lagring saknas")
+        try:
+            return self.cloud_config.check()
+        except (CentralSyncError, RuntimePublicationError, USError) as error:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "config_update_failed", str(error)) from error
 
     def local_admin(self, user: dict[str, object] | None = None) -> PairedClient:
         return PairedClient(
@@ -400,6 +510,10 @@ class TrainMeetHTTPApplication:
     def installation_status(self) -> dict[str, Any]:
         access = self.identities.admin_access_summary()
         runtime = self.runtime_store.summary() if self.runtime_store is not None else {"configured": False}
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        if selected:
+            runtime.update(configured=True, publication_id=selected["publication_id"],
+                           meet_id=selected["meet_id"], meet_name=selected.get("meet_name", ""))
         required = (
             not bool(access["password_configured"])
             or bool(self.runtime_store and self.runtime_store.installation_required())
@@ -463,35 +577,37 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_server_name", str(error)) from error
         return {"server_name": name, "installation": self.installation_status()}
 
+    @runtime_view
     def complete_installation(
         self,
         client: PairedClient,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         self._require_admin(client)
-        if self.runtime_store is None or self.runtime_store.active() is None:
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        if self.runtime_store is None or not selected:
             raise HTTPAPIError(
                 HTTPStatus.BAD_REQUEST,
                 "runtime_not_configured",
                 "Hämta och aktivera en träff innan installationen avslutas",
             )
+        self.lifecycle.assert_selected(selected["region"], publication_id=selected["publication_id"])
         if not self.runtime_store.server_name():
             raise HTTPAPIError(
                 HTTPStatus.BAD_REQUEST,
                 "server_name_missing",
                 "Ge servern ett namn innan installationen avslutas",
             )
-        active_day = str(payload.get("active_day") or self.runtime_store.active_day() or "").strip()
-        try:
-            self.runtime_store.set_active_day(active_day)
-        except RuntimePublicationError as error:
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_active_day", str(error)) from error
+        # Setup completion is metadata only, even when an old client submits an
+        # active_day. Cloud supplies the initial day; later changes must use the
+        # guarded runtime-day command, not bypass it through a repeated setup.
+        active_day = self.runtime_store.active_day() if selected["region"] == "eu" else None
         self.runtime_store.complete_installation()
         return {
             "completed": True,
             "active_day": active_day,
-            "restart_required": self.runtime_store.active().session_config() != self.engine.config,
-            "message": "Grundinstallationen är klar. Starta om servern för att börja köra träffen.",
+            "restart_required": False,
+            "message": "Grundinstallationen är klar. Servern använder den valda träffen.",
         }
 
     def pair(self, payload: dict[str, Any], request_host: str) -> dict[str, Any]:
@@ -574,16 +690,19 @@ class TrainMeetHTTPApplication:
         actor = f"user:{client.admin_user_id}" if client.admin_user_id else f"client:{client.client_id}"
         return self.us_store, actor, dispatcher
 
+    @runtime_view
     def us_context(self, client: PairedClient) -> dict[str, Any]:
         store, actor, dispatcher = self.us_access(client)
+        if self.lifecycle:
+            self.lifecycle.assert_selected("us")
         result = store.context(actor, dispatcher)
         if 'clock' not in result:
-            result["clock"] = self.operations_store.clock_status() if self.operations_store else {"time": self.engine.config.clock_time, "running": False}
+            result["clock"] = {"time": "12:00:00", "running": False, "configured": False, "scope": "us"}
         if dispatcher:
             result["conductors"] = [{"id": f"client:{c.client_id}", "name": c.display_name} for c in self.identities.enabled_clients() if c.kind == DeviceKind.US_CONDUCTOR]
-            link = store.cloud_link()
-            result['cloud'] = {'linked': bool(link), 'url': link[0] if link else DEFAULT_RUNTIME_PUBLICATION_URL}
-            result['packages'] = store.package_catalogue()
+            selected = self.lifecycle.selected() if self.lifecycle else None
+            result['cloud'] = {'linked': bool(self.runtime_store and self.runtime_store.link_token())}
+            result['packages'] = [p for p in store.package_catalogue() if not selected or p['publication_id'] == selected['publication_id']]
         return result
 
     def us_stage_package(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
@@ -616,15 +735,20 @@ class TrainMeetHTTPApplication:
                                       expected_link=link if not code else None)
         return {'package': summary, 'staged': True, 'linked': bool(store.cloud_link()), 'restart_required': False}
 
+    @runtime_command("us")
     def us_command(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         store, actor, dispatcher = self.us_access(client)
         action = str(payload.get("action", ""))
+        if action == "create_session" and self.lifecycle:
+            selected = self.lifecycle.assert_selected("us")
+            if payload.get("package") is not None or payload.get("publication_id") != selected["publication_id"]:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "cloud_config_required", "Starta serverns valda publicerade Cloud-config.")
         if action == "assign":
             conductor = next((c for c in self.identities.enabled_clients() if c.kind == DeviceKind.US_CONDUCTOR and f"client:{c.client_id}" == payload.get("conductor_id")), None)
             if conductor is None:
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "unknown_conductor", "Select a paired conductor")
             payload = {**payload, "conductor_name": conductor.display_name}
-        clock = self.operations_store.clock_status() if self.operations_store else {"time": self.engine.config.clock_time}
+        clock = store.context(actor, dispatcher).get("clock", {"time": "12:00"})
         result = store.execute(actor, dispatcher, action, payload, str(clock["time"]))
         if action == 'create_session' and self.runtime_store and self.runtime_store.server_name() and self.runtime_store.installation_required() and self.runtime_store.active() is None:
             # Explicitly starting a US session completes first-time setup too;
@@ -643,7 +767,10 @@ class TrainMeetHTTPApplication:
             ],
         }
 
+    @runtime_command("eu")
     def command(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        if payload.get("traffic_session_id") and payload["traffic_session_id"] != self.engine.config.id:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "wrong_session", "Kommandot tillhör en tidigare config.")
         panel_id = str(payload.get("panel_id", ""))
         if panel_id not in client.panel_ids:
             raise HTTPAPIError(
@@ -698,6 +825,7 @@ class TrainMeetHTTPApplication:
             self._station_service = TMBoxStationService(
                 self.runtime_store, self.operations_store, self.identities
             )
+        self._station_service.lifecycle = self.lifecycle
         return self._station_service
 
     def tmbox_v2_assignment(self, client: PairedClient, device_id: str) -> dict[str, Any]:
@@ -724,6 +852,7 @@ class TrainMeetHTTPApplication:
             )
         return payload
 
+    @runtime_command("eu")
     def tmbox_v2_command(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
         device_id = str(payload.get("device_id") or "").strip()
@@ -776,15 +905,21 @@ class TrainMeetHTTPApplication:
             ],
         }
 
+    @runtime_view
     def runtime_summary(self, client: PairedClient) -> dict[str, Any]:
-        del client
         if self.runtime_store is None:
             return {"configured": False, "central_url": canonical_runtime_url(self.config.central_runtime_url)}
+        context = self.server_context(client)
+        selected = context["selected_meet"]
         return {
             **self.runtime_store.summary(),
+            **({"configured": True, "publication_id": selected["publication_id"],
+                "meet_id": selected["id"], "meet_name": selected["name"]} if selected else {}),
             "central_url": canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url),
+            "server_context": context,
         }
 
+    @runtime_view
     def display_snapshot(self, request_host: str = "") -> dict[str, Any]:
         publication = self.runtime_store.active() if self.runtime_store is not None else None
         if publication is not None:
@@ -835,6 +970,12 @@ class TrainMeetHTTPApplication:
                 "show_seconds": True,
                 "available_styles": list(AVAILABLE_CLOCK_STYLES),
             }
+            positions = []
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        if selected and selected["region"] == "us":
+            clock = self.clock_status(self.local_admin())
+            meet = {"id": selected["meet_id"], "name": selected.get("meet_name", ""), "operating_region": "us"}
+            publication_id = selected["publication_id"]
             positions = []
         return {
             "protocol_version": 1,
@@ -930,6 +1071,7 @@ class TrainMeetHTTPApplication:
             return publication.track_catalogue()
         return self.engine.config.tracks
 
+    @runtime_command("eu")
     def tkl_context(self, client: PairedClient, station_id: str) -> dict[str, Any]:
         if self.operations_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
@@ -955,6 +1097,7 @@ class TrainMeetHTTPApplication:
         return {
             "protocol_version": 1,
             "publication_id": snapshot["publication_id"],
+            "meet_generation": (self.lifecycle.selected() or {}).get("generation") if self.lifecycle else None,
             "meet": snapshot["meet"],
             "active_day": snapshot["active_day"],
             "station": station,
@@ -978,6 +1121,7 @@ class TrainMeetHTTPApplication:
             "connection_states": connection_states,
         }
 
+    @runtime_command("eu")
     def start_tkl_shift(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         if self.operations_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
@@ -999,6 +1143,7 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_shift", str(error)) from error
         return {"shift": shift}
 
+    @runtime_command("eu")
     def finish_tkl_shift(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         if self.operations_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
@@ -1041,6 +1186,7 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_shift", str(error)) from error
         return {"shift": result}
 
+    @runtime_command("eu")
     def update_tkl_movement(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         if self.operations_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
@@ -1111,6 +1257,7 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_movement", str(error)) from error
         return {"movement": result}
 
+    @runtime_command("eu")
     def tkl_clearance_action(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         """Drive one clearance step for a TKL terminal.
 
@@ -1192,6 +1339,7 @@ class TrainMeetHTTPApplication:
         state = next((item for item in snapshot["connection_states"] if item["id"] == connection_id), None)
         return {"action": action, "connection": state, "revision": self.engine.revision}
 
+    @runtime_command("eu")
     def tkl_line_available(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         """Send or acknowledge a line-available message.
 
@@ -1243,6 +1391,9 @@ class TrainMeetHTTPApplication:
     def _require_station_access(self, client: PairedClient, station_id: str) -> None:
         if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
             return
+        current = self.identities.client(client.client_id)
+        if current is not None:
+            client = current
         if client.station_id is not None and client.station_id == station_id:
             return
         station_panels = {
@@ -1251,8 +1402,36 @@ class TrainMeetHTTPApplication:
         if not station_panels.intersection(client.panel_ids):
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "station_not_assigned", "Terminalen har inte tillgång till stationen")
 
+    def clock_status(self, client: PairedClient) -> dict[str, Any]:
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        if selected and selected["region"] == "us":
+            result = self.us_context(client)
+            return {**result["clock"], "configured": bool(result["session"])}
+        return self.operations_store.clock_status() if self.operations_store else {"configured": False, "running": False}
+
+    @runtime_command()
     def control_clock(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        if selected and selected["region"] == "us":
+            store, actor, _ = self.us_access(client)
+            context = store.context(actor, True)
+            if context["session"] is None or context["session"]["status"] == "closed":
+                if payload.get("action") != "start":
+                    raise HTTPAPIError(HTTPStatus.CONFLICT, "session_not_started", "Starta US-körningen först.")
+                package = next(p for p in store.package_catalogue() if p["publication_id"] == selected["publication_id"])
+                self.us_command(client, {"action": "create_session", "command_id": str(uuid4()), "confirmed": True,
+                    "publication_id": selected["publication_id"], "package_checksum": package["checksum"]})
+                context = store.context(actor, True)
+            action = payload.get("action")
+            if action not in {"start", "stop", "speed"}:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_action", "Okänt klockkommando")
+            clock = context["clock"]
+            self.us_command(client, {"action": "clock", "command_id": str(uuid4()), "confirmed": True,
+                "session_id": context["session"]["id"], "expected_revision": context["session"]["revision"],
+                "clock_time": payload.get("time") or clock["time"], "clock_speed": payload.get("speed", clock["speed"]),
+                "running": action == "start" or (action == "speed" and clock["running"])})
+            return self.clock_status(client)
         if self.operations_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "clock_unavailable", "Den lokala klockan är inte tillgänglig")
         action = str(payload.get("action") or "")
@@ -1880,56 +2059,8 @@ class TrainMeetHTTPApplication:
         }
 
     def auto_sync_cloud_runtime(self) -> dict[str, Any]:
-        """Poll Cloud for a newer revision - and never activate what it finds.
-
-        This runs every fifteen seconds with nobody watching. It used to call
-        `install()`, whose `activate` defaults to True, and then restart the
-        server to apply the result. An operator who had corrected three
-        departure times at 13:00 lost them when Cloud published at 14:00, and
-        the meet restarted underneath them while it happened.
-
-        So: fetch, store, mark as waiting, and stop. Activating is somebody's
-        decision, and a decision needs somebody present to make it.
-        """
-        if self.runtime_store is None or not self.runtime_store.cloud_auto_sync_enabled():
-            return {"checked": False, "pending": False}
-
-        # In offline-meet the server is deliberately the editor, and polling
-        # Cloud in the background is the wrong thing to be doing at all - not
-        # merely the wrong thing to activate. Staging revisions nobody asked
-        # for would queue a "waiting" badge over work that left Cloud on
-        # purpose.
-        if not self.runtime_store.cloud_polling_is_allowed():
-            return {"checked": False, "pending": False, "reason": "offline_meet"}
-
-        token = self.runtime_store.link_token()
-        if not token:
-            return {"checked": False, "pending": False}
-        central_url = canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url)
-        manifest = self.linked_runtime_fetcher(token, central_url, True)
-        if not isinstance(manifest, CentralRuntimeManifest):
-            raise CentralSyncError("TrainMeet Cloud skickade inget versionsbesked")
-        active = self.runtime_store.active()
-        if active is not None and active.publication_id == manifest.publication_id:
-            return {"checked": True, "pending": False, "publication_id": manifest.publication_id}
-
-        # Already fetched and waiting: downloading it again every fifteen
-        # seconds would be pointless traffic and would keep rewriting the row.
-        waiting = self.runtime_store.pending_publication()
-        if waiting is not None and waiting.publication_id == manifest.publication_id:
-            return {"checked": True, "pending": True, "publication_id": waiting.publication_id}
-
-        download = self.linked_runtime_fetcher(token, central_url, False)
-        if not isinstance(download, CentralRuntimeDownload):
-            raise CentralSyncError("TrainMeet Cloud skickade inget driftpaket")
-        publication = self.runtime_store.stage_pending(download.package)
-        if self.operations_store is not None:
-            self.operations_store.ensure_publication(publication)
-        return {
-            "checked": True,
-            "pending": True,
-            "publication_id": publication.publication_id,
-        }
+        """Same validated, guarded pipeline as a manual config check; no restart."""
+        return self.cloud_config.check(automatic=True) if self.cloud_config else {"checked": False}
 
     # ------------------------------------------------- väntande Cloud-revision
 
@@ -2266,7 +2397,9 @@ class TrainMeetHTTPApplication:
             "warnings": warnings,
         }
 
+    @runtime_command("eu")
     def set_active_day(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Change the operating day, never the published Cloud configuration."""
         self._require_admin(client)
         if self.runtime_store is None or self.runtime_store.active() is None:
             raise HTTPAPIError(
@@ -2274,14 +2407,50 @@ class TrainMeetHTTPApplication:
                 "runtime_not_configured",
                 "Ingen tidtabell är publicerad",
             )
-        try:
-            active_day = self.runtime_store.set_active_day(str(payload.get("active_day", "")))
-        except RuntimePublicationError as error:
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_active_day", str(error)) from error
-        return {"active_day": active_day}
+        publication = self.runtime_store.active()
+        if self.lifecycle is None or self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Driftläget kan inte verifieras.")
+        selected = self.lifecycle.assert_selected("eu", publication_id=publication.publication_id)
+        if type(payload.get("meet_generation")) is not int or payload["meet_generation"] != selected["generation"]:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_meet_context", "Läs in aktuell träff innan du byter trafikdag.")
+        day = payload.get("active_day")
+        if not isinstance(day, str) or not day.strip() or len(day.strip()) > 40:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_active_day", "Ange en giltig trafikdag.")
+        day = day.strip()
+        if day == self.runtime_store.active_day():
+            return {"active_day": day, "meet_generation": selected["generation"], "changed": False}
+        blockers = self.operations_store.config_update_blockers(publication, publication)
+        if self.operations_store.clock_status().get("running"):
+            blockers.append("Stoppa klockan innan du byter trafikdag.")
+        if any(value.state != ConnectionState.FREE for value in self.engine.connections.values()):
+            blockers.append("Avsluta pågående trafik och klareringar först.")
+        if any(value.mode != InteractionMode.IDLE for value in self.engine.panels.values()):
+            blockers.append("Avsluta pågående TMBox-inmatning först.")
+        if blockers:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "active_day_busy", " ".join(dict.fromkeys(blockers)))
+        # Day affects timetable/command meaning. Fail closed across the store
+        # writes and advance scope so queued commands from yesterday are stale.
+        ticket = self.lifecycle.begin_transition("eu", selected["meet_id"], selected["publication_id"],
+            meet_name=selected.get("meet_name", ""), expected_generation=selected["generation"])
+        self.runtime_store.set_active_day(day)
+        self.runtime_store.bump_config_version()
+        self.runtime_store._save_setting("require_scoped_commands", "true")
+        self.engine.adopt_config(self.engine.config)
+        updated = self.lifecycle.complete_transition(ticket)
+        if self.on_config_applied:
+            try:
+                self.on_config_applied()
+            except Exception:
+                LOGGER.warning("Trafikdagen har ändrats; enheter hämtar den vid nästa kontakt.", exc_info=True)
+        return {"active_day": day, "meet_generation": updated["generation"], "changed": True}
 
     def sync_runtime(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
+        if self.cloud_config:
+            try:
+                return self.cloud_config.connect(payload)
+            except (CentralSyncError, RuntimePublicationError, USError) as error:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "cloud_connection_failed", str(error)) from error
         code = str(payload.get("sync_code", ""))
         central_url = str(payload.get("central_url", "")).strip()
         if self.runtime_store is not None:
@@ -2405,6 +2574,7 @@ class TrainMeetHTTPApplication:
             ),
         }
 
+    @runtime_command("eu")
     def assign_device(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         """Assign a discovered box to a station.
 
@@ -2452,9 +2622,9 @@ class TrainMeetHTTPApplication:
             )
 
     def static_asset(self, path: str) -> tuple[bytes, str] | None:
-        if path in {"/us", "/us/", "/us/dispatcher", "/us/conductor", "/us/app.js", "/us/style.css"}:
+        if path in {"/us", "/us/", "/us/dispatcher", "/us/conductor", "/us/app.js", "/us/style.css", "/us/workspace-messages.js"}:
             name = path.rsplit("/", 1)[-1]
-            if name not in {"app.js", "style.css"}:
+            if name not in {"app.js", "style.css", "workspace-messages.js"}:
                 name = "index.html"
             return self.us_web_root.joinpath(name).read_bytes(), mimetypes.guess_type(name)[0] or "text/plain"
         if path.startswith("/tkl/"):
@@ -2475,6 +2645,7 @@ class TrainMeetHTTPApplication:
             "/assets/app.js": "app.js",
             "/assets/i18n.js": "i18n.js",
             "/assets/i18n-messages.js": "i18n-messages.js",
+            "/assets/shell-messages.js": "shell-messages.js",
             "/assets/meet-type-messages.js": "meet-type-messages.js",
             "/assets/us-cloud-messages.js": "us-cloud-messages.js",
             "/assets/meet-type.css": "meet-type.css",
@@ -2531,20 +2702,44 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path in {"/v1/operating-mode", "/v1/local-configuration", "/v1/build/timetable", "/v1/build/topology"}:
+                self.server.application._require_admin(self._authenticated_client())
+                raise HTTPAPIError(HTTPStatus.GONE, "cloud_authoring_only", "Träffen redigeras i Cloud. Befintliga lokala utkast är arkiverade, inte aktiva arbetsytor.")
+            if path == "/v1/server-context":
+                self._send_json(HTTPStatus.OK, self.server.application.server_context(self._authenticated_client()))
+                return
+            if path == "/v1/clock":
+                self._send_json(HTTPStatus.OK, self.server.application.clock_status(self._authenticated_client()))
+                return
             if path == "/v1/us/context":
                 self._send_json(HTTPStatus.OK, self.server.application.us_context(self._authenticated_client()))
                 return
             if path == '/v1/us/package':
-                store, _, dispatcher = self.server.application.us_access(self._authenticated_client())
-                if not dispatcher:
-                    raise HTTPAPIError(HTTPStatus.FORBIDDEN, 'us_dispatcher_required', 'Dispatcher access required')
-                publication_id = parse_qs(parsed.query).get('publication_id', [''])[0]
-                self._send_json(HTTPStatus.OK, {'package': store.saved_package(publication_id)})
+                application = self.server.application
+                with application.engine._lock:
+                    store, _, dispatcher = application.us_access(self._authenticated_client())
+                    if not dispatcher:
+                        raise HTTPAPIError(HTTPStatus.FORBIDDEN, 'us_dispatcher_required', 'Dispatcher access required')
+                    publication_id = parse_qs(parsed.query).get('publication_id', [''])[0]
+                    if application.lifecycle:
+                        selected = application.lifecycle.assert_selected("us")
+                        if publication_id and publication_id != selected["publication_id"]:
+                            raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_meet_context", "Package does not belong to the selected configuration.")
+                        publication_id = selected["publication_id"]
+                    self._send_json(HTTPStatus.OK, {'package': store.saved_package(publication_id)})
                 return
             if path == "/v1/us/command-status":
-                store, actor, _ = self.server.application.us_access(self._authenticated_client())
-                command_id = parse_qs(parsed.query).get("command_id", [""])[0]
-                self._send_json(HTTPStatus.OK, {"result": store.command_status(actor, command_id)})
+                application = self.server.application
+                with application.engine._lock:
+                    store, actor, _ = application.us_access(self._authenticated_client())
+                    if application.lifecycle:
+                        application.lifecycle.assert_selected("us")
+                    command_id = parse_qs(parsed.query).get("command_id", [""])[0]
+                    result = store.command_status(actor, command_id)
+                    current = store.current_session()
+                    if result and (not current or result.get("session_id") != current["id"]):
+                        result = None
+                    self._send_json(HTTPStatus.OK, {"result": result})
                 return
             if path == "/tkl":
                 self.send_response(HTTPStatus.PERMANENT_REDIRECT)
@@ -2753,6 +2948,8 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 self._send_bytes(HTTPStatus.OK, *asset)
                 return
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
+        except MeetLifecycleError as error:
+            self._send_api_error(HTTPAPIError(HTTPStatus.CONFLICT, "meet_context_conflict", str(error)))
         except USError as error:
             self._send_api_error(HTTPAPIError(HTTPStatus(error.status), "us_error", str(error)))
         except HTTPAPIError as error:
@@ -2762,6 +2959,18 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             payload = self._read_json()
+            if path in {"/v1/local-configuration", "/v1/local-configuration/seed", "/v1/local-configuration/build",
+                        "/v1/local-configuration/activate", "/v1/operating-mode", "/v1/runtime/install", "/v1/us/packages"}:
+                self.server.application._require_admin(self._authenticated_client())
+                raise HTTPAPIError(HTTPStatus.GONE, "cloud_authoring_only", "Träffens config redigeras och publiceras i TrainMeet Cloud. Lokala utkast finns kvar som historik.")
+            if path in {"/v1/config/check", "/v1/runtime/update", "/v1/runtime/activate", "/v1/runtime/pending/activate"}:
+                self._send_json(HTTPStatus.OK, self.server.application.check_config_update(self._authenticated_client()))
+                return
+            if path == "/v1/us/cloud/download":
+                client = self._authenticated_client()
+                result = self.server.application.sync_runtime(client, payload) if payload.get("sync_code") else self.server.application.check_config_update(client)
+                self._send_json(HTTPStatus.OK, result)
+                return
             if path == "/v1/us/commands":
                 self._send_json(HTTPStatus.OK, self.server.application.us_command(self._authenticated_client(), payload))
                 return
@@ -3105,6 +3314,8 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
+        except MeetLifecycleError as error:
+            self._send_api_error(HTTPAPIError(HTTPStatus.CONFLICT, "meet_context_conflict", str(error)))
         except USError as error:
             self._send_api_error(HTTPAPIError(HTTPStatus(error.status), "us_error", str(error)))
         except HTTPAPIError as error:

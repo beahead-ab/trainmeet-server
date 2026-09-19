@@ -12,44 +12,24 @@
     <script src="/assets/meet-type-messages.js" defer></script>
     <link rel="stylesheet" href="/assets/meet-type.css">
     <script src="/assets/i18n.js" defer></script>
+    <script src="/assets/shell-messages.js" defer></script>
     <script src="/assets/i18n-init.js" defer></script>
   </head>
   <body>
     <div class="language-toolbar">
-      <nav class="meet-type-nav" aria-label="Typ av tågträff" data-tm-aria-label="Operating session type" title="Att byta vy ändrar eller stoppar inte en körning." data-tm-title="Switching views does not change or stop an operating session.">
-        <a href="/" aria-current="page"><span data-tm-text="EU operating session">EU-tågträff</span></a>
-        <a href="/us/dispatcher"><span data-tm-text="US operating session">US-tågträff</span></a>
-      </nav>
       <label><span data-tm-text="Språk">Språk</span><select data-language-picker aria-label="Språk" data-tm-aria-label="Språk"></select></label>
     </div>
     <main class="page-shell">
-      <!-- Applocket, DEL 3.1. Två rader: den mörka finns bara i byggläget,
-           den vita i båda. Konfiguration och drift ska inte kunna förväxlas -
-           det är hela poängen med att byggläget ser annorlunda ut. -->
-      <div id="build-chrome" class="build-chrome hidden">
-        <div class="build-chrome-left">
-          <span class="build-chrome-mark" aria-hidden="true">✎</span>
-          <b><tm-text data-tm-text="Byggläge">Byggläge</tm-text></b>
-          <span class="build-chrome-note" id="build-chrome-note"><tm-text data-tm-text="
-            Träffen fortsätter köra. Inget ändras för operatörerna förrän du aktiverar.
-          ">
-            Träffen fortsätter köra. Inget ändras för operatörerna förrän du aktiverar.
-          </tm-text></span>
-        </div>
-        <button type="button" id="leave-build" class="build-chrome-exit"><tm-text data-tm-text="Lämna byggläget">Lämna byggläget</tm-text></button>
-      </div>
 
       <header class="topbar" id="app-chrome">
-        <div class="brand-lockup">
+        <a href="#overview" id="workspace-home" class="brand-lockup" aria-label="Hem i arbetsytan">
           <img class="brand-mark" src="/assets/ikon/trainmeet-ikon.svg" alt="" width="28" height="28" data-tm-alt="">
           <h1 id="app-meet-name"><tm-text data-tm-text="TrainMeet Server">TrainMeet Server</tm-text></h1>
-        </div>
+        </a>
 
         <nav id="run-tabs" class="run-tabs" aria-label="Körläge" data-tm-aria-label="Körläge">
           <button type="button" class="run-tab" data-run-tab="oversikt" aria-current="page"><tm-text data-tm-text="Översikt">Översikt</tm-text></button>
           <button type="button" class="run-tab" data-run-tab="trafik"><tm-text data-tm-text="Trafik">Trafik</tm-text></button>
-          <button type="button" class="run-tab" data-run-tab="skarmar"><tm-text data-tm-text="Skärmar">Skärmar</tm-text></button>
-          <button type="button" class="run-tab" data-run-tab="tkl"><tm-text data-tm-text="TKL-terminal">TKL-terminal</tm-text></button>
           <button type="button" class="run-tab" data-run-tab="tmbox"><tm-text data-tm-text="TMBox v2">TMBox v2</tm-text></button>
         </nav>
 
@@ -57,12 +37,15 @@
           <span id="app-clock" class="app-clock" aria-label="Träffklocka" data-tm-aria-label="Träffklocka">–&#8202;–:–&#8202;–</span>
           <span id="app-devices" class="app-devices"><i></i><tm-text data-tm-text="Inga boxar">Inga boxar</tm-text></span>
           <div id="connection" class="status offline"><span></span><b><tm-text data-tm-text="Ej ansluten">Ej ansluten</tm-text></b></div>
-          <button type="button" id="open-settings" class="settings-button" aria-label="Inställningar" title="Inställningar" data-tm-aria-label="Inställningar" data-tm-title="Inställningar">⚙</button>
-          <!-- Vägen tillbaka från Inställningar. Den mörka listen är bygglägets
-               och betyder "det här är inte träffen som kör" - Inställningar är
-               inte det läget, och lånade en varning den inte behövde. -->
-          <button type="button" id="leave-settings" class="leave-settings"><tm-text data-tm-text="Tillbaka till träffen">Tillbaka till träffen</tm-text></button>
-          <button type="button" id="enter-build" class="enter-build"><tm-text data-tm-text="Bygg om träffen">Bygg om träffen</tm-text></button>
+          <details id="application-menu" class="application-menu">
+            <summary aria-label="Öppna menyn">☰</summary>
+            <nav aria-label="Servermeny">
+              <a href="#settings" id="open-settings">Inställningar</a>
+              <a href="#screens">Skärmar</a>
+              <a href="#workspaces">Byt arbetsyta</a>
+              <button id="logout" type="button">Logga ut</button>
+            </nav>
+          </details>
         </div>
       </header>
 
@@ -204,64 +187,15 @@
       </section>
 
       <section id="app-view" class="app-view hidden">
-        <button id="server-sidebar-toggle" class="server-sidebar-toggle" type="button" aria-label="Öppna servermenyn" data-tm-aria-label="Öppna servermenyn">☰</button>
-        <button id="server-sidebar-overlay" class="server-sidebar-overlay" type="button" aria-label="Stäng servermenyn" data-tm-aria-label="Stäng servermenyn"></button>
+        <p id="server-context-warning" class="form-message error context-warning hidden" role="alert"></p>
+        <section id="workspace-picker" class="card workspace-picker hidden" aria-labelledby="workspace-heading">
+          <p class="eyebrow">TRAINMEET SERVER</p>
+          <h2 id="workspace-heading">Välj arbetsyta</h2>
+          <p id="workspace-meet">En server, en träff. Välj vad du vill arbeta med.</p>
+          <div id="workspace-options" class="workspace-options"></div>
+          <p id="workspace-message" class="form-message" role="status"></p>
+        </section>
         <div class="server-admin-shell">
-          <!-- Byggstegen, DEL 3. Numrerade cirklar i stället för ikoner:
-               steg har ordning, ikoner har det inte. Sidopanelen finns bara i
-               byggläget - körläget har flikraden i applocket i stället. -->
-          <aside id="build-sidebar" class="build-sidebar hidden" aria-label="Byggsteg" data-tm-aria-label="Byggsteg">
-            <nav class="build-steps" aria-label="Steg" data-tm-aria-label="Steg">
-              <button type="button" class="build-step" data-build-step="kalla" aria-current="step">
-                <span class="build-step-number">1</span>
-                <span class="build-step-text">
-                  <span class="build-step-label"><tm-text data-tm-text="Träffen">Träffen</tm-text></span>
-                  <small class="build-step-subtitle" data-step-subtitle="kalla"></small>
-                </span>
-              </button>
-              <button type="button" class="build-step" data-build-step="bana">
-                <span class="build-step-number">2</span>
-                <span class="build-step-text">
-                  <span class="build-step-label"><tm-text data-tm-text="Stationer och sträckor">Stationer och sträckor</tm-text></span>
-                  <small class="build-step-subtitle" data-step-subtitle="bana"></small>
-                </span>
-              </button>
-              <button type="button" class="build-step" data-build-step="tid">
-                <span class="build-step-number">3</span>
-                <span class="build-step-text">
-                  <span class="build-step-label"><tm-text data-tm-text="Tidtabell">Tidtabell</tm-text></span>
-                  <small class="build-step-subtitle" data-step-subtitle="tid"></small>
-                </span>
-              </button>
-              <button type="button" class="build-step" data-build-step="boxar">
-                <span class="build-step-number">4</span>
-                <span class="build-step-text">
-                  <span class="build-step-label"><tm-text data-tm-text="TMBoxar">TMBoxar</tm-text></span>
-                  <small class="build-step-subtitle" data-step-subtitle="boxar"></small>
-                </span>
-              </button>
-            </nav>
-
-            <div id="unsaved-panel" class="unsaved-panel" aria-live="polite">
-              <p class="unsaved-count" id="unsaved-count"><tm-text data-tm-text="Inga osparade ändringar">Inga osparade ändringar</tm-text></p>
-              <p class="unsaved-note" id="unsaved-note"><tm-text data-tm-text="
-                Träffen kör på den aktiva versionen tills du aktiverar en ny.
-              ">
-                Träffen kör på den aktiva versionen tills du aktiverar en ny.
-              </tm-text></p>
-              <button type="button" id="review-and-activate" class="primary" disabled><tm-text data-tm-text="
-                Granska och aktivera
-              ">
-                Granska och aktivera
-              </tm-text></button>
-              <button type="button" id="save-draft" class="quiet" disabled><tm-text data-tm-text="Spara utkast">Spara utkast</tm-text></button>
-            </div>
-
-            <div class="server-sidebar-footer">
-              <i></i><span><b id="sidebar-runtime-name"><tm-text data-tm-text="Ingen aktiv träff">Ingen aktiv träff</tm-text></b><small id="sidebar-runtime-status"><tm-text data-tm-text="Lokal server">Lokal server</tm-text></small></span>
-            </div>
-            <button id="logout" type="button" class="quiet tab-action hidden"><tm-text data-tm-text="Logga ut">Logga ut</tm-text></button>
-          </aside>
 
           <div class="server-workspace">
 
@@ -281,15 +215,17 @@
           </article>
 
           <div class="overview-actions">
-            <button type="button" class="overview-action" data-open-view="admin" aria-label="Öppna administration" data-tm-aria-label="Öppna administration">⚙ <span><tm-text data-tm-text="Inställningar">Inställningar</tm-text></span></button>
-            <button type="button" class="overview-action" data-open-view="displays">▣ <span><tm-text data-tm-text="Skärmar">Skärmar</tm-text></span></button>
-            <a class="overview-action" href="/tkl/">🚆 <span><tm-text data-tm-text="Öppna TKL">Öppna TKL</tm-text></span></a>
+            <button type="button" id="overview-clock-start" class="primary">Starta / fortsätt</button>
+            <button type="button" id="overview-clock-stop" class="secondary">Stoppa</button>
+            <button type="button" data-open-modal="clock-control-form-modal" class="quiet">Justera klockan</button>
             <div class="overview-live-meta">
               <span id="overview-clock">--:--</span>
               <span id="overview-day"><tm-text data-tm-text="Dagl">Dagl</tm-text></span>
               <span class="overview-online"><i></i><tm-text data-tm-text=" Lokal drift"> Lokal drift</tm-text></span>
             </div>
           </div>
+          <p id="overview-clock-message" class="form-message" role="status"></p>
+          <section id="us-runtime-summary" class="card section-card hidden"><h3>Pågående trafik</h3><p id="us-runtime-detail"></p><p>Trafiken hanteras i arbetsytan Dispatcher. Byt arbetsyta i menyn för att öppna den.</p></section>
 
           <section class="card overview-section topology-overview-card">
             <header class="overview-section-heading">
@@ -351,213 +287,15 @@
           </section>
         </section>
 
-        <!-- Rubriken kommer ur byggsteget, inte härifrån. Den gamla
-             "DRIFT / Aktiv träff"-listen hörde till de tolv menypunkterna och
-             skrevs inte längre av någon kod - den stod kvar och sa emot
-             stegets egen rubrik i varje byggsteg. -->
         <section id="admin-view" class="view-panel hidden">
           <header id="settings-heading" class="build-panel-heading hidden">
             <div class="build-panel-title">
               <h2><tm-text data-tm-text="Inställningar">Inställningar</tm-text></h2>
-              <p><tm-text data-tm-text="
-                Servern själv: namn, inloggning, programvara, Cloud-koppling och
-                nollställning. Träffens innehåll byggs under ">
-                Servern själv: namn, inloggning, programvara, Cloud-koppling och
-                nollställning. Träffens innehåll byggs under </tm-text><b><tm-text data-tm-text="Bygg om träffen">Bygg om träffen</tm-text></b>.
-              </p>
+              <p>Servern, användare och anslutna enheter. Träffens innehåll ändras i TrainMeet Cloud och uppdateras automatiskt här.</p>
             </div>
           </header>
-          <section id="build-step-kalla" class="build-panel hidden" data-build-panel="kalla">
-            <header class="build-panel-heading">
-              <h2><tm-text data-tm-text="Var kommer träffen ifrån?">Var kommer träffen ifrån?</tm-text></h2>
-              <p><tm-text data-tm-text="
-                Ett val i stället för tre menypunkter. Valet avgör om stationer,
-                sträckor och tidtabell är låsta eller redigerbara i nästa steg.
-              ">
-                Ett val i stället för tre menypunkter. Valet avgör om stationer,
-                sträckor och tidtabell är låsta eller redigerbara i nästa steg.
-              </tm-text></p>
-            </header>
 
-            <div class="source-cards" role="radiogroup" aria-label="Träffens källa" data-tm-aria-label="Träffens källa">
-              <button type="button" class="source-card" data-source="cloud" role="radio" aria-checked="false">
-                <span class="source-card-head">
-                  <b><tm-text data-tm-text="TrainMeet Cloud">TrainMeet Cloud</tm-text></b>
-                  <span class="source-check" aria-hidden="true"></span>
-                </span>
-                <span class="source-card-body"><tm-text data-tm-text="Cloud äger innehållet. Stationer och tidtabell är låsta här.">Cloud äger innehållet. Stationer och tidtabell är låsta här.</tm-text></span>
-              </button>
-              <button type="button" class="source-card" data-source="lokal" role="radio" aria-checked="false">
-                <span class="source-card-head">
-                  <b><tm-text data-tm-text="Lokalt utkast">Lokalt utkast</tm-text></b>
-                  <span class="source-check" aria-hidden="true"></span>
-                </span>
-                <span class="source-card-body"><tm-text data-tm-text="Servern är redaktör under träffen. Rätta tider och spår på plats.">Servern är redaktör under träffen. Rätta tider och spår på plats.</tm-text></span>
-              </button>
-              <button type="button" class="source-card" data-source="fil" role="radio" aria-checked="false">
-                <span class="source-card-head">
-                  <b><tm-text data-tm-text="Importerad fil">Importerad fil</tm-text></b>
-                  <span class="source-check" aria-hidden="true"></span>
-                </span>
-                <span class="source-card-body"><tm-text data-tm-text="Ett exporterat driftpaket, validerat innan det aktiveras.">Ett exporterat driftpaket, validerat innan det aktiveras.</tm-text></span>
-              </button>
-            </div>
 
-            <section id="pending-revision" class="card pending-card hidden" aria-live="polite">
-              <div class="pending-heading">
-                <div>
-                  <p class="eyebrow"><tm-text data-tm-text="EN REVISION VÄNTAR">EN REVISION VÄNTAR</tm-text></p>
-                  <h3 id="pending-title"><tm-text data-tm-text="TrainMeet Cloud har publicerat en ny version">TrainMeet Cloud har publicerat en ny version</tm-text></h3>
-                  <p id="pending-detail"><tm-text data-tm-text="Träffen kör vidare på den aktiva versionen tills du aktiverar.">Träffen kör vidare på den aktiva versionen tills du aktiverar.</tm-text></p>
-                </div>
-                <span class="revision-badge" id="pending-id">–</span>
-              </div>
-              <div id="pending-changes" class="pending-changes"></div>
-              <div class="pending-actions">
-                <button id="activate-pending" type="button"><tm-text data-tm-text="Aktivera den nya versionen">Aktivera den nya versionen</tm-text></button>
-                <p id="pending-message" class="form-message" role="status"></p>
-              </div>
-            </section>
-
-            <p id="source-message" class="form-message" role="status"></p>
-          </section>
-
-          <!-- BYGG steg 3. Tidtabellen är alltid redigerbar lokalt, även
-               när grundrevisionen kommer från Cloud: servern är runtime och
-               tidtabellen är det som ändras under en träff. Produktbeslut P6. -->
-          <section id="build-step-tid" class="build-panel hidden" data-build-panel="tid">
-            <header class="build-panel-heading with-badge">
-              <div class="build-panel-title">
-                <h2><tm-text data-tm-text="Tidtabell">Tidtabell</tm-text></h2>
-                <p><tm-text data-tm-text="
-                  Tågrörelserna på träffen. Grupperingen ändrar bara hur listan
-                  visas — raderna är desamma.
-                ">
-                  Tågrörelserna på träffen. Grupperingen ändrar bara hur listan
-                  visas — raderna är desamma.
-                </tm-text></p>
-              </div>
-              <span id="tid-source-badge" class="lock-badge">–</span>
-            </header>
-
-            <div class="tid-controls">
-              <div class="segmented" role="group" aria-label="Gruppering" data-tm-aria-label="Gruppering">
-                <button type="button" class="segment is-active" data-tid-group="tid"><tm-text data-tm-text="Tid">Tid</tm-text></button>
-                <button type="button" class="segment" data-tid-group="station"><tm-text data-tm-text="Station">Station</tm-text></button>
-                <button type="button" class="segment" data-tid-group="tag"><tm-text data-tm-text="Tåg">Tåg</tm-text></button>
-              </div>
-              <label class="tid-filter">
-                <span><tm-text data-tm-text="Station">Station</tm-text></span>
-                <select id="tid-station"><option value="" data-tm-text="Alla">Alla</option></select>
-              </label>
-              <label class="tid-filter tid-search">
-                <span><tm-text data-tm-text="Sök">Sök</tm-text></span>
-                <input id="tid-search" type="search" placeholder="Tågnummer, spår, anteckning" autocomplete="off" data-tm-placeholder="Tågnummer, spår, anteckning">
-              </label>
-              <span id="tid-count" class="tid-count"></span>
-            </div>
-
-            <div id="tid-bulk" class="tid-bulk hidden" role="group" aria-label="Ändra markerade" data-tm-aria-label="Ändra markerade">
-              <b id="tid-bulk-count"><tm-text data-tm-text="0 markerade">0 markerade</tm-text></b>
-              <label><tm-text data-tm-text="Spår">Spår</tm-text><input id="tid-bulk-track" type="text" size="4" autocomplete="off"></label>
-              <label><tm-text data-tm-text="Dagar">Dagar</tm-text><input id="tid-bulk-days" type="text" size="6" autocomplete="off"></label>
-              <label><tm-text data-tm-text="Flytta tid">Flytta tid</tm-text><input id="tid-bulk-shift" type="number" step="1" size="4" placeholder="min" data-tm-placeholder="min"></label>
-              <button type="button" id="tid-bulk-apply" class="primary"><tm-text data-tm-text="Ändra markerade">Ändra markerade</tm-text></button>
-              <button type="button" id="tid-bulk-clear" class="link-button"><tm-text data-tm-text="Avmarkera">Avmarkera</tm-text></button>
-            </div>
-
-            <div class="table-scroll">
-              <table id="tid-table" class="tid-table">
-                <thead>
-                  <tr>
-                    <th class="tid-pick"><input type="checkbox" id="tid-all" aria-label="Markera alla" data-tm-aria-label="Markera alla"></th>
-                    <th><tm-text data-tm-text="Tåg">Tåg</tm-text></th><th><tm-text data-tm-text="Dagar">Dagar</tm-text></th><th><tm-text data-tm-text="Station">Station</tm-text></th><th><tm-text data-tm-text="Spår">Spår</tm-text></th>
-                    <th><tm-text data-tm-text="Ankomst">Ankomst</tm-text></th><th><tm-text data-tm-text="Avgång">Avgång</tm-text></th><th><tm-text data-tm-text="Från">Från</tm-text></th><th><tm-text data-tm-text="Till">Till</tm-text></th><th><tm-text data-tm-text="Anteckning">Anteckning</tm-text></th>
-                  </tr>
-                </thead>
-                <tbody id="tid-rows"></tbody>
-              </table>
-            </div>
-
-            <p id="tid-empty" class="tid-empty hidden"><tm-text data-tm-text="Inga rader matchar filtret.">Inga rader matchar filtret.</tm-text></p>
-
-            <div class="tid-actions">
-              <button type="button" id="tid-save" class="primary" disabled><tm-text data-tm-text="Spara utkast">Spara utkast</tm-text></button>
-              <button type="button" id="tid-revert" class="link-button hidden"><tm-text data-tm-text="Ångra ändringar">Ångra ändringar</tm-text></button>
-              <p id="tid-message" class="form-message" role="status"></p>
-            </div>
-
-            <p class="lock-note"><tm-text data-tm-text="
-              Tidtabellen är redigerbar även när träffen kommer från Cloud, till
-              skillnad från stationer och sträckor. En sparad ändring blir en
-              lokal revision som du aktiverar själv — den slår aldrig igenom av
-              sig själv för operatörerna.
-            ">
-              Tidtabellen är redigerbar även när träffen kommer från Cloud, till
-              skillnad från stationer och sträckor. En sparad ändring blir en
-              lokal revision som du aktiverar själv — den slår aldrig igenom av
-              sig själv för operatörerna.
-            </tm-text></p>
-          </section>
-
-          <section id="build-step-bana" class="build-panel hidden" data-build-panel="bana">
-            <header class="build-panel-heading with-badge">
-              <div class="build-panel-title">
-                <h2><tm-text data-tm-text="Stationer, sträckor och paneler">Stationer, sträckor och paneler</tm-text></h2>
-                <p><tm-text data-tm-text="
-                  Ordningen i listan är banans ordning. Sträckor och A–D-paneler
-                  kan byggas ur den — du behöver inte fylla i samma sak tre gånger.
-                ">
-                  Ordningen i listan är banans ordning. Sträckor och A–D-paneler
-                  kan byggas ur den — du behöver inte fylla i samma sak tre gånger.
-                </tm-text></p>
-              </div>
-              <span id="bana-lock-badge" class="lock-badge">–</span>
-            </header>
-
-            <p id="bana-lock-note" class="lock-note hidden"></p>
-
-            <div id="bana-shortcut" class="shortcut-box hidden">
-              <div>
-                <b><tm-text data-tm-text="Snabbaste vägen till en körbar träff">Snabbaste vägen till en körbar träff</tm-text></b>
-                <p><tm-text data-tm-text="Bygg sträckor mellan stationerna och en A–D-panel per station.">Bygg sträckor mellan stationerna och en A–D-panel per station.</tm-text></p>
-              </div>
-              <button id="build-from-order" type="button" class="secondary"><tm-text data-tm-text="Bygg från stationsordningen">Bygg från stationsordningen</tm-text></button>
-            </div>
-
-            <div id="bana-seed" class="shortcut-box hidden">
-              <div>
-                <b><tm-text data-tm-text="Utkastet är tomt">Utkastet är tomt</tm-text></b>
-                <p><tm-text data-tm-text="Hämta stationer, sträckor och tidtabell från den aktiva träffen att utgå ifrån.">Hämta stationer, sträckor och tidtabell från den aktiva träffen att utgå ifrån.</tm-text></p>
-              </div>
-              <button id="seed-from-active" type="button" class="secondary"><tm-text data-tm-text="Hämta från aktiva träffen">Hämta från aktiva träffen</tm-text></button>
-            </div>
-
-            <div class="card topology-card">
-              <section class="topology-section">
-                <div class="topology-heading">
-                  <h3><tm-text data-tm-text="1 · Stationer i ordning">1 · Stationer i ordning</tm-text></h3>
-                </div>
-                <div id="bana-stations" class="topology-rows"></div>
-              </section>
-
-              <section class="topology-section">
-                <div class="topology-heading">
-                  <h3><tm-text data-tm-text="2 · Sträckor">2 · Sträckor</tm-text></h3>
-                </div>
-                <div id="bana-connections" class="topology-rows"></div>
-              </section>
-
-              <section class="topology-section">
-                <div class="topology-heading">
-                  <h3><tm-text data-tm-text="3 · TMBox-paneler A–D">3 · TMBox-paneler A–D</tm-text></h3>
-                </div>
-                <div id="bana-panels" class="topology-rows"></div>
-              </section>
-            </div>
-
-            <p id="bana-message" class="form-message" role="status"></p>
-          </section>
 
 
           <div class="server-hero card admin-section-panel" data-admin-section="runtime">
@@ -569,181 +307,27 @@
             <div id="runtime-pill" class="runtime-pill"><tm-text data-tm-text="Ingen lokal träff vald">Ingen lokal träff vald</tm-text></div>
           </div>
 
-          <section id="active-runtime-config" class="card section-card active-runtime-card admin-section-panel" data-admin-section="runtime">
-            <div class="section-heading compact-heading">
-              <div>
-                <p class="eyebrow"><tm-text data-tm-text="AKTIV RUNTIME">AKTIV RUNTIME</tm-text></p>
-                <h2 id="admin-active-meet"><tm-text data-tm-text="Läser aktiv träff …">Läser aktiv träff …</tm-text></h2>
-                <p id="admin-active-detail"><tm-text data-tm-text="Serverns körande stationsplan och tidtabell.">Serverns körande stationsplan och tidtabell.</tm-text></p>
-              </div>
-              <span id="admin-active-day" class="revision-badge">–</span>
-            </div>
-            <div class="runtime-facts">
-              <div><b id="admin-active-stations">–</b><span><tm-text data-tm-text="stationer">stationer</tm-text></span></div>
-              <div><b id="admin-active-connections">–</b><span><tm-text data-tm-text="sträckor">sträckor</tm-text></span></div>
-              <div><b id="admin-active-trains">–</b><span><tm-text data-tm-text="tåg">tåg</tm-text></span></div>
-              <div><b id="admin-active-clock">–</b><span><tm-text data-tm-text="träffklocka">träffklocka</tm-text></span></div>
-            </div>
-            <div id="admin-active-station-list" class="runtime-station-list"></div>
-            <div class="runtime-plan-grid">
-              <section class="runtime-plan-section">
-                <div class="runtime-plan-heading">
-                  <h3><tm-text data-tm-text="Aktiva sträckor">Aktiva sträckor</tm-text></h3>
-                  <span id="admin-active-connection-label"><tm-text data-tm-text="Serverns stationsplan">Serverns stationsplan</tm-text></span>
-                </div>
-                <div id="admin-active-connection-list" class="runtime-plan-list"></div>
-              </section>
-              <section class="runtime-plan-section">
-                <div class="runtime-plan-heading">
-                  <h3><tm-text data-tm-text="Aktiva TMBox-paneler">Aktiva TMBox-paneler</tm-text></h3>
-                  <span><tm-text data-tm-text="A–D från körande runtime">A–D från körande runtime</tm-text></span>
-                </div>
-                <div id="admin-active-panel-list" class="runtime-plan-list"></div>
-              </section>
-            </div>
-            <div class="active-runtime-actions">
-              <p><tm-text data-tm-text="Den aktiva träffen ovan är serverns körande konfiguration. Kopiera den om du vill ändra den lokalt.">Den aktiva träffen ovan är serverns körande konfiguration. Kopiera den om du vill ändra den lokalt.</tm-text></p>
-              <button id="copy-active-runtime" type="button" class="secondary"><tm-text data-tm-text="Kopiera till lokalt utkast">Kopiera till lokalt utkast</tm-text></button>
-            </div>
-          </section>
 
-          <section id="runtime-import" class="card section-card runtime-import-card admin-section-panel hidden" data-admin-section="import">
-            <div class="section-heading compact-heading">
-              <div>
-                <p class="eyebrow"><tm-text data-tm-text="IMPORT OCH PUBLICERING">IMPORT OCH PUBLICERING</tm-text></p>
-                <h2><tm-text data-tm-text="Granska ett komplett driftpaket">Granska ett komplett driftpaket</tm-text></h2>
-                <p><tm-text data-tm-text="Läs in en exporterad TrainMeet-fil, validera hela träffen och aktivera den först när stationsplan och tidtabell ser rätt ut.">Läs in en exporterad TrainMeet-fil, validera hela träffen och aktivera den först när stationsplan och tidtabell ser rätt ut.</tm-text></p>
-              </div>
-              <span id="runtime-import-state" class="revision-badge"><tm-text data-tm-text="Ingen fil vald">Ingen fil vald</tm-text></span>
-            </div>
-            <div class="runtime-import-picker">
-              <label for="runtime-import-file"><tm-text data-tm-text="TrainMeet runtime (.json)">TrainMeet runtime (.json)</tm-text></label>
-              <input id="runtime-import-file" type="file" accept="application/json,.json">
-              <button id="runtime-import-validate" class="secondary" type="button" disabled><tm-text data-tm-text="Validera filen">Validera filen</tm-text></button>
-              <button id="runtime-import-activate" class="primary hidden" type="button"><tm-text data-tm-text="Importera och aktivera">Importera och aktivera</tm-text></button>
-            </div>
-            <p id="runtime-import-message" class="form-message" role="status"></p>
-            <div id="runtime-import-review" class="runtime-import-review hidden" aria-live="polite">
-              <div id="runtime-import-facts" class="runtime-facts"></div>
-              <div id="runtime-import-warnings" class="runtime-import-warnings hidden"></div>
-              <div class="runtime-table-wrap">
-                <table class="runtime-review-table">
-                  <thead><tr><th><tm-text data-tm-text="Station">Station</tm-text></th><th><tm-text data-tm-text="Spår">Spår</tm-text></th><th><tm-text data-tm-text="Sträckor">Sträckor</tm-text></th><th><tm-text data-tm-text="Paneler">Paneler</tm-text></th><th><tm-text data-tm-text="Tågrörelser">Tågrörelser</tm-text></th></tr></thead>
-                  <tbody id="runtime-import-stations"></tbody>
-                </table>
-              </div>
-            </div>
-          </section>
 
-          <section id="local-runtime-draft" class="card section-card configuration-card admin-section-panel hidden" data-admin-section="local">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow"><tm-text data-tm-text="TRÄFF OCH STATIONSPLAN">TRÄFF OCH STATIONSPLAN</tm-text></p>
-                <h2 id="local-draft-title"><tm-text data-tm-text="Nytt lokalt utkast">Nytt lokalt utkast</tm-text></h2>
-                <p><tm-text data-tm-text="Bygg eller ersätt en fristående körning direkt på servern. Den aktiva träffen ovan fortsätter att gå tills utkastet aktiveras.">Bygg eller ersätt en fristående körning direkt på servern. Den aktiva träffen ovan fortsätter att gå tills utkastet aktiveras.</tm-text></p>
-              </div>
-              <span id="draft-revision" class="revision-badge"><tm-text data-tm-text="Utkast">Utkast</tm-text></span>
-            </div>
 
-            <form id="config-form" class="config-form">
-              <div class="form-grid basics-grid">
-                <label><tm-text data-tm-text="Träffens namn
-                  ">Träffens namn
-                  </tm-text><input id="meet-name" maxlength="100" placeholder="Höstträffen" data-tm-placeholder="Höstträffen">
-                </label>
-                <label><tm-text data-tm-text="Trafikläge
-                  ">Trafikläge
-                  </tm-text><select id="dispatch-mode">
-                    <option value="clearance" data-tm-text="Begär och bekräfta">Begär och bekräfta</option>
-                    <option value="direct" data-tm-text="Direkt om sträckan är ledig">Direkt om sträckan är ledig</option>
-                  </select>
-                </label>
-                <label><tm-text data-tm-text="Starttid på träffklockan
-                  ">Starttid på träffklockan
-                  </tm-text><input id="clock-time" type="time" value="12:00">
-                </label>
-                <label><tm-text data-tm-text="Trafikdag
-                  ">Trafikdag
-                  </tm-text><input id="active-day" maxlength="20" value="Dagl" placeholder="Dagl eller Lör" data-tm-placeholder="Dagl eller Lör">
-                </label>
-              </div>
-
-              <div class="editor-section">
-                <div class="editor-heading">
-                  <div>
-                    <h3><tm-text data-tm-text="1. Stationer i ordning">1. Stationer i ordning</tm-text></h3>
-                    <p><tm-text data-tm-text="Ordningen används när servern bygger en enkel stationskedja.">Ordningen används när servern bygger en enkel stationskedja.</tm-text></p>
-                  </div>
-                  <button type="button" class="secondary compact" data-action="add-station"><tm-text data-tm-text="Lägg till station">Lägg till station</tm-text></button>
-                </div>
-                <div id="station-editor" class="editor-list"></div>
-              </div>
-
-              <div class="chain-builder">
-                <div>
-                  <b><tm-text data-tm-text="Snabbaste vägen till en körbar träff">Snabbaste vägen till en körbar träff</tm-text></b>
-                  <span><tm-text data-tm-text="Bygg sträckor mellan stationerna och en A–D-panel per station.">Bygg sträckor mellan stationerna och en A–D-panel per station.</tm-text></span>
-                </div>
-                <button type="button" class="secondary" data-action="build-chain"><tm-text data-tm-text="Bygg från stationsordningen">Bygg från stationsordningen</tm-text></button>
-              </div>
-
-              <div class="editor-section">
-                <div class="editor-heading">
-                  <div>
-                    <h3><tm-text data-tm-text="2. Sträckor">2. Sträckor</tm-text></h3>
-                    <p><tm-text data-tm-text="Välj ändstationer, enkel- eller dubbelspår och eventuellt eget trafikläge.">Välj ändstationer, enkel- eller dubbelspår och eventuellt eget trafikläge.</tm-text></p>
-                  </div>
-                  <button type="button" class="secondary compact" data-action="add-connection"><tm-text data-tm-text="Lägg till sträcka">Lägg till sträcka</tm-text></button>
-                </div>
-                <div id="connection-editor" class="editor-list"></div>
-              </div>
-
-              <div class="editor-section">
-                <div class="editor-heading">
-                  <div>
-                    <h3><tm-text data-tm-text="3. TMBox-paneler">3. TMBox-paneler</tm-text></h3>
-                    <p><tm-text data-tm-text="Varje panel tillhör en station. Tangenterna A–D kopplas direkt till stationens sträckor.">Varje panel tillhör en station. Tangenterna A–D kopplas direkt till stationens sträckor.</tm-text></p>
-                  </div>
-                  <button type="button" class="secondary compact" data-action="add-panel"><tm-text data-tm-text="Lägg till panel">Lägg till panel</tm-text></button>
-                </div>
-                <div id="panel-editor" class="editor-list"></div>
-              </div>
-
-              <div class="config-actions">
-                <p id="config-message" class="form-message" role="status"></p>
-                <button type="submit" class="secondary"><tm-text data-tm-text="Spara utkast">Spara utkast</tm-text></button>
-                <button id="activate-config" type="button" class="primary"><tm-text data-tm-text="Spara och aktivera">Spara och aktivera</tm-text></button>
-                <button id="restart-server" type="button" class="restart hidden"><tm-text data-tm-text="Starta om servern">Starta om servern</tm-text></button>
-              </div>
-              <div class="local-change-policy">
-                <span aria-hidden="true">↗</span>
-                <p><b><tm-text data-tm-text="Lokalt först.">Lokalt först.</tm-text></b><tm-text data-tm-text=" Ändringar sparas på den här servern och stannar där. Flödet mot TrainMeet Cloud går bara åt ett håll: Cloud publicerar, servern hämtar."> Ändringar sparas på den här servern och stannar där. Flödet mot TrainMeet Cloud går bara åt ett håll: Cloud publicerar, servern hämtar.</tm-text></p>
-              </div>
-            </form>
-          </section>
-
-          <!-- BYGG 5, block 1: identitet. Tre statusrutor och servernamnet i
-               samma kort, som paketets DEL 3.11. Statusrutorna låg förr under
-               "Server och nollställning", servernamnet under "Användare och
-               åtkomst"; ingenting av det är omskrivet, bara flyttat. -->
           <section id="server-identity-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="identity">
             <div class="identity-status-grid">
               <div><small><tm-text data-tm-text="SERVER">SERVER</tm-text></small><b id="system-server-name"><tm-text data-tm-text="TrainMeet Server">TrainMeet Server</tm-text></b></div>
               <div><small><tm-text data-tm-text="AKTIV TRÄFF">AKTIV TRÄFF</tm-text></small><b id="system-runtime-name"><tm-text data-tm-text="Ingen aktiv träff">Ingen aktiv träff</tm-text></b></div>
               <div><small><tm-text data-tm-text="CLOUD">CLOUD</tm-text></small><b id="system-cloud-state"><tm-text data-tm-text="Inte kopplad">Inte kopplad</tm-text></b></div>
             </div>
-            <form id="server-identity-form" class="server-identity-form">
+<button type="button" class="secondary modal-launch" data-open-modal="server-identity-form-modal">Ändra servernamn</button>
+<dialog id="server-identity-form-modal" class="admin-modal" aria-labelledby="server-identity-form-title"><h2 id="server-identity-form-title">Ändra servernamn</h2>
+<form id="server-identity-form" class="server-identity-form">
               <label for="admin-server-name"><tm-text data-tm-text="Servernamn">Servernamn</tm-text></label>
               <input id="admin-server-name" maxlength="80" placeholder="Exempel: Grimslöv driftserver" required data-tm-placeholder="Exempel: Grimslöv driftserver">
               <button type="submit" class="secondary"><tm-text data-tm-text="Spara servernamn">Spara servernamn</tm-text></button>
               <p id="server-identity-message" class="form-message" role="status"></p>
-            </form>
+            <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
+</form>
+</dialog>
           </section>
 
-          <!-- BYGG 5, block 2: extern admininloggning. Chippet säger hur den
-               här webbläsaren är inne (verkligt access_mode), raden under det
-               om ett externt lösenord finns. Fältet för användarnamn fylls
-               aldrig i av programmet - se refreshAuthStatus i app.js. -->
           <!-- Användare. Ägaren bjuder in; den inbjudne väljer sitt eget
                lösenord med en engångskod som lämnas över på plats. Ägaren
                känner alltså aldrig till någon annans lösenord.
@@ -777,7 +361,9 @@
               <code id="users-code-value">–</code>
             </div>
 
-            <form id="users-invite-form" class="users-invite hidden">
+<button type="button" class="secondary modal-launch" data-open-modal="users-invite-form-modal" id="users-invite-open">Lägg till användare</button>
+<dialog id="users-invite-form-modal" class="admin-modal" aria-labelledby="users-invite-form-title"><h2 id="users-invite-form-title">Lägg till användare</h2>
+<form id="users-invite-form" class="users-invite">
               <label class="users-invite-name"><tm-text data-tm-text="Användarnamn
                 ">Användarnamn
                 </tm-text><input id="users-invite-name" maxlength="64" autocomplete="off" required>
@@ -787,7 +373,9 @@
                 <span><tm-text data-tm-text="Ägare — får också lägga till och ta bort användare">Ägare — får också lägga till och ta bort användare</tm-text></span>
               </label>
               <button type="submit" class="primary"><tm-text data-tm-text="Bjud in">Bjud in</tm-text></button>
-            </form>
+            <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
+</form>
+</dialog>
 
             <p id="users-message" class="form-message" role="status"></p>
           </section>
@@ -801,7 +389,9 @@
               </div>
               <span id="access-mode" class="status-chip"><tm-text data-tm-text="Vid servern">Vid servern</tm-text></span>
             </div>
-            <form id="admin-access-form" class="form-grid access-grid">
+<button type="button" class="secondary modal-launch" data-open-modal="admin-access-form-modal">Ändra inloggning</button>
+<dialog id="admin-access-form-modal" class="admin-modal" aria-labelledby="admin-access-form-title"><h2 id="admin-access-form-title">Ändra inloggning</h2>
+<form id="admin-access-form" class="form-grid access-grid">
               <label><tm-text data-tm-text="Användarnamn
                 ">Användarnamn
                 </tm-text><input id="admin-username" maxlength="64" autocomplete="username" required>
@@ -818,12 +408,11 @@
                 <p id="admin-access-message" class="form-message" role="status"></p>
                 <button type="submit" class="primary"><tm-text data-tm-text="Spara inloggning">Spara inloggning</tm-text></button>
               </div>
-            </form>
+            <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
+</form>
+</dialog>
           </section>
 
-          <!-- BYGG 5, block 3: programuppdatering. Versionsraden och de sju
-               stegen ur update_contract.py. Stegen är oförändrade - de flyttar
-               hit och får paketets radlayout, inget mer. -->
           <section id="software-update-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="software">
             <div class="section-heading compact-heading">
               <div>
@@ -851,18 +440,13 @@
             </details>
           </section>
 
-          <!-- BYGG 5, block 4: nollställning. Hopfälld med flit - den ska
-               vara nåbar men inte råkas ut för. Rubriken, brödtexten och
-               knappen skrivs av configureResetMode ur verkligt access_mode:
-               lokalt är det en fabriksåterställning, externt bara träffdatan. -->
           <section id="server-system-settings" class="card section-card reset-card server-step-card admin-section-panel hidden" data-admin-section="system">
             <!-- Återställning. Kopiorna tas av uppdateraren före varje
                  installation; vägen tillbaka låg bara i terminalen, vilket är
                  fel plats den dagen man behöver den. Hopfälld som
                  nollställningen: det här är inte något man gör i förbifarten. -->
-            <details class="reset-details">
-              <summary><tm-text data-tm-text="Återställ från säkerhetskopia">Återställ från säkerhetskopia</tm-text></summary>
-              <div class="reset-body">
+<button type="button" class="secondary" data-open-modal="restore-modal">Återställ från säkerhetskopia</button>
+<dialog id="restore-modal" class="admin-modal" aria-label="Återställ från säkerhetskopia"><div class="reset-body">
                 <h3><tm-text data-tm-text="Ta tillbaka en tidigare version av servern">Ta tillbaka en tidigare version av servern</tm-text></h3>
                 <p><tm-text data-tm-text="En kopia tas automatiskt före varje programuppdatering. Att återställa byter ut ">En kopia tas automatiskt före varje programuppdatering. Att återställa byter ut </tm-text><b><tm-text data-tm-text="hela">hela</tm-text></b><tm-text data-tm-text=" serverns databas — träff, tidtabell, användare och parkopplade enheter blir de som fanns när kopian togs."> serverns databas — träff, tidtabell, användare och parkopplade enheter blir de som fanns när kopian togs.</tm-text></p>
                 <div id="restore-list" class="restore-list" role="radiogroup" aria-label="Säkerhetskopior" data-tm-aria-label="Säkerhetskopior"></div>
@@ -875,10 +459,9 @@
                 </div>
                 <p id="restore-message" class="form-message" role="status"></p>
               </div>
-            </details>
-            <details class="reset-details">
-              <summary id="reset-mode-summary"><tm-text data-tm-text="Nollställ träffdata">Nollställ träffdata</tm-text></summary>
-              <div class="reset-body">
+            <button type="button" data-close-modal>Avbryt</button></dialog>
+<button type="button" class="secondary" id="reset-mode-summary" data-open-modal="reset-modal">Nollställ träffdata</button>
+<dialog id="reset-modal" class="admin-modal" aria-label="Nollställ träffdata"><div class="reset-body">
                 <h3 id="reset-mode-title"><tm-text data-tm-text="Börja om utan att förlora administratörsåtkomsten">Börja om utan att förlora administratörsåtkomsten</tm-text></h3>
                 <p id="reset-mode-description"><tm-text data-tm-text="Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och den aktiva webbinloggningen behålls.">Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och den aktiva webbinloggningen behålls.</tm-text></p>
                 <label for="factory-reset-confirmation"><tm-text data-tm-text="Skriv ">Skriv </tm-text><b><tm-text data-tm-text="NOLLSTÄLL">NOLLSTÄLL</tm-text></b><tm-text data-tm-text=" för att låsa upp knappen"> för att låsa upp knappen</tm-text></label>
@@ -888,55 +471,15 @@
                 </div>
                 <p id="factory-reset-message" class="form-message" role="status"></p>
               </div>
-            </details>
+            <button type="button" data-close-modal>Avbryt</button></dialog>
           </section>
 
           <section id="sync-and-devices" class="card section-card cloud-section-card admin-section-panel hidden" data-admin-section="cloud">
-              <div class="section-heading compact-heading">
-                <div>
-                  <p class="eyebrow"><tm-text data-tm-text="TRAINMEET CLOUD">TRAINMEET CLOUD</tm-text></p>
-                  <h2><tm-text data-tm-text="Cloud-koppling">Cloud-koppling</tm-text></h2>
-                  <p><tm-text data-tm-text="Hämta publicerade versioner. Inget skickas tillbaka: TrainMeet Cloud är enda källan till en träffs innehåll.">Hämta publicerade versioner. Inget skickas tillbaka: TrainMeet Cloud är enda källan till en träffs innehåll.</tm-text></p>
-                </div>
-              </div>
-              <div class="cloud-connection-summary">
-                <span class="cloud-connection-icon" aria-hidden="true">↻</span>
-                <div>
-                  <small id="cloud-connection-label"><tm-text data-tm-text="KONFIGURATIONSKÄLLA">KONFIGURATIONSKÄLLA</tm-text></small>
-                  <b id="cloud-connection-meet"><tm-text data-tm-text="Ingen Cloud-koppling">Ingen Cloud-koppling</tm-text></b>
-                  <span id="cloud-connection-meta"><tm-text data-tm-text="Koppla en publicerad träff med en sexsiffrig kod.">Koppla en publicerad träff med en sexsiffrig kod.</tm-text></span>
-                </div>
-                <span id="cloud-connection-state" class="revision-badge"><tm-text data-tm-text="Inte kopplad">Inte kopplad</tm-text></span>
-              </div>
-
-              <ol class="cloud-connection-flow" aria-label="Cloud-kopplingens steg" data-tm-aria-label="Cloud-kopplingens steg">
-                <li id="cloud-step-server"><i>1</i><span><b><tm-text data-tm-text="Config-server">Config-server</tm-text></b><small><tm-text data-tm-text="Adress vald">Adress vald</tm-text></small></span></li>
-                <li id="cloud-step-code"><i>2</i><span><b><tm-text data-tm-text="Träffkod">Träffkod</tm-text></b><small><tm-text data-tm-text="Väntar på kod">Väntar på kod</tm-text></small></span></li>
-                <li id="cloud-step-version"><i>3</i><span><b><tm-text data-tm-text="Version hämtad">Version hämtad</tm-text></b><small><tm-text data-tm-text="Ingen lokal version">Ingen lokal version</tm-text></small></span></li>
-                <li id="cloud-step-sync"><i>4</i><span><b><tm-text data-tm-text="Fortsatt synk">Fortsatt synk</tm-text></b><small><tm-text data-tm-text="Manuell">Manuell</tm-text></small></span></li>
-              </ol>
-
-              <label class="cloud-setting-row" for="runtime-auto-sync">
-                <span>
-                  <b><tm-text data-tm-text="Automatiska Cloud-uppdateringar">Automatiska Cloud-uppdateringar</tm-text></b>
-                  <small><tm-text data-tm-text="Servern söker var 15:e sekund och aktiverar en ny publicerad version när den finns.">Servern söker var 15:e sekund och aktiverar en ny publicerad version när den finns.</tm-text></small>
-                </span>
-                <input id="runtime-auto-sync" type="checkbox">
-              </label>
-
-              <div class="runtime-update-actions">
-                <button id="runtime-check-update" class="secondary" type="button"><tm-text data-tm-text="Sök efter uppdatering">Sök efter uppdatering</tm-text></button>
-                <button id="runtime-download-update" class="secondary hidden" type="button"><tm-text data-tm-text="Hämta versionen">Hämta versionen</tm-text></button>
-                <button id="runtime-activate-update" class="primary hidden" type="button"><tm-text data-tm-text="Aktivera hämtad version">Aktivera hämtad version</tm-text></button>
-              </div>
-              <p id="runtime-auto-sync-hint" class="runtime-auto-sync-hint hidden" role="status"></p>
-              <p id="runtime-message" class="form-message" role="status"></p>
-              <div id="runtime-status" class="status-list"></div>
-
-              <details id="runtime-link-details" class="cloud-link-details" open>
-                <summary><tm-text data-tm-text="Koppla eller byt träff">Koppla eller byt träff</tm-text></summary>
-                <p><tm-text data-tm-text="Ange koden från en publicerad Cloud-version. Kopplingen sparas på servern och den långa åtkomstnyckeln hanteras automatiskt.">Ange koden från en publicerad Cloud-version. Kopplingen sparas på servern och den långa åtkomstnyckeln hanteras automatiskt.</tm-text></p>
-                <form id="runtime-sync-form" class="inline-form">
+<h2>Cloud-koppling och config</h2><p>Träffens innehåll ändras i Cloud. Publicerade uppdateringar hämtas automatiskt och används när det är säkert för pågående trafik.</p>
+<div class="cloud-connection-summary"><div><b id="cloud-connection-meet">Ingen träff vald</b><span id="cloud-connection-meta"></span></div><span id="cloud-connection-state" class="revision-badge">Inte kopplad</span></div>
+<p id="cloud-auto-status"></p><p id="cloud-version-state" role="status"></p><div class="cloud-actions"><button id="runtime-check-update" class="secondary" type="button">Sök configuppdatering</button><button type="button" class="secondary" data-open-modal="runtime-sync-form-modal">Koppla eller byt träff</button></div><p id="cloud-update-message" class="form-message" role="status"></p>
+<dialog id="runtime-sync-form-modal" class="admin-modal" aria-labelledby="runtime-sync-form-title"><h2 id="runtime-sync-form-title">Koppla eller byt träff</h2>
+<form id="runtime-sync-form" class="inline-form"><p>Servern representerar en enda träff. Ett byte bevarar serverns användare och nätverk, men gamla stationstilldelningar följer inte med.</p><label class="switch-confirmation"><input id="confirm-meet-change" type="checkbox"> Jag vill byta serverns valda träff om koden gäller en annan träff.</label><p id="runtime-message" class="form-message" role="status"></p>
                   <label for="runtime-central-url"><tm-text data-tm-text="Config-server">Config-server</tm-text></label>
                   <input id="runtime-central-url" type="url" value="https://cloud.trainmeet.app/config" required>
                   <label for="runtime-sync-code-boxes"><tm-text data-tm-text="Träffkod">Träffkod</tm-text></label>
@@ -951,9 +494,10 @@
                   </div>
                   <input id="runtime-sync-code" type="hidden">
                   <button class="primary" type="submit"><tm-text data-tm-text="Koppla och hämta">Koppla och hämta</tm-text></button>
-                </form>
-              </details>
-          </section>
+                <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
+</form>
+</dialog>
+</section>
 
           <section id="device-management" class="card section-card admin-section-panel hidden" data-admin-section="devices">
               <div class="section-heading compact-heading">
@@ -963,14 +507,18 @@
                   <p><tm-text data-tm-text="Skriv koden på lådan och välj vilken station den ska tjänstgöra vid.">Skriv koden på lådan och välj vilken station den ska tjänstgöra vid.</tm-text></p>
                 </div>
               </div>
-              <form id="device-form" class="inline-form device-form">
+<button type="button" class="secondary modal-launch" data-open-modal="device-form-modal">Koppla eller ändra TMBox</button>
+<dialog id="device-form-modal" class="admin-modal" aria-labelledby="device-form-title"><h2 id="device-form-title">Koppla eller ändra TMBox</h2>
+<form id="device-form" class="inline-form device-form">
                 <label for="device-code"><tm-text data-tm-text="Kod på lådan">Kod på lådan</tm-text></label>
                 <input id="device-code" placeholder="TMBOX-A7K2C3" autocapitalize="characters" required data-tm-placeholder="TMBOX-A7K2C3">
                 <label for="device-station"><tm-text data-tm-text="Station">Station</tm-text></label>
                 <select id="device-station"></select>
                 <button class="primary" type="submit"><tm-text data-tm-text="Koppla">Koppla</tm-text></button>
                 <p id="device-message" class="form-message" role="status"></p>
-              </form>
+              <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
+</form>
+</dialog>
               <div id="device-list" class="status-list"></div>
           </section>
         </section>
@@ -1003,23 +551,6 @@
           </section>
         </section>
 
-        <section id="tkl-view" class="view-panel tkl-view hidden">
-          <div class="tkl-toolbar">
-            <label for="tkl-station"><tm-text data-tm-text="Station">Station</tm-text></label>
-            <select id="tkl-station"></select>
-            <a id="tkl-open-tab" class="quiet" href="/tkl/" target="_blank" rel="noopener"><tm-text data-tm-text="
-              Öppna i egen flik
-            ">
-              Öppna i egen flik
-            </tm-text></a>
-          </div>
-          <!-- Inbäddad, inte en egen flik: man ska inte tappa bort sig mellan
-               flikar under en träff. Knappen ovan finns för den som ändå vill
-               ha terminalen på en egen skärm. -->
-          <div class="tkl-frame-wrap">
-            <iframe id="tkl-frame" title="TKL-terminal" src="about:blank" data-tm-title="TKL-terminal"></iframe>
-          </div>
-        </section>
 
         <section id="tmbox-v2-view" class="view-panel tmbox-v2-view hidden" aria-live="polite">
           <div class="simulator-intro">
@@ -1148,6 +679,8 @@
               </div>
               <span id="connection-badge-code" class="revision-badge"><tm-text data-tm-text="Läser koden …">Läser koden …</tm-text></span>
             </div>
+<button type="button" class="secondary" data-open-modal="connection-badge-modal">Ändra visning av anslutningsuppgifter</button>
+<dialog id="connection-badge-modal" class="admin-modal" aria-labelledby="connection-badge-title"><h2 id="connection-badge-title">Anslutningsuppgifter på skärmar</h2><form id="connection-badge-form">
             <div id="connection-badge-screens" class="connection-badge-screens">
               <label><input type="checkbox" value="clock" checked><tm-text data-tm-text=" Träffklocka"> Träffklocka</tm-text></label>
               <label><input type="checkbox" value="topology" checked><tm-text data-tm-text=" Banöversikt"> Banöversikt</tm-text></label>
@@ -1165,6 +698,7 @@
               </select>
             </label>
             <p id="connection-badge-message" class="form-message"></p>
+<button type="submit" class="primary">Spara</button><button type="button" data-close-modal>Avbryt</button></form></dialog>
           </section>
           <section class="card section-card clock-control-card">
             <div class="section-heading compact-heading">
@@ -1175,7 +709,9 @@
               </div>
               <span id="clock-state" class="revision-badge"><tm-text data-tm-text="Läser klockan …">Läser klockan …</tm-text></span>
             </div>
-            <form id="clock-control-form" class="clock-control-form">
+<button type="button" class="secondary modal-launch" data-open-modal="clock-control-form-modal">Justera klockan</button>
+<dialog id="clock-control-form-modal" class="admin-modal" aria-labelledby="clock-control-form-title"><h2 id="clock-control-form-title">Justera klockan</h2>
+<form id="clock-control-form" class="clock-control-form">
               <label><tm-text data-tm-text="Klockslag
                 ">Klockslag
                 </tm-text><input id="local-clock-time" type="time" step="1" value="12:00:00">
@@ -1205,13 +741,29 @@
                 <button id="stop-local-clock" class="secondary" type="button"><tm-text data-tm-text="Stoppa">Stoppa</tm-text></button>
               </div>
               <p id="clock-control-message" class="form-message" role="status"></p>
-            </form>
+            <p class="modal-feedback form-message" role="status"></p><button type="button" class="secondary" data-close-modal>Avbryt</button>
+</form>
+</dialog>
           </section>
         </section>
           </div>
         </div>
       </section>
 
+      <dialog id="user-edit-modal" class="admin-modal" aria-labelledby="user-edit-title">
+        <h2 id="user-edit-title">Redigera användare</h2>
+        <form id="user-edit-form">
+          <p id="user-edit-name"></p>
+          <label>Roll<select id="user-edit-role"><option value="admin">Administratör</option><option value="owner">Ägare</option></select></label>
+          <label>Nytt lösenord (valfritt)<input id="user-edit-password" type="password" minlength="8" autocomplete="new-password"></label>
+          <label>Upprepa lösenord<input id="user-edit-password-confirm" type="password" minlength="8" autocomplete="new-password"></label>
+          <p class="modal-feedback form-message" role="status"></p>
+          <div class="modal-actions"><button type="submit" class="primary">Spara</button><button type="button" data-close-modal>Avbryt</button></div>
+          <hr><button id="user-edit-reissue" type="button" class="secondary">Skapa ny inbjudningskod</button>
+          <label class="users-delete-confirm"><input id="user-delete-confirm" type="checkbox"> Jag vill ta bort denna användare permanent.</label>
+          <button id="user-edit-delete" type="button" class="danger-action" disabled>Ta bort användaren</button>
+        </form>
+      </dialog>
       <section id="display-app" class="display-app hidden">
         <header id="display-toolbar" class="display-toolbar">
           <a href="/" class="display-back"><tm-text data-tm-text="← TrainMeet Server">← TrainMeet Server</tm-text></a>

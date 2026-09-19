@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .runtime import AVAILABLE_CLOCK_STYLES, RuntimePublication
+from .runtime import AVAILABLE_CLOCK_STYLES, RuntimePublication, RuntimePublicationError
 
 
 class SQLiteOperationsStore:
@@ -39,6 +39,13 @@ class SQLiteOperationsStore:
                 stopped_reason TEXT,
                 show_seconds INTEGER NOT NULL CHECK(show_seconds IN (0, 1)),
                 available_styles_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runtime_meet_archives (
+                archive_id TEXT PRIMARY KEY,
+                publication_id TEXT NOT NULL,
+                clock_json TEXT NOT NULL,
+                positions_json TEXT NOT NULL,
+                recorded_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS train_positions (
                 train_number TEXT PRIMARY KEY,
@@ -228,11 +235,43 @@ class SQLiteOperationsStore:
                 )
 
     def ensure_publication(self, publication: RuntimePublication) -> None:
+        self._initialize_publication(publication, carry_previous=True)
+
+    def start_meet(self, publication: RuntimePublication) -> None:
+        """Explicit meet switch: archive runtime, stop clock, don't transfer grants.
+
+        Unlike a same-meet config adoption, the operator is selecting a different
+        meet. History remains in its original publication; active TKL shifts end.
+        Call only after the shared coordinator has guarded and confirmed a switch.
+        """
+        with self._lock:
+            blockers = self.start_meet_blockers(publication)
+            if blockers:
+                raise RuntimePublicationError(" ".join(blockers))
+            self._initialize_publication(publication, carry_previous=False)
+
+    def start_meet_blockers(self, publication: RuntimePublication) -> list[str]:
+        """Read-only preflight before the coordinator starts a transition.
+
+        A fresh operating selection must not resurrect an archived publication's
+        state. Keep its history intact and ask for a fresh Cloud publication.
+        This restriction does not apply to same-meet config adoption.
+        """
+        with self._lock:
+            for table in ("runtime_clock", "runtime_meet_archives", "movement_identity",
+                          "tkl_movement_states", "train_readiness", "tkl_shifts",
+                          "clearances", "line_available_messages", "tkl_events"):
+                if self._connection.execute(f"SELECT 1 FROM {table} WHERE publication_id=? LIMIT 1",
+                                            (publication.publication_id,)).fetchone():
+                    return ["Den här configversionen har redan använts i en körning. Publicera en ny configversion i Cloud innan du startar träffen igen; tidigare driftdata behålls som historik."]
+        return []
+
+    def _initialize_publication(self, publication: RuntimePublication, *, carry_previous: bool) -> None:
         with self._lock:
             row = self._connection.execute(
                 "SELECT publication_id FROM runtime_clock WHERE singleton = 1"
             ).fetchone()
-            if row is not None and str(row[0]) == publication.publication_id:
+            if carry_previous and row is not None and str(row[0]) == publication.publication_id:
                 return
             previous_publication = str(row[0]) if row is not None else None
             clock = publication.payload.get("clock", {})
@@ -247,6 +286,12 @@ class SQLiteOperationsStore:
             styles = clock.get("available_styles") or list(AVAILABLE_CLOCK_STYLES)
             self._connection.execute("BEGIN IMMEDIATE")
             try:
+                if previous_publication and not carry_previous:
+                    self._connection.execute("INSERT INTO runtime_meet_archives VALUES(?,?,?,?,?)",
+                        (str(uuid4()), previous_publication, json.dumps(self.clock_status()),
+                         json.dumps(self.positions()), _now_iso()))
+                    self._connection.execute("UPDATE tkl_shifts SET status='closed',ended_at=?,updated_at=? WHERE status!='closed'",
+                                             (_now_iso(), _now_iso()))
                 self._connection.execute(
                     """
                     INSERT INTO runtime_clock(
@@ -272,12 +317,131 @@ class SQLiteOperationsStore:
                         json.dumps(styles, ensure_ascii=False),
                     ),
                 )
-                self._carry_operational_state_locked(previous_publication, publication)
+                self._carry_operational_state_locked(previous_publication if carry_previous else None, publication)
                 self._connection.execute("COMMIT")
             except Exception:
                 if self._connection.in_transaction:
                     self._connection.execute("ROLLBACK")
                 raise
+
+    def config_update_blockers(self, previous: RuntimePublication,
+                               publication: RuntimePublication) -> list[str]:
+        """Conservative persistent-state preflight; caller also guards the engine.
+
+        This is read-only. It never expires a clearance, releases a line or changes
+        a clock to make a candidate config appear safe.
+        """
+        reasons = []
+        if previous.meet_id != publication.meet_id:
+            return ["En annan träff kräver ett bekräftat träffbyte."]
+        # The publication's default day, like its initial clock time, is not a
+        # command to change an already operating session. Coordinator preserves
+        # runtime_store.active_day() during same-meet activation.
+        identities = {identity[1:]: identity[0] for identity in _movement_identities(publication.payload)}
+        stations = {row["id"] for row in publication.payload["stations"]}
+        trains = {row["train_number"] for row in publication.payload["trains"]}
+        previous_movements = {row["id"]: row for row in previous.payload["trains"]}
+        arriving_movements = {row["id"]: row for row in publication.payload["trains"]}
+        with self._lock:
+            clock = self._connection.execute("SELECT publication_id FROM runtime_clock WHERE singleton=1").fetchone()
+            if clock and clock[0] not in {previous.publication_id, publication.publication_id}:
+                reasons.append("Driftläget tillhör en annan configversion.")
+            if self._connection.execute("SELECT 1 FROM train_positions WHERE status='connection' LIMIT 1").fetchone():
+                reasons.append("Väntar på att pågående tågrörelser avslutas.")
+            if self._connection.execute("SELECT 1 FROM clearances WHERE publication_id=? AND (status='waiting' OR (status='approved' AND settled_at IS NULL)) LIMIT 1", (previous.publication_id,)).fetchone():
+                reasons.append("Väntar på att utestående körtillstånd avslutas.")
+            if self._connection.execute("SELECT 1 FROM line_available_messages WHERE publication_id=? AND status='delivered_to_device' LIMIT 1", (previous.publication_id,)).fetchone():
+                reasons.append("Väntar på kvittens av linjemeddelande.")
+            for train, station in self._connection.execute("SELECT train_number,station_id FROM train_positions").fetchall():
+                if train not in trains or station and station not in stations:
+                    reasons.append("Config tar bort ett tåg eller en station med registrerat trafikläge.")
+                    break
+            for (station,) in self._connection.execute("SELECT station_id FROM tkl_shifts WHERE publication_id=? AND status!='closed'", (previous.publication_id,)).fetchall():
+                if station not in stations:
+                    reasons.append("Config tar bort en station med pågående TKL-pass.")
+                    break
+            # Do not erase completed or pending operational records just because
+            # their imported timetable movement was removed from a newer version.
+            recorded = self._connection.execute("""
+                SELECT i.train_number,i.station_id,i.stop_index
+                FROM movement_identity i WHERE i.publication_id=? AND (
+                    EXISTS(SELECT 1 FROM tkl_movement_states s WHERE s.publication_id=i.publication_id AND s.movement_id=i.movement_id)
+                    OR EXISTS(SELECT 1 FROM train_readiness r WHERE r.publication_id=i.publication_id AND r.movement_id=i.movement_id))
+                """, (previous.publication_id,)).fetchall()
+            if any(tuple(row) not in identities for row in recorded):
+                reasons.append("Config tar bort en tågrörelse med registrerade driftuppgifter.")
+            for movement_id, train, station, stop_index, actual_track in self._connection.execute("""
+                SELECT s.movement_id,i.train_number,i.station_id,i.stop_index,s.actual_track
+                FROM tkl_movement_states s JOIN movement_identity i
+                  ON i.publication_id=s.publication_id AND i.movement_id=s.movement_id
+                WHERE s.publication_id=?
+            """, (previous.publication_id,)).fetchall():
+                target_id = identities.get((train, station, stop_index))
+                if target_id is None:
+                    continue
+                before = previous_movements.get(movement_id, {})
+                after = arriving_movements[target_id]
+                if before.get("operating_point_id") != after.get("operating_point_id"):
+                    reasons.append("Config flyttar en registrerad tågrörelse till en annan driftplats.")
+                if actual_track and not any(track["station_id"] == station
+                    and track.get("operating_point_id") == after.get("operating_point_id")
+                    and actual_track in {track["id"], track["display_label"]}
+                    for track in publication.payload["tracks"]):
+                    reasons.append("Config tar bort ett spår med registrerat trafikläge.")
+        return list(dict.fromkeys(reasons))
+
+    def adopt_publication(self, previous: RuntimePublication,
+                          publication: RuntimePublication) -> None:
+        """Explicit same-meet adoption, retaining the exact live clock anchor.
+
+        Never call this while only downloading/staging. The HTTP coordinator must
+        serialize commands and engine reconfiguration around the call. Existing
+        ``ensure_publication`` retains its distinct initial-install semantics.
+        """
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                blockers = self.config_update_blockers(previous, publication)
+                if blockers:
+                    raise RuntimePublicationError(" ".join(blockers))
+                clock = self._connection.execute("SELECT publication_id FROM runtime_clock WHERE singleton=1").fetchone()
+                if clock is None:
+                    raise RuntimePublicationError("Driftklockan måste vara initierad innan config kan uppdateras.")
+                if clock[0] != publication.publication_id:
+                    # Returning to an older config must materialize the current
+                    # operations, including absent rows. Historical events and
+                    # the source publication's state remain untouched.
+                    self._connection.execute("DELETE FROM tkl_movement_states WHERE publication_id=?", (publication.publication_id,))
+                    self._carry_operational_state_locked(previous.publication_id, publication)
+                    self._carry_readiness_locked(previous.publication_id, publication)
+                    # Config defaults do not override a running operator's clock,
+                    # speed, stop reason or display preferences.
+                    self._connection.execute("UPDATE runtime_clock SET publication_id=? WHERE singleton=1", (publication.publication_id,))
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+
+    def _carry_readiness_locked(self, previous_id: str, publication: RuntimePublication) -> None:
+        # A previously used publication may be selected again. Its old readiness
+        # is a stale snapshot, never authoritative over the currently operating
+        # version (including the absence of a readiness record). Event history
+        # remains intact; replace only this publication's materialized state.
+        self._connection.execute("DELETE FROM train_readiness WHERE publication_id=?", (publication.publication_id,))
+        self._connection.execute("""
+            INSERT INTO train_readiness (
+                publication_id,active_day,movement_id,station_id,operating_point_id,status,
+                prepared_by_role,prepared_by,prepared_at,acknowledged_by,acknowledged_at,
+                revoked_by,revoked_at,updated_at)
+            SELECT ?,r.active_day,n.movement_id,r.station_id,r.operating_point_id,r.status,
+                   r.prepared_by_role,r.prepared_by,r.prepared_at,r.acknowledged_by,r.acknowledged_at,
+                   r.revoked_by,r.revoked_at,r.updated_at
+            FROM train_readiness r
+            JOIN movement_identity p ON p.publication_id=r.publication_id AND p.movement_id=r.movement_id
+            JOIN movement_identity n ON n.publication_id=? AND n.train_number=p.train_number
+                AND n.station_id=p.station_id AND n.stop_index=p.stop_index
+            WHERE r.publication_id=?
+        """, (publication.publication_id, publication.publication_id, previous_id))
 
     def _carry_operational_state_locked(
         self, previous_publication: str | None, publication: RuntimePublication

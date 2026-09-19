@@ -4,7 +4,7 @@ const editor = document.querySelector('#editor');
 const conductorView = location.pathname.endsWith('/conductor');
 const readStored = (key) => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const store = (key, value) => { try { value ? sessionStorage.setItem(key, value) : sessionStorage.removeItem(key); } catch { /* in-memory state still works */ } };
-const state = { data: null, selected: '', online: false, busy: false, history: false, loginVisible: false, token: conductorView ? readStored('us-token') : null, pending: readStored(conductorView ? 'us-pending-conductor' : 'us-pending-dispatcher'), notice: '', signature: '' };
+const state = { data: null, serverContext: null, contextBlocked: false, selected: '', online: false, busy: false, history: false, loginVisible: false, token: conductorView ? readStored('us-token') : null, pending: readStored(conductorView ? 'us-pending-conductor' : 'us-pending-dispatcher'), notice: '', signature: '' };
 const pendingKey = conductorView ? 'us-pending-conductor' : 'us-pending-dispatcher';
 const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const labels = {draft:'Draft · not in effect',transmitted:'Transmitted · not in effect',received:'Received · not in effect',readback_pending:'Readback reported · not in effect',active:'In effect',release_requested:'Release reported · awaiting confirmation',closed:'Released',void:'Voided'};
@@ -12,7 +12,7 @@ const holding = (w) => ['active','release_requested'].includes(w.status);
 const closed = (w) => ['closed','void'].includes(w.status);
 const session = () => state.data?.session;
 const run = (id) => session()?.runs.find((r) => r.id === id);
-const disabled = (action='') => !state.online || state.busy || Boolean(state.pending) || (session()?.status === 'closed' && !['import','create_session','cloud','packages','review-package'].includes(action));
+const disabled = (action='') => ['import','cloud','packages'].includes(action) || state.contextBlocked || !state.online || state.busy || Boolean(state.pending) || (session()?.status === 'closed' && !['create_session','review-package','config'].includes(action));
 const button = (label, action, extra='', primary=false) => html`<button type="button" data-action="${action}" ${extra} ${!['details','history'].includes(action)&&disabled(action)?'disabled':''} class="${primary?'primary':''}">${escape(t(label))}</button>`;
 // randomUUID is unavailable on ordinary LAN HTTP; getRandomValues still works.
 function createCommandID() {
@@ -21,7 +21,17 @@ function createCommandID() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return 'us-' + Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
-document.querySelector(`.topbar nav a[href="/us/${conductorView?'conductor':'dispatcher'}"]`).setAttribute('aria-current', 'page');
+const workspace = conductorView ? 'conductor' : 'dispatcher';
+store('trainmeet.workspace', workspace);
+document.querySelector('#workspace-home').href = `/us/${workspace}`;
+document.querySelector('#workspace-logout').onclick = async () => {
+  try {
+    await api('/v1/auth/logout', {});
+    state.token=null; store('us-token',null); store('trainmeet.workspace',null);
+    state.data=null; state.online=false; editor.close();
+    location.href='/';
+  } catch(error) { notify(error.message); }
+};
 
 async function api(path, body) {
   const controller = new AbortController();
@@ -40,6 +50,9 @@ function status() {
   document.body.classList.toggle('disconnected', !state.online);
   document.querySelector('#connection').textContent = state.online ? t("● Server connected") : t("● Offline · stale state");
   document.querySelector('#clock').textContent = state.data?.clock?.time?.slice(0,5) || '--:--';
+  document.querySelector('#workspace-label').textContent = t(conductorView ? 'Conductor' : 'Dispatcher');
+  document.querySelector('#selected-meet').textContent = state.serverContext?.selected_meet?.name || '';
+  document.querySelectorAll('[data-admin-navigation]').forEach((link) => { link.hidden = state.data?.role !== 'dispatcher'; });
   const notice = document.querySelector('#notice');
   const message = state.pending ? t("Command result is unconfirmed. No further operational actions are allowed until it is checked.") : !state.online && state.data ? t("Connection lost. Showing the last confirmed server state. Actions are blocked.") : t(state.notice);
   notice.hidden = !message;
@@ -50,9 +63,26 @@ function status() {
 
 async function refresh(force=false) {
   try {
-    const next = await api('/v1/us/context');
-    state.data = next; state.online = true;
-    const signature = JSON.stringify([next.session?.id,next.session?.revision,next.conductors,next.role,next.packages,next.cloud]);
+    const context = await api('/v1/server-context');
+    state.serverContext=context;
+    if(context.operating_region!=='us' || !context.selected_meet?.publication_id) {
+      blockContext(context.selected_meet ? 'This workspace is not available for the selected meet.' : 'Select a published meet in Server settings first.');
+      return;
+    }
+    let next = await api('/v1/us/context');
+    // A saved US session is not evidence that this server still represents it.
+    // Never display or command a previous meet after an administrator switches.
+    if(next.session && next.session.status!=='closed' && next.session.package?.publication_id!==context.selected_meet.publication_id) {
+      blockContext('The selected config is changing. Waiting for the server to confirm the active session.');
+      return;
+    }
+    if(next.session?.status==='closed' && next.session.package?.publication_id!==context.selected_meet.publication_id) {
+      next={...next,session:null,clock:null};
+    }
+    const wasBlocked=state.contextBlocked;
+    state.contextBlocked=false; state.data = next; state.online = true;
+    const signature = JSON.stringify([context.selected_meet,next.session?.id,next.session?.revision,next.conductors,next.role,next.packages]);
+    if(wasBlocked)state.signature='';
     if (force || signature !== state.signature) { state.signature = signature; render(); }
   } catch (error) {
     state.online = false;
@@ -62,6 +92,13 @@ async function refresh(force=false) {
     }
     if (error.status === 401 || !state.data) login(error.status === 401 ? '' : error.message);
   }
+  status();
+}
+
+function blockContext(message) {
+  state.contextBlocked=true; state.online=true; state.data=null; state.signature=''; state.loginVisible=false;
+  editor.close();
+  app.innerHTML=html`<section class="welcome"><h1>Workspace unavailable</h1><p>${escape(t(message))}</p><a class="button" href="/#workspaces">Change workspace</a></section>`;
   status();
 }
 
@@ -133,11 +170,12 @@ function bindForm(action, makePayload) {
 const formEnd = (label) => html`<p class="form-error" role="alert"></p><div class="dialog-actions"><button class="primary" type="submit">${escape(t(label))}</button></div>`;
 
 function render() {
+  if(state.contextBlocked || !state.data)return;
   if (conductorView && state.data.role !== 'conductor') { login(); return; }
   state.loginVisible = false;
   const current=session();
   if (!current || current.status === 'closed') {
-    app.innerHTML=html`<section class="welcome"><p class="eyebrow">${current?t("Session complete"):t("Local-first operations")}</p><h1>${current?t("Session safely closed"):t("Start a US session")}</h1><p>${state.data.role==='dispatcher'?t("Import a reviewed US runtime package. Its topology and timetable are frozen for this session; future Cloud changes cannot alter live authorities."):t("Waiting for the dispatcher to start a session and assign your train.")}</p>${state.data.role==='dispatcher'?html`<div class="actions">${button('Download from Cloud','cloud','',true)}${button(t("Import US package"),'import')}</div>${packageShelf()}`:''}${current?html`<p class="form-note">${escape(current.name)} · final revision ${current.revision} · history retained on the server</p>`:''}</section>`;status();return;
+    app.innerHTML=html`<section class="welcome"><p class="eyebrow">${current?t("Session complete"):t("Local-first operations")}</p><h1>${current?t("Session safely closed"):t("Start a US session")}</h1><p>${state.data.role==='dispatcher'?t("The server runs the meet selected in Cloud settings. Review its published config before starting."):t("Waiting for the dispatcher to start a session and assign your train.")}</p>${state.data.role==='dispatcher'?packageShelf():''}${current?html`<p class="form-note">${escape(current.name)} · final revision ${current.revision} · history retained on the server</p>`:''}</section>`;status();return;
   }
   if (!run(state.selected)) state.selected=current.runs[0]?.id || '';
   const scrolls=[...app.querySelectorAll('[data-scroll]')].map((el)=>[el.dataset.scroll,el.scrollTop,el.scrollLeft]);
@@ -177,11 +215,13 @@ function renderDispatcher() {
   const current=session(), selected=run(state.selected);
   const pending=current.warrants.filter((w)=>!holding(w)&&!closed(w));
   const active=current.warrants.filter(holding), history=current.warrants.filter(closed);
-  app.innerHTML=html`<div class="page-heading"><div><p class="eyebrow">Train dispatcher · Track Warrant Control</p><h1>${escape(current.name)}</h1><p>Revision ${current.revision} · ${current.runs.length} train runs · ${active.length} track warrants reserving limits</p><p>${escape(t(state.data.clock?.running?'US clock running':'US clock paused'))} · ${escape(state.data.clock?.speed||1)}×</p></div><div class="toolbar">${button('US clock','clock')}${button('Saved US packages','packages')}${button(t("Connect conductor"),'pair')}${button(t("+ Extra train"),'extra')}${button(t("Finish session"),'finish_session')}</div></div><div class="board"><section class="column" aria-label="All train runs"><div class="column-head"><h2>All trains</h2><small>${current.runs.length} runs</small></div><div class="scroll train-list" data-scroll="trains">${current.runs.map(trainRow).join('')||html`<p class="empty">No scheduled runs. Add an extra train.</p>`}</div>${selected?html`<div class="column-head">${button(t("Train details"),'details')}${button(t("Assign"),'assign')}</div>`:''}</section><section class="column" aria-label="Track diagram"><div class="column-head"><h2>The railroad</h2><small>Reported positions · mileposts</small></div><div class="scroll map-viewport" data-scroll="map">${stripMap()}</div><div class="map-key"><span><i></i>Reserved authority limits</span><span><i class="draft"></i>Proposed · not in effect</span></div></section><section class="column" aria-label="Track warrants"><div class="column-head"><h2>Track warrants</h2>${selected?button(t("+ Draft"),'draft','',true):''}</div><div class="scroll warrant-list" data-scroll="warrants"><p class="list-label">Needs attention · ${pending.length}</p>${pending.map(warrantCard).join('')||html`<p class="muted">Nothing waiting.</p>`}<p class="list-label">In effect / release pending · ${active.length}</p>${active.map(warrantCard).join('')||html`<p class="muted">No reserved authority limits.</p>`}<p class="list-label">History · ${history.length}</p>${history.length?html`<button type="button" data-action="history">${state.history?t("Hide"):t("Show")} history</button>`:''}${state.history?history.map(warrantCard).join(''):''}</div></section></div>`;
+  app.innerHTML=html`<div class="page-heading"><div><p class="eyebrow">Train dispatcher · Track Warrant Control</p><h1>${escape(current.name)}</h1><p>Revision ${current.revision} · ${current.runs.length} train runs · ${active.length} track warrants reserving limits</p><p>${escape(t(state.data.clock?.running?'US clock running':'US clock paused'))} · ${escape(state.data.clock?.speed||1)}×</p></div><div class="toolbar">${button('US clock','clock')}${button('Selected meet config','config')}${button(t("Connect conductor"),'pair')}${button(t("+ Extra train"),'extra')}${button(t("Finish session"),'finish_session')}</div></div><div class="board"><section class="column" aria-label="All train runs"><div class="column-head"><h2>All trains</h2><small>${current.runs.length} runs</small></div><div class="scroll train-list" data-scroll="trains">${current.runs.map(trainRow).join('')||html`<p class="empty">No scheduled runs. Add an extra train.</p>`}</div>${selected?html`<div class="column-head">${button(t("Train details"),'details')}${button(t("Assign"),'assign')}</div>`:''}</section><section class="column" aria-label="Track diagram"><div class="column-head"><h2>The railroad</h2><small>Reported positions · mileposts</small></div><div class="scroll map-viewport" data-scroll="map">${stripMap()}</div><div class="map-key"><span><i></i>Reserved authority limits</span><span><i class="draft"></i>Proposed · not in effect</span></div></section><section class="column" aria-label="Track warrants"><div class="column-head"><h2>Track warrants</h2>${selected?button(t("+ Draft"),'draft','',true):''}</div><div class="scroll warrant-list" data-scroll="warrants"><p class="list-label">Needs attention · ${pending.length}</p>${pending.map(warrantCard).join('')||html`<p class="muted">Nothing waiting.</p>`}<p class="list-label">In effect / release pending · ${active.length}</p>${active.map(warrantCard).join('')||html`<p class="muted">No reserved authority limits.</p>`}<p class="list-label">History · ${history.length}</p>${history.length?html`<button type="button" data-action="history">${state.history?t("Hide"):t("Show")} history</button>`:''}${state.history?history.map(warrantCard).join(''):''}</div></section></div>`;
 }
 
 function packageShelf() {
-  return html`<section class="package-shelf"><h2>Saved US packages</h2><p class="form-note">Stored on this server. Internet is not required to start or run a downloaded session.</p>${(state.data.packages||[]).map((p)=>html`<article class="package-row"><div><strong>${escape(p.name)}</strong><p>${p.counts.runs} ${escape(t('train runs'))} · ${p.counts.segments} ${escape(t('track segments'))}</p><small>${escape(p.published_at||p.downloaded_at)} · ${escape(p.publication_id)}</small></div>${button('Review package','review-package',`data-package="${escape(p.publication_id)}"`)}</article>`).join('')||html`<p>No downloaded US package yet.</p>`}</section>`;
+  const selectedId=state.serverContext?.selected_meet?.publication_id;
+  const packages=(state.data.packages||[]).filter((p)=>p.publication_id===selectedId);
+  return html`<section class="package-shelf"><h2>Selected meet config</h2><p class="form-note">Config is maintained in Cloud. Downloaded config remains available without internet.</p>${packages.map((p)=>html`<article class="package-row"><div><strong>${escape(p.name)}</strong><p>${p.counts.runs} ${escape(t('train runs'))} · ${p.counts.segments} ${escape(t('track segments'))}</p><small>${escape(p.published_at||p.downloaded_at)} · ${escape(p.publication_id)}</small></div>${button('Review package','review-package',`data-package="${escape(p.publication_id)}"`)}</article>`).join('')||html`<p>The selected config is not ready yet. Check Cloud connection in Server settings.</p>`}</section>`;
 }
 
 function packagePreview(p) {
@@ -190,27 +230,14 @@ function packagePreview(p) {
 }
 
 async function reviewPackage(id) {
+  if(id!==state.serverContext?.selected_meet?.publication_id)return;
   const p=state.data.packages?.find((item)=>item.publication_id===id);
   if(!p)return;
   const {package: details}=await api(`/v1/us/package?publication_id=${encodeURIComponent(id)}`);
+  if(state.contextBlocked || id!==state.serverContext?.selected_meet?.publication_id)return;
   const settings=p.session||{}, planning=p.planning||{}, canStart=!session()||session().status==='closed';
-  modal(t('Review US package'),html`<h3>${escape(p.name)}</h3><p class="form-note">${escape(p.publication_id)} · ${escape(p.source_url||t('Local JSON file'))}</p><p>${p.counts.territories} ${escape(t('territories'))} · ${p.counts.nodes} ${escape(t('named points'))} · ${p.counts.segments} ${escape(t('track segments'))} · ${p.counts.runs} ${escape(t('train runs'))}</p><p>US clock starts paused. EU traffic and its clock stay unchanged.</p><p>${escape(settings.clock_time||'12:00')} · ${escape(settings.clock_speed||1)}× · ${escape(settings.timezone||'')}</p><details><summary>Source instructions and dispatcher districts</summary><p class="form-note">Planning reference only. District permissions and Train Token handovers are not enforced in this profile.</p>${(planning.dispatcher_districts||[]).map((d)=>html`<h3>${escape(d.name)}</h3><p>${escape(d.instructions||'')}</p>`).join('')}${(planning.source_instructions||[]).map((n)=>html`<p>${escape(n.text)}</p>`).join('')}</details>${packagePreview(details)}${canStart?html`<form><label class="confirm-label"><input name="confirmed" type="checkbox" required>I reviewed the topology and the model-railroad test profile.</label>${formEnd(t('Start US session'))}</form>`:html`<p class="form-note">Finish the current session before starting another package. Downloading never changes live operations.</p>`}`);
+  modal(t('Selected meet config'),html`<h3>${escape(p.name)}</h3><p class="form-note">${escape(p.publication_id)}</p><p>${p.counts.territories} ${escape(t('territories'))} · ${p.counts.nodes} ${escape(t('named points'))} · ${p.counts.segments} ${escape(t('track segments'))} · ${p.counts.runs} ${escape(t('train runs'))}</p><p>The session clock starts paused. This server runs one selected meet.</p><p>${escape(settings.clock_time||'12:00')} · ${escape(settings.clock_speed||1)}× · ${escape(settings.timezone||'')}</p><details><summary>Source instructions</summary>${(planning.source_instructions||[]).map((n)=>html`<p>${escape(n.text)}</p>`).join('')}</details>${packagePreview(details)}${canStart?html`<form><label class="confirm-label"><input name="confirmed" type="checkbox" required>I reviewed the topology and the model-railroad test profile.</label>${formEnd(t('Start US session'))}</form>`:html`<p class="form-note">Read-only config. Changes are published in Cloud and applied safely by the server.</p>`}`);
   if(canStart)bindForm('create_session',async(fields)=>({publication_id:p.publication_id,package_checksum:p.checksum,confirmed:fields.get('confirmed')==='on'}));
-}
-
-function bindDownload(path, makePayload) {
-  const form=editor.querySelector('form');
-  form.dataset.usAction='cloud';
-  form.onsubmit=async(event)=>{
-    event.preventDefault(); if(disabled('cloud'))return;
-    const error=form.querySelector('.form-error'); error.textContent='';
-    state.busy=true; status();
-    error.textContent=t('Downloading and validating the package…');
-    try {const result=await api(path,await makePayload(new FormData(form)));await refresh(true);await reviewPackage(result.package.publication_id);}
-    catch(err){error.textContent=err.message;}
-    finally{state.busy=false;status();}
-  };
-  status();
 }
 
 function stripMap() {
@@ -258,21 +285,12 @@ async function action(name, warrantId, packageId) {
   if(name==='history'){state.history=!state.history;render();return;}
   if(name==='details'&&selected){modal(trainLabel(selected),html`<p class="form-note">Session-specific run: ${escape(selected.id)}</p><h3>Train schedule & job instructions</h3>${schedule(selected)}<h3>Recent operations</h3>${events(selected)}`);return;}
   if(disabled(name))return;
+  if(name==='config'){await reviewPackage(state.serverContext?.selected_meet?.publication_id);return;}
   if(name==='review-package'){await reviewPackage(packageId);return;}
-  if(name==='packages'){modal(t('Saved US packages'),html`<div class="actions">${button('Download from Cloud','cloud')}${button('Import US package','import')}</div>${packageShelf()}`);return;}
-  if(name==='cloud'){
-    const cloud=state.data.cloud||{};
-    modal(t('Download from Cloud'),html`<form><p>Only published US packages are downloaded. Live operations are never changed.</p><label>Config URL<input name="url" type="url" required value="${escape(cloud.url||'')}"></label><label>Six-digit session code<input name="code" inputmode="numeric" autocomplete="off" pattern="[0-9]{6}" maxlength="6" ${cloud.linked?'':'required'}></label>${cloud.linked?html`<p class="form-note">Leave the code empty to download the latest version from the saved connection.</p>`:''}${formEnd(t('Download package'))}</form>`);
-    bindDownload('/v1/us/cloud/download',async(fields)=>({central_url:fields.get('url'),sync_code:fields.get('code')}));return;
-  }
   if(name==='clock'){
     const clock=state.data.clock||{};
     modal(t('US clock'),html`<form><p>Only this US session is affected. Clock time never grants movement authority.</p><label>Time<input name="time" type="time" step="1" required value="${escape(clock.time||'12:00:00')}"></label><label>Speed<input name="speed" type="number" min="0.1" max="60" step="any" required value="${escape(clock.speed||1)}"></label><label class="confirm-label"><input name="running" type="checkbox" ${clock.running?'checked':''}>Run US clock</label>${formEnd(t('Apply US clock'))}</form>`);
     bindForm('clock',async(fields)=>({clock_time:fields.get('time'),clock_speed:Number(fields.get('speed')),running:fields.get('running')==='on',confirmed:true}));return;
-  }
-  if(name==='import'){
-    modal(t('Import US package'),html`<form><p>Save a package locally, then review it before starting.</p><label>Runtime JSON file<input name="file" type="file" accept=".json,application/json" required></label>${formEnd(t('Review package'))}</form>`);
-    bindDownload('/v1/us/packages',async(fields)=>{const file=fields.get('file');if(file.size>2000000)throw new Error(t("Package is too large"));return{package:JSON.parse(await file.text())};});return;
   }
   if(name==='pair'){
     const result=await api('/v1/us/conductor-code',{});modal(t("Connect a conductor"),html`<p>Open <strong>${escape(location.origin)}/us/conductor</strong> on the conductor’s device.</p><div class="pair-code">${escape(result.code)}</div><p class="form-note">One use · expires in ${result.expires_in_minutes} minutes. After connection, select a train and choose Assign.</p>`);return;
@@ -313,6 +331,7 @@ window.addEventListener('online',()=>{void refresh(true);});
 TrainMeetI18n.subscribe(() => {
   const fields = [...app.querySelectorAll('input,select,textarea')].map((element) => ({name:element.name,value:element.value,checked:element.checked}));
   const focusedName = app.contains(document.activeElement) ? document.activeElement.name : null;
+  if(state.contextBlocked) { status(); return; }
   if (state.data) render();
   else login('', true);
   for (const saved of fields) {

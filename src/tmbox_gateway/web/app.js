@@ -1,5 +1,4 @@
 const { t, html } = globalThis.TrainMeetI18n;
-const slotKeys = ["A", "B", "C", "D"];
 
 function createWebClientID() {
   const browserCrypto = globalThis.crypto;
@@ -40,8 +39,7 @@ const state = {
   snapshotTimer: null,
   adminTimer: null,
   sending: false,
-  config: null,
-  configRevision: 0,
+  serverContext: null,
   restartRequired: false,
   restarting: false,
   authStatus: null,
@@ -64,8 +62,6 @@ const state = {
 const setup = document.querySelector("#setup");
 const login = document.querySelector("#login");
 const appView = document.querySelector("#app-view");
-const serverSidebarToggle = document.querySelector("#server-sidebar-toggle");
-const serverSidebarOverlay = document.querySelector("#server-sidebar-overlay");
 const loginForm = document.querySelector("#login-form");
 const loginError = document.querySelector("#login-error");
 const setupAdminForm = document.querySelector("#setup-admin-form");
@@ -146,15 +142,6 @@ const deviceStation = document.querySelector("#device-station");
 const runtimeForm = document.querySelector("#runtime-sync-form");
 const runtimeMessage = document.querySelector("#runtime-message");
 const runtimeCheckUpdate = document.querySelector("#runtime-check-update");
-const runtimeDownloadUpdate = document.querySelector("#runtime-download-update");
-const runtimeActivateUpdate = document.querySelector("#runtime-activate-update");
-const runtimeAutoSync = document.querySelector("#runtime-auto-sync");
-const runtimeAutoSyncHint = document.querySelector("#runtime-auto-sync-hint");
-const configForm = document.querySelector("#config-form");
-const configMessage = document.querySelector("#config-message");
-const stationEditor = document.querySelector("#station-editor");
-const connectionEditor = document.querySelector("#connection-editor");
-const panelEditor = document.querySelector("#panel-editor");
 // Omstartsknappen står på två ställen och betyder samma sak på båda: en i
 // stationsplanens knapprad, där en aktivering just har begärt omstart, och en
 // i BYGG 5 där paketet placerar den. De delar tillstånd i stället för att
@@ -181,12 +168,6 @@ const overviewRouteList = document.querySelector("#overview-route-list");
 const overviewRouteDetail = document.querySelector("#overview-route-detail");
 const overviewStationCounts = document.querySelector("#overview-station-counts");
 const closeStationInspector = document.querySelector("#close-station-inspector");
-const copyActiveRuntimeButton = document.querySelector("#copy-active-runtime");
-const runtimeImportFile = document.querySelector("#runtime-import-file");
-const runtimeImportValidate = document.querySelector("#runtime-import-validate");
-const runtimeImportActivate = document.querySelector("#runtime-import-activate");
-const runtimeImportMessage = document.querySelector("#runtime-import-message");
-const runtimeImportReview = document.querySelector("#runtime-import-review");
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -205,6 +186,8 @@ loginForm.addEventListener("submit", async (event) => {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || t("Inloggningen misslyckades"));
     document.querySelector("#login-password").value = "";
+    sessionStorage.removeItem("trainmeet.workspace");
+    history.replaceState(null, "", location.pathname + "#workspaces");
     await refreshAuthStatus();
     const installation = await refreshSetupStatus();
     if (installation.required) {
@@ -345,7 +328,6 @@ setupCentralForm.addEventListener("submit", async (event) => {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
     setupSyncCodeBoxes.reset();
-    if (payload.operating_region === 'us') { location.assign('/us/dispatcher'); return; }
     showSetup(await refreshSetupStatus());
   } catch (error) {
     setMessage(message, error.message, "error");
@@ -389,224 +371,215 @@ setupFinishForm.addEventListener("submit", async (event) => {
 });
 
 
-// ============================================================ KÖR och BYGG
-// `mode` är roten: den enda variabel som byter hela
-// sidans skelett. Körläget är default, eftersom det är det man ser under en
-// träff, och ingenting där får ändra konfigurationen.
-//
-// Kartan från gammalt till nytt (paketets DEL 2): de åtta adminsektionerna och
-// fyra vyerna blir två lägen med fem flikar var. Ingen funktionalitet
-// försvinner - allt flyttar - utom TMBox-simuleringen, som paketet tar bort
-// eftersom v2 räcker.
-
-const RUN_TABS = ["oversikt", "trafik", "skarmar", "tkl", "tmbox"];
-//: BYGG bygger träffen. Serveradministration ligger i sitt eget läge - se
-// Se SETTINGS_SECTIONS nedan för de separata inställningsområdena.
-const BUILD_STEPS = ["kalla", "bana", "tid", "boxar"];
-
-//: Det tredje läget. Att administrera servern är varken drift eller bygge, och
-//: låg tidigare bakom "Bygg om träffen" - alltså bakom ett flöde som handlar om
-//: något helt annat. Programuppdateringen var fyra klick bort.
-const SETTINGS_SECTIONS = ["identity", "access", "users", "software", "cloud", "system"];
-
-//: Vilka av dagens adminsektioner som hör till vilket byggsteg.
-const STEP_SECTIONS = {
-  // "cloud" är flyttad till Inställningar: kortet bär Cloud-kopplingen och
-  // parkopplingen av TMBoxar, och båda är serveradministration. Källvalet i
-  // steg 1 handlar om var *träffen* kommer ifrån, inte om kopplingen.
-  kalla: ["runtime", "local", "import"],
-  bana: [],
-  tid: [],
-  boxar: ["devices"],
-  //: Paketets DEL 3.11 i sin ordning: identitet, inloggning, uppdatering,
-  //: nollställning. Ordningen i listan är inte den som gäller på skärmen -
-  //: den kommer ur DOM-ordningen - men den här är densamma, så de inte
-  //: kan glida isär utan att någon märker det.
-};
-
-//: Vilken av dagens vypaneler som visas i vilken körflik.
+// Server workspaces select an interface, never a different meet or engine.
+const RUN_TABS = ["oversikt", "trafik", "skarmar", "tmbox"];
+const SETTINGS_SECTIONS = ["identity", "access", "users", "devices", "software", "cloud", "system"];
 const RUN_PANELS = {
-  oversikt: "#overview-view",
-  trafik: "#traffic-view",
-  skarmar: "#displays-view",
-  tkl: "#tkl-view",
-  tmbox: "#tmbox-v2-view",
+  oversikt: "#overview-view", trafik: "#traffic-view",
+  skarmar: "#displays-view", tmbox: "#tmbox-v2-view",
+};
+const MODES = ["workspaces", "kor", "installningar"];
+const WORKSPACE_KEY = "trainmeet.workspace";
+const WORKSPACES = {
+  administration: { title: "Drift och administration", detail: "Översikt, klocka och serverinställningar", path: "/#overview" },
+  tkl: { title: "TKL", detail: "Stationsarbetet i en egen arbetsyta", path: "/tkl/" },
+  dispatcher: { title: "Dispatcher", detail: "Trafikledning för träffens territorier", path: "/us/dispatcher" },
+  conductor: { title: "Conductor", detail: "Tåguppdrag och körtillstånd", path: "/us/conductor" },
 };
 
-const MODES = ["kor", "bygg", "installningar"];
+function currentMode() { return document.body.dataset.mode || "workspaces"; }
+function storedMode() { return sessionStorage.getItem(WORKSPACE_KEY) ? "kor" : "workspaces"; }
 
-//: Vilket läge sidan står i. Enda stället som läser `data-mode`, så ett fjärde
-//: läge behöver bara läggas i MODES.
-//:
-//: Den kände tidigare bara `bygg` och `kor` och svarade `kor` för allt annat.
-//: Den hade noll anropsställen, så felet syntes aldrig - men samma tvåvägsval
-//: fanns på startraden längst ned, och där syntes det: setMode *skriver*
-//: `installningar` till localStorage, men starten kunde inte läsa tillbaka
-//: det. Lämnade man appen i Inställningar och laddade om hamnade man i KÖR.
-function currentMode() {
-  const stored = document.body.dataset.mode;
-  return MODES.includes(stored) ? stored : "kor";
+function workspaceHome() {
+  return WORKSPACES[sessionStorage.getItem(WORKSPACE_KEY)]?.path || "/#workspaces";
 }
 
-//: Vad ett sparat läge ska tolkas som vid start. Samma lista, ett ställe.
-function storedMode() {
-  const stored = localStorage.getItem("trainmeet.mode");
-  return MODES.includes(stored) ? stored : "kor";
+function availableWorkspaces() {
+  // Fail closed: a stale browser choice must not grant a role or select EU/US.
+  return (state.serverContext?.available_workspaces || []).filter((key) => WORKSPACES[key]);
 }
+
+async function refreshServerContext() {
+  const response = await authorizedFetch("/v1/server-context", { cache: "no-store" });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || "Serverns träff kunde inte läsas.");
+  state.serverContext = payload;
+  const warning = document.querySelector("#server-context-warning");
+  setMessage(warning, payload.error?.message || (typeof payload.error === "string" ? payload.error : "") || (payload.transition_pending ? "Byte av träff pågår. Trafikkommandon är tillfälligt spärrade." : ""), "error");
+  warning.classList.toggle("hidden", !warning.textContent);
+  const meet = payload.selected_meet;
+  const name = meet?.name || t("Ingen träff vald");
+  document.querySelector("#app-meet-name").textContent = name;
+  renderWorkspaceMeetLabel();
+  const selected = sessionStorage.getItem(WORKSPACE_KEY);
+  if (selected && !availableWorkspaces().includes(selected)) {
+    sessionStorage.removeItem(WORKSPACE_KEY);
+    setMode("workspaces");
+  }
+  renderWorkspacePicker();
+  renderCloudStatus();
+  const us = payload.operating_region === "us";
+  document.querySelectorAll('[data-run-tab="trafik"], [data-run-tab="tmbox"]').forEach((node) => { node.hidden = us; });
+  document.querySelector("#us-runtime-summary").classList.toggle("hidden", !us);
+  document.querySelectorAll('.display-launch-card[href="/display/topology"], .display-launch-card[href="/display/graph"], .display-launch-card[href="/display/dashboard"], .connection-badge-card')
+    .forEach((node) => node.classList.toggle("hidden", us));
+  document.querySelectorAll("#overview-view .topology-overview-card, #overview-view .overview-routes-section, #overview-view .overview-graph-card")
+    .forEach((node) => node.classList.toggle("hidden", us));
+  document.querySelector("#workspace-home").href = workspaceHome();
+  return payload;
+}
+
+function renderWorkspacePicker() {
+  const host = document.querySelector("#workspace-options");
+  const signature = availableWorkspaces().join(",") + ":" + document.documentElement.lang;
+  if (host.dataset.workspaces === signature) return;
+  host.dataset.workspaces = signature;
+  host.replaceChildren();
+  for (const key of availableWorkspaces()) {
+    const entry = WORKSPACES[key];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "workspace-option";
+    const title = document.createElement("strong");
+    title.textContent = t(entry.title);
+    const detail = document.createElement("span");
+    detail.textContent = t(entry.detail);
+    button.append(title, detail);
+    button.addEventListener("click", () => {
+      sessionStorage.setItem(WORKSPACE_KEY, key);
+      if (key === "administration") {
+        location.hash = "overview";
+        setMode("kor");
+      } else location.assign(entry.path);
+    });
+    host.append(button);
+  }
+}
+
+function renderWorkspaceMeetLabel() {
+  const meet = state.serverContext?.selected_meet;
+  document.querySelector("#workspace-meet").textContent = meet
+    ? t("{name} · alla arbetsytor använder samma träff.", { name: meet.name })
+    : t("Koppla servern till en publicerad träff i Cloud via Inställningar.");
+}
+
+globalThis.TrainMeetI18n.subscribe(() => {
+  renderWorkspacePicker();
+  renderWorkspaceMeetLabel();
+  renderCloudStatus();
+  renderUsers();
+  configureResetMode();
+});
 
 function setMode(mode) {
-  const next = MODES.includes(mode) ? mode : "kor";
+  const next = MODES.includes(mode) ? mode : "workspaces";
   document.body.dataset.mode = next;
-  localStorage.setItem("trainmeet.mode", next);
-  document.querySelector("#build-chrome").classList.toggle("hidden", next !== "bygg");
-  document.querySelector("#build-sidebar").classList.toggle("hidden", next !== "bygg");
-  if (next === "bygg") selectBuildStep(state.buildStep || "kalla");
-  else if (next === "installningar") showSettings();
+  document.querySelector("#workspace-picker").classList.toggle("hidden", next !== "workspaces");
+  document.querySelector(".server-admin-shell").classList.toggle("hidden", next === "workspaces");
+  document.querySelector("#application-menu").open = false;
+  if (next === "workspaces") {
+    stopTMBoxV2();
+    stopTrafficView();
+    renderWorkspacePicker();
+  } else if (next === "installningar") showSettings();
   else selectRunTab(state.runTab || "oversikt");
 }
 
-//: Inställningarna visar samma sektioner som förut, i samma DOM. Ingenting är
-//: omskrivet - bara flyttat ur ett flöde det inte hörde hemma i.
 function showSettings() {
-  Object.values(RUN_PANELS).forEach((selector) => {
-    const panel = document.querySelector(selector);
-    if (panel) panel.classList.add("hidden");
-  });
+  Object.values(RUN_PANELS).forEach((selector) => document.querySelector(selector)?.classList.add("hidden"));
   stopTMBoxV2();
-  unmountTklFrame();
   stopTrafficView();
-
-  document.querySelectorAll(".build-panel").forEach((panel) => panel.classList.add("hidden"));
-  const adminView = document.querySelector("#admin-view");
-  if (adminView) adminView.classList.remove("hidden");
+  document.querySelector("#admin-view").classList.remove("hidden");
   document.querySelectorAll(".admin-section-panel").forEach((panel) => {
     panel.classList.toggle("hidden", !SETTINGS_SECTIONS.includes(panel.dataset.adminSection));
   });
-  const heading = document.querySelector("#settings-heading");
-  if (heading) heading.classList.remove("hidden");
-
-  checkSoftwareUpdate();
-  refreshUsers();
-  refreshBackups();
-  refreshRuntime();
-  appView.classList.remove("sidebar-open");
+  document.querySelector("#settings-heading").classList.remove("hidden");
+  Promise.allSettled([checkSoftwareUpdate(), refreshUsers(), refreshBackups(), refreshRuntime(), refreshDevices()]);
   window.scrollTo({ top: 0, behavior: "auto" });
 }
 
 function selectRunTab(tab) {
-  // Rubriken hör till inställningsläget och döljs här, annars står den kvar
-  // ovanför den här vyns innehåll.
-  document.querySelector("#settings-heading")?.classList.add("hidden");
-  const selected = RUN_TABS.includes(tab) ? tab : "oversikt";
+  const us = state.serverContext?.operating_region === "us";
+  const selected = RUN_TABS.includes(tab) && !(us && ["trafik", "tmbox"].includes(tab)) ? tab : "oversikt";
   state.runTab = selected;
-  localStorage.setItem("trainmeet.runTab", selected);
-
-  for (const [name, selector] of Object.entries(RUN_PANELS)) {
-    const panel = document.querySelector(selector);
-    if (panel) panel.classList.toggle("hidden", name !== selected);
-  }
-  document.querySelectorAll(".admin-section-panel").forEach((panel) => panel.classList.add("hidden"));
-  const adminView = document.querySelector("#admin-view");
-  if (adminView) adminView.classList.add("hidden");
-
-  document.querySelectorAll(".run-tab").forEach((button) => {
-    const active = button.dataset.runTab === selected;
-    button.toggleAttribute("aria-current", active);
-    if (active) button.setAttribute("aria-current", "page");
-  });
-
-  // Den inbäddade terminalen och v2-simulatorn kostar båda något att hålla
-  // igång, så de startas och stoppas med sin flik.
-  if (selected === "tmbox") startTMBoxV2(); else stopTMBoxV2();
-  if (selected === "tkl") mountTklFrame(); else unmountTklFrame();
-  if (selected === "trafik") startTrafficView(); else stopTrafficView();
-  appView.classList.remove("sidebar-open");
-  window.scrollTo({ top: 0, behavior: "auto" });
-}
-
-function selectBuildStep(step) {
-  // Rubriken hör till inställningsläget och döljs här, annars står den kvar
-  // ovanför den här vyns innehåll.
   document.querySelector("#settings-heading")?.classList.add("hidden");
-  const selected = BUILD_STEPS.includes(step) ? step : "kalla";
-  state.buildStep = selected;
-  localStorage.setItem("trainmeet.buildStep", selected);
-
-  Object.values(RUN_PANELS).forEach((selector) => {
-    const panel = document.querySelector(selector);
-    if (panel) panel.classList.add("hidden");
+  for (const [name, selector] of Object.entries(RUN_PANELS)) {
+    document.querySelector(selector)?.classList.toggle("hidden", name !== selected);
+  }
+  document.querySelector("#admin-view").classList.add("hidden");
+  document.querySelectorAll(".run-tab").forEach((button) => {
+    if (button.dataset.runTab === selected) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
   });
-  stopTMBoxV2();
-  unmountTklFrame();
-  stopTrafficView();
-
-  const adminView = document.querySelector("#admin-view");
-  if (adminView) adminView.classList.remove("hidden");
-  const sections = STEP_SECTIONS[selected] || [];
-  document.querySelectorAll(".admin-section-panel").forEach((panel) => {
-    panel.classList.toggle("hidden", !sections.includes(panel.dataset.adminSection));
-  });
-  document.querySelectorAll(".build-panel").forEach((panel) => {
-    panel.classList.toggle("hidden", panel.dataset.buildPanel !== selected);
-  });
-  document.querySelectorAll("[data-build-step]").forEach((button) => {
-    const active = button.dataset.buildStep === selected;
-    button.toggleAttribute("aria-current", active);
-    if (active) button.setAttribute("aria-current", "step");
-  });
-
-  if (sections.includes("software")) checkSoftwareUpdate();
-  if (sections.includes("cloud")) refreshRuntime();
-  if (selected === "kalla") refreshSourceChoice();
-  if (selected === "kalla") refreshPendingRevision();
-  if (selected === "bana") refreshBuildTopology();
-  if (selected === "tid") refreshBuildTimetable();
-  appView.classList.remove("sidebar-open");
+  if (selected === "tmbox") startTMBoxV2(); else stopTMBoxV2();
+  if (selected === "trafik") startTrafficView(); else stopTrafficView();
   window.scrollTo({ top: 0, behavior: "auto" });
 }
 
-// Kroppen ska bära ett läge från första bildrutan, inte först efter
-// inloggning: CSS hänger på body[data-mode] och en sida utan läge ritar
-// applocket fel under den halvsekund som inloggningen tar.
-document.body.dataset.mode = storedMode();
+function applyWorkspaceRoute() {
+  if (!state.authStatus?.authenticated) return;
+  const route = location.hash.slice(1);
+  document.querySelector("#application-menu").open = false;
+  if (route === "settings") setMode("installningar");
+  else if (route === "screens") { state.runTab = "skarmar"; setMode("kor"); }
+  else if (route === "workspaces" || !sessionStorage.getItem(WORKSPACE_KEY)) setMode("workspaces");
+  else if (sessionStorage.getItem(WORKSPACE_KEY) !== "administration") location.assign(workspaceHome());
+  else { state.runTab = route === "traffic" ? "trafik" : "oversikt"; setMode("kor"); }
+}
 
-document.querySelector("#enter-build").addEventListener("click", () => setMode("bygg"));
-document.querySelector("#leave-build").addEventListener("click", () => setMode("kor"));
+document.body.dataset.mode = storedMode();
+window.addEventListener("hashchange", applyWorkspaceRoute);
+document.querySelector("#workspace-home").addEventListener("click", (event) => {
+  event.preventDefault();
+  const destination = workspaceHome();
+  if (destination.startsWith("/#")) {
+    location.hash = destination.slice(2);
+    applyWorkspaceRoute();
+  } else location.assign(destination);
+});
 document.querySelectorAll(".run-tab").forEach((button) => {
   button.addEventListener("click", () => selectRunTab(button.dataset.runTab));
 });
-bindTimetableStep();
 bindUsersSection();
 bindRestore();
-document.querySelectorAll("[data-build-step]").forEach((button) => {
-  button.addEventListener("click", () => selectBuildStep(button.dataset.buildStep));
-});
 
-serverSidebarToggle.addEventListener("click", () => {
-  appView.classList.toggle("sidebar-open");
-});
-serverSidebarOverlay.addEventListener("click", () => {
-  appView.classList.remove("sidebar-open");
-});
-
-// Genvägar inne i vyerna pekade på de gamla vynamnen. De pekar nu på flikar,
-// via en karta i stället för att varje knapp skrivs om i markupen.
-const LEGACY_VIEW_TABS = {
-  overview: "oversikt", displays: "skarmar", "tmbox-v2": "tmbox",
-  simulator: "tmbox", admin: null,
-};
-document.querySelector("#open-settings")?.addEventListener("click", () => setMode("installningar"));
-document.querySelector("#leave-settings")?.addEventListener("click", () => setMode("kor"));
-
-document.querySelectorAll("[data-open-view]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const target = LEGACY_VIEW_TABS[button.dataset.openView];
-    if (target) { setMode("kor"); selectRunTab(target); }
-    // Kugghjulet hette "Öppna administration" men landade i BYGG steg 1, som
-    // handlar om var träffen kommer ifrån. Nu går det dit det säger.
-    else setMode("installningar");
+// Native dialog supplies focus trapping; every editor shares cancellation,
+// dirty-state protection and focus restoration. Background refresh never
+// rewrites fields in an open editor.
+const modalOrigins = new WeakMap();
+const modalValues = new WeakMap();
+function openModal(id) {
+  const dialog = document.getElementById(id);
+  if (!dialog || dialog.open) return;
+  modalOrigins.set(dialog, document.activeElement);
+  modalValues.set(dialog, [...dialog.querySelectorAll("input, select, textarea")].map((input) => [input, input.value, input.checked]));
+  dialog.dataset.dirty = "false";
+  dialog.querySelectorAll(".form-message").forEach((message) => setMessage(message, ""));
+  document.body.append(dialog);
+  dialog.showModal();
+}
+function cancelModal(dialog) {
+  if (dialog.querySelector('[type="submit"]:disabled') || dialog.dataset.busy === "true") return;
+  if (dialog.dataset.dirty === "true" && !window.confirm(t("Stäng utan att spara ändringarna?"))) return;
+  for (const [input, value, checked] of modalValues.get(dialog) || []) { input.value = value; input.checked = checked; }
+  dialog.close();
+}
+function finishModal(form) {
+  const dialog = form.closest("dialog");
+  if (dialog) { dialog.dataset.dirty = "false"; dialog.close(); }
+}
+function bindAdminModals() {
+  document.querySelectorAll("dialog.admin-modal").forEach((dialog) => {
+    dialog.addEventListener("input", () => { dialog.dataset.dirty = "true"; });
+    dialog.addEventListener("cancel", (event) => { event.preventDefault(); cancelModal(dialog); });
+    dialog.addEventListener("close", () => modalOrigins.get(dialog)?.focus());
+    dialog.querySelectorAll("[data-close-modal]").forEach((button) => button.addEventListener("click", () => cancelModal(dialog)));
   });
-});
+  document.querySelectorAll("[data-open-modal]").forEach((button) => button.addEventListener("click", () => openModal(button.dataset.openModal)));
+}
+bindAdminModals();
+document.querySelector("#overview-clock-start").addEventListener("click", () => controlLocalClock({ action: "start" }));
+document.querySelector("#overview-clock-stop").addEventListener("click", () => controlLocalClock({ action: "stop" }));
 
 overviewRouteSearch.addEventListener("input", renderRouteExplorer);
 overviewRouteList.addEventListener("click", (event) => {
@@ -630,20 +603,6 @@ overviewStationCounts.addEventListener("click", (event) => {
 
 closeStationInspector.addEventListener("click", () => selectOverviewStation(null, true));
 
-copyActiveRuntimeButton.addEventListener("click", () => copyActiveRuntimeToDraft());
-
-runtimeImportFile.addEventListener("change", () => {
-  state.pendingImportPackage = null;
-  state.pendingImportValidation = null;
-  runtimeImportValidate.disabled = !runtimeImportFile.files?.length;
-  runtimeImportActivate.classList.add("hidden");
-  runtimeImportReview.classList.add("hidden");
-  document.querySelector("#runtime-import-state").textContent = runtimeImportFile.files?.[0]?.name || t("Ingen fil vald");
-  setMessage(runtimeImportMessage, "");
-});
-
-runtimeImportValidate.addEventListener("click", validateRuntimeImport);
-runtimeImportActivate.addEventListener("click", activateRuntimeImport);
 
 logoutButton.addEventListener("click", async () => {
   await fetch("/v1/auth/logout", {
@@ -653,6 +612,7 @@ logoutButton.addEventListener("click", async () => {
   });
   localStorage.removeItem("trainmeet.accessToken");
   localStorage.removeItem("trainmeet.panelID");
+  sessionStorage.removeItem(WORKSPACE_KEY);
   state.token = null;
   state.snapshots.clear();
   clearTimeout(state.snapshotTimer);
@@ -696,6 +656,7 @@ adminAccessForm.addEventListener("submit", async (event) => {
     await refreshAuthStatus();
     logoutButton.classList.toggle("hidden", !state.authStatus?.authenticated);
     await refreshAdminAccess();
+    finishModal(adminAccessForm);
   } catch (error) {
     setMessage(adminAccessMessage, error.message, "error");
   } finally {
@@ -718,6 +679,7 @@ serverIdentityForm.addEventListener("submit", async (event) => {
     if (!response.ok) throw new Error(payload.message || "Servernamnet kunde inte sparas");
     setMessage(serverIdentityMessage, `Servernamnet är nu ${payload.server_name}.`, "success");
     await refreshInfo();
+    finishModal(serverIdentityForm);
   } catch (error) {
     setMessage(serverIdentityMessage, error.message, "error");
   } finally {
@@ -725,8 +687,10 @@ serverIdentityForm.addEventListener("submit", async (event) => {
   }
 });
 
-document.querySelector("#connection-badge-screens").addEventListener("change", saveConnectionBadgeSettings);
-document.querySelector("#connection-badge-validity").addEventListener("change", saveConnectionBadgeSettings);
+document.querySelector("#connection-badge-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveConnectionBadgeSettings();
+});
 
 // The field offers whole numbers in a dropdown but accepts anything typed, so
 // a Swedish decimal comma has to read as a decimal point.
@@ -776,6 +740,7 @@ deviceForm.addEventListener("submit", async (event) => {
     setMessage(deviceMessage, "TMBoxen är kopplad och hämtar sin station vid nästa kontakt.", "success");
     document.querySelector("#device-code").value = "";
     await refreshDevices();
+    finishModal(deviceForm);
   } catch (error) {
     setMessage(deviceMessage, error.message, "error");
   } finally {
@@ -801,15 +766,15 @@ runtimeForm.addEventListener("submit", async (event) => {
       body: JSON.stringify({
         central_url: document.querySelector("#runtime-central-url").value,
         sync_code: syncCode,
+        confirm_meet_change: document.querySelector("#confirm-meet-change").checked,
       }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
     setMessage(runtimeMessage, `3/3 · ${payload.message} Cloud-kopplingen är sparad på servern.`, payload.restart_required ? "notice" : "success");
     runtimeSyncCodeBoxes.reset();
-    if (payload.operating_region === 'us') { location.assign('/us/dispatcher'); return; }
-    document.querySelector("#runtime-link-details").open = false;
-    await Promise.all([refreshRuntime(), refreshInfo()]);
+    await Promise.all([refreshServerContext(), refreshRuntime(), refreshInfo()]);
+    finishModal(runtimeForm);
   } catch (error) {
     setMessage(runtimeMessage, error.message, "error");
     document.querySelector("#cloud-connection-state").textContent = "Kopplingen misslyckades";
@@ -985,110 +950,39 @@ factoryResetButton.addEventListener("click", async () => {
   }
 });
 
-const AUTO_SYNC_REASON =
-  "Automatiska Cloud-uppdateringar är på — servern hämtar och aktiverar själv.";
-
-/** Keep the manual staging controls from racing the automatic loop.
-
-    With automatic updates on, the fifteen-second loop installs *and* activates,
-    so downloading a version by hand can only duplicate what it has already
-    done. The buttons stay visible rather than vanishing: an operator who just
-    saw them should be told why they are inert, not left hunting for them. */
-function applyCloudAutoSyncLock() {
-  const automatic = runtimeAutoSync.checked;
-  [runtimeDownloadUpdate, runtimeActivateUpdate].forEach((button) => {
-    button.disabled = automatic;
-    if (automatic) button.title = AUTO_SYNC_REASON;
-    else button.removeAttribute("title");
-  });
-  // Only worth saying when there is a disabled button on screen to explain.
-  const offering = [runtimeDownloadUpdate, runtimeActivateUpdate]
-    .some((button) => !button.classList.contains("hidden"));
-  runtimeAutoSyncHint.textContent = automatic && offering ? AUTO_SYNC_REASON : "";
-  runtimeAutoSyncHint.classList.toggle("hidden", !(automatic && offering));
-}
-
-runtimeAutoSync.addEventListener("change", async () => {
-  runtimeAutoSync.disabled = true;
-  try {
-    const response = await authorizedFetch("/v1/cloud/auto-sync", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled: runtimeAutoSync.checked }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message || "Inställningen kunde inte sparas");
-    setMessage(runtimeMessage, payload.message, "success");
-  } catch (error) {
-    runtimeAutoSync.checked = !runtimeAutoSync.checked;
-    setMessage(runtimeMessage, error.message, "error");
-  } finally {
-    runtimeAutoSync.disabled = false;
-    applyCloudAutoSyncLock();
-  }
-});
-
 runtimeCheckUpdate.addEventListener("click", async () => {
-  setMessage(runtimeMessage, "Söker efter en ny publicerad version …");
+  setMessage(document.querySelector("#cloud-update-message"), "Söker efter publicerad config …");
   runtimeCheckUpdate.disabled = true;
   try {
-    const response = await authorizedFetch("/v1/runtime/update");
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message || "Uppdateringen kunde inte kontrolleras");
-    state.pendingPublicationID = payload.publication_id;
-    runtimeDownloadUpdate.classList.toggle("hidden", !payload.update_available);
-    runtimeActivateUpdate.classList.add("hidden");
-    setMessage(runtimeMessage, payload.update_available
-      ? "En ny version finns. Hämta den för att granska och aktivera lokalt."
-      : "Servern har redan den senaste publicerade versionen.", payload.update_available ? "notice" : "success");
-  } catch (error) {
-    setMessage(runtimeMessage, error.message, "error");
-  } finally {
-    runtimeCheckUpdate.disabled = false;
-    applyCloudAutoSyncLock();
-  }
-});
-
-runtimeDownloadUpdate.addEventListener("click", async () => {
-  setMessage(runtimeMessage, "Hämtar den nya versionen …");
-  runtimeDownloadUpdate.disabled = true;
-  try {
-    const response = await authorizedFetch("/v1/runtime/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message || "Versionen kunde inte hämtas");
-    state.pendingPublicationID = payload.downloaded_publication_id;
-    runtimeDownloadUpdate.classList.add("hidden");
-    runtimeActivateUpdate.classList.remove("hidden");
-    setMessage(runtimeMessage, payload.message, "notice");
-    await refreshRuntime();
-  } catch (error) {
-    setMessage(runtimeMessage, error.message, "error");
-  } finally {
-    applyCloudAutoSyncLock();
-  }
-});
-
-runtimeActivateUpdate.addEventListener("click", async () => {
-  setMessage(runtimeMessage, "Aktiverar den hämtade versionen …");
-  runtimeActivateUpdate.disabled = true;
-  try {
-    const response = await authorizedFetch("/v1/runtime/activate", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ publication_id: state.pendingPublicationID }),
+    const response = await authorizedFetch("/v1/config/check", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message || "Versionen kunde inte aktiveras");
-    runtimeActivateUpdate.classList.add("hidden");
-    state.pendingPublicationID = null;
-    state.restartRequired = !!payload.restart_required;
-    setRestartButtonsVisible(state.restartRequired);
-    setMessage(runtimeMessage, payload.message, payload.restart_required ? "notice" : "success");
-    await Promise.all([refreshRuntime(), refreshInfo()]);
+    if (!response.ok) throw new Error(payload.message || "Configuppdateringen kunde inte kontrolleras.");
+    setMessage(document.querySelector("#cloud-update-message"), payload.message || "Kontrollen är klar. Uppdateringar används när det är säkert.", "success");
+    await Promise.all([refreshServerContext(), refreshRuntime(), refreshLocalClock()]);
   } catch (error) {
-    setMessage(runtimeMessage, error.message, "error");
-  } finally {
-    applyCloudAutoSyncLock();
-  }
+    setMessage(document.querySelector("#cloud-update-message"), error.message, "error");
+  } finally { runtimeCheckUpdate.disabled = false; }
 });
+
+function renderCloudStatus() {
+  const context = state.serverContext || {};
+  const update = context.cloud_update || {};
+  const meet = context.selected_meet;
+  document.querySelector("#cloud-connection-meet").textContent = meet?.name || t("Ingen träff vald");
+  document.querySelector("#cloud-connection-meta").textContent = meet?.publication_id
+    ? t("Publicerad config · {version}", { version: meet.publication_id }) : t("Koppla en publicerad träff med koden från Cloud.");
+  document.querySelector("#cloud-connection-state").textContent = t(update.linked ? "Kopplad" : "Inte kopplad");
+  document.querySelector("#cloud-connection-state").classList.toggle("active", Boolean(update.linked));
+  document.querySelector("#cloud-auto-status").textContent = t(update.linked
+    ? (update.auto_sync ? "Automatisk configuppdatering är aktiv." : "Automatisk configuppdatering är pausad.")
+    : "Automatisk uppdatering aktiveras när servern kopplas till Cloud.");
+  document.querySelector("#cloud-version-state").textContent = update.message || t(
+    update.pending_publication_id ? "Ny config hämtad – väntar på säker aktivering." :
+    "Senaste fungerande config används även utan internet.");
+  runtimeCheckUpdate.disabled = !update.linked;
+}
 
 softwareCheck.addEventListener("click", checkSoftwareUpdate);
 softwareInstall.addEventListener("click", async () => {
@@ -1228,7 +1122,6 @@ function renderSoftwareUpdate(payload) {
   softwareVersion.dataset.build = build;
   // Stegräckan visar samma version som kortet, ur samma svar - annars kan de
   // stå och säga olika saker om vilken programvara som kör.
-  updateStepSubtitles(null);
 
   renderUpdateProgress(payload);
   renderVersionMove(payload);
@@ -1291,69 +1184,7 @@ softwareRetry.addEventListener("click", async () => {
   }
 });
 
-configForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  await saveConfiguration(false);
-});
-
-document.querySelector("#activate-config").addEventListener("click", async () => {
-  await saveConfiguration(true);
-});
-
 restartButtons.forEach((button) => button.addEventListener("click", restartServer));
-
-configForm.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-action]");
-  if (!button || !state.config) return;
-  event.preventDefault();
-  syncConfigurationFromDOM();
-  const action = button.dataset.action;
-  const index = Number(button.dataset.index);
-
-  if (action === "add-station") {
-    state.config.stations.push({ id: uniqueID("station"), code: nextStationCode(), name: "Ny station" });
-  } else if (action === "remove-station") {
-    const removedID = state.config.stations[index]?.id;
-    state.config.stations.splice(index, 1);
-    state.config.connections = state.config.connections.filter(
-      (item) => item.station_a_id !== removedID && item.station_b_id !== removedID,
-    );
-    state.config.panels = state.config.panels.filter((item) => item.station_id !== removedID);
-  } else if (action === "station-up" && index > 0) {
-    [state.config.stations[index - 1], state.config.stations[index]] = [
-      state.config.stations[index],
-      state.config.stations[index - 1],
-    ];
-  } else if (action === "station-down" && index < state.config.stations.length - 1) {
-    [state.config.stations[index + 1], state.config.stations[index]] = [
-      state.config.stations[index],
-      state.config.stations[index + 1],
-    ];
-  } else if (action === "add-connection") {
-    addConnection();
-  } else if (action === "remove-connection") {
-    const removedID = state.config.connections[index]?.id;
-    state.config.connections.splice(index, 1);
-    for (const panel of state.config.panels) {
-      for (const key of slotKeys) if (panel.slots[key] === removedID) panel.slots[key] = null;
-    }
-  } else if (action === "add-panel") {
-    addPanel();
-  } else if (action === "remove-panel") {
-    state.config.panels.splice(index, 1);
-  } else if (action === "build-chain") {
-    buildStationChain();
-  }
-  renderConfiguration();
-});
-
-panelEditor.addEventListener("change", (event) => {
-  if (!event.target.matches("select[data-field='station_id']")) return;
-  syncConfigurationFromDOM();
-  const panel = state.config.panels[Number(event.target.closest(".panel-row").dataset.index)];
-  panel.slots = { A: null, B: null, C: null, D: null };
-  renderConfiguration();
-});
 
 async function openApplication() {
   document.body.dataset.signedIn = "yes";
@@ -1361,16 +1192,16 @@ async function openApplication() {
   login.classList.add("hidden");
   appView.classList.remove("hidden");
   logoutButton.classList.toggle("hidden", !state.authStatus?.authenticated);
-  setMode(localStorage.getItem("trainmeet.mode") === "bygg" ? "bygg" : "kor");
   try {
+    await refreshServerContext();
     await Promise.all([
       refreshInfo(),
       refreshAdminAccess(),
-      loadLocalConfiguration(),
       refreshDevices(),
       refreshRuntime(),
       refreshLocalClock(),
     ]);
+    applyWorkspaceRoute();
     setConnection(
       "online",
       state.authStatus?.at_the_machine ? "Lokalt ansluten" : "Externt ansluten",
@@ -1382,43 +1213,6 @@ async function openApplication() {
 }
 
 
-// ------------------------------------------------------------ TKL-terminalen
-// Inbäddad enligt DEL 3.5. Iframen monteras först när fliken visas: en TKL som
-// ligger och kör i bakgrunden håller en MQTT-anslutning i onödan.
-/** Stationsväljaren ovanför den inbäddade terminalen (DEL 3.5). */
-function fillTklStations(stations) {
-  const select = document.querySelector("#tkl-station");
-  if (!select) return;
-  const signature = stations.map((station) => station.id).join("|");
-  if (select.dataset.signature === signature) return;
-  select.dataset.signature = signature;
-  select.replaceChildren();
-  for (const station of stations) {
-    const option = document.createElement("option");
-    option.value = station.id;
-    option.textContent = station.name || station.id;
-    select.append(option);
-  }
-  if (!select.dataset.bound) {
-    select.dataset.bound = "1";
-    select.addEventListener("change", mountTklFrame);
-  }
-}
-
-function mountTklFrame() {
-  const frame = document.querySelector("#tkl-frame");
-  if (!frame) return;
-  const station = document.querySelector("#tkl-station")?.value || "";
-  const target = station ? `/tkl/?station=${encodeURIComponent(station)}` : "/tkl/";
-  if (frame.getAttribute("src") !== target) frame.setAttribute("src", target);
-  const link = document.querySelector("#tkl-open-tab");
-  if (link) link.setAttribute("href", target);
-}
-
-function unmountTklFrame() {
-  const frame = document.querySelector("#tkl-frame");
-  if (frame && frame.getAttribute("src") !== "about:blank") frame.setAttribute("src", "about:blank");
-}
 
 // ------------------------------------------------------------------- Trafik
 let trafficTimer = null;
@@ -1446,7 +1240,7 @@ function scheduleAdminRefresh() {
   clearTimeout(state.adminTimer);
   state.adminTimer = setTimeout(async () => {
     if (!state.authStatus?.authenticated) return;
-    await Promise.allSettled([refreshInfo(), refreshDevices(), refreshRuntime(), refreshAdminAccess(), refreshLocalClock()]);
+    await Promise.allSettled([refreshServerContext(), refreshInfo(), refreshDevices(), refreshRuntime(), refreshAdminAccess(), refreshLocalClock()]);
     scheduleAdminRefresh();
   }, 5000);
 }
@@ -1460,31 +1254,25 @@ async function refreshInfo() {
   document.querySelector("#server-detail").textContent =
     `Kör lokalt · aktiv trafiksession: ${info.traffic_session_name}`;
   document.querySelector("#system-server-name").textContent = info.runtime?.server_name || info.gateway_id || "TrainMeet Server";
-  document.querySelector("#system-runtime-name").textContent = info.runtime?.configured ? info.runtime.meet_name : t("Ingen aktiv träff");
-  document.querySelector("#system-cloud-state").textContent = info.runtime?.linked ? t("Kopplad") : t("Inte kopplad");
+  document.querySelector("#system-runtime-name").textContent = state.serverContext?.selected_meet?.name || t("Ingen aktiv träff");
+  document.querySelector("#system-cloud-state").textContent = state.serverContext?.cloud_update?.linked ? t("Kopplad") : t("Inte kopplad");
   const serverNameInput = document.querySelector("#admin-server-name");
-  if (document.activeElement !== serverNameInput) {
+  if (!serverIdentityForm.closest("dialog").open) {
     serverNameInput.value = info.runtime?.server_name || info.gateway_id || "";
   }
   const pill = document.querySelector("#runtime-pill");
-  if (info.runtime?.configured) {
-    pill.textContent = `${info.runtime.meet_name} · ${info.runtime.active_day}`;
+  if (state.serverContext?.selected_meet) {
+    pill.textContent = state.serverContext.selected_meet.name;
     pill.classList.add("active");
     document.querySelector("#overview-runtime-state").textContent = "Lokalt aktiv";
-    document.querySelector("#sidebar-runtime-name").textContent = info.runtime.meet_name;
-    document.querySelector("#sidebar-runtime-status").textContent = `${info.runtime.active_day} · ${info.runtime.linked ? t("Cloud kopplad") : t("lokal config")}`;
   } else {
     pill.textContent = info.runtime?.error ? t("Konfigurationen behöver rättas") : t("Ingen träff aktiverad");
     pill.classList.remove("active");
     document.querySelector("#overview-runtime-state").textContent = info.runtime?.error
       ? "Konfigurationsfel"
       : "Ej konfigurerad";
-    document.querySelector("#sidebar-runtime-name").textContent = "Ingen aktiv träff";
-    document.querySelector("#sidebar-runtime-status").textContent = info.runtime?.error
-      ? "Importera en rättad version"
-      : "Konfiguration krävs";
   }
-  updateRuntimeNavigation(Boolean(info.runtime?.configured));
+  updateRuntimeNavigation(Boolean(state.serverContext?.selected_meet));
   updateRestartButton(Boolean(info.restart_required));
 }
 
@@ -1492,7 +1280,7 @@ async function refreshAdminAccess() {
   const response = await authorizedFetch("/v1/admin/access");
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || "Åtkomstinställningen kunde inte läsas");
-  document.querySelector("#admin-username").value = payload.username || "";
+  if (!adminAccessForm.closest("dialog").open) document.querySelector("#admin-username").value = payload.username || "";
 
   // Chippet svarade förr på "hur är jag inne", och svaret var alltid samma
   // sak som var man stod. Nu kräver servern inloggning överallt, så frågan
@@ -1510,53 +1298,6 @@ async function refreshAdminAccess() {
   passwordState.classList.toggle("is-missing", !payload.password_configured);
 }
 
-async function loadLocalConfiguration() {
-  const response = await authorizedFetch("/v1/local-configuration");
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || "Konfigurationen kunde inte läsas");
-  state.configRevision = payload.revision || 0;
-  state.config = payload.draft;
-  renderConfiguration();
-}
-
-async function saveConfiguration(activate) {
-  syncConfigurationFromDOM();
-  setMessage(configMessage, activate ? "Sparar och aktiverar …" : "Sparar utkast …");
-  const buttons = configForm.querySelectorAll("button");
-  buttons.forEach((button) => { button.disabled = true; });
-  try {
-    const saveResponse = await authorizedFetch("/v1/local-configuration", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expected_revision: state.configRevision, draft: state.config }),
-    });
-    const saved = await saveResponse.json();
-    if (!saveResponse.ok) throw new Error(saved.message || "Konfigurationen kunde inte sparas");
-    state.configRevision = saved.revision;
-    state.config = saved.draft;
-    renderConfiguration();
-
-    if (!activate) {
-      setMessage(configMessage, "Utkastet är sparat lokalt på servern.", "success");
-      return;
-    }
-    const activateResponse = await authorizedFetch("/v1/local-configuration/activate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expected_revision: state.configRevision }),
-    });
-    const result = await activateResponse.json();
-    if (!activateResponse.ok) throw new Error(result.message || "Konfigurationen kunde inte aktiveras");
-    setMessage(configMessage, result.message, result.restart_required ? "notice" : "success");
-    updateRestartButton(Boolean(result.restart_required));
-    await Promise.all([refreshRuntime(), refreshInfo()]);
-  } catch (error) {
-    setMessage(configMessage, error.message, "error");
-    if (/annan klient/i.test(error.message)) await loadLocalConfiguration();
-  } finally {
-    buttons.forEach((button) => { button.disabled = false; });
-  }
-}
 
 async function restartServer() {
   if (state.restarting || !state.restartRequired) return;
@@ -1618,180 +1359,6 @@ function updateRestartButton(required) {
   setRestartButtonsDisabled(state.restarting);
 }
 
-function renderConfiguration() {
-  const config = state.config;
-  if (!config) return;
-  document.querySelector("#meet-name").value = config.name || "";
-  document.querySelector("#dispatch-mode").value = config.default_dispatch_mode || "clearance";
-  document.querySelector("#clock-time").value = config.clock_time || "12:00";
-  document.querySelector("#active-day").value = config.active_day || "Dagl";
-  document.querySelector("#draft-revision").textContent = state.configRevision
-    ? `Utkast ${state.configRevision}`
-    : "Nytt utkast";
-
-  stationEditor.innerHTML = config.stations.length
-    ? config.stations.map((station, index) => html`
-      <div class="editor-row station-row" data-index="${index}">
-        <span class="sequence-number">${index + 1}</span>
-        <label>Kod<input data-field="code" maxlength="8" value="${escapeHTML(station.code)}"></label>
-        <label class="grow">Stationsnamn<input data-field="name" maxlength="100" value="${escapeHTML(station.name)}"></label>
-        <div class="row-actions">
-          <button type="button" class="icon-button" data-action="station-up" data-index="${index}" title="Flytta upp" ${index === 0 ? "disabled" : ""}>↑</button>
-          <button type="button" class="icon-button" data-action="station-down" data-index="${index}" title="Flytta ned" ${index === config.stations.length - 1 ? "disabled" : ""}>↓</button>
-          <button type="button" class="icon-button danger" data-action="remove-station" data-index="${index}" title="Ta bort">×</button>
-        </div>
-      </div>`).join("")
-    : emptyEditor("Inga stationer ännu", "Lägg till stationerna i den ordning de ligger på banan.");
-
-  connectionEditor.innerHTML = config.connections.length
-    ? config.connections.map((connection, index) => html`
-      <div class="editor-row connection-row" data-index="${index}">
-        <span class="sequence-number">${index + 1}</span>
-        <label>Från<select data-field="station_a_id">${stationOptions(connection.station_a_id)}</select></label>
-        <label>Till<select data-field="station_b_id">${stationOptions(connection.station_b_id)}</select></label>
-        <label>Spår<select data-field="track_type">
-          <option value="single" ${connection.track_type === "single" ? "selected" : ""}>Enkelspår</option>
-          <option value="double" ${connection.track_type === "double" ? "selected" : ""}>Dubbelspår</option>
-        </select></label>
-        <label>Trafikläge<select data-field="dispatch_mode_override">
-          <option value="" ${!connection.dispatch_mode_override ? "selected" : ""}>Träffens läge</option>
-          <option value="clearance" ${connection.dispatch_mode_override === "clearance" ? "selected" : ""}>Begär och bekräfta</option>
-          <option value="direct" ${connection.dispatch_mode_override === "direct" ? "selected" : ""}>Direkt om ledigt</option>
-        </select></label>
-        <button type="button" class="icon-button danger" data-action="remove-connection" data-index="${index}" title="Ta bort">×</button>
-      </div>`).join("")
-    : emptyEditor("Inga sträckor ännu", "Bygg automatiskt från stationsordningen eller lägg till en sträcka manuellt.");
-
-  panelEditor.innerHTML = config.panels.length
-    ? config.panels.map((panel, index) => html`
-      <div class="editor-row panel-row" data-index="${index}">
-        <span class="sequence-number">${index + 1}</span>
-        <label>Station<select data-field="station_id">${stationOptions(panel.station_id)}</select></label>
-        <label class="grow">Panelnamn<input data-field="name" maxlength="100" value="${escapeHTML(panel.name)}"></label>
-        <div class="slot-grid">
-          ${slotKeys.map((key) => html`<label><b>${key}</b><select data-slot="${key}">${connectionOptions(panel.station_id, panel.slots[key])}</select></label>`).join("")}
-        </div>
-        <button type="button" class="icon-button danger" data-action="remove-panel" data-index="${index}" title="Ta bort">×</button>
-      </div>`).join("")
-    : emptyEditor("Inga paneler ännu", "Varje station som ska användas behöver minst en TMBox-panel.");
-}
-
-function syncConfigurationFromDOM() {
-  if (!state.config) return;
-  state.config.name = document.querySelector("#meet-name").value.trim();
-  state.config.id = state.config.id || `local-${slugify(state.config.name) || uniqueID("meet")}`;
-  state.config.default_dispatch_mode = document.querySelector("#dispatch-mode").value;
-  state.config.clock_time = document.querySelector("#clock-time").value || "12:00";
-  state.config.active_day = document.querySelector("#active-day").value.trim() || "Dagl";
-
-  state.config.stations = [...stationEditor.querySelectorAll(".station-row")].map((row, index) => ({
-    ...state.config.stations[index],
-    code: row.querySelector("[data-field='code']").value.trim().toUpperCase(),
-    name: row.querySelector("[data-field='name']").value.trim(),
-  }));
-  state.config.connections = [...connectionEditor.querySelectorAll(".connection-row")].map((row, index) => ({
-    ...state.config.connections[index],
-    station_a_id: row.querySelector("[data-field='station_a_id']").value,
-    station_b_id: row.querySelector("[data-field='station_b_id']").value,
-    track_type: row.querySelector("[data-field='track_type']").value,
-    dispatch_mode_override: row.querySelector("[data-field='dispatch_mode_override']").value || null,
-  }));
-  state.config.panels = [...panelEditor.querySelectorAll(".panel-row")].map((row, index) => ({
-    ...state.config.panels[index],
-    station_id: row.querySelector("[data-field='station_id']").value,
-    name: row.querySelector("[data-field='name']").value.trim(),
-    slots: Object.fromEntries(slotKeys.map((key) => [key, row.querySelector(`[data-slot='${key}']`).value || null])),
-  }));
-}
-
-function addConnection() {
-  const stations = state.config.stations;
-  if (stations.length < 2) {
-    setMessage(configMessage, "Lägg till minst två stationer först.", "error");
-    return;
-  }
-  state.config.connections.push({
-    id: uniqueID("connection"),
-    station_a_id: stations[0].id,
-    station_b_id: stations[1].id,
-    track_type: "single",
-    dispatch_mode_override: null,
-    display_side_a: "right",
-    display_side_b: "left",
-    display_order_a: 0,
-    display_order_b: 0,
-  });
-}
-
-function addPanel() {
-  const station = state.config.stations[0];
-  if (!station) {
-    setMessage(configMessage, "Lägg till en station först.", "error");
-    return;
-  }
-  state.config.panels.push({
-    id: uniqueID("panel"),
-    station_id: station.id,
-    name: `${station.code} TMBox`,
-    slots: { A: null, B: null, C: null, D: null },
-  });
-}
-
-function buildStationChain() {
-  const stations = state.config.stations;
-  if (stations.length < 2) {
-    setMessage(configMessage, "Lägg till minst två stationer först.", "error");
-    return;
-  }
-  if ((state.config.connections.length || state.config.panels.length)
-      && !window.confirm("Detta bygger om nuvarande sträckor och paneler från stationsordningen. Fortsätta?")) return;
-
-  state.config.connections = stations.slice(0, -1).map((station, index) => ({
-    id: uniqueID("connection"),
-    station_a_id: station.id,
-    station_b_id: stations[index + 1].id,
-    track_type: "single",
-    dispatch_mode_override: null,
-    display_side_a: "right",
-    display_side_b: "left",
-    display_order_a: 0,
-    display_order_b: 0,
-  }));
-  state.config.panels = stations.map((station) => {
-    const incident = state.config.connections.filter(
-      (connection) => connection.station_a_id === station.id || connection.station_b_id === station.id,
-    );
-    return {
-      id: uniqueID("panel"),
-      station_id: station.id,
-      name: `${station.code} TMBox`,
-      slots: Object.fromEntries(slotKeys.map((key, index) => [key, incident[index]?.id || null])),
-    };
-  });
-  setMessage(configMessage, "Stationskedjan är byggd. Kontrollera A–D-valen och spara.", "success");
-}
-
-function stationOptions(selectedID) {
-  return state.config.stations.map((station) =>
-    html`<option value="${escapeHTML(station.id)}" ${station.id === selectedID ? "selected" : ""}>${escapeHTML(station.code)} · ${escapeHTML(station.name)}</option>`
-  ).join("");
-}
-
-function connectionOptions(stationID, selectedID) {
-  const connections = state.config.connections.filter(
-    (connection) => connection.station_a_id === stationID || connection.station_b_id === stationID,
-  );
-  return html`<option value="">Inte använd</option>${connections.map((connection) => {
-    const otherID = connection.station_a_id === stationID ? connection.station_b_id : connection.station_a_id;
-    const other = state.config.stations.find((station) => station.id === otherID);
-    const label = other ? `${other.code} · ${connection.track_type === "double" ? t("dubbelspår") : t("enkelspår")}` : "Okänd sträcka";
-    return html`<option value="${escapeHTML(connection.id)}" ${connection.id === selectedID ? "selected" : ""}>${escapeHTML(label)}</option>`;
-  }).join("")}`;
-}
-
-function emptyEditor(title, detail) {
-  return html`<div class="empty-editor"><b>${escapeHTML(title)}</b><span>${escapeHTML(detail)}</span></div>`;
-}
 
 async function refreshDevices() {
   const response = await authorizedFetch("/v1/devices");
@@ -1801,8 +1368,7 @@ async function refreshDevices() {
   // de kan inte visa olika många.
   state.devices = payload.devices || [];
   state.stations = payload.stations || [];
-  updateStepSubtitles(null);
-  fillTklStations(state.stations);
+  document.querySelector("#app-devices").textContent = `${state.devices.length} TMBox${state.devices.length === 1 ? "" : "ar"}`;
   const list = document.querySelector("#device-list");
   updateStationOptions(payload.stations || []);
   list.replaceChildren();
@@ -1825,6 +1391,17 @@ async function refreshDevices() {
       ? `${station.code} · ${station.name}`
       : "Väntar på station";
     row.append(identity, assignment);
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "secondary";
+    edit.dataset.tmText = "Ändra station";
+    edit.textContent = t("Ändra station");
+    edit.addEventListener("click", () => {
+      document.querySelector("#device-code").value = device.device_code;
+      deviceStation.value = device.station_id || "";
+      openModal("device-form-modal");
+    });
+    row.append(edit);
     list.append(row);
   }
 }
@@ -1847,95 +1424,50 @@ function updateStationOptions(stations) {
 async function refreshRuntime() {
   const response = await authorizedFetch("/v1/runtime");
   if (!response.ok) return;
-  const runtime = await response.json();
-  // Stegräckans underrubriker läser samma svar. Ett andra anrop skulle bara
-  // kunna ge ett annat tal än det vyn just visat.
-  state.runtime = runtime;
-  updateStepSubtitles(null);
-  const status = document.querySelector("#runtime-status");
-  status.replaceChildren();
-  const row = document.createElement("div");
-  row.className = "status-row";
-  const identity = document.createElement("div");
-  const title = document.createElement("b");
-  const detail = document.createElement("small");
-  if (runtime.configured) {
-    title.textContent = runtime.meet_name;
-    detail.textContent = `${runtime.station_count} stationer · ${runtime.train_count} tågrörelser · ${runtime.linked ? t("Cloud kopplad") : "lokal konfiguration"}`;
-  } else {
-    title.textContent = runtime.error ? "Träffkonfigurationen kunde inte aktiveras" : t("Ingen träff aktiverad");
-    detail.textContent = runtime.error
-      ? `${runtime.error}. Hämta eller aktivera en rättad version; den tidigare versionen är sparad.`
-      : "Koppla en konfigurationsserver eller bygg en lokal träff";
-  }
-  runtimeCheckUpdate.classList.toggle("hidden", !runtime.linked);
-  runtimeAutoSync.checked = !!runtime.cloud_auto_sync;
-  runtimeAutoSync.disabled = !runtime.linked;
-  if (runtime.central_url) document.querySelector("#runtime-central-url").value = runtime.central_url;
-  if (runtime.available_publication_id) {
-    state.pendingPublicationID = runtime.available_publication_id;
-    runtimeActivateUpdate.classList.remove("hidden");
-  }
-  applyCloudAutoSyncLock();
-  identity.append(title, detail);
-  const day = document.createElement("span");
-  day.textContent = runtime.active_day || "–";
-  row.append(identity, day);
-  status.append(row);
-
-  const cloudMeet = document.querySelector("#cloud-connection-meet");
-  const cloudMeta = document.querySelector("#cloud-connection-meta");
-  const cloudState = document.querySelector("#cloud-connection-state");
-  const cloudDetails = document.querySelector("#runtime-link-details");
-  cloudMeet.textContent = runtime.linked ? runtime.meet_name : "Ingen Cloud-koppling";
-  const publicationTime = runtime.published_at
-    ? new Date(runtime.published_at).toLocaleString("sv-SE", { dateStyle: "medium", timeStyle: "short" })
-    : null;
-  cloudMeta.textContent = runtime.linked
-    ? `${runtime.central_url || "TrainMeet Cloud"} · ${runtime.station_count} stationer · ${runtime.train_count} tågrörelser${publicationTime ? ` · publicerad ${publicationTime}` : ""}`
-    : "Koppla en publicerad träff med en sexsiffrig kod.";
-  cloudState.textContent = runtime.linked ? t("Kopplad") : t("Inte kopplad");
-  cloudState.classList.toggle("active", runtime.linked);
-  const cloudSteps = {
-    server: document.querySelector("#cloud-step-server"),
-    code: document.querySelector("#cloud-step-code"),
-    version: document.querySelector("#cloud-step-version"),
-    sync: document.querySelector("#cloud-step-sync"),
-  };
-  cloudSteps.server.classList.add("is-complete");
-  cloudSteps.server.querySelector("small").textContent = runtime.central_url || "Config-server vald";
-  cloudSteps.code.classList.toggle("is-complete", runtime.linked);
-  cloudSteps.code.querySelector("small").textContent = runtime.linked ? "Koppling sparad" : "Väntar på sexsiffrig kod";
-  cloudSteps.version.classList.toggle("is-complete", runtime.configured);
-  cloudSteps.version.querySelector("small").textContent = runtime.configured ? `${runtime.meet_name} finns lokalt` : "Ingen lokal version";
-  cloudSteps.sync.classList.toggle("is-complete", runtime.linked && runtime.cloud_auto_sync);
-  cloudSteps.sync.querySelector("small").textContent = runtime.cloud_auto_sync ? "Automatisk var 15:e sekund" : (runtime.linked ? "Manuell uppdatering" : "Aktiveras efter koppling");
-  if (!state.runtimeLinkInitialized) {
-    cloudDetails.open = !runtime.linked;
-    state.runtimeLinkInitialized = true;
-  }
+  state.runtime = await response.json();
+  const input = document.querySelector("#runtime-central-url");
+  if (state.runtime.central_url && !input.closest("dialog")?.open) input.value = state.runtime.central_url;
+  renderCloudStatus();
 }
 
 async function refreshLocalClock() {
-  const response = await fetch("/v1/display", { cache: "no-store" });
+  const response = await authorizedFetch("/v1/clock", { cache: "no-store" });
   if (!response.ok) return;
-  const payload = await response.json();
-  state.overviewSnapshot = payload;
-  renderOverview(payload);
-  const clock = payload.clock || {};
+  const clock = await response.json();
+  state.clock = clock;
+  if (state.serverContext?.operating_region !== "us") {
+    const display = await fetch("/v1/display", { cache: "no-store" });
+    if (display.ok) {
+      const payload = await display.json();
+      state.overviewSnapshot = payload;
+      renderOverview(payload);
+      renderConnectionBadgeSettings(payload.connection || {});
+    }
+  } else {
+    const meet = state.serverContext.selected_meet;
+    document.querySelector("#overview-meet-name").textContent = meet?.name || "TrainMeet Server";
+    document.querySelector("#overview-runtime-meta").textContent = t("Publicerad config · {version}", { version: meet?.publication_id || "–" });
+    document.querySelector("#overview-station-meta").textContent = t("Territorier och tåguppdrag från Cloud");
+    document.querySelector("#overview-day").textContent = "";
+    document.querySelector("#us-runtime-detail").textContent = t(clock.configured ? "Körningen finns lokalt på servern." : "Träffen är hämtad. Starta klockan när körningen ska börja.");
+  }
   const timeInput = document.querySelector("#local-clock-time");
-  if (document.activeElement !== timeInput) timeInput.value = clock.time || "12:00:00";
+  if (!clockControlForm.closest("dialog").open) timeInput.value = clock.time || "12:00:00";
   const speedInput = document.querySelector("#local-clock-speed");
-  if (document.activeElement !== speedInput) speedInput.value = Number(clock.speed || 1);
+  if (!clockControlForm.closest("dialog").open) speedInput.value = Number(clock.speed || 1);
   const stateLabel = document.querySelector("#clock-state");
-  stateLabel.textContent = clock.running ? `Går · ${Number(clock.speed || 1)}×` : t("Stoppad");
+  stateLabel.textContent = clock.running ? t("Går · {speed}×", { speed: Number(clock.speed || 1) }) : t("Stoppad");
   stateLabel.classList.toggle("clock-running", Boolean(clock.running));
-  renderConnectionBadgeSettings(payload.connection || {});
+  document.querySelector("#overview-clock").textContent = String(clock.time || "--:--").slice(0, 5);
+  document.querySelector("#app-clock").textContent = String(clock.time || "--:--").slice(0, 5);
+  document.querySelector("#overview-clock-start").disabled = Boolean(clock.running) || !state.serverContext?.selected_meet;
+  document.querySelector("#overview-clock-stop").disabled = !clock.running;
 }
 
 function renderConnectionBadgeSettings(connection) {
   const container = document.querySelector("#connection-badge-screens");
   if (!container) return;
+  if (container.closest("dialog")?.open) return;
   const screens = connection.screens || [];
   for (const input of container.querySelectorAll("input[type=checkbox]")) {
     if (document.activeElement !== input) input.checked = screens.includes(input.value);
@@ -1951,6 +1483,9 @@ function renderConnectionBadgeSettings(connection) {
 async function saveConnectionBadgeSettings() {
   const container = document.querySelector("#connection-badge-screens");
   const message = document.querySelector("#connection-badge-message");
+  const form = document.querySelector("#connection-badge-form");
+  const button = form.querySelector('[type="submit"]');
+  button.disabled = true;
   const screens = [...container.querySelectorAll("input[type=checkbox]")]
     .filter((input) => input.checked)
     .map((input) => input.value);
@@ -1974,15 +1509,19 @@ async function saveConnectionBadgeSettings() {
           : "Sparat. Koden visas inte på någon skärm.",
       "success",
     );
+    finishModal(form);
   } catch (error) {
     setMessage(message, error.message, "error");
+  } finally {
+    button.disabled = false;
   }
 }
 
 async function controlLocalClock(command) {
-  const buttons = [...clockControlForm.querySelectorAll("button")];
+  const buttons = [...clockControlForm.querySelectorAll("button"), document.querySelector("#overview-clock-start"), document.querySelector("#overview-clock-stop")];
   buttons.forEach((button) => { button.disabled = true; });
-  setMessage(clockControlMessage, "Uppdaterar den lokala klockan …", "notice");
+  const message = clockControlForm.closest("dialog").open ? clockControlMessage : document.querySelector("#overview-clock-message");
+  setMessage(message, "Uppdaterar den lokala klockan …", "notice");
   try {
     const response = await authorizedFetch("/v1/clock", {
       method: "POST",
@@ -1992,15 +1531,18 @@ async function controlLocalClock(command) {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Klockan kunde inte uppdateras");
     setMessage(
-      clockControlMessage,
+      message,
       payload.running ? `Klockan går från ${payload.time.slice(0, 5)} i ${Number(payload.speed)}×.` : "Klockan är stoppad.",
       "success",
     );
+    if (clockControlForm.closest("dialog").open) finishModal(clockControlForm);
     await refreshLocalClock();
   } catch (error) {
-    setMessage(clockControlMessage, error.message, "error");
+    setMessage(message, error.message, "error");
   } finally {
     buttons.forEach((button) => { button.disabled = false; });
+    document.querySelector("#overview-clock-start").disabled = Boolean(state.clock?.running) || !state.serverContext?.selected_meet;
+    document.querySelector("#overview-clock-stop").disabled = !state.clock?.running;
   }
 }
 
@@ -2116,15 +1658,6 @@ function updateRuntimeDataViews(snapshot, services) {
   const clockTime = String(snapshot.clock?.time || "--:--").slice(0, 5);
   const clockState = snapshot.clock?.running ? `${clockTime} · ${Number(snapshot.clock?.speed || 1)}×` : `${clockTime} · stoppad`;
 
-  document.querySelector("#admin-active-meet").textContent = snapshot.meet?.name || "Lokal träff";
-  document.querySelector("#admin-active-detail").textContent = `${snapshot.meet?.default_dispatch_mode === "direct" ? "Direkttrafik" : "Tåganmälan"} · ${services.length} tågrutter från den aktiva tidtabellen`;
-  document.querySelector("#admin-active-day").textContent = snapshot.active_day || "Dagl";
-  document.querySelector("#admin-active-stations").textContent = stations.length;
-  document.querySelector("#admin-active-connections").textContent = connections.length;
-  document.querySelector("#admin-active-trains").textContent = services.length;
-  document.querySelector("#admin-active-clock").textContent = clockTime;
-  document.querySelector("#admin-active-station-list").innerHTML = orderedStations(snapshot).map((station) => html`<span><b>${escapeHTML(station.code || "–")}</b>${escapeHTML(station.name)}</span>`).join("");
-  renderActiveRuntimePlan(snapshot);
 
   document.querySelector("#display-card-topology").textContent = `${stations.length} stationer · ${connections.length} sträckor`;
   document.querySelector("#display-card-graph").textContent = `${services.length} tåg · ${snapshot.active_day || "Dagl"}`;
@@ -2132,190 +1665,7 @@ function updateRuntimeDataViews(snapshot, services) {
   document.querySelector("#display-card-dashboard").textContent = `${activeTrains} aktiva tåg · ${activeConnections} upptagna sträckor`;
 }
 
-function renderActiveRuntimePlan(snapshot) {
-  if (!snapshot) return;
-  const stations = snapshot.stations || [];
-  const connections = snapshot.connections || [];
-  const stationByID = new Map(stations.map((station) => [station.id, station]));
-  const connectionList = document.querySelector("#admin-active-connection-list");
-  const panelList = document.querySelector("#admin-active-panel-list");
 
-  connectionList.innerHTML = connections.length
-    ? connections.map((connection) => {
-      const stationA = stationByID.get(connection.station_a_id);
-      const stationB = stationByID.get(connection.station_b_id);
-      const endpointA = stationA?.code || stationA?.name || "?";
-      const endpointB = stationB?.code || stationB?.name || "?";
-      const keys = [connection.tambox_key_a, connection.tambox_key_b].filter(Boolean).join(" / ");
-      const detail = `${connection.track_type === "double" ? t("Dubbelspår") : t("Enkelspår")}${keys ? ` · ${keys}` : ""}`;
-      return html`<div class="runtime-plan-row"><b>${escapeHTML(endpointA)} ↔ ${escapeHTML(endpointB)}</b><span>${escapeHTML(detail)}</span></div>`;
-    }).join("")
-    : html`<div class="runtime-plan-empty">Inga aktiva sträckor.</div>`;
-
-  const stationIDs = new Set(stations.map((station) => station.id));
-  const panels = [...state.snapshots.values()]
-    .filter((panel) => stationIDs.has(panel.station_id))
-    .sort((a, b) => String(a.panel_name).localeCompare(String(b.panel_name), "sv"));
-  panelList.innerHTML = panels.length
-    ? panels.map((panel) => {
-      const assignments = slotKeys.flatMap((key) => {
-        const slot = panel.slots?.[key];
-        return slot?.connection_id ? [`${key}→${slot.station_code || "?"}`] : [];
-      }).join(" · ");
-      return html`<div class="runtime-plan-row"><b>${escapeHTML(panel.panel_name)}</b><span>${escapeHTML(assignments || "Ingen A–D-koppling")}</span></div>`;
-    }).join("")
-    : html`<div class="runtime-plan-empty">Panelerna läses in …</div>`;
-
-  document.querySelector("#admin-active-connection-label").textContent = `${connections.length} konfigurerade`;
-  copyActiveRuntimeButton.disabled = stations.length === 0;
-}
-
-async function validateRuntimeImport() {
-  const file = runtimeImportFile.files?.[0];
-  if (!file) return;
-  runtimeImportValidate.disabled = true;
-  runtimeImportActivate.classList.add("hidden");
-  runtimeImportReview.classList.add("hidden");
-  setMessage(runtimeImportMessage, "Läser och validerar hela driftpaketet …", "notice");
-  try {
-    if (file.size > 3_500_000) throw new Error("Runtime-filen får vara högst 3,5 MB");
-    const parsed = JSON.parse(await file.text());
-    const packageValue = parsed?.package && typeof parsed.package === "object" ? parsed.package : parsed;
-    const response = await authorizedFetch("/v1/runtime/validate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ package: packageValue }),
-    });
-    const validation = await response.json();
-    if (!response.ok) throw new Error(validation.message || "Driftpaketet är inte giltigt");
-    state.pendingImportPackage = packageValue;
-    state.pendingImportValidation = validation;
-    renderRuntimeImportReview(validation);
-    runtimeImportActivate.classList.remove("hidden");
-    document.querySelector("#runtime-import-state").textContent = "Validerad";
-    setMessage(
-      runtimeImportMessage,
-      `${validation.meet.name} är validerad. Ingen körande data har ändrats ännu.`,
-      validation.warnings.length ? "notice" : "success",
-    );
-  } catch (error) {
-    state.pendingImportPackage = null;
-    state.pendingImportValidation = null;
-    document.querySelector("#runtime-import-state").textContent = "Kontrollera filen";
-    setMessage(runtimeImportMessage, error instanceof SyntaxError ? "Filen innehåller inte giltig JSON." : error.message, "error");
-  } finally {
-    runtimeImportValidate.disabled = false;
-  }
-}
-
-function renderRuntimeImportReview(validation) {
-  const counts = validation.counts;
-  document.querySelector("#runtime-import-facts").innerHTML = html`
-    <div><b>${counts.stations}</b><span>stationer</span></div>
-    <div><b>${counts.operating_points}</b><span>driftplatser</span></div>
-    <div><b>${counts.connections}</b><span>sträckor</span></div>
-    <div><b>${counts.services}</b><span>tågrutter</span></div>
-    <div><b>${counts.timetable_rows}</b><span>tågrörelser</span></div>`;
-  const warningBox = document.querySelector("#runtime-import-warnings");
-  warningBox.classList.toggle("hidden", validation.warnings.length === 0);
-  warningBox.innerHTML = validation.warnings.length
-    ? html`<b>Kontrollera före aktivering</b><ul>${validation.warnings.map((warning) => html`<li>${escapeHTML(warning)}</li>`).join("")}</ul>`
-    : "";
-  document.querySelector("#runtime-import-stations").innerHTML = validation.stations.map((station) => {
-    const operatingPoints = station.operating_points?.length
-      ? station.operating_points.map((point) => `${point.name}: ${point.tracks.join(", ") || "inga spår"} · ${point.timetable_rows} rader`).join(" · ")
-      : "";
-    return html`<tr>
-      <th><b>${escapeHTML(station.code)}</b><span>${escapeHTML(station.name)}</span>${operatingPoints ? html`<small>${escapeHTML(operatingPoints)}</small>` : ""}</th>
-      <td>${station.track_count}</td>
-      <td>${station.connection_count}</td>
-      <td>${station.panel_count}</td>
-      <td>${station.timetable_rows}</td>
-    </tr>`;
-  }).join("");
-  runtimeImportReview.classList.remove("hidden");
-}
-
-async function activateRuntimeImport() {
-  if (!state.pendingImportPackage || !state.pendingImportValidation) return;
-  const name = state.pendingImportValidation.meet.name;
-  if (!window.confirm(`Importera och aktivera ${name}? Den nuvarande träffen ligger kvar i historiken men den nya blir aktiv.`)) return;
-  runtimeImportActivate.disabled = true;
-  setMessage(runtimeImportMessage, "Importerar och aktiverar den validerade träffen …", "notice");
-  try {
-    const response = await authorizedFetch("/v1/runtime/install", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ package: state.pendingImportPackage }),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || "Driftpaketet kunde inte importeras");
-    state.restartRequired = Boolean(result.restart_required);
-    setRestartButtonsVisible(state.restartRequired);
-    document.querySelector("#runtime-import-state").textContent = result.restart_required ? "Aktiverad · omstart krävs" : "Aktiverad";
-    setMessage(runtimeImportMessage, result.message, result.restart_required ? "notice" : "success");
-    await Promise.all([refreshRuntime(), refreshInfo()]);
-  } catch (error) {
-    setMessage(runtimeImportMessage, error.message, "error");
-  } finally {
-    runtimeImportActivate.disabled = false;
-  }
-}
-
-function copyActiveRuntimeToDraft() {
-  const snapshot = state.overviewSnapshot;
-  if (!snapshot?.stations?.length) {
-    setMessage(configMessage, "Det finns ingen aktiv stationsplan att kopiera.", "error");
-    return;
-  }
-  const currentHasContent = Boolean(
-    state.config?.stations?.length
-    || state.config?.connections?.length
-    || state.config?.panels?.length
-  );
-  if (currentHasContent && !window.confirm("Ersätt det lokala utkastet i formuläret med den aktiva träffen? Inget sparas förrän du väljer Spara utkast.")) return;
-
-  const stationIDs = new Set(snapshot.stations.map((station) => station.id));
-  const panels = [...state.snapshots.values()]
-    .filter((panel) => stationIDs.has(panel.station_id))
-    .map((panel) => ({
-      id: panel.panel_id,
-      station_id: panel.station_id,
-      name: panel.panel_name,
-      slots: Object.fromEntries(slotKeys.map((key) => [key, panel.slots?.[key]?.connection_id || null])),
-    }));
-
-  state.config = {
-    schema_version: 1,
-    id: `local-${snapshot.meet?.id || slugify(snapshot.meet?.name || "trainmeet")}`,
-    name: snapshot.meet?.name || "Lokal träff",
-    timezone: snapshot.meet?.timezone || "Europe/Stockholm",
-    active_day: snapshot.active_day || snapshot.meet?.active_day || "Dagl",
-    default_dispatch_mode: snapshot.meet?.default_dispatch_mode === "direct" ? "direct" : "clearance",
-    clock_time: String(snapshot.meet?.clock_time || snapshot.clock?.time || "12:00").slice(0, 5),
-    stations: orderedStations(snapshot).map((station) => ({
-      id: station.id,
-      code: station.code,
-      name: station.name,
-    })),
-    connections: (snapshot.connections || []).map((connection) => ({
-      id: connection.id,
-      station_a_id: connection.station_a_id,
-      station_b_id: connection.station_b_id,
-      track_type: connection.track_type === "double" ? "double" : "single",
-      dispatch_mode_override: connection.dispatch_mode_override || null,
-      display_side_a: String(connection.display_side_a || "right").startsWith("left") ? "left" : "right",
-      display_side_b: String(connection.display_side_b || "left").startsWith("right") ? "right" : "left",
-      display_order_a: Number(connection.display_order_a || 0),
-      display_order_b: Number(connection.display_order_b || 0),
-    })),
-    panels,
-  };
-  document.querySelector("#local-draft-title").textContent = "Lokalt utkast från aktiv träff";
-  renderConfiguration();
-  setMessage(configMessage, "Den aktiva stationsplanen är kopierad till formuläret. Granska den och välj Spara utkast när du är nöjd.", "success");
-  configForm.scrollIntoView({ behavior: "smooth", block: "start" });
-}
 
 function renderOverview(snapshot) {
   if (!snapshot) return;
@@ -2437,6 +1787,15 @@ function renderRouteExplorer() {
 
 function authorizedFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
+  // Bind a command to the context already shown, never silently refresh a
+  // changed meet and then replay the user's old action against it.
+  if (options.method && options.method !== "GET" && typeof options.body === "string" && headers.get("Content-Type") === "application/json") {
+    const body = JSON.parse(options.body);
+    if (body.meet_generation === undefined && state.serverContext?.selected_meet?.generation !== undefined) {
+      body.meet_generation = state.serverContext.selected_meet.generation;
+    }
+    options = { ...options, body: JSON.stringify(body) };
+  }
   if (state.token) headers.set("Authorization", `Bearer ${state.token}`);
   return fetch(path, { ...options, headers, credentials: "same-origin" });
 }
@@ -2471,18 +1830,18 @@ function configureResetMode() {
   const localFactoryReset = state.authStatus?.at_the_machine === true;
   // Sammanfattningen är det enda som syns när blocket är hopfällt, så den ska
   // säga vilken av de två nollställningarna som gäller den här webbläsaren.
-  document.querySelector("#reset-mode-summary").textContent = localFactoryReset
+  document.querySelector("#reset-mode-summary").textContent = t(localFactoryReset
     ? "Fabriksåterställ servern"
-    : "Nollställ träffdata";
-  document.querySelector("#reset-mode-title").textContent = localFactoryReset
+    : "Nollställ träffdata");
+  document.querySelector("#reset-mode-title").textContent = t(localFactoryReset
     ? "Börja om från en helt ren TrainMeet Server"
-    : "Börja om utan att förlora administratörsåtkomsten";
-  document.querySelector("#reset-mode-description").textContent = localFactoryReset
+    : "Börja om utan att förlora administratörsåtkomsten");
+  document.querySelector("#reset-mode-description").textContent = t(localFactoryReset
     ? "Tar bort administratör, träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Första installationen öppnas efter omstarten."
-    : "Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och din aktiva webbinloggning behålls.";
-  factoryResetButton.textContent = localFactoryReset
+    : "Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och din aktiva webbinloggning behålls.");
+  factoryResetButton.textContent = t(localFactoryReset
     ? "Fabriksåterställ servern"
-    : "Nollställ träffdata";
+    : "Nollställ träffdata");
 }
 
 async function refreshSetupStatus() {
@@ -2587,31 +1946,15 @@ function setConnection(kind, text) {
 }
 
 function setMessage(element, text, kind = "") {
+  const modalFeedback = element.classList.contains("modal-feedback");
+  const contextWarning = element.classList.contains("context-warning");
   element.dataset.tmText = text || "";
   element.textContent = t(text || "");
-  element.className = `form-message ${kind}`.trim();
+  element.className = `form-message ${kind}${modalFeedback ? " modal-feedback" : ""}${contextWarning ? " context-warning" : ""}`.trim();
 }
 
 
 
-function nextStationCode() {
-  const number = state.config.stations.length + 1;
-  return `ST${number}`;
-}
-
-function uniqueID(prefix) {
-  return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
-}
-
-function slugify(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 48);
-}
 
 function escapeHTML(value) {
   return String(value ?? "")
@@ -3869,7 +3212,7 @@ function renderUsers() {
   const owner = users.role === "owner";
 
   usersEl("role-chip").textContent = owner ? t("Ägare") : t("Administratör");
-  usersEl("invite-form")?.classList.toggle("hidden", !owner);
+  usersEl("invite-open")?.classList.toggle("hidden", !owner);
 
   body.replaceChildren(...users.list.map((user) => {
     const tr = document.createElement("tr");
@@ -3907,14 +3250,7 @@ function renderUsers() {
     const actions = document.createElement("td");
     actions.className = "users-actions";
     if (owner) {
-      if (user.invitation_pending) {
-        actions.append(usersButton("Ny kod", () => reissueUserCode(user)));
-      }
-      actions.append(usersButton(
-        user.role === "owner" ? "Gör till administratör" : "Gör till ägare",
-        () => setUserRole(user, user.role === "owner" ? "admin" : "owner"),
-      ));
-      actions.append(usersButton(t("Ta bort"), () => removeUser(user), "danger"));
+      actions.append(usersButton("Redigera", () => editUser(user)));
     }
     tr.append(actions);
     return tr;
@@ -3925,7 +3261,8 @@ function usersButton(label, onClick, kind = "") {
   const button = document.createElement("button");
   button.type = "button";
   button.className = kind ? `link-button ${kind}` : "link-button";
-  button.textContent = label;
+  button.dataset.tmText = label;
+  button.textContent = t(label);
   button.addEventListener("click", onClick);
   return button;
 }
@@ -3958,7 +3295,14 @@ async function refreshUsers() {
 }
 
 async function usersPost(path, body, whenOk) {
-  const message = usersEl("message");
+  const modal = document.querySelector("dialog.admin-modal[open]");
+  const message = modal?.querySelector(".modal-feedback") || usersEl("message");
+  if (modal?.dataset.busy === "true") return null;
+  if (modal) modal.dataset.busy = "true";
+  const buttons = [...(modal?.querySelectorAll("button") || [])];
+  const previousDisabled = buttons.map((button) => button.disabled);
+  buttons.forEach((button) => { button.disabled = true; });
+  setMessage(message, "Sparar …");
   try {
     const response = await authorizedFetch(path, {
       method: "POST",
@@ -3976,6 +3320,9 @@ async function usersPost(path, body, whenOk) {
   } catch {
     setMessage(message, "Åtgärden gick inte att utföra", "error");
     return null;
+  } finally {
+    if (modal) modal.dataset.busy = "false";
+    buttons.forEach((button, index) => { button.disabled = previousDisabled[index]; });
   }
 }
 
@@ -3992,12 +3339,12 @@ async function inviteUser(event) {
       setMessage(usersEl("message"), `${name} är inbjuden. Lämna över koden.`, "success");
     },
   );
-  if (result) showSetupCode(result.user);
+  if (result) { finishModal(usersEl("invite-form")); showSetupCode(result.user); }
 }
 
 async function reissueUserCode(user) {
   const result = await usersPost("/v1/admin/users/reissue", { user_id: user.user_id });
-  if (result) showSetupCode(result.user);
+  if (result) { finishModal(document.querySelector("#user-edit-form")); showSetupCode(result.user); }
 }
 
 async function setUserRole(user, role) {
@@ -4007,16 +3354,45 @@ async function setUserRole(user, role) {
 }
 
 async function removeUser(user) {
-  // Ett borttaget konto går inte att ångra, och namnet står i frågan så att
-  // ingen råkar ta bort fel person.
-  if (!window.confirm(`Ta bort ${user.username}? Kontot går inte att återskapa.`)) return;
-  await usersPost("/v1/admin/users/delete", { user_id: user.user_id }, () => {
+  if (!document.querySelector("#user-delete-confirm").checked) return;
+  const result = await usersPost("/v1/admin/users/delete", { user_id: user.user_id }, () => {
     setMessage(usersEl("message"), `${user.username} är borttagen`, "success");
   });
+  if (result) finishModal(document.querySelector("#user-edit-form"));
+}
+
+function editUser(user) {
+  users.editing = user;
+  document.querySelector("#user-edit-name").textContent = user.username;
+  document.querySelector("#user-edit-role").value = user.role;
+  document.querySelector("#user-edit-password").value = "";
+  document.querySelector("#user-edit-password-confirm").value = "";
+  document.querySelector("#user-delete-confirm").checked = false;
+  document.querySelector("#user-edit-delete").disabled = true;
+  document.querySelector("#user-edit-reissue").hidden = !user.invitation_pending;
+  openModal("user-edit-modal");
 }
 
 function bindUsersSection() {
   usersEl("invite-form")?.addEventListener("submit", inviteUser);
+  document.querySelector("#user-edit-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const password = document.querySelector("#user-edit-password").value;
+    if (password !== document.querySelector("#user-edit-password-confirm").value) {
+      setMessage(form.querySelector(".modal-feedback"), "Lösenorden är inte likadana.", "error");
+      return;
+    }
+    const body = { user_id: users.editing.user_id };
+    const role = document.querySelector("#user-edit-role").value;
+    if (role !== users.editing.role) body.role = role;
+    if (password) body.password = password;
+    const result = await usersPost("/v1/admin/users/update", body);
+    if (result) { finishModal(form); setMessage(usersEl("message"), "Användaren är uppdaterad.", "success"); }
+  });
+  document.querySelector("#user-delete-confirm").addEventListener("change", (event) => { document.querySelector("#user-edit-delete").disabled = !event.target.checked; });
+  document.querySelector("#user-edit-delete").addEventListener("click", () => removeUser(users.editing));
+  document.querySelector("#user-edit-reissue").addEventListener("click", () => reissueUserCode(users.editing));
 }
 
 function bindV2Controls() {
@@ -4201,6 +3577,8 @@ async function pressV2Key(key) {
   // cannot turn one decision into two.
   const command = {
     protocol_version: 2,
+    // Use the snapshot the operator acted on, not a newer polled context.
+    meet_generation: tmboxV2.snapshot?.meet_generation,
     message_id: `sim-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
     action: result.command.action,
     station_id: v2El("station").value,
@@ -4547,1079 +3925,3 @@ function renderTrafficTimeline(snapshot) {
 
   host.replaceChildren(...(items.length ? items : [emptyNote("Tidtabellen är tom.")]));
 }
-
-// ================================================== BYGG › 1 Träffen (3.7)
-// Källvalet är inte en etikett. Det är serverns driftläge, som redan finns
-// sedan 1.2.0 och redan låser redigeringsvägarna:
-//
-//   TrainMeet Cloud  ↔  cloud-linked   Cloud är redaktör, redigering låst
-//   Lokalt utkast    ↔  offline-meet   servern är redaktör, redigering öppen
-//   Importerad fil                     en åtgärd, inte ett läge
-//
-// Att gå tillbaka till Cloud kastar de lokala revisionerna, och servern
-// vägrar tills man sett vad som kastas och bekräftat. Den kontrollen ligger
-// i API:t, inte här - UI:t visar bara vad servern svarar.
-
-const SOURCE_MODES = { cloud: "cloud-linked", lokal: "offline-meet" };
-
-async function refreshSourceChoice() {
-  const message = document.querySelector("#source-message");
-  try {
-    const response = await authorizedFetch("/v1/operating-mode");
-    if (!response.ok) return;
-    const state = await response.json();
-    applySourceChoice(state.mode === "cloud-linked" ? "cloud" : "lokal", state);
-  } catch {
-    if (message) setMessage(message, "Driftläget kunde inte läsas", "error");
-  }
-}
-
-function applySourceChoice(source, modeState) {
-  document.querySelectorAll(".source-card").forEach((card) => {
-    const selected = card.dataset.source === source;
-    card.classList.toggle("selected", selected);
-    card.setAttribute("aria-checked", String(selected));
-  });
-  // locked = source === "cloud" (DEL 5). Härledd, aldrig satt: den kommer ur
-  // serverns svar, så UI och server kan inte tycka olika.
-  document.body.dataset.sourceLocked = String(!modeState.editing_open);
-  updateStepSubtitles(modeState);
-}
-
-async function chooseSource(source) {
-  const message = document.querySelector("#source-message");
-  if (source === "fil") {
-    // Importen är en åtgärd, inte ett läge. Den kräver att redigering är
-    // öppen, precis som varje annan skrivväg.
-    document.querySelector("#runtime-import")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    return;
-  }
-  const mode = SOURCE_MODES[source];
-  if (!mode) return;
-  try {
-    const response = await authorizedFetch("/v1/operating-mode", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode }),
-    });
-    const payload = await response.json();
-    if (response.status === 409 && payload.code === "confirm_discard") {
-      // D4: aldrig tyst. Servern har räknat exakt vad som kastas.
-      await confirmDiscardAndSwitch(mode, message);
-      return;
-    }
-    if (!response.ok) throw new Error(payload.message || "Läget kunde inte bytas");
-    applySourceChoice(source, payload);
-    setMessage(message, "", "notice");
-  } catch (error) {
-    setMessage(message, error.message, "error");
-  }
-}
-
-async function confirmDiscardAndSwitch(mode, message) {
-  const state = await (await authorizedFetch("/v1/operating-mode")).json();
-  const preview = state.discards_on_return || { revisions: 0, rows: [] };
-  const lines = preview.rows.slice(0, 12).map((row) => `  ${row.train_number || row.id}: ${row.change}`);
-  const more = preview.rows.length > 12 ? `\n  … och ${preview.rows.length - 12} till` : "";
-  const question =
-    `${preview.revisions} lokala revisioner kastas när Clouds version gäller igen.\n\n` +
-    `${lines.join("\n")}${more}\n\nFortsätta?`;
-  if (!confirm(question)) {
-    setMessage(message, "Läget är oförändrat.", "notice");
-    return;
-  }
-  const response = await authorizedFetch("/v1/operating-mode", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mode, discard_local_revisions: true }),
-  });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || "Läget kunde inte bytas");
-  applySourceChoice("cloud", payload);
-  setMessage(message, `${preview.revisions} lokala revisioner kastades.`, "notice");
-}
-
-/** Underrubrikerna i stegräckan, ur verklig data. */
-function updateStepSubtitles(modeState) {
-  const runtime = state.runtime || {};
-  const set = (step, text) => {
-    const host = document.querySelector(`[data-step-subtitle="${step}"]`);
-    if (host) host.textContent = text || "";
-  };
-  if (modeState) {
-    const source = modeState.editing_open ? "Lokalt utkast" : "Cloud";
-    const revisions = (modeState.local_revisions || []).length;
-    set("kalla", revisions ? `${source} · ${revisions} lokala revisioner` : source);
-  }
-  // Stationer och sträckor, inte bara stationer: steg 2 handlar om banan, och
-  // en bana med stationer men utan sträckor är just det man vill se i räknaren.
-  const topology = state.topology;
-  if (topology) {
-    const parts = [plural(topology.stations.length, "station", t("stationer"))];
-    if (topology.connections.length) {
-      parts.push(plural(topology.connections.length, "sträcka", "sträckor"));
-    }
-    set("bana", parts.join(" · "));
-  } else {
-    set("bana", runtime.station_count != null ? `${runtime.station_count} stationer` : "");
-  }
-  set("tid", runtime.train_count != null ? `${runtime.train_count} rörelser` : "");
-  set("boxar", state.devices?.length != null ? `${state.devices.length} kopplade` : "");
-  const version = document.querySelector("#software-version")?.dataset;
-  set("server", version?.version ? `${version.version}${version.build ? ` · build ${version.build}` : ""}` : "");
-}
-
-document.querySelectorAll(".source-card").forEach((card) => {
-  card.addEventListener("click", () => chooseSource(card.dataset.source));
-});
-
-// --------------------------------------------------------- BYGG steg 2: Bana
-// Stationer, sträckor och A-D-paneler i ett kort (paketets 3.8). Allt ritas ur
-// /v1/build/topology, som svarar med samma form vare sig innehållet kommer
-// från en Cloud-publicering eller ett lokalt utkast.
-//
-// Läget kommer med i svaret som `locked`. Sidan räknar aldrig ut det själv -
-// en vy som gissar rätt nio gånger av tio erbjuder till slut redigering av ett
-// paket som Cloud äger.
-
-// "1 sträckor" är den sortens fel man slutar se efter en vecka och som en
-// utomstående ser direkt.
-function plural(count, one, many) {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
-const TRACK_TYPE_LABELS = { single: "Enkelspår", double: "Dubbelspår" };
-const DISPATCH_RULE_LABELS = {
-  clearance: "Begär och bekräfta",
-  direct: "Direkt",
-};
-
-function topologyField(text, locked, extraClass = "") {
-  // Ett låst fält är ingen kontroll, så det ritas inte som en. Rutan är
-  // paketets, men ett <div> kan inte fokuseras, skickas eller läsas upp som
-  // "redigerbart textfält" av en skärmläsare.
-  const field = document.createElement("div");
-  field.className = extraClass ? `topology-field ${extraClass}` : "topology-field";
-  if (locked) field.dataset.locked = "true";
-  field.textContent = text;
-  return field;
-}
-
-// Öppet läge: ett riktigt inmatningsfält. `onCommit` får det nya värdet först
-// när fältet lämnas eller Enter trycks - inte vid varje tangenttryckning, som
-// hade sparat "L", "Le", "Lek" var för sig och gjort revisionshistoriken
-// oläslig.
-function topologyInput(value, extraClass, onCommit) {
-  const field = document.createElement("input");
-  field.type = "text";
-  field.className = extraClass ? `topology-field ${extraClass}` : "topology-field";
-  field.value = value ?? "";
-  const commit = () => {
-    if (field.value === (value ?? "")) return;
-    onCommit(field.value);
-  };
-  field.addEventListener("change", commit);
-  field.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") field.blur();
-  });
-  return field;
-}
-
-function topologySelect(options, selected, extraClass, onCommit) {
-  const field = document.createElement("select");
-  field.className = extraClass ? `topology-field ${extraClass}` : "topology-field";
-  options.forEach(([value, label]) => {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = label;
-    if (value === selected) option.selected = true;
-    field.append(option);
-  });
-  field.addEventListener("change", () => onCommit(field.value));
-  return field;
-}
-
-function topologyIndex(number) {
-  const badge = document.createElement("span");
-  badge.className = "topology-index";
-  badge.textContent = String(number);
-  return badge;
-}
-
-function topologyEmpty(container, text) {
-  const note = document.createElement("p");
-  note.className = "topology-empty";
-  note.textContent = text;
-  container.append(note);
-}
-
-// Beskrivningen är härledd, inte lagrad: den säger vad som ligger framåt i
-// banan från den här stationen. Lagrad hade den kunnat bli osann i samma
-// sekund som någon ändrade en sträcka.
-function forwardDescription(station, next, connections) {
-  if (!next) return "Ändstation";
-  const link = connections.find(
-    (connection) =>
-      (connection.station_a_id === station.id && connection.station_b_id === next.id) ||
-      (connection.station_b_id === station.id && connection.station_a_id === next.id),
-  );
-  if (!link) return "Saknar sträcka framåt";
-  const track = TRACK_TYPE_LABELS[link.track_type] || "Sträcka";
-  return `${track} till ${next.name}`;
-}
-
-function renderTopologyStations(container, topology) {
-  container.replaceChildren();
-  const { stations, connections, locked } = topology;
-  if (!stations.length) {
-    topologyEmpty(container, "Inga stationer ännu.");
-    return;
-  }
-  stations.forEach((station, index) => {
-    const row = document.createElement("div");
-    row.className = "topology-row";
-    if (locked) {
-      row.append(
-        topologyIndex(station.order),
-        topologyField(station.code, locked, "signature"),
-        topologyField(station.name, locked, "grow"),
-      );
-    } else {
-      row.append(
-        topologyIndex(station.order),
-        topologyInput(station.code, "signature", (value) =>
-          editStation(station.id, "code", value.toUpperCase())),
-        topologyInput(station.name, "grow", (value) =>
-          editStation(station.id, "name", value)),
-      );
-    }
-    const note = document.createElement("span");
-    note.className = "topology-note";
-    note.textContent = forwardDescription(station, stations[index + 1], connections);
-    row.append(note);
-    container.append(row);
-  });
-}
-
-function renderTopologyConnections(container, topology, names) {
-  container.replaceChildren();
-  const { connections, locked } = topology;
-  if (!connections.length) {
-    topologyEmpty(container, "Inga sträckor ännu.");
-    return;
-  }
-  connections.forEach((connection, index) => {
-    const row = document.createElement("div");
-    row.className = "topology-row";
-    // Ärver träffens läge är inte samma sak som något av lägena - det betyder
-    // att sträckan följer det som är satt på träffen. Därför en egen text.
-    const rule = connection.dispatch_mode_override
-      ? DISPATCH_RULE_LABELS[connection.dispatch_mode_override] ||
-        connection.dispatch_mode_override
-      : "Ärver träffens läge";
-    row.append(
-      topologyIndex(index + 1),
-      topologyField(names.get(connection.station_a_id) || "–", locked, "station-pick"),
-      topologyField(names.get(connection.station_b_id) || "–", locked, "station-pick"),
-    );
-    if (locked) {
-      row.append(
-        topologyField(TRACK_TYPE_LABELS[connection.track_type] || connection.track_type, locked, "station-pick"),
-        topologyField(rule, locked, "station-pick"),
-      );
-    } else {
-      row.append(
-        topologySelect(
-          [["single", "Enkelspår"], ["double", "Dubbelspår"]],
-          connection.track_type,
-          "station-pick",
-          (value) => editConnection(connection.id, "track_type", value),
-        ),
-        // Tre val, inte två som skärmbilden visar: "Ärver träffens läge" är
-        // inte samma sak som något av lägena, och "Direkt" finns i datan.
-        // Regel 3 i uppdraget säger att funktionalitet får flyttas men inte
-        // försvinna, så valet står kvar.
-        topologySelect(
-          [["", "Ärver träffens läge"], ["clearance", "Begär och bekräfta"], ["direct", "Direkt"]],
-          connection.dispatch_mode_override || "",
-          "station-pick",
-          (value) => editConnection(connection.id, "dispatch_mode_override", value || null),
-        ),
-      );
-    }
-    container.append(row);
-  });
-}
-
-// En A-D-plats pekar på en *sträcka*, inte på en granne. Panelen sitter på en
-// station, och grannen är sträckans andra ände sedd därifrån. Att visa
-// sträckans id vore sant men obrukbart - det är grannens namn tågklareraren
-// läser på lådan.
-function slotNeighbour(panel, connectionId, connections, names) {
-  if (!connectionId) return null;
-  const link = connections.find((connection) => connection.id === connectionId);
-  if (!link) return null;
-  const other =
-    link.station_a_id === panel.station_id ? link.station_b_id : link.station_a_id;
-  return names.get(other) || other || null;
-}
-
-function renderTopologyPanels(container, topology, names) {
-  container.replaceChildren();
-  const { panels, connections, locked } = topology;
-  if (!panels.length) {
-    topologyEmpty(container, "Inga paneler ännu.");
-    return;
-  }
-  panels.forEach((panel, index) => {
-    const row = document.createElement("div");
-    row.className = "topology-row";
-    row.append(
-      topologyIndex(index + 1),
-      topologyField(names.get(panel.station_id) || "–", locked, "station-pick"),
-      locked
-        ? topologyField(panel.name, locked, "station-pick")
-        : topologyInput(panel.name, "station-pick", (value) =>
-            editPanel(panel.id, "name", value)),
-    );
-    const slots = document.createElement("div");
-    slots.className = "topology-slots";
-    ["A", "B", "C", "D"].forEach((key) => {
-      const neighbour = slotNeighbour(
-        panel,
-        panel.slots ? panel.slots[key] : null,
-        connections,
-        names,
-      );
-      const chip = document.createElement("span");
-      chip.className = "slot-chip";
-      const letter = document.createElement("b");
-      letter.textContent = key;
-      const label = document.createElement("span");
-      if (neighbour) {
-        label.textContent = neighbour;
-      } else {
-        label.textContent = "–";
-        chip.dataset.empty = "true";
-      }
-      chip.append(letter, label);
-      slots.append(chip);
-    });
-    row.append(slots);
-    container.append(row);
-  });
-}
-
-// ── BYGG steg 3, tidtabellen ────────────────────────────────────────────
-//
-// Tre saker styr den här vyn.
-//
-// Grupperingen ändrar vad man ser, aldrig vad som finns. `tid.rows` rörs inte
-// av en gruppering eller ett filter - de bygger bara en ny lista att rita ur.
-// Annars skulle en sparning efter ett filter spara det man råkade titta på.
-//
-// Redigeringen är alltid öppen, även när grundrevisionen kommer från Cloud.
-// Servern är runtime; tidtabellen är det som ändras under en träff. Det är
-// skillnaden mot steg 2, och den är avsiktlig.
-//
-// Och en träff har lätt femhundra rörelser. Raderna byggs därför i ett svep i
-// ett DocumentFragment, utan lyssnare per rad - klick fångas på tbody.
-
-const tid = {
-  rows: [],          //: Det redigerade tillståndet. Enda sanningen.
-  original: new Map(), //: Som det såg ut när vyn lästes, för ändringsmärket.
-  stations: [],
-  tracks: [],
-  revision: null,
-  group: "tid",
-  station: "",
-  search: "",
-  selected: new Set(),
-  editing: null,
-};
-
-//: Fälten som går att ändra, och hur de visas. Ordningen är kolumnernas.
-const TID_COLUMNS = [
-  { key: "train_number", label: "Tåg", edit: true, cls: "mono" },
-  { key: "days", label: "Dagar", edit: true },
-  { key: "station", label: "Station", edit: false },
-  { key: "track", label: "Spår", edit: true, cls: "mono" },
-  { key: "arrival_time", label: "Ankomst", edit: true, cls: "mono" },
-  { key: "departure_time", label: "Avgång", edit: true, cls: "mono" },
-  { key: "arrival_from", label: "Från", edit: true },
-  { key: "departure_to", label: "Till", edit: true },
-  { key: "note", label: "Anteckning", edit: true },
-];
-
-function tidEl(name) {
-  return document.querySelector(`#tid-${name}`);
-}
-
-//: Minuter sedan midnatt, eller null om tiden inte går att läsa. Används både
-//: för sortering och för att flytta tider i massredigeringen.
-function tidMinutes(value) {
-  const match = /^(\d{1,2})[:.](\d{2})$/.exec(String(value || "").trim());
-  if (!match) return null;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (hours > 23 || minutes > 59) return null;
-  return hours * 60 + minutes;
-}
-
-function tidClock(minutes) {
-  const wrapped = ((minutes % 1440) + 1440) % 1440;
-  return `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}`;
-}
-
-//: Har raden ändrats sedan den lästes? Jämför bara de fält som går att ändra -
-//: id och station_id rör vi aldrig.
-function tidChanged(row) {
-  const before = tid.original.get(row.id);
-  if (!before) return false;
-  return TID_COLUMNS.some((column) => String(row[column.key] ?? "") !== String(before[column.key] ?? ""));
-}
-
-function tidDirty() {
-  return tid.rows.some(tidChanged);
-}
-
-//: Vad som ska visas, givet filter och gruppering. Returnerar en platt lista
-//: av poster: antingen en rubrik eller en rad. Inget här ändrar tid.rows.
-function tidVisible() {
-  const needle = tid.search.trim().toLowerCase();
-  const rows = tid.rows.filter((row) => {
-    if (tid.station && row.station_id !== tid.station) return false;
-    if (!needle) return true;
-    return [row.train_number, row.track, row.note, row.arrival_from, row.departure_to, row.station]
-      .some((value) => String(value || "").toLowerCase().includes(needle));
-  });
-
-  if (tid.group === "tid") {
-    const sorted = [...rows].sort((a, b) => {
-      const left = tidMinutes(a.sort_time || a.departure_time || a.arrival_time);
-      const right = tidMinutes(b.sort_time || b.departure_time || b.arrival_time);
-      if (left === right) return String(a.train_number).localeCompare(String(b.train_number), "sv");
-      if (left === null) return 1;
-      if (right === null) return -1;
-      return left - right;
-    });
-    return sorted.map((row) => ({ row }));
-  }
-
-  const key = tid.group === "station" ? "station" : "train_number";
-  const groups = new Map();
-  for (const row of rows) {
-    const name = String(row[key] || "–");
-    if (!groups.has(name)) groups.set(name, []);
-    groups.get(name).push(row);
-  }
-  const out = [];
-  for (const name of [...groups.keys()].sort((a, b) => a.localeCompare(b, "sv", { numeric: true }))) {
-    const bucket = groups.get(name);
-    out.push({ heading: name, count: bucket.length });
-    bucket
-      .sort((a, b) => (tidMinutes(a.sort_time) ?? 9999) - (tidMinutes(b.sort_time) ?? 9999))
-      .forEach((row) => out.push({ row }));
-  }
-  return out;
-}
-
-function tidRenderRows() {
-  const body = tidEl("rows");
-  if (!body) return;
-  const items = tidVisible();
-  const fragment = document.createDocumentFragment();
-
-  for (const item of items) {
-    if (item.heading) {
-      const tr = document.createElement("tr");
-      tr.className = "tid-heading";
-      const cell = document.createElement("td");
-      cell.colSpan = TID_COLUMNS.length + 1;
-      cell.textContent = `${item.heading} · ${item.count} ${item.count === 1 ? "rad" : "rader"}`;
-      tr.append(cell);
-      fragment.append(tr);
-      continue;
-    }
-
-    const row = item.row;
-    const tr = document.createElement("tr");
-    tr.dataset.rowId = row.id;
-    if (tidChanged(row)) tr.classList.add("is-changed");
-    if (tid.selected.has(row.id)) tr.classList.add("is-picked");
-
-    const pick = document.createElement("td");
-    pick.className = "tid-pick";
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    box.checked = tid.selected.has(row.id);
-    box.setAttribute("aria-label", `Markera ${row.train_number} ${row.station}`);
-    pick.append(box);
-    tr.append(pick);
-
-    for (const column of TID_COLUMNS) {
-      const cell = document.createElement("td");
-      if (column.cls) cell.className = column.cls;
-      if (column.edit) cell.dataset.tidField = column.key;
-      cell.textContent = String(row[column.key] ?? "");
-      tr.append(cell);
-    }
-
-    if (tidChanged(row)) {
-      const chip = document.createElement("span");
-      chip.className = "tid-chip";
-      chip.textContent = "Ändrad";
-      tr.lastElementChild.append(chip);
-    }
-    fragment.append(tr);
-  }
-
-  body.replaceChildren(fragment);
-
-  const shown = items.filter((item) => item.row).length;
-  const count = tidEl("count");
-  if (count) count.textContent = `${shown} av ${tid.rows.length} rörelser`;
-  tidEl("empty")?.classList.toggle("hidden", shown > 0);
-  tidUpdateActions();
-}
-
-function tidUpdateActions() {
-  const dirty = tidDirty();
-  const save = tidEl("save");
-  if (save) save.disabled = !dirty;
-  tidEl("revert")?.classList.toggle("hidden", !dirty);
-  const bulk = tidEl("bulk");
-  bulk?.classList.toggle("hidden", tid.selected.size === 0);
-  const label = tidEl("bulk-count");
-  if (label) label.textContent = `${tid.selected.size} markerade`;
-}
-
-//: Byt en cell mot ett fält. En i taget - 499 rader gånger nio fält vore
-//: fyra tusen inmatningsrutor att bygga för ingenting.
-function tidEditCell(cell) {
-  if (tid.editing) tidCommitCell();
-  const tr = cell.closest("tr");
-  const row = tid.rows.find((item) => item.id === tr?.dataset.rowId);
-  const field = cell.dataset.tidField;
-  if (!row || !field) return;
-
-  const input = document.createElement("input");
-  input.type = "text";
-  input.value = String(row[field] ?? "");
-  input.className = "tid-input";
-  cell.replaceChildren(input);
-  input.focus();
-  input.select();
-  tid.editing = { cell, row, field };
-}
-
-function tidCommitCell() {
-  if (!tid.editing) return;
-  const { cell, row, field } = tid.editing;
-  const input = cell.querySelector("input");
-  tid.editing = null;
-  if (!input) return;
-  const value = input.value.trim();
-  row[field] = value;
-  // sort_time följer avgången när den finns, annars ankomsten. Utan det
-  // hamnar en ändrad tid på fel plats så fort vyn grupperas om.
-  if (field === "departure_time" || field === "arrival_time") {
-    row.sort_time = row.departure_time || row.arrival_time || "";
-  }
-  tidRenderRows();
-}
-
-function tidApplyBulk() {
-  const track = tidEl("bulk-track")?.value.trim() ?? "";
-  const days = tidEl("bulk-days")?.value.trim() ?? "";
-  const shift = Number(tidEl("bulk-shift")?.value ?? "");
-  let touched = 0;
-  for (const row of tid.rows) {
-    if (!tid.selected.has(row.id)) continue;
-    if (track) row.track = track;
-    if (days) row.days = days;
-    if (Number.isFinite(shift) && shift !== 0) {
-      for (const field of ["arrival_time", "departure_time"]) {
-        const minutes = tidMinutes(row[field]);
-        if (minutes !== null) row[field] = tidClock(minutes + shift);
-      }
-      row.sort_time = row.departure_time || row.arrival_time || "";
-    }
-    touched += 1;
-  }
-  setMessage(tidEl("message"), touched ? `${touched} rader ändrade` : "Inget att ändra", touched ? "ok" : "");
-  tidRenderRows();
-}
-
-async function tidSave() {
-  const message = tidEl("message");
-  const changed = tid.rows.filter(tidChanged);
-  if (!changed.length) return;
-  setMessage(message, "Sparar …", "");
-  try {
-    // Läs utkastet först. Ett utkast som skickas med bara `trains` skulle
-    // radera stationer, sträckor och paneler - butiken sparar det den får,
-    // inte en sammanslagning. Det som ändras här är tidtabellen och ingenting
-    // annat, så resten måste följa med oförändrad.
-    let current = await authorizedFetch("/v1/local-configuration");
-    if (!current.ok) {
-      setMessage(message, "Utkastet kunde inte läsas", "error");
-      return;
-    }
-    let state_ = await current.json();
-
-    // Kommer träffen från Cloud finns inget lokalt utkast att spara i, och en
-    // tidtabell vars rader pekar på stationer som inte står i utkastet vägras
-    // - med rätta. Sådden öppnar den aktiva publikationen som arbetskopia.
-    // Den kopierar, den ändrar ingenting: den aktiva träffen står orörd tills
-    // någon aktiverar en ny revision.
-    if (!(state_.draft?.stations || []).length) {
-      setMessage(message, "Öppnar träffen som arbetskopia …", "");
-      // Kroppen är tom av natur men måste finnas: servern avvisar en begäran
-      // utan innehåll innan den ens tittar på sökvägen.
-      const seeded = await authorizedFetch("/v1/local-configuration/seed", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      if (!seeded.ok) {
-        const problem = await seeded.json().catch(() => ({}));
-        setMessage(message, problem.message || "Träffen kunde inte öppnas för redigering", "error");
-        return;
-      }
-      current = await authorizedFetch("/v1/local-configuration");
-      state_ = await current.json();
-    }
-    const draft = state_.draft || {};
-
-    const response = await authorizedFetch("/v1/local-configuration", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        draft: { ...draft, trains: tid.rows },
-        expected_revision: state_.revision ?? tid.revision,
-      }),
-    });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setMessage(message, body.message || "Utkastet kunde inte sparas", "error");
-      return;
-    }
-    tid.revision = body.revision ?? tid.revision;
-    tid.original = new Map(tid.rows.map((row) => [row.id, { ...row }]));
-    setMessage(message, `${changed.length} ändrade rader sparade. Aktivera i steg 1 när du är klar.`, "success");
-    tidRenderRows();
-    refreshPendingRevision();
-  } catch {
-    setMessage(message, "Utkastet kunde inte sparas", "error");
-  }
-}
-
-async function refreshBuildTimetable() {
-  const body = tidEl("rows");
-  if (!body) return;
-  const message = tidEl("message");
-  try {
-    const response = await authorizedFetch("/v1/build/timetable");
-    if (!response.ok) {
-      setMessage(message, "Tidtabellen kunde inte läsas", "error");
-      return;
-    }
-    const payload = await response.json();
-    tid.rows = payload.rows || [];
-    tid.original = new Map(tid.rows.map((row) => [row.id, { ...row }]));
-    tid.stations = payload.stations || [];
-    tid.tracks = payload.tracks || [];
-    tid.revision = payload.revision ?? null;
-    tid.selected.clear();
-
-    const badge = tidEl("source-badge");
-    if (badge) {
-      badge.textContent = payload.base_from_cloud ? "✎ Redigerbar · grund från Cloud" : "✎ Redigerbar";
-      badge.dataset.locked = "false";
-    }
-
-    const picker = tidEl("station");
-    if (picker) {
-      const chosen = tid.station;
-      picker.replaceChildren();
-      const all = document.createElement("option");
-      all.value = "";
-      all.textContent = "Alla";
-      picker.append(all);
-      for (const station of tid.stations) {
-        const option = document.createElement("option");
-        option.value = station.id;
-        option.textContent = station.name;
-        picker.append(option);
-      }
-      picker.value = tid.stations.some((station) => station.id === chosen) ? chosen : "";
-      tid.station = picker.value;
-    }
-
-    setMessage(message, "", "");
-    tidRenderRows();
-  } catch {
-    setMessage(message, "Tidtabellen kunde inte läsas", "error");
-  }
-}
-
-function bindTimetableStep() {
-  document.querySelectorAll("[data-tid-group]").forEach((button) => {
-    button.addEventListener("click", () => {
-      tid.group = button.dataset.tidGroup;
-      document.querySelectorAll("[data-tid-group]").forEach((other) => {
-        other.classList.toggle("is-active", other === button);
-      });
-      tidRenderRows();
-    });
-  });
-
-  tidEl("station")?.addEventListener("change", (event) => {
-    tid.station = event.target.value;
-    tidRenderRows();
-  });
-  tidEl("search")?.addEventListener("input", (event) => {
-    tid.search = event.target.value;
-    tidRenderRows();
-  });
-
-  // En lyssnare på kroppen i stället för en per rad: 499 rader ska inte kosta
-  // 499 lyssnare, och raderna byts ut vid varje omritning.
-  const body = tidEl("rows");
-  body?.addEventListener("click", (event) => {
-    const box = event.target.closest('input[type="checkbox"]');
-    if (box) {
-      const id = box.closest("tr")?.dataset.rowId;
-      if (id) {
-        if (box.checked) tid.selected.add(id);
-        else tid.selected.delete(id);
-        box.closest("tr").classList.toggle("is-picked", box.checked);
-        tidUpdateActions();
-      }
-      return;
-    }
-    if (event.target.closest(".tid-input")) return;
-    const cell = event.target.closest("[data-tid-field]");
-    if (cell) tidEditCell(cell);
-  });
-  body?.addEventListener("keydown", (event) => {
-    if (!tid.editing) return;
-    if (event.key === "Enter") { event.preventDefault(); tidCommitCell(); }
-    if (event.key === "Escape") { tid.editing = null; tidRenderRows(); }
-  });
-  body?.addEventListener("focusout", (event) => {
-    if (tid.editing && event.target === tid.editing.cell.querySelector("input")) tidCommitCell();
-  });
-
-  tidEl("all")?.addEventListener("change", (event) => {
-    tid.selected.clear();
-    if (event.target.checked) {
-      tidVisible().forEach((item) => { if (item.row) tid.selected.add(item.row.id); });
-    }
-    tidRenderRows();
-  });
-  tidEl("bulk-apply")?.addEventListener("click", tidApplyBulk);
-  tidEl("bulk-clear")?.addEventListener("click", () => { tid.selected.clear(); tidRenderRows(); });
-  tidEl("save")?.addEventListener("click", tidSave);
-  tidEl("revert")?.addEventListener("click", () => {
-    tid.rows = tid.rows.map((row) => ({ ...(tid.original.get(row.id) || row) }));
-    setMessage(tidEl("message"), "Ändringarna är återställda", "");
-    tidRenderRows();
-  });
-}
-
-async function refreshBuildTopology() {
-  const message = document.querySelector("#bana-message");
-  const badge = document.querySelector("#bana-lock-badge");
-  const note = document.querySelector("#bana-lock-note");
-  const stations = document.querySelector("#bana-stations");
-  const connections = document.querySelector("#bana-connections");
-  const panels = document.querySelector("#bana-panels");
-  if (!stations || !connections || !panels) return;
-
-  try {
-    const response = await authorizedFetch("/v1/build/topology");
-    if (!response.ok) {
-      if (message) setMessage(message, "Banan kunde inte läsas", "error");
-      return;
-    }
-    const topology = await response.json();
-    state.topology = topology;
-    const names = new Map(topology.stations.map((station) => [station.id, station.name]));
-
-    if (badge) {
-      badge.textContent = topology.locked ? "🔒 Låst av Cloud" : "✎ Redigerbar";
-      badge.dataset.locked = String(Boolean(topology.locked));
-    }
-    if (note) {
-      note.classList.toggle("hidden", !topology.locked);
-      note.textContent = topology.locked
-        ? "Banan kommer från TrainMeet Cloud, där den tolkats ur träffens underlag och granskats. " +
-          "Servern visar den men ändrar den inte. Byt källa i steg 1 om den ska redigeras här."
-        : "";
-    }
-    if (message) setMessage(message, "", "");
-
-    renderTopologyStations(stations, topology);
-    renderTopologyConnections(connections, topology, names);
-    renderTopologyPanels(panels, topology, names);
-    updateStepSubtitles(null);
-
-    // Genvägen visas bara när den kan göra något: läget är öppet och det finns
-    // stationer att härleda ur. Sådden visas bara när det inte finns några.
-    const shortcut = document.querySelector("#bana-shortcut");
-    const seed = document.querySelector("#bana-seed");
-    const hasStations = topology.stations.length > 0;
-    if (shortcut) shortcut.classList.toggle("hidden", topology.locked || !hasStations);
-    if (seed) seed.classList.toggle("hidden", topology.locked || hasStations);
-  } catch {
-    if (message) setMessage(message, "Banan kunde inte läsas", "error");
-  }
-}
-
-// ------------------------------------------- Väntande Cloud-revision (T4)
-// Pollern hämtar men aktiverar inte. Det här är vyn som gör beslutet möjligt:
-// vad som väntar, och vad ett ja skulle ersätta. Listan ligger i kortet och
-// inte bakom en länk - det som kräver ett extra klick blir inte läst.
-
-function pendingChange(label, text, kind = "change") {
-  const row = document.createElement("div");
-  row.className = "pending-change";
-  row.dataset.kind = kind;
-  const name = document.createElement("b");
-  name.textContent = label;
-  const detail = document.createElement("span");
-  detail.textContent = text;
-  row.append(name, detail);
-  return row;
-}
-
-// "och 3 till" i stället för att klippa listan tyst. En avkortad lista som
-// inte säger att den är avkortad läses som fullständig.
-function namedList(group) {
-  if (!group || !group.count) return "";
-  const names = group.names.join(", ");
-  return group.more ? `${names} och ${group.more} till` : names;
-}
-
-function renderPendingChanges(container, changes) {
-  container.replaceChildren();
-  if (!changes) return;
-  if (changes.first_activation) {
-    container.append(
-      pendingChange("Första", "Ingen träff är aktiv, så ingenting skrivs över.", "none"),
-    );
-    return;
-  }
-
-  const rows = [];
-  const stations = changes.stations || {};
-  if (stations.added?.count) rows.push(["Nya stationer", namedList(stations.added)]);
-  if (stations.removed?.count) rows.push(["Borttagna", namedList(stations.removed)]);
-  if (stations.renamed?.count) rows.push(["Omdöpta", namedList(stations.renamed)]);
-
-  const links = changes.connections || {};
-  if (links.added) rows.push(["Nya sträckor", plural(links.added, "sträcka", "sträckor")]);
-  if (links.removed) rows.push(["Borttagna sträckor", plural(links.removed, "sträcka", "sträckor")]);
-
-  const timetable = changes.timetable || {};
-  if (timetable.changed?.count) {
-    rows.push([
-      "Ändrade tider",
-      `tåg ${namedList(timetable.changed)}`,
-    ]);
-  }
-  if (timetable.added) rows.push(["Nya rörelser", String(timetable.added)]);
-  if (timetable.removed) rows.push(["Borttagna rörelser", String(timetable.removed)]);
-
-  if (!rows.length) {
-    container.append(
-      pendingChange("Inget synligt", "Samma stationer, sträckor och tider som nu.", "none"),
-    );
-    return;
-  }
-  rows.forEach(([label, text]) => container.append(pendingChange(label, text)));
-}
-
-async function refreshPendingRevision() {
-  const card = document.querySelector("#pending-revision");
-  if (!card) return;
-  try {
-    const response = await authorizedFetch("/v1/runtime/pending");
-    if (!response.ok) return;
-    const state = await response.json();
-    card.classList.toggle("hidden", !state.pending);
-    if (!state.pending) {
-      state.publication_id = null;
-      card.dataset.publicationId = "";
-      return;
-    }
-    card.dataset.publicationId = state.publication_id;
-    const id = document.querySelector("#pending-id");
-    if (id) id.textContent = state.publication_id;
-    const detail = document.querySelector("#pending-detail");
-    if (detail) {
-      const revisions = (state.local_revisions || []).length;
-      detail.textContent = revisions
-        ? `Träffen kör vidare tills du aktiverar. ${plural(revisions, "lokal revision", "lokala revisioner")} skrivs över.`
-        : "Träffen kör vidare på den aktiva versionen tills du aktiverar.";
-    }
-    renderPendingChanges(document.querySelector("#pending-changes"), state.changes);
-  } catch {
-    // Tyst: kortet är en upplysning, inte en åtgärd. Ett felmeddelande här
-    // skulle skrika om nätet varje gång steg 1 öppnas.
-  }
-}
-
-async function activatePendingRevision() {
-  const card = document.querySelector("#pending-revision");
-  const message = document.querySelector("#pending-message");
-  const button = document.querySelector("#activate-pending");
-  if (!card || !card.dataset.publicationId) return;
-  if (button) button.disabled = true;
-  try {
-    // Id:t skickas tillbaka med flit. En flik som stått öppen sedan i morse
-    // ska inte kunna aktivera något som kommit sedan dess.
-    const response = await authorizedFetch("/v1/runtime/pending/activate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ publication_id: card.dataset.publicationId }),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setMessage(message, result.message || "Aktiveringen gick inte igenom", "error");
-      await refreshPendingRevision();
-      return;
-    }
-    setMessage(message, "Den nya versionen är aktiv", "success");
-    await refreshPendingRevision();
-    await refreshRuntime();
-  } catch {
-    setMessage(message, "Aktiveringen gick inte igenom", "error");
-  } finally {
-    if (button) button.disabled = false;
-  }
-}
-
-document.querySelector("#activate-pending")?.addEventListener("click", activatePendingRevision);
-
-// --------------------------------------- BYGG steg 2, redigering av utkastet
-// Varje ändring går via utkastet i sin helhet: hämta, ändra ett fält, spara.
-// Servern äger revisionsnumret, så en flik som stått öppen sedan i morse får
-// en konflikt i stället för att skriva över någon annans arbete.
-
-async function withDraft(change) {
-  const message = document.querySelector("#bana-message");
-  try {
-    const read = await authorizedFetch("/v1/local-configuration");
-    if (!read.ok) {
-      setMessage(message, "Utkastet kunde inte läsas", "error");
-      return;
-    }
-    const current = await read.json();
-    const draft = current.draft || {};
-    if (!change(draft)) return;
-
-    const saved = await authorizedFetch("/v1/local-configuration", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ draft, expected_revision: current.revision }),
-    });
-    const result = await saved.json().catch(() => ({}));
-    if (!saved.ok) {
-      setMessage(message, result.message || "Ändringen sparades inte", "error");
-      await refreshBuildTopology();
-      return;
-    }
-    // Omritningen nollar meddelanderaden, så kvittensen sätts efter den -
-    // annars skrivs "Sparat" och raderas i samma andetag.
-    await refreshBuildTopology();
-    setMessage(message, t("Sparat"), "success");
-  } catch {
-    setMessage(message, "Ändringen sparades inte", "error");
-  }
-}
-
-function editStation(id, field, value) {
-  return withDraft((draft) => {
-    const station = (draft.stations || []).find((row) => String(row.id) === String(id));
-    if (!station || station[field] === value) return false;
-    station[field] = value;
-    return true;
-  });
-}
-
-function editConnection(id, field, value) {
-  return withDraft((draft) => {
-    const link = (draft.connections || []).find((row) => String(row.id) === String(id));
-    if (!link || link[field] === value) return false;
-    link[field] = value;
-    return true;
-  });
-}
-
-function editPanel(id, field, value) {
-  return withDraft((draft) => {
-    const panel = (draft.panels || []).find((row) => String(row.id) === String(id));
-    if (!panel || panel[field] === value) return false;
-    panel[field] = value;
-    return true;
-  });
-}
-
-// Genvägen. Servern gör själva härledningen, så webbläsaren inte får en egen
-// uppfattning om hur en A-D-panel ska fyllas i - två sanningar om det vore
-// värre än ingen genväg alls.
-async function buildFromStationOrder() {
-  const message = document.querySelector("#bana-message");
-  const button = document.querySelector("#build-from-order");
-  if (button) button.disabled = true;
-  try {
-    const response = await authorizedFetch("/v1/local-configuration/build", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setMessage(message, result.message || "Genvägen kunde inte köras", "error");
-      return;
-    }
-    await refreshBuildTopology();
-    setMessage(message, "Sträckor och paneler byggda ur stationsordningen", "success");
-  } catch {
-    setMessage(message, "Genvägen kunde inte köras", "error");
-  } finally {
-    if (button) button.disabled = false;
-  }
-}
-
-// Sådden. Utan den har det lokala läget ingenting att redigera: utkastet är
-// tomt tills någon kopierat den aktiva träffen till det.
-async function seedFromActive() {
-  const message = document.querySelector("#bana-message");
-  const button = document.querySelector("#seed-from-active");
-  if (button) button.disabled = true;
-  try {
-    const response = await authorizedFetch("/v1/local-configuration/seed", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setMessage(message, result.message || "Kopieringen gick inte igenom", "error");
-      return;
-    }
-    await refreshBuildTopology();
-    setMessage(message, "Utkastet är en kopia av den aktiva träffen", "success");
-  } catch {
-    setMessage(message, "Kopieringen gick inte igenom", "error");
-  } finally {
-    if (button) button.disabled = false;
-  }
-}
-
-document.querySelector("#build-from-order")?.addEventListener("click", buildFromStationOrder);
-document.querySelector("#seed-from-active")?.addEventListener("click", seedFromActive);

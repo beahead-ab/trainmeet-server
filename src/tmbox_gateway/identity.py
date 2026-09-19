@@ -606,6 +606,20 @@ class IdentityStore:
                 (client_id,),
             )
 
+    def clear_meet_assignments(self) -> None:
+        """Keep accounts, tokens and hardware IDs, but retire meet-scoped grants."""
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute("DELETE FROM client_panels")
+                self._connection.execute("UPDATE clients SET station_id = NULL")
+                # Previously issued panel grants must not rebind a new meet.
+                self._connection.execute("DELETE FROM pairing_codes")
+                self._connection.execute("COMMIT")
+            except Exception:
+                self._connection.execute("ROLLBACK")
+                raise
+
     def reconcile_panels(self, valid_panel_ids: set[str]) -> None:
         """Keep physical assignments that still exist and grant admins all active panels."""
         ordered_panels = sorted(valid_panel_ids)

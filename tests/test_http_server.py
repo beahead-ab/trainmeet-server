@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from html.parser import HTMLParser
 import tempfile
 import threading
@@ -21,7 +22,7 @@ from tmbox_gateway.http_server import (
 )
 from tmbox_gateway.identity import DeviceKind, IdentityStore, PairingService
 from tmbox_gateway.local_config import SQLiteLocalConfigurationStore
-from tmbox_gateway.models import DispatchMode
+from tmbox_gateway.models import DispatchMode, unconfigured_session
 from tmbox_gateway.operations import SQLiteOperationsStore
 from tmbox_gateway.runtime import SQLiteRuntimeStore
 from runtime_fixture import runtime_package, runtime_package_v3
@@ -78,7 +79,14 @@ class HTTPServerTests(unittest.TestCase):
         self.local_configuration_store = SQLiteLocalConfigurationStore(
             Path(self.temporary_directory.name) / "runtime.db"
         )
-        self.engine = TrafficEngine(sample_session(DispatchMode.CLEARANCE))
+        # Bootstrap the same published meet in storage and the engine, as the
+        # installed server does. The first-start test intentionally has neither.
+        initial = None if self._testMethodName == "test_clean_server_runs_the_complete_first_start_flow" else self.runtime_store.install(
+            runtime_package_v3(publication_id="fixture-initial")
+        )
+        if initial:
+            self.operations_store.ensure_publication(initial)
+        self.engine = TrafficEngine(initial.session_config() if initial else unconfigured_session())
         pairing = PairingService(
             self.identities,
             set(self.engine.config.panels),
@@ -95,7 +103,7 @@ class HTTPServerTests(unittest.TestCase):
             runtime_store=self.runtime_store,
             local_configuration_store=self.local_configuration_store,
             runtime_fetcher=lambda code, _url: (
-                runtime_package()
+                CentralRuntimeDownload(package=runtime_package(), link_token="central-test-link")
                 if "".join(character for character in code if character.isdigit()) == "654321"
                 else (_ for _ in ()).throw(ValueError("unexpected sync code"))
             ),
@@ -112,6 +120,7 @@ class HTTPServerTests(unittest.TestCase):
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=5)
+        self.application.lifecycle.close()
         self.identities.close()
         self.runtime_store.close()
         self.operations_store.close()
@@ -127,21 +136,20 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="overview-topology"', html)
         self.assertIn('id="overview-route-list"', html)
         self.assertIn("TÅGRUTTER", html)
-        # Den gamla sidopanelen ("Administration och funktioner") och
-        # Den äldre TMBox-simuleringen finns inte längre; gränssnittet ersätter tolv
-        # menypunkter med två lägen, och tar bort simuleringen eftersom v2
-        # räcker. Skalet kontrolleras därför mot den nya strukturen.
-        self.assertIn('id="run-tabs"', html)
-        self.assertIn('data-run-tab="trafik"', html)
-        self.assertIn('id="build-sidebar"', html)
-        self.assertIn('data-build-step="kalla"', html)
+        self.assertIn('id="workspace-picker"', html)
+        self.assertIn('id="application-menu"', html)
+        self.assertIn('id="overview-clock-start"', html)
+        self.assertIn('id="overview-clock-stop"', html)
+        self.assertNotIn('id="build-sidebar"', html)
+        self.assertNotIn('data-build-step=', html)
         self.assertNotIn('id="simulator-view"', html)
-        self.assertIn("AKTIV RUNTIME", html)
-        self.assertIn("Aktiva sträckor", html)
-        self.assertIn('id="copy-active-runtime"', html)
-        self.assertIn('id="runtime-import"', html)
-        self.assertIn('id="runtime-import-file"', html)
-        self.assertIn("Nytt lokalt utkast", html)
+        self.assertIn('id="overview-route-list"', html)
+        self.assertIn('id="cloud-version-state"', html)
+        self.assertIn('id="runtime-check-update"', html)
+        self.assertIn('id="runtime-sync-form-modal"', html)
+        self.assertNotIn('id="runtime-import"', html)
+        self.assertNotIn('id="runtime-import-file"', html)
+        self.assertNotIn("Nytt lokalt utkast", html)
         self.assertIn('id="overview-graph"', html)
         self.assertIn('<h2><tm-text data-tm-text="Inloggning">Inloggning</tm-text></h2>', html)
         self.assertIn('data-language-picker', html)
@@ -231,6 +239,7 @@ class HTTPServerTests(unittest.TestCase):
 
     def test_legacy_default_configuration_url_is_migrated_to_cloud(self):
         self.runtime_store.save_central_url("https://trainmeet.app/konfig")
+        self.application.lifecycle.close()
         self.application = TrainMeetHTTPApplication(
             self.engine,
             self.identities,
@@ -245,7 +254,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(DEFAULT_RUNTIME_PUBLICATION_URL, self.application.runtime_summary(self.application.local_admin())["central_url"])
 
     def test_public_display_exposes_runtime_clock_services_and_live_state(self):
-        publication = self.runtime_store.install(runtime_package_v3())
+        publication = self._select_package(runtime_package_v3())
         self.operations_store.ensure_publication(publication)
 
         display = self._json_request("/v1/display")
@@ -264,7 +273,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertTrue(started["time"].startswith("10:30:"))
 
     def test_a_track_outside_the_catalogue_is_refused(self):
-        publication = self.runtime_store.install(runtime_package_v3())
+        publication = self._select_package(runtime_package_v3())
         self.operations_store.ensure_publication(publication)
         client = self.application.local_admin()
         self.application.start_tkl_shift(
@@ -291,7 +300,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(refused.exception.code, "unknown_track")
 
     def test_tkl_context_persists_shift_and_train_progress(self):
-        publication = self.runtime_store.install(runtime_package_v3())
+        publication = self._select_package(runtime_package_v3())
         self.operations_store.ensure_publication(publication)
         client = self.application.local_admin()
 
@@ -337,7 +346,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(finished["shift"]["status"], "closed")
 
     def test_line_available_is_never_answered_like_a_clearance(self):
-        publication = self.runtime_store.install(runtime_package_v3())
+        publication = self._select_package(runtime_package_v3())
         self.operations_store.ensure_publication(publication)
         client = self.application.local_admin()
         self.application.start_tkl_shift(
@@ -431,53 +440,55 @@ class HTTPServerTests(unittest.TestCase):
         )
         self.assertEqual(arrived["connection"]["state"], "free")
 
-    def test_linked_runtime_update_is_downloaded_before_activation(self):
-        self.runtime_store.install(runtime_package_v3(publication_id="publication-v2-first"))
-        self.runtime_store.save_link_token("central-test-link")
-
+    def test_linked_runtime_update_safely_adopts_without_a_second_activation_step(self):
+        self._select_package(runtime_package_v3(publication_id="publication-v2-first"))
         manifest = self._json_request("/v1/runtime/update")
         self.assertTrue(manifest["update_available"])
         self.assertEqual(manifest["publication_id"], "publication-v2-second")
 
-        downloaded = self._json_request("/v1/runtime/update", {}, expected_status=201)
-        self.assertEqual(downloaded["downloaded_publication_id"], "publication-v2-second")
-        self.assertEqual(self.runtime_store.active().publication_id, "publication-v2-first")
+        checked = self._json_request("/v1/runtime/update", {})
+        self.assertFalse(checked["pending"])
+        self.assertEqual(self.runtime_store.active().publication_id, "publication-v2-second")
+        self.assertEqual(self.application.lifecycle.selected()["publication_id"], "publication-v2-second")
+        self.assertEqual(self.engine.config.id, self.runtime_store.active().session_config().id)
+        self.assertFalse(self.operations_store.clock_status()["running"])
 
-        activated = self._json_request(
-            "/v1/runtime/activate",
-            {"publication_id": "publication-v2-second"},
-            expected_status=201,
-        )
-        self.assertEqual(activated["publication_id"], "publication-v2-second")
+        # Legacy activation URLs use the same safe pipeline, never a bypass.
+        again = self._json_request("/v1/runtime/activate", {"publication_id": "publication-v2-second"})
+        self.assertFalse(again["pending"])
         self.assertEqual(self.runtime_store.active().publication_id, "publication-v2-second")
 
-    def test_admin_can_enable_realtime_cloud_config_updates(self):
-        """Auto-sync fetches. It does not decide.
-
-        This test used to assert that polling made the new publication active.
-        That was the behaviour, and it was the bug: fifteen seconds after Cloud
-        published, the running meet changed under whoever was dispatching it.
-        The fetch is still automatic; only the taking-effect is not.
-        """
-        self.runtime_store.install(runtime_package_v3(publication_id="publication-v2-first"))
-        self.runtime_store.save_link_token("central-test-link")
+    def test_automatic_cloud_check_adopts_safe_updates_without_stopping_the_clock(self):
+        self._select_package(runtime_package_v3(publication_id="publication-v2-first"))
         client = self.application.local_admin()
-
+        self._json_request("/v1/clock", {"action": "start", "time": "10:30:00", "speed": 2})
         setting = self.application.configure_cloud_auto_sync(client, {"enabled": True})
         result = self.application.auto_sync_cloud_runtime()
 
         self.assertTrue(setting["enabled"])
-        self.assertTrue(result["pending"])
-        self.assertNotIn("updated", result)
-        self.assertEqual("publication-v2-first", self.runtime_store.active().publication_id)
-        self.assertEqual(
-            "publication-v2-second", self.runtime_store.pending_publication().publication_id
-        )
+        self.assertFalse(result["pending"])
+        self.assertEqual("publication-v2-second", self.runtime_store.active().publication_id)
+        self.assertIsNone(self.runtime_store.pending_publication())
+        self.assertTrue(self.operations_store.clock_status()["running"])
+        self.assertEqual(self.operations_store.clock_status()["speed"], 2)
         self.assertTrue(self.application.runtime_summary(client)["cloud_auto_sync"])
 
+    def test_automatic_cloud_check_waits_for_clearance_to_finish(self):
+        self._select_package(runtime_package_v3(publication_id="publication-v2-first"))
+        client = self.application.local_admin()
+        self.application.start_tkl_shift(client, {"station_id": "station-a", "operator_name": "Anna", "terminal_name": "CDA"})
+        self.application.tkl_clearance_action(client, {"station_id": "station-a", "connection_id": "connection-a-b", "train_number": "101", "action": "request"})
+
+        result = self.application.auto_sync_cloud_runtime()
+        self.assertTrue(result["pending"])
+        self.assertEqual("publication-v2-first", self.runtime_store.active().publication_id)
+        self.assertEqual("publication-v2-first", self.application.lifecycle.selected()["publication_id"])
+        self.assertEqual("publication-v2-second", self.runtime_store.pending_publication().publication_id)
+        self.assertEqual(self.application.display_snapshot()["connection_states"][0]["state"], "requested")
+
     def test_local_admin_opens_directly_and_external_admin_uses_login_cookie(self):
-        local = self._json_request("/v1/local-configuration")
-        self.assertIn("draft", local)
+        local = self._json_request("/v1/server-context")
+        self.assertEqual(local["selected_meet"]["publication_id"], "fixture-initial")
 
         access = self._json_request(
             "/v1/admin/access",
@@ -495,7 +506,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(status["access_mode"], "external")
 
         with self.assertRaises(HTTPError) as denied:
-            self._json_request("/v1/local-configuration")
+            self._json_request("/v1/server-context")
         self.assertEqual(denied.exception.code, 401)
 
         with self.assertRaises(HTTPError) as invalid:
@@ -628,7 +639,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(after["devices"][0]["station_id"], "station-a")
 
     def test_a_station_assigned_box_reaches_its_own_station_only(self):
-        publication = self.runtime_store.install(runtime_package_v3())
+        publication = self._select_package(runtime_package_v3())
         self.operations_store.ensure_publication(publication)
         self.identities.record_discovery("TMBOX-STATION", "TMBOX-STATION")
         box = self.identities.assign_discovered_device(
@@ -672,7 +683,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(assigned["device_id"], "esp32-real-box")
         self.assertEqual(assigned["assigned_panel_ids"], ["panel-b"])
 
-    def test_admin_installs_runtime_and_clients_read_station_timetable(self):
+    def test_admin_downloads_cloud_runtime_and_clients_read_station_timetable(self):
         paired = self._json_request(
             "/v1/pair",
             {
@@ -686,14 +697,15 @@ class HTTPServerTests(unittest.TestCase):
         token = paired["access_token"]
 
         installed = self._json_request(
-            "/v1/runtime/install",
-            {"package": runtime_package()},
+            "/v1/runtime/sync",
+            {"sync_code": "654321"},
             token=token,
             expected_status=201,
         )
         self.assertTrue(installed["configured"])
         self.assertEqual(installed["publication_id"], "publication-2026-08-11-a")
-        self.assertTrue(installed["restart_required"])
+        self.assertFalse(installed.get("restart_required", False))
+        self.assertEqual(self.application.lifecycle.selected()["publication_id"], installed["publication_id"])
 
         timetable = self._json_request(
             "/v1/timetable?station_id=station-a",
@@ -703,7 +715,7 @@ class HTTPServerTests(unittest.TestCase):
 
         self._json_request(
             "/v1/runtime/active-day",
-            {"active_day": "Sön"},
+            {"active_day": "Sön", "meet_generation": self.application.lifecycle.selected()["generation"]},
             token=token,
         )
         sunday = self._json_request(
@@ -723,7 +735,8 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(validation["counts"]["stations"], 2)
         self.assertEqual(validation["counts"]["services"], 2)
         self.assertEqual(validation["stations"][0]["code"], "CDA")
-        self.assertFalse(self.runtime_store.summary()["configured"])
+        self.assertEqual(self.runtime_store.active().publication_id, "fixture-initial")
+        self.assertEqual(self.application.lifecycle.selected()["publication_id"], "fixture-initial")
 
     def test_admin_syncs_published_runtime_with_six_digit_code(self):
         paired = self._json_request(
@@ -736,96 +749,36 @@ class HTTPServerTests(unittest.TestCase):
             },
             expected_status=201,
         )
-        synced = self._json_request(
-            "/v1/runtime/sync",
-            {"sync_code": "654 321"},
-            token=paired["access_token"],
-            expected_status=201,
-        )
-        self.assertEqual(synced["meet_name"], "Sommarträffen")
-        self.assertTrue(synced["restart_required"])
+        for formatted_code in ("654 321", "654-321"):
+            with self.subTest(code=formatted_code):
+                synced = self._json_request(
+                    "/v1/runtime/sync",
+                    {"sync_code": formatted_code},
+                    token=paired["access_token"],
+                    expected_status=201,
+                )
+                self.assertEqual(synced["meet_name"], "Sommarträffen")
+                self.assertFalse(synced.get("restart_required", False))
+                self.assertEqual(self.application.lifecycle.selected()["publication_id"], synced["publication_id"])
 
-    def test_admin_saves_and_activates_a_local_station_configuration(self):
-        paired = self._json_request(
-            "/v1/pair",
-            {
-                "pairing_code": self.pairing_code,
-                "client_id": "local-config-admin",
-                "display_name": "Lokal admin",
-                "device_kind": "web_admin",
-            },
-            expected_status=201,
-        )
-        token = paired["access_token"]
-        configuration = {
-            "schema_version": 1,
-            "id": "lokal-hosttraff",
-            "name": "Lokal höstträff",
-            "timezone": "Europe/Stockholm",
-            "active_day": "Lör",
-            "default_dispatch_mode": "clearance",
-            "clock_time": "09:15",
-            "stations": [
-                {"id": "station-a", "code": "CDA", "name": "Charlottendahl"},
-                {"id": "station-b", "code": "LEK", "name": "Lekeberg"},
-            ],
-            "connections": [
-                {
-                    "id": "connection-a-b",
-                    "station_a_id": "station-a",
-                    "station_b_id": "station-b",
-                    "track_type": "double",
-                    "dispatch_mode_override": None,
-                    "display_side_a": "right",
-                    "display_side_b": "left",
-                    "display_order_a": 0,
-                    "display_order_b": 0,
-                }
-            ],
-            "panels": [
-                {
-                    "id": "panel-a",
-                    "station_id": "station-a",
-                    "name": "CDA TMBox",
-                    "slots": {"A": "connection-a-b", "B": None, "C": None, "D": None},
-                },
-                {
-                    "id": "panel-b",
-                    "station_id": "station-b",
-                    "name": "LEK TMBox",
-                    "slots": {"A": "connection-a-b", "B": None, "C": None, "D": None},
-                },
-            ],
-        }
-
-        empty = self._json_request("/v1/local-configuration", token=token)
-        self.assertFalse(empty["configured"])
-
-        saved = self._json_request(
-            "/v1/local-configuration",
-            {"expected_revision": 0, "draft": configuration},
-            token=token,
-        )
-        self.assertEqual(saved["revision"], 1)
-        self.assertEqual(saved["draft"]["stations"][0]["code"], "CDA")
-
-        activated = self._json_request(
-            "/v1/local-configuration/activate",
-            {"expected_revision": 1},
-            token=token,
-            expected_status=201,
-        )
-        self.assertEqual(activated["source"], "local")
-        self.assertEqual(activated["meet_name"], "Lokal höstträff")
-        self.assertTrue(activated["restart_required"])
-
-        with self.assertRaises(HTTPError) as stale:
-            self._json_request(
-                "/v1/local-configuration",
-                {"expected_revision": 0, "draft": configuration},
-                token=token,
-            )
-        self.assertEqual(stale.exception.code, 409)
+    def test_local_authoring_endpoints_are_gone_and_cannot_change_selected_meet(self):
+        before = self.application.lifecycle.selected()
+        active = self.runtime_store.active()
+        for path, payload in (
+            ("/v1/local-configuration", None),
+            ("/v1/local-configuration", {"expected_revision": 0, "draft": {"name": "Local replacement"}}),
+            ("/v1/local-configuration/activate", {"expected_revision": 1}),
+            ("/v1/runtime/install", {"package": runtime_package()}),
+            ("/v1/operating-mode", {"mode": "build"}),
+        ):
+            with self.subTest(path=path, payload=payload):
+                with self.assertRaises(HTTPError) as refused:
+                    self._json_request(path, payload)
+                self.assertEqual(refused.exception.code, 410)
+                self.assertEqual(json.load(refused.exception)["error"], "cloud_authoring_only")
+        self.assertEqual(self.application.lifecycle.selected(), before)
+        self.assertEqual(self.runtime_store.active().publication_id, active.publication_id)
+        self.assertEqual(self.engine.config.id, active.session_config().id)
 
     def test_admin_can_request_a_supervised_server_restart(self):
         paired = self._json_request(
@@ -938,8 +891,22 @@ class HTTPServerTests(unittest.TestCase):
             self._json_request("/v1/cloud/changes", {})
         self.assertEqual(404, refused.exception.code)
 
+    def _select_package(self, package):
+        """Exercise the real Cloud boundary instead of bypassing lifecycle storage."""
+        previous_fetcher = self.application.runtime_fetcher
+        self.application.runtime_fetcher = lambda _code, _url: CentralRuntimeDownload(
+            package=package, link_token="central-test-link",
+        )
+        try:
+            result = self._json_request("/v1/runtime/sync", {"sync_code": "654321"}, expected_status=201)
+            self.assertFalse(result.get("pending", False))
+            self.assertEqual(self.application.lifecycle.selected()["publication_id"], package["publication_id"])
+            return self.runtime_store.active()
+        finally:
+            self.application.runtime_fetcher = previous_fetcher
+
     def _tkl_client_on_station_a(self, package):
-        publication = self.runtime_store.install(package)
+        publication = self._select_package(package)
         self.operations_store.ensure_publication(publication)
         client = self.application.local_admin()
         self.application.start_tkl_shift(
@@ -1031,7 +998,7 @@ class HTTPServerTests(unittest.TestCase):
             return CentralRuntimeManifest(
                 publication_id=package["publication_id"],
                 published_at=package["published_at"],
-                package_checksum="fixture-checksum",
+                package_checksum=hashlib.sha256(json.dumps(package, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(),
             )
         return CentralRuntimeDownload(package=package, link_token=token)
 
@@ -1065,6 +1032,7 @@ class ConnectionBadgeTests(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=5)
         self.identities.close()
+        self.application.lifecycle.close()
         self.runtime_store.close()
         self.temporary_directory.cleanup()
 

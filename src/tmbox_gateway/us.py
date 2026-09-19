@@ -18,6 +18,7 @@ from typing import Any
 from uuid import uuid4
 
 from .us_clock import clock_settings, clock_status
+from .lifecycle import us_meet_id
 
 PROFILE = "tm-us-twc-manual-v1"
 SCHEMA = "trainmeet.us.runtime/1"
@@ -286,6 +287,117 @@ class USStore:
             raise USError("US session not found", 404)
         return json.loads(row[0])
 
+    def current_session(self) -> dict | None:
+        """Unfiltered internal state for the shared lifecycle, never a public API."""
+        with self.lock:
+            row = self.db.execute("SELECT session_id FROM us_current WHERE singleton=1").fetchone()
+            return self._load(row[0]) if row else None
+
+    def deactivate(self) -> None:
+        """Archive the current pointer after an explicit, guarded meet switch."""
+        with self.lock:
+            self.db.execute("DELETE FROM us_current WHERE singleton=1")
+
+    @staticmethod
+    def _update_blockers(state: dict | None, package: dict) -> list[str]:
+        if state is None:
+            return ["No US operating session is selected."]
+        previous = state["package"]
+        if us_meet_id(previous) != us_meet_id(package):
+            return ["A different meet requires an explicit confirmed meet switch."]
+        reasons = []
+        # Diagram placement is presentation, unlike MP values, endpoints, names
+        # and conflict resources used to interpret an issued track warrant.
+        def infrastructure(value):
+            return {key: sorted(({k: v for k, v in row.items() if key != "nodes" or k not in {"x", "y"}}
+                                for row in value[key]), key=lambda row: row["id"])
+                    for key in ("territories", "nodes", "segments")}
+        changed_infrastructure = infrastructure(previous) != infrastructure(package)
+        outstanding = [w for w in state["warrants"] if w["status"] not in TERMINAL]
+        if changed_infrastructure and outstanding:
+            reasons.append("Waiting for outstanding track warrants to be closed or voided before changing infrastructure.")
+        if changed_infrastructure and any(r.get("position") for r in state["runs"]):
+            reasons.append("Infrastructure changes affect reported train positions; start a new operating session after traffic is complete.")
+        old_plans = indexed(previous["runs"], "runs")
+        new_plans = indexed(package["runs"], "runs")
+        for run in state["runs"]:
+            planned_id = run.get("planned_id")
+            if not planned_id:
+                continue  # Extra trains are runtime data, not Cloud config.
+            plan = new_plans.get(planned_id)
+            has_records = (run.get("conductor_id") or run.get("position") or run.get("ready")
+                           or any(w["run_id"] == run["id"] for w in state["warrants"])
+                           or any(r["run_id"] == run["id"] for r in state["reports"]))
+            if plan is None and has_records:
+                reasons.append(f"Train {run['symbol']} has operating records or an assigned conductor and cannot be removed automatically.")
+                continue
+            old_plan = old_plans.get(planned_id, {})
+            if plan and plan != old_plan and any(w["run_id"] == run["id"] for w in outstanding):
+                reasons.append(f"Waiting for outstanding track warrants for {run['symbol']} before changing its plan.")
+            identity_fields = ("symbol", "railroad", "direction")
+            if plan and has_records and any(plan.get(key) != old_plan.get(key) for key in identity_fields):
+                reasons.append(f"Train {run['symbol']} has operating records; its identity and direction must remain unchanged.")
+        return list(dict.fromkeys(reasons))
+
+    def config_update_blockers(self, value: dict) -> list[str]:
+        package = validate_package(value)
+        with self.lock:
+            return self._update_blockers(self.current_session(), package)
+
+    def adopt_package(self, value: dict, *, expected_revision: int | None = None,
+                      actor: str = "cloud-sync") -> dict:
+        """Adopt config into the same session; retain warrants, run IDs and clock.
+
+        All checks and the update share one SQLite write transaction. Parent must
+        also hold the cross-engine lifecycle lock and transition marker. Candidate
+        publication is saved separately before calling; a download alone does not
+        invoke this method or change any operating state.
+        """
+        package = validate_package(value)
+        encoded = json.dumps(package, sort_keys=True, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+        checksum = hashlib.sha256(encoded.encode()).hexdigest()
+        with self.lock:
+            self.db.execute("BEGIN IMMEDIATE")
+            try:
+                state = self.current_session()
+                blockers = self._update_blockers(state, package)
+                if blockers:
+                    raise USError(" ".join(blockers), 409)
+                if expected_revision is not None and state["revision"] != expected_revision:
+                    raise USError("The session changed. Check config updates again.", 409)
+                if state["package"]["publication_id"] == package["publication_id"]:
+                    if state["package_checksum"] != checksum:
+                        raise USError("A different package already uses this publication ID", 409)
+                    self.db.execute("COMMIT")
+                    return {"session_id": state["id"], "revision": state["revision"], "publication_id": package["publication_id"], "changed": False}
+                saved = self.db.execute("SELECT checksum FROM us_packages WHERE publication_id=?", (package["publication_id"],)).fetchone()
+                if not saved or saved[0] != checksum:
+                    raise USError("Download and validate the config before activation.", 409)
+                by_plan = {r["planned_id"]: r for r in state["runs"] if r.get("planned_id")}
+                runtime_fields = ("id", "planned_id", "conductor_id", "conductor_name", "position", "ready")
+                runs = []
+                for plan in package["runs"]:
+                    old = by_plan.get(plan["id"])
+                    runtime = ({key: old.get(key) for key in runtime_fields} if old else
+                               {"id": str(uuid4()), "planned_id": plan["id"], "conductor_id": None,
+                                "conductor_name": None, "position": None, "ready": False})
+                    runs.append({**plan, **runtime})
+                runs.extend(r for r in state["runs"] if not r.get("planned_id"))
+                old_publication = state["package"]["publication_id"]
+                state.update(package=package, package_checksum=checksum, name=package["name"],
+                             runs=runs, revision=state["revision"] + 1)
+                self.db.execute("UPDATE us_sessions SET state_json=?,revision=? WHERE id=?",
+                                (json.dumps(state, allow_nan=False), state["revision"], state["id"]))
+                self.db.execute("INSERT INTO us_events(session_id,revision,actor,action,target_id,meet_time,recorded_at,detail_json) VALUES(?,?,?,?,?,?,?,?)",
+                                (state["id"], state["revision"], actor, "config_updated", package["publication_id"],
+                                 clock_status(state["clock"])["time"] if state.get("clock") else "",
+                                 datetime.now(timezone.utc).isoformat(), json.dumps({"previous_publication_id": old_publication, "publication_id": package["publication_id"]})))
+                self.db.execute("COMMIT")
+                return {"session_id": state["id"], "revision": state["revision"], "publication_id": package["publication_id"], "changed": True}
+            except BaseException:
+                self.db.execute("ROLLBACK")
+                raise
+
     def context(self, actor: str, dispatcher: bool) -> dict:
         with self.lock:
             self.db.execute("BEGIN")
@@ -358,7 +470,11 @@ class USStore:
                         state["runs"].append({**plan, "planned_id": plan["id"], "id": str(uuid4()), "conductor_id": None, "conductor_name": None, "position": None, "ready": False})
                     target = state["id"]
                 else:
-                    state = self._load(text(payload.get("session_id"), "session_id", 100))
+                    session_id = text(payload.get("session_id"), "session_id", 100)
+                    current = self.db.execute("SELECT session_id FROM us_current WHERE singleton=1").fetchone()
+                    if not current or current[0] != session_id:
+                        raise USError("This command belongs to a previous operating session", 409)
+                    state = self._load(session_id)
                     if state["status"] != "running":
                         raise USError("Session is closed", 409)
                     if type(payload.get("expected_revision")) is not int or payload["expected_revision"] != state["revision"]:

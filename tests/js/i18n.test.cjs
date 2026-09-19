@@ -48,10 +48,22 @@ test('US explicit choice persists separately and only US tabs synchronize it',()
  eu.listeners.storage({key:'trainmeet.language.us',newValue:'de'});assert.equal(eu.api.getLanguage(),'sv');
  eu.api.setLanguage('en');assert.equal(eu.api.getLocale(),'en-GB');
 });
-test('both US operating routes use the explicitly scoped English document',()=>{
+test('both US workspaces use the scoped English document and keep Home in their own workspace',()=>{
  const source=fs.readFileSync(path.join(root,'../us_web/index.html'),'utf8');
  assert.match(source,/<html lang="en" data-i18n-scope="us">/);
- assert.match(source,/href="\/us\/dispatcher"/);assert.match(source,/href="\/us\/conductor"/);
+ assert.match(source,/id="workspace-home"/);
+ assert.doesNotMatch(source,/class="meet-type-navigation"/);
+ const app=fs.readFileSync(path.join(root,'../us_web/app.js'),'utf8');
+ const initialization=app.slice(0,app.indexOf('async function api('));
+ for(const role of ['dispatcher','conductor']) {
+  const elements=new Map(),storage=new Map();
+  const context={TrainMeetI18n:{t:value=>value,html:()=>''},location:{pathname:'/us/'+role},
+   document:{querySelector(selector){if(!elements.has(selector))elements.set(selector,{});return elements.get(selector);}},
+   sessionStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)}};
+  vm.createContext(context);vm.runInContext(initialization,context);
+  assert.equal(elements.get('#workspace-home').href,'/us/'+role);
+  assert.equal(storage.get('trainmeet.workspace'),role);
+ }
 });
 test('unknown source is preserved and parameters never treated as replacement syntax',()=>{
  const {api,context}=setup();assert.equal(api.t('Cda 8266'),'Cda 8266');

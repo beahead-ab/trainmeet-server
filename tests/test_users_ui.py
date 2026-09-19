@@ -40,7 +40,7 @@ class UsersViewTests(unittest.TestCase):
         den, vilket ser ut som att servern hänger sig."""
 
         body = SCRIPT[SCRIPT.index("function showSettings()"):]
-        self.assertIn("refreshUsers();", body[: body.index("\nfunction ")])
+        self.assertIn("refreshUsers()", body[: body.index("\nfunction ")])
 
     def test_every_field_the_view_reads_is_one_the_server_sends(self) -> None:
         view = SCRIPT[SCRIPT.index("function renderUsers()"): SCRIPT.index("function usersButton(")]
@@ -61,13 +61,14 @@ class UsersViewTests(unittest.TestCase):
 
         view = SCRIPT[SCRIPT.index("function renderUsers()"): SCRIPT.index("function usersButton(")]
         self.assertIn('const owner = users.role === "owner"', view)
-        self.assertRegex(view, r'invite-form.*classList\.toggle\("hidden", !owner\)')
+        self.assertRegex(view, r'invite-open.*classList\.toggle\("hidden", !owner\)')
         self.assertIn("if (owner) {", view)
 
     def test_removing_a_user_asks_first(self) -> None:
         remove = SCRIPT[SCRIPT.index("async function removeUser("):]
         remove = remove[: remove.index("\nfunction ")]
-        self.assertIn("window.confirm", remove)
+        self.assertIn('#user-delete-confirm").checked', remove)
+        self.assertIn('id="user-edit-modal"', MARKUP)
         self.assertIn("${user.username}", remove)
 
 

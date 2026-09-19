@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import secrets
@@ -20,6 +21,7 @@ from .central_sync import DEFAULT_RUNTIME_PUBLICATION_URL
 from .engine import TrafficEngine
 from .http_server import HTTPServerConfig, TrainMeetHTTPApplication, TrainMeetHTTPServer
 from .identity import DeviceKind, IdentityStore, PairingService
+from .lifecycle import SQLiteMeetLifecycle, MeetLifecycleError
 from .local_config import SQLiteLocalConfigurationStore
 from .models import unconfigured_session
 from .observability import configure_logging
@@ -107,6 +109,7 @@ def main() -> None:
     runtime_store = SQLiteRuntimeStore(database_path)
     operations_store = SQLiteOperationsStore(database_path)
     us_store = USStore(database_path)
+    lifecycle = SQLiteMeetLifecycle(database_path)
     local_configuration_store = SQLiteLocalConfigurationStore(database_path)
     try:
         active_publication = runtime_store.active()
@@ -114,9 +117,15 @@ def main() -> None:
         LOGGER.error("Den aktiva träffkonfigurationen kunde inte startas: %s", error)
         runtime_store.quarantine_active(str(error))
         active_publication = None
+    try:
+        selected = lifecycle.bootstrap(active_publication, us_store.current_session())
+    except MeetLifecycleError as error:
+        LOGGER.error("Trafik spärrad: %s", error)
+        selected = None
     session_config = (
         active_publication.session_config()
-        if active_publication is not None
+        if active_publication is not None and selected and selected["region"] == "eu"
+            and selected["publication_id"] == active_publication.publication_id
         else unconfigured_session()
     )
     state_store = SQLiteStateStore(database_path)
@@ -169,8 +178,6 @@ def main() -> None:
         gateway_id=args.gateway_id,
         identities=identities,
     )
-    gateway.client.connect(broker_host, args.mqtt_port, keepalive=10, clean_start=True)
-    gateway.client.loop_start()
 
     # Protocol v2 runs beside v1 on its own prefix and its own client. There is
     # no bridge between them; a box speaks one or the other.
@@ -182,7 +189,6 @@ def main() -> None:
         publish=lambda topic, payload, retain: None,
     )
     v2_adapter = MQTTV2Adapter(v2_gateway, host=broker_host, port=args.mqtt_port)
-    v2_adapter.connect()
     discovery_advertiser = _start_discovery_advertiser(
         args.mqtt_port, server_id=args.gateway_id
     )
@@ -210,7 +216,25 @@ def main() -> None:
         operations_store=operations_store,
         station_service=station_service,
         us_store=us_store,
+        lifecycle=lifecycle,
     )
+    def publish_config():
+        gateway._publish_snapshots()
+        for device in identities.discovered_devices():
+            if device.protocol_version == 2:
+                v2_gateway.publish_device_state(device.device_id)
+            else:
+                gateway._handle_device_hello(device.device_id, json.dumps({
+                    "device_code": device.device_code, "model": device.model,
+                    "firmware_version": device.firmware_version,
+                    "protocol_version": device.protocol_version,
+                    "display": device.display.to_dict(),
+                }).encode())
+    application.on_config_applied = publish_config
+    # Attach the common lifecycle gate before either transport accepts input.
+    gateway.client.connect(broker_host, args.mqtt_port, keepalive=10, clean_start=True)
+    gateway.client.loop_start()
+    v2_adapter.connect()
     server = TrainMeetHTTPServer((args.bind, args.http_port), application)
     cloud_sync_stop = threading.Event()
     cloud_sync_thread = threading.Thread(
@@ -229,8 +253,7 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nTMBox-servern stoppas …")
     finally:
-        cloud_sync_stop.set()
-        cloud_sync_thread.join(timeout=2)
+        _stop_cloud_sync(application, cloud_sync_thread, cloud_sync_stop)
         server.shutdown()
         server.server_close()
         gateway.client.disconnect()
@@ -243,6 +266,7 @@ def main() -> None:
         local_configuration_store.close()
         operations_store.close()
         us_store.close()
+        lifecycle.close()
         if broker is not None:
             broker.terminate()
             try:
@@ -308,7 +332,8 @@ def _reset_operational_state(database_path: Path, state_directory: Path) -> None
     try:
         connection.execute("PRAGMA foreign_keys=ON")
         with connection:
-            for table in ("us_events", "us_commands", "us_current", "us_sessions", "us_packages", "us_cloud_link"):
+            for table in ("us_events", "us_commands", "us_current", "us_sessions", "us_packages", "us_cloud_link",
+                          "server_meet_selection", "server_meet_transition", "server_meet_history", "runtime_meet_archives"):
                 if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
                     connection.execute(f"DELETE FROM {table}")
             for table in (
@@ -339,6 +364,16 @@ def _reset_operational_state(database_path: Path, state_directory: Path) -> None
     )
 
 
+def _stop_cloud_sync(application, worker: threading.Thread, stop: threading.Event) -> None:
+    """Finish bounded network work before any runtime database is closed."""
+    stop.set()
+    if application.cloud_config:
+        application.cloud_config.request_stop()
+    # Requests have explicit 20s/30s timeouts. Never close stores while a worker
+    # can still apply downloaded config or complete an activation transaction.
+    worker.join()
+
+
 def _cloud_auto_sync_loop(
     application: TrainMeetHTTPApplication,
     server: TrainMeetHTTPServer,
@@ -347,15 +382,17 @@ def _cloud_auto_sync_loop(
     while not stop.is_set():
         try:
             result = application.auto_sync_cloud_runtime()
+            if stop.is_set():
+                break
             if result.get("pending"):
-                # Hämtad, inte aktiverad, och framför allt: ingen omstart. Den
-                # här loopen körde tidigare request_restart() på egen hand, så
-                # en träff kunde starta om under händerna på tågklareraren för
-                # att Cloud råkade publicera. Nu väntar den på ett ja.
                 LOGGER.info(
-                    "Ny Cloud-revision väntar på granskning: %s",
+                    "Ny Cloud-config väntar på säkert trafikläge: %s",
                     result.get("publication_id"),
                 )
+            # Long polling is initiated by Server; no inbound Internet port is
+            # needed. Older Cloud versions keep the fifteen-second fallback.
+            if application.cloud_config and application.cloud_config.wait_for_change():
+                continue
         except Exception as error:
             LOGGER.warning("Automatisk Cloud-synk misslyckades: %s", error)
         stop.wait(15)

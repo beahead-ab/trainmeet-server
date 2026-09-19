@@ -23,6 +23,7 @@ from .models import SessionConfig, TrackType, UnknownTrackError, resolve_track_i
 from .observability import log_event, use_correlation
 from .operations import SQLiteOperationsStore
 from .runtime import RuntimePublication, SQLiteRuntimeStore, matches_active_day
+from .lifecycle import MeetLifecycleError
 
 
 LOGGER = logging.getLogger("tmbox_gateway.protocol_v2")
@@ -77,11 +78,18 @@ class TMBoxStationService:
         self.clock_source = clock_source or operations_store.clock_status
         self._cached_publication_id: str | None = None
         self._cached_session_config: SessionConfig | None = None
+        self.lifecycle = None
 
     # ---------------------------------------------------------------- state
 
     def publication(self) -> RuntimePublication | None:
-        return self.runtime_store.active()
+        publication = self.runtime_store.active()
+        if self.lifecycle:
+            try:
+                self.lifecycle.assert_selected("eu", publication_id=publication.publication_id if publication else "")
+            except MeetLifecycleError:
+                return None
+        return publication
 
     def session_config(self) -> SessionConfig | None:
         publication = self.publication()
@@ -95,6 +103,10 @@ class TMBoxStationService:
     def config_version(self) -> int:
         return self.runtime_store.config_version()
 
+    def runtime_scope(self) -> dict[str, Any]:
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        return {"meet_generation": selected["generation"], "publication_id": selected["publication_id"]} if selected else {}
+
     # -------------------------------------------------------------- payloads
 
     def assignment_payload(self, device_id: str) -> dict[str, Any]:
@@ -104,6 +116,7 @@ class TMBoxStationService:
         station = config.stations.get(station_id) if config and station_id else None
         return {
             "protocol_version": PROTOCOL_VERSION,
+            **self.runtime_scope(),
             "status": "assigned" if station_id else "waiting_for_assignment",
             "device_id": device_id,
             "device_code": device.display_name.split()[-1] if device else device_id,
@@ -144,6 +157,7 @@ class TMBoxStationService:
             )
         return {
             "protocol_version": PROTOCOL_VERSION,
+            **self.runtime_scope(),
             "config_version": self.config_version(),
             "station": {"id": station.id, "code": station.code, "name": station.name},
             "tracks": [
@@ -204,6 +218,7 @@ class TMBoxStationService:
         clock = self.clock_source()
         return {
             "protocol_version": PROTOCOL_VERSION,
+            **self.runtime_scope(),
             "station_id": station_id,
             "revision": {
                 "config_version": self.config_version(),
@@ -247,6 +262,25 @@ class TMBoxStationService:
     # -------------------------------------------------------------- commands
 
     def handle_command(self, device_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.lifecycle:
+            with self.lifecycle.lock:
+                try:
+                    publication = self.publication()
+                    selected = self.lifecycle.assert_selected("eu", publication_id=publication.publication_id if publication else "")
+                except MeetLifecycleError:
+                    return self._ack(payload.get("message_id"), "rejected", "no_active_configuration", None)
+                generation = payload.get("meet_generation")
+                required = self.runtime_store._setting("require_scoped_commands") == "true"
+                if payload.get("action") not in READ_ACTIONS | CONFIG_ACTIONS and (
+                    (generation is not None and (type(generation) is not int or generation != selected["generation"]))
+                    or (payload.get("publication_id") is not None and payload["publication_id"] != selected["publication_id"])
+                    or (required and generation is None)
+                ):
+                    return self._ack(payload.get("message_id"), "rejected", "stale_meet_context", None)
+                return self._handle_command(device_id, payload)
+        return self._handle_command(device_id, payload)
+
+    def _handle_command(self, device_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Apply one complete command and return the acknowledgement for it.
 
         The message id is also the correlation id: everything this command

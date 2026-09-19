@@ -8,7 +8,7 @@ const root=path.resolve(__dirname,'../../src/tmbox_gateway');
 function fixture(role='dispatcher') {
  const statuses=['draft','transmitted','received','readback_pending','active','release_requested','closed','void'];
  return {role,conductors:[],clock:{time:'06:15:00'},session:{id:'session-1',name:'Spara',revision:8,status:'running',
-  package:{territories:[{id:'territory',name:'Test Subdivision'}],nodes:[{id:'a',territory_id:'territory',name:'North Yard',mp:10,x:30,y:0},{id:'b',territory_id:'territory',name:'South Yard',mp:20,x:30,y:100}],segments:[{id:'main',name:'Main',from_node:'a',to_node:'b'}]},
+  package:{publication_id:'v1',territories:[{id:'territory',name:'Test Subdivision'}],nodes:[{id:'a',territory_id:'territory',name:'North Yard',mp:10,x:30,y:0},{id:'b',territory_id:'territory',name:'South Yard',mp:20,x:30,y:100}],segments:[{id:'main',name:'Main',from_node:'a',to_node:'b'}]},
   runs:[{id:'run-1',symbol:'SP 834',direction:'east',conductor_name:'Spara',schedule:[{node_id:'a',time:'06:00',work:'Switch'}],position:{segment_id:'main',mp:12,meet_time:'06:10',recorded_at:'2026-09-18T06:10:00Z'}}],
   warrants:statuses.map((status,i)=>({id:'w'+i,number:'W'+i,run_id:'run-1',kind:'proceed',status,text:'W'+i+' · SP 834\nProceed from MP 10 to MP 20\nSpara <unchanged>',path:[{segment_id:'main',from_mp:10,to_mp:20}],times:{[status]:{meet_time:'06:10'}}})),events:[]}};
 }
@@ -27,16 +27,18 @@ async function setup(role='dispatcher', options={}) {
   querySelector:element,querySelectorAll:()=>[],addEventListener(){},
   createElement:()=>({set innerHTML(value){this.value=value.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');}})};
  const data=fixture(role), requests=[];
+ const serverContext=options.serverContext||{operating_region:'us',selected_meet:{id:'meet-1',name:'Spara',publication_id:'v1',operating_region:'us'}};
+ const storage=new Map();
  const context={document,navigator:{languages:['sv-SE']},location:{pathname:'/us/'+role,origin:'http://local.test'},crypto:require('node:crypto').webcrypto,
-  localStorage:{getItem:key=>key==='trainmeet.language'?'sv':null,setItem(){}},sessionStorage:{getItem:()=>null,setItem(){},removeItem(){}},
+  localStorage:{getItem:key=>key==='trainmeet.language'?'sv':null,setItem(){}},sessionStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},
   addEventListener(){},setTimeout:()=>0,clearTimeout(){},AbortController,
-  fetch:async(url,request)=>{requests.push({url,method:request.method});return {ok:!options.unauthenticated,status:options.unauthenticated?401:200,json:async()=>options.unauthenticated?{message:'Sign in required'}:url.startsWith('/v1/us/package?')?{package:{...data.session.package,runs:data.session.runs}}:data};}};
+  fetch:async(url,request)=>{requests.push({url,method:request.method,body:request.body});return {ok:!options.unauthenticated,status:options.unauthenticated?401:200,json:async()=>options.unauthenticated?{message:'Sign in required'}:url==='/v1/server-context'?serverContext:url.startsWith('/v1/us/package?')?{package:{...data.session.package,runs:data.session.runs}}:data};}};
  context.window=context;
  vm.createContext(context);
- for(const file of ['web/i18n-messages.js','web/us-cloud-messages.js','web/i18n.js']) vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),context);
+ for(const file of ['web/i18n-messages.js','web/us-cloud-messages.js','us_web/workspace-messages.js','web/i18n.js']) vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),context);
  const source=fs.readFileSync(path.join(root,'us_web/app.js'),'utf8');
  const api=await vm.runInContext('(async()=>{'+source+'\nreturn {state,runStatus,warrantCard,stripMap,action,holding,disabled,refresh,command,createCommandID,render};})()',context);
- return {api,language:context.TrainMeetI18n,requests,app:element('#app'),editor:element('#editor'),data,context};
+ return {api,language:context.TrainMeetI18n,requests,app:element('#app'),editor:element('#editor'),data,context,serverContext,storage,elements};
 }
 
 test('read-only train details remain available during writes and connection loss',async()=>{
@@ -119,13 +121,15 @@ test('repeated unauthenticated polling never replaces the login form',async()=>{
  assert.equal(app.innerHTML,'FORM WITH UNSENT CREDENTIALS');
  assert.equal(api.state.online,false);
 });
-test('closed session permits importing the next session but blocks old traffic actions',async()=>{
+test('closed session permits selected Cloud session start but never local import',async()=>{
  const {api,data,app}=await setup();
  data.session.status='closed';api.render();
- assert.equal(api.disabled('import'),false);
+ assert.equal(api.disabled('import'),true);
+ assert.equal(api.disabled('cloud'),true);
  assert.equal(api.disabled('create_session'),false);
  assert.equal(api.disabled('activate'),true);
- assert.match(app.innerHTML,/data-action="import"\s+class=/);
+ assert.doesNotMatch(app.innerHTML,/data-action="(?:import|cloud|packages)"/);
+ assert.match(app.innerHTML,/Selected meet config/);
  api.state.pending='unconfirmed';assert.equal(api.disabled('create_session'),true);
  api.state.pending=null;api.state.online=false;assert.equal(api.disabled('import'),true);
 });
@@ -152,12 +156,12 @@ test('uncertain write result is not resent by polling or language changes',async
  assert.equal(writes.length,1);
 });
 
-test('Cloud packages are reviewed before start, and active sessions have no replacement action',async()=>{
+test('only selected Cloud config is reviewed before start, active session config is read-only',async()=>{
  const {api,data,editor,app}=await setup();
  data.cloud={linked:true,url:'https://config.example.test/config'};
  data.packages=[{publication_id:'v1',name:'Test <railroad>',checksum:'checksum',counts:{territories:1,nodes:2,segments:1,runs:1},session:{clock_time:'05:30',clock_speed:4},planning:{source_instructions:[{text:'<untrusted instruction>'}],dispatcher_districts:[]}}];
  await api.action('review-package',undefined,'v1');
- assert.match(editor.innerHTML,/Finish the current session/);
+ assert.match(editor.innerHTML,/Read-only config/);
  assert.doesNotMatch(editor.innerHTML,/<form>/);
  assert.match(editor.innerHTML,/&lt;untrusted instruction&gt;/);
  assert.match(editor.innerHTML,/<table>/);
@@ -166,7 +170,7 @@ test('Cloud packages are reviewed before start, and active sessions have no repl
  assert.match(app.innerHTML,/data-package="v1"/);
  await api.action('review-package',undefined,'v1');
  assert.match(editor.innerHTML,/name="confirmed" type="checkbox" required/);
- assert.match(editor.innerHTML,/US clock starts paused/);
+ assert.match(editor.innerHTML,/session clock starts paused/);
  assert.match(editor.innerHTML,/Test &lt;railroad&gt;/);
  assert.match(editor.innerHTML,/Start US session/);
 });
@@ -180,16 +184,72 @@ test('download and review copy has five languages without rewriting domain data'
    }
  }
 });
-test('US clock form and Cloud connection are explicit actions and not polled',async()=>{
+test('US clock is operational, Cloud connection can only be changed in Server settings',async()=>{
  const {api,editor,requests,data}=await setup();
  data.cloud={linked:true,url:'https://config.example.test/config'};
  await api.action('clock');assert.match(editor.innerHTML,/Only this US session is affected/);
  assert.match(editor.innerHTML,/name="speed" type="number" min="0.1" max="60" step="any"/);
- await api.action('cloud');assert.match(editor.innerHTML,/Six-digit session code/);
- assert.match(editor.innerHTML,/Leave the code empty/);
+ const before=editor.innerHTML;
+ await api.action('cloud');assert.equal(editor.innerHTML,before);
+ await api.action('import');assert.equal(editor.innerHTML,before);
  await api.refresh();await api.refresh();
  assert.equal(requests.some(r=>r.url.includes('/cloud/')),false);
  assert.equal(requests.some(r=>r.method==='POST'),false);
+});
+
+test('EU and unconfigured servers never fetch or display a saved US runtime',async()=>{
+ for(const serverContext of [{operating_region:'eu',selected_meet:{publication_id:'eu-v1',name:'EU meet'}},{operating_region:null,selected_meet:null}]) {
+  const {api,requests,app}=await setup('dispatcher',{serverContext});
+  assert.equal(api.state.contextBlocked,true);assert.equal(api.state.data,null);
+  assert.equal(api.disabled('draft'),true);
+  assert.equal(requests.some(r=>r.url==='/v1/us/context'),false);
+  assert.match(app.innerHTML,/Workspace unavailable/);
+  assert.doesNotMatch(app.innerHTML,/SP 834/);
+ }
+});
+
+test('changing selected publication clears stale session and action dialogs',async()=>{
+ const {api,serverContext,editor,app,data}=await setup();let closed=0;
+ editor.close=()=>closed++;
+ serverContext.selected_meet.publication_id='v2';
+ await api.refresh();
+ assert.equal(api.state.data,null);assert.equal(api.disabled('ready'),true);
+ assert.match(app.innerHTML,/Waiting for the server/);assert.ok(closed);
+ data.session.package.publication_id='v2';await api.refresh();
+ assert.equal(api.state.contextBlocked,false);assert.match(app.innerHTML,/Track warrants/);
+});
+
+test('saved packages cannot select or start a different meet',async()=>{
+ const {api,data,app,editor,requests}=await setup();
+ data.session.status='closed';
+ const item={name:'selected',counts:{runs:1,segments:1}};
+ data.packages=[{...item,publication_id:'v1'},{...item,name:'Other meet',publication_id:'other'}];
+ api.render();assert.match(app.innerHTML,/data-package="v1"/);
+ assert.doesNotMatch(app.innerHTML,/Other meet|data-package="other"/);
+ const before=requests.length;
+ await api.action('review-package',undefined,'other');
+ assert.equal(requests.length,before);assert.equal(editor.innerHTML,'');
+});
+
+test('home preserves each workspace and navigation has no operating-region switches',async()=>{
+ for(const role of ['dispatcher','conductor']) {
+  const {storage,elements}=await setup(role);
+  assert.equal(storage.get('trainmeet.workspace'),role);
+  assert.equal(elements.get('#workspace-home').href,'/us/'+role);
+ }
+ const markup=fs.readFileSync(path.join(root,'us_web/index.html'),'utf8');
+ assert.doesNotMatch(markup,/meet-type-nav|EU operating session|US operating session/);
+ for(const route of ['/#settings','/#screens','/#workspaces'])assert.ok(markup.includes(route));
+});
+
+test('new workspace and Cloud-only copy supports all five UI languages',async()=>{
+ const {language}=await setup();
+ for(const locale of ['sv','da','nb','de','en']) {
+  language.setLanguage(locale);
+  for(const term of ['Change workspace','Workspace unavailable','Selected meet config','Config is maintained in Cloud. Downloaded config remains available without internet.']) {
+   assert.ok(language.t(term));if(locale!=='en')assert.notEqual(language.t(term),term);
+  }
+ }
 });
 
 test('Cloud railroad identity and schedule event labels survive language changes',async()=>{

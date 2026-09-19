@@ -13,6 +13,15 @@
     "display"
   ],
   "properties": {
+    "meet_generation": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Beständig driftomfattning från servern; ändras vid config-, träff- och trafikdagsbyte."
+    },
+    "publication_id": {
+      "type": "string",
+      "minLength": 1
+    },
     "protocol_version": {
       "type": "integer",
       "enum": [

@@ -4,16 +4,17 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Train Meet US · Operations</title>
   <link rel="icon" href="/assets/ikon/png/trainmeet-ikon-32.png">
-  <link rel="stylesheet" href="/us/style.css"><link rel="stylesheet" href="/assets/meet-type.css">
+  <link rel="stylesheet" href="/us/style.css">
   <script src="/assets/i18n-messages.js" defer></script>
   <script src="/assets/meet-type-messages.js" defer></script>
   <script src="/assets/us-cloud-messages.js" defer></script>
+  <script src="/us/workspace-messages.js" defer></script>
   <script src="/assets/i18n.js" defer></script><script src="/assets/i18n-init.js" defer></script>
   <script type="module" src="/us/app.js"></script>
 </head>
 <body>
-  <div class="language-toolbar"><nav class="meet-type-nav" aria-label="Operating session type" data-tm-aria-label="Operating session type" title="Switching views does not change or stop an operating session." data-tm-title="Switching views does not change or stop an operating session."><a href="/"><span data-tm-text="EU operating session">EU operating session</span></a><a href="/us/dispatcher" aria-current="page"><span data-tm-text="US operating session">US operating session</span></a></nav><label><span data-tm-text="Language">Language</span><select data-language-picker aria-label="Language" data-tm-aria-label="Language"></select></label></div>
-  <header class="topbar"><a class="brand" href="/us/dispatcher"><img src="/trainmeet-logo.png" alt="TrainMeet" data-tm-alt="TrainMeet"><span><tm-text data-tm-text="Train Meet ">Train Meet </tm-text><b><tm-text data-tm-text="US">US</tm-text></b><small><tm-text data-tm-text="LOCAL OPERATIONS">LOCAL OPERATIONS</tm-text></small></span></a><nav aria-label="Operating views" data-tm-aria-label="Operating views"><a href="/us/dispatcher"><tm-text data-tm-text="Dispatcher">Dispatcher</tm-text></a><a href="/us/conductor"><tm-text data-tm-text="Conductor">Conductor</tm-text></a><a href="/"><tm-text data-tm-text="Server">Server</tm-text></a></nav><div class="connection"><span id="connection"><tm-text data-tm-text="Connecting…">Connecting…</tm-text></span><time id="clock">--:--</time></div></header>
+  <div class="language-toolbar"><label><span data-tm-text="Language">Language</span><select data-language-picker aria-label="Language" data-tm-aria-label="Language"></select></label></div>
+  <header class="topbar"><a class="brand" id="workspace-home" href="/us/dispatcher"><img src="/trainmeet-logo.png" alt="TrainMeet" data-tm-alt="TrainMeet"><span>TrainMeet<small id="workspace-label"></small></span></a><span id="selected-meet" class="selected-meet"></span><div class="connection"><span id="connection"><tm-text data-tm-text="Connecting…">Connecting…</tm-text></span><time id="clock">--:--</time></div><details class="workspace-menu" id="workspace-menu"><summary aria-label="Menu" data-tm-aria-label="Menu">☰</summary><nav aria-label="Workspace menu" data-tm-aria-label="Workspace menu"><a href="/#settings" data-admin-navigation hidden><tm-text data-tm-text="Settings">Settings</tm-text></a><a href="/#screens" data-admin-navigation hidden><tm-text data-tm-text="Screens">Screens</tm-text></a><a href="/#workspaces"><tm-text data-tm-text="Change workspace">Change workspace</tm-text></a><button type="button" id="workspace-logout"><tm-text data-tm-text="Log out">Log out</tm-text></button></nav></details></header>
   <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
   <main id="app"><div class="empty"><tm-text data-tm-text="Connecting to the local TrainMeet Server…">Connecting to the local TrainMeet Server…</tm-text></div></main>
   <footer class="app-footer"><span><tm-text data-tm-text="Train Meet US · TWC pilot">Train Meet US · TWC pilot</tm-text></span><span><tm-text data-tm-text="Model railroad test profile · reported positions, never simulated movement">Model railroad test profile · reported positions, never simulated movement</tm-text></span></footer>

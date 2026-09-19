@@ -1,21 +1,22 @@
 # TrainMeet Server
 
-TrainMeet Server är den lokala, självständiga driftsmiljön för en TrainMeet-träff. Den körs på en Raspberry Pi och fortsätter fungera utan internet. Servern äger stationer, spårförbindelser, körsätt, aktiv tidtabell, trafiktillstånd och alla anslutna TMBoxar.
+TrainMeet Server är den lokala, självständiga driftsmiljön för en TrainMeet-träff på Raspberry Pi, Mac eller PC. En server representerar exakt en vald träff åt gången, även när klockan är stoppad. Träffens config publiceras i Cloud; servern äger driftläget, klockan och anslutna enheter och fortsätter fungera utan internet.
 
 [TrainMeet Cloud](https://github.com/beahead-ab/trainmeet-cloud) bygger, validerar och publicerar konfigurationer och tolkar importerade tidtabeller. Själva träffen körs lokalt här. Flödet går bara åt ett håll: Cloud publicerar, den här servern hämtar. Ingenting synkas tillbaka.
 
 ## US-körning och språk
 
-Publicera US-träffen i Cloud och välj **US Dispatcher → Download from Cloud**
-på Servern. Ange `https://cloud.trainmeet.app/config` och träffens sexsiffriga
-kod. Paketet sparas lokalt för granskning innan **Start US session**.
-US-klockan startar pausad; därefter behövs inget internet. Nya hämtningar
-ändrar aldrig pågående körning eller EU-drift. JSON-import finns också kvar.
+Publicera US-träffen i Cloud och anslut servern via **Inställningar → Cloud-koppling**.
+Ange `https://cloud.trainmeet.app/config` och träffens sexsiffriga kod. Efter
+inloggning väljer du arbetsyta; **Dispatcher** visas när serverns valda träff
+är en US-träff. Granska den valda configen innan **Start US session**.
+US-klockan startar pausad; därefter behövs inget internet. Nya publiceringar
+aktiveras endast när driftkontrollerna tillåter det. Lokal JSON-import är borttagen.
 
 Servern innehåller även en separat **US TWC-pilot**. Välj **US Dispatcher** i
 webbgränssnittet eller öppna `/us/dispatcher`. Conductor öppnar `/us/conductor`
 och parkopplas med en engångskod; dispatcher tilldelar tåget.
-EU/TKL/TMBox använder sina befintliga trafikflöden och påverkas inte av US-start.
+EU/TKL/TMBox och US använder skilda trafikflöden, men kan inte köra två träffar samtidigt.
 
 Se [steg-för-steg för US-piloten](docs/TRAINMEET-US.md), dess tydliga
 begränsningar och den frivilliga, fiktiva övningsfilen. Inget exempel laddas
@@ -54,7 +55,7 @@ ESP32/Arduino-enhet. Installera servern först.
 > **En ny server är helt tom.** Den innehåller inga exempelstationer, ingen
 > demoträff och inget förvalt administratörskonto. Vid första öppningen leder en
 > installationsguide genom administratör, servernamn, konfigurationsserver,
-> sexsiffrig träffkod och trafikdag.
+> sexsiffrig träffkod. Trafikdagen följer först configen och kan sedan bytas som en skyddad driftåtgärd.
 
 ### Windows-PC
 
@@ -477,7 +478,7 @@ TMBox-simulering. De andra delarna installeras separat:
 
 ## Två tydligt separerade webbdelar
 
-- **TrainMeet Server** är administrationen. Här definieras träffen, stationernas ordning, enkel- och dubbelspår, körsätt, paneler A–D, boxkopplingar, aktiv tidtabell och lokal klocka.
+- **TrainMeet Server** är drift och administration. Här finns klockan, Cloud-kopplingen, användare och boxarnas stationstilldelningar. Bana och tidtabell redigeras endast i Cloud.
 - **TMBox-simulering** kör exakt samma renderare och tillståndsmaskin som firmwaren, inte en efterlikning: `tmbox-render.js`, `tmbox-nav.js` och `tmbox-attention.js` hålls mot firmwarens egna guldfiler och serverns testsvit faller om de skiljer sig. Den ritar alla fyra displaygeometrier — **16×2, 20×2, 16×4 och 20×4** — som växlas i vyn, så en skärm går att granska i den storlek boxen faktiskt har.
 
 Simulatorn ger också **uppmärksamhetssignalerna**: en ton och en banderoll när
@@ -488,9 +489,8 @@ saknar summer är det här enda stället signalerna går att höra. Det som inte
 låter är minst lika viktigt: en klarering som redan väntade, den första
 ögonblicksbilden efter start, och det tågklareraren själv nyss gjorde är tysta.
 
-Ändringar sparas först som ett utkast och aktiveras uttryckligen. Om topologin ändras krävs serveromstart, så en pågående körning inte ändras tyst. Administrationsvyn har en knapp för kontrollerad omstart.
+Ny publicerad config hämtas och aktiveras utan serveromstart när trafikläget tillåter det. Annars visas vänteläget och orsaken. Manuell kontroll använder samma säkerhetskontroller.
 
-<<<<<<< HEAD
 ### Typsnitt
 
 Webbadmin serverar Inter från servern själv, i fyra vikter, latin, cirka
@@ -499,32 +499,13 @@ serverns egen Content-Security-Policy (`style-src 'self'`) avvisade vid varje
 sidladdning — ett konsolfel per besök och en DNS-uppslagning mot en extern
 värd som en server byggd för att köra en träff utan internet aldrig ska
 behöva.
-=======
-## Driftlägen
+## Arbetsytor, inte byggläge
 
-| Läge | Cloud | Redigering på servern |
-|---|---|---|
-| `cloud-linked` | nås, är redaktör | **låst** |
-| `offline-meet` | nås inte, eller medvetet frånkopplad | **öppen** |
-
-Läget är **beständigt tillstånd som en människa satt** — det överlever omstart
-och härleds aldrig ur om Cloud svarade just nu. Ett nätavbrott låser alltså
-aldrig upp redigering på egen hand, och ett nät som kommer tillbaka låser
-aldrig mitt i någons arbete. En server som aldrig kopplats till Cloud kör
-lokalt utan att någon behöver välja.
-
-I `offline-meet` går det att öppna den aktiva Cloud-versionen som en
-arbetskopia, rätta tider och spår, och aktivera. Aktiveringen skriver en ny
-paketrevision `<bas>+local-rN` genom samma maskineri som en Cloud-publicering,
-så TKL och boxarna ser en `config_version` de inte sett och läser om. De vet
-inte, och behöver inte veta, att revisionen gjordes lokalt.
-
-Att gå tillbaka till `cloud-linked` betyder att Clouds publicering gäller igen
-och att de lokala revisionerna kastas. Det sker **aldrig tyst**: servern visar
-först exakt vilka rader som ändrats, lagts till eller tagits bort, och kräver
-en bekräftelse. Finns inget lokalt att kasta krävs ingen bekräftelse — en
-bekräftelseruta för ingenting lär folk att klicka igenom dem.
->>>>>>> origin/main
+Efter inloggning väljer du Drift och administration, TKL eller relevant US-roll.
+Hem leder till aktuell arbetsyta. Hamburgermenyn samlar Inställningar, Skärmar,
+Byt arbetsyta och Logga ut. Servern har inget byggläge och ingen offline-editor;
+ett nätavbrott påverkar inte den lokala driften eller låser upp configredigering.
+Se [Cloud förbereder, Server kör](docs/CLOUD-ONLY-SERVER.md).
 
 ## Adminåtkomst
 
@@ -746,9 +727,8 @@ redigeras bort på fältnamn innan något skrivs.
 
 Ansvarsfördelningen mellan TrainMeet Cloud och servern — vem som får ändra
 vad, och hur en ändring rör sig — är fastslagen i
-[docs/cloud-server.md](docs/cloud-server.md). Flödet är enkelriktat: Cloud
-bygger och trycker ner, servern kör. Servern kan redigera träffen lokalt bara
-när den är satt i offline-läge, och de ändringarna lever bara under träffen.
+[docs/CLOUD-ONLY-SERVER.md](docs/CLOUD-ONLY-SERVER.md). Flödet är enkelriktat:
+Cloud publicerar, servern hämtar och kör. Inga lokala configändringar görs.
 
 Protokollet mellan en fysisk TMBox och servern är specificerat i
 [docs/protocol/v2/](docs/protocol/v2/README.md): topics, meddelandekuvert,
@@ -758,25 +738,19 @@ normativt — säger koden och dokumentet olika saker är det en bugg i koden.
 Den nuvarande MQTT-gatewayn talar fortfarande v1; v2-ytan byggs mot det här
 kontraktet.
 
-## Lokal konfiguration och tidtabell
+## Publicerad config och tidtabell
 
-Servern kan skapa och aktivera en träff helt lokalt. Den kan också installera
-ett normaliserat, versionsmärkt runtime-paket från valfri kompatibel
-konfigurationsserver. Standardadressen är `https://cloud.trainmeet.app/config`.
+Servern väljer en publicerad träff från en kompatibel Cloud-konfigurationsserver.
+Standardadressen är `https://cloud.trainmeet.app/config`.
 Användaren anger bara serveradressen och en sexsiffrig kod. Den permanenta
 länkidentiteten returneras av konfigurationsservern och lagras osynligt lokalt;
 ingen lång API-nyckel behöver kopieras eller visas.
 
-En ansluten server kan skicka lokala konfigurationsändringar tillbaka till
-TrainMeet Cloud. Stationer, sträckor, TMBoxar och grundinställningar läggs då
-som separata poster i en lokal, beständig kö. Cloud-admin godkänner eller avslår
-varje post innan den påverkar Cloud-utkastet. Först när utkastet publiceras som
-en ny version kan ändringen hämtas tillbaka av lokala servrar.
-
-Administratören kan aktivera automatisk Cloud-synk. Servern kontrollerar då
-var femtonde sekund om en ny komplett version har publicerats, hämtar och
-aktiverar den samt gör en kontrollerad omstart när trafikmotorns stations- eller
-TMBox-konfiguration har ändrats.
+Automatisk configuppdatering aktiveras vid koppling. Servern väntar på
+publiceringsbesked från Cloud med en utgående, högst 25 sekunder lång förfrågan.
+Äldre Cloud eller anslutningsproblem ger kontroll var femtonde sekund som reserv.
+Klocka och trafikläge bevaras; konfliktfyllda ändringar väntar. Inställningarnas
+**Sök configuppdatering** använder samma kedja. Detta uppdaterar inte serverprogrammet.
 
 Under den nuvarande utvecklingsfasen stöds endast runtime-schema 3. Vi håller inte
 ett kompatibilitetslager för äldre testformat innan den första externa releasen;
@@ -876,9 +850,9 @@ PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 
 Den fysiska boxens firmware finns i [trainmeet-tmbox](https://github.com/beahead-ab/trainmeet-tmbox). Den nativa appen finns separat i [trainmeet-iphone](https://github.com/beahead-ab/trainmeet-iphone).
 
-## Välj EU eller US
+## EU eller US följer träffen
 
-Överst i webbgränssnittet finns **EU-tågträff / US-tågträff**. EU öppnar
-servervyn med TKL och TMBox; US öppnar Dispatcher och därifrån Conductor.
-Bytet sker i samma flik och ändrar eller avslutar ingen körning.
+Trafiktypen väljs för träffen i Cloud, inte med en separat serverväxel.
+Alla arbetsytor använder samma valda träff. Ett uttryckligt träffbyte görs
+under Inställningar och kräver att driftkontrollerna tillåter bytet.
 US-vyerna börjar på engelska. Se [US-pilotens omfattning](docs/TRAINMEET-US.md).
