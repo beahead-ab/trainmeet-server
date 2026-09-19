@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import tempfile
 import unittest
-from dataclasses import replace
+import hashlib
+import json
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from session_fixture import sample_session
 from tmbox_gateway.engine import TrafficEngine
 from tmbox_gateway.models import Command, ConnectionState, DispatchMode
-from tmbox_gateway.storage import ConfigurationMismatchError, SQLiteStateStore
+from tmbox_gateway.storage import ConfigurationMismatchError, SQLiteStateStore, session_config_fingerprint
 
 
 def command_for(
@@ -38,6 +40,38 @@ def press(engine: TrafficEngine, panel_id: str, key: str, sequence: int) -> None
 
 
 class PersistenceTests(unittest.TestCase):
+    def test_software_upgrade_preserves_legacy_and_190_run_without_rewriting(self):
+        config = sample_session(DispatchMode.CLEARANCE)
+        for explicit_defaults in (False, True):
+            with self.subTest(explicit_defaults=explicit_defaults), tempfile.TemporaryDirectory() as directory:
+                store = SQLiteStateStore(Path(directory) / 'trainmeet.db')
+                try:
+                    engine = TrafficEngine(config)
+                    for sequence, key in enumerate(['A', '3', '9', '#'], start=1):
+                        press(engine, 'panel-a', key, sequence)
+                    value = asdict(config)
+                    if not explicit_defaults:
+                        for panel in value['panels'].values():
+                            panel.pop('slot_layout')
+                    fingerprint = hashlib.sha256(json.dumps(value, ensure_ascii=False, separators=(',', ':'), sort_keys=True).encode()).hexdigest()
+                    store.save(config.id, fingerprint, engine.revision, engine.export_state())
+                    before = store._connection.execute('SELECT * FROM engine_state').fetchall()
+                    restored = TrafficEngine(config, state_store=store)
+                    self.assertEqual(restored.export_state(), engine.export_state())
+                    self.assertEqual(restored.snapshot('panel-a'), engine.snapshot('panel-a'))
+                    self.assertEqual(store._connection.execute('SELECT * FROM engine_state').fetchall(), before)
+                    self.assertEqual(restored.press(command_for(restored, 'panel-a', '#', 'setup-4')).status, 'duplicate')
+                    for changed in (replace(config, name='changed'), replace(config, panels={key: replace(panel, slot_layout='columns') for key, panel in config.panels.items()})):
+                        with self.assertRaises(ConfigurationMismatchError):
+                            TrafficEngine(changed, state_store=store)
+                finally:
+                    store.close()
+
+    def test_nondefault_display_layout_still_changes_configuration_identity(self):
+        original = sample_session(DispatchMode.CLEARANCE)
+        changed = replace(original, panels={key: replace(panel, slot_layout='columns') for key, panel in original.panels.items()})
+        self.assertNotEqual(session_config_fingerprint(original), session_config_fingerprint(changed))
+
     def test_pending_clearance_request_survives_restart(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "trainmeet.db"

@@ -38,9 +38,18 @@ class CorruptStateError(StateStoreError):
     pass
 
 
-def session_config_fingerprint(config: SessionConfig) -> str:
+def session_config_fingerprint(config: SessionConfig, *, explicit_panel_layout_defaults: bool = False) -> str:
+    value = asdict(config)
+    # Before 1.9 the default row layout was implicit. Adding a presentation
+    # field must not invalidate every persisted run on a software upgrade.
+    # Non-default layouts remain part of the identity, as do all route/slot
+    # mappings and traffic rules. Never bypass the configuration check.
+    if not explicit_panel_layout_defaults:
+        for panel in value["panels"].values():
+            if panel.get("slot_layout") == "rows":
+                panel.pop("slot_layout")
     canonical = json.dumps(
-        asdict(config),
+        value,
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,

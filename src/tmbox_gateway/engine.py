@@ -20,7 +20,7 @@ from .models import (
     RequestStatus,
     SessionConfig,
 )
-from .storage import CorruptStateError, StateStore, session_config_fingerprint
+from .storage import ConfigurationMismatchError, CorruptStateError, StateStore, session_config_fingerprint
 
 
 class TrafficEngine:
@@ -51,7 +51,16 @@ class TrafficEngine:
         self.runtime_guard: Callable[[], str | None] | None = None
         self._validate_config()
         if self.state_store is not None:
-            state = self.state_store.load(self.config.id, self.config_fingerprint)
+            try:
+                state = self.state_store.load(self.config.id, self.config_fingerprint)
+            except ConfigurationMismatchError:
+                # 1.9.0 briefly hashed explicit default layout fields. Accept
+                # only that exact encoding of THIS config, never arbitrary old
+                # configuration or reset state. Startup does not rewrite data.
+                explicit = session_config_fingerprint(config, explicit_panel_layout_defaults=True)
+                if explicit == self.config_fingerprint:
+                    raise
+                state = self.state_store.load(self.config.id, explicit)
             if state is not None:
                 self._restore_state(state)
 
