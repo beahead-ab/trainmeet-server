@@ -48,6 +48,7 @@ class TrafficEngine:
         self.audit: list[dict[str, Any]] = []
         self.transition_observer: Callable[[dict[str, Any], dict[str, Any], datetime], None] | None = None
         self.clock_source: Callable[[], dict[str, Any]] | None = None
+        self.runtime_guard: Callable[[], str | None] | None = None
         self._validate_config()
         if self.state_store is not None:
             state = self.state_store.load(self.config.id, self.config_fingerprint)
@@ -56,7 +57,33 @@ class TrafficEngine:
 
     def press(self, command: Command, *, now: datetime | None = None) -> CommandAck:
         with self._lock:
+            if self.runtime_guard and (reason := self.runtime_guard()):
+                return CommandAck(command.command_id, "rejected", reason, self.revision, self.revision, {})
             return self._press_locked(command, now=now)
+
+    def adopt_config(self, config: SessionConfig) -> None:
+        """Swap a validated idle configuration without replacing gateway objects.
+
+        The common lifecycle lock covers the surrounding database transition;
+        MQTT and HTTP keep referencing this same engine and revision increases.
+        """
+        with self._lock:
+            if any(value.state != ConnectionState.FREE for value in self.connections.values()):
+                raise ValueError("Traffic must clear before the configuration changes")
+            if any(value.mode != InteractionMode.IDLE for value in self.panels.values()):
+                raise ValueError("Panel interaction must finish before the configuration changes")
+            validated = TrafficEngine(config)
+            checkpoint = self._checkpoint()
+            old_config, old_fingerprint = self.config, self.config_fingerprint
+            self.config, self.config_fingerprint = config, validated.config_fingerprint
+            self.connections, self.panels = validated.connections, validated.panels
+            self.processed_commands = {}
+            self.revision += 1
+            try:
+                self._persist_or_rollback(checkpoint)
+            except Exception:
+                self.config, self.config_fingerprint = old_config, old_fingerprint
+                raise
 
     def perform(
         self,
@@ -75,6 +102,8 @@ class TrafficEngine:
         the key grammar part of the HTTP contract; this does not.
         """
         with self._lock:
+            if self.runtime_guard and (reason := self.runtime_guard()):
+                return False, reason
             if connection_id not in self.connections:
                 return False, "unknown_connection"
             moment = now or datetime.now(timezone.utc)

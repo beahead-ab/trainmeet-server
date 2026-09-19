@@ -18,3 +18,12 @@ tm-text { display: contents; }
 .package-table table {border-collapse:collapse;width:100%;font-size:.9rem}
 .package-table th,.package-table td {padding:10px;text-align:left;border-bottom:1px solid var(--border,#ddd);vertical-align:top}
 .package-table th {font-weight:600}
+.selected-meet{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:500}
+.workspace-menu{position:relative;flex:none}
+.workspace-menu summary{cursor:pointer;list-style:none;border:1px solid hsl(var(--border));border-radius:12px;padding:8px 14px;font-size:22px;line-height:1.2}
+.workspace-menu summary::-webkit-details-marker{display:none}
+.topbar .workspace-menu nav{position:absolute;right:0;top:calc(100% + 8px);width:230px;max-width:calc(100vw - 36px);z-index:20;display:grid;gap:4px;padding:10px;border:1px solid hsl(var(--border));border-radius:14px;background:hsl(var(--card));box-shadow:0 12px 36px hsl(var(--ink)/.15)}
+.workspace-menu:not([open]) nav,.workspace-menu [hidden]{display:none!important}
+.workspace-menu nav a,.workspace-menu nav button{text-align:left;justify-content:flex-start;min-height:44px;padding:10px 14px;border:0;border-radius:8px;color:inherit}
+.workspace-menu nav a:hover,.workspace-menu nav button:hover{background:hsl(var(--tint))}
+@media(max-width:680px){.selected-meet{order:4;flex-basis:100%;font-size:13px}.connection{margin-left:auto}.connection #connection{max-width:100px;font-size:10px}.topbar{gap:12px}.topbar .workspace-menu nav{order:initial;justify-content:stretch}}

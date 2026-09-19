@@ -579,7 +579,7 @@ class SQLiteRuntimeStore:
         except json.JSONDecodeError as error:
             raise RuntimePublicationError("Det hämtade driftpaketet är skadat") from error
 
-    def activate(self, publication_id: str) -> RuntimePublication:
+    def activate(self, publication_id: str, *, preserve_active_day: bool = False) -> RuntimePublication:
         publication = self.publication(publication_id)
         if publication is None:
             raise RuntimePublicationError("Den hämtade versionen finns inte")
@@ -597,14 +597,15 @@ class SQLiteRuntimeStore:
                     "DELETE FROM runtime_settings WHERE key = ? AND value = ?",
                     (self.PENDING_KEY, publication_id),
                 )
-                self._connection.execute(
-                    """
-                    INSERT INTO runtime_settings(key, value, updated_at)
-                    VALUES ('active_day', ?, CURRENT_TIMESTAMP)
-                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-                    """,
-                    (publication.active_day,),
-                )
+                if not preserve_active_day or self.active_day() is None:
+                    self._connection.execute(
+                        """
+                        INSERT INTO runtime_settings(key, value, updated_at)
+                        VALUES ('active_day', ?, CURRENT_TIMESTAMP)
+                        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                        """,
+                        (publication.active_day,),
+                    )
                 self._connection.execute(
                     "DELETE FROM runtime_settings WHERE key = 'runtime_error'"
                 )
@@ -615,6 +616,16 @@ class SQLiteRuntimeStore:
                 raise
         self.bump_config_version()
         return publication
+
+    def deactivate(self) -> None:
+        """Archive EU's active pointer for an explicit switch, never its data.
+
+        The shared lifecycle gate must already block traffic before calling this.
+        Pending packages, Cloud credentials, accounts and publication history stay.
+        """
+        with self._lock:
+            self._connection.execute("UPDATE runtime_publications SET active=0 WHERE active=1")
+            self.bump_config_version()
 
     def config_version(self) -> int:
         """The current configuration generation.

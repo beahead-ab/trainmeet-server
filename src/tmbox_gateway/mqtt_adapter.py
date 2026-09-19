@@ -91,6 +91,10 @@ class MQTTGatewayAdapter:
         LOGGER.warning("Gateway disconnected from broker: %s", reason_code)
 
     def _on_message(self, client: Any, userdata: Any, message: Any) -> None:
+        with self.engine._lock:
+            return self._on_message_locked(client, userdata, message)
+
+    def _on_message_locked(self, client: Any, userdata: Any, message: Any) -> None:
         del userdata
         try:
             topic_parts = message.topic.split("/")

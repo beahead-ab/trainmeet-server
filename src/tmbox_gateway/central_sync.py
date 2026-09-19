@@ -35,6 +35,7 @@ class CentralRuntimeManifest:
     publication_id: str
     published_at: str
     package_checksum: str
+    wait_supported: bool = False
 
 
 def fetch_runtime_package(
@@ -116,6 +117,7 @@ def fetch_linked_runtime(
                 publication_id=str(payload["publication_id"]),
                 published_at=str(payload["published_at"]),
                 package_checksum=str(payload.get("package_checksum") or ""),
+                wait_supported=payload.get("wait_supported") is True,
             )
         except (KeyError, TypeError) as error:
             raise CentralSyncError("TrainMeet skickade inget versionsbesked") from error
@@ -123,6 +125,23 @@ def fetch_linked_runtime(
     if not isinstance(package, dict):
         raise CentralSyncError("TrainMeet skickade inget driftpaket")
     return CentralRuntimeDownload(package=package, link_token=token)
+
+
+def wait_for_runtime_change(link_token: str, endpoint_url: str, publication_id: str,
+                            *, wait_seconds: int = 25) -> CentralRuntimeManifest:
+    """An outbound, bounded notification request, compatible with old Cloud."""
+    wait_seconds = min(25, max(0, wait_seconds))
+    endpoint_url = canonical_runtime_url(endpoint_url)
+    query = urlencode({"token": link_token, "manifest": "1", "after": publication_id,
+                       "wait": wait_seconds})
+    separator = "&" if "?" in endpoint_url else "?"
+    payload = _read_json(Request(f"{endpoint_url}{separator}{query}",
+                        headers={"Accept": "application/json", "User-Agent": "TrainMeet-Server"}),
+                         timeout=wait_seconds + 5)
+    if not payload.get("publication_id"):
+        raise CentralSyncError("Cloud skickade ingen publiceringsnotifiering")
+    return CentralRuntimeManifest(str(payload["publication_id"]), str(payload.get("published_at", "")),
+                                 str(payload.get("package_checksum", "")), payload.get("wait_supported") is True)
 
 
 def _read_json(request: Request, *, timeout: float) -> dict[str, Any]:
@@ -142,5 +161,3 @@ def _read_json(request: Request, *, timeout: float) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise CentralSyncError("TrainMeet skickade ett ogiltigt svar")
     return payload
-
-

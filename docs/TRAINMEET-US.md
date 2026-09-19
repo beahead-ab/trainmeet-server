@@ -2,35 +2,33 @@
 
 ## Cloud → lokal US-körning
 
-Server kan hämta publicerade US-paket från **Cloud 1.2.0**. Cloud bygger och
-publicerar konfiguration; den lokala Servern ensam äger körning, klocka,
-Conductor-tilldelning och track warrants. EU:s paket, Cloud-koppling, klocka
-och trafikmotor ändras inte av en US-hämtning eller US-start.
+Cloud bygger och publicerar config; den lokala Servern ensam äger körning,
+klocka, Conductor-tilldelning och track warrants. Servern representerar en
+vald träff. EU och US har separata trafikmotorer men kan inte vara aktiva
+samtidigt. Se [aktuell Cloud/server-modell](CLOUD-ONLY-SERVER.md).
 
 1. Publicera en granskad **US-träff** i Cloud och hämta dess sexsiffriga kod.
-2. Öppna **US Dispatcher → Download from Cloud** på den lokala Servern.
+2. Öppna **Inställningar → Cloud-koppling** på den lokala Servern.
 3. Använd `https://cloud.trainmeet.app/config` (eller din egen Config-server)
-   och skriv in koden. **Download package** sparar och validerar lokalt;
-   ingen körning startar och ingen omstart krävs.
-4. Granska spårsegment, MP-gränser, tåg/tidtabell och källinstruktioner i
+   och skriv in koden. Config sparas och valideras lokalt; ingen körning
+   startar och ingen omstart krävs. Byte från en annan träff bekräftas separat.
+4. Välj arbetsytan **Dispatcher**. Granska spårsegment, MP-gränser, tåg/tidtabell och källinstruktioner i
    **Review US package**. Bekräfta testprofilen och välj **Start US session**.
    En redan pågående session måste avslutas först.
 5. **US clock** använder Clouds föreslagna tid/hastighet men börjar pausad.
    Dispatcher väljer när den ska gå. Klockan sparas lokalt och fortsätter
    efter serveromstart om den lämnades igång; stoppa den före en planerad paus.
 6. Anslut och tilldela Conductor enligt driftstegen nedan. All fortsatt drift
-   fungerar utan internet, inklusive start av tidigare hämtade paket.
+   fungerar utan internet, inklusive start av serverns valda hämtade config.
 
-**Saved US packages** visar lokalt sparade publiceringar. Ny hämtning kan
-göras under körning men ändrar aldrig den frysta sessionen. Lämna koden tom
-för att hämta senaste publiceringen via den sparade US-kopplingen. Byter du
-Config-server eller träff ska du ange den nya serverns adress **och kod**.
-US hämtar inte automatiskt i bakgrunden. En ny publicering används först vid
-nästa uttryckliga sessionsstart. JSON-import finns kvar för helt offline
-installation och går genom samma granskning.
+Ny publicerad config kontrolleras automatiskt och aktiveras när den kan
+bevara pågående drift. Öppna warrants och andra konflikter gör att den väntar.
+**Sök configuppdatering** under Inställningar använder samma säkra kedja.
+Paketarkivet och historiken bevaras, men gamla paket kan inte väljas som en
+andra parallell träff. Lokal JSON-import och separata US-Cloud-kopplingar är borttagna.
 
 Första installationens vanliga **hämta config** känner också igen US-paket
-och leder vidare till Dispatcher. Lokalt administratörskonto krävs precis
+och leder vidare till arbetsytesväljaren. Lokalt administratörskonto krävs precis
 som för EU; Cloud-inloggningar och lösenord kopieras aldrig.
 
 Clouds dispatcher-distrikt och källinstruktioner visas som **planeringsunderlag**.
@@ -40,7 +38,7 @@ Distriktsbegränsade behörigheter, Train Token-överlämning och historisk TT&T
 dispatcher uttryckligen ställer **US clock**; en uppdatering flyttar inte deras tid.
 
 Tekniskt: `us_packages` sparar oföränderliga paket med SHA-256-kontrollsumma;
-`us_cloud_link` håller US-kopplingen separat från EU. Samma publicerings-ID
+Cloud-koppling och beständig träffspärr delas med EU. Samma publicerings-ID
 med annat innehåll avvisas. Start är revisions-/idempotensskyddad och låser
 in en kopia. Kopplingstoken skickas aldrig till webbläsaren. Befintlig backup
 omfattar tabellerna och serverns träffnollställning rensar även dessa.
@@ -103,9 +101,9 @@ bara efter aktivt val; inga MP-tal eller spårantaganden från bilderna importer
 2. Öppna **US Dispatcher** eller `http://SERVER:8787/us/dispatcher` och logga in
    med den lokala serverns administratör. På HTTPS-installationer används
    förstås serverns vanliga HTTPS-adress utan porttillägg.
-3. Välj **Import US package**. Välj `examples/us-twc-training.json` från detta
-   repo och **Review package**. Läs övningsbanan, bekräfta testprofilen och välj **Start US session**.
-   De två parallella spåren är avsiktligt fiktiva och oberoende.
+3. Koppla en publicerad US-övningsträff från Cloud enligt stegen ovan.
+   Granska den valda configen, bekräfta testprofilen och välj **Start US session**.
+   `examples/us-twc-training.json` är en utvecklingsfixture, inte en importväg i Serverns gränssnitt.
 4. Välj **Connect conductor**. Öppna samma servers `/us/conductor` på telefonen,
    ange namn och engångskoden. Markera Training 101 hos dispatcher och välj
    **Assign**. Conductor får inte själv byta till ett annat tåg.

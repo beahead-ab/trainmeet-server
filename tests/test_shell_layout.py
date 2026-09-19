@@ -41,10 +41,10 @@ class RunModeLayoutTests(unittest.TestCase):
         self.assertTrue(body, "KÖR sätter ingen egen layout på skalet")
         self.assertIn("display: block", body)
 
-    def test_build_mode_still_has_its_sidebar_row(self):
-        body = _rule('body[data-mode="bygg"] .server-admin-shell')
+    def test_workspace_picker_does_not_inherit_a_sidebar(self):
+        body = _rule('body[data-mode="workspaces"] .server-admin-shell')
         self.assertTrue(body)
-        self.assertIn("display: flex", body)
+        self.assertIn("display: block", body)
 
     def test_the_workspace_does_not_carry_its_own_width(self):
         """Bredden ska komma från skalet, inte från två ställen som kan
@@ -56,7 +56,7 @@ class RunModeLayoutTests(unittest.TestCase):
     def test_both_modes_are_covered(self):
         """Ett läge utan egen regel faller tillbaka på den gamla gridden,
         vilket är precis felet som nådde produktion."""
-        for mode in ("kor", "bygg"):
+        for mode in ("kor", "workspaces", "installningar"):
             with self.subTest(mode=mode):
                 self.assertTrue(_rule(f'body[data-mode="{mode}"] .server-admin-shell'))
 

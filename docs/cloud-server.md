@@ -1,9 +1,10 @@
-# Cloud och server: ansvar och ändringsrätt
+# Historik: tidigare Cloud/server-modell
 
-Normativt beslutsdokument för relationen mellan TrainMeet Cloud och TrainMeet
-Server. Besluten D1–D6 nedan ersätter motsvarande formuleringar i README och i
-`trainmeet-cloud`. När koden och det här dokumentet säger olika saker är det en
-bugg i koden.
+**Ersatt 2026-09-19 av [Cloud förbereder, Server kör](CLOUD-ONLY-SERVER.md).**
+Texten nedan sparas endast som beslutshistorik och beskriver inte dagens
+gränssnitt eller ändringsrätt. Byggläge/offline-editor har tagits bort. Cloud
+är ensam configredaktör, Server representerar en träff och fortsätter köra
+lokalt utan internet. Historik och konton bevaras även vid träffbyte.
 
 Boxens sida av kedjan är [`docs/protocol/v2/`](protocol/v2/README.md). Det här
 dokumentet handlar om våningen ovanför: vem som får ändra en träffs

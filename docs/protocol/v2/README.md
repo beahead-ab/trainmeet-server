@@ -196,6 +196,23 @@ förlorad kontakt.
 
 ## 5. Revision och idempotens
 
+### Träffens omfattning
+
+Cloud-only Server skickar även `meet_generation` och `publication_id` i
+assignment, config och snapshot. Boxen ska använda den matchande uppsättning
+som operatören såg och kopiera omfattningen till skrivkommandot. Den får inte
+hämta en ny generation enbart för att märka om ett gammalt kommando.
+Vid byte rensas gamla val och väntande kommandon/svar. Blandade retained
+meddelanden från olika generationer får aldrig bilda ett körklart läge.
+
+Servern avvisar felaktig omfattning med `stale_meet_context`. Efter uttryckligt
+träffbyte eller trafikdagsbyte krävs omfattning för alla operativa skrivningar.
+Äldre oskopad firmware kan fortsätta före ett sådant byte, men måste uppdateras
+för att skriva efteråt. Läsningar/configkvittens ger ingen trafikrättighet.
+En ny box kan prata med en äldre server utan dessa fält, men får inte blanda
+oskopade och skopade tillstånd. Fälten är därför valfria i bakåtkompatibla
+JSON-scheman; Serverns runtimepolicy avgör när de krävs.
+
 Tre skilda revisionsutrymmen, inte en global räknare. En global revision skalar
 inte: en orelaterad händelse vid en annan station skulle ge falska
 `stale_revision`-avslag.
