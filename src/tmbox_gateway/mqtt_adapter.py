@@ -120,16 +120,12 @@ class MQTTGatewayAdapter:
             payload = json.loads(message.payload.decode("utf-8"))
             if payload.get("client_id") != client_id:
                 raise ValueError("Client id does not match command topic")
-            paired_client = self.identities.client(client_id) if self.identities is not None else None
-            gateway_clock = paired_client is not None and paired_client.kind == DeviceKind.ESP32_PANEL
-            command = _decode_command(
-                payload,
-                received_at=datetime.now(timezone.utc),
-                use_gateway_clock=gateway_clock,
-            )
-            if self.identities is not None and command.panel_id not in self.identities.panels_for_client(client_id):
+            # Revoke before decoding: physical boxes omit wall-clock fields.
+            # A removed box is no longer a paired client, but still deserves
+            # an explicit refusal instead of a misleading malformed-message log.
+            if self.identities is not None and str(payload.get("panel_id") or "") not in self.identities.panels_for_client(client_id):
                 ack = CommandAck(
-                    command_id=command.command_id,
+                    command_id=str(payload.get("command_id") or ""),
                     status="rejected",
                     reason="panel_not_assigned",
                     previous_revision=self.engine.revision,
@@ -137,6 +133,12 @@ class MQTTGatewayAdapter:
                     snapshots={},
                 )
             else:
+                paired_client = self.identities.client(client_id) if self.identities is not None else None
+                command = _decode_command(
+                    payload,
+                    received_at=datetime.now(timezone.utc),
+                    use_gateway_clock=paired_client is not None and paired_client.kind == DeviceKind.ESP32_PANEL,
+                )
                 ack = self.engine.press(command)
             ack_payload = ack.to_dict()
             if self.identities is not None:
@@ -162,7 +164,7 @@ class MQTTGatewayAdapter:
         if self.identities is None:
             return
         payload = json.loads(raw_payload.decode("utf-8"))
-        device = self.identities.record_discovery(
+        self.identities.record_discovery(
             device_id,
             str(payload["device_code"]),
             model=str(payload.get("model", "TMBox")),
@@ -171,6 +173,14 @@ class MQTTGatewayAdapter:
             protocol_version=int(payload.get("protocol_version", 1) or 1),
             display=DisplayCapability.parse(payload.get("display")),
         )
+        self.publish_device_assignment(device_id)
+
+    def publish_device_assignment(self, device_id: str) -> None:
+        if self.identities is None:
+            return
+        device = self.identities.discovered_device_or_none(device_id)
+        if device is None:
+            return
         assigned_panel_ids = list(self.identities.panels_for_client(device_id))
         station_id = self.identities.station_for_client(device_id)
         # Admin assigns a station now. A v1 keypad still needs one concrete

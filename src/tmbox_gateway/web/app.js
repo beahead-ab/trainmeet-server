@@ -805,6 +805,35 @@ deviceForm.addEventListener("submit", async (event) => {
   }
 });
 
+document.querySelector("#device-remove-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('[type="submit"]');
+  if (button.disabled || !form.dataset.deviceId) return;
+  const message = document.querySelector("#device-remove-message");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  setMessage(message, "");
+  button.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/devices/remove", {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device_id: form.dataset.deviceId }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || t("TMBoxen kunde inte tas bort."));
+    finishModal(form);
+    setMessage(document.querySelector("#device-list-message"), "TMBoxen är borttagen.", "success");
+    // Show the confirmed result without depending on another network request.
+    state.devices = state.devices.filter(device => device.device_id !== form.dataset.deviceId);
+    renderDevices({ devices: state.devices, stations: state.stations });
+  } catch (error) {
+    setMessage(message, error.name === "AbortError" ? "Servern svarade inte. Kontrollera listan innan du försöker igen." : error.message, "error");
+  } finally { clearTimeout(timeout); button.disabled = false; }
+});
+
 runtimeForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const syncCode = document.querySelector("#runtime-sync-code").value;
@@ -1410,12 +1439,16 @@ async function refreshDevices() {
   // de kan inte visa olika många.
   state.devices = payload.devices || [];
   state.stations = payload.stations || [];
+  renderDevices({ devices: state.devices, stations: state.stations });
+}
+
+function renderDevices(payload) {
   document.querySelector("#app-devices").textContent = `${state.devices.length} TMBox${state.devices.length === 1 ? "" : "ar"}`;
   const list = document.querySelector("#device-list");
   updateStationOptions(payload.stations || []);
   list.replaceChildren();
   if (!payload.devices.length) {
-    list.innerHTML = html`<div class="empty-status">Ingen fysisk TMBox har presenterat sig ännu.</div>`;
+    list.innerHTML = html`<div class="empty-status">Inga TMBoxar att visa.</div>`;
     return;
   }
   for (const device of payload.devices) {
@@ -1443,7 +1476,22 @@ async function refreshDevices() {
       deviceStation.value = device.station_id || "";
       openModal("device-form-modal");
     });
-    row.append(edit);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "secondary device-remove";
+    remove.dataset.tmText = "Ta bort";
+    remove.textContent = t("Ta bort");
+    remove.addEventListener("click", () => {
+      document.querySelector("#device-remove-form").dataset.deviceId = device.device_id;
+      document.querySelector("#device-remove-code").textContent = device.device_code;
+      document.querySelector("#device-remove-station").textContent = assignment.textContent;
+      setMessage(document.querySelector("#device-list-message"), "");
+      openModal("device-remove-modal");
+    });
+    const actions = document.createElement("div");
+    actions.className = "device-actions";
+    actions.append(edit, remove);
+    row.append(actions);
     list.append(row);
   }
 }

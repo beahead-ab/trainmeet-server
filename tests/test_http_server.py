@@ -29,6 +29,47 @@ from runtime_fixture import runtime_package, runtime_package_v3
 
 
 class HTTPServerTests(unittest.TestCase):
+    def test_admin_removes_box_over_http_and_publishes_revocation(self):
+        from unittest.mock import Mock
+        self.identities.record_discovery("box-one", "TBX-ONE")
+        box = self.identities.assign_discovered_device("TBX-ONE", ("panel-a",), station_id="station-a")
+        self.identities.register_client("admin-remove", "Admin", DeviceKind.WEB_ADMIN, "admin-token", ())
+        notify = self.application.on_device_assignment_changed = Mock()
+        before = self.engine.revision
+        result = self._json_request("/v1/devices/remove", {"device_id": "box-one"}, token="admin-token")
+        self.assertEqual(result, {"device_id": "box-one", "removed": True})
+        notify.assert_called_once_with("box-one")
+        self.assertEqual(self._json_request("/v1/devices", token="admin-token")["devices"], [])
+        self.assertEqual(self.engine.revision, before)
+        # A request authenticated just before removal must not use stale grants.
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.application.command(box, {"panel_id": "panel-a", "expected_revision": before, "key": "A"})
+        self.assertEqual(refused.exception.code, "panel_not_assigned")
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.application.tkl_context(box, "station-a")
+        self.assertEqual(refused.exception.code, "station_not_assigned")
+
+    def test_remove_requires_admin_and_known_device(self):
+        self.identities.configure_admin_access("admin", "test-password")
+        self.identities.record_discovery("box-one", "TBX-ONE")
+        self.identities.register_client("box-one", "Box", DeviceKind.ESP32_PANEL, "box-token", ())
+        self.identities.register_client("admin-remove", "Admin", DeviceKind.WEB_ADMIN, "admin-token", ())
+        for token, body, status in [(None, {"device_id": "box-one"}, 401), ("box-token", {"device_id": "box-one"}, 403), ("admin-token", {}, 400), ("admin-token", {"device_id": "missing"}, 404)]:
+            request = Request(self.base_url + "/v1/devices/remove", method="POST", data=json.dumps(body).encode(), headers={"Content-Type": "application/json", **({"Authorization": "Bearer " + token} if token else {})})
+            with self.assertRaises(HTTPError) as refused:
+                urlopen(request, timeout=2)
+            self.assertEqual(refused.exception.code, status)
+        self.assertEqual(len(self.identities.discovered_devices()), 1)
+
+    def test_remove_is_committed_even_if_broker_is_unavailable(self):
+        from unittest.mock import Mock
+        self.identities.record_discovery("box-one", "TBX-ONE")
+        admin = self.identities.register_client("admin-remove", "Admin", DeviceKind.WEB_ADMIN, "admin-token", ())
+        self.application.on_device_assignment_changed = Mock(side_effect=RuntimeError("offline"))
+        with self.assertLogs("tmbox_gateway.http", level="ERROR"):
+            self.application.remove_device(admin, {"device_id": "box-one"})
+        self.assertEqual(self.identities.discovered_devices(), ())
+
     def test_tmbox_code_enrolls_without_picking_a_station(self):
         device_id = "esp8266-aabbccddeeff"
         self.identities.record_discovery(device_id, "TBX-DDEEFF")

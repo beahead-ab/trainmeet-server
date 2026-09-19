@@ -46,6 +46,25 @@ class MQTTCommandTests(unittest.TestCase):
 
 
 class DeviceHelloTests(unittest.TestCase):
+    def test_removed_box_loses_retained_assignment_and_cannot_control_panel(self):
+        self._hello()
+        device_id = "TMBOX-7A42F1"
+        self.identities.assign_discovered_device(device_id, ("panel-a",), station_id="station-a")
+        self.identities.remove_discovered_device(device_id)
+        self.adapter.publish_device_assignment(device_id)
+        self.assertEqual(self._last_assignment()["status"], "waiting_for_assignment")
+        self.assertEqual(self._last_assignment()["assigned_panel_ids"], [])
+        self._hello()
+        self.assertEqual(self.identities.discovered_devices(), ())
+        # Real physical commands have uptime, not sent_at/expires_at.
+        payload = {**command_payload(), "client_id": device_id}
+        message = MagicMock(topic=f"tambox/v1/client/{device_id}/command", payload=json.dumps(payload).encode(), mid=1, qos=1)
+        self.adapter.engine.press = MagicMock()
+        self.adapter._on_message(self.adapter.client, None, message)
+        self.adapter.engine.press.assert_not_called()
+        acks = [json.loads(call.args[1]) for call in self.adapter.client.publish.call_args_list if call.args[0].endswith("/ack")]
+        self.assertEqual(acks[-1]["reason"], "panel_not_assigned")
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.identities = IdentityStore(Path(self.directory.name) / "identity.db")

@@ -600,6 +600,19 @@
                 </div>
 </form>
 </dialog>
+<dialog id="device-remove-modal" class="admin-modal" aria-labelledby="device-remove-title" aria-describedby="device-remove-description">
+  <h2 id="device-remove-title">Ta bort TMBox</h2>
+  <p><strong id="device-remove-code"></strong><br><span id="device-remove-station"></span></p>
+  <p id="device-remove-description">Boxen kopplas bort från stationen och kan inte längre styra trafiken. Träffens trafik och historik behålls. Du kan koppla boxen igen med dess kod.</p>
+  <form id="device-remove-form">
+    <p id="device-remove-message" class="form-message" role="status"></p>
+    <div class="modal-actions">
+      <button type="button" class="secondary" data-close-modal>Avbryt</button>
+      <button type="submit" class="danger-action">Ta bort TMBox</button>
+    </div>
+  </form>
+</dialog>
+              <p id="device-list-message" class="form-message" role="status"></p>
               <div id="device-list" class="status-list"></div>
           </section>
         </section>

@@ -2,6 +2,13 @@
  * never translation keys. Uses the existing TrainMeet localization runtime. */
 (() => {
   const rows = [
+    ['Ta bort', 'Remove', 'Fjern', 'Fjern', 'Entfernen'],
+    ['Ta bort TMBox', 'Remove TMBox', 'Fjern TMBox', 'Fjern TMBox', 'TMBox entfernen'],
+    ['Boxen kopplas bort från stationen och kan inte längre styra trafiken. Träffens trafik och historik behålls. Du kan koppla boxen igen med dess kod.', 'The box is disconnected from its station and can no longer control traffic. Meet operations and history are preserved. You can reconnect the box using its code.', 'Boksen frakobles stationen og kan ikke længere styre trafikken. Træffets trafik og historik bevares. Du kan tilslutte boksen igen med dens kode.', 'Boksen kobles fra stasjonen og kan ikke lenger styre trafikken. Treffets trafikk og historikk beholdes. Du kan koble til boksen igjen med koden.', 'Die Box wird vom Bahnhof getrennt und kann den Betrieb nicht mehr steuern. Betrieb und Verlauf des Treffens bleiben erhalten. Die Box kann mit ihrem Code erneut verbunden werden.'],
+    ['TMBoxen är borttagen.', 'TMBox removed.', 'TMBox er fjernet.', 'TMBoxen er fjernet.', 'TMBox entfernt.'],
+    ['TMBoxen kunde inte tas bort.', 'Could not remove the TMBox.', 'TMBox kunne ikke fjernes.', 'Kunne ikke fjerne TMBoxen.', 'Die TMBox konnte nicht entfernt werden.'],
+    ['Servern svarade inte. Kontrollera listan innan du försöker igen.', 'The server did not respond. Check the list before trying again.', 'Serveren svarede ikke. Kontrollér listen, før du prøver igen.', 'Serveren svarte ikke. Kontroller listen før du prøver igjen.', 'Der Server hat nicht geantwortet. Prüfen Sie die Liste, bevor Sie es erneut versuchen.'],
+    ['Inga TMBoxar att visa.', 'No TMBoxes to display.', 'Ingen TMBoxe at vise.', 'Ingen TMBoxer å vise.', 'Keine TMBoxen vorhanden.'],
     ['TRÄFFINSTÄLLNINGAR', 'MEET SETTINGS', 'TRÆFINDSTILLINGER', 'TREFFINNSTILLINGER', 'TREFFENEINSTELLUNGEN'],
     ['Ändra klockans utseende', 'Change clock appearance', 'Skift urets udseende', 'Endre klokkens utseende', 'Uhrdarstellung ändern'],
     ['Klockans utseende', 'Clock appearance', 'Urets udseende', 'Klokkens utseende', 'Uhrdarstellung'],

@@ -106,6 +106,26 @@ class ProtocolV2Base(unittest.TestCase):
 
 
 class ProtocolV2Tests(ProtocolV2Base):
+    def test_removed_box_waits_and_cannot_send_or_replay_commands(self):
+        command = {"protocol_version": 2, "message_id": "before-remove", "device_id": DEVICE,
+                   "action": "train.position.set", "payload": {"movement_id": DEPARTURE}}
+        self._send("command", command)
+        self.assertEqual(self._acks()[-1]["status"], "accepted")
+        before = self.service.snapshot_payload(STATION)
+        self.identities.remove_discovered_device(DEVICE)
+        self.published.clear()
+        self.gateway.publish_device_state(DEVICE)
+        self.assertEqual(len(self._retained()), 1)
+        self.assertEqual(self._retained()[0][1]["status"], "waiting_for_assignment")
+        for message_id in ("before-remove", "after-remove"):
+            self._send("command", {**command, "message_id": message_id})
+            self.assertEqual(self._acks()[-1]["reason"], "not_assigned")
+        self._send("hello", {"device_code": DEVICE})
+        self.assertEqual(self.identities.discovered_devices(), ())
+        self.assertEqual(self.service.snapshot_payload(STATION), before)
+        # History survives; the old acknowledgement is retained for audit.
+        self.assertIsNotNone(self.operations_store.device_command_response(DEVICE, "before-remove"))
+
     # ------------------------------------------------------------ retained
 
     def test_hello_answers_with_assignment_config_and_snapshot(self):

@@ -150,6 +150,29 @@ const root = path.resolve(__dirname, '../..');
     assert.equal((await (await page.request.get(urls.eu + '/v1/devices')).json()).devices[0].station_id, 'station-b');
     page.once('dialog', dialog => dialog.accept());
     await page.locator('#device-form [data-close-modal]').click();
+    // Remove and explicitly reconnect a fixture box through the real API.
+    const trafficBeforeRemoval = await (await page.request.get(urls.eu + '/v1/display')).json();
+    await page.locator('#device-list .device-remove').click();
+    assert.equal(await page.locator('#device-remove-code').innerText(), 'TBX-SMOKE');
+    await screenshot('device-remove-mobile');
+    await page.locator('#device-remove-modal > .modal-close').click();
+    assert.equal((await (await page.request.get(urls.eu + '/v1/devices')).json()).devices.length, 1);
+    await page.locator('#device-list .device-remove').click();
+    await page.locator('#device-remove-form [type="submit"]').click();
+    await page.locator('#device-remove-modal').waitFor({ state: 'hidden' });
+    assert.equal((await (await page.request.get(urls.eu + '/v1/devices')).json()).devices.length, 0);
+    await page.reload();
+    await page.locator('#device-list .empty-status').waitFor();
+    const trafficAfterRemoval = await (await page.request.get(urls.eu + '/v1/display')).json();
+    for (const key of ['stations', 'connections', 'routes', 'train_positions', 'connection_states']) {
+      assert.deepEqual(trafficAfterRemoval[key], trafficBeforeRemoval[key], key + ' unchanged');
+    }
+    await page.locator('[data-open-modal="device-form-modal"]').click();
+    await page.locator('#device-code').fill('TBX-SMOKE');
+    await page.locator('#device-station').selectOption('station-a');
+    await page.locator('#device-form button[type="submit"]').click();
+    await page.locator('#device-form-modal').waitFor({ state: 'hidden' });
+    assert.equal((await (await page.request.get(urls.eu + '/v1/devices')).json()).devices[0].station_id, 'station-a');
     // Two separate browser contexts (different computers) follow the server,
     // even when an old local preference or bookmarked URL says otherwise.
     const screenContext = await browser.newContext();

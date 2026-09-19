@@ -245,6 +245,7 @@ class IdentityStore:
                 "display_rows": "INTEGER NOT NULL DEFAULT 2",
                 "display_cols": "INTEGER NOT NULL DEFAULT 16",
                 "charset": "TEXT NOT NULL DEFAULT 'ascii'",
+                "removed_at": "TEXT",
             },
         )
         now = datetime.now(timezone.utc).isoformat()
@@ -432,12 +433,19 @@ class IdentityStore:
         *,
         station_id: str | None = None,
         now: datetime | None = None,
+        reactivate_device: bool = False,
     ) -> PairedClient:
         now = now or datetime.now(timezone.utc)
         digest = _credential_digest(credential)
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
+                removed = self._connection.execute(
+                    "SELECT removed_at FROM discovered_devices WHERE device_id = ?",
+                    (client_id,),
+                ).fetchone()
+                if removed and removed[0] and not reactivate_device:
+                    raise InvalidClientError("Boxen är borttagen. Be administratören koppla den igen med boxens kod.")
                 created_at = self._connection.execute(
                     "SELECT created_at FROM clients WHERE client_id = ?",
                     (client_id,),
@@ -474,6 +482,11 @@ class IdentityStore:
                     "INSERT INTO client_panels (client_id, panel_id) VALUES (?, ?)",
                     [(client_id, panel_id) for panel_id in sorted(set(panel_ids))],
                 )
+                if reactivate_device:
+                    self._connection.execute(
+                        "UPDATE discovered_devices SET removed_at = NULL WHERE device_id = ?",
+                        (client_id,),
+                    )
                 self._connection.execute("COMMIT")
             except Exception:
                 if self._connection.in_transaction:
@@ -509,11 +522,13 @@ class IdentityStore:
         """
         with self._lock:
             discovered = self._connection.execute(
-                "SELECT device_code FROM discovered_devices WHERE device_id = ?",
+                "SELECT device_code, removed_at FROM discovered_devices WHERE device_id = ?",
                 (client_id,),
             ).fetchone()
             if discovered is None:
                 raise InvalidClientError("Boxen har inte upptäckts ännu. Invänta MQTT-anslutningen.")
+            if discovered[1]:
+                raise InvalidClientError("Boxen är borttagen. Be administratören koppla den igen med boxens kod.")
             now = datetime.now(timezone.utc).isoformat()
             self._connection.execute(
                 """INSERT OR IGNORE INTO clients (
@@ -737,7 +752,7 @@ class IdentityStore:
             rows = self._connection.execute(
                 """
                 SELECT device_id, device_code, model, firmware_version, last_seen_at, hardware_version, protocol_version, display_rows, display_cols, charset
-                FROM discovered_devices ORDER BY last_seen_at DESC
+                FROM discovered_devices WHERE removed_at IS NULL ORDER BY last_seen_at DESC
                 """
             ).fetchall()
             return tuple(
@@ -766,18 +781,52 @@ class IdentityStore:
                 """,
                 (normalized,),
             ).fetchone()
-        if row is None:
-            raise InvalidClientError("Ingen inkopplad TMBox har den koden")
-        internal_credential = f"local-device:{row[0]}"
-        return self.register_client(
-            row[0],
-            f"{row[1]} {normalized}",
-            DeviceKind.ESP32_PANEL,
-            internal_credential,
-            panel_ids,
-            station_id=station_id,
-            now=now,
-        )
+            if row is None:
+                raise InvalidClientError("Ingen inkopplad TMBox har den koden")
+            self._require_physical_box_locked(row[0])
+            return self.register_client(
+                row[0],
+                f"{row[1]} {normalized}",
+                DeviceKind.ESP32_PANEL,
+                secrets.token_urlsafe(32),
+                panel_ids,
+                station_id=station_id,
+                now=now,
+                reactivate_device=True,
+            )
+
+    def _require_physical_box_locked(self, device_id: str) -> None:
+        row = self._connection.execute(
+            "SELECT kind FROM clients WHERE client_id = ?", (device_id,),
+        ).fetchone()
+        if row and row[0] != DeviceKind.ESP32_PANEL.value:
+            raise InvalidClientError("Enheten är inte en TMBox")
+
+    def remove_discovered_device(self, device_id: str) -> None:
+        """Revoke a box, preserving traffic and a tombstone against rediscovery.
+
+        A retained MQTT hello must not undo the administrator's decision.
+        Only explicit assignment by its printed code brings the box back.
+        """
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self.discovered_device(device_id)  # Reject unknown IDs before writing.
+                self._require_physical_box_locked(device_id)
+                self._connection.execute(
+                    "UPDATE discovered_devices SET removed_at = COALESCE(removed_at, ?) WHERE device_id = ?",
+                    (datetime.now(timezone.utc).isoformat(), device_id),
+                )
+                self._connection.execute(
+                    "UPDATE clients SET enabled = 0, station_id = NULL, credential_digest = ? WHERE client_id = ?",
+                    (_credential_digest(secrets.token_urlsafe(32)), device_id),
+                )
+                self._connection.execute("DELETE FROM client_panels WHERE client_id = ?", (device_id,))
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
 
     def admin_access_summary(self) -> dict[str, object]:
         with self._lock:

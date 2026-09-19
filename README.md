@@ -476,6 +476,14 @@ TMBox-simulering. De andra delarna installeras separat:
 - [TrainMeet TKL](https://github.com/beahead-ab/trainmeet-tkl) är den separata
   stationsapplikationen. Samma UI ingår även under `/tkl/` på servern.
 
+Under **Inställningar → TMBoxar** kan administratören välja **Ta bort** vid en
+box och bekräfta dess kod och station i ett modalfönster. Boxen försvinner ur
+listan och förlorar sina stations- och panelbehörigheter direkt. Pågående
+trafik, klareringar, stationer och historik raderas inte. En uppkopplad box
+läggs inte tillbaka av automatisk upptäckt eller omstart; använd **Koppla eller
+ändra TMBox** och boxens kod för att tilldela den på nytt. Gäller både
+ESP8266/V1 och ESP32/V2, utan ny firmware.
+
 ## Två tydligt separerade webbdelar
 
 - **TrainMeet Server** är drift och administration. Här finns klockan, Cloud-kopplingen, användare och boxarnas stationstilldelningar. Bana och tidtabell redigeras endast i Cloud.

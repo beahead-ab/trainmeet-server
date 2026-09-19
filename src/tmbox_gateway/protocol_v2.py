@@ -293,14 +293,14 @@ class TMBoxStationService:
 
         action = str(payload.get("action") or "")
         with use_correlation(message_id):
-            cached = self.operations_store.device_command_response(device_id, message_id)
-            if cached is not None:
-                # The same question, not a second decision.
-                self._audit(device_id, None, action, "duplicate", payload)
-                return {**cached, "status": "duplicate"}
-
             try:
                 station_id = self._require_station(device_id, payload)
+                cached = self.operations_store.device_command_response(device_id, message_id)
+                if cached is not None:
+                    # A removed box must not replay even an old successful
+                    # response. Check its current grants before deduplication.
+                    self._audit(device_id, station_id, action, "duplicate", payload)
+                    return {**cached, "status": "duplicate"}
                 result = self._apply(device_id, station_id, payload)
             except CommandRejected as rejection:
                 station_id = self.identities.station_for_client(device_id)

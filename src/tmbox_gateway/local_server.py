@@ -231,6 +231,13 @@ def main() -> None:
                     "display": device.display.to_dict(),
                 }).encode())
     application.on_config_applied = publish_config
+    def publish_device_assignment(device_id):
+        device = identities.discovered_device(device_id)
+        if device.protocol_version == 2:
+            v2_gateway.publish_device_state(device_id)
+        else:
+            gateway.publish_device_assignment(device_id)
+    application.on_device_assignment_changed = publish_device_assignment
     # Attach the common lifecycle gate before either transport accepts input.
     gateway.client.connect(broker_host, args.mqtt_port, keepalive=10, clean_start=True)
     gateway.client.loop_start()

@@ -261,6 +261,7 @@ class TrainMeetHTTPApplication:
                 self._station_service.lifecycle = self.lifecycle
         self.cloud_config = CloudConfiguration(self) if self.lifecycle else None
         self.on_config_applied = None
+        self.on_device_assignment_changed = None
         if self.lifecycle and us_store and (self.lifecycle.selected() or {}).get("region") == "us":
             old_link = us_store.cloud_link()
             if old_link and not runtime_store.link_token():
@@ -772,6 +773,11 @@ class TrainMeetHTTPApplication:
 
     @runtime_command("eu")
     def command(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        if client.kind == DeviceKind.ESP32_PANEL:
+            current = self.identities.client(client.client_id)
+            if current is None:
+                raise HTTPAPIError(HTTPStatus.FORBIDDEN, "panel_not_assigned", "Enheten har inte tillgång till den panelen")
+            client = current
         if payload.get("traffic_session_id") and payload["traffic_session_id"] != self.engine.config.id:
             raise HTTPAPIError(HTTPStatus.CONFLICT, "wrong_session", "Kommandot tillhör en tidigare config.")
         panel_id = str(payload.get("panel_id", ""))
@@ -1397,6 +1403,8 @@ class TrainMeetHTTPApplication:
         if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
             return
         current = self.identities.client(client.client_id)
+        if current is None and client.kind == DeviceKind.ESP32_PANEL:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "station_not_assigned", "Terminalen har inte tillgång till stationen")
         if current is not None:
             client = current
         if client.station_id is not None and client.station_id == station_id:
@@ -2642,11 +2650,36 @@ class TrainMeetHTTPApplication:
             )
         except PairingError as error:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, error.code, str(error)) from error
+        self._notify_device_assignment(assigned.client_id)
         return {
             "device_id": assigned.client_id,
             "station_id": assigned.station_id,
             "assigned_panel_ids": list(assigned.panel_ids),
         }
+
+    @runtime_view
+    def remove_device(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        # Server device management also works without an active meet. Serialize
+        # with traffic commands so none can race the revocation of its grants.
+        self._require_admin(client)
+        device_id = str(payload.get("device_id") or "").strip()
+        if not device_id:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "device_required", "Välj en TMBox att ta bort")
+        try:
+            self.identities.remove_discovered_device(device_id)
+        except PairingError as error:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, error.code, str(error)) from error
+        self._notify_device_assignment(device_id)
+        return {"device_id": device_id, "removed": True}
+
+    def _notify_device_assignment(self, device_id: str) -> None:
+        if self.on_device_assignment_changed:
+            try:
+                self.on_device_assignment_changed(device_id)
+            except Exception:
+                # Grants are already committed. An offline broker must not
+                # undo them; the next hello republishes the current assignment.
+                LOGGER.exception("Could not publish changed TMBox assignment")
 
     @staticmethod
     def _require_admin(client: PairedClient) -> None:
@@ -3162,6 +3195,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/devices/assign":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.assign_device(client, payload))
+                return
+            if path == "/v1/devices/remove":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.remove_device(client, payload))
                 return
             if path == "/v1/runtime/install":
                 client = self._authenticated_client()
