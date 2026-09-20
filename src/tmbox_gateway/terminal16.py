@@ -167,11 +167,6 @@ class Terminal16Lab:
             key = self.bindings.get(connection.id)
             if key:
                 items.append(self._label(terminal.station, self.legs[key]))
-            else:
-                other = connection.other_station(terminal.station)
-                side = self._side(terminal.station, other)
-                code = self.engine.config.stations[other].code
-                items.append((code + "-" if side == "left" else "-" + code, side))
         left = [text for text, side in items if side == "left"]
         right = [text for text, side in items if side == "right"]
         page = terminal.page

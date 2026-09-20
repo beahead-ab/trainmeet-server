@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {EntryBuffer} = require('../../src/tmbox_gateway/terminal16_web/terminal.js');
-const frame = {lines:['MUN-         -VA','Nr# C:Val  12:34'],entry:{context:'station-cda',max_length:5,
+const frame = {lines:['                ','Nr# C/D    12:34'],entry:{context:'station-cda',max_length:5,
   lines:['TAG: _____      ','#Sok B:Del 12:34'],row:0,column:5,commit:'#',cancel:'*',erase:'B'}};
 test('digits never create server commands; # submits the complete value',()=>{
   const buffer = new EntryBuffer();
@@ -14,6 +14,14 @@ test('cancel and erase are local, and do not release traffic',()=>{
   const buffer = new EntryBuffer();buffer.press('3',frame);buffer.press('9',frame);
   assert.equal(buffer.press('B',frame).local,true);assert.equal(buffer.digits,'3');
   assert.equal(buffer.press('*',frame).local,true);assert.equal(buffer.digits,'');
+});
+test('idle top row stays blank and cancelling entry restores it with the clock',()=>{
+  const buffer = new EntryBuffer();
+  assert.deepEqual(buffer.lines(frame), [' '.repeat(16), 'Nr# C/D    12:34']);
+  buffer.press('3',frame);buffer.press('9',frame);
+  assert.equal(buffer.lines(frame)[0],'TAG: 39___      ');
+  buffer.press('*',frame);
+  assert.deepEqual(buffer.lines(frame), [' '.repeat(16), 'Nr# C/D    12:34']);
 });
 test('star clears typed digits locally even when server offers withdrawal or rejection',()=>{
   for (const label of ['Återta begäran…','Återta klartecken…','Neka begäran…']) {

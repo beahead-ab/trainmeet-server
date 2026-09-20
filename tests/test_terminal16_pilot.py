@@ -6,7 +6,7 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 from uuid import uuid4
 
-from tmbox_gateway.models import ConnectionState as State
+from tmbox_gateway.models import ConnectionConfig, ConnectionState as State
 from tmbox_gateway.terminal16 import Terminal16Lab
 from tmbox_gateway.terminal16_demo import demo_lab, LabServer
 
@@ -44,8 +44,39 @@ class Terminal16Tests(unittest.TestCase):
             self.assertNotIn("A", frame["keys"])
             self.assertEqual(frame["keys"]["#"]["label"], "Visa kommande tåg")
             self.assertEqual(frame["entry"]["commit"], "#")
-        self.assertTrue(self.lab.frame("DEMO-CDA")["lines"][0].startswith("MUN-"))
-        self.assertTrue(self.lab.frame("DEMO-CDA")["lines"][0].endswith("-VA"))
+            self.assertEqual(frame["lines"][0], " " * 16)
+
+    def test_overview_shows_only_active_traffic_then_becomes_blank(self):
+        for device in ("DEMO-CDA", "DEMO-VA"):
+            self.lab.terminals["WATCH-" + device] = deepcopy(self.lab.terminals[device])
+        def check(marker):
+            self.assertEqual(self.lab.frame("WATCH-DEMO-CDA")["lines"][0], f"39{marker}VA".rjust(16))
+            self.assertEqual(self.lab.frame("WATCH-DEMO-VA")["lines"][0], f"CDA{marker}39".ljust(16))
+            self.assertEqual(self.lab.frame("DEMO-MUN")["lines"][0], " " * 16)
+        self.lookup("39"); self.accept("DEMO-CDA", "#"); check("?")
+        self.lookup("39", "DEMO-VA"); self.accept("DEMO-VA", "#"); check(">")
+        self.accept("DEMO-CDA", "#"); check("▶")
+        self.accept("DEMO-VA", "#")
+        for device in ("WATCH-DEMO-CDA", "WATCH-DEMO-VA", "DEMO-MUN"):
+            self.assertEqual(self.lab.frame(device)["lines"], [" " * 16, "Nr# C/D    12:34"])
+
+    def test_overview_becomes_blank_after_cancel_or_rejection(self):
+        for actor in ("DEMO-CDA", "DEMO-VA"):
+            with self.subTest(actor=actor):
+                self.setUp()
+                self.lab.terminals["WATCH"] = deepcopy(self.lab.terminals["DEMO-CDA"])
+                self.lookup("39"); self.accept("DEMO-CDA", "#")
+                if actor == "DEMO-VA":
+                    self.lookup("39", actor)
+                self.accept(actor, "*"); self.accept(actor, "#")
+                self.assertEqual(self.lab.frame("WATCH")["lines"][0], " " * 16)
+
+    def test_extra_inactive_connections_do_not_take_display_space(self):
+        # Two connections to the left and one to the right must still be blank at rest.
+        self.lab.engine.config.connections["unused-west"] = ConnectionConfig("unused-west", "mun", "cda")
+        self.assertEqual(self.lab.frame("DEMO-CDA")["lines"][0], " " * 16)
+        self.lookup("39"); self.accept("DEMO-CDA", "#"); self.accept("DEMO-CDA", "A")
+        self.assertEqual(self.lab.frame("DEMO-CDA")["lines"][0], "39?VA".rjust(16))
 
     def test_station_timetable_has_only_its_trains_in_time_order(self):
         expected = {
@@ -517,6 +548,7 @@ class Terminal16HTTPTests(unittest.TestCase):
                     self.assertEqual(terminal.screen, "overview")
                     self.assertIsNone(terminal.selected)
                     self.assertEqual(terminal.notice, "")
+                    self.assertEqual(frame["lines"][0], " " * 16)
                     self.assertNotEqual(frame["entry"]["context"], old_contexts[frame["device_id"]])
                 self.assertEqual(self.server.lab.publication, before.publication)
 

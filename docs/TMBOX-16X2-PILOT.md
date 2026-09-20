@@ -60,8 +60,11 @@ När `*` öppnar återtagning/nekande visar `A` översikten utan att ändra traf
 bekräftelsefråga visas spärras den gamla bekräftelsen. En fråga som inte längre
 är giltig visar ”LÄGET ÄNDRAT”. Inga trafikregler har flyttats till webbläsaren.
 
-Översiktens första rad visar grannarnas stationskoder och aktuella tåg till
-vänster/höger. `?` betyder begärt, `<`/`>` klart, `◀`/`▶` faktiskt avgånget.
+Översiktens första rad är helt tom när ingen trafik pågår. Lediga anslutningar
+visas inte med stationskod eller streck och tar ingen plats, oavsett antal.
+Endast aktuella begäranden och tågrörelser visas till vänster/höger med
+motstationens kod. `?` betyder begärt, `<`/`>` klart, `◀`/`▶` faktiskt avgånget.
+När trafiken återtas, nekas eller tas emot försvinner den från översikten.
 För långa identiteter visas en i taget med `B` i översikten, aldrig ett avklippt tågnummer.
 Detaljvyn fokuserar på det valda tåget. På andra raden finns aktuellt handgrepp
 till vänster och serverns klocka till höger, även under sifferinmatning.
@@ -91,7 +94,7 @@ på Wi-Fi. Webbsidan anpassar sig dock till telefonbredd.
 
 ## Verifiering
 
-- 60 Python-tester: grundflöden, direkttrafik, neka/återta, ankomstspår,
+- 63 Python-tester: grundflöden, direkttrafik, neka/återta, ankomstspår,
   dubbla kommandon, gamla vyer, ruttkontroll, 16 tecken och HTTP-isolering;
   dessutom kronologisk bläddring, filter, dygnsskifte, försenade tåg,
   genomgående tåg, separata val/bekräftelser och inaktuell tågmarkering;
@@ -99,7 +102,7 @@ på Wi-Fi. Webbsidan anpassar sig dock till telefonbredd.
   och nollställning i alla trafiklägen med bevarad konfiguration/klocka.
 - 8 ytterligare Python-tester: originalets färgpalett, specialtecken, normalisering,
   teckenbudget och rundtur från Unicode till LCD-byte och tillbaka.
-- 9 JavaScript-tester: lokal sifferbuffert, `#`, `*`, radering,
+- 10 JavaScript-tester: lokal sifferbuffert, `#`, `*`, radering,
   siffergräns, bevarad inmatning vid klockuppdatering, specialtecken och återställning.
 - 18 befintliga trafikmotortester används som regressionstest.
 - 16 tester för publicerad provbänk: sessionsisolering, egen nollställning,
