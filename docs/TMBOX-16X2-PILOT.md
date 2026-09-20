@@ -27,6 +27,17 @@ ligger kvar även när tåg har körts; listan är en referens, inte trafikknapp
 2. Vagnsta: förfrågan öppnas automatiskt i ledig översikt. `#` ger klartecken utan tågnummer. `*` öppnar ”Neka?” och `#` bekräftar. `A` hittar alltid tillbaka till förfrågningarna.
 3. Charlottendal: `#` rapporterar faktisk avgång.
 4. Vagnsta: `#` tar emot på planerat spår 1. `B`, `D`, `#` tar emot på spår 2.
+5. Charlottendal får `39 MOTTAGET`, mottagarens kod och fortsatt klocka.
+   Beskedet försvinner automatiskt efter fem verkliga sekunder, även med
+   stoppad träffklocka. Det avslutade tågvalet rensas och kommer inte tillbaka
+   på den aktiva displayen. Referenstidtabellen ligger kvar.
+
+Mottagningsbesked skickas till alla boxar vid avsändarstationen, först efter
+lyckad ankomst (även på annat spår). Annat tågval avbryts inte: beskedet väntar
+tills boxen återgår till översikten. Flera besked visas i turordning. `#` eller
+`*` kan stänga beskedet tidigare utan trafikåtgärd; `A` öppnar förfrågningskön.
+Utgången styrs av servern; gamla knappkommandon kan inte få ny betydelse när
+beskedet försvinner. Lokal sifferinmatning bevaras.
 
 Tåg 17 går västerut från Charlottendal till Munkeröd. Tåg 93 går från
 Munkeröd till Charlottendal. Tåg 94 går från Vagnsta till Charlottendal;
@@ -130,7 +141,7 @@ på Wi-Fi. Webbsidan anpassar sig dock till telefonbredd.
 
 ## Verifiering
 
-- 80 Python-tester: grundflöden, direkttrafik, neka/återta, ankomstspår,
+- 91 Python-tester: grundflöden, direkttrafik, neka/återta, ankomstspår,
   dubbla kommandon, gamla vyer, ruttkontroll, 16 tecken och HTTP-isolering;
   dessutom kronologisk bläddring, filter, dygnsskifte, försenade tåg,
   genomgående tåg, separata val/bekräftelser och inaktuell tågmarkering;
@@ -138,11 +149,13 @@ på Wi-Fi. Webbsidan anpassar sig dock till telefonbredd.
   och nollställning i alla trafiklägen med bevarad konfiguration/klocka.
   Där ingår 13 kötester: automatisk visning, två samtidiga avsändare,
   köordning, snabbväg, avbruten fråga, gammal vy, dubbeltryck och flera mottagare.
+  Dessutom 11 mottagningsbeskedstester: automatisk stängning, alla avsändarboxar,
+  uppskjutna besked, flera besked, spårbyte, direkttrafik och gamla/dubbla kommandon.
 - 8 ytterligare Python-tester: originalets färgpalett, specialtecken, normalisering,
   teckenbudget och rundtur från Unicode till LCD-byte och tillbaka.
-- 12 JavaScript-tester: lokal sifferbuffert, `#`, `*`, radering,
+- 13 JavaScript-tester: lokal sifferbuffert, `#`, `*`, radering,
   siffergräns, bevarad inmatning vid klockuppdatering/ny förfrågan, uttryckligt
-  kökommando från inmatning, specialtecken och återställning.
+  kökommando från inmatning, specialtecken, återställning och mottagningsbesked.
 - 18 befintliga trafikmotortester används som regressionstest.
 - 16 tester för publicerad provbänk: sessionsisolering, egen nollställning,
   utgång, resursgränser, sessionscookie, HTTPS-origin och begränsade HTTP-rutter.

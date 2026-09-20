@@ -8,11 +8,12 @@ requirements. This lab deliberately refuses a persistent/production engine.
 """
 from collections import OrderedDict
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 import json
 import re
 from threading import RLock
+from time import monotonic
 from uuid import uuid4
 
 from .engine import TrafficEngine
@@ -32,6 +33,8 @@ class Terminal:
     notice: str = ""
     browse_filter: str = "all"
     return_screen: str = "detail"
+    receipts: list[tuple[str, str]] = field(default_factory=list)
+    receipt_until: float | None = None
 
 
 def row(left="", right=""):
@@ -42,10 +45,11 @@ def row(left="", right=""):
 
 
 class Terminal16Lab:
-    def __init__(self, engine: TrafficEngine, publication: dict, assignments: dict[str, str]):
+    def __init__(self, engine: TrafficEngine, publication: dict, assignments: dict[str, str], *, now=monotonic):
         if engine.state_store is not None:
             raise ValueError("This pilot is isolated and in-memory only")
         self.engine = engine
+        self.now = now
         self.publication = deepcopy(publication)
         self.day = publication["meet"]["active_day"]
         self.epoch = uuid4().hex
@@ -154,6 +158,31 @@ class Terminal16Lab:
                 self._open_requests(terminal)
                 terminal.revision += 1
 
+    def _notify_arrival(self, leg):
+        for terminal in self.terminals.values():
+            if terminal.station != leg["from_station_id"]:
+                continue
+            # Clear the exact completed leg, never a different train being handled.
+            if terminal.selected == leg["from_movement_id"]:
+                terminal.selected, terminal.screen, terminal.notice = None, "overview", ""
+            terminal.receipts.append((leg["train_number"], leg["to_station_id"]))
+            terminal.revision += 1
+
+    def _dismiss_receipt(self, terminal):
+        if terminal.receipt_until is not None:
+            terminal.receipts.pop(0)
+            terminal.receipt_until = None
+            terminal.revision += 1
+
+    def _advance_receipts(self, terminal):
+        # Real elapsed time, independent of a paused/accelerated meeting clock.
+        if terminal.receipt_until is not None and self.now() >= terminal.receipt_until:
+            self._dismiss_receipt(terminal)
+        if (terminal.receipts and terminal.receipt_until is None
+                and terminal.screen == "overview" and not terminal.notice):
+            terminal.receipt_until = self.now() + 5
+            terminal.revision += 1
+
     def _departure_ready(self, leg):
         # For a through train the preceding arrival must be recorded first.
         return all(key in self.completed for key, incoming in self.legs.items()
@@ -216,6 +245,8 @@ class Terminal16Lab:
         return buttons
 
     def _view_buttons(self, terminal):
+        if terminal.receipt_until is not None:
+            return {"#": ("home", "Stäng meddelande"), "*": ("home", "Tillbaka")}
         if terminal.notice:
             return {"#": ("back", "OK"), "*": ("back", "Tillbaka")}
         if terminal.screen == "overview":
@@ -277,6 +308,7 @@ class Terminal16Lab:
 
     def _frame(self, device):
         terminal = self.terminals[device]
+        self._advance_receipts(terminal)
         buttons = self._buttons(terminal)
         clock = self.engine.meeting_clock()["time"]
         clock = clock if re.fullmatch(r"\d{2}:\d{2}", clock) else "--:--"
@@ -349,6 +381,13 @@ class Terminal16Lab:
         if terminal.screen == "requests":
             status = (f"Förfrågan {requests.index(terminal.selected) + 1}/{len(requests)} · " + status
                       if terminal.selected in requests else "Ingen vald förfrågan. A öppnar kön; B visar översikten.")
+        if terminal.receipt_until is not None:
+            number, destination = terminal.receipts[0]
+            station = self.engine.config.stations[destination]
+            first, hint = row(f"{number} MOTTAGET"), station.code
+            if len(text_cells(hint)) > 11:
+                first, hint = row(number, station.code), "MOTTAGET"
+            status = f"Tåg {number} mottaget i {station.name}. Meddelandet försvinner automatiskt."
         lines = [first, row(hint, clock)]
         entry_lines = [row("TÅG: _____"), row("#Sök B:Del", clock)]
         return {
@@ -382,6 +421,7 @@ class Terminal16Lab:
     def command(self, device, body):
         with self.lock:
             terminal = self.terminals[device]
+            self._advance_receipts(terminal)
             command_id = body.get("command_id")
             if not isinstance(command_id, str) or not 1 <= len(command_id) <= 80:
                 return self._answer(device, False, "Ogiltigt kommando-ID")
@@ -415,6 +455,7 @@ class Terminal16Lab:
             if (body.get("entry_context") != self._frame(device)["entry"]["context"]
                     or not isinstance(number, str) or not re.fullmatch(r"[0-9]{1,5}", number)):
                 return self._answer(device, False, "Ogiltig eller gammal inmatning")
+            self._dismiss_receipt(terminal)
             matches = [key for key in self._candidates(terminal) if self.legs[key]["train_number"] == number]
             if len(matches) != 1:
                 future_arrival = any(leg["train_number"] == number and leg["to_station_id"] == terminal.station
@@ -430,6 +471,7 @@ class Terminal16Lab:
         button = self._buttons(terminal).get(key)
         if not button:
             return self._answer(device, False, "Tangenten är inte tillgänglig i det här läget")
+        self._dismiss_receipt(terminal)
         action = button[0]
         terminal.notice = ""
         if action == "back":
@@ -503,6 +545,7 @@ class Terminal16Lab:
                                   "planned_track": self._planned_track(leg), "movement_id": leg["to_movement_id"]}
             self.completed.add(key)
             terminal.notice = f"{leg['train_number']} ANK SP{self.engine.config.tracks[arrival_track].display_label}"
+            self._notify_arrival(leg)
         if action in {"cancel", "reject", "arrive", "arrive_track"}:
             self.bindings.pop(leg["connection_id"], None)
         if action == "cancel":

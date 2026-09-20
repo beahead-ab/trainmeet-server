@@ -51,6 +51,13 @@ test('explicit server-defined queue shortcut leaves entry without sending its di
   assert.deepEqual(buffer.press('A',{...frame,entry:{...frame.entry,shortcut:'A'}}),{local:false});
   assert.equal(buffer.digits,'');
 });
+test('receipt and its automatic expiry preserve a locally typed train number',()=>{
+  const buffer = new EntryBuffer(); buffer.press('1',frame); buffer.press('7',frame);
+  const receipt = {...frame,lines:['93 MOTTAGET     ','CDA        12:34'],keys:{'#':{label:'Stäng meddelande'}}};
+  assert.equal(buffer.lines(receipt)[0],'TAG: 17___      ');
+  assert.equal(buffer.lines(frame)[0],'TAG: 17___      ');
+  assert.deepEqual(buffer.press('#',frame),{local:false,train_number:'17',entry_context:'station-cda'});
+});
 test('# without digits delegates confirmation, but typed digits always form a lookup',()=>{
   const buffer = new EntryBuffer();
   const actionable = {...frame,keys:{'#':{label:'Rapportera avgång'}}};

@@ -47,6 +47,7 @@ class Terminal16Tests(unittest.TestCase):
             self.assertEqual(frame["lines"][0], " " * 16)
 
     def test_overview_shows_only_active_traffic_then_becomes_blank(self):
+        self.lab.now = lambda: 100
         for device in ("DEMO-CDA", "DEMO-VA"):
             self.lab.terminals["WATCH-" + device] = deepcopy(self.lab.terminals[device])
         def check(marker):
@@ -59,6 +60,8 @@ class Terminal16Tests(unittest.TestCase):
         self.lookup("39", "DEMO-VA"); self.accept("DEMO-VA", "#"); check(">")
         self.accept("DEMO-CDA", "#"); check("▶")
         self.accept("DEMO-VA", "#")
+        self.assertIn("39 MOTTAGET", self.lab.frame("WATCH-DEMO-CDA")["lines"][0])
+        self.lab.now = lambda: 106
         for device in ("WATCH-DEMO-CDA", "WATCH-DEMO-VA", "DEMO-MUN"):
             self.assertEqual(self.lab.frame(device)["lines"], [" " * 16, "Nr# A:Kö   12:34"])
 
@@ -507,8 +510,13 @@ class Terminal16Tests(unittest.TestCase):
     def test_completed_sender_does_not_advertise_unavailable_key(self):
         self.departure(); self.accept("DEMO-VA", "#")
         frame = self.lab.frame("DEMO-CDA")
-        self.assertEqual(set(frame["keys"]), {"*", "A"})
-        self.assertTrue(frame["lines"][1].startswith("A:Kö *=Bak"))
+        self.assertEqual(set(frame["keys"]), {"#", "*", "A"})
+        self.assertEqual(frame["keys"]["#"]["label"], "Stäng meddelande")
+        self.assertIn("39 MOTTAGET", frame["lines"][0])
+        before = len(self.lab.engine.audit)
+        self.accept("DEMO-CDA", "#")
+        self.assertEqual(len(self.lab.engine.audit), before)
+        self.assertNotIn("39", self.lab.frame("DEMO-CDA")["lines"][0])
 
     def test_route_is_revalidated_at_mutation(self):
         self.lookup("39")
@@ -554,6 +562,140 @@ class Terminal16Tests(unittest.TestCase):
         self.assertIn("MUN?12345", self.lab.frame("DEMO-CDA")["lines"][0])
         self.accept("DEMO-CDA", "B")
         self.assertIn("67890?VA", self.lab.frame("DEMO-CDA")["lines"][0])
+
+
+class Terminal16ReceiptTests(unittest.TestCase):
+    send = Terminal16Tests.send
+    lookup = Terminal16Tests.lookup
+    accept = Terminal16Tests.accept
+    departure = Terminal16Tests.departure
+
+    def setUp(self):
+        Terminal16Tests.setUp(self)
+        self.now = 100.0
+        self.lab.now = lambda: self.now
+
+    def depart93(self):
+        self.lookup("93", "DEMO-MUN")
+        self.accept("DEMO-MUN", "#")
+        self.accept("DEMO-CDA", "#")
+        self.accept("DEMO-MUN", "#")
+
+    def test_sender_sees_receipt_then_train_disappears_without_acknowledgement(self):
+        self.depart93()
+        self.accept("DEMO-CDA", "#")
+        frame = self.lab.frame("DEMO-MUN")
+        self.assertEqual(frame["lines"], ["93 MOTTAGET     ", "CDA        12:34"])
+        self.assertIn("mottaget i Charlottendal", frame["status"])
+        self.assertIsNone(self.lab.terminals["DEMO-MUN"].selected)
+        self.now += 4.9
+        self.assertIn("93 MOTTAGET", self.lab.frame("DEMO-MUN")["lines"][0])
+        self.now += 0.1
+        frame = self.lab.frame("DEMO-MUN")
+        self.assertEqual(frame["lines"][0], " " * 16)
+        self.assertNotIn("93", frame["status"])
+        self.assertEqual(self.lab._candidates(self.lab.terminals["DEMO-MUN"]), [])
+        self.assertEqual(len(self.lab.engine.audit), 4)
+        self.now += 60
+        self.assertEqual(self.lab.frame("DEMO-MUN")["lines"][0], " " * 16)
+
+    def test_receipt_reaches_all_sender_boxes_but_no_unrelated_station(self):
+        self.lab.terminals["SECOND-MUN"] = deepcopy(self.lab.terminals["DEMO-MUN"])
+        self.depart93(); self.accept("DEMO-CDA", "#")
+        self.assertIn("93 MOTTAGET", self.lab.frame("SECOND-MUN")["lines"][0])
+        self.assertEqual(self.lab.terminals["DEMO-VA"].receipts, [])
+        self.assertEqual(self.lab.terminals["DEMO-CDA"].receipts, [])
+
+    def test_receipt_is_deferred_while_sender_handles_a_different_train(self):
+        self.departure()
+        self.lookup("17")
+        self.accept("DEMO-VA", "#")
+        terminal = self.lab.terminals["DEMO-CDA"]
+        self.assertEqual((terminal.selected, terminal.screen), ("17-cda", "detail"))
+        self.assertIsNone(terminal.receipt_until)
+        self.now += 20
+        self.assertIn("MUN-17", self.lab.frame("DEMO-CDA")["lines"][0])
+        self.accept("DEMO-CDA", "*")
+        self.assertIn("39 MOTTAGET", self.lab.frame("DEMO-CDA")["lines"][0])
+        self.now += 5
+        self.assertNotIn("39", self.lab.frame("DEMO-CDA")["lines"][0])
+
+    def test_alternate_arrival_track_also_notifies_sender(self):
+        self.depart93()
+        self.accept("DEMO-CDA", "B"); self.accept("DEMO-CDA", "D")
+        self.accept("DEMO-CDA", "#")
+        self.assertEqual(self.lab.arrivals["93-mun"]["track"], "cda-2")
+        self.assertIn("93 MOTTAGET", self.lab.frame("DEMO-MUN")["lines"][0])
+
+    def test_failed_arrival_does_not_notify_or_remove_departed_train(self):
+        self.depart93()
+        self.lab.arrivals["other"] = {"station": "cda", "track": "cda-1"}
+        self.assertEqual(self.send("DEMO-CDA", "#")["status"], "rejected")
+        self.assertEqual(self.lab.terminals["DEMO-MUN"].receipts, [])
+        self.assertIn("93▶CDA", self.lab.frame("DEMO-MUN")["lines"][0])
+
+    def test_direct_traffic_also_shows_receipt_and_clears_completed_selection(self):
+        self.lab = demo_lab("direct")
+        self.lab.now = lambda: self.now
+        self.lab.engine.set_clock_source(lambda: {"configured": True, "running": False, "time": "12:34"})
+        self.lookup("93", "DEMO-MUN"); self.accept("DEMO-MUN", "#")
+        self.lookup("93", "DEMO-CDA")
+        self.accept("DEMO-MUN", "#"); self.accept("DEMO-CDA", "#")
+        self.assertIn("93 MOTTAGET", self.lab.frame("DEMO-MUN")["lines"][0])
+        self.now += 5
+        self.assertEqual(self.lab.frame("DEMO-MUN")["lines"][0], " " * 16)
+        self.assertEqual([event["action"] for event in self.lab.engine.audit], ["request", "depart", "arrive"])
+
+    def test_long_station_code_is_not_truncated_and_clock_stays_visible(self):
+        self.depart93(); self.accept("DEMO-CDA", "#")
+        station = self.lab.engine.config.stations["cda"]
+        self.lab.engine.config.stations["cda"] = type(station)(station.id, "CHARLOTTENDAL", station.name)
+        frame = self.lab.frame("DEMO-MUN")
+        self.assertEqual(frame["lines"], ["93 CHARLOTTENDAL", "MOTTAGET   12:34"])
+
+    def test_duplicate_arrival_never_replays_receipt(self):
+        self.depart93()
+        body = {"command_id": "arrival", "view_token": self.lab.frame("DEMO-CDA")["view_token"], "key": "#"}
+        self.lab.command("DEMO-CDA", body)
+        self.lab.frame("DEMO-MUN")
+        self.now += 5
+        self.lab.frame("DEMO-MUN")
+        self.lab.command("DEMO-CDA", body)
+        self.assertEqual(self.lab.terminals["DEMO-MUN"].receipts, [])
+        self.assertEqual(len(self.lab.engine.audit), 4)
+
+    def test_timeout_invalidates_old_dismiss_key_before_it_can_open_other_view(self):
+        self.depart93(); self.accept("DEMO-CDA", "#")
+        old = self.lab.frame("DEMO-MUN")["view_token"]
+        self.now += 5
+        result = self.lab.command("DEMO-MUN", {"command_id": "old-dismiss", "view_token": old, "key": "#"})
+        self.assertEqual(result["status"], "rejected")
+        self.assertEqual(self.lab.terminals["DEMO-MUN"].screen, "overview")
+        self.assertEqual(result["frame"]["lines"][0], " " * 16)
+
+    def test_queue_shortcut_dismisses_receipt_without_replaying_it(self):
+        self.depart93(); self.accept("DEMO-CDA", "#")
+        self.accept("DEMO-MUN", "A")
+        self.assertEqual(self.lab.terminals["DEMO-MUN"].screen, "requests")
+        self.assertEqual(self.lab.terminals["DEMO-MUN"].receipts, [])
+        self.accept("DEMO-MUN", "B")
+        self.assertEqual(self.lab.frame("DEMO-MUN")["lines"][0], " " * 16)
+
+    def test_multiple_receipts_are_shown_in_order_for_five_seconds_each(self):
+        # Two different outbound legs finish while sender works on another view.
+        for number in ("17", "39"):
+            self.lookup(number); self.accept("DEMO-CDA", "#")
+            receiver = "DEMO-MUN" if number == "17" else "DEMO-VA"
+            self.accept(receiver, "#"); self.accept("DEMO-CDA", "#")
+        self.accept("DEMO-CDA", "A")
+        self.accept("DEMO-MUN", "#"); self.accept("DEMO-VA", "#")
+        self.assertEqual(self.lab.terminals["DEMO-CDA"].screen, "requests")
+        self.accept("DEMO-CDA", "B")
+        self.assertIn("17 MOTTAGET", self.lab.frame("DEMO-CDA")["lines"][0])
+        self.now += 5
+        self.assertIn("39 MOTTAGET", self.lab.frame("DEMO-CDA")["lines"][0])
+        self.now += 5
+        self.assertEqual(self.lab.frame("DEMO-CDA")["lines"][0], " " * 16)
 
 
 class Terminal16RequestQueueTests(unittest.TestCase):
@@ -771,6 +913,8 @@ class Terminal16HTTPTests(unittest.TestCase):
                     self.assertEqual(terminal.screen, "overview")
                     self.assertIsNone(terminal.selected)
                     self.assertEqual(terminal.notice, "")
+                    self.assertEqual(terminal.receipts, [])
+                    self.assertIsNone(terminal.receipt_until)
                     self.assertEqual(frame["requests"]["count"], 0)
                     self.assertEqual(frame["lines"][0], " " * 16)
                     self.assertNotEqual(frame["entry"]["context"], old_contexts[frame["device_id"]])
