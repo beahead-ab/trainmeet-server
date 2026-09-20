@@ -87,8 +87,13 @@ class Terminal16Lab:
                 continue
             own = leg["from_station_id"] == terminal.station
             incoming = leg["to_station_id"] == terminal.station
+            active = self.bindings.get(leg["connection_id"]) == key
+            # Receivers cannot initiate a movement from a future timetable arrival.
+            # Only the exact leg initiated by its sender becomes selectable here.
+            if incoming and not (active and self._line(leg).state in {State.REQUESTED, State.RESERVED, State.OCCUPIED}):
+                continue
             # A departed train is no longer an upcoming departure at its sender.
-            if own and self.bindings.get(leg["connection_id"]) == key and self._line(leg).state == State.OCCUPIED:
+            if own and active and self._line(leg).state == State.OCCUPIED:
                 continue
             if own or incoming:
                 if filtered and terminal.browse_filter not in {"all", self._schedule(terminal, leg)["kind"]}:
@@ -352,7 +357,9 @@ class Terminal16Lab:
                 return self._answer(device, False, "Ogiltig eller gammal inmatning")
             matches = [key for key in self._candidates(terminal) if self.legs[key]["train_number"] == number]
             if len(matches) != 1:
-                terminal.notice = "INGET TÅG" if not matches else "FLERA TÅG - ADMIN"
+                future_arrival = any(leg["train_number"] == number and leg["to_station_id"] == terminal.station
+                                     and key not in self.completed for key, leg in self.legs.items())
+                terminal.notice = ("EJ BEGÄRT ÄN" if future_arrival else "INGET TÅG") if not matches else "FLERA TÅG - ADMIN"
             else:
                 terminal.selected, terminal.screen, terminal.notice = matches[0], "detail", ""
                 terminal.browse_filter = "all"

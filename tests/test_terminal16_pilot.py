@@ -134,6 +134,8 @@ class Terminal16Tests(unittest.TestCase):
         self.assertEqual(self.lab.engine.revision, 0)
 
     def test_browse_mixes_arrivals_and_departures_in_station_time_order(self):
+        self.lookup("93", "DEMO-MUN"); self.accept("DEMO-MUN", "#")
+        before = deepcopy(self.lab.engine.audit)
         expected = [("17-cda", "departure", "12:35"), ("39-cda", "departure", "12:38"),
                     ("93-mun", "arrival", "12:40")]
         for movement, kind, time in expected:
@@ -142,10 +144,10 @@ class Terminal16Tests(unittest.TestCase):
                              (movement, kind, time))
             self.assertIn("ANK" if kind == "arrival" else "AVG", frame["lines"][0])
             self.assertTrue(frame["lines"][0].endswith(time))
-        self.assertEqual(self.lab.engine.audit, [])
+        self.assertEqual(self.lab.engine.audit, before)
 
     def test_browse_previous_next_wrap_both_directions(self):
-        for key, selected in (("C", "93-mun"), ("D", "17-cda"), ("C", "93-mun"), ("C", "39-cda")):
+        for key, selected in (("C", "39-cda"), ("D", "17-cda"), ("C", "39-cda"), ("C", "17-cda")):
             self.assertEqual(self.accept("DEMO-CDA", key)["frame"]["upcoming"]["movement_id"], selected)
         self.assertEqual(self.lab.engine.audit, [])
 
@@ -159,20 +161,24 @@ class Terminal16Tests(unittest.TestCase):
         self.accept("DEMO-CDA", "#")
         self.assertEqual([event["action"] for event in self.lab.engine.audit], ["request"])
 
-    def test_future_incoming_is_visible_but_cannot_be_accepted(self):
+    def test_future_incoming_cannot_be_selected_by_number(self):
         frame = self.lookup("93")["frame"]
-        self.assertIn("Ankomst från Munkeröd", frame["status"])
-        self.assertNotIn("#", frame["keys"])
-        self.assertEqual(self.send("DEMO-CDA", "#")["status"], "rejected")
+        self.assertIn("EJ BEGÄRT ÄN", frame["lines"][0])
+        self.assertIsNone(self.lab.terminals["DEMO-CDA"].selected)
+        self.assertEqual(frame["keys"]["#"]["label"], "OK")
+        self.accept("DEMO-CDA", "#")  # Only dismisses the information, never receives the train.
+        self.assertEqual(self.lab.bindings, {})
         self.assertEqual(self.lab.engine.audit, [])
 
     def test_arrival_departure_filters_are_read_only_and_station_scoped(self):
+        self.lookup("93", "DEMO-MUN"); self.accept("DEMO-MUN", "#")
+        before = deepcopy(self.lab.engine.audit)
         self.accept("DEMO-CDA", "D")
         for kind, count, movement in (("arrival", 1, "93-mun"), ("departure", 2, "17-cda"), ("all", 3, "17-cda")):
             frame = self.accept("DEMO-CDA", "A")["frame"]
             self.assertEqual((frame["upcoming"]["filter"], frame["upcoming"]["count"], frame["upcoming"]["movement_id"]),
                              (kind, count, movement))
-        self.assertEqual(self.lab.engine.audit, [])
+        self.assertEqual(self.lab.engine.audit, before)
 
     def test_empty_departure_filter_has_no_confirmation_and_can_be_left(self):
         self.accept("DEMO-VA", "D")
@@ -181,7 +187,62 @@ class Terminal16Tests(unittest.TestCase):
         self.assertIn("INGA AVGÅNGAR", frame["lines"][0])
         self.assertNotIn("#", frame["keys"])
         self.accept("DEMO-VA", "A")
+        frame = self.lab.frame("DEMO-VA")
+        self.assertIn("INGA TÅG", frame["lines"][0])
+        self.assertNotIn("#", frame["keys"])
+        self.lookup("39"); self.accept("DEMO-CDA", "#")
+        self.accept("DEMO-VA", "D")
         self.assertEqual(self.lab.frame("DEMO-VA")["upcoming"]["count"], 1)
+
+    def test_default_browse_only_has_departures_before_any_request(self):
+        for key in ("D", "D", "D", "C", "C", "C"):
+            frame = self.accept("DEMO-CDA", key)["frame"]
+            self.assertEqual(frame["upcoming"]["kind"], "departure")
+            self.assertEqual(frame["upcoming"]["count"], 2)
+            self.assertNotIn("93", frame["lines"][0])
+        self.accept("DEMO-CDA", "A")
+        self.assertIn("INGA ANKOMSTER", self.lab.frame("DEMO-CDA")["lines"][0])
+        self.assertEqual(self.lab.engine.audit, [])
+
+    def test_only_exact_requested_arrival_is_exposed_on_a_shared_connection(self):
+        package = deepcopy(self.lab.publication)
+        service = deepcopy(next(s for s in package["services"] if s["id"] == "39"))
+        service.update(id="41", train_number="41")
+        package["services"].append(service)
+        for source in list(package["trains"]):
+            if source["service_id"] == "39":
+                movement = deepcopy(source)
+                movement.update(id=source["id"].replace("39", "41"), service_id="41", train_number="41")
+                package["trains"].append(movement)
+        self.lab = Terminal16Lab(self.lab.engine, package, {"DEMO-CDA": "cda", "DEMO-VA": "va"})
+        self.lookup("39"); self.accept("DEMO-CDA", "#")
+        self.assertEqual(self.lab._candidates(self.lab.terminals["DEMO-VA"]), ["39-cda"])
+        frame = self.lookup("41", "DEMO-VA")["frame"]
+        self.assertIn("EJ BEGÄRT ÄN", frame["lines"][0])
+        self.assertIsNone(self.lab.terminals["DEMO-VA"].selected)
+
+    def test_withdrawn_incoming_disappears_and_stale_selection_cannot_confirm(self):
+        self.lookup("39"); self.accept("DEMO-CDA", "#")
+        self.accept("DEMO-VA", "D")
+        stale = self.lab.frame("DEMO-VA")["view_token"]
+        self.accept("DEMO-CDA", "*"); self.accept("DEMO-CDA", "#")
+        self.assertEqual(self.lab._candidates(self.lab.terminals["DEMO-VA"]), [])
+        self.assertNotIn("#", self.lab.frame("DEMO-VA")["keys"])
+        result = self.lab.command("DEMO-VA", {"key": "#", "command_id": "withdrawn-selection", "view_token": stale})
+        self.assertEqual(result["status"], "rejected")
+        self.assertEqual([item["action"] for item in self.lab.engine.audit], ["request", "cancel"])
+
+    def test_direct_traffic_arrival_appears_only_after_sender_reserves(self):
+        self.lab = demo_lab("direct")
+        self.lab.engine.set_clock_source(lambda: {"configured": True, "running": False, "time": "12:34"})
+        receiver = self.lab.terminals["DEMO-VA"]
+        self.assertEqual(self.lab._candidates(receiver), [])
+        self.lookup("39"); self.accept("DEMO-CDA", "#")
+        self.assertEqual(self.lab._candidates(receiver), ["39-cda"])
+        frame = self.lookup("39", "DEMO-VA")["frame"]
+        self.assertNotIn("#", frame["keys"])  # Reserved is not yet departed.
+        self.accept("DEMO-CDA", "#")
+        self.assertEqual(self.lab.frame("DEMO-VA")["keys"]["#"]["label"], "Rapportera ankomst")
 
     def test_departed_train_leaves_sender_list_but_remains_for_receiver(self):
         self.departure()
@@ -201,7 +262,7 @@ class Terminal16Tests(unittest.TestCase):
         for movement in self.lab.publication["trains"]:
             if movement["id"] == "17-cda":
                 movement.update(departure_time="00:05", service_day_offset=1)
-        self.assertEqual(self.lab._candidates(self.lab.terminals["DEMO-CDA"]), ["39-cda", "93-mun", "17-cda"])
+        self.assertEqual(self.lab._candidates(self.lab.terminals["DEMO-CDA"]), ["39-cda", "17-cda"])
 
     def test_finished_browse_selection_does_not_confirm_different_train(self):
         self.departure()

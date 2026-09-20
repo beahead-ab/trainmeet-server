@@ -33,12 +33,18 @@ Munkeröd till Charlottendal. Siffror börjar direkt skriva ett nytt tågnummer,
 även från en detaljvy. `#` söker hela numret, utan att samtidigt ändra trafiken.
 Utan inmatade siffror bekräftar `#` den åtgärd som visas på skärmen.
 
-`C`/`D` bläddrar bakåt/framåt i stationens kommande ankomster och avgångar.
+`C`/`D` bläddrar bakåt/framåt bland stationens avgångar och aktiva inkommande tåg.
 Listan sorteras efter stationens planerade tid, med hänsyn till dygnsoffset.
 Rad 1 visar tågnummer, **ANK/AVG** och planerad tid; rad 2 visar handgrepp och
 aktuell klocka. I bläddringsvyn växlar `A` mellan alla tåg, ankomster och
 avgångar. `#` väljer tåget; en ytterligare bekräftelse krävs för trafikåtgärden.
-Planerade ankomster syns även före begäran men kan inte tas emot före avgång.
+En planerad ankomst blir valbar först när avsändaren har begärt klartecken
+eller reserverat tågrörelsen i direkttrafik. Mottagaren kan aldrig själv
+starta den. Sökning på ett sådant framtida tågnummer visar ”EJ BEGÄRT ÄN”.
+Regeln gäller också ankomstfiltret och skiljer på exakta tågrörelser, inte bara
+om en sträcka är upptagen. Aktiv begäran kan besvaras, men faktisk ankomst
+kan inte rapporteras före avgång. Den skrivna referenstidtabellen under boxen
+visar fortfarande samtliga planerade tåg, även framtida ankomster.
 Försenade, ännu inte rapporterade tåg ligger kvar. Avgångar försvinner från
 avsändarens lista först vid faktisk avgång; ankomster först när de tas emot.
 Ett genomgående tåg kan inte skickas vidare innan föregående ankomst registrerats.
@@ -94,7 +100,7 @@ på Wi-Fi. Webbsidan anpassar sig dock till telefonbredd.
 
 ## Verifiering
 
-- 63 Python-tester: grundflöden, direkttrafik, neka/återta, ankomstspår,
+- 67 Python-tester: grundflöden, direkttrafik, neka/återta, ankomstspår,
   dubbla kommandon, gamla vyer, ruttkontroll, 16 tecken och HTTP-isolering;
   dessutom kronologisk bläddring, filter, dygnsskifte, försenade tåg,
   genomgående tåg, separata val/bekräftelser och inaktuell tågmarkering;
