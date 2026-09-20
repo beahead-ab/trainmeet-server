@@ -111,6 +111,15 @@ def runtime_view(method):
 def _tkl_engine_reason(reason: str) -> str:
     return {
         "connection_busy": "Sträckan är redan upptagen",
+        "channel_occupied": "Spåret på sträckan är redan upptaget",
+        "movement_already_requested": "Tåget har redan en pågående klarering",
+        "unknown_train_number": "Tågnumret saknar en passande rörelse på stationen denna trafikdag",
+        "ambiguous_train_number": "Tågnumret har flera rörelser. Välj den avsedda rörelsen i TKL",
+        "invalid_departure": "Avgång kan inte registreras i tågets nuvarande läge",
+        "invalid_arrival": "Ankomst kan inte registreras i tågets nuvarande läge",
+        "train_already_departed": "Tåget har redan avgått och klareringen kan inte återkallas",
+        "track_occupied": "Spåret är upptaget av ett annat tåg",
+        "unknown_track": "Spåret finns inte i stationens spårkatalog",
         "departure_not_reserved": "Tåget saknar beviljad klarering",
         "train_not_departed": "Tåget finns inte registrerat på sträckan",
         "request_no_longer_pending": "Klareringsförfrågan gäller inte längre",
@@ -129,6 +138,7 @@ class HTTPServerConfig:
     allow_software_update: bool = False
     state_dir: str = "data/local"
     force_external_auth: bool = False
+    public_client_origin: str = ""
     http_port: int = 8787
     local_ip: str = ""
     connection_code: str = ""
@@ -255,6 +265,10 @@ class TrainMeetHTTPApplication:
         self.lifecycle_error = ""
         if self.lifecycle:
             self.engine._lock = self.lifecycle.lock
+            if self.operations_store:
+                # Configuration switches and all traffic transports share one
+                # lock; an older shared-traffic branch used a second lock.
+                self.operations_store._lock = self.lifecycle.lock
             try:
                 self.lifecycle.bootstrap(runtime_store.active(), us_store.current_session() if us_store else None)
             except MeetLifecycleError as error:
@@ -267,6 +281,10 @@ class TrainMeetHTTPApplication:
         self.on_device_assignment_changed = None
         self.on_device_language_changed = None
         self.on_clock_changed = None
+        self.on_terminal_tick = None
+        self._terminal16 = None
+        from .terminal16_public import SessionStore
+        self.lab_sessions = SessionStore()
         self.external_clock = ExternalClock()
         self.refresh_clock_source()
         if self.operations_store:
@@ -308,6 +326,8 @@ class TrainMeetHTTPApplication:
                 active = self.runtime_store.active()
                 if active is not None and not self._eu_runtime_guard():
                     self.operations_store.ensure_publication(active)
+                from .shared_traffic import SharedPanelTraffic
+                SharedPanelTraffic(self.engine, self.station_service)
 
     def _eu_runtime_guard(self):
         if not self.lifecycle:
@@ -317,6 +337,23 @@ class TrainMeetHTTPApplication:
         except MeetLifecycleError:
             return "wrong_session"
         return None
+
+    @property
+    def terminal16(self):
+        if self._terminal16 is None:
+            from .terminal16_runtime import Terminal16Service
+            self._terminal16 = Terminal16Service(self.station_service)
+        return self._terminal16
+
+    @runtime_view
+    def terminal16_frame(self, client):
+        self._require_box_access(client, client.client_id)
+        return self.terminal16.frame(client.client_id)
+
+    @runtime_view
+    def terminal16_command(self, client, payload):
+        self._require_box_access(client, client.client_id)
+        return self.terminal16.command(client.client_id, payload)
 
     def refresh_connection_grants(self, *, new_meet=False):
         """Refresh allowed panels after hot activation; keep admin sessions intact."""
@@ -405,7 +442,7 @@ class TrainMeetHTTPApplication:
         client = self.identities.register_client(client_id, f"Webb {workspace.upper()}", kind, token, (), browser_workspace=workspace)
         self.identities.record_discovery(client_id, f"WEB-{uuid4().hex[:8].upper()}",
                                          model=f"{'TKL' if workspace == 'tkl' else 'TMBox'} · webbläsare", protocol_version=2,
-                                         display=DisplayCapability(rows=4, cols=20))
+                                         display=DisplayCapability(rows=2, cols=16) if workspace == "tmbox" else DisplayCapability(rows=4, cols=20))
         return {**self.browser_client(client), "access_token": token}
 
     def browser_client(self, client: PairedClient) -> dict[str, Any]:
@@ -1083,6 +1120,8 @@ class TrainMeetHTTPApplication:
             {"id": connection["id"], **runtime_connections.get(connection["id"], {"state": "free"})}
             for connection in connections
         ]
+        if self.engine.shared_traffic is not None:
+            connection_states = self.engine.shared_traffic.connection_states()
         if self.operations_store is not None:
             clock = self.operations_store.clock_status()
             positions = self.operations_store.positions()
@@ -1215,6 +1254,9 @@ class TrainMeetHTTPApplication:
         connection_states = [
             state for state in snapshot["connection_states"] if state["id"] in related_connection_ids
         ]
+        if self.engine.shared_traffic is not None:
+            connection_states = [state for state in self.engine.shared_traffic.connection_states(station_id)
+                                 if state["id"] in related_connection_ids]
         trains = [train for train in snapshot["trains"] if train.get("station_id") == station_id]
         state = self.operations_store.tkl_station_state(
             snapshot["publication_id"],
@@ -1335,6 +1377,20 @@ class TrainMeetHTTPApplication:
         )["shift"]
         if current_shift is None:
             raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan tågrörelser hanteras")
+        if self.engine.shared_traffic is not None:
+            from .protocol_v2 import CommandRejected
+            try:
+                result = self.station_service.update_station_movement(
+                    current_shift["operator_name"], station_id, movement_id,
+                    {key: payload[key] for key in ("arrival", "departure", "actual_track", "operator_note")
+                     if key in payload and payload[key] is not None},
+                    shift_id=current_shift["shift_id"],
+                )
+            except (CommandRejected, ValueError) as error:
+                reason = error.reason if isinstance(error, CommandRejected) else str(error)
+                message = str(error) if str(error) != reason else _tkl_engine_reason(reason)
+                raise HTTPAPIError(HTTPStatus.CONFLICT, reason, message) from error
+            return {"movement": result}
         try:
             actual_track = resolve_track_id(
                 self.track_catalogue(), station_id, str(payload.get("actual_track") or "")
@@ -1464,6 +1520,9 @@ class TrainMeetHTTPApplication:
             )
         snapshot = self.display_snapshot()
         state = next((item for item in snapshot["connection_states"] if item["id"] == connection_id), None)
+        if self.engine.shared_traffic is not None:
+            state = next((item for item in self.engine.shared_traffic.connection_states(station_id)
+                          if item["id"] == connection_id), None)
         return {"action": action, "connection": state, "revision": self.engine.revision}
 
     @runtime_command("eu")
@@ -1480,6 +1539,17 @@ class TrainMeetHTTPApplication:
         self._require_station_access(client, station_id)
         snapshot = self.display_snapshot()
         action = str(payload.get("action") or "publish")
+        if self.engine.shared_traffic is not None:
+            from .protocol_v2 import CommandRejected
+            operation = "line.available.acknowledge" if action == "acknowledge" else "line.available.publish"
+            try:
+                result = self.station_service.execute_station_command(
+                    client.client_id, station_id, operation,
+                    {key: payload[key] for key in ("message_id", "connection_id", "movement_id") if key in payload},
+                )
+            except CommandRejected as error:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, error.reason, str(error)) from error
+            return {"message": self.operations_store.line_message(result["revision"]["key"])}
         if action == "acknowledge":
             message_id = str(payload.get("message_id") or "")
             message = self.operations_store.line_message(message_id)
@@ -2898,6 +2968,9 @@ class TrainMeetHTTPApplication:
             )
 
     def static_asset(self, path: str) -> tuple[bytes, str] | None:
+        terminal_asset = {"/tmbox/": "live.html", "/tmbox": "live.html", "/tmbox/terminal.js": "terminal.js", "/tmbox/style.css": "style.css"}.get(path)
+        if terminal_asset:
+            return files("tmbox_gateway").joinpath("terminal16_web", terminal_asset).read_bytes(), mimetypes.guess_type(terminal_asset)[0] or "text/plain"
         if path in {"/us", "/us/", "/us/dispatcher", "/us/conductor", "/us/app.js", "/us/style.css", "/us/workspace-messages.js"}:
             name = path.rsplit("/", 1)[-1]
             if name not in {"app.js", "style.css", "workspace-messages.js"}:
@@ -2980,6 +3053,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path.startswith("/tmbox-lab/"):
+                from .terminal16_embedded import serve
+                return serve(self, "GET")
             if path in {"/v1/operating-mode", "/v1/local-configuration", "/v1/build/timetable", "/v1/build/topology"}:
                 self.server.application._require_admin(self._authenticated_client())
                 raise HTTPAPIError(HTTPStatus.GONE, "cloud_authoring_only", "Träffen redigeras i Cloud. Befintliga lokala utkast är arkiverade, inte aktiva arbetsytor.")
@@ -2992,6 +3068,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/browser-clients/self":
                 self._send_json(HTTPStatus.OK, self.server.application.browser_client(self._authenticated_client()))
+                return
+            if path == "/v1/tmbox/terminal":
+                self._send_json(HTTPStatus.OK, self.server.application.terminal16_frame(self._authenticated_client()))
                 return
             if path == "/v1/clock":
                 self._send_json(HTTPStatus.OK, self.server.application.clock_status(self._authenticated_client()))
@@ -3249,6 +3328,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         try:
+            if path.startswith("/tmbox-lab/"):
+                from .terminal16_embedded import serve
+                return serve(self, "POST")
             payload = self._read_json()
             if path in {"/v1/browser-clients", "/v1/clock/source"}:
                 origin = self.headers.get("Origin")
@@ -3395,6 +3477,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/tmbox/preferences":
                 self._send_json(HTTPStatus.OK, self.server.application.tmbox_preferences(self._authenticated_client(), payload))
+                return
+            if path == "/v1/tmbox/terminal":
+                self._send_json(HTTPStatus.OK, self.server.application.terminal16_command(self._authenticated_client(), payload))
                 return
             if path == "/v1/tkl/shift/start":
                 client = self._authenticated_client()
@@ -3747,6 +3832,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         return address.is_loopback or address.is_private or address.is_link_local
 
     def _public_clients_allowed(self) -> bool:
+        origin = self.server.application.config.public_client_origin
+        if origin and origin.startswith("https://") and urlparse(origin).netloc == self.headers.get("Host"):
+            return self.headers.get("X-Forwarded-Proto") == "https" and self._client_address_is_private()
         return (self._client_address_is_private() and not self.server.application.config.force_external_auth
                 and not any(self.headers.get(name) for name in ("Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto")))
 

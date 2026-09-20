@@ -25,7 +25,8 @@ class ShellStructureTests(unittest.TestCase):
         for retired_selector in ('#tkl-frame', '.tkl-toolbar', '.tkl-frame-wrap', '.overview-action {'):
             self.assertNotIn(retired_selector, self.css)
         self.assertIn('path: "/tkl/"', self.js)
-        self.assertIn('path: "/#tmbox"', self.js)
+        self.assertIn('path: "/tmbox/"', self.js)
+        self.assertIn('location.replace("/tmbox/")', self.js)
 
     def test_workspace_cards_have_local_decorative_icons_and_accessible_labels(self):
         self.assertIn('const WORKSPACE_ICONS', self.js)

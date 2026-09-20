@@ -3,8 +3,8 @@
 The transport is deliberately thin. Everything a box needs to reach a correct
 state after a reconnect sits in three retained topics - assignment, config and
 snapshot - which is the whole synchronisation mechanism. There is no event
-replay and no bridge to the v1 panel protocol; the two run on separate
-prefixes so an older device can never mistake one for the other.
+replay. Both wire formats use the same station service; separate prefixes
+ensure an older device can never mistake one display format for the other.
 """
 
 from __future__ import annotations
@@ -59,6 +59,7 @@ class TMBoxV2Gateway:
         self.identities = identities
         self.gateway_id = gateway_id
         self.publish = publish
+        service.subscribe(self.publish_all_snapshots)
 
     # ------------------------------------------------------------- lifecycle
 
@@ -144,8 +145,12 @@ class TMBoxV2Gateway:
     def handle_command(self, device_id: str, body: dict[str, Any]) -> None:
         acknowledgement = self.service.handle_command(device_id, body)
         self.publish(device_topic(device_id, "ack"), acknowledgement, False)
-        station_id = self.identities.station_for_client(device_id)
-        if station_id and acknowledgement["status"] == "accepted":
+
+    def publish_all_snapshots(self) -> None:
+        # A clearance changes BOTH endpoints, including when it arrived from
+        # v1 MQTT or TKL HTTP rather than this particular gateway.
+        stations = {client.station_id for client in self.identities.enabled_clients() if client.station_id}
+        for station_id in stations:
             self.publish_station_snapshot(station_id)
 
     # ------------------------------------------------------------ publishing
@@ -189,8 +194,7 @@ class TMBoxV2Gateway:
 class MQTTV2Adapter:
     """Paho transport for the v2 gateway, running beside the v1 adapter.
 
-    Separate client, separate prefix, no bridge. The two protocols share a
-    broker and nothing else.
+    Separate client and prefix, shared authoritative station operations.
     """
 
     def __init__(
@@ -208,6 +212,7 @@ class MQTTV2Adapter:
             ) from error
 
         self.gateway = gateway
+        self.terminal_gateway = None
         self.host = host
         self.port = port
         self.client = mqtt.Client(
@@ -241,12 +246,18 @@ class MQTTV2Adapter:
             return
         for subscription in TMBoxV2Gateway.SUBSCRIPTIONS:
             client.subscribe(subscription, qos=1)
+        if self.terminal_gateway:
+            for subscription in self.terminal_gateway.SUBSCRIPTIONS:
+                client.subscribe(subscription, qos=1)
         self.gateway.announce_online()
         LOGGER.info("TMBox-gateway v2 online")
 
     def _on_message(self, client: Any, userdata: Any, message: Any) -> None:
         del client, userdata
         try:
+            if self.terminal_gateway and message.topic.startswith(self.terminal_gateway.PREFIX):
+                self.terminal_gateway.on_message(message.topic, message.payload, retained=bool(message.retain))
+                return
             self.gateway.on_message(message.topic, message.payload, retained=bool(message.retain))
         except Exception:  # pragma: no cover - defensive transport boundary
             LOGGER.exception("Ett v2-meddelande kunde inte hanteras: %s", message.topic)

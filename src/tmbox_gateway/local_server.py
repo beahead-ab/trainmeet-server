@@ -111,6 +111,8 @@ def main() -> None:
         default=os.environ.get("TRAINMEET_FORCE_EXTERNAL_AUTH", "").lower() in {"1", "true", "yes"},
         help="Require admin login for every web request (use behind a proxy or Kubernetes ingress)",
     )
+    parser.add_argument("--public-client-origin", default=os.environ.get("TRAINMEET_PUBLIC_CLIENT_ORIGIN", ""),
+                        help="Explicit HTTPS origin allowed to enroll unassigned browser clients behind the trusted local proxy")
     args = parser.parse_args()
 
     configure_logging(logging.INFO)
@@ -200,9 +202,7 @@ def main() -> None:
         gateway_id=args.gateway_id,
         identities=identities,
     )
-
-    # Protocol v2 runs beside v1 on its own prefix and its own client. There is
-    # no bridge between them; a box speaks one or the other.
+    # Different display/input protocols, one station service and traffic store.
     station_service = TMBoxStationService(runtime_store, operations_store, identities)
     v2_gateway = TMBoxV2Gateway(
         station_service,
@@ -229,6 +229,7 @@ def main() -> None:
             allow_software_update=supports_updates(),
             state_dir=str(state_directory),
             force_external_auth=args.force_external_auth,
+            public_client_origin=args.public_client_origin,
             http_port=args.http_port,
             local_ip=local_ip,
             connection_code=issued_code,
@@ -261,6 +262,12 @@ def main() -> None:
         publish_clock_to_devices(gateway, v2_gateway, identities)
     application.on_clock_changed = publish_clock
     # Attach the common lifecycle gate before either transport accepts input.
+    # Bind the shared traffic authority before accepting the first command.
+    station_service.subscribe(gateway._publish_snapshots)
+    from .terminal16_mqtt import Terminal16Gateway
+    v2_adapter.terminal_gateway = Terminal16Gateway(application.terminal16, v2_adapter._publish)
+    application.on_terminal_tick = v2_adapter.terminal_gateway.tick
+    station_service.subscribe(v2_adapter.terminal_gateway.tick)
     gateway.client.connect(broker_host, args.mqtt_port, keepalive=10, clean_start=True)
     gateway.client.loop_start()
     v2_adapter.connect()
@@ -403,6 +410,8 @@ def _external_clock_loop(application, stop):
     while not stop.is_set():
         try:
             application.poll_external_clock()
+            if application.on_terminal_tick:
+                application.on_terminal_tick()
         except Exception:
             # No request URLs or provider credentials in logs.
             LOGGER.warning("FastClock kunde inte uppdateras; försöker igen")

@@ -19,4 +19,4 @@ trainmeet-server = "tmbox_gateway.local_server:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-tmbox_gateway = ["web/*.html", "web/*.css", "web/*.js", "web/*.png", "tkl/*", "tkl/assets/*", "us_web/*"]
+tmbox_gateway = ["web/*.html", "web/*.css", "web/*.js", "web/*.png", "tkl/*", "tkl/assets/*", "us_web/*", "terminal16_web/*"]

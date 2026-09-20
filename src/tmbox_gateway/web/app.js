@@ -385,7 +385,7 @@ const WORKSPACE_KEY = "trainmeet.workspace";
 const WORKSPACES = {
   administration: { title: "Drift och administration", detail: "Trafikläge, klocka och serverinställningar", path: "/#overview" },
   tkl: { title: "TKL", detail: "Starta klienten – administratören tilldelar station", path: "/tkl/" },
-  tmbox: { title: "TMBox", detail: "Testa display, knappsats och boxens flöden", path: "/#tmbox" },
+  tmbox: { title: "TMBox", detail: "Starta klienten – administratören tilldelar station", path: "/tmbox/" },
   dispatcher: { title: "Dispatcher", detail: "Trafikledning för träffens territorier", path: "/us/dispatcher" },
   conductor: { title: "Conductor", detail: "Tåguppdrag och körtillstånd", path: "/us/conductor" },
 };
@@ -480,7 +480,7 @@ function renderWorkspacePicker() {
     button.append(illustration, title, detail, action);
     button.addEventListener("click", () => {
       sessionStorage.setItem(WORKSPACE_KEY, key);
-      if (key === "administration" || key === "tmbox") {
+      if (key === "administration") {
         const hash = key === "tmbox" ? "#tmbox" : "#overview";
         if (location.hash === hash) applyWorkspaceRoute();
         else location.hash = hash;
@@ -548,7 +548,7 @@ function applyWorkspaceRoute() {
   else if (route === "tmbox") {
     if (!availableWorkspaces().includes("tmbox")) { setMode("workspaces"); return; }
     sessionStorage.setItem(WORKSPACE_KEY, "tmbox");
-    setMode("tmbox");
+    location.replace("/tmbox/");
   }
   else if (route === "traffic" && availableWorkspaces().includes("administration")) {
     // Deprecated separate Traffic route: keep bookmarks, not the old view.
@@ -559,8 +559,7 @@ function applyWorkspaceRoute() {
   }
   else if (!route || route === "workspaces" || !sessionStorage.getItem(WORKSPACE_KEY)) setMode("workspaces");
   else if (sessionStorage.getItem(WORKSPACE_KEY) === "tmbox") {
-    history.replaceState(null, "", "/#tmbox");
-    setMode("tmbox");
+    location.replace("/tmbox/");
   }
   else if (sessionStorage.getItem(WORKSPACE_KEY) !== "administration") location.assign(workspaceHome());
   else setMode("kor");
