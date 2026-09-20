@@ -16,6 +16,10 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--paper); color: var(--ink); }
+[hidden] { display: none !important; }
+body[data-terminal="live"] .boxes { grid-template-columns: minmax(0, 480px); justify-content: center; }
+body[data-terminal="live"] .box-code { font-size: 14px; }
+body[data-terminal="live"] .box-status, body[data-terminal="live"] .box-queue { font-size: 15px; }
 main { max-width: 1320px; margin: auto; padding: 36px 28px 40px; }
 .page-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .eyebrow { font-size: 11px; letter-spacing: .15em; color: var(--copper); font-weight: 750; margin: 0 0 10px; }

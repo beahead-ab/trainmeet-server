@@ -63,7 +63,7 @@ class Terminal16Tests(unittest.TestCase):
         self.assertIn("39 MOTTAGET", self.lab.frame("WATCH-DEMO-CDA")["lines"][0])
         self.lab.now = lambda: 106
         for device in ("WATCH-DEMO-CDA", "WATCH-DEMO-VA", "DEMO-MUN"):
-            self.assertEqual(self.lab.frame(device)["lines"], [" " * 16, "Nr# A:Kö   12:34"])
+            self.assertEqual(self.lab.frame(device)["lines"], [" " * 16, "*Språk A:Kö12:34"])
 
     def test_overview_becomes_blank_after_cancel_or_rejection(self):
         for actor in ("DEMO-CDA", "DEMO-VA"):

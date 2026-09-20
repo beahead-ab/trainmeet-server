@@ -113,61 +113,9 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.locator('[data-language-picker]').selectOption('sv');
     await page.goto('http://127.0.0.1:9999/#workspaces');
     await screenshot('workspace-chooser');
-    await page.getByRole('button', { name: 'TMBox', exact: true }).focus();
-    await page.keyboard.press('Enter');
-    await page.locator('#tmbox-v2-view').waitFor({ state: 'visible' });
-    assert.equal(await page.locator('#run-tabs').isVisible(), false);
-    assert.equal(await page.locator('#keypad-v2 button').count(), 16);
-    assert.equal(await page.locator('#workspace-home').getAttribute('href'), '/#tmbox');
-    await screenshot('tmbox-workspace');
-    const writesBeforeDocs = calls.filter(([method]) => method === 'POST').length;
-    await page.locator('[data-tmbox-pane="skarmar"]').click();
-    assert.equal(await page.locator('.tmbox-screen-card').count(), 20);
-    assert.equal(await page.locator('#tmbox-v2-device').isVisible(), false);
-    for (const geometry of ['16x2', '20x2', '16x4', '20x4']) {
-      await page.locator('#tmbox-doc-geometry').selectOption(geometry);
-      const [cols, rows] = geometry.split('x').map(Number);
-      assert.equal(await page.locator('.tmbox-screen-card .lcd-line').count(), rows * 20);
-      const lines = await page.locator('.tmbox-screen-card .lcd-line').allTextContents();
-      assert.ok(lines.every(line => line.length === cols));
-    }
-    await screenshot('tmbox-esp32-catalog');
-    await page.locator('[data-tmbox-pane="floden"]').click();
-    assert.equal(await page.locator('#tmbox-operation-guide details').count(), 14);
-    assert.match(await page.locator('#tmbox-operation-guide').innerText(), /Välj språk för den egna TMBoxen/);
-    assert.equal(await page.locator('.tmbox-flow-item').count(), 12);
-    await page.locator('#tmbox-doc-profile').selectOption('esp8266');
-    assert.equal(await page.locator('.tmbox-flow-item').count(), 8);
-    assert.equal(await page.locator('#tmbox-doc-geometry').isDisabled(), true);
-    for (const button of await page.locator('.tmbox-flow-item').all()) {
-      await button.click();
-      assert.ok(await page.locator('.tmbox-step').count() >= 2);
-    }
-    await screenshot('tmbox-esp8266-flow');
-    await page.locator('[data-tmbox-pane="skarmar"]').click();
-    assert.equal(await page.locator('.tmbox-screen-card').count(), 28);
-    assert.match(await page.locator('#tmbox-screen-catalog').innerText(), /Språk kunde inte sparas/);
-    await page.locator('[data-tmbox-pane="referens"]').click();
-    assert.match(await page.locator('#tmbox-reference-content').innerText(), /ESP8266/);
-    assert.equal(calls.filter(([method]) => method === 'POST').length, writesBeforeDocs);
-    await page.locator('[data-tmbox-pane="klient"]').click();
-    await page.reload();
-    await page.locator('#tmbox-v2-view').waitFor({ state: 'visible' });
-    await page.locator('#application-menu summary').click();
-    await page.locator('#open-settings').click();
-    await page.locator('#settings-heading').waitFor({ state: 'visible' });
-    assert.equal(await page.evaluate(() => tmboxV2.timer), null);
-    await page.locator('#workspace-home').click();
-    await page.locator('#tmbox-v2-view').waitFor({ state: 'visible' });
-    await page.locator('#application-menu summary').click();
-    await page.locator('#application-menu a[href="#screens"]').click();
-    await page.locator('#displays-view').waitFor({ state: 'visible' });
-    assert.equal(await page.locator('#run-tabs').isVisible(), false);
-    await page.locator('#workspace-home').click();
-    await page.locator('#tmbox-v2-view').waitFor({ state: 'visible' });
-    await page.locator('#application-menu summary').click();
-    await page.locator('#application-menu a[href="#workspaces"]').click();
-    await page.locator('#workspace-picker').waitFor({ state: 'visible' });
+    // The retired embedded simulator is no longer an operational workspace.
+    // Live transport/keyboard behavior is covered against SQLite in public-workspaces-live.
+    assert.equal(await page.evaluate(() => WORKSPACES.tmbox.path), '/tmbox/');
     assert.equal(await page.evaluate(() => tmboxV2.timer), null);
     await page.locator('#workspace-options button').first().click();
     await page.locator('#overview-view').waitFor({ state: 'visible' });

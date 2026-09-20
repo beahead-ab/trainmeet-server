@@ -155,6 +155,50 @@ class HTTPServerTests(unittest.TestCase):
             self.application.create_browser_client({"workspace": "tmbox"}, "same-peer")
         self.assertEqual(caught.exception.status, 429)
 
+    def test_terminal_profile_is_self_scoped_and_has_no_actions_until_assigned(self):
+        box = self._public_client()
+        token = box["access_token"]
+        frame = self._json_request("/v1/tmbox/terminal", token=token)
+        self.assertEqual(frame["keys"], {})
+        self.assertEqual(frame["profile"], "server-16x2")
+        self.assertEqual(self._json_request("/v1/tmbox/terminal", {"key":"#", "station_id":"station-a"}, token=token)["status"], "rejected")
+        self.application.assign_device(self.application.local_admin(), {"device_code":box["device_code"], "station_id":"station-a"})
+        frame = self._json_request("/v1/tmbox/terminal", token=token)
+        self.assertEqual(frame["station_code"], "CDA")
+        self._public_refused("/v1/admin/users", token=token)
+
+    def test_embedded_lab_has_separate_sessions_and_cannot_reset_live_traffic(self):
+        from http.cookiejar import CookieJar
+        from urllib.request import build_opener, HTTPCookieProcessor
+        before = self.application.engine.export_state()
+        self.identities.configure_admin_access("admin", "test-password")
+        self._public_refused("/tmbox-lab/api/state", status=401)
+        first, second = (build_opener(HTTPCookieProcessor(CookieJar())) for _ in range(2))
+        for browser in (first, second):
+            self.assertEqual(browser.open(self.base_url + "/tmbox-lab/").status, 200)
+        def state(browser):
+            return json.load(browser.open(self.base_url + "/tmbox-lab/api/state"))
+        self.assertNotEqual(state(first)["frames"][0]["view_token"], state(second)["frames"][0]["view_token"])
+        request = Request(self.base_url + "/tmbox-lab/api/reset-devices", data=b"{}",
+            headers={"Content-Type":"application/json", "Origin":self.base_url})
+        self.assertEqual(first.open(request).status, 200)
+        self.assertEqual(self.application.engine.export_state(), before)
+        self.assertEqual(len(self.application.lab_sessions.sessions), 2)
+        self._public_refused("/tmbox-lab/api/reset-devices", {}, headers={"Origin":"https://evil.example"})
+
+    def test_public_client_origin_is_explicit_and_does_not_unlock_admin(self):
+        from dataclasses import replace
+        self.identities.configure_admin_access("admin", "test-password")
+        self.application.config = replace(self.application.config, force_external_auth=True,
+            public_client_origin="https://test.trainmeet.app")
+        headers={"Host":"test.trainmeet.app", "Origin":"https://test.trainmeet.app", "X-Forwarded-Proto":"https", "Content-Type":"application/json"}
+        request = Request(self.base_url + "/v1/browser-clients", data=b'{"workspace":"tmbox"}', headers=headers)
+        with urlopen(request) as response:
+            box = json.load(response)
+        self.assertIsNone(box["station_id"])
+        self._public_refused("/v1/admin/users", token=box["access_token"], headers=headers)
+        self._public_refused("/v1/browser-clients", {"workspace":"tmbox"}, headers={**headers, "Host":"another.example"})
+
     def test_admin_removes_box_over_http_and_publishes_revocation(self):
         from unittest.mock import Mock
         self.identities.record_discovery("box-one", "TBX-ONE")
@@ -553,7 +597,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(acknowledged["status"], "display_acknowledged")
 
     def test_tkl_clearance_actions_use_the_authoritative_traffic_engine(self):
-        publication = self.runtime_store.install(runtime_package_v3())
+        publication = self._select_package(runtime_package_v3())
         self.operations_store.ensure_publication(publication)
         client = self.application.local_admin()
         for station_id, operator_name in (("station-a", "Anna"), ("station-b", "Bertil")):

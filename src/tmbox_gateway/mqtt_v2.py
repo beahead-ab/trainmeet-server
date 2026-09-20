@@ -212,6 +212,7 @@ class MQTTV2Adapter:
             ) from error
 
         self.gateway = gateway
+        self.terminal_gateway = None
         self.host = host
         self.port = port
         self.client = mqtt.Client(
@@ -245,12 +246,18 @@ class MQTTV2Adapter:
             return
         for subscription in TMBoxV2Gateway.SUBSCRIPTIONS:
             client.subscribe(subscription, qos=1)
+        if self.terminal_gateway:
+            for subscription in self.terminal_gateway.SUBSCRIPTIONS:
+                client.subscribe(subscription, qos=1)
         self.gateway.announce_online()
         LOGGER.info("TMBox-gateway v2 online")
 
     def _on_message(self, client: Any, userdata: Any, message: Any) -> None:
         del client, userdata
         try:
+            if self.terminal_gateway and message.topic.startswith(self.terminal_gateway.PREFIX):
+                self.terminal_gateway.on_message(message.topic, message.payload, retained=bool(message.retain))
+                return
             self.gateway.on_message(message.topic, message.payload, retained=bool(message.retain))
         except Exception:  # pragma: no cover - defensive transport boundary
             LOGGER.exception("Ett v2-meddelande kunde inte hanteras: %s", message.topic)

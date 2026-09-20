@@ -78,10 +78,13 @@ class CloudDeliveryFixture(unittest.TestCase):
         return CentralRuntimeDownload(copy.deepcopy(self.offered), token)
 
     def busy(self):
-        self.application.engine.connections["connection-a-b"].state = ConnectionState.OCCUPIED
+        self.application.station_service.execute_station_command("test", "station-a", "clearance.request",
+            {"movement_id": "movement-101-a", "connection_id": "connection-a-b"})
 
     def free(self):
-        self.application.engine.connections["connection-a-b"].state = ConnectionState.FREE
+        case = self.application.station_service.open_cases("station-a")[0]
+        self.application.station_service.execute_station_command("test", "station-a", "clearance.cancel",
+            {"clearance_id": case["clearance_id"]})
 
     def clock_record(self):
         return self.operations._connection.execute("SELECT * FROM runtime_clock").fetchone()

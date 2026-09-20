@@ -16,6 +16,7 @@ from tmbox_gateway.operations import SQLiteOperationsStore
 from tmbox_gateway.protocol_v2 import CommandRejected, TMBoxStationService
 from tmbox_gateway.runtime import SQLiteRuntimeStore
 from tmbox_gateway.storage import SQLiteStateStore
+from tmbox_gateway.central_sync import CentralRuntimeDownload
 
 
 class SharedTrafficTests(unittest.TestCase):
@@ -46,6 +47,13 @@ class SharedTrafficTests(unittest.TestCase):
         self.ops.close()
         self.runtime.close()
         self.temp.cleanup()
+
+    def install(self, package):
+        self.app.runtime_fetcher = lambda *_: CentralRuntimeDownload(package, "test-link")
+        result = self.app.sync_runtime(self.admin, {"sync_code": "123456"})
+        self.assertFalse(result.get("pending"))
+        self.publication = self.runtime.active()
+        return self.publication
 
     def key(self, key, panel="panel-a", device="esp8266"):
         self.seq += 1
@@ -187,7 +195,7 @@ class SharedTrafficTests(unittest.TestCase):
         extra["departure_time"] = "12:00"
         package["trains"].append(extra)
         package["publication_id"] = "ambiguous-test"
-        self.runtime.install(package)
+        self.install(package)
         result = self.engine.perform(station_id="station-a", connection_id="connection-a-b", action="request", train_number="101")
         self.assertEqual(result, (False, "ambiguous_train_number"))
         self.assertEqual(self.service.open_cases("station-a"), [])
@@ -207,7 +215,7 @@ class SharedTrafficTests(unittest.TestCase):
         package = runtime_package_v3()
         package["connections"][0]["dispatch_mode_override"] = "direct"
         package["publication_id"] = "direct-test"
-        self.runtime.install(package)
+        self.install(package)
         self.request_v1()
         self.assertEqual(self.service.open_cases("station-a")[0]["status"], "approved")
 
@@ -245,10 +253,7 @@ class SharedTrafficTests(unittest.TestCase):
         reverse = deepcopy(package["trains"][1])
         reverse.update(id="movement-102-b", train_number="102", arrival_time=None, departure_time="10:00")
         package["trains"].append(reverse)
-        publication = self.runtime.install(package)
-        self.engine = TrafficEngine(publication.session_config(), state_store=self.store)
-        from tmbox_gateway.shared_traffic import SharedPanelTraffic
-        SharedPanelTraffic(self.engine, self.service)
+        self.install(package)
         outgoing = self.request_v1()
         self.approve(outgoing)
         opposite = self.v2("clearance.request", {"movement_id": "movement-102-b", "connection_id": "connection-a-b"})

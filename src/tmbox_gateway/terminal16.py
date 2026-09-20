@@ -1,10 +1,9 @@
-"""Isolated 16x2 pilot: the SERVER owns views, key meanings and traffic.
+"""Shared server-owned 16x2 views, key meanings and input contexts.
 
-Not wired into production HTTP or MQTT. Uses TrafficEngine.perform rather
-than the incomplete V2 movement transitions. A client renders frames and
-buffers digits according to `entry`; it has no movement state machine.
-Persistent arrival/track transactions and firmware adapters remain release
-requirements. This lab deliberately refuses a persistent/production engine.
+The isolated lab uses an ephemeral TrafficEngine. terminal16_runtime reuses
+these views with the persistent station service; the datasets never mix.
+Clients render frames and buffer digits according to `entry`, without a
+movement state machine. The lab refuses a persistent/production engine.
 """
 from collections import OrderedDict
 from copy import deepcopy
@@ -20,11 +19,15 @@ from .engine import TrafficEngine
 from .models import ConnectionState as State, DispatchMode
 from .train_routes import resolve_departure, RouteResolutionError
 from .terminal16_glyphs import text_cells, encode_lcd
+from .terminal16_i18n import text as translated, notice as translated_notice
+from .device_ui import LANGUAGES
 
 
 @dataclass
 class Terminal:
     station: str
+    language: str = "sv"
+    language_index: int = 0
     selected: str | None = None
     screen: str = "overview"
     track: int = 0
@@ -35,6 +38,7 @@ class Terminal:
     return_screen: str = "detail"
     receipts: list[tuple[str, str]] = field(default_factory=list)
     receipt_until: float | None = None
+    notice_until: float | None = None
 
 
 def row(left="", right=""):
@@ -60,7 +64,10 @@ class Terminal16Lab:
         self.legs = {}
         for movement in publication["trains"]:
             if movement.get("departure_time"):
-                leg = resolve_departure(publication, self.day, movement["station_id"], movement["id"])
+                try:
+                    leg = resolve_departure(publication, self.day, movement["station_id"], movement["id"])
+                except RouteResolutionError:
+                    continue
                 if leg["status"] == "resolved":
                     self.legs[movement["id"]] = leg
         self.bindings = {}  # connection -> exact departure movement, not just train number
@@ -92,7 +99,7 @@ class Terminal16Lab:
                 continue
             own = leg["from_station_id"] == terminal.station
             incoming = leg["to_station_id"] == terminal.station
-            active = self.bindings.get(leg["connection_id"]) == key
+            active = self._is_active(leg)
             # Receivers cannot initiate a movement from a future timetable arrival.
             # Only the exact leg initiated by its sender becomes selectable here.
             if incoming and not (active and self._line(leg).state in {State.REQUESTED, State.RESERVED, State.OCCUPIED}):
@@ -175,6 +182,10 @@ class Terminal16Lab:
             terminal.revision += 1
 
     def _advance_receipts(self, terminal):
+        if terminal.notice_until is not None and self.now() >= terminal.notice_until:
+            terminal.notice, terminal.notice_until = "", None
+            terminal.selected, terminal.screen = None, "overview"
+            terminal.revision += 1
         # Real elapsed time, independent of a paused/accelerated meeting clock.
         if terminal.receipt_until is not None and self.now() >= terminal.receipt_until:
             self._dismiss_receipt(terminal)
@@ -191,18 +202,22 @@ class Terminal16Lab:
     def _line(self, leg):
         return self.engine.connections[leg["connection_id"]]
 
-    def _side(self, station, other):
+    def _is_active(self, leg):
+        return self.bindings.get(leg["connection_id"]) == leg["from_movement_id"]
+
+    def _side(self, station, other, connection_id=None):
         link = next(c for c in self.publication["connections"]
-                    if {c["station_a_id"], c["station_b_id"]} == {station, other})
+                    if c["id"] == connection_id or (connection_id is None and
+                        {c["station_a_id"], c["station_b_id"]} == {station, other}))
         return link["display_side_a" if link["station_a_id"] == station else "display_side_b"]
 
     def _label(self, station, leg):
         own = leg["from_station_id"] == station
         other = leg["to_station_id"] if own else leg["from_station_id"]
         code = self.engine.config.stations[other].code
-        side = self._side(station, other)
+        side = self._side(station, other, leg["connection_id"])
         line = self._line(leg)
-        active = self.bindings.get(leg["connection_id"]) == leg["from_movement_id"]
+        active = self._is_active(leg)
         marker = "-"
         if active:
             points_left = (side == "left") == own
@@ -217,12 +232,10 @@ class Terminal16Lab:
 
     def _overview(self, terminal):
         items = []
-        for connection in self.engine.config.connections.values():
-            if terminal.station not in {connection.station_a_id, connection.station_b_id}:
-                continue
-            key = self.bindings.get(connection.id)
-            if key:
-                items.append(self._label(terminal.station, self.legs[key]))
+        for key in self.bindings.values():
+            leg = self.legs[key]
+            if terminal.station in {leg["from_station_id"], leg["to_station_id"]}:
+                items.append(self._label(terminal.station, leg))
         left = [text for text, side in items if side == "left"]
         right = [text for text, side in items if side == "right"]
         page = terminal.page
@@ -245,13 +258,16 @@ class Terminal16Lab:
         return buttons
 
     def _view_buttons(self, terminal):
+        if terminal.screen == "language":
+            return {"#": ("save_language", "Spara språk"), "*": ("home", "Tillbaka"),
+                    "C": ("previous_language", "Föregående språk"), "D": ("next_language", "Nästa språk")}
         if terminal.receipt_until is not None:
             return {"#": ("home", "Stäng meddelande"), "*": ("home", "Tillbaka")}
         if terminal.notice:
             return {"#": ("back", "OK"), "*": ("back", "Tillbaka")}
         if terminal.screen == "overview":
             primary = ("requests", "Visa väntande förfrågningar") if self._requests(terminal) else ("browse", "Visa kommande tåg")
-            return {"#": primary, "C": ("previous", "Föregående tåg"),
+            return {"#": primary, "*": ("language", "Språk"), "C": ("previous", "Föregående tåg"),
                     "D": ("next", "Nästa tåg"), "B": ("page", "Nästa översiktssida")}
         buttons = {"*": ("back", "Tillbaka")}
         if terminal.screen == "requests":
@@ -271,7 +287,7 @@ class Terminal16Lab:
         if not leg or terminal.selected in self.completed:
             return buttons
         line = self._line(leg)
-        active = self.bindings.get(leg["connection_id"]) == terminal.selected
+        active = self._is_active(leg)
         own = leg["from_station_id"] == terminal.station
         if terminal.screen == "cancel":
             buttons["*"] = ("back", "Behåll begäran eller klartecken")
@@ -308,11 +324,12 @@ class Terminal16Lab:
 
     def _frame(self, device):
         terminal = self.terminals[device]
+        t = lambda key, **values: translated(terminal.language, key, **values)
         self._advance_receipts(terminal)
         buttons = self._buttons(terminal)
         clock = self.engine.meeting_clock()["time"]
         clock = clock if re.fullmatch(r"\d{2}:\d{2}", clock) else "--:--"
-        hint = "Nr# A:Kö"
+        hint = "*Språk A:Kö"
         first = self._overview(terminal)
         selected = self.legs.get(terminal.selected)
         requests = self._requests(terminal)
@@ -320,7 +337,10 @@ class Terminal16Lab:
         if terminal.screen == "overview" and requests:
             hint = "A:Kö #Visa"
         if terminal.notice:
-            first, hint = row(terminal.notice), "#OK *=Bak"
+            first, hint = row(translated_notice(terminal.language, terminal.notice)), "#OK *=Bak"
+        elif terminal.screen == "language":
+            first = row(LANGUAGES[terminal.language_index][1])
+            hint = "#OK C/D *"
         elif terminal.screen == "requests":
             if position:
                 label, side = self._label(terminal.station, selected)
@@ -331,30 +351,30 @@ class Terminal16Lab:
                 else:
                     # Keep long train identities intact; put queue count in the hint.
                     first = row(label) if side == "left" else row("", label)
-                    hint = f"#Ja {counter}"
+                    hint = t("#Ja {count}", count=counter)
             else:
-                first = row("INGA FRÅGOR" if not requests else "FRÅGAN ÄNDRAD")
+                first = row(t("INGA FRÅGOR" if not requests else "FRÅGAN ÄNDRAD"))
                 hint = "A:Kö *=Bak"
         elif terminal.screen == "browse":
             choices = self._candidates(terminal, filtered=True)
             if terminal.selected in choices:
                 schedule = self._schedule(terminal, selected)
-                first = row(f"{selected['train_number']} {schedule['label']}", schedule["time"])
+                first = row(f"{selected['train_number']} {t(schedule['label'])}", schedule["time"])
                 hint = "#Välj A:Kö"
             else:
-                first = row("VÄLJ NÄSTA TÅG" if choices else
-                            {"all": "INGA TÅG", "arrival": "INGA ANKOMSTER", "departure": "INGA AVGÅNGAR"}[terminal.browse_filter])
+                first = row(t("VÄLJ NÄSTA TÅG" if choices else
+                            {"all": "INGA TÅG", "arrival": "INGA ANKOMSTER", "departure": "INGA AVGÅNGAR"}[terminal.browse_filter]))
                 hint = "C/D A:Kö" if choices else "B:Fil A:Kö"
         elif terminal.screen == "cancel":
-            first, hint = ((row(f"ÅTER {selected['train_number']}?"), "#Ja *Nej") if "#" in buttons
-                           else (row("LÄGET ÄNDRAT"), "*=Bak"))
+            first, hint = ((row(t("ÅTER {number}?", number=selected['train_number'])), "#Ja *Nej") if "#" in buttons
+                           else (row(t("LÄGET ÄNDRAT")), "*=Bak"))
         elif terminal.screen == "reject":
-            first, hint = ((row(f"NEKA {selected['train_number']}?"), "#Ja *Nej") if "#" in buttons
-                           else (row("LÄGET ÄNDRAT"), "*=Bak"))
+            first, hint = ((row(t("NEKA {number}?", number=selected['train_number'])), "#Ja *Nej") if "#" in buttons
+                           else (row(t("LÄGET ÄNDRAT")), "*=Bak"))
         elif terminal.screen == "tracks":
             tracks = self._tracks(terminal)
             label = tracks[terminal.track % len(tracks)].display_label
-            first, hint = row(f"{selected['train_number']} SPÅR {label}"), "#In C/D:Sp"
+            first, hint = row(t("{number} SPÅR {track}", number=selected['train_number'], track=label)), "#In C/D:Sp"
         elif terminal.screen == "detail" and selected:
             label, side = self._label(terminal.station, selected)
             first = row(label) if side == "left" else row("", label)
@@ -364,32 +384,33 @@ class Terminal16Lab:
                                                "C/D A:Kö" if "C" in buttons else "A:Kö *=Bak")
             if action == "request" and buttons["#"][1] == "Reservera":
                 hint = "#Sändklar"
-        status = "Skriv tågnummer direkt, eller bläddra med C/D"
+        status = t("Skriv tågnummer direkt, eller bläddra med C/D")
         upcoming = None
         if selected and terminal.screen != "overview":
             schedule = self._schedule(terminal, selected)
             other = self.engine.config.stations[schedule["other"]].name
             direction = "Avgång till" if schedule["kind"] == "departure" else "Ankomst från"
-            status = f"Tåg {selected['train_number']} · {direction} {other} · planerat {schedule['time']}"
+            status = t("Tåg {number} · {direction} {station} · planerat {time}", number=selected['train_number'], direction=t(direction), station=other, time=schedule['time'])
             if terminal.screen == "browse":
                 choices = self._candidates(terminal, filtered=True)
                 position = choices.index(terminal.selected) + 1 if terminal.selected in choices else 0
                 label = {"all": "alla tåg", "arrival": "ankomster", "departure": "avgångar"}[terminal.browse_filter]
-                status = f"{position}/{len(choices)} · {label} · " + status
+                status = f"{position}/{len(choices)} · {t(label)} · " + status
                 upcoming = {"position": position, "count": len(choices), "filter": terminal.browse_filter,
                             "kind": schedule["kind"], "time": schedule["time"], "movement_id": terminal.selected}
         if terminal.screen == "requests":
-            status = (f"Förfrågan {requests.index(terminal.selected) + 1}/{len(requests)} · " + status
-                      if terminal.selected in requests else "Ingen vald förfrågan. A öppnar kön; B visar översikten.")
+            status = (t("Förfrågan {position}/{count} · ", position=requests.index(terminal.selected)+1, count=len(requests)) + status
+                      if terminal.selected in requests else t("Ingen vald förfrågan. A öppnar kön; B visar översikten."))
+        hint = t(hint)
         if terminal.receipt_until is not None:
             number, destination = terminal.receipts[0]
             station = self.engine.config.stations[destination]
-            first, hint = row(f"{number} MOTTAGET"), station.code
+            first, hint = row(number + " " + t("MOTTAGET")), station.code
             if len(text_cells(hint)) > 11:
-                first, hint = row(number, station.code), "MOTTAGET"
-            status = f"Tåg {number} mottaget i {station.name}. Meddelandet försvinner automatiskt."
+                first, hint = row(number, station.code), t("MOTTAGET")
+            status = t("Tåg {number} mottaget i {station}. Meddelandet försvinner automatiskt.", number=number, station=station.name)
         lines = [first, row(hint, clock)]
-        entry_lines = [row("TÅG: _____"), row("#Sök B:Del", clock)]
+        entry_lines = [row(t("TÅG: _____")), row(t("#Sök B:Del"), clock)]
         return {
             "profile": "server-16x2-pilot", "device_id": device,
             "station": self.engine.config.stations[terminal.station].name,
@@ -398,15 +419,16 @@ class Terminal16Lab:
             "view_token": self._token(device, terminal),
             "revision": self.engine.revision, "view_revision": terminal.revision,
             "input_guard_ms": 500,
-            "keys": {key: {"label": label} for key, (_, label) in buttons.items()},
+            "language": terminal.language,
+            "keys": {key: {"label": t("Förfrågningskö ({count} väntar)", count=len(requests)) if key == "A" else t(label)} for key, (_, label) in buttons.items()},
             "entry": {"context": f"{self.epoch}:{device}:{terminal.station}", "max_length": 5,
                       "lines": entry_lines, "lcd": encode_lcd(entry_lines),
                       "row": 0, "column": 5, "commit": "#", "cancel": "*", "erase": "B",
                       "shortcut": "A",
-                      "labels": {"#": "Sök tåg", "*": "Avbryt inmatning", "B": "Sudda siffra",
-                                 "A": "Förfrågningskö (avbryt inmatning)"}},
+                      "labels": {"#": t("Sök tåg"), "*": t("Avbryt inmatning"), "B": t("Sudda siffra"),
+                                 "A": t("Förfrågningskö (avbryt inmatning)")}},
             "requests": {"count": len(requests), "position": requests.index(terminal.selected) + 1 if terminal.selected in requests else 0,
-                         "label": f"A · Förfrågningskö · {len(requests)} väntar"},
+                         "label": "A · " + t("Förfrågningskö ({count} väntar)", count=len(requests))},
             "status": status, "upcoming": upcoming,
         }
 
@@ -474,12 +496,21 @@ class Terminal16Lab:
         self._dismiss_receipt(terminal)
         action = button[0]
         terminal.notice = ""
+        terminal.notice_until = None
         if action == "back":
             terminal.screen = terminal.return_screen if terminal.screen in {"tracks", "cancel", "reject"} else "overview"
         elif action == "home":
             terminal.screen = "overview"
         elif action == "page":
             terminal.page += 1
+        elif action == "language":
+            terminal.language_index = [code for code, _ in LANGUAGES].index(terminal.language)
+            terminal.screen = "language"
+        elif action in {"next_language", "previous_language"}:
+            terminal.language_index = (terminal.language_index + (1 if action == "next_language" else -1)) % len(LANGUAGES)
+        elif action == "save_language":
+            self.set_language(device, LANGUAGES[terminal.language_index][0])
+            terminal.screen = "overview"
         elif action in {"requests", "next_request", "previous_request"}:
             self._open_requests(terminal, {"requests": 0, "next_request": 1, "previous_request": -1}[action])
         elif action in {"browse", "next", "previous"}:
@@ -507,6 +538,9 @@ class Terminal16Lab:
                 return self._answer(device, False, message)
         terminal.revision += 1
         return self._answer(device, True)
+
+    def set_language(self, device, language):
+        self.terminals[device].language = language
 
     def _traffic(self, device, terminal, action):
         key = terminal.selected
@@ -545,13 +579,16 @@ class Terminal16Lab:
                                   "planned_track": self._planned_track(leg), "movement_id": leg["to_movement_id"]}
             self.completed.add(key)
             terminal.notice = f"{leg['train_number']} ANK SP{self.engine.config.tracks[arrival_track].display_label}"
+            terminal.notice_until = self.now() + 3
             self._notify_arrival(leg)
         if action in {"cancel", "reject", "arrive", "arrive_track"}:
             self.bindings.pop(leg["connection_id"], None)
         if action == "cancel":
             terminal.notice = f"{leg['train_number']} ÅTERTAGET"
+            terminal.notice_until = self.now() + 3
         if action == "reject":
             terminal.notice = f"{leg['train_number']} NEKAT"
+            terminal.notice_until = self.now() + 3
             for other in self.terminals.values():
                 if other.station == leg["from_station_id"] and other.selected == key:
                     other.notice = f"{leg['train_number']} NEKAT"

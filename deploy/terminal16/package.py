@@ -11,7 +11,7 @@ import tarfile
 MODULES = (
     "__init__", "device_ui", "display", "engine", "models", "observability",
     "runtime", "storage", "terminal16", "terminal16_demo", "terminal16_glyphs",
-    "terminal16_public", "train_routes",
+    "terminal16_public", "terminal16_i18n", "train_routes",
 )
 FILES = [f"src/tmbox_gateway/{name}.py" for name in MODULES] + [
     f"src/tmbox_gateway/terminal16_web/{name}" for name in ("index.html", "style.css", "terminal.js")

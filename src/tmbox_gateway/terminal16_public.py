@@ -203,7 +203,8 @@ class PublicHandler(Handler):
             return False
         self.session, self.session_token = session, token
         if created:
-            self.cookie_value = f"{COOKIE}={token}; Path={self.server.prefix}; Max-Age={MAX_AGE}; Secure; HttpOnly; SameSite=Strict"
+            secure = "; Secure" if self.server.origin.startswith("https://") else ""
+            self.cookie_value = f"{COOKIE}={token}; Path={self.server.prefix}; Max-Age={MAX_AGE}{secure}; HttpOnly; SameSite=Strict"
         if mutation and not self.server.sessions.allow_command(session):
             self._send(429, {"message": "För många knapptryck. Vänta en stund."})
             return False

@@ -2,7 +2,7 @@
 
 Only the characters required by this frame are allocated to the eight CGRAM
 slots. Never transliterate, split a UTF-8 sequence, or silently reuse a slot.
-The firmware consumer is not integrated yet; web keeps the Unicode lines.
+ESP8266/ESP32 render the supplied cells/glyphs; web keeps the Unicode lines.
 """
 from unicodedata import normalize
 
@@ -23,6 +23,7 @@ GLYPHS = {
     "ø": (0, 0, 15, 19, 21, 25, 30, 0),
     "Ü": (10, 0, 17, 17, 17, 17, 14, 0),
     "ü": (10, 0, 0, 17, 17, 19, 13, 0),
+    "é": (2, 4, 14, 17, 31, 16, 14, 0),
     "ß": (6, 9, 9, 14, 9, 9, 22, 0),
     "ẞ": (14, 17, 18, 20, 18, 17, 22, 0),
     "◀": (1, 3, 7, 15, 7, 3, 1, 0),

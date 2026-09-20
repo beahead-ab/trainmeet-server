@@ -598,6 +598,19 @@ class TMBoxStationService:
             if incoming and (len(incoming) != 1 or not self.case_departed(incoming[0])):
                 raise CommandRejected("train_not_departed")
 
+            # Receive on the actual track AND release the line in this same
+            # transaction. Never change a track in a separate preliminary act.
+            try:
+                track = resolve_track_id(config.tracks, station_id, str(body.get("track_id") or track or ""))
+            except UnknownTrackError as error:
+                raise CommandRejected("unknown_track") from error
+            if track is None:
+                raise CommandRejected("unknown_track")
+            if find_track_conflict(publication.payload["trains"],
+                    self.operations_store.tkl_station_state(publication.publication_id, active_day, station_id)["movements"],
+                    station_id, active_day, movement_id, track) is not None:
+                raise CommandRejected("track_occupied")
+
         if action == CREW_ACTION:
             crew_ready = bool((body.get("crew_ready", True)))
         elif action in TRACK_ACTIONS:

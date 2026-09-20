@@ -5,10 +5,11 @@
   class EntryBuffer {
     constructor() { this.digits = ""; this.context = null; }
     clear() { this.digits = ""; this.context = null; }
-    sync(frame) { if (this.context && this.context !== frame.entry.context) this.clear(); }
+    sync(frame) { if (this.context && this.context !== frame.entry?.context) this.clear(); }
     press(key, frame) {
       this.sync(frame);
       const entry = frame.entry;
+      if (!entry) return {local: false};
       if (/^[0-9]$/.test(key)) {
         if (this.digits.length < entry.max_length) this.digits += key;
         this.context = entry.context;
@@ -38,6 +39,8 @@
   if (typeof document === "undefined") return;
 
   const boxes = new Map();
+  const live = document.body.dataset.terminal === "live";
+  let identity = null, pollVersion = 0;
   let connected = false, resetting = false, text = {};
   const keyOrder = "123A456B789C*0#D";
   function drawLCD(lcd, lines) {
@@ -102,6 +105,8 @@
     const {card, frame, entry} = model;
     const lines = entry.lines(frame);
     drawLCD(card.querySelector(".lcd"), lines);
+    card.querySelector("h2").textContent = frame.station || "Väntar på station";
+    card.querySelector(".box-code").textContent = live ? identity?.device_code || frame.device_id : frame.device_id;
     card.querySelector(".box-status").textContent = frame.status;
     const queue = card.querySelector(".box-queue");
     queue.textContent = frame.requests?.label || "";
@@ -111,7 +116,7 @@
     for (const [key, label] of Object.entries(labels)) { const hint = document.createElement("span"); const strong = document.createElement("b"); strong.textContent = key; hint.append(strong, label); hints.append(hint); }
     for (const button of card.querySelectorAll(".key")) {
       const key = button.dataset.key;
-      button.disabled = !connected || resetting || model.busy || performance.now() < model.until || (!/^[0-9]$/.test(key) && !(key in labels));
+      button.disabled = !connected || resetting || model.busy || performance.now() < model.until || (/^[0-9]$/.test(key) ? !frame.entry : !(key in labels));
       button.setAttribute("aria-label", labels[key] ? `${key} · ${labels[key]}` : key);
     }
     const status = card.querySelector(".box-message");
@@ -120,9 +125,9 @@
   }
   function apply(frame) {
     const model = boxes.get(frame.device_id) || makeBox(frame);
-    if (model.frame.entry.context === frame.entry.context &&
+    if (model.frame.entry?.context === frame.entry?.context &&
         (frame.revision < model.frame.revision || (frame.revision === model.frame.revision && frame.view_revision < model.frame.view_revision))) return;
-    if (model.frame.entry.context !== frame.entry.context) message(model, "");
+    if (model.frame.entry?.context !== frame.entry?.context) message(model, "");
     // A newly offered primary action must be readable before accepting a key.
     // This is a generic display/input guard, not client-side traffic logic.
     if (!model.entry.digits && model.frame.keys['#']?.label !== frame.keys['#']?.label) {
@@ -142,13 +147,15 @@
     if (!entry.train_number && !(key in model.frame.keys)) return;
     const body = {device_id: model.frame.device_id, command_id: crypto.randomUUID(), view_token: model.frame.view_token, key};
     if (entry.train_number) Object.assign(body, {train_number: entry.train_number, entry_context: entry.entry_context});
-    const context = model.frame.entry.context;
+    const context = model.frame.entry?.context;
+    ++pollVersion;
     model.busy = true; message(model, text.sending); render(model);
     try {
-      const response = await fetch("./api/key", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body), signal:AbortSignal.timeout(5000)});
+      if (live) delete body.device_id;
+      const response = await fetch(live ? "/v1/tmbox/terminal" : "./api/key", {method:"POST", credentials: live ? "omit" : "same-origin", headers:{"Content-Type":"application/json", ...(live ? {Authorization: `Bearer ${identity.access_token}`} : {})}, body:JSON.stringify(body), signal:AbortSignal.timeout(5000)});
       const result = await response.json();
-      if (model.frame.entry.context !== context) return;
-      if (result.status === "accepted") model.entry.clear();
+      if (model.frame.entry?.context !== context) return;
+      if (result.status === "accepted" || result.status === "duplicate") model.entry.clear();
       if (result.frame) apply(result.frame);
       message(model, result.message, !response.ok);
     } catch { message(model, "Serversvar saknas. Kontrollera det aktuella läget innan nytt försök.", true); }
@@ -182,9 +189,44 @@
     const events = document.querySelector("#events"); events.replaceChildren();
     for (const event of state.audit) { const li = document.createElement("li"); li.textContent = `${event.revision}. ${event.station_id.toUpperCase()} · ${event.action} · ${event.connection_id}`; events.append(li); }
   }
-  const events = new EventSource("./events");
+  const events = live ? {} : new EventSource("./events");
   events.onmessage = event => update(JSON.parse(event.data));
   events.onerror = () => { connected = false; resetButtons(); document.querySelector("#connection").textContent = text.offline || "Testservern är inte ansluten."; for (const model of boxes.values()) render(model); };
+  async function startLive() {
+    document.querySelector("#start-client").hidden = true;
+    try {
+      let saved; try { saved = JSON.parse(localStorage.getItem("trainmeet.browser-tmbox")); } catch {}
+      const response = await fetch(saved?.access_token ? "/v1/browser-clients/self" : "/v1/browser-clients", {
+        method: saved?.access_token ? "GET" : "POST", credentials: "omit", cache: "no-store",
+        headers: saved?.access_token ? {Authorization: `Bearer ${saved.access_token}`} : {"Content-Type":"application/json"},
+        body: saved?.access_token ? undefined : JSON.stringify({workspace:"tmbox"}), signal:AbortSignal.timeout(5000)});
+      const result = await response.json();
+      if (!response.ok || result.workspace !== "tmbox") throw Error(result.message || "Klienten kan inte anslutas.");
+      identity = {...result,access_token: saved?.access_token || result.access_token};
+      localStorage.setItem("trainmeet.browser-tmbox", JSON.stringify(identity));
+    } catch (error) {
+      document.querySelector("#connection").textContent = error.message;
+      document.querySelector("#start-client").hidden = false;
+    }
+  }
+  async function pollLive() {
+    if (identity && !document.hidden && ![...boxes.values()].some(m=>m.busy)) {
+      const version = pollVersion;
+      try {
+        const response = await fetch("/v1/tmbox/terminal", {credentials:"omit",cache:"no-store",headers:{Authorization:`Bearer ${identity.access_token}`},signal:AbortSignal.timeout(5000)});
+        const frame = await response.json();
+        if (!response.ok) throw Error(frame.message || "Anslutningen bröts.");
+        if (version === pollVersion) update({frames:[frame],audit:[],text:{title:"TMBox",subtitle:location.host,
+          session:`Enhetskod: ${identity.device_code} · Station tilldelas av administratören`,ready:"Ansluten till servern",entry:"Siffrorna stannar här tills du trycker #.",sending:"Inväntar servern…"}});
+      } catch { events.onerror(); }
+    }
+    setTimeout(pollLive,1000);
+  }
+  if (live) {
+    document.querySelector("#start-client").addEventListener("click",()=>{localStorage.removeItem("trainmeet.browser-tmbox");startLive();});
+    document.addEventListener("visibilitychange",()=>{if(document.hidden){++pollVersion;for(const model of boxes.values())model.entry.clear();events.onerror();}});
+    startLive().then(pollLive);
+  }
   function resetButtons() {
     for (const id of ["reset-all", "reset-clearance", "reset-direct"]) document.getElementById(id).disabled = !connected || resetting;
   }
