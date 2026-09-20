@@ -133,7 +133,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     }
     await screenshot('tmbox-esp32-catalog');
     await page.locator('[data-tmbox-pane="floden"]').click();
-    assert.equal(await page.locator('#tmbox-operation-guide details').count(), 13);
+    assert.equal(await page.locator('#tmbox-operation-guide details').count(), 14);
+    assert.match(await page.locator('#tmbox-operation-guide').innerText(), /Välj språk för den egna TMBoxen/);
     assert.equal(await page.locator('.tmbox-flow-item').count(), 12);
     await page.locator('#tmbox-doc-profile').selectOption('esp8266');
     assert.equal(await page.locator('.tmbox-flow-item').count(), 8);
@@ -144,7 +145,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     }
     await screenshot('tmbox-esp8266-flow');
     await page.locator('[data-tmbox-pane="skarmar"]').click();
-    assert.equal(await page.locator('.tmbox-screen-card').count(), 26);
+    assert.equal(await page.locator('.tmbox-screen-card').count(), 28);
+    assert.match(await page.locator('#tmbox-screen-catalog').innerText(), /Språk kunde inte sparas/);
     await page.locator('[data-tmbox-pane="referens"]').click();
     assert.match(await page.locator('#tmbox-reference-content').innerText(), /ESP8266/);
     assert.equal(calls.filter(([method]) => method === 'POST').length, writesBeforeDocs);
