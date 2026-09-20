@@ -1039,6 +1039,23 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .status-row small { margin-top: 3px; color: var(--muted); }
 .status-row > span { color: var(--muted); text-align: right; }
 
+/* Connected clients are primary settings content, not tiny status metadata.
+   Keep the same readable type for one or many devices; let the page scroll. */
+#device-list { gap: 12px; margin-top: 16px; max-height: none; overflow: visible; }
+#device-list .status-row { gap: 16px 24px; padding: 16px 20px; font-size: 16px; line-height: 1.5; }
+#device-list .status-row > div:first-child { flex: 1 1 260px; }
+#device-list .status-row b { font-size: 18px; line-height: 1.4; }
+#device-list .status-row small { margin-top: 6px; font-size: 14px; line-height: 1.5; }
+#device-list .status-row > span { flex: 1 1 200px; text-align: left; color: var(--ink); font-weight: 500; }
+#device-list .device-actions { flex: 0 1 auto; }
+#device-list .device-actions button { min-height: 44px; padding: 10px 16px; font-size: 16px; line-height: 1.4; white-space: normal; }
+#device-list .empty-status { padding: 16px 20px; font-size: 16px; line-height: 1.5; }
+@media (max-width: 760px) {
+  #device-list .status-row, #device-list .empty-status { padding: 16px; }
+  #device-list .status-row > div:first-child, #device-list .status-row > span, #device-list .device-actions { flex-basis: 100%; }
+  #device-list .device-actions button { flex: 1 1 auto; }
+}
+
 .simulator-view { width: min(100%, 720px); margin: 0 auto; }
 .simulator-intro {
   display: flex;
