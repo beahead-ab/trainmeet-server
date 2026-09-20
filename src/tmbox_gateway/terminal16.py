@@ -97,6 +97,25 @@ class Terminal16Lab:
         return sorted(result, key=lambda key: (self._schedule(terminal, self.legs[key])["order"],
                                               self.legs[key]["train_number"], key))
 
+    def timetable(self, device):
+        """Read-only test aid: keep the full schedule, including completed trains."""
+        with self.lock:
+            terminal = self.terminals[device]
+            entries = []
+            for key, leg in self.legs.items():
+                if terminal.station not in {leg["from_station_id"], leg["to_station_id"]}:
+                    continue
+                schedule = self._schedule(terminal, leg)
+                outgoing = schedule["kind"] == "departure"
+                other = self.engine.config.stations[schedule["other"]]
+                entry = {"train_number": leg["train_number"],
+                         "time": ("Avg " if outgoing else "Ank ") + schedule["time"],
+                         "route": ("Till " if outgoing else "Från ") + other.name}
+                entries.append((schedule["order"], leg["train_number"], key, entry))
+            return {"title": "Tidtabell · testdata", "columns": ["Tåg", "Tid", "Från / till"],
+                    "rows": [entry for _, _, _, entry in sorted(entries)],
+                    "empty": "Inga tåg i testtidtabellen."}
+
     def _browse(self, terminal, direction=0):
         choices = self._candidates(terminal, filtered=True)
         current = choices.index(terminal.selected) if terminal.selected in choices else None

@@ -15,7 +15,7 @@ MODULES = (
 )
 FILES = [f"src/tmbox_gateway/{name}.py" for name in MODULES] + [
     f"src/tmbox_gateway/terminal16_web/{name}" for name in ("index.html", "style.css", "terminal.js")
-] + ["deploy/terminal16/deploy.py", "deploy/terminal16/package.py",
+] + ["deploy/terminal16/deploy.py", "deploy/terminal16/update.py", "deploy/terminal16/package.py",
      "deploy/terminal16/README.md", "docs/TMBOX-16X2-PILOT.md"]
 
 

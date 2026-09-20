@@ -59,3 +59,8 @@ Vid misslyckande stängs den nya provtjänsten av och vår egen proxyändring
 En framtida uppdatering ska byta en versionslåst release och starta om enbart
 `trainmeet-tmbox-lab`; alla pågående tester blir då tomma. Kör inte
 förstagångsskriptet en gång till.
+
+För uppdatering, använd det nya paketets `update.py --payload /root/PAYLOAD
+--sha FULL_SHA --previous INSTALLED_SHA`. Skriptet kontrollerar den installerade
+revisionen, byter bara provtjänstens versionskatalog och återgår till den gamla
+vid fel. Proxy, Cloud och ordinarie Server ändras inte. Provsessionerna nollställs.

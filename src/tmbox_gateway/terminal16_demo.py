@@ -78,6 +78,7 @@ class LabState:
             lab = self.lab
             with lab.lock:
                 return {"frames": lab.frames(), "mode": self.mode,
+                        "timetables": {device: lab.timetable(device) for device in lab.terminals},
                         "language_samples": language_samples(lab.engine.meeting_clock()["time"]),
                         "audit": lab.engine.audit[-10:], "arrivals": lab.arrivals,
                         "text": {"title": "TMBox · 16 × 2", "subtitle": "Isolerad provkörning · ingen koppling till er träff",

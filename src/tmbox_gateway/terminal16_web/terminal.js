@@ -50,7 +50,7 @@
   }
   function makeBox(frame) {
     const card = document.createElement("article"); card.className = "box"; card.tabIndex = 0; card.dataset.device = frame.device_id;
-    card.innerHTML = '<div class="box-heading"><h2></h2><span class="box-code"></span></div><div class="box-status"></div><div class="tmbox-case"><div class="lcd-frame"><div class="lcd" role="img"></div></div><div class="keypad"></div></div><div class="key-hints"></div><p class="box-message" role="status"></p>';
+    card.innerHTML = '<div class="box-heading"><h2></h2><span class="box-code"></span></div><div class="box-status"></div><div class="tmbox-case"><div class="lcd-frame"><div class="lcd" role="img"></div></div><div class="keypad"></div></div><div class="key-hints"></div><p class="box-message" role="status"></p><div class="box-timetable"></div>';
     const model = {card, frame, entry: new EntryBuffer(), busy: false, until: 0, uiMessage: "", uiError: false};
     card.querySelector("h2").textContent = frame.station;
     card.querySelector(".box-code").textContent = frame.device_id;
@@ -67,6 +67,35 @@
       }
     });
     document.querySelector("#boxes").append(card); boxes.set(frame.device_id, model); return model;
+  }
+  function renderTimetable(model, timetable) {
+    if (!timetable) return;
+    const signature = JSON.stringify(timetable);
+    if (signature === model.timetableSignature) return;
+    model.timetableSignature = signature;
+    const table = document.createElement("table");
+    const caption = document.createElement("caption"); caption.textContent = timetable.title;
+    const head = document.createElement("thead"), heading = document.createElement("tr");
+    for (const label of timetable.columns) {
+      const cell = document.createElement("th"); cell.scope = "col"; cell.textContent = label; heading.append(cell);
+    }
+    head.append(heading);
+    const body = document.createElement("tbody");
+    for (const row of timetable.rows) {
+      const line = document.createElement("tr");
+      for (const key of ["train_number", "time", "route"]) {
+        const cell = document.createElement(key === "train_number" ? "th" : "td");
+        if (key === "train_number") cell.scope = "row";
+        cell.textContent = row[key]; line.append(cell);
+      }
+      body.append(line);
+    }
+    if (!timetable.rows.length) {
+      const line = document.createElement("tr"), cell = document.createElement("td");
+      cell.colSpan = timetable.columns.length; cell.textContent = timetable.empty; line.append(cell); body.append(line);
+    }
+    table.append(caption, head, body);
+    model.card.querySelector(".box-timetable").replaceChildren(table);
   }
   function render(model) {
     const {card, frame, entry} = model;
@@ -126,6 +155,9 @@
     document.querySelector("#connection").textContent = text.ready;
     document.querySelector("#session-info").textContent = text.session || "";
     for (const frame of state.frames) apply(frame);
+    for (const [device, timetable] of Object.entries(state.timetables || {})) {
+      const model = boxes.get(device); if (model) renderTimetable(model, timetable);
+    }
     const samples = document.querySelector("#language-samples"); samples.replaceChildren();
     for (const sample of state.language_samples || []) {
       const card = document.createElement("div"); card.className = "language-sample";

@@ -18,6 +18,11 @@ ofullständiga V2-övergångarna. Presentationen är en ny, serverägd adapter.
 Tre virtuella boxar är förhandstilldelade teststationer: Munkeröd, Charlottendal
 och Vagnsta. Detta är exempeldata, inte den importerade träffens tidtabell.
 
+Under varje testbox visas en skrivskyddad tidtabell med tydliga tågnummer,
+planerad ankomst/avgång och från-/tillstation. Den byggs av servern från samma
+testdata som terminalen och sorteras efter stationens tider. Hela tidtabellen
+ligger kvar även när tåg har körts; listan är en referens, inte trafikknappar.
+
 1. Charlottendal: `39 #` väljer tåget, sedan ett separat `#` för begäran till Vagnsta.
 2. Vagnsta: `39 #` väljer tåget, sedan `#` för klartecken. `*` öppnar ”Neka?” och `#` bekräftar.
 3. Charlottendal: `#` rapporterar faktisk avgång.
@@ -86,7 +91,7 @@ på Wi-Fi. Webbsidan anpassar sig dock till telefonbredd.
 
 ## Verifiering
 
-- 57 Python-tester: grundflöden, direkttrafik, neka/återta, ankomstspår,
+- 60 Python-tester: grundflöden, direkttrafik, neka/återta, ankomstspår,
   dubbla kommandon, gamla vyer, ruttkontroll, 16 tecken och HTTP-isolering;
   dessutom kronologisk bläddring, filter, dygnsskifte, försenade tåg,
   genomgående tåg, separata val/bekräftelser och inaktuell tågmarkering;
@@ -97,7 +102,7 @@ på Wi-Fi. Webbsidan anpassar sig dock till telefonbredd.
 - 9 JavaScript-tester: lokal sifferbuffert, `#`, `*`, radering,
   siffergräns, bevarad inmatning vid klockuppdatering, specialtecken och återställning.
 - 18 befintliga trafikmotortester används som regressionstest.
-- 15 tester för publicerad provbänk: sessionsisolering, egen nollställning,
+- 16 tester för publicerad provbänk: sessionsisolering, egen nollställning,
   utgång, resursgränser, sessionscookie, HTTPS-origin och begränsade HTTP-rutter.
 - Webbläsarprov: hela klarteckenskedjan och mottagning på avvikande spår;
   endast fyra trafikåtgärder registreras. Telefonlayout kontrollerad vid 390 px.

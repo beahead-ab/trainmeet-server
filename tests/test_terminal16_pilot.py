@@ -47,6 +47,31 @@ class Terminal16Tests(unittest.TestCase):
         self.assertTrue(self.lab.frame("DEMO-CDA")["lines"][0].startswith("MUN-"))
         self.assertTrue(self.lab.frame("DEMO-CDA")["lines"][0].endswith("-VA"))
 
+    def test_station_timetable_has_only_its_trains_in_time_order(self):
+        expected = {
+            "DEMO-MUN": [("93", "Avg 12:32", "Till Charlottendal"), ("17", "Ank 12:42", "Från Charlottendal")],
+            "DEMO-CDA": [("17", "Avg 12:35", "Till Munkeröd"), ("39", "Avg 12:38", "Till Vagnsta"),
+                         ("93", "Ank 12:40", "Från Munkeröd")],
+            "DEMO-VA": [("39", "Ank 12:46", "Från Charlottendal")],
+        }
+        for device, rows in expected.items():
+            table = self.lab.timetable(device)
+            self.assertEqual([(row["train_number"], row["time"], row["route"]) for row in table["rows"]], rows)
+            self.assertEqual(table["columns"], ["Tåg", "Tid", "Från / till"])
+        self.assertEqual(self.lab.engine.audit, [])
+
+    def test_reference_timetable_remains_after_departure_arrival_and_filter_changes(self):
+        before = {device: self.lab.timetable(device) for device in self.lab.terminals}
+        self.departure(); self.accept("DEMO-VA", "#")
+        self.accept("DEMO-MUN", "D"); self.accept("DEMO-MUN", "A")
+        self.assertEqual({device: self.lab.timetable(device) for device in self.lab.terminals}, before)
+
+    def test_reference_timetable_uses_publication_times(self):
+        next(m for m in self.lab.publication["trains"] if m["id"] == "17-cda").update(departure_time="00:05", service_day_offset=1)
+        rows = self.lab.timetable("DEMO-CDA")["rows"]
+        self.assertEqual([row["train_number"] for row in rows], ["39", "93", "17"])
+        self.assertEqual(rows[-1]["time"], "Avg 00:05")
+
     def test_lookup_is_read_only_and_finds_destination(self):
         frame = self.lookup("39")["frame"]
         self.assertTrue(frame["lines"][0].endswith("39-VA"))

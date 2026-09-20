@@ -121,6 +121,12 @@ class PublicHTTPTests(unittest.TestCase):
         self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
         self.assertEqual(headers["Cache-Control"], "no-store")
 
+    def test_state_includes_server_owned_station_timetables(self):
+        state = self.state(self.session())
+        self.assertEqual(set(state["timetables"]), {frame["device_id"] for frame in state["frames"]})
+        self.assertEqual([row["train_number"] for row in state["timetables"]["DEMO-CDA"]["rows"]], ["17", "39", "93"])
+        self.assertEqual(state["audit"], [])
+
     def test_two_browsers_are_isolated_and_reset_does_not_affect_other(self):
         first, second = self.session(), self.session()
         self.assertNotEqual(first, second)

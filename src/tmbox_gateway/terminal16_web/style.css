@@ -98,6 +98,18 @@ button:focus-visible { outline: 3px solid #ba744e; outline-offset: 3px; }
 .key:focus-visible { outline-color: #b9d8ff; }
 .box-message { font-size: 12px; line-height: 1.45; min-height: 34px; margin: 14px 0 0; color: #6c766e; }
 .box-message.error { color: #a34029; }
+.box-timetable { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 16px; }
+.box-timetable:empty { display: none; }
+.box-timetable table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+.box-timetable caption { text-align: left; font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+.box-timetable th, .box-timetable td { padding: 11px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.box-timetable th:first-child, .box-timetable td:first-child { padding-left: 0; }
+.box-timetable th:last-child, .box-timetable td:last-child { padding-right: 0; }
+.box-timetable thead th { font-size: 12px; font-weight: 600; color: var(--muted); padding-top: 0; }
+.box-timetable tbody th { font-size: 18px; font-variant-numeric: tabular-nums; }
+.box-timetable td:nth-child(2) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.box-timetable td:last-child { overflow-wrap: anywhere; }
+.box-timetable tbody tr:last-child > * { border-bottom: 0; }
 .key-hints { min-height: 29px; display: flex; flex-wrap: wrap; gap: 5px 11px; font-size: 12px; color: #5d685f; margin-top: 17px; }
 .key-hints span { white-space: nowrap; }
 .key-hints b { color: var(--ink); margin-right: 4px; }
