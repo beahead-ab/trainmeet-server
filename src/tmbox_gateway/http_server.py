@@ -265,6 +265,7 @@ class TrainMeetHTTPApplication:
         self.cloud_config = CloudConfiguration(self) if self.lifecycle else None
         self.on_config_applied = None
         self.on_device_assignment_changed = None
+        self.on_device_language_changed = None
         self.on_clock_changed = None
         self.external_clock = ExternalClock()
         self.refresh_clock_source()
@@ -908,7 +909,7 @@ class TrainMeetHTTPApplication:
 
     def tmbox_v2_config(self, client: PairedClient, station_id: str) -> dict[str, Any]:
         self._require_station_access(client, station_id)
-        payload = self.station_service.config_payload(station_id)
+        payload = self.station_service.config_payload(station_id, device_id=client.client_id)
         if payload is None:
             raise HTTPAPIError(
                 HTTPStatus.NOT_FOUND, "unknown_station", "Stationen finns inte i den aktiva träffen"
@@ -946,6 +947,27 @@ class TrainMeetHTTPApplication:
         if current is None or current.kind != DeviceKind.ESP32_PANEL or device_id != current.client_id:
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "box_not_assigned", "Du kan bara använda din egen TMBox")
 
+    def tmbox_preferences(self, client: PairedClient, payload: dict | None = None) -> dict:
+        # Browser operators use their own bearer identity, never a submitted
+        # station/device id. No admin permission and no traffic write involved.
+        if client.kind != DeviceKind.ESP32_PANEL:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "box_required", "Använd din egen TMBox")
+        self._require_box_access(client, client.client_id)
+        if payload is not None:
+            if set(payload) != {"language"}:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_preferences", "Ange bara språk")
+            try:
+                self.identities.set_device_language(client.client_id, payload["language"])
+            except ValueError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_language", "Ogiltigt språk") from error
+        return {"ui": self._device_ui(client.client_id)}
+
+    def _device_ui(self, device_id: str) -> dict:
+        from .device_ui import ui_payload
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        default = "en" if selected and selected.get("region") == "us" else "sv"
+        return ui_payload(self.identities.device_language(device_id, default))
+
     def tmbox_v2_stations(self, client: PairedClient) -> dict[str, Any]:
         """Which stations the simulator can stand in for, and which boxes exist."""
         self._require_admin(client)
@@ -962,7 +984,9 @@ class TrainMeetHTTPApplication:
 
     def devices(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
+        from .device_ui import LANGUAGES
         return {
+            "languages": [{"code": code, "name": name} for code, name in LANGUAGES],
             "devices": [
                 {
                     "device_id": device.device_id,
@@ -975,6 +999,8 @@ class TrainMeetHTTPApplication:
                     "hardware_version": device.hardware_version,
                     "protocol_version": device.protocol_version,
                     "display": device.display.to_dict(),
+                    "language": (self._device_ui(device.device_id)["language"]
+                                 if self._device_supports_language(device.device_id) else None),
                 }
                 for device in self.identities.discovered_devices()
             ],
@@ -983,6 +1009,27 @@ class TrainMeetHTTPApplication:
                 for station in self.engine.config.stations.values()
             ],
         }
+
+    def _device_supports_language(self, device_id: str) -> bool:
+        client = self.identities.client(device_id)
+        return client is None or client.kind == DeviceKind.ESP32_PANEL
+
+    @runtime_view
+    def set_device_language(self, client: PairedClient, payload: dict[str, Any]) -> dict:
+        self._require_admin(client)
+        device_id = str(payload.get("device_id") or "").strip()
+        if not self._device_supports_language(device_id):
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "box_required", "Välj en TMBox")
+        try:
+            language = self.identities.set_device_language(device_id, payload.get("language"))
+        except ValueError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_preferences", "Välj en befintlig TMBox och ett giltigt språk") from error
+        if self.on_device_language_changed:
+            try:
+                self.on_device_language_changed(device_id)
+            except Exception:
+                LOGGER.exception("Could not publish TMBox language; saved for next contact")
+        return {"device_id": device_id, "language": language, "saved": True}
 
     @runtime_view
     def runtime_summary(self, client: PairedClient) -> dict[str, Any]:
@@ -3139,6 +3186,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     self.server.application.tmbox_v2_config(client, station_id),
                 )
                 return
+            if path == "/v1/tmbox/preferences":
+                self._send_json(HTTPStatus.OK, self.server.application.tmbox_preferences(self._authenticated_client()))
+                return
             if path == "/v1/tmbox-v2/snapshot":
                 client = self._authenticated_client()
                 station_id = parse_qs(parsed.query).get("station_id", [""])[0]
@@ -3343,6 +3393,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.command(client, payload))
                 return
+            if path == "/v1/tmbox/preferences":
+                self._send_json(HTTPStatus.OK, self.server.application.tmbox_preferences(self._authenticated_client(), payload))
+                return
             if path == "/v1/tkl/shift/start":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.start_tkl_shift(client, payload))
@@ -3378,6 +3431,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/devices/remove":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.remove_device(client, payload))
+                return
+            if path == "/v1/devices/language":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.set_device_language(client, payload))
                 return
             if path == "/v1/runtime/install":
                 client = self._authenticated_client()

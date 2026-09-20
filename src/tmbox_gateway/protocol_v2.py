@@ -110,6 +110,12 @@ class TMBoxStationService:
 
     # -------------------------------------------------------------- payloads
 
+    def device_ui(self, device_id: str) -> dict[str, Any]:
+        from .device_ui import ui_payload
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        default = "en" if selected and selected.get("region") == "us" else "sv"
+        return ui_payload(self.identities.device_language(device_id, default))
+
     def assignment_payload(self, device_id: str) -> dict[str, Any]:
         device = self.identities.client(device_id)
         station_id = device.station_id if device else None
@@ -120,6 +126,7 @@ class TMBoxStationService:
             **self.runtime_scope(),
             "status": "assigned" if station_id else "waiting_for_assignment",
             "device_id": device_id,
+            "language": self.device_ui(device_id)["language"],
             "device_code": device.display_name.split()[-1] if device else device_id,
             "config_version": self.config_version(),
             "station_id": station_id,
@@ -130,6 +137,7 @@ class TMBoxStationService:
         self,
         station_id: str,
         display: DisplayCapability | None = None,
+        device_id: str = "",
     ) -> dict[str, Any] | None:
         """The station's static configuration, replaced wholesale on publish."""
         config = self.session_config()
@@ -200,6 +208,7 @@ class TMBoxStationService:
                 for panel in panels
             ],
             "display": capability.to_dict(),
+            "ui": self.device_ui(device_id),
         }
 
     def snapshot_payload(self, station_id: str) -> dict[str, Any] | None:

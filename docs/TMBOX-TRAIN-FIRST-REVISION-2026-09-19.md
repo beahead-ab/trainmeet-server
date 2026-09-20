@@ -10,6 +10,11 @@ för A–D-destinationer, klocka alltid till höger på sista raden, `?` för v�
 A–D är enbart funktionsknappar i den nya profilen. Befintliga profiler ändras
 inte tyst innan server och klienter kan uppdateras tillsammans.
 
+Tillägg 20 september 2026: **operatören väljer boxens språk direkt i boxens
+meny**. Kravet och acceptansen beskrivs i F11 nedan. Det är ännu inte
+implementerat eller driftsatt; webbgränssnittets befintliga språkval är inte
+likvärdigt med språk på den fysiska boxens display.
+
 Infört lokalt:
 
 - `train_routes.py` identifierar planerad delsträcka genom service, trafikdag,
@@ -197,6 +202,55 @@ Identifiera tåg → granska mottagare och Direkttrafik → A Reservera → serv
 
 Slutstation: efter ankomst finns inget utgående steg utan nästa körning. Genomgående tåg: behandla in- och utgående delsträcka separat; ingen automatisk avgång bara för att ankomst rapporterats. Nätfel/omstart: återläs serverns beslut, visa osäker status tills synk är klar och återanvänd kommando-ID vid kontroll av tappad kvittens. Skapa inte ett nytt utskick för att svaret försvann.
 
+### F11 – Operatören väljer språk på sin TMBox
+
+**Meny → Inställningar → Språk → välj → Spara.** Detta är en
+operatörsinställning utan administratörsinloggning. På knappsatsen nås menyn
+genom den nya profilens synliga Fler/Meny-funktion, inte genom en dold
+tangentkombination eller genom att återanvända en tangent som just nu ger
+klartecken, avgång eller ankomst. Det exakta menyinträdet ska ingå i den nya
+profilens navigerings- och referensbildstester innan det aktiveras.
+
+Språken visas med sina egna namn: **Svenska, Dansk, Norsk (bokmål), English,
+Deutsch**. Valet gäller menyer, funktionsetiketter, trafikstatus, frågor och
+felmeddelanden. Tågnummer, stationskoder, namn i träffunderlaget och klockans
+värde ändras inte.
+
+- Valet tillhör **enheten**, inte stationen, servern, Cloud-kontot eller den
+  gemensamma webbläsarens språk. Två boxar på samma station får välja olika språk.
+- Operatörens uttryckliga val sparas beständigt och överlever omstart,
+  återanslutning, firmwareuppdatering utan dataradering och omtilldelning till
+  en annan station. Nollställning av boxens data kan däremot radera valet.
+- En box utan tidigare val använder träffens standard: engelska för US,
+  svenska för EU om ingen annan standard har angetts. Innan träffen är känd
+  används en dokumenterad reservinställning. Ett uttryckligt operatörsval
+  skrivs aldrig över av Cloud-synk eller ny stationstilldelning.
+- Den fysiska boxens webbtestvy speglar samma språkval som boxen. En separat
+  virtuell box har ett eget val kopplat till sitt eget enhets-ID.
+- Spara verkställer valet och ritar om aktuell vy utan att ändra trafikläge.
+  Avbryt, tillbaka eller kryss i webbmenyn lämnar språk och trafik oförändrade.
+  Inmatat tågnummer och valt ärende får inte tappas eller skickas av språkbytet.
+- Språkval ger inte rätt att välja station, roll, displaygeometri, sträcka eller
+  klarteckesregel. Dessa rättigheter ligger fortsatt hos serverns administratör.
+- Servern skickar stabila status-/felkoder och strukturerade värden. Språket
+  får aldrig påverka kommando-ID, protokollnamn, ruttidentifiering eller regler.
+
+**Implementation för båda hårdvarorna:** ESP8266:s serverrenderade texter
+behöver enhetens valda språk; ESP32:s lokala renderare behöver samma
+meddelandekatalog och betydelser. Gemensamma meddelande-ID:n med kompakta,
+granskade LCD-texter ska återanvändas av virtuell box och skärmkatalog.
+Webbgränssnittets allmänna språkval får inte användas som ersättning.
+
+Lagring och protokoll ska validera de fem språkkoderna och endast låta klienten
+ändra sin egen språkpreferens. En gammal klient utan språkuppgift fortsätter
+fungera med sin dokumenterade standard. Vid nätfel ska sparstatus vara ärlig;
+ingen gammal trafikåtgärd får köas eller upprepas för att ett språkval synkas.
+
+För LCD krävs verifierade korttexter och teckenhantering. Diakritiska tecken
+återges där hårdvaran stöder dem och translittereras konsekvent annars. Långa
+texter får inte tränga undan klockan eller göra två trafikbesked identiska.
+US:s etablerade trafiktermer ska behålla sin betydelse i översättningarna.
+
 ## 7. Saker vi annars riskerar att missa
 
 | Situation | Föreslagen hantering |
@@ -248,6 +302,14 @@ Avveckla i den nya boxprofilen: fritt motstationsval i normalfallet, obligatoris
 - **4 live-TKL-fall:** box→TKL, TKL→box, samtidiga kommandon och återanslutning mot samma ärende. Den offentliga TKL-demon ska fortsatt vara helt isolerad.
 
 Totalt **97 föreslagna acceptansfall**, delvis överlappande på olika testnivåer. Detta är en plan, inte genomförd testtäckning. Lägg till läsbarhet, långtidstest och resurstoppar på fysisk hårdvara.
+
+Språktillägget F11 kompletterar denna matris med **5 språk × 6 presentationer
+= 30 språk-/layoutkombinationer**, vardera med meny, trafikbesked och felvy.
+Därtill verifieras beständighet vid omstart/omtilldelning, olika språk på två
+boxar vid samma station, fysisk box och webbtestvy i synk, avbryt utan ändring,
+bevarad lokal inmatning, oförändrade trafikkommandon, ogiltig språkkod,
+gammal klient och nätavbrott. Detta är nya planerade kontroller, inte redan
+passerade tester eller en ändring av de 97 trafikacceptansfallen ovan.
 
 ## 10. Vad som är verifierat i denna genomgång
 

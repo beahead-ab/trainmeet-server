@@ -12,6 +12,7 @@ from .identity import DeviceKind, DisplayCapability, IdentityStore
 from .models import Command, CommandAck, unconfigured_session
 from .observability import configure_logging
 from .storage import SQLiteStateStore
+from .device_ui import ui_payload
 
 
 LOGGER = logging.getLogger("tmbox_gateway.mqtt")
@@ -71,6 +72,7 @@ class MQTTGatewayAdapter:
         client.subscribe("tambox/v1/client/+/command", qos=1)
         client.subscribe("tambox/v1/client/+/presence", qos=1)
         client.subscribe("tambox/v1/device/+/hello", qos=1)
+        client.subscribe("tambox/v1/device/+/preferences/set", qos=1)
         client.publish(
             f"tambox/v1/gateway/{self.gateway_id}/status",
             json.dumps({"status": "online"}),
@@ -99,6 +101,21 @@ class MQTTGatewayAdapter:
         del userdata
         try:
             topic_parts = message.topic.split("/")
+            if len(topic_parts) == 6 and topic_parts[:3] == ["tambox", "v1", "device"] and topic_parts[4:] == ["preferences", "set"]:
+                if not message.retain and self.identities is not None:
+                    body = json.loads(message.payload.decode("utf-8"))
+                    request_id = body.get("request_id")
+                    if isinstance(request_id, str) and 1 <= len(request_id) <= 96:
+                        try:
+                            self.identities.set_device_language(topic_parts[3], body.get("language"))
+                            status = "accepted"
+                        except ValueError:
+                            status = "rejected"
+                        self._publish_device_ui(topic_parts[3], request_id=request_id, status=status)
+                        if status == "accepted":
+                            self._publish_client_snapshots(topic_parts[3])
+                client.ack(message.mid, message.qos)
+                return
             if (
                 len(topic_parts) == 5
                 and topic_parts[:3] == ["tambox", "v1", "device"]
@@ -176,6 +193,20 @@ class MQTTGatewayAdapter:
         )
         self.publish_device_assignment(device_id)
 
+    def _publish_device_ui(self, device_id: str, **extra: Any) -> None:
+        if self.identities is None:
+            return
+        self.client.publish(
+            f"tambox/v1/device/{device_id}/preferences",
+            json.dumps({**extra, "ui": ui_payload(self.identities.device_language(device_id), legacy=True)},
+                       ensure_ascii=False, separators=(",", ":")), qos=1, retain=False,
+        )
+
+    def publish_device_language(self, device_id: str) -> None:
+        with self.engine._lock:
+            self._publish_device_ui(device_id)
+            self._publish_client_snapshots(device_id)
+
     def _handle_presence(self, client_id: str, raw_payload: bytes, *, retained: bool) -> None:
         payload = json.loads(raw_payload.decode("utf-8"))
         if payload.get("status") != "online":
@@ -199,7 +230,8 @@ class MQTTGatewayAdapter:
                 return
             reply = {"status": "waiting_for_assignment", "request_id": request_id}
         else:
-            snapshot = self.engine.snapshots().get(panel_id)
+            snapshot = (self.engine.snapshot(panel_id, language=self.identities.device_language(client_id))
+                        if panel_id in self.engine.config.panels else None)
             if snapshot is None:
                 return  # Invalid config must not keep stale input alive.
             token = _snapshot_token(snapshot)
@@ -222,6 +254,7 @@ class MQTTGatewayAdapter:
         device = self.identities.discovered_device_or_none(device_id)
         if device is None:
             return
+        self._publish_device_ui(device_id)
         assigned_panel_ids = list(self.identities.panels_for_client(device_id))
         station_id = self.identities.station_for_client(device_id)
         # Admin assigns a station now. A v1 keypad still needs one concrete
@@ -284,6 +317,7 @@ class MQTTGatewayAdapter:
             snapshot = snapshots.get(panel_id)
             if snapshot is None:
                 continue
+            snapshot = self.engine.snapshot(panel_id, language=self.identities.device_language(client_id))
             snapshot = {**snapshot, "state_token": _snapshot_token(snapshot)}
             self.client.publish(
                 f"tambox/v1/client/{client_id}/snapshot/{panel_id}",

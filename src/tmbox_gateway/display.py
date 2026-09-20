@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .device_ui import text
+
 from .models import (
     ConnectionRuntime,
     ConnectionState,
@@ -56,8 +58,9 @@ def render_panel(
     connection_runtime: dict[str, ConnectionRuntime],
     *,
     clock_time: str | None = None,
+    language: str = "sv",
 ) -> tuple[str, str]:
-    interaction = _render_interaction(config, panel, panel_runtime, connection_runtime)
+    interaction = _render_interaction(config, panel, panel_runtime, connection_runtime, language=language)
     if interaction is not None:
         return interaction
 
@@ -85,7 +88,10 @@ def _render_interaction(
     panel: PanelConfig,
     runtime: PanelRuntime,
     connection_runtime: dict[str, ConnectionRuntime],
+    *, language: str = "sv",
 ) -> tuple[str, str] | None:
+    def t(key: str) -> str:
+        return text(language, key)
     if runtime.mode == InteractionMode.IDLE or runtime.selected_slot is None:
         return None
 
@@ -100,23 +106,23 @@ def _render_interaction(
 
     if runtime.mode == InteractionMode.ENTER_TRAIN:
         cursor = "_" if len(train) < 5 else ""
-        return fit_line(f"Till: {other_code}", "#=OK"), fit_line(f"Tåg: {train}{cursor}", "*=Avb")
+        return fit_line(t("Till: ") + other_code, "#=OK"), fit_line(t("Tåg: ") + train + cursor, t("*=Avb"))
     if runtime.mode == InteractionMode.AWAITING_PERMISSION:
-        return fit_line(f"{train}->{other_code}"), fit_line("Väntar svar...", "*=Avb")
+        return fit_line(f"{train}->{other_code}"), fit_line(t("Väntar svar..."), t("*=Avb"))
     if runtime.mode == InteractionMode.INCOMING_REQUEST:
         from_code = config.stations[line.from_station_id or other_id].code[:3].upper()
-        return fit_line(f"Från {from_code} {train}"), fit_line("A=KLART", "B=EJ")
+        return fit_line(t("Från ") + f"{from_code} {train}"), fit_line(t("A=KLART"), t("B=EJ"))
     if runtime.mode == InteractionMode.READY_DEPARTURE:
         arrow = _departure_symbol(runtime.selected_slot, panel)
-        return fit_line(f"{train}{arrow}{other_code}", "KLAR"), fit_line("A=Avg", "*=Avb")
+        return fit_line(f"{train}{arrow}{other_code}", t("KLAR")), fit_line(t("A=Avg"), t("*=Avb"))
     if runtime.mode == InteractionMode.CONFIRM_DEPARTURE:
         arrow = _departure_symbol(runtime.selected_slot, panel)
-        return fit_line(f"{train}{arrow}{other_code}", "Tåg ut?"), fit_line("A=AVGÅTT", "B=EJ")
+        return fit_line(f"{train}{arrow}{other_code}", t("Tåg ut?")), fit_line(t("A=AVGÅTT"), t("B=EJ"))
     if runtime.mode == InteractionMode.CONFIRM_CANCEL:
-        return fit_line("Avbryt begäran?"), fit_line("#=Ja", "*=Nej")
+        return fit_line(t("Avbryt begäran?")), fit_line(t("#=Ja"), t("*=Nej"))
     if runtime.mode == InteractionMode.INCOMING_ARRIVAL:
         from_code = config.stations[line.from_station_id or other_id].code[:3].upper()
-        return fit_line(f"Ank {train}", f"från {from_code}"), fit_line("A=ANKOMMIT", "B=EJ")
+        return fit_line(t("Ank ") + train, t("från ") + from_code), fit_line(t("A=ANKOMMIT"), t("B=EJ"))
     return None
 
 

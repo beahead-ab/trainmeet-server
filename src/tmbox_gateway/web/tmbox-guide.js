@@ -12,7 +12,13 @@ globalThis.TMBoxGuide = [
     "En träff öppnar tåget. Flera träffar: C bläddrar och # väljer rörelse. Ingen träff ger ett besked."]},
   {title: "Bläddra utan tågnummer", status: "Finns", steps: [
     "C öppnar första rörelsen från översikten.", "C går vidare till nästa tåg; * återgår till översikten.",
-    "D saknar funktion i dagens ESP32-navigation. Det finns ingen separat Tåg ut/Tåg in-växling ännu."]},
+    "D öppnar språkval från översikten i ESP32. Det finns ingen separat Tåg ut/Tåg in-växling ännu."]},
+  {title: "Välj språk för den egna TMBoxen", status: "Finns – kräver uppdaterad server och firmware", steps: [
+    "ESP32: D från översikten. ESP8266: # från viloläget. Språk / Language öppnar valet i webbklienten.",
+    "Fysisk box: C bläddrar, # sparar, * avbryter. Webbklient: välj språk och Spara; Avbryt eller krysset lämnar utan ändring.",
+    "Svenska, danska, norska, engelska och tyska. Servern sparar valet per enhets-ID, inte per station.",
+    "Språkpaketet kommer från servern. Bytet skickar inget trafikkommando och ger ingen stationstilldelning.",
+    "Misslyckad sparning visas tydligt. Boxen behåller sitt tidigare språk tills servern har svarat."]},
   {title: "Ställa upp och förare redo", status: "Finns – föreslås förenklas", steps: [
     "På en avgång med status none skickar A Uppställt.",
     "När servern svarat positioned skickar nästa A Förare redo.",
@@ -75,4 +81,6 @@ globalThis.TMBoxLegacyDeviceScreens = [
   ["Knappsats saknas", "KNAPPSATS SAKNAS", "KONTROLLERA I2C"],
   ["Diagnostikbygge: hårdvarutest", "HARDVARUTEST", "TRYCK ALLA 16"],
   ["Diagnostikbygge: tangenttest", "TANGENT", "A"],
+  ["Språkval (C bläddrar, # sparar, * avbryter)", "C> #OK *=BAK", "Svenska    09:21"],
+  ["Språk kunde inte sparas", "EJ SPARAT #=NY", "English    09:21"],
 ];
