@@ -34,7 +34,9 @@ p { line-height: 1.55; margin: 8px 0; color: var(--muted); }
 .box-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .box h2 { font-size: 20px; margin: 0; }
 .box-code { font-size: 10px; color: var(--muted); letter-spacing: .09em; font-weight: 700; white-space: nowrap; }
-.box-status { font-size: 12px; margin-bottom: 17px; min-height: 20px; }
+/* Reserve room for three status lines, including a selected train's route.
+   Text may scroll if unusually long; it must never push the keypad away. */
+.box-status { font-size: 12px; line-height: 1.5; height: 4.5em; margin-bottom: 17px; overflow: auto; overflow-wrap: anywhere; }
 /* The physical-looking shell stays separate from the test harness controls. */
 .tmbox-case {
   display: grid;
@@ -96,7 +98,7 @@ button:focus-visible { outline: 3px solid #ba744e; outline-offset: 3px; }
 .key:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 #050609; }
 .key:disabled { color: #667080; opacity: .62; cursor: default; }
 .key:focus-visible { outline-color: #b9d8ff; }
-.box-message { font-size: 12px; line-height: 1.45; min-height: 34px; margin: 14px 0 0; color: #6c766e; }
+.box-message { font-size: 12px; line-height: 1.45; height: 4.35em; overflow: auto; overflow-wrap: anywhere; margin: 14px 0 0; color: #6c766e; }
 .box-message.error { color: #a34029; }
 .box-timetable { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 16px; }
 .box-timetable:empty { display: none; }
@@ -110,8 +112,9 @@ button:focus-visible { outline: 3px solid #ba744e; outline-offset: 3px; }
 .box-timetable td:nth-child(2) { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .box-timetable td:last-child { overflow-wrap: anywhere; }
 .box-timetable tbody tr:last-child > * { border-bottom: 0; }
-.key-hints { min-height: 29px; display: flex; flex-wrap: wrap; gap: 5px 11px; font-size: 12px; color: #5d685f; margin-top: 17px; }
-.key-hints span { white-space: nowrap; }
+/* Keep the whole card stable, including following cards in the mobile stack. */
+.key-hints { height: 7.5em; line-height: 1.5; overflow: auto; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px 11px; font-size: 12px; color: #5d685f; margin-top: 17px; }
+.key-hints span { max-width: 100%; overflow-wrap: anywhere; }
 .key-hints b { color: var(--ink); margin-right: 4px; }
 #connection { font-size: 12px; color: #5b725c; min-height: 18px; }
 .session-info { font-size: 12px; max-width: 820px; }
@@ -125,8 +128,7 @@ button:focus-visible { outline: 3px solid #ba744e; outline-offset: 3px; }
 .reset-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin: 0 0 20px; }
 .reset-controls .secondary { width: auto; margin: 0; min-height: 44px; }
 .reset-controls p { flex: 1 1 300px; margin: 0; font-size: 13px; }
-.reset-controls #reset-status { flex-basis: 100%; color: #426344; }
-.reset-controls #reset-status:empty { display: none; }
+.reset-controls #reset-status { flex-basis: 100%; height: 3.1em; overflow: auto; color: #426344; }
 .reset-controls #reset-status.error { color: #a34029; }
 .secondary:disabled { opacity: .6; cursor: default; }
 .audit { padding: 22px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
@@ -165,6 +167,7 @@ button:focus-visible { outline: 3px solid #ba744e; outline-offset: 3px; }
   .pill { font-size: 8px; padding: 8px; }
   .test-tools { grid-template-columns: 1fr; padding: 22px; }
   .test-actions { border-left: 0; border-top: 1px solid var(--line); padding: 22px 0 0; }
+  .reset-controls #reset-status { height: 4.65em; }
 }
 @media (max-width: 360px) {
   main { padding: 20px 12px; }

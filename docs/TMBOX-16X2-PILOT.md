@@ -86,6 +86,13 @@ flikar via serveruppdateringen. Stationstilldelningar, tidtabell, testläge och
 den löpande klockan behålls. Gamla kommandon kan inte återskapa rörelser efter
 nollställningen. Detta påverkar enbart provbänken, aldrig den riktiga träffen.
 
+Provbänkens kort reserverar fasta ytor för tågstatus, knapphjälp och meddelanden.
+Även återställningsmeddelandet har plats innan det visas. Display, knappsats
+och tidtabell flyttas därför inte vid tågval eller nollställning; även efterföljande
+kort står still i mobilens staplade layout. Ovanligt lång text går att rulla
+inom sin yta och klipps inte bort. Webbläsarmätning av samtliga tre kort på
+dator och vid 390 px mobilbredd visade 0 px förskjutning efter val och reset.
+
 ## Starta lokalt
 
 Från serverprojektets rot, med dess Python-miljö:
