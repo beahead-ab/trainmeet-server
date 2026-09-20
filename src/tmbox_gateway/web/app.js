@@ -882,6 +882,23 @@ document.querySelector("#clock-appearance-form").addEventListener("submit", asyn
   finally { endModalAction(form); }
 });
 
+document.querySelector("#device-language-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!form.dataset.deviceId || !beginModalAction(form)) return;
+  try {
+    const response = await authorizedFetch("/v1/devices/language", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device_id: form.dataset.deviceId, language: document.querySelector("#device-language").value }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Språket kunde inte sparas.");
+    finishModal(form);
+    setMessage(document.querySelector("#device-list-message"), "Språket är sparat. Boxen får det nu eller vid nästa anslutning.", "success");
+    await refreshDevices();
+  } catch (error) { setMessage(document.querySelector("#device-language-message"), error.message, "error"); }
+  finally { endModalAction(form); }
+});
+
 deviceForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = deviceForm.querySelector('button[type="submit"]');
@@ -1575,6 +1592,7 @@ async function refreshDevices() {
   const payload = await response.json();
   // Admin sees physical TMBox and managed browser clients in the same list.
   state.devices = payload.devices || [];
+  state.deviceLanguages = payload.languages || [];
   state.stations = payload.stations || [];
   renderDevices({ devices: state.devices, stations: state.stations });
 }
@@ -1628,6 +1646,22 @@ function renderDevices(payload) {
     const actions = document.createElement("div");
     actions.className = "device-actions";
     actions.append(edit, remove);
+    if (device.language) {
+      const language = document.createElement("button");
+      language.type = "button";
+      language.className = "secondary device-language";
+      const current = (state.deviceLanguages || []).find(item => item.code === device.language);
+      language.textContent = "Språk / " + (current?.name || device.language);
+      language.addEventListener("click", () => {
+        document.querySelector("#device-language-form").dataset.deviceId = device.device_id;
+        document.querySelector("#device-language-code").textContent = device.device_code;
+        const select = document.querySelector("#device-language");
+        select.replaceChildren(...(state.deviceLanguages || []).map(item => new Option(item.name, item.code)));
+        select.value = device.language;
+        openModal("device-language-modal");
+      });
+      actions.insertBefore(language, remove);
+    }
     row.append(actions);
     list.append(row);
   }
@@ -3742,6 +3776,23 @@ function bindUsersSection() {
 }
 
 function bindV2Controls() {
+  document.querySelector("#tmbox-language-open").addEventListener("click", openBoxLanguage);
+  document.querySelector("#tmbox-language-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!beginModalAction(form)) return;
+    ++tmboxV2.uiEpoch;
+    try {
+      const response = await boxFetch("/v1/tmbox/preferences", { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ language: document.querySelector("#tmbox-language").value }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || "Språket kunde inte sparas.");
+      ++tmboxV2.uiEpoch;
+      tmboxV2.ui = body.ui; drawV2(); finishModal(form);
+    } catch (error) { setMessage(document.querySelector("#tmbox-language-message"), error.message, "error"); }
+    finally { endModalAction(form); }
+  });
   const device = v2El("device");
   const station = v2El("station");
   const geometry = v2El("geometry");
@@ -3777,6 +3828,7 @@ async function connectBrowserTMBox() {
     const body = await response.json().catch(() => ({}));
     if (!response.ok || body.workspace !== "tmbox") throw new Error(body.message || "TMBoxen kunde inte startas.");
     tmboxV2.browser = { ...body, access_token: saved?.access_token || body.access_token };
+    tmboxV2.uiEpoch = (tmboxV2.uiEpoch || 0) + 1;
     localStorage.setItem("trainmeet.browser-tmbox", JSON.stringify(tmboxV2.browser));
     v2El("device").value = body.device_code;
     document.querySelector("#tmbox-browser-start").classList.add("hidden");
@@ -3794,6 +3846,20 @@ function boxFetch(path, options = {}) {
     headers: { ...options.headers, Authorization: `Bearer ${tmboxV2.browser.access_token}` } });
 }
 
+async function openBoxLanguage() {
+  if (!tmboxV2.browser || tmboxV2.busy) return;
+  try {
+    const response = await boxFetch("/v1/tmbox/preferences");
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.message || "Språken kunde inte hämtas.");
+    tmboxV2.ui = body.ui;
+    const select = document.querySelector("#tmbox-language");
+    select.replaceChildren(...body.ui.languages.map(item => new Option(item.name, item.code)));
+    select.value = body.ui.language;
+    openModal("tmbox-language-modal");
+  } catch (error) { setMessage(v2El("message"), error.message, "error"); }
+}
+
 async function refreshTMBoxV2() {
   const deviceID = tmboxV2.browser?.client_id;
   const nav = tmboxV2.nav;
@@ -3809,6 +3875,12 @@ async function refreshTMBoxV2() {
         setMessage(v2El("message"), "Boxen är borttagen eller saknar behörighet. Be administratören om hjälp.", "error");
       }
       tmboxV2.assignment = response.ok ? await response.json() : null;
+      if (tmboxV2.assignment?.language && tmboxV2.ui?.language !== tmboxV2.assignment.language) {
+        const uiEpoch = tmboxV2.uiEpoch;
+        const prefs = await boxFetch("/v1/tmbox/preferences");
+        const latest = prefs.ok ? await prefs.json() : null;
+        if (latest && uiEpoch === tmboxV2.uiEpoch) tmboxV2.ui = latest.ui;
+      }
     } catch { tmboxV2.assignment = null; }
   } else {
     tmboxV2.assignment = null;
@@ -3907,6 +3979,7 @@ function v2NormaliseConfig(payload) {
     name: station.name || "",
     tracks: payload.tracks || [],
     connections: payload.connections || [],
+    ui: payload.ui,
   };
 }
 
@@ -3930,7 +4003,7 @@ function drawV2() {
   }
 
   nav.view.device_code = v2El("device").value.trim() || "TMBOX-------";
-  const frame = TMBoxRender.render(geometry, nav.view, tmboxV2.config, tmboxV2.snapshot);
+  const frame = TMBoxRender.render(geometry, nav.view, { ...tmboxV2.config, ui: tmboxV2.ui || tmboxV2.config.ui }, tmboxV2.snapshot);
   frame.forEach((line, row) => { lcd.children[row].textContent = line; });
 }
 
@@ -3941,6 +4014,10 @@ async function pressV2Key(key) {
   // A flash is a screen the operator is reading; let it finish before a key
   // is taken against whatever is behind it.
   if (tmboxV2.flashUntil > Date.now()) return;
+  if (document.querySelector("#tmbox-language-modal")?.open) return;
+  if (key === "D" && ["StationOverview", "AwaitingAssignment"].includes(nav.view.screen)) {
+    await openBoxLanguage(); return;
+  }
 
   const result = nav.press(key, v2Now(), tmboxV2.config, tmboxV2.snapshot);
   if (result.outcome === "Ignored") return;

@@ -250,6 +250,13 @@ def main() -> None:
         else:
             gateway.publish_device_assignment(device_id)
     application.on_device_assignment_changed = publish_device_assignment
+    def publish_device_language(device_id):
+        device = identities.discovered_device(device_id)
+        if device.protocol_version == 2:
+            v2_gateway.publish_device_language(device_id)
+        else:
+            gateway.publish_device_language(device_id)
+    application.on_device_language_changed = publish_device_language
     def publish_clock():
         publish_clock_to_devices(gateway, v2_gateway, identities)
     application.on_clock_changed = publish_clock

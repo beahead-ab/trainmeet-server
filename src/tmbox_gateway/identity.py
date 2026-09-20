@@ -187,6 +187,11 @@ class IdentityStore:
                 charset TEXT NOT NULL DEFAULT 'ascii'
             );
 
+            CREATE TABLE IF NOT EXISTS device_ui_preferences (
+                device_id TEXT PRIMARY KEY,
+                language TEXT NOT NULL CHECK(language IN ('sv','da','nb','en','de'))
+            );
+
             CREATE TABLE IF NOT EXISTS admin_access (
                 singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
                 username TEXT NOT NULL,
@@ -422,6 +427,30 @@ class IdentityStore:
                 "DELETE FROM pairing_codes WHERE label = ?",
                 (label,),
             )
+
+    def device_language(self, device_id: str, default: str = "sv") -> str:
+        from .device_ui import language_code
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT language FROM device_ui_preferences WHERE device_id = ?", (device_id,)
+            ).fetchone()
+        return language_code(row[0] if row else default)
+
+    def set_device_language(self, device_id: str, language: str) -> str:
+        from .device_ui import language_code
+        code = language_code(language)
+        # Preferences cannot create an identity or grant a station/role.
+        with self._lock:
+            if self._connection.execute(
+                "SELECT 1 FROM discovered_devices WHERE device_id = ? AND removed_at IS NULL", (device_id,)
+            ).fetchone() is None:
+                raise ValueError("Unknown TMBox")
+            self._connection.execute(
+                "INSERT INTO device_ui_preferences(device_id, language) VALUES (?, ?) "
+                "ON CONFLICT(device_id) DO UPDATE SET language = excluded.language",
+                (device_id, code),
+            )
+        return code
 
     def register_client(
         self,
