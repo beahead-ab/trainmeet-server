@@ -437,6 +437,26 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.locator('#device-form-modal > .modal-close').click();
     await page.locator('[data-language-picker]').selectOption('sv');
     // Removal is explicit, names the target, handles errors and works on mobile.
+    const checkClientReadability = async expected => {
+      assert.equal(await page.locator('#device-list .status-row').count(), expected);
+      const metrics = await page.locator('#device-list').evaluate(list => ({
+        maxHeight: getComputedStyle(list).maxHeight,
+        overflow: document.documentElement.scrollWidth > innerWidth + 1,
+        rows: [...list.querySelectorAll('.status-row')].map(row => ({
+          code: parseFloat(getComputedStyle(row.querySelector('b')).fontSize),
+          model: parseFloat(getComputedStyle(row.querySelector('small')).fontSize),
+          station: parseFloat(getComputedStyle(row.querySelector(':scope > span')).fontSize),
+          buttons: [...row.querySelectorAll('button')].map(button => ({font: parseFloat(getComputedStyle(button).fontSize), height: button.getBoundingClientRect().height})),
+        })),
+      }));
+      assert.equal(metrics.maxHeight, 'none');
+      assert.equal(metrics.overflow, false);
+      for (const row of metrics.rows) {
+        assert.ok(row.code >= 18 && row.model >= 14 && row.station >= 16, JSON.stringify(row));
+        assert.ok(row.buttons.every(button => button.font >= 16 && button.height >= 44));
+      }
+    };
+    await checkClientReadability(1);
     const removeDialog = page.locator('#device-remove-modal');
     await page.locator('#device-list .device-remove').click();
     assert.equal(await page.locator('#device-remove-code').innerText(), 'TBX-123');
@@ -460,6 +480,19 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.reload();
     await page.locator('#device-list .empty-status').waitFor();
     assert.equal(await page.locator('#device-list .status-row').count(), 0);
+    assert.ok(await page.locator('#device-list .empty-status').evaluate(node => parseFloat(getComputedStyle(node).fontSize) >= 16));
+    devices = Array.from({length: 6}, (_, index) => ({
+      device_id: `esp32-long-device-identity-for-wrapping-${index}`,
+      device_code: `TBX-TEST-${index}`, station_id: index % 2 ? null : 'a',
+      model: index % 2 ? 'Virtual TMBox test client' : 'NodeMCU ESP8266 PCF8574',
+    }));
+    await page.reload();
+    await page.locator('#device-list .status-row').last().waitFor();
+    for (const width of [1200, 760, 390, 360]) {
+      await page.setViewportSize({width, height: 900});
+      await checkClientReadability(6);
+    }
+    await screenshot('mobile-connected-clients');
     region = 'us';
     await page.goto('http://127.0.0.1:9999/#workspaces');
     await page.reload();
