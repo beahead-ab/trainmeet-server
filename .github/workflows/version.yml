@@ -24,6 +24,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   bump:
@@ -130,3 +131,11 @@ jobs:
           numret tills detta är löst.
           MESSAGE
           exit 1
+      # GITHUB_TOKEN tag pushes do not trigger a tag build. Build the exact
+      # version after stamping it, not the preceding merge's VERSION file.
+      - name: Publish versioned server image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(python3 scripts/version.py current)
+          gh workflow run container.yml --ref main -f "release_ref=v$VERSION"
