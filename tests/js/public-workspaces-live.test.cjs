@@ -76,6 +76,8 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#tmbox-language-open').click();
     await page.locator('#tmbox-language').selectOption('da');
     await page.locator('#tmbox-language-modal button[type=submit]').click();
+    await page.locator('#tmbox-language-modal').waitFor({state: 'hidden'});
+    await page.waitForFunction(() => tmboxV2.ui.language === 'da');
     assert.equal(await page.evaluate(() => tmboxV2.nav.view.lookup_digits), '12', 'Own language change preserves unsent digits');
     assert.equal((await admin.request.post(urls.eu + '/v1/devices/language', {data: {device_id: box.client_id, language: 'de'}})).status(), 200);
     await page.waitForFunction(() => tmboxV2.ui.language === 'de');
