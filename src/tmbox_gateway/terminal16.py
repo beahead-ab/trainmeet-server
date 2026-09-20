@@ -31,6 +31,7 @@ class Terminal:
     revision: int = 0
     notice: str = ""
     browse_filter: str = "all"
+    return_screen: str = "detail"
 
 
 def row(left="", right=""):
@@ -132,6 +133,27 @@ class Terminal16Lab:
             terminal.selected = None
         terminal.screen = "browse"
 
+    def _requests(self, terminal):
+        # Bindings retain request order. Only exact, still-unanswered incoming legs.
+        return [key for key in self.bindings.values()
+                if self.legs[key]["to_station_id"] == terminal.station
+                and self._line(self.legs[key]).state == State.REQUESTED]
+
+    def _open_requests(self, terminal, direction=0):
+        choices = self._requests(terminal)
+        current = choices.index(terminal.selected) if terminal.selected in choices else None
+        index = (current + direction) % len(choices) if current is not None else 0
+        terminal.selected = choices[index] if choices else None
+        terminal.screen, terminal.notice = "requests", ""
+
+    def _notify_request(self, leg):
+        for terminal in self.terminals.values():
+            if (terminal.station == leg["to_station_id"] and not terminal.notice
+                    and (terminal.screen == "overview"
+                         or (terminal.screen == "requests" and terminal.selected is None))):
+                self._open_requests(terminal)
+                terminal.revision += 1
+
     def _departure_ready(self, leg):
         # For a through train the preceding arrival must be recorded first.
         return all(key in self.completed for key, incoming in self.legs.items()
@@ -189,15 +211,28 @@ class Terminal16Lab:
         return next(r.get("track_id") for r in self.publication["trains"] if r["id"] == leg["to_movement_id"])
 
     def _buttons(self, terminal):
+        buttons = self._view_buttons(terminal)
+        buttons["A"] = ("requests", f"Förfrågningskö ({len(self._requests(terminal))} väntar)")
+        return buttons
+
+    def _view_buttons(self, terminal):
         if terminal.notice:
             return {"#": ("back", "OK"), "*": ("back", "Tillbaka")}
         if terminal.screen == "overview":
-            return {"#": ("browse", "Visa kommande tåg"), "C": ("previous", "Föregående tåg"),
+            primary = ("requests", "Visa väntande förfrågningar") if self._requests(terminal) else ("browse", "Visa kommande tåg")
+            return {"#": primary, "C": ("previous", "Föregående tåg"),
                     "D": ("next", "Nästa tåg"), "B": ("page", "Nästa översiktssida")}
         buttons = {"*": ("back", "Tillbaka")}
+        if terminal.screen == "requests":
+            buttons.update(B=("home", "Översikt utan trafikändring"))
+            if self._requests(terminal):
+                buttons.update(C=("previous_request", "Föregående förfrågan"), D=("next_request", "Nästa förfrågan"))
+            if terminal.selected in self._requests(terminal):
+                buttons.update({"#": ("accept", "Ge klart"), "*": ("reject_view", "Neka begäran…")})
+            return buttons
         if terminal.screen == "browse":
             next_filter = {"all": "ankomster", "arrival": "avgångar", "departure": "alla tåg"}[terminal.browse_filter]
-            buttons.update(A=("filter", "Visa " + next_filter), C=("previous", "Föregående tåg"), D=("next", "Nästa tåg"))
+            buttons.update(B=("filter", "Visa " + next_filter), C=("previous", "Föregående tåg"), D=("next", "Nästa tåg"))
             if terminal.selected in self._candidates(terminal, filtered=True):
                 buttons["#"] = ("select", "Välj tåg")
             return buttons
@@ -228,14 +263,14 @@ class Terminal16Lab:
                       or self.engine.config.default_dispatch_mode) == DispatchMode.DIRECT
             buttons["#"] = ("request", "Reservera" if direct else "Begär klartecken")
         elif active and line.state == State.REQUESTED:
-            buttons["A"] = ("home", "Översikt utan trafikändring")
+            buttons["B"] = ("home", "Översikt utan trafikändring")
             if own:
                 buttons["*"] = ("cancel_view", "Återta begäran…")
             else:
                 buttons.update({"#": ("accept", "Ge klart"), "*": ("reject_view", "Neka begäran…")})
         elif active and line.state == State.RESERVED and own:
             buttons.update({"#": ("depart", "Rapportera avgång"), "*": ("cancel_view", "Återta klartecken…"),
-                            "A": ("home", "Översikt utan trafikändring")})
+                            "B": ("home", "Översikt utan trafikändring")})
         elif active and line.state == State.OCCUPIED and not own:
             buttons.update({"#": ("arrive", "Rapportera ankomst"), "B": ("tracks", "Annat ankomstspår")})
         return buttons
@@ -245,21 +280,39 @@ class Terminal16Lab:
         buttons = self._buttons(terminal)
         clock = self.engine.meeting_clock()["time"]
         clock = clock if re.fullmatch(r"\d{2}:\d{2}", clock) else "--:--"
-        hint = "Nr# C/D"
+        hint = "Nr# A:Kö"
         first = self._overview(terminal)
         selected = self.legs.get(terminal.selected)
+        requests = self._requests(terminal)
+        position = requests.index(terminal.selected) + 1 if terminal.selected in requests else 0
+        if terminal.screen == "overview" and requests:
+            hint = "A:Kö #Visa"
         if terminal.notice:
             first, hint = row(terminal.notice), "#OK *=Bak"
+        elif terminal.screen == "requests":
+            if position:
+                label, side = self._label(terminal.station, selected)
+                counter = f"{position}/{len(requests)}"
+                if len(label) + len(counter) < 16:
+                    first = row(label, counter) if side == "left" else row(counter, label)
+                    hint = "#Ja *Nej"
+                else:
+                    # Keep long train identities intact; put queue count in the hint.
+                    first = row(label) if side == "left" else row("", label)
+                    hint = f"#Ja {counter}"
+            else:
+                first = row("INGA FRÅGOR" if not requests else "FRÅGAN ÄNDRAD")
+                hint = "A:Kö *=Bak"
         elif terminal.screen == "browse":
             choices = self._candidates(terminal, filtered=True)
             if terminal.selected in choices:
                 schedule = self._schedule(terminal, selected)
                 first = row(f"{selected['train_number']} {schedule['label']}", schedule["time"])
-                hint = "#Välj C/D"
+                hint = "#Välj A:Kö"
             else:
                 first = row("VÄLJ NÄSTA TÅG" if choices else
                             {"all": "INGA TÅG", "arrival": "INGA ANKOMSTER", "departure": "INGA AVGÅNGAR"}[terminal.browse_filter])
-                hint = "C/D *=Bak" if choices else "A:Filter *"
+                hint = "C/D A:Kö" if choices else "B:Fil A:Kö"
         elif terminal.screen == "cancel":
             first, hint = ((row(f"ÅTER {selected['train_number']}?"), "#Ja *Nej") if "#" in buttons
                            else (row("LÄGET ÄNDRAT"), "*=Bak"))
@@ -274,9 +327,9 @@ class Terminal16Lab:
             label, side = self._label(terminal.station, selected)
             first = row(label) if side == "left" else row("", label)
             action = buttons.get("#", ("", ""))[0]
-            hint = {"request": "#Begär", "accept": "#Ja *Nej", "depart": "#Avg *Åter",
-                    "arrive": "#In B:Sp"}.get(action, "*Åter A:Öv" if "A" in buttons else
-                                               "C/D *=Bak" if "C" in buttons else "*=Bak")
+            hint = {"request": "#Beg A:Kö", "accept": "#Ja *Nej", "depart": "#Avg *Åter",
+                    "arrive": "#In B:Sp"}.get(action, "*Åter B:Öv" if buttons.get("B", (None,))[0] == "home" else
+                                               "C/D A:Kö" if "C" in buttons else "A:Kö *=Bak")
             if action == "request" and buttons["#"][1] == "Reservera":
                 hint = "#Sändklar"
         status = "Skriv tågnummer direkt, eller bläddra med C/D"
@@ -293,6 +346,9 @@ class Terminal16Lab:
                 status = f"{position}/{len(choices)} · {label} · " + status
                 upcoming = {"position": position, "count": len(choices), "filter": terminal.browse_filter,
                             "kind": schedule["kind"], "time": schedule["time"], "movement_id": terminal.selected}
+        if terminal.screen == "requests":
+            status = (f"Förfrågan {requests.index(terminal.selected) + 1}/{len(requests)} · " + status
+                      if terminal.selected in requests else "Ingen vald förfrågan. A öppnar kön; B visar översikten.")
         lines = [first, row(hint, clock)]
         entry_lines = [row("TÅG: _____"), row("#Sök B:Del", clock)]
         return {
@@ -307,7 +363,11 @@ class Terminal16Lab:
             "entry": {"context": f"{self.epoch}:{device}:{terminal.station}", "max_length": 5,
                       "lines": entry_lines, "lcd": encode_lcd(entry_lines),
                       "row": 0, "column": 5, "commit": "#", "cancel": "*", "erase": "B",
-                      "labels": {"#": "Sök tåg", "*": "Avbryt inmatning", "B": "Sudda siffra"}},
+                      "shortcut": "A",
+                      "labels": {"#": "Sök tåg", "*": "Avbryt inmatning", "B": "Sudda siffra",
+                                 "A": "Förfrågningskö (avbryt inmatning)"}},
+            "requests": {"count": len(requests), "position": requests.index(terminal.selected) + 1 if terminal.selected in requests else 0,
+                         "label": f"A · Förfrågningskö · {len(requests)} väntar"},
             "status": status, "upcoming": upcoming,
         }
 
@@ -373,11 +433,13 @@ class Terminal16Lab:
         action = button[0]
         terminal.notice = ""
         if action == "back":
-            terminal.screen = "detail" if terminal.screen in {"tracks", "cancel", "reject"} else "overview"
+            terminal.screen = terminal.return_screen if terminal.screen in {"tracks", "cancel", "reject"} else "overview"
         elif action == "home":
             terminal.screen = "overview"
         elif action == "page":
             terminal.page += 1
+        elif action in {"requests", "next_request", "previous_request"}:
+            self._open_requests(terminal, {"requests": 0, "next_request": 1, "previous_request": -1}[action])
         elif action in {"browse", "next", "previous"}:
             self._browse(terminal, {"browse": 0, "next": 1, "previous": -1}[action])
         elif action == "filter":
@@ -387,10 +449,13 @@ class Terminal16Lab:
         elif action == "select":
             terminal.screen = "detail"
         elif action == "cancel_view":
+            terminal.return_screen = terminal.screen
             terminal.screen = "cancel"
         elif action == "reject_view":
+            terminal.return_screen = terminal.screen
             terminal.screen = "reject"
         elif action == "tracks":
+            terminal.return_screen = terminal.screen
             terminal.track, terminal.screen = 0, "tracks"
         elif action in {"next_track", "previous_track"}:
             terminal.track = (terminal.track + (1 if action == "next_track" else -1)) % len(self._tracks(terminal))
@@ -428,6 +493,11 @@ class Terminal16Lab:
                     "train_not_departed": "Tåget har inte avgått"}.get(reason, "Läget har ändrats. Välj tåget igen.")
         if action == "request":
             self.bindings[leg["connection_id"]] = key
+            if self._line(leg).state == State.REQUESTED:
+                self._notify_request(leg)
+        if action == "accept" and terminal.screen == "requests":
+            # Stay with the accepted train, never repurpose a second # for another request.
+            terminal.screen = "detail"
         if action in {"arrive", "arrive_track"}:
             self.arrivals[key] = {"station": terminal.station, "track": arrival_track,
                                   "planned_track": self._planned_track(leg), "movement_id": leg["to_movement_id"]}

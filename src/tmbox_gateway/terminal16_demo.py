@@ -42,7 +42,8 @@ def demo_lab(mode="clearance"):
     for number, origin, destination, departure, arrival in (
             ("17", "cda", "mun", "12:35", "12:42"),
             ("39", "cda", "va", "12:38", "12:46"),
-            ("93", "mun", "cda", "12:32", "12:40")):
+            ("93", "mun", "cda", "12:32", "12:40"),
+            ("94", "va", "cda", "12:44", "12:52")):
         stops = []
         for order, station in enumerate((origin, destination)):
             stop = {"station_id": station, "stop_order": order,

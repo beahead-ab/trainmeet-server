@@ -38,6 +38,19 @@ test('function keys cannot act on traffic while typing',()=>{
   const buffer = new EntryBuffer();buffer.press('3',frame);
   for(const key of ['A','C','D']) assert.equal(buffer.press(key,frame).local,true);
 });
+test('incoming request preserves entry; hash still searches rather than approving',()=>{
+  const buffer = new EntryBuffer(); buffer.press('3',frame); buffer.press('9',frame);
+  const request = {...frame,lines:['MUN?93       1/1','#Ja *Nej   12:34'],keys:{'#':{label:'Ge klart'}},
+    entry:{...frame.entry,shortcut:'A'}};
+  assert.equal(buffer.lines(request)[0],'TAG: 39___      ');
+  assert.deepEqual(buffer.press('#',request),{local:false,train_number:'39',entry_context:'station-cda'});
+  assert.equal(buffer.digits,'39');
+});
+test('explicit server-defined queue shortcut leaves entry without sending its digits',()=>{
+  const buffer = new EntryBuffer(); buffer.press('3',frame); buffer.press('9',frame);
+  assert.deepEqual(buffer.press('A',{...frame,entry:{...frame.entry,shortcut:'A'}}),{local:false});
+  assert.equal(buffer.digits,'');
+});
 test('# without digits delegates confirmation, but typed digits always form a lookup',()=>{
   const buffer = new EntryBuffer();
   const actionable = {...frame,keys:{'#':{label:'Rapportera avgång'}}};

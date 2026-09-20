@@ -24,19 +24,21 @@ testdata som terminalen och sorteras efter stationens tider. Hela tidtabellen
 ligger kvar även när tåg har körts; listan är en referens, inte trafikknappar.
 
 1. Charlottendal: `39 #` väljer tåget, sedan ett separat `#` för begäran till Vagnsta.
-2. Vagnsta: `39 #` väljer tåget, sedan `#` för klartecken. `*` öppnar ”Neka?” och `#` bekräftar.
+2. Vagnsta: förfrågan öppnas automatiskt i ledig översikt. `#` ger klartecken utan tågnummer. `*` öppnar ”Neka?” och `#` bekräftar. `A` hittar alltid tillbaka till förfrågningarna.
 3. Charlottendal: `#` rapporterar faktisk avgång.
 4. Vagnsta: `#` tar emot på planerat spår 1. `B`, `D`, `#` tar emot på spår 2.
 
 Tåg 17 går västerut från Charlottendal till Munkeröd. Tåg 93 går från
-Munkeröd till Charlottendal. Siffror börjar direkt skriva ett nytt tågnummer,
+Munkeröd till Charlottendal. Tåg 94 går från Vagnsta till Charlottendal;
+begär 93 och 94 från avsändarna för att prova två samtidiga förfrågningar.
+Siffror börjar direkt skriva ett nytt tågnummer,
 även från en detaljvy. `#` söker hela numret, utan att samtidigt ändra trafiken.
 Utan inmatade siffror bekräftar `#` den åtgärd som visas på skärmen.
 
 `C`/`D` bläddrar bakåt/framåt bland stationens avgångar och aktiva inkommande tåg.
 Listan sorteras efter stationens planerade tid, med hänsyn till dygnsoffset.
 Rad 1 visar tågnummer, **ANK/AVG** och planerad tid; rad 2 visar handgrepp och
-aktuell klocka. I bläddringsvyn växlar `A` mellan alla tåg, ankomster och
+aktuell klocka. I bläddringsvyn växlar `B` mellan alla tåg, ankomster och
 avgångar. `#` väljer tåget; en ytterligare bekräftelse krävs för trafikåtgärden.
 En planerad ankomst blir valbar först när avsändaren har begärt klartecken
 eller reserverat tågrörelsen i direkttrafik. Mottagaren kan aldrig själv
@@ -48,6 +50,25 @@ visar fortfarande samtliga planerade tåg, även framtida ankomster.
 Försenade, ännu inte rapporterade tåg ligger kvar. Avgångar försvinner från
 avsändarens lista först vid faktisk avgång; ankomster först när de tas emot.
 Ett genomgående tåg kan inte skickas vidare innan föregående ankomst registrerats.
+
+### Förfrågningskö
+
+- `A` är en permanent snabbväg till obesvarade inkommande förfrågningar, även
+  från felmeddelanden och bekräftelsevyer. Den utför aldrig en trafikåtgärd.
+- En ny förfrågan öppnas direkt om mottagaren står i översikten eller i en
+  tom kö. Tågval, spårval, andra frågor och pågående inmatning avbryts inte.
+- Kön sorteras i begäransordning. Displayen visar motstation/tåg och `1/2`;
+  webbens fasta köfält visar alltid antal väntande och snabbkommandot `A`.
+- `#` ger klart för just den visade förfrågan. `*` öppnar nekande med separat
+  `#`-bekräftelse. `C/D` bläddrar enbart i kön; `B` lämnar den utan att svara.
+- Efter klartecken ligger det valda tåget kvar för avgång/ankomst. `A` öppnar
+  återstående kö. Nästa tåg väljs inte automatiskt efter svar eller återtagning.
+  Gamla kommandon och en förfrågan besvarad på en annan box kan inte godkänna
+  ett annat tåg. Från översikten öppnar även `#` en väntande kö, utan att godkänna.
+- Sifferbufferten hålls lokal även när en förfrågan visas i en ny serverbild.
+  `#` med inmatade siffror söker fortsatt tåget och ger aldrig klartecken.
+  Ett uttryckligt `A` lämnar den oskickade inmatningen och öppnar kön.
+- Direkttrafik kräver inget godkännande och läggs därför inte i denna kö.
 
 `#` är primär bekräftelse och `*` är primär avbryt/nej/tillbaka-knapp.
 Betydelsen bestäms av servern och visas på displayen och i knappförklaringen:
@@ -61,7 +82,9 @@ Betydelsen bestäms av servern och visas på displayen och i knappförklaringen:
 | Val av annat ankomstspår | Tillbaka utan att registrera ankomst | Ingen trafikändring |
 | Tåget har avgått | Tillbaka, aldrig återtagning | Mottagaren behöver ta emot tåget |
 
-När `*` öppnar återtagning/nekande visar `A` översikten utan att ändra trafiken.
+I detaljvyn för begäran/klart visar `B` översikten utan att ändra trafiken.
+`A` öppnar alltid förfrågningskön. Avbryts nekandefrågan återgår man till den
+kö eller detaljvy där frågan öppnades.
 `B` nekar inte längre direkt. Om en annan box ändrar tillståndet medan en
 bekräftelsefråga visas spärras den gamla bekräftelsen. En fråga som inte längre
 är giltig visar ”LÄGET ÄNDRAT”. Inga trafikregler har flyttats till webbläsaren.
@@ -107,16 +130,19 @@ på Wi-Fi. Webbsidan anpassar sig dock till telefonbredd.
 
 ## Verifiering
 
-- 67 Python-tester: grundflöden, direkttrafik, neka/återta, ankomstspår,
+- 80 Python-tester: grundflöden, direkttrafik, neka/återta, ankomstspår,
   dubbla kommandon, gamla vyer, ruttkontroll, 16 tecken och HTTP-isolering;
   dessutom kronologisk bläddring, filter, dygnsskifte, försenade tåg,
   genomgående tåg, separata val/bekräftelser och inaktuell tågmarkering;
   dessutom `*` i alla lägen, avbrutna bekräftelser, samtidiga trafikändringar
   och nollställning i alla trafiklägen med bevarad konfiguration/klocka.
+  Där ingår 13 kötester: automatisk visning, två samtidiga avsändare,
+  köordning, snabbväg, avbruten fråga, gammal vy, dubbeltryck och flera mottagare.
 - 8 ytterligare Python-tester: originalets färgpalett, specialtecken, normalisering,
   teckenbudget och rundtur från Unicode till LCD-byte och tillbaka.
-- 10 JavaScript-tester: lokal sifferbuffert, `#`, `*`, radering,
-  siffergräns, bevarad inmatning vid klockuppdatering, specialtecken och återställning.
+- 12 JavaScript-tester: lokal sifferbuffert, `#`, `*`, radering,
+  siffergräns, bevarad inmatning vid klockuppdatering/ny förfrågan, uttryckligt
+  kökommando från inmatning, specialtecken och återställning.
 - 18 befintliga trafikmotortester används som regressionstest.
 - 16 tester för publicerad provbänk: sessionsisolering, egen nollställning,
   utgång, resursgränser, sessionscookie, HTTPS-origin och begränsade HTTP-rutter.

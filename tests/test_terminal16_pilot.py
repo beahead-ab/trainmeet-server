@@ -41,7 +41,7 @@ class Terminal16Tests(unittest.TestCase):
         for frame in self.lab.frames():
             self.assertEqual((frame["cols"], frame["rows"]), (16, 2))
             self.assertTrue(frame["lines"][1].endswith("12:34"))
-            self.assertNotIn("A", frame["keys"])
+            self.assertEqual(frame["keys"]["A"]["label"], "Förfrågningskö (0 väntar)")
             self.assertEqual(frame["keys"]["#"]["label"], "Visa kommande tåg")
             self.assertEqual(frame["entry"]["commit"], "#")
             self.assertEqual(frame["lines"][0], " " * 16)
@@ -50,6 +50,8 @@ class Terminal16Tests(unittest.TestCase):
         for device in ("DEMO-CDA", "DEMO-VA"):
             self.lab.terminals["WATCH-" + device] = deepcopy(self.lab.terminals[device])
         def check(marker):
+            if self.lab.terminals["WATCH-DEMO-VA"].screen == "requests":
+                self.accept("WATCH-DEMO-VA", "B")
             self.assertEqual(self.lab.frame("WATCH-DEMO-CDA")["lines"][0], f"39{marker}VA".rjust(16))
             self.assertEqual(self.lab.frame("WATCH-DEMO-VA")["lines"][0], f"CDA{marker}39".ljust(16))
             self.assertEqual(self.lab.frame("DEMO-MUN")["lines"][0], " " * 16)
@@ -58,7 +60,7 @@ class Terminal16Tests(unittest.TestCase):
         self.accept("DEMO-CDA", "#"); check("▶")
         self.accept("DEMO-VA", "#")
         for device in ("WATCH-DEMO-CDA", "WATCH-DEMO-VA", "DEMO-MUN"):
-            self.assertEqual(self.lab.frame(device)["lines"], [" " * 16, "Nr# C/D    12:34"])
+            self.assertEqual(self.lab.frame(device)["lines"], [" " * 16, "Nr# A:Kö   12:34"])
 
     def test_overview_becomes_blank_after_cancel_or_rejection(self):
         for actor in ("DEMO-CDA", "DEMO-VA"):
@@ -75,15 +77,15 @@ class Terminal16Tests(unittest.TestCase):
         # Two connections to the left and one to the right must still be blank at rest.
         self.lab.engine.config.connections["unused-west"] = ConnectionConfig("unused-west", "mun", "cda")
         self.assertEqual(self.lab.frame("DEMO-CDA")["lines"][0], " " * 16)
-        self.lookup("39"); self.accept("DEMO-CDA", "#"); self.accept("DEMO-CDA", "A")
+        self.lookup("39"); self.accept("DEMO-CDA", "#"); self.accept("DEMO-CDA", "B")
         self.assertEqual(self.lab.frame("DEMO-CDA")["lines"][0], "39?VA".rjust(16))
 
     def test_station_timetable_has_only_its_trains_in_time_order(self):
         expected = {
             "DEMO-MUN": [("93", "Avg 12:32", "Till Charlottendal"), ("17", "Ank 12:42", "Från Charlottendal")],
             "DEMO-CDA": [("17", "Avg 12:35", "Till Munkeröd"), ("39", "Avg 12:38", "Till Vagnsta"),
-                         ("93", "Ank 12:40", "Från Munkeröd")],
-            "DEMO-VA": [("39", "Ank 12:46", "Från Charlottendal")],
+                         ("93", "Ank 12:40", "Från Munkeröd"), ("94", "Ank 12:52", "Från Vagnsta")],
+            "DEMO-VA": [("94", "Avg 12:44", "Till Charlottendal"), ("39", "Ank 12:46", "Från Charlottendal")],
         }
         for device, rows in expected.items():
             table = self.lab.timetable(device)
@@ -94,13 +96,13 @@ class Terminal16Tests(unittest.TestCase):
     def test_reference_timetable_remains_after_departure_arrival_and_filter_changes(self):
         before = {device: self.lab.timetable(device) for device in self.lab.terminals}
         self.departure(); self.accept("DEMO-VA", "#")
-        self.accept("DEMO-MUN", "D"); self.accept("DEMO-MUN", "A")
+        self.accept("DEMO-MUN", "D"); self.accept("DEMO-MUN", "B")
         self.assertEqual({device: self.lab.timetable(device) for device in self.lab.terminals}, before)
 
     def test_reference_timetable_uses_publication_times(self):
         next(m for m in self.lab.publication["trains"] if m["id"] == "17-cda").update(departure_time="00:05", service_day_offset=1)
         rows = self.lab.timetable("DEMO-CDA")["rows"]
-        self.assertEqual([row["train_number"] for row in rows], ["39", "93", "17"])
+        self.assertEqual([row["train_number"] for row in rows], ["39", "93", "94", "17"])
         self.assertEqual(rows[-1]["time"], "Avg 00:05")
 
     def test_lookup_is_read_only_and_finds_destination(self):
@@ -135,6 +137,7 @@ class Terminal16Tests(unittest.TestCase):
 
     def test_browse_mixes_arrivals_and_departures_in_station_time_order(self):
         self.lookup("93", "DEMO-MUN"); self.accept("DEMO-MUN", "#")
+        self.accept("DEMO-CDA", "B")
         before = deepcopy(self.lab.engine.audit)
         expected = [("17-cda", "departure", "12:35"), ("39-cda", "departure", "12:38"),
                     ("93-mun", "arrival", "12:40")]
@@ -172,21 +175,23 @@ class Terminal16Tests(unittest.TestCase):
 
     def test_arrival_departure_filters_are_read_only_and_station_scoped(self):
         self.lookup("93", "DEMO-MUN"); self.accept("DEMO-MUN", "#")
+        self.accept("DEMO-CDA", "B")
         before = deepcopy(self.lab.engine.audit)
         self.accept("DEMO-CDA", "D")
         for kind, count, movement in (("arrival", 1, "93-mun"), ("departure", 2, "17-cda"), ("all", 3, "17-cda")):
-            frame = self.accept("DEMO-CDA", "A")["frame"]
+            frame = self.accept("DEMO-CDA", "B")["frame"]
             self.assertEqual((frame["upcoming"]["filter"], frame["upcoming"]["count"], frame["upcoming"]["movement_id"]),
                              (kind, count, movement))
         self.assertEqual(self.lab.engine.audit, before)
 
     def test_empty_departure_filter_has_no_confirmation_and_can_be_left(self):
+        self.lab.completed.add("94-va")
         self.accept("DEMO-VA", "D")
-        self.accept("DEMO-VA", "A")
-        frame = self.accept("DEMO-VA", "A")["frame"]
+        self.accept("DEMO-VA", "B")
+        frame = self.accept("DEMO-VA", "B")["frame"]
         self.assertIn("INGA AVGÅNGAR", frame["lines"][0])
         self.assertNotIn("#", frame["keys"])
-        self.accept("DEMO-VA", "A")
+        self.accept("DEMO-VA", "B")
         frame = self.lab.frame("DEMO-VA")
         self.assertIn("INGA TÅG", frame["lines"][0])
         self.assertNotIn("#", frame["keys"])
@@ -200,7 +205,7 @@ class Terminal16Tests(unittest.TestCase):
             self.assertEqual(frame["upcoming"]["kind"], "departure")
             self.assertEqual(frame["upcoming"]["count"], 2)
             self.assertNotIn("93", frame["lines"][0])
-        self.accept("DEMO-CDA", "A")
+        self.accept("DEMO-CDA", "B")
         self.assertIn("INGA ANKOMSTER", self.lab.frame("DEMO-CDA")["lines"][0])
         self.assertEqual(self.lab.engine.audit, [])
 
@@ -216,17 +221,18 @@ class Terminal16Tests(unittest.TestCase):
                 package["trains"].append(movement)
         self.lab = Terminal16Lab(self.lab.engine, package, {"DEMO-CDA": "cda", "DEMO-VA": "va"})
         self.lookup("39"); self.accept("DEMO-CDA", "#")
-        self.assertEqual(self.lab._candidates(self.lab.terminals["DEMO-VA"]), ["39-cda"])
+        self.assertEqual(self.lab._candidates(self.lab.terminals["DEMO-VA"]), ["94-va", "39-cda"])
         frame = self.lookup("41", "DEMO-VA")["frame"]
         self.assertIn("EJ BEGÄRT ÄN", frame["lines"][0])
-        self.assertIsNone(self.lab.terminals["DEMO-VA"].selected)
+        self.assertEqual(self.lab.terminals["DEMO-VA"].selected, "39-cda")
+        self.assertEqual(self.lab.frame("DEMO-VA")["keys"]["#"]["label"], "OK")
 
     def test_withdrawn_incoming_disappears_and_stale_selection_cannot_confirm(self):
         self.lookup("39"); self.accept("DEMO-CDA", "#")
         self.accept("DEMO-VA", "D")
         stale = self.lab.frame("DEMO-VA")["view_token"]
         self.accept("DEMO-CDA", "*"); self.accept("DEMO-CDA", "#")
-        self.assertEqual(self.lab._candidates(self.lab.terminals["DEMO-VA"]), [])
+        self.assertEqual(self.lab._candidates(self.lab.terminals["DEMO-VA"]), ["94-va"])
         self.assertNotIn("#", self.lab.frame("DEMO-VA")["keys"])
         result = self.lab.command("DEMO-VA", {"key": "#", "command_id": "withdrawn-selection", "view_token": stale})
         self.assertEqual(result["status"], "rejected")
@@ -236,9 +242,9 @@ class Terminal16Tests(unittest.TestCase):
         self.lab = demo_lab("direct")
         self.lab.engine.set_clock_source(lambda: {"configured": True, "running": False, "time": "12:34"})
         receiver = self.lab.terminals["DEMO-VA"]
-        self.assertEqual(self.lab._candidates(receiver), [])
+        self.assertEqual(self.lab._candidates(receiver), ["94-va"])
         self.lookup("39"); self.accept("DEMO-CDA", "#")
-        self.assertEqual(self.lab._candidates(receiver), ["39-cda"])
+        self.assertEqual(self.lab._candidates(receiver), ["94-va", "39-cda"])
         frame = self.lookup("39", "DEMO-VA")["frame"]
         self.assertNotIn("#", frame["keys"])  # Reserved is not yet departed.
         self.accept("DEMO-CDA", "#")
@@ -267,6 +273,8 @@ class Terminal16Tests(unittest.TestCase):
     def test_finished_browse_selection_does_not_confirm_different_train(self):
         self.departure()
         self.accept("DEMO-VA", "D")
+        self.accept("DEMO-VA", "D")
+        self.assertEqual(self.lab.terminals["DEMO-VA"].selected, "39-cda")
         stale = self.lab.frame("DEMO-VA")["view_token"]
         self.lab.terminals["SECOND-VA"] = deepcopy(self.lab.terminals["DEMO-VA"])
         self.lookup("39", "SECOND-VA"); self.accept("SECOND-VA", "#")
@@ -318,7 +326,7 @@ class Terminal16Tests(unittest.TestCase):
     def test_two_simultaneous_requests_share_top_row(self):
         self.lookup("17"); self.accept("DEMO-CDA", "#")
         self.lookup("39"); self.accept("DEMO-CDA", "#")
-        self.accept("DEMO-CDA", "A")
+        self.accept("DEMO-CDA", "B")
         self.assertEqual(self.lab.frame("DEMO-CDA")["lines"][0], "MUN?17     39?VA")
 
     def test_left_arrow_direction_changes_only_on_departure(self):
@@ -336,7 +344,7 @@ class Terminal16Tests(unittest.TestCase):
         self.assertEqual(self.lab.engine.connections["east"].state, State.FREE)
 
     def test_home_does_not_cancel_pending_request(self):
-        self.lookup("39"); self.accept("DEMO-CDA", "#"); self.accept("DEMO-CDA", "A")
+        self.lookup("39"); self.accept("DEMO-CDA", "#"); self.accept("DEMO-CDA", "B")
         self.assertEqual(self.lab.engine.connections["east"].state, State.REQUESTED)
         self.assertEqual(self.lab.terminals["DEMO-CDA"].screen, "overview")
 
@@ -365,7 +373,7 @@ class Terminal16Tests(unittest.TestCase):
     def test_star_opens_rejection_and_second_star_keeps_incoming_request(self):
         self.lookup("39"); self.accept("DEMO-CDA", "#")
         frame = self.lookup("39", "DEMO-VA")["frame"]
-        self.assertNotIn("B", frame["keys"])
+        self.assertEqual(frame["keys"]["B"]["label"], "Översikt utan trafikändring")
         frame = self.accept("DEMO-VA", "*")["frame"]
         self.assertIn("NEKA 39?", frame["lines"][0])
         self.assertEqual(len(self.lab.engine.audit), 1)
@@ -376,7 +384,7 @@ class Terminal16Tests(unittest.TestCase):
 
     def test_home_keeps_incoming_request_without_answering(self):
         self.lookup("39"); self.accept("DEMO-CDA", "#")
-        self.lookup("39", "DEMO-VA"); self.accept("DEMO-VA", "A")
+        self.lookup("39", "DEMO-VA"); self.accept("DEMO-VA", "B")
         self.assertEqual(self.lab.terminals["DEMO-VA"].screen, "overview")
         self.assertEqual(self.lab.engine.connections["east"].state, State.REQUESTED)
         self.assertEqual(len(self.lab.engine.audit), 1)
@@ -444,8 +452,8 @@ class Terminal16Tests(unittest.TestCase):
 
     def test_no_cancel_after_departure(self):
         self.departure()
-        self.assertNotIn("A", self.lab.frame("DEMO-CDA")["keys"])
-        self.assertEqual(self.send("DEMO-CDA", "A")["status"], "rejected")
+        self.assertEqual(self.lab.frame("DEMO-CDA")["keys"]["*" ]["label"], "Tillbaka")
+        self.accept("DEMO-CDA", "A")  # Queue navigation cannot cancel an occupied line.
         self.assertEqual(self.lab.engine.connections["east"].state, State.OCCUPIED)
 
     def test_no_arrival_before_departure(self):
@@ -499,8 +507,8 @@ class Terminal16Tests(unittest.TestCase):
     def test_completed_sender_does_not_advertise_unavailable_key(self):
         self.departure(); self.accept("DEMO-VA", "#")
         frame = self.lab.frame("DEMO-CDA")
-        self.assertEqual(set(frame["keys"]), {"*"})
-        self.assertTrue(frame["lines"][1].startswith("*=Bak"))
+        self.assertEqual(set(frame["keys"]), {"*", "A"})
+        self.assertTrue(frame["lines"][1].startswith("A:Kö *=Bak"))
 
     def test_route_is_revalidated_at_mutation(self):
         self.lookup("39")
@@ -542,10 +550,164 @@ class Terminal16Tests(unittest.TestCase):
                 if item["train_number"] == old: item["train_number"] = new
             self.lab.legs[f"{old}-cda"]["train_number"] = new
             self.lookup(new); self.accept("DEMO-CDA", "#")
-        self.accept("DEMO-CDA", "A")
+        self.accept("DEMO-CDA", "B")
         self.assertIn("MUN?12345", self.lab.frame("DEMO-CDA")["lines"][0])
         self.accept("DEMO-CDA", "B")
         self.assertIn("67890?VA", self.lab.frame("DEMO-CDA")["lines"][0])
+
+
+class Terminal16RequestQueueTests(unittest.TestCase):
+    setUp = Terminal16Tests.setUp
+    send = Terminal16Tests.send
+    lookup = Terminal16Tests.lookup
+    accept = Terminal16Tests.accept
+
+    def two_senders(self):
+        self.assertIn("94-va", self.lab.legs)  # Public bench also supports the two-sender example.
+
+    def request(self, number="93", sender="DEMO-MUN"):
+        self.lookup(number, sender); self.accept(sender, "#")
+
+    def test_idle_receiver_opens_request_and_accepts_without_train_entry(self):
+        self.request()
+        frame = self.lab.frame("DEMO-CDA")
+        self.assertEqual(self.lab.terminals["DEMO-CDA"].screen, "requests")
+        self.assertIn("MUN?93", frame["lines"][0]); self.assertIn("1/1", frame["lines"][0])
+        self.assertTrue(frame["lines"][1].startswith("#Ja *Nej"))
+        self.assertEqual(frame["keys"]["#"]["label"], "Ge klart")
+        self.assertEqual(len(self.lab.engine.audit), 1)  # Showing is not acceptance.
+        self.accept("DEMO-CDA", "#")
+        self.accept("DEMO-MUN", "#")
+        self.accept("DEMO-CDA", "#")
+        self.assertEqual([e["action"] for e in self.lab.engine.audit], ["request", "accept", "depart", "arrive"])
+
+    def test_multiple_requests_keep_fifo_order_and_current_focus(self):
+        self.two_senders(); self.request("94", "DEMO-VA"); self.request()
+        frame = self.lab.frame("DEMO-CDA")
+        self.assertEqual(frame["requests"]["count"], 2)
+        self.assertEqual(frame["requests"]["position"], 1)
+        self.assertEqual(self.lab.terminals["DEMO-CDA"].selected, "94-va")
+        self.assertIn("1/2", frame["lines"][0])
+        self.assertIn("2 väntar", frame["requests"]["label"])
+        self.assertIn("93", self.accept("DEMO-CDA", "D")["frame"]["lines"][0])
+        self.assertIn("2/2", self.lab.frame("DEMO-CDA")["lines"][0])
+        self.assertIn("94", self.accept("DEMO-CDA", "C")["frame"]["lines"][0])
+        self.assertEqual([e["action"] for e in self.lab.engine.audit], ["request", "request"])
+
+    def test_accept_does_not_repurpose_hash_for_next_request(self):
+        self.two_senders(); self.request(); self.request("94", "DEMO-VA")
+        frame = self.lab.frame("DEMO-CDA")
+        body = {"key": "#", "view_token": frame["view_token"], "command_id": "one-approval"}
+        self.assertEqual(self.lab.command("DEMO-CDA", body)["status"], "accepted")
+        self.assertEqual(self.lab.command("DEMO-CDA", body)["status"], "accepted")
+        self.assertEqual(self.lab.terminals["DEMO-CDA"].selected, "93-mun")
+        frame = self.lab.frame("DEMO-CDA")
+        self.assertEqual(frame["requests"]["count"], 1)
+        self.assertNotIn("#", frame["keys"])
+        self.assertEqual(self.send("DEMO-CDA", "#")["status"], "rejected")
+        self.accept("DEMO-CDA", "A"); self.accept("DEMO-CDA", "#")
+        self.assertEqual([e["action"] for e in self.lab.engine.audit], ["request", "request", "accept", "accept"])
+
+    def test_queue_can_be_left_and_reopened_by_a_or_overview_hash(self):
+        self.request(); self.accept("DEMO-CDA", "B")
+        frame = self.lab.frame("DEMO-CDA")
+        self.assertIn("A:Kö", frame["lines"][1])
+        self.assertEqual(frame["keys"]["#"]["label"], "Visa väntande förfrågningar")
+        self.accept("DEMO-CDA", "#")
+        self.assertEqual(self.lab.terminals["DEMO-CDA"].screen, "requests")
+        self.accept("DEMO-CDA", "B"); self.accept("DEMO-CDA", "D")
+        self.accept("DEMO-CDA", "A")
+        self.assertEqual(self.lab.terminals["DEMO-CDA"].selected, "93-mun")
+        self.assertEqual(len(self.lab.engine.audit), 1)
+
+    def test_request_does_not_interrupt_other_views_or_notices(self):
+        for screen in ("browse", "detail", "tracks", "cancel", "reject"):
+            with self.subTest(screen=screen):
+                self.setUp()
+                terminal = self.lab.terminals["DEMO-CDA"]
+                terminal.screen, terminal.selected = screen, "39-cda"
+                self.request()
+                self.assertEqual((terminal.screen, terminal.selected), (screen, "39-cda"))
+                self.assertEqual(self.lab.frame("DEMO-CDA")["requests"]["count"], 1)
+                self.accept("DEMO-CDA", "A")
+                self.assertEqual(terminal.selected, "93-mun")
+        self.setUp(); terminal = self.lab.terminals["DEMO-CDA"]
+        terminal.notice = "INGET TÅG"
+        self.request()
+        self.assertEqual(terminal.notice, "INGET TÅG")
+        self.accept("DEMO-CDA", "A")
+        self.assertEqual(terminal.notice, "")
+        self.assertEqual(terminal.screen, "requests")
+
+    def test_withdrawn_request_cannot_silently_switch_to_another(self):
+        self.two_senders(); self.request(); self.request("94", "DEMO-VA")
+        stale = self.lab.frame("DEMO-CDA")["view_token"]
+        self.accept("DEMO-MUN", "*"); self.accept("DEMO-MUN", "#")
+        frame = self.lab.frame("DEMO-CDA")
+        self.assertEqual(frame["requests"]["count"], 1)
+        self.assertIn("FRÅGAN ÄNDRAD", frame["lines"][0])
+        self.assertNotIn("#", frame["keys"])
+        self.assertEqual(self.lab.command("DEMO-CDA", {"key": "#", "view_token": stale, "command_id": "late"})["status"], "rejected")
+        self.assertEqual(self.send("DEMO-CDA", "#")["status"], "rejected")
+        self.accept("DEMO-CDA", "A")
+        self.assertIn("94", self.lab.frame("DEMO-CDA")["lines"][0])
+        self.assertEqual(self.lab.engine.connections["east"].state, State.REQUESTED)
+
+    def test_another_receiver_answer_invalidates_queue_selection(self):
+        self.lab.terminals["SECOND-CDA"] = deepcopy(self.lab.terminals["DEMO-CDA"])
+        self.request()
+        self.accept("SECOND-CDA", "#")
+        frame = self.lab.frame("DEMO-CDA")
+        self.assertEqual(frame["requests"]["count"], 0)
+        self.assertNotIn("#", frame["keys"])
+        self.assertEqual(self.send("DEMO-CDA", "#")["status"], "rejected")
+
+    def test_neka_still_requires_confirmation_and_keeps_remaining_queue(self):
+        self.two_senders(); self.request(); self.request("94", "DEMO-VA")
+        self.accept("DEMO-CDA", "*")
+        self.assertEqual(self.lab.engine.connections["west"].state, State.REQUESTED)
+        self.accept("DEMO-CDA", "#")
+        self.assertEqual(self.lab.frame("DEMO-CDA")["requests"]["count"], 1)
+        self.accept("DEMO-CDA", "A")
+        self.assertIn("94", self.lab.frame("DEMO-CDA")["lines"][0])
+
+    def test_abandoned_rejection_returns_to_the_same_queue_item(self):
+        self.two_senders(); self.request(); self.request("94", "DEMO-VA")
+        self.accept("DEMO-CDA", "*"); self.accept("DEMO-CDA", "*")
+        self.assertEqual(self.lab.terminals["DEMO-CDA"].screen, "requests")
+        self.assertEqual(self.lab.terminals["DEMO-CDA"].selected, "93-mun")
+        self.assertEqual(self.lab.frame("DEMO-CDA")["requests"]["count"], 2)
+
+    def test_empty_queue_is_always_reachable_without_side_effects(self):
+        frame = self.accept("DEMO-CDA", "A")["frame"]
+        self.assertIn("INGA FRÅGOR", frame["lines"][0])
+        self.assertEqual(frame["requests"]["count"], 0)
+        self.assertNotIn("#", frame["keys"])
+        self.assertEqual(self.lab.engine.audit, [])
+        self.request()
+        self.assertIn("MUN?93", self.lab.frame("DEMO-CDA")["lines"][0])
+
+    def test_direct_traffic_never_asks_for_approval(self):
+        self.lab = demo_lab("direct")
+        self.lab.engine.set_clock_source(lambda: {"time": "12:34"})
+        self.request()
+        self.assertEqual(self.lab.frame("DEMO-CDA")["requests"]["count"], 0)
+        self.assertEqual(self.lab.terminals["DEMO-CDA"].screen, "overview")
+
+    def test_new_request_invalidates_an_old_overview_key(self):
+        stale = self.lab.frame("DEMO-CDA")["view_token"]
+        self.request()
+        self.assertEqual(self.lab.command("DEMO-CDA", {"key": "#", "view_token": stale, "command_id": "old-overview"})["status"], "rejected")
+        self.assertEqual(self.lab.engine.connections["west"].state, State.REQUESTED)
+
+    def test_long_train_numbers_keep_identity_and_queue_count(self):
+        for item in self.lab.publication["services"] + self.lab.publication["trains"]:
+            if item["train_number"] == "93":
+                item["train_number"] = "12345"
+        self.lab.legs["93-mun"]["train_number"] = "12345"
+        self.request("12345")
+        frame = self.lab.frame("DEMO-CDA")
+        self.assertIn("MUN?12345", frame["lines"][0]); self.assertIn("1/1", frame["lines"][0])
 
 
 class Terminal16HTTPTests(unittest.TestCase):
@@ -609,6 +771,7 @@ class Terminal16HTTPTests(unittest.TestCase):
                     self.assertEqual(terminal.screen, "overview")
                     self.assertIsNone(terminal.selected)
                     self.assertEqual(terminal.notice, "")
+                    self.assertEqual(frame["requests"]["count"], 0)
                     self.assertEqual(frame["lines"][0], " " * 16)
                     self.assertNotEqual(frame["entry"]["context"], old_contexts[frame["device_id"]])
                 self.assertEqual(self.server.lab.publication, before.publication)

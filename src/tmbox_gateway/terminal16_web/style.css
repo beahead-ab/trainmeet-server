@@ -37,6 +37,8 @@ p { line-height: 1.55; margin: 8px 0; color: var(--muted); }
 /* Reserve room for three status lines, including a selected train's route.
    Text may scroll if unusually long; it must never push the keypad away. */
 .box-status { font-size: 12px; line-height: 1.5; height: 4.5em; margin-bottom: 17px; overflow: auto; overflow-wrap: anywhere; }
+.box-queue { height: 3.5em; font-size: 12px; line-height: 1.5; padding: 5px 8px; margin-bottom: 12px; overflow: auto; border: 1px solid transparent; border-radius: 6px; color: var(--muted); }
+.box-queue.pending { color: #663713; background: #fff0d3; border-color: #d3a35f; font-weight: 700; }
 /* The physical-looking shell stays separate from the test harness controls. */
 .tmbox-case {
   display: grid;

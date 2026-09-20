@@ -17,6 +17,7 @@
       if (this.digits) {
         if (key === entry.cancel) { this.clear(); return {local: true}; }
         if (key === entry.erase) { this.digits = this.digits.slice(0, -1); return {local: true}; }
+        if (key === entry.shortcut) { this.clear(); return {local: false}; }
         if (key === entry.commit) return {local: false, train_number: this.digits, entry_context: entry.context};
         return {local: true};
       }
@@ -50,7 +51,7 @@
   }
   function makeBox(frame) {
     const card = document.createElement("article"); card.className = "box"; card.tabIndex = 0; card.dataset.device = frame.device_id;
-    card.innerHTML = '<div class="box-heading"><h2></h2><span class="box-code"></span></div><div class="box-status"></div><div class="tmbox-case"><div class="lcd-frame"><div class="lcd" role="img"></div></div><div class="keypad"></div></div><div class="key-hints"></div><p class="box-message" role="status"></p><div class="box-timetable"></div>';
+    card.innerHTML = '<div class="box-heading"><h2></h2><span class="box-code"></span></div><div class="box-status"></div><div class="box-queue" role="status"></div><div class="tmbox-case"><div class="lcd-frame"><div class="lcd" role="img"></div></div><div class="keypad"></div></div><div class="key-hints"></div><p class="box-message" role="status"></p><div class="box-timetable"></div>';
     const model = {card, frame, entry: new EntryBuffer(), busy: false, until: 0, uiMessage: "", uiError: false};
     card.querySelector("h2").textContent = frame.station;
     card.querySelector(".box-code").textContent = frame.device_id;
@@ -102,6 +103,9 @@
     const lines = entry.lines(frame);
     drawLCD(card.querySelector(".lcd"), lines);
     card.querySelector(".box-status").textContent = frame.status;
+    const queue = card.querySelector(".box-queue");
+    queue.textContent = frame.requests?.label || "";
+    queue.classList.toggle("pending", !!frame.requests?.count);
     const hints = card.querySelector(".key-hints"); hints.replaceChildren();
     const labels = entry.digits ? frame.entry.labels : Object.fromEntries(Object.entries(frame.keys).map(([key, info]) => [key, info.label]));
     for (const [key, label] of Object.entries(labels)) { const hint = document.createElement("span"); const strong = document.createElement("b"); strong.textContent = key; hint.append(strong, label); hints.append(hint); }
@@ -119,6 +123,12 @@
     if (model.frame.entry.context === frame.entry.context &&
         (frame.revision < model.frame.revision || (frame.revision === model.frame.revision && frame.view_revision < model.frame.view_revision))) return;
     if (model.frame.entry.context !== frame.entry.context) message(model, "");
+    // A newly offered primary action must be readable before accepting a key.
+    // This is a generic display/input guard, not client-side traffic logic.
+    if (!model.entry.digits && model.frame.keys['#']?.label !== frame.keys['#']?.label) {
+      model.until = Math.max(model.until, performance.now() + frame.input_guard_ms);
+      setTimeout(() => render(model), frame.input_guard_ms + 10);
+    }
     model.frame = frame; render(model);
   }
   function message(model, value, error=false) {
