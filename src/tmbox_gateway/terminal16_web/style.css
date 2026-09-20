@@ -1,0 +1,162 @@
+:root {
+  color-scheme: light;
+  --ink: #242c2b;
+  --muted: #636d69;
+  --copper: #a45432;
+  --line: #dddcd4;
+  --paper: #f6f5ef;
+  --card: #fffefa;
+  /* Same TMBox palette as the original Server test client in web/app.css. */
+  --case: #b76f80;
+  --lcd-blue: #0c4fe5;
+  --lcd-text: #b9d8ff;
+  --key-panel: #171a21;
+  --key: #090b10;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); }
+main { max-width: 1320px; margin: auto; padding: 36px 28px 40px; }
+.page-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.eyebrow { font-size: 11px; letter-spacing: .15em; color: var(--copper); font-weight: 750; margin: 0 0 10px; }
+h1 { font-size: clamp(28px, 4vw, 44px); letter-spacing: -.04em; margin: 0 0 8px; }
+h2 { font-size: 23px; letter-spacing: -.03em; margin: 0 0 16px; }
+h3 { font-size: 17px; margin-top: 0; }
+p { line-height: 1.55; margin: 8px 0; color: var(--muted); }
+.pill { background: #ede5d8; border: 1px solid #dacbb3; border-radius: 99px; font-size: 10px; letter-spacing: .08em; padding: 10px 13px; white-space: nowrap; font-weight: 750; }
+.intro { margin: 28px 0 18px; display: flex; align-items: center; gap: 25px; justify-content: space-between; padding: 20px 24px; background: #ebece5; border-radius: 14px; }
+.intro p { max-width: 670px; font-size: 14px; margin-bottom: 0; }
+.legend { display: flex; gap: 16px; font-size: 12px; white-space: nowrap; }
+.legend b { font-size: 19px; margin-right: 5px; }
+.boxes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin: 18px 0 30px; }
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 23px 18px; box-shadow: 0 3px 5px #303a2810; outline: none; }
+.box:focus-within { border-color: #997754; box-shadow: 0 0 0 3px #a454321a; }
+.box-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.box h2 { font-size: 20px; margin: 0; }
+.box-code { font-size: 10px; color: var(--muted); letter-spacing: .09em; font-weight: 700; white-space: nowrap; }
+.box-status { font-size: 12px; margin-bottom: 17px; min-height: 20px; }
+/* The physical-looking shell stays separate from the test harness controls. */
+.tmbox-case {
+  display: grid;
+  gap: 25px;
+  padding: 34px 16px 38px;
+  border: 1px solid #935867;
+  border-radius: 5px;
+  background: var(--case);
+  box-shadow: 0 12px 25px #2b1a311c, inset 0 0 22px #ffffff14;
+  container-type: inline-size;
+}
+.lcd-frame {
+  min-width: 0;
+  padding: 11px 10px;
+  border-radius: 3px;
+  background: #17191e;
+  box-shadow: inset 0 0 0 3px #080a0e, 0 2px 2px #0006;
+}
+.lcd {
+  background: var(--lcd-blue);
+  color: var(--lcd-text);
+  border-radius: 2px;
+  padding: 10px 5px;
+  box-shadow: inset 0 0 14px #031e88, 0 0 8px #3b78ff55;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  text-shadow: 0 0 5px #b9d8ffaa;
+  overflow: hidden;
+}
+.lcd-row { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); line-height: 1.5; }
+.lcd-cell {
+  /* Scale to the box, not the viewport: always 16 complete, readable cells. */
+  font-size: clamp(13px, 8cqi, 23px);
+  text-align: center; white-space: pre; font-weight: 500; letter-spacing: 0;
+}
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 13px 12px;
+  padding: 18px 14px;
+  border-radius: 17px;
+  background: var(--key-panel);
+  box-shadow: inset 0 0 18px #0008, 0 2px 3px #0005;
+}
+button { font: inherit; cursor: pointer; border: 1px solid #d3d5cc; transition: background .1s, transform .1s; }
+button:focus-visible { outline: 3px solid #ba744e; outline-offset: 3px; }
+.key {
+  min-width: 0;
+  min-height: 44px;
+  aspect-ratio: 1.05;
+  border: 1px solid #313641;
+  border-radius: 5px;
+  color: #dce7f4;
+  background: linear-gradient(#171b23, var(--key));
+  box-shadow: 0 4px 0 #050609, 0 5px 7px #0008, inset 0 1px 1px #ffffff17;
+  font-size: clamp(20px, 9cqi, 27px);
+  font-weight: 700;
+}
+.key.function { color: #c4dcff; }
+.key:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 #050609; }
+.key:disabled { color: #667080; opacity: .62; cursor: default; }
+.key:focus-visible { outline-color: #b9d8ff; }
+.box-message { font-size: 12px; line-height: 1.45; min-height: 34px; margin: 14px 0 0; color: #6c766e; }
+.box-message.error { color: #a34029; }
+.key-hints { min-height: 29px; display: flex; flex-wrap: wrap; gap: 5px 11px; font-size: 12px; color: #5d685f; margin-top: 17px; }
+.key-hints span { white-space: nowrap; }
+.key-hints b { color: var(--ink); margin-right: 4px; }
+#connection { font-size: 12px; color: #5b725c; min-height: 18px; }
+.session-info { font-size: 12px; max-width: 820px; }
+.session-info:empty { display: none; }
+.test-tools { display: grid; grid-template-columns: 1.8fr 1fr; gap: 40px; padding: 28px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; }
+.test-tools p, .test-tools li { font-size: 14px; }
+.test-tools ol { margin: 0; padding-left: 20px; line-height: 1.9; }
+.test-actions { border-left: 1px solid var(--line); padding-left: 30px; }
+.secondary { background: #f2ece1; padding: 12px 15px; border-radius: 10px; font-size: 13px; font-weight: 650; display: block; margin: 10px 0; width: 100%; text-align: left; }
+.secondary:hover { background: #e5d9c5; }
+.reset-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin: 0 0 20px; }
+.reset-controls .secondary { width: auto; margin: 0; min-height: 44px; }
+.reset-controls p { flex: 1 1 300px; margin: 0; font-size: 13px; }
+.reset-controls #reset-status { flex-basis: 100%; color: #426344; }
+.reset-controls #reset-status:empty { display: none; }
+.reset-controls #reset-status.error { color: #a34029; }
+.secondary:disabled { opacity: .6; cursor: default; }
+.audit { padding: 22px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.audit summary { cursor: pointer; font-weight: 650; }
+.audit summary span { font-weight: 400; color: var(--muted); margin-left: 10px; }
+.audit ol { font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.8; }
+.footnote { font-size: 12px; margin-top: 20px; max-width: 900px; }
+.language-check { padding: 24px 0; border-bottom: 1px solid var(--line); }
+.language-check summary { cursor: pointer; font-weight: 650; }
+.language-check > p { font-size: 14px; max-width: 800px; }
+.language-samples { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 265px), 1fr)); gap: 16px; margin-top: 20px; }
+.language-sample { container-type: inline-size; min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.language-sample p { font-size: 12px; margin: 12px 0 0; }
+@media (max-width: 1100px) {
+  main { padding: 25px 20px; }
+  .boxes { gap: 12px; }
+  .box { padding: 18px 12px; }
+  .box h2 { font-size: 17px; }
+  .box-code { font-size: 9px; }
+  .tmbox-case { padding: 28px 10px 32px; gap: 22px; }
+  .lcd-frame { padding: 9px 7px; }
+  .keypad { gap: 11px 8px; padding: 16px 10px; }
+  .legend { flex-direction: column; gap: 3px; }
+  .test-tools { gap: 22px; }
+}
+@media (max-width: 900px) {
+  .boxes { grid-template-columns: 1fr; }
+  .box { max-width: 430px; width: 100%; margin: auto; padding: 24px; }
+  .box h2 { font-size: 22px; }
+  .box-code { font-size: 10px; }
+  .tmbox-case { padding: 38px 14px 42px; }
+  .keypad { gap: 14px 12px; padding: 18px 14px; }
+  .intro { display: block; padding: 20px; }
+  .legend { margin-top: 15px; flex-direction: row; flex-wrap: wrap; }
+  .page-header { align-items: flex-start; }
+  .pill { font-size: 8px; padding: 8px; }
+  .test-tools { grid-template-columns: 1fr; padding: 22px; }
+  .test-actions { border-left: 0; border-top: 1px solid var(--line); padding: 22px 0 0; }
+}
+@media (max-width: 360px) {
+  main { padding: 20px 12px; }
+  .box { padding: 16px; }
+  .box-heading { flex-wrap: wrap; }
+  .keypad { gap: 10px 8px; padding: 14px 10px; }
+}

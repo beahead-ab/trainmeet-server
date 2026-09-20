@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TMBox · 16 × 2 · Provbänk</title>
+  <link rel="stylesheet" href="./style.css"><script src="./terminal.js" defer></script>
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <div><p class="eyebrow">TRAINMEET · PROVBÄNK</p><h1>TMBox · 16 × 2</h1><p id="subtitle">Ansluter till den separata testservern…</p></div>
+      <span class="pill">ENBART TESTDATA</span>
+    </header>
+    <section class="intro">
+      <div><strong>En server. Tre enkla terminaler.</strong><p>Servern bestämmer raderna och tangenternas betydelse. Boxarna är förhandstilldelade sina teststationer.</p></div>
+      <div class="legend"><span><b>?</b> Begärt</span><span><b>›</b> Klartecken</span><span><b>▶</b> Avgånget</span></div>
+    </section>
+    <section class="reset-controls" aria-label="Nollställ provbänken">
+      <button id="reset-all" class="secondary" disabled>Nollställ alla enheter</button>
+      <p>Tömmer pågående tågrörelser, inmatning och testlogg. Stationer, tidtabell, testläge och klocka behålls.</p>
+      <p id="reset-status" role="status"></p>
+    </section>
+    <div id="connection" role="status">Ansluter…</div>
+    <p id="session-info" class="session-info"></p>
+    <section id="boxes" class="boxes" aria-label="Tre virtuella TMBoxar"></section>
+    <section class="test-tools">
+      <div><p class="eyebrow">FÖR DIG SOM PROVAR</p><h2>Prova en hel tågrörelse</h2>
+        <ol><li>På <strong>Charlottendal</strong>: börja skriva <strong>39</strong>. <strong>#</strong> väljer tåget; nästa <strong>#</strong> begär klartecken.</li>
+          <li>På <strong>Vagnsta</strong>: skriv <strong>39 #</strong>. Nästa <strong>#</strong> ger klart. <strong>*</strong> öppnar ”Neka?”; <strong>#</strong> bekräftar.</li>
+          <li>Tillbaka på <strong>Charlottendal</strong>: <strong>#</strong> rapporterar faktisk avgång.</li>
+          <li>På <strong>Vagnsta</strong>: <strong>#</strong> tar emot på spår 1. För annat spår: <strong>B → D → #</strong>.</li></ol>
+        <p><strong>17</strong> går från Charlottendal till Munkeröd. <strong>93</strong> går från Munkeröd till Charlottendal. Alla är exempel, inte er riktiga tidtabell.</p>
+        <p><strong>C / D</strong> bläddrar bakåt/framåt i stationens tåg i tidtabellsordning. <strong>ANK / AVG</strong> och planerad tid visas på rad ett. <strong>#</strong> väljer; ingen trafik ändras av själva valet. I listan växlar <strong>A</strong> mellan alla tåg, ankomster och avgångar.</p>
+        <p><strong>#</strong> bekräftar, <strong>*</strong> avbryter eller går tillbaka. När du skriver tömmer <strong>*</strong> numret lokalt. Vid egen begäran eller eget klartecken öppnar <strong>*</strong> ”Återta?”; vid inkommande begäran öppnar den ”Neka?”. Först <strong>#</strong> i frågan ändrar trafiken; <strong>*</strong> i frågan behåller läget. <strong>A</strong> visar då översikten utan att ändra trafiken. Efter faktisk avgång kan tåget inte återtas. Klockan längst ned är alltid den aktuella träffklockan.</p>
+      </div>
+      <div class="test-actions"><h3>Börja om med tomma testdata</h3><p>Detta återställer bara provbänken. Träffen på er TrainMeet Server berörs aldrig.</p>
+        <button id="reset-clearance" class="secondary">Nytt test · med klartecken</button>
+        <button id="reset-direct" class="secondary">Nytt test · direkttrafik</button>
+        <p id="mode"></p>
+      </div>
+    </section>
+    <details class="language-check"><summary>Teckentest · svenska, danska, norska, engelska och tyska</summary>
+      <p>Serverns tecken visas utan att ÅÄÖ, ÆØ eller Üß byts mot andra bokstäver. Varje exempel är exakt 16 × 2. Detta provar tecken, inte översättning av trafikflödena.</p>
+      <div id="language-samples" class="language-samples"></div>
+      <p class="footnote">Servern skapar även pixelmönster för fysisk LCD. De är ännu inte inkopplade i ESP-firmwaren eller verifierade på hårdvara.</p>
+    </details>
+    <details class="audit"><summary>Vad tog servern emot? <span id="event-count">0 trafikåtgärder</span></summary><ol id="events"></ol></details>
+    <p class="footnote">Pilot för layout och grundflöden. Svensk 16×2-profil. Ingen firmware har flashats; produktion, språkbyte och beständig lagring ingår inte i detta test.</p>
+  </main>
+</body>
+</html>
