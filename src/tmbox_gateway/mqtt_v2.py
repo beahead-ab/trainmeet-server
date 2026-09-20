@@ -44,6 +44,7 @@ class TMBoxV2Gateway:
         f"{TOPIC_PREFIX}/device/+/presence",
         f"{TOPIC_PREFIX}/device/+/command",
         f"{TOPIC_PREFIX}/device/+/config/ack",
+        f"{TOPIC_PREFIX}/device/+/preferences/set",
     )
 
     def __init__(
@@ -76,7 +77,7 @@ class TMBoxV2Gateway:
 
     # -------------------------------------------------------------- messages
 
-    def on_message(self, topic: str, payload: bytes) -> None:
+    def on_message(self, topic: str, payload: bytes, *, retained: bool = False) -> None:
         parts = topic.split("/")
         if len(parts) < 5 or parts[0:3] != ["tmbox", "v2", "device"]:
             LOGGER.warning("Okänt v2-topic: %s", topic)
@@ -98,6 +99,21 @@ class TMBoxV2Gateway:
             self.handle_presence(device_id, body)
         elif leaf == "command":
             self.handle_command(device_id, body)
+        elif leaf == "preferences/set":
+            if retained:
+                return
+            request_id = body.get("request_id")
+            if not isinstance(request_id, str) or not 1 <= len(request_id) <= 96:
+                return
+            try:
+                self.identities.set_device_language(device_id, body.get("language"))
+            except ValueError:
+                self.publish(device_topic(device_id, "preferences"),
+                             {"request_id": request_id, "status": "rejected"}, False)
+                return
+            self.publish(device_topic(device_id, "preferences"),
+                         {"request_id": request_id, "status": "accepted",
+                          "ui": self.service.device_ui(device_id)}, False)
         elif leaf == "config/ack":
             LOGGER.info(
                 "TMBox %s kvitterade config %s", device_id, body.get("config_version")
@@ -134,6 +150,10 @@ class TMBoxV2Gateway:
 
     # ------------------------------------------------------------ publishing
 
+    def publish_device_language(self, device_id: str) -> None:
+        self.publish(device_topic(device_id, "preferences"),
+                     {"ui": self.service.device_ui(device_id)}, False)
+
     def publish_device_state(self, device_id: str) -> None:
         """Publish the three retained topics a box resynchronises from.
 
@@ -141,13 +161,14 @@ class TMBoxV2Gateway:
         state, so none of them depends on another having arrived first.
         """
         assignment = self.service.assignment_payload(device_id)
+        self.publish_device_language(device_id)
         self.publish(device_topic(device_id, "assignment"), assignment, True)
         station_id = assignment.get("station_id")
         if not station_id:
             return
         device = self.identities.discovered_device_or_none(device_id)
         config = self.service.config_payload(
-            station_id, device.display if device else None
+            station_id, device.display if device else None, device_id=device_id
         )
         if config is not None:
             self.publish(device_topic(device_id, "config"), config, True)
@@ -226,7 +247,7 @@ class MQTTV2Adapter:
     def _on_message(self, client: Any, userdata: Any, message: Any) -> None:
         del client, userdata
         try:
-            self.gateway.on_message(message.topic, message.payload)
+            self.gateway.on_message(message.topic, message.payload, retained=bool(message.retain))
         except Exception:  # pragma: no cover - defensive transport boundary
             LOGGER.exception("Ett v2-meddelande kunde inte hanteras: %s", message.topic)
 

@@ -147,6 +147,7 @@
   }
 
   function render(geometry, view, config, snapshot) {
+    const tr = key => config.ui?.messages?.[key] ?? key;
     const movements = snapshot.movements || [];
     const clearances = snapshot.active_clearances || [];
     const messages = snapshot.line_messages || [];
@@ -154,25 +155,27 @@
 
     switch (view.screen) {
       case "Identity": lines = ["TRAINMEET TMBOX", view.device_code || ""]; break;
-      case "NoNetwork": lines = ["NAT SAKNAS", "FORSOKER IGEN"]; break;
-      case "SetupPortal": lines = ["INSTALLERA WIFI", view.access_point_name || ""]; break;
-      case "SeekingServer": lines = ["SOKER SERVER", view.device_code || ""]; break;
-      case "ServerGone": lines = ["SERVER BORTA", "FORSOKER IGEN"]; break;
-      case "AwaitingAssignment": lines = ["KOPPLA BOXEN", view.device_code || ""]; break;
+      case "NoNetwork": lines = [tr("NAT SAKNAS"), tr("FORSOKER IGEN")]; break;
+      case "SetupPortal": lines = [tr("INSTALLERA WIFI"), view.access_point_name || ""]; break;
+      case "SeekingServer": lines = [tr("SOKER SERVER"), view.device_code || ""]; break;
+      case "ServerGone": lines = [tr("SERVER BORTA"), tr("FORSOKER IGEN")]; break;
+      case "AwaitingAssignment": lines = [tr("KOPPLA BOXEN"), view.device_code || ""]; break;
       // The station is known but its data has not arrived. An empty overview
       // would claim there are no trains today, which is a different thing.
-      case "LoadingStation": lines = ["STATION KOPPLAD", "HAMTAR DATA..."]; break;
-      case "ResettingNetwork": lines = ["NATVERK RADERAS", view.device_code || ""]; break;
-      case "Sending": lines = ["SKICKAR...", ""]; break;
-      case "CommandAccepted": lines = ["KOMMANDO OK", ""]; break;
-      case "CommandRejected": lines = ["KOMMANDO NEKAT", rejectionWord(view.reason)]; break;
+      case "LoadingStation": lines = [tr("STATION KOPPLAD"), tr("HAMTAR DATA...")]; break;
+      case "ResettingNetwork": lines = [tr("NATVERK RADERAS"), view.device_code || ""]; break;
+      case "Sending": lines = [tr("SKICKAR..."), ""]; break;
+      case "CommandAccepted": lines = [tr("KOMMANDO OK"), ""]; break;
+      case "CommandRejected": lines = [tr("KOMMANDO NEKAT"), tr(rejectionWord(view.reason))]; break;
 
       case "StationOverview": {
         const clock = (snapshot.clock && snapshot.clock.time) || "--:--";
         lines.push(spread(config.code || "TMBOX", clock, geometry.cols));
         lines.push(movements.length === 0
-          ? "INGA TAG IDAG"
-          : `${movements.length} TAG  C=BLADDRA`);
+          ? tr("INGA TAG IDAG")
+          : `${movements.length}${tr(" TAG  C=BLADDRA")}`);
+        if (config.ui?.messages?.["C=TAG D=SPRAK"])
+          lines[1] = tr("C=TAG D=SPRAK");
         if (geometry.rows >= 4) {
           for (const movement of movements) {
             if (lines.length >= geometry.rows) break;
@@ -184,31 +187,31 @@
 
       case "MovementDetail": {
         const movement = movements[view.selected_movement];
-        if (!movement) { lines = ["INGET TAG VALT", "*=TILLBAKA"]; break; }
+        if (!movement) { lines = [tr("INGET TAG VALT"), tr("*=TILLBAKA")]; break; }
         lines.push(spread(movementMark(config, movement), movementTime(movement), geometry.cols));
         const primary = primaryAction(movement);
-        let actions = primary.label ? `A=${primary.label}` : "";
+        let actions = primary.label ? `A=${tr(primary.label)}` : "";
         if (allows(movement, "train.track.change")) {
-          actions = actions ? `${actions}  B=ANDRA` : "B=ANDRA";
+          actions = actions ? `${actions}  ${tr("B=ANDRA")}` : tr("B=ANDRA");
         }
-        lines.push(actions || "INGET TILLATET");
+        lines.push(actions || tr("INGET TILLATET"));
         if (geometry.rows >= 4) {
-          lines.push(`FORARE ${movement.crewReady ? "PA PLATS" : "SAKNAS"}`);
-          lines.push("C=NASTA  *=TILLBAKA");
+          lines.push(`${tr("FORARE ")}${movement.crewReady ? tr("PA PLATS") : tr("SAKNAS")}`);
+          lines.push(tr("C=NASTA  *=TILLBAKA"));
         }
         break;
       }
 
       case "TrackPicker": {
         const tracks = config.tracks || [];
-        if (tracks.length === 0) { lines.push("VALJ SPAR"); lines.push("INGA SPAR"); break; }
+        if (tracks.length === 0) { lines.push(tr("VALJ SPAR")); lines.push(tr("INGA SPAR")); break; }
         const index = view.selected_track >= 0 && view.selected_track < tracks.length
           ? view.selected_track : 0;
-        lines.push(spread("VALJ SPAR", tracks[index].display_label, geometry.cols));
-        lines.push("A=VALJ  C=NASTA");
+        lines.push(spread(tr("VALJ SPAR"), tracks[index].display_label, geometry.cols));
+        lines.push(tr("A=VALJ  C=NASTA"));
         if (geometry.rows >= 4) {
-          lines.push(`${index + 1} AV ${tracks.length}`);
-          lines.push("*=TILLBAKA");
+          lines.push(`${index + 1}${tr(" AV ")}${tracks.length}`);
+          lines.push(tr("*=TILLBAKA"));
         }
         break;
       }
@@ -216,7 +219,7 @@
       case "ConnectionPicker": {
         const connections = config.connections || [];
         if (connections.length === 0) {
-          lines.push("BEGAR MOT"); lines.push("INGEN GRANNE"); break;
+          lines.push(tr("BEGAR MOT")); lines.push(tr("INGEN GRANNE")); break;
         }
         const index = view.selected_connection >= 0 && view.selected_connection < connections.length
           ? view.selected_connection : 0;
@@ -224,73 +227,73 @@
         // invent a choice the operator has to make.
         const connection = connections[index];
         lines.push(connection.display_side === "left"
-          ? spread(connection.other_station_code, "BEGAR MOT", geometry.cols)
-          : spread("BEGAR MOT", connection.other_station_code, geometry.cols));
-        lines.push("A=BEGAR  C=NASTA");
+          ? spread(connection.other_station_code, tr("BEGAR MOT"), geometry.cols)
+          : spread(tr("BEGAR MOT"), connection.other_station_code, geometry.cols));
+        lines.push(tr("A=BEGAR  C=NASTA"));
         if (geometry.rows >= 4) {
-          lines.push(`${index + 1} AV ${connections.length}`);
-          lines.push("*=TILLBAKA");
+          lines.push(`${index + 1}${tr(" AV ")}${connections.length}`);
+          lines.push(tr("*=TILLBAKA"));
         }
         break;
       }
 
       case "TrainLookup": {
         // The cursor shows there is more to type; an empty field still says so.
-        lines.push(spread("TAG", `${view.lookup_digits || ""}_`, geometry.cols));
-        lines.push("A=SOK  B=SUDDA");
+        lines.push(spread(tr("TAG"), `${view.lookup_digits || ""}_`, geometry.cols));
+        lines.push(tr("A=SOK  B=SUDDA"));
         if (geometry.rows >= 4) {
-          lines.push("SIFFROR PA TANGENT");
-          lines.push("*=AVBRYT");
+          lines.push(tr("SIFFROR PA TANGENT"));
+          lines.push(tr("*=AVBRYT"));
         }
         break;
       }
 
       case "LookupResults": {
         const found = view.lookup_matches || [];
-        if (found.length === 0) { lines = ["INGEN TRAFF", "*=TILLBAKA"]; break; }
+        if (found.length === 0) { lines = [tr("INGEN TRAFF"), tr("*=TILLBAKA")]; break; }
         const index = view.selected_match >= 0 && view.selected_match < found.length
           ? view.selected_match : 0;
         const match = found[index];
-        lines.push(`${match.train_number} ${found.length} TRAFFAR`);
+        lines.push(`${match.train_number} ${found.length}${tr(" TRAFFAR")}`);
         // Choosing which movement to look at is not an operative decision.
-        lines.push("C=NASTA #=VALJ");
+        lines.push(tr("C=NASTA #=VALJ"));
         if (geometry.rows >= 4) {
           const time = match.departure_time || match.arrival_time || "";
-          const what = match.departure_time ? "AVG" : "ANK";
+          const what = match.departure_time ? tr("AVG") : tr("ANK");
           lines.push(spread(`${what} ${time}`, `${index + 1}/${found.length}`, geometry.cols));
-          lines.push("*=TILLBAKA");
+          lines.push(tr("*=TILLBAKA"));
         }
         break;
       }
 
       case "ClearanceInbox": {
-        if (clearances.length === 0) { lines = ["INGA ARENDEN", "*=TILLBAKA"]; break; }
+        if (clearances.length === 0) { lines = [tr("INGA ARENDEN"), tr("*=TILLBAKA")]; break; }
         const index = view.selected_case >= 0 && view.selected_case < clearances.length
           ? view.selected_case : 0;
         const clearance = clearances[index];
-        lines.push(`KLARERING ${clearanceWord(clearance.status)}`);
+        lines.push(`${tr("KLARERING ")}${tr(clearanceWord(clearance.status))}`);
         // A settles it and B refuses it; # never leaves an operative decision.
-        lines.push("A=KLART  B=EJ");
+        lines.push(tr("A=KLART  B=EJ"));
         if (geometry.rows >= 4) {
           const from = otherStationCode(config, clearance.connection_id);
-          lines.push(`FRAN ${from || clearance.from_station_id}`);
-          lines.push(`${index + 1} AV ${clearances.length}  *=TILLBAKA`);
+          lines.push(`${tr("FRAN ")}${from || clearance.from_station_id}`);
+          lines.push(`${index + 1}${tr(" AV ")}${clearances.length}${tr("  *=TILLBAKA")}`);
         }
         break;
       }
 
       case "LineInbox": {
-        if (messages.length === 0) { lines = ["INGA MEDDELANDEN", "*=TILLBAKA"]; break; }
+        if (messages.length === 0) { lines = [tr("INGA MEDDELANDEN"), tr("*=TILLBAKA")]; break; }
         const index = view.selected_case >= 0 && view.selected_case < messages.length
           ? view.selected_case : 0;
         const message = messages[index];
-        lines.push("LINJEN LEDIG");
+        lines.push(tr("LINJEN LEDIG"));
         // One-sided information: the only answer is that it was shown.
-        lines.push("A=KVITTERA");
+        lines.push(tr("A=KVITTERA"));
         if (geometry.rows >= 4) {
           const from = otherStationCode(config, message.connection_id);
-          lines.push(`FRAN ${from || message.from_station_id}`);
-          lines.push("*=TILLBAKA");
+          lines.push(`${tr("FRAN ")}${from || message.from_station_id}`);
+          lines.push(tr("*=TILLBAKA"));
         }
         break;
       }

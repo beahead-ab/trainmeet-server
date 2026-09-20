@@ -133,7 +133,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     }
     await screenshot('tmbox-esp32-catalog');
     await page.locator('[data-tmbox-pane="floden"]').click();
-    assert.equal(await page.locator('#tmbox-operation-guide details').count(), 13);
+    assert.equal(await page.locator('#tmbox-operation-guide details').count(), 14);
+    assert.match(await page.locator('#tmbox-operation-guide').innerText(), /Välj språk för den egna TMBoxen/);
     assert.equal(await page.locator('.tmbox-flow-item').count(), 12);
     await page.locator('#tmbox-doc-profile').selectOption('esp8266');
     assert.equal(await page.locator('.tmbox-flow-item').count(), 8);
@@ -144,7 +145,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     }
     await screenshot('tmbox-esp8266-flow');
     await page.locator('[data-tmbox-pane="skarmar"]').click();
-    assert.equal(await page.locator('.tmbox-screen-card').count(), 26);
+    assert.equal(await page.locator('.tmbox-screen-card').count(), 28);
+    assert.match(await page.locator('#tmbox-screen-catalog').innerText(), /Språk kunde inte sparas/);
     await page.locator('[data-tmbox-pane="referens"]').click();
     assert.match(await page.locator('#tmbox-reference-content').innerText(), /ESP8266/);
     assert.equal(calls.filter(([method]) => method === 'POST').length, writesBeforeDocs);
@@ -258,7 +260,9 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     const userTable = await page.locator('#users-table').boundingBox();
     assert.ok(addUser.y + addUser.height <= userTable.y, 'Add user is above, not stuck against the bottom row');
     const modalIds = await page.locator('dialog.admin-modal').evaluateAll(nodes => nodes.map(node => node.id));
-    assert.equal(modalIds.length, 14);
+    assert.equal(modalIds.length, 16);
+    assert.ok(modalIds.includes('tmbox-language-modal'));
+    assert.ok(modalIds.includes('device-language-modal'));
     for (const width of [1200, 360]) {
       await page.setViewportSize({ width, height: 900 });
       for (const id of modalIds) {

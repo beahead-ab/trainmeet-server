@@ -196,7 +196,7 @@ class ProtocolV2Tests(ProtocolV2Base):
             json.dumps({"device_code": "TMBOX-NEW"}).encode("utf-8"),
         )
 
-        published = [payload for _, payload, _ in self.published]
+        published = [payload for topic, payload, _ in self.published if topic.endswith("/assignment")]
         self.assertEqual(len(published), 1)
         self.assertEqual(published[0]["status"], "waiting_for_assignment")
         self.assertIsNone(published[0]["station_id"])

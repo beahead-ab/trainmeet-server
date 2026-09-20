@@ -404,16 +404,16 @@ class TrafficEngine:
             ) = checkpoint
             raise
 
-    def snapshot(self, panel_id: str) -> dict[str, Any]:
+    def snapshot(self, panel_id: str, *, language: str = "sv") -> dict[str, Any]:
         with self._lock:
-            return self._snapshot_locked(panel_id)
+            return self._snapshot_locked(panel_id, language=language)
 
-    def _snapshot_locked(self, panel_id: str) -> dict[str, Any]:
+    def _snapshot_locked(self, panel_id: str, *, language: str = "sv") -> dict[str, Any]:
         panel = self.config.panels[panel_id]
         runtime = self.panels[panel_id]
         clock = self.meeting_clock()
         line1, line2 = render_panel(
-            self.config, panel, runtime, self.connections, clock_time=clock["time"]
+            self.config, panel, runtime, self.connections, clock_time=clock["time"], language=language
         )
 
         slots: dict[str, Any] = {}

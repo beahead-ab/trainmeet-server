@@ -636,6 +636,17 @@
     </div>
   </form>
 </dialog>
+<dialog id="device-language-modal" class="admin-modal" aria-labelledby="device-language-title">
+  <h2 id="device-language-title">Språk på TMBox</h2>
+  <p><strong id="device-language-code"></strong></p>
+  <form id="device-language-form">
+    <label for="device-language">Språk / Language</label>
+    <select id="device-language" name="language" required></select>
+    <p>Bara det valda språket skickas till denna box. Är den frånkopplad får den språket vid nästa anslutning. Operatören kan byta språk igen.</p>
+    <p id="device-language-message" class="form-message" role="status"></p>
+    <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara och skicka</button></div>
+  </form>
+</dialog>
               <p id="device-list-message" class="form-message" role="status"></p>
               <div id="device-list" class="status-list"></div>
           </section>
@@ -689,6 +700,17 @@
           </div>
 
           <div id="tmbox-pane-klient" class="tmbox-pane">
+          <button id="tmbox-language-open" type="button" class="secondary">Språk / Language</button>
+          <dialog id="tmbox-language-modal" class="admin-modal" aria-labelledby="tmbox-language-title">
+            <h2 id="tmbox-language-title">Språk / Language</h2>
+            <form id="tmbox-language-form">
+              <p>Språket gäller bara denna TMBox. Stationen tilldelas av administratören.</p>
+              <label for="tmbox-language">Språk / Language</label>
+              <select id="tmbox-language" name="language"></select>
+              <p id="tmbox-language-message" class="form-message" role="status"></p>
+              <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara</button></div>
+            </form>
+          </dialog>
           <article class="tmbox-case">
             <div class="lcd-module">
               <div id="lcd-v2" class="lcd" aria-label="TMBox display" data-tm-aria-label="TMBox display"></div>
