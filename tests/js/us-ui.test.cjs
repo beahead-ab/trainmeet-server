@@ -26,7 +26,7 @@ async function setup(role='dispatcher', options={}) {
  const document={documentElement:{lang:'',dataset:{i18nScope:'us'}},body:element('body'),activeElement:null,
   querySelector:element,querySelectorAll:()=>[],addEventListener(){},
   createElement:()=>({set innerHTML(value){this.value=value.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');}})};
- const data=fixture(role), requests=[];
+ const data=options.data||fixture(role), requests=[];
  const serverContext=options.serverContext||{operating_region:'us',selected_meet:{id:'meet-1',name:'Spara',publication_id:'v1',operating_region:'us'}};
  const storage=new Map();
  const context={document,navigator:{languages:['sv-SE']},location:{pathname:'/us/'+role,origin:'http://local.test'},crypto:require('node:crypto').webcrypto,
@@ -37,7 +37,7 @@ async function setup(role='dispatcher', options={}) {
  vm.createContext(context);
  for(const file of ['web/i18n-messages.js','web/us-cloud-messages.js','us_web/workspace-messages.js','web/i18n.js']) vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),context);
  const source=fs.readFileSync(path.join(root,'us_web/app.js'),'utf8');
- const api=await vm.runInContext('(async()=>{'+source+'\nreturn {state,runStatus,warrantCard,stripMap,action,holding,disabled,refresh,command,createCommandID,render};})()',context);
+ const api=await vm.runInContext('(async()=>{'+source+'\nreturn {state,runStatus,warrantCard,stripMap,action,holding,disabled,refresh,command,createCommandID,render,setupLeg,legForm,readLeg,positionOptions,packagePreview,schedule};})()',context);
  return {api,language:context.TrainMeetI18n,requests,app:element('#app'),editor:element('#editor'),data,context,serverContext,storage,elements};
 }
 
@@ -260,4 +260,48 @@ test('Cloud railroad identity and schedule event labels survive language changes
  language.setLanguage('sv');api.render();assert.match(app.innerHTML,/SP 834/);assert.match(app.innerHTML,/Växling/);
  assert.equal(r.symbol,'834');assert.equal(r.schedule[0].event,'switch');
  assert.match(app.innerHTML,/SP 834 · Morning/);
+});
+
+function independentFixture(role='dispatcher') {
+ const data=fixture(role),p=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../us_runtime_v2_package.json'),'utf8'));
+ p.publication_id='v1';data.session.package=p;
+ data.session.runs=[{...p.runs[0],id:'run-1',conductor_name:'Crew',position:{segment_id:'ab',milepost_id:'m1',meet_time:'06:15'}}];
+ data.session.warrants=[{...data.session.warrants[4],text:'W004\nIndependent authority unchanged',path:[{segment_id:'ab',from_node:'a',to_node:'b'}]}];
+ return data;
+}
+test('v2 diagram keeps equal MPs independent and renders places and limits without NaN',async()=>{
+ const data=independentFixture(),{api,app}=await setup('dispatcher',{data});
+ const map=api.stripMap();
+ for(const text of ['data-point="a"','data-point="b"','data-milepost="m1"','data-milepost="m2"','data-place="yard1"','data-boundary="limit"','position-pin','authority-band'])assert.ok(map.includes(text),text);
+ assert.doesNotMatch(map,/NaN|Infinity|undefined/);
+ assert.match(map,/planning reference, not permission/);
+ assert.match(app.innerHTML,/Main line mileage · MP 40/);
+ assert.match(api.packagePreview(data.session.package),/whole track segments/);
+ assert.match(api.schedule(data.session.runs[0]),/East yard/);
+});
+test('v2 authority form transmits exact endpoint IDs and reverses direction without MP inference',async()=>{
+ const {api}=await setup('dispatcher',{data:independentFixture()});
+ const fields={segment:{value:'ab'},from:{},to:{},remove:{}};
+ const el={querySelector:selector=>selector==='.remove-leg'?fields.remove:fields[selector.match(/name=(\w+)/)[1]],remove(){}};
+ api.setupLeg(el);
+ assert.equal(fields.from.value,'a');assert.equal(fields.to.value,'b');
+ fields.from.value='b';fields.from.onchange();assert.equal(fields.to.value,'a');
+ assert.deepEqual(JSON.parse(JSON.stringify(api.readLeg(el))),{segment_id:'ab',from_node:'b',to_node:'a'});
+ assert.match(api.legForm(),/From point/);assert.doesNotMatch(api.legForm(),/From MP|type="number"/);
+});
+test('v2 reporting lists only explicit node/marker associations and never arbitrary MP numbers',async()=>{
+ const data=independentFixture();
+ data.session.package.mileposts.push({id:'loose',name:'Unlinked MP',value:40,mp_system_id:'main'});
+ const {api}=await setup('conductor',{data});const options=api.positionOptions('ab');
+ for(const value of ['node:a','node:b','mp:m1','mp:m2'])assert.ok(options.includes(`value="${value}"`));
+ assert.doesNotMatch(options,/loose|Unlinked MP/);
+});
+test('v2 conductor sees place timetable while issued text remains immutable across locales',async()=>{
+ const data=independentFixture('conductor'),before=JSON.stringify(data),{api,app,language,requests}=await setup('conductor',{data});
+ for(const locale of ['sv','en','de','nb','da']){
+  language.setLanguage(locale);api.render();
+  assert.match(app.innerHTML,/East yard|West yard/);assert.match(app.innerHTML,/Independent authority unchanged/);
+  assert.doesNotMatch(app.innerHTML,/NaN|undefined/);
+ }
+ assert.equal(before,JSON.stringify(data));assert.equal(requests.some(r=>r.method==='POST'),false);
 });

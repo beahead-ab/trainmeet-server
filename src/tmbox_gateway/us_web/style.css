@@ -32,4 +32,10 @@ tm-text { display: contents; }
 .workspace-menu:not([open]) nav,.workspace-menu [hidden]{display:none!important}
 .workspace-menu nav a,.workspace-menu nav button{text-align:left;justify-content:flex-start;min-height:44px;padding:10px 14px;border:0;border-radius:8px;color:inherit}
 .workspace-menu nav a:hover,.workspace-menu nav button:hover{background:hsl(var(--tint))}
+.mp-marker{fill:hsl(var(--warning));stroke:hsl(var(--warning));stroke-width:1}
+.independent-map{min-width:900px}
+.planning-boundary{stroke:hsl(var(--warning));stroke-width:2;stroke-dasharray:3 3;fill:none}
+.strip-map .place-label{font-weight:600;fill:hsl(var(--primary))}
+.reference-catalogue{padding:16px;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+.reference-catalogue h3{margin-top:14px}.reference-catalogue p{margin:8px 0}
 @media(max-width:680px){.selected-meet{order:4;flex-basis:100%;font-size:13px}.connection{margin-left:auto}.connection #connection{max-width:100px;font-size:10px}.topbar{gap:12px}.topbar .workspace-menu nav{order:initial;justify-content:stretch}}

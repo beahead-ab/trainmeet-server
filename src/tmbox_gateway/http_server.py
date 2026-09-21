@@ -2802,7 +2802,7 @@ class TrainMeetHTTPApplication:
             )
         # Route by schema BEFORE touching EU connection tokens or publications.
         # A US package is staged only; starting a session is an explicit US command.
-        if isinstance(package, dict) and package.get('schema') == 'trainmeet.us.runtime/1':
+        if isinstance(package, dict) and isinstance(package.get('schema'), str) and package['schema'].startswith('trainmeet.us.runtime/'):
             store, _, _ = self.us_access(client)
             staged = store.stage_package(package, url=central_url,
                                          token=result.link_token if isinstance(result, CentralRuntimeDownload) else None)

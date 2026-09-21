@@ -8,7 +8,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import math
 import sqlite3
 import threading
 import time
@@ -19,6 +18,9 @@ from uuid import uuid4
 
 from .us_clock import clock_settings, clock_status
 from .lifecycle import us_meet_id
+from .us_topology import (PROFILE_V2, SCHEMA_V2, REFERENCE_COLLECTIONS, USError,
+                          text, number, rows, indexed, reference, validate_references,
+                          validate_node_path, node_paths_conflict, node_label, validate_position, validate_schedules)
 
 PROFILE = "tm-us-twc-manual-v1"
 SCHEMA = "trainmeet.us.runtime/1"
@@ -26,44 +28,13 @@ HOLDING = {"active", "release_requested"}
 TERMINAL = {"closed", "void"}
 
 
-class USError(ValueError):
-    def __init__(self, message: str, status: int = 400):
-        super().__init__(message)
-        self.status = status
-
-
-def text(value: Any, field: str, limit: int = 160) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > limit:
-        raise USError(f"{field}: enter 1–{limit} characters")
-    return value.strip()
-
-
-def number(value: Any, field: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-        raise USError(f"{field}: a finite number is required")
-    return float(value)
-
-
-def rows(value: Any, field: str, maximum: int = 1000) -> list[dict]:
-    if not isinstance(value, list) or len(value) > maximum or any(not isinstance(v, dict) for v in value):
-        raise USError(f"{field}: expected a list of at most {maximum} objects")
-    return value
-
-
-def indexed(value: Any, field: str) -> dict[str, dict]:
-    result = {}
-    for row in rows(value, field):
-        key = text(row.get("id"), f"{field}.id", 80)
-        if key in result:
-            raise USError(f"Duplicate {field} ID: {key}")
-        result[key] = row
-    return result
-
-
 def validate_package(value: Any) -> dict:
-    if not isinstance(value, dict) or value.get("schema") != SCHEMA or value.get("profile") != PROFILE:
-        raise USError(f"Expected {SCHEMA} with profile {PROFILE}")
+    if not isinstance(value, dict) or (value.get("schema"), value.get("profile")) not in ((SCHEMA, PROFILE), (SCHEMA_V2, PROFILE_V2)):
+        raise USError('Unsupported US runtime schema/profile; update TrainMeet Server for newer packages')
     package = copy.deepcopy(value)
+    independent = package['schema'] == SCHEMA_V2
+    if not independent and any(package.get(key) for key in REFERENCE_COLLECTIONS):
+        raise USError('Independent references require runtime v2; they cannot be ignored by runtime v1')
     text(package.get("publication_id"), "publication_id", 100)
     text(package.get("name"), "name")
     territories = indexed(package.get("territories"), "territories")
@@ -75,24 +46,30 @@ def validate_package(value: Any) -> dict:
     for territory in territories.values():
         text(territory.get("name"), "territory.name")
     for node in nodes.values():
-        if node.get("territory_id") not in territories:
-            raise USError("Unknown milepost territory")
+        reference(node, 'territory_id', territories)
         text(node.get("name"), "node.name")
-        number(node.get("mp"), "node.mp")
+        if independent:
+            if 'mp' in node:
+                raise USError('Runtime v2 mileposts must be independent records, not node.mp')
+        else:
+            number(node.get("mp"), "node.mp")
         if not 0 <= number(node.get("x"), "node.x") <= 100 or not 0 <= number(node.get("y"), "node.y") <= 10000:
             raise USError("Diagram x must be 0–100 and y 0–10000")
     for segment in segments.values():
         text(segment.get("name"), "segment.name")
-        a, b = nodes.get(segment.get("from_node")), nodes.get(segment.get("to_node"))
-        if not a or not b or a["id"] == b["id"] or a["territory_id"] != b["territory_id"] or a["mp"] == b["mp"]:
+        a, b = reference(segment, 'from_node', nodes), reference(segment, 'to_node', nodes)
+        if a['id'] == b['id'] or (not independent and (a["territory_id"] != b["territory_id"] or a["mp"] == b["mp"])):
             raise USError("Each segment needs two distinct limits in the same MP territory")
         resources = segment.get("conflict_resources", [])
         if not isinstance(resources, list) or len(resources) > 100:
             raise USError("Invalid conflict resources")
         for resource in resources:
             text(resource, "conflict_resource", 80)
+    catalogues = validate_references(package) if independent else {}
     for run in runs.values():
-        validate_run(run, nodes)
+        validate_run(run, nodes, catalogues.get('locations'))
+    if independent:
+        validate_schedules(package)
     try:
         clock_settings(package.get('session', {}))
     except ValueError as error:
@@ -114,22 +91,28 @@ def validate_package(value: Any) -> dict:
     return package
 
 
-def validate_run(run: dict, nodes: dict) -> None:
+def validate_run(run: dict, nodes: dict, locations: dict | None = None) -> None:
     text(run.get("symbol"), "train symbol", 60)
     for field in ('railroad', 'service'):
         if field in run and (not isinstance(run[field], str) or len(run[field]) > 160):
             raise USError(f'{field}: expected text up to 160 characters')
-    if run.get("direction") not in {"east", "west"}:
+    if run.get("direction") not in ("east", "west"):
         raise USError("Direction must be east or west")
     for stop in rows(run.get("schedule", []), "schedule", 200):
-        if stop.get("node_id") not in nodes:
-            raise USError("Unknown scheduled location")
+        if 'location_id' in stop:
+            if locations is None or 'node_id' in stop:
+                raise USError('Schedule must reference a location or node using the matching runtime profile')
+            location = reference(stop, 'location_id', locations)
+            if not location.get('node_ids'):
+                raise USError('Scheduled location needs a verified track-node association')
+        else:
+            reference(stop, 'node_id', nodes)
         value = text(stop.get("time"), "scheduled time", 5)
         if len(value) != 5 or value[2] != ":" or not value.replace(":", "").isdigit() or int(value[:2]) > 23 or int(value[3:]) > 59:
             raise USError("Scheduled time must be HH:MM")
         if stop.get("work"):
             text(stop["work"], "scheduled work", 400)
-        if stop.get('event') is not None and stop['event'] not in {'arrive', 'depart', 'pass', 'switch'}:
+        if stop.get('event') is not None and stop['event'] not in ('arrive', 'depart', 'pass', 'switch'):
             raise USError('Unknown schedule event')
         if type(stop.get('day_offset', 0)) is not int or stop.get('day_offset', 0) != 0:
             raise USError('This US profile supports one timetable day per session')
@@ -139,11 +122,15 @@ def validate_path(package: dict, value: Any) -> list[dict]:
     path = copy.deepcopy(rows(value, "path", 100))
     if not path:
         raise USError("Choose at least one track segment")
+    if package['schema'] == SCHEMA_V2:
+        return validate_node_path(package, path)
     segments = indexed(package["segments"], "segments")
     nodes = indexed(package["nodes"], "nodes")
     previous_exit = None
     seen = set()
     for i, leg in enumerate(path):
+        if set(leg) != {'segment_id', 'from_mp', 'to_mp'}:
+            raise USError('Runtime v1 requires MP interval limits')
         segment = segments.get(leg.get("segment_id"))
         if not segment or segment["id"] in seen:
             raise USError("Unknown or repeated track segment")
@@ -161,6 +148,8 @@ def validate_path(package: dict, value: Any) -> list[dict]:
 
 
 def paths_conflict(package: dict, first: list[dict], second: list[dict]) -> bool:
+    if package['schema'] == SCHEMA_V2:
+        return node_paths_conflict(package, first, second)
     segments = indexed(package["segments"], "segments")
     for a in first:
         for b in second:
@@ -186,6 +175,12 @@ def warrant_text(package: dict, warrant: dict, run: dict) -> str:
     lines = [f"Track Warrant {warrant['number']} · {train} · Train direction: {direction}"]
     for leg in warrant["path"]:
         segment = segments[leg["segment_id"]]
+        if package['schema'] == SCHEMA_V2:
+            start, end = node_label(package, leg['from_node']), node_label(package, leg['to_node'])
+            limits = (f'Proceed from {start} to {end}' if warrant['kind'] == 'proceed'
+                      else f'Work between {start} and {end} (either direction)')
+            lines.append(f"{segment['name']} [{segment['id']}] · {limits} · entire segment")
+            continue
         territory = territories[nodes[segment["from_node"]]["territory_id"]]["name"]
         limits = (f"Proceed from MP {leg['from_mp']:g} to MP {leg['to_mp']:g}"
                   if warrant["kind"] == "proceed" else
@@ -310,9 +305,10 @@ class USStore:
         # Diagram placement is presentation, unlike MP values, endpoints, names
         # and conflict resources used to interpret an issued track warrant.
         def infrastructure(value):
-            return {key: sorted(({k: v for k, v in row.items() if key != "nodes" or k not in {"x", "y"}}
-                                for row in value[key]), key=lambda row: row["id"])
-                    for key in ("territories", "nodes", "segments")}
+            return {'schema': value['schema'], 'profile': value['profile'], **{
+                key: sorted(({k: v for k, v in row.items() if key not in {'nodes', 'mileposts', 'locations'} or k not in {'x', 'y'}}
+                             for row in value.get(key, [])), key=lambda row: row['id'])
+                for key in ('territories', 'nodes', 'segments', *REFERENCE_COLLECTIONS)}}
         changed_infrastructure = infrastructure(previous) != infrastructure(package)
         outstanding = [w for w in state["warrants"] if w["status"] not in TERMINAL]
         if changed_infrastructure and outstanding:
@@ -558,12 +554,18 @@ class USStore:
                 segment = next((s for s in state["package"]["segments"] if s["id"] == position.get("segment_id")), None)
                 if not segment:
                     raise USError("Unknown position segment")
-                nodes = indexed(state["package"]["nodes"], "nodes")
-                limits = [nodes[segment[k]]["mp"] for k in ("from_node", "to_node")]
-                mp = number(position.get("mp"), "position MP")
-                if not min(limits) <= mp <= max(limits):
-                    raise USError("Position is outside the segment")
-                report["position"] = {"segment_id": segment["id"], "mp": mp, "certainty": "reported", "recorded_at": now, "meet_time": meet_time}
+                if state['package']['schema'] == SCHEMA_V2:
+                    reported = validate_position(state['package'], position)
+                else:
+                    if set(position) != {'segment_id', 'mp'}:
+                        raise USError('Runtime v1 position requires segment and MP')
+                    nodes = indexed(state["package"]["nodes"], "nodes")
+                    limits = [nodes[segment[k]]["mp"] for k in ("from_node", "to_node")]
+                    mp = number(position.get("mp"), "position MP")
+                    if not min(limits) <= mp <= max(limits):
+                        raise USError("Position is outside the segment")
+                    reported = {"segment_id": segment["id"], "mp": mp}
+                report["position"] = {**reported, "certainty": "reported", "recorded_at": now, "meet_time": meet_time}
                 run["position"] = report["position"]
             state["reports"].append(report)
         elif action == "draft":

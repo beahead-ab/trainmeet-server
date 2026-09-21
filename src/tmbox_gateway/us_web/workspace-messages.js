@@ -1,6 +1,16 @@
 /* UI copy only: never translate issued authorities or imported meet content. */
 (() => {
   const rows = [
+    ['From point','Från spårpunkt','Fra sporpunkt','Fra sporpunkt','Von Gleispunkt'],
+    ['To point','Till spårpunkt','Til sporpunkt','Til sporpunkt','Bis Gleispunkt'],
+    ['Reported point','Rapporterad punkt','Rapporteret punkt','Rapportert punkt','Gemeldeter Punkt'],
+    ['Independent references','Fristående referenser','Selvstændige referencer','Selvstendige referanser','Unabhängige Referenzen'],
+    ['Mileposts','Mileposts','Mileposts','Mileposts','Meilensteine'],
+    ['Operating places','Trafikplatser','Driftssteder','Trafikksteder','Betriebsstellen'],
+    ['Unlinked reference','Referens utan spårkoppling','Reference uden sporkobling','Referanse uten sportilknytning','Referenz ohne Gleiszuordnung'],
+    ['Planning boundaries · not permissions','Planeringsgränser · inte tillstånd','Planlægningsgrænser · ikke tilladelser','Planleggingsgrenser · ikke tillatelser','Planungsgrenzen · keine Fahrberechtigungen'],
+    ['Independent mileposts and explicit track topology','Fristående mileposts och uttryckliga spårförbindelser','Selvstændige mileposts og eksplicitte sporforbindelser','Selvstendige mileposts og eksplisitte sporforbindelser','Unabhängige Meilensteine und explizite Gleisverbindungen'],
+    ['Runtime v2 reserves whole track segments and shared endpoints. Mileposts and planning boundaries do not grant movement authority.','Runtime v2 reserverar hela spårsegment och gemensamma ändpunkter. Mileposts och planeringsgränser ger inget körtillstånd.','Runtime v2 reserverer hele sporsegmenter og fælles endepunkter. Mileposts og planlægningsgrænser giver ikke køretilladelse.','Runtime v2 reserverer hele sporsegmenter og felles endepunkter. Mileposts og planleggingsgrenser gir ikke kjøretillatelse.','Runtime v2 reserviert ganze Gleissegmente und gemeinsame Endpunkte. Meilensteine und Planungsgrenzen erteilen keine Fahrberechtigung.'],
     ['Close without saving changes?','Stäng utan att spara ändringarna?','Luk uden at gemme ændringerne?','Lukk uten å lagre endringene?','Ohne Speichern der Änderungen schließen?'],
     ['Menu','Meny','Menu','Meny','Menü'],
     ['Workspace menu','Arbetsytemeny','Arbejdsområdemenu','Arbeidsområdemeny','Arbeitsbereich-Menü'],

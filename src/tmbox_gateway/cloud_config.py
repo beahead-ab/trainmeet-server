@@ -66,7 +66,7 @@ class CloudConfiguration:
 
     @staticmethod
     def describe(package):
-        if package.get("schema") == "trainmeet.us.runtime/1":
+        if isinstance(package.get('schema'), str) and package['schema'].startswith('trainmeet.us.runtime/'):
             validated = validate_package(package)
             return "us", us_meet_id(validated), validated["publication_id"], validated["name"]
         publication = RuntimePublication.parse(package)

@@ -1,0 +1,150 @@
+{
+  "schema": "trainmeet.us.runtime/2",
+  "profile": "tm-us-twc-manual-v2",
+  "mp_systems": [
+    {
+      "id": "main",
+      "name": "Main line mileage",
+      "territory_id": "atsf"
+    }
+  ],
+  "mileposts": [
+    {
+      "id": "m1",
+      "name": "MP 40",
+      "mp_system_id": "main",
+      "value": 40,
+      "x": 30,
+      "y": 100,
+      "node_id": "a"
+    },
+    {
+      "id": "m2",
+      "name": "MP 40",
+      "mp_system_id": "main",
+      "value": 40,
+      "x": 60,
+      "y": 100,
+      "node_id": "b"
+    }
+  ],
+  "locations": [
+    {
+      "id": "yard1",
+      "name": "East yard",
+      "territory_id": "atsf",
+      "kind": "yard",
+      "aliases": [],
+      "node_ids": [
+        "a"
+      ],
+      "milepost_ids": [
+        "m1"
+      ],
+      "x": 30,
+      "y": 120
+    },
+    {
+      "id": "yard2",
+      "name": "West yard",
+      "territory_id": "atsf",
+      "kind": "yard",
+      "aliases": [],
+      "node_ids": [
+        "b"
+      ],
+      "milepost_ids": [
+        "m2"
+      ],
+      "x": 60,
+      "y": 120
+    }
+  ],
+  "limits": [
+    {
+      "id": "limit",
+      "name": "East switch clearance",
+      "territory_id": "atsf",
+      "kind": "clearance",
+      "node_id": "a",
+      "milepost_id": "m1"
+    }
+  ],
+  "operating_region": "us",
+  "default_language": "en",
+  "publication_id": "us-v2-contract",
+  "published_at": "2026-09-21T00:00:00Z",
+  "name": "Independent MP test",
+  "territories": [
+    {
+      "id": "atsf",
+      "name": "ATSF",
+      "notes": "Call Dispatcher."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "a",
+      "name": "Main 1 east switch",
+      "territory_id": "atsf",
+      "x": 30,
+      "y": 100,
+      "kind": "switch"
+    },
+    {
+      "id": "b",
+      "name": "Main 2 east switch",
+      "territory_id": "atsf",
+      "x": 60,
+      "y": 100,
+      "kind": "switch"
+    }
+  ],
+  "segments": [
+    {
+      "id": "ab",
+      "name": "Crossover",
+      "from_node": "a",
+      "to_node": "b"
+    }
+  ],
+  "runs": [
+    {
+      "id": "run",
+      "railroad": "UP",
+      "symbol": "103",
+      "service": "",
+      "direction": "west",
+      "kind": "passenger",
+      "schedule": [
+        {
+          "location_id": "yard1",
+          "time": "06:15",
+          "day_offset": 0,
+          "event": "depart",
+          "work": ""
+        },
+        {
+          "location_id": "yard2",
+          "time": "06:20",
+          "day_offset": 0,
+          "event": "arrive",
+          "work": ""
+        }
+      ]
+    }
+  ],
+  "planning": {
+    "dispatcher_districts": [],
+    "source_instructions": [],
+    "runtime_enforced": false
+  },
+  "session": {
+    "id": "meet",
+    "timezone": "Europe/Stockholm",
+    "start_date": "",
+    "end_date": "",
+    "clock_time": "12:00",
+    "clock_speed": 1
+  }
+}

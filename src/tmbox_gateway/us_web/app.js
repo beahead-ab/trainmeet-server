@@ -11,6 +11,10 @@ const labels = {draft:'Draft · not in effect',transmitted:'Transmitted · not i
 const holding = (w) => ['active','release_requested'].includes(w.status);
 const closed = (w) => ['closed','void'].includes(w.status);
 const session = () => state.data?.session;
+const independent = (p=session()?.package) => p?.schema === 'trainmeet.us.runtime/2';
+const pointName = (p,id) => { const n=p.nodes.find(n=>n.id===id); return n?`${p.territories.find(t=>t.id===n.territory_id)?.name || ''} / ${n.name} [${id}]`:id; };
+const markerName = (p,id) => { const m=(p.mileposts||[]).find(m=>m.id===id); return m?`${(p.mp_systems||[]).find(s=>s.id===m.mp_system_id)?.name || ''} · MP ${m.value} · ${m.name} [${id}]`:id; };
+const positionReference = (p,pos) => independent(p) ? (pos.node_id?pointName(p,pos.node_id):markerName(p,pos.milepost_id)) : `MP ${pos.mp}`;
 const run = (id) => session()?.runs.find((r) => r.id === id);
 const disabled = (action='') => ['import','cloud','packages'].includes(action) || state.contextBlocked || !state.online || state.busy || Boolean(state.pending) || (session()?.status === 'closed' && !['create_session','review-package','config'].includes(action));
 const button = (label, action, extra='', primary=false) => html`<button type="button" data-action="${action}" ${extra} ${!['details','history'].includes(action)&&disabled(action)?'disabled':''} class="${primary?'primary':''}">${escape(t(label))}</button>`;
@@ -221,7 +225,7 @@ function runStatus(r) {
 function positionLabel(r) {
   if(!r.position)return t("No position reported");
   const seg=session().package.segments.find((s)=>s.id===r.position.segment_id);
-  return `${seg?.name || t("Track")} · MP ${r.position.mp} · ${r.position.meet_time}`;
+  return `${seg?.name || t("Track")} · ${positionReference(session().package,r.position)} · ${r.position.meet_time}`;
 }
 function trainRow(r) {
   const warrants=session().warrants.filter((w)=>w.run_id===r.id&&!closed(w));
@@ -250,6 +254,7 @@ function packageShelf() {
 }
 
 function packagePreview(p) {
+  if(independent(p))return html`<details open><summary>The railroad</summary><p class="form-note">Runtime v2 reserves whole track segments and shared endpoints. Mileposts and planning boundaries do not grant movement authority.</p><div class="package-table"><table><thead><tr><th>Track segment</th><th>From point</th><th>To point</th></tr></thead><tbody>${p.segments.map(s=>html`<tr><td>${escape(s.name)}</td><td>${escape(pointName(p,s.from_node))}</td><td>${escape(pointName(p,s.to_node))}</td></tr>`).join('')}</tbody></table></div>${referencePreview(p)}</details><details><summary>Train schedule & job instructions</summary>${p.runs.map(r=>html`<h3>${escape(trainLabel(r))}</h3>${schedule(r,p)}`).join('')}</details>`;
   const node=(id)=>p.nodes.find((n)=>n.id===id);
   return html`<details open><summary>The railroad</summary><div class="package-table"><table><thead><tr><th>Track segment</th><th>From MP</th><th>To MP</th></tr></thead><tbody>${p.segments.map((s)=>html`<tr><td>${escape(s.name)}</td><td>${escape(node(s.from_node)?.name)} · ${escape(node(s.from_node)?.mp)}</td><td>${escape(node(s.to_node)?.name)} · ${escape(node(s.to_node)?.mp)}</td></tr>`).join('')}</tbody></table></div></details><details><summary>Train schedule & job instructions</summary>${p.runs.map((r)=>html`<h3>${escape(trainLabel(r))} · ${escape(t(r.direction==='east'?'Eastbound':'Westbound'))}</h3>${schedule(r,p)}`).join('')}</details>`;
 }
@@ -267,6 +272,7 @@ async function reviewPackage(id) {
 
 function stripMap() {
   const current=session(), p=current.package;
+  if(independent(p))return independentMap(current);
   const nodes=new Map(p.nodes.map((n)=>[n.id,n])), segments=new Map(p.segments.map((s)=>[s.id,s]));
   const xy=(n)=>({x:n.x*6,y:n.y+65});
   const point=(id,mp)=>{const s=segments.get(id),a=nodes.get(s.from_node),b=nodes.get(s.to_node),t=(mp-a.mp)/(b.mp-a.mp),aa=xy(a),bb=xy(b);return{x:aa.x+(bb.x-aa.x)*t,y:aa.y+(bb.y-aa.y)*t};};
@@ -277,6 +283,40 @@ function stripMap() {
   const bands=current.warrants.filter((w)=>!closed(w)).flatMap((w)=>w.path.map((leg)=>{const a=point(leg.segment_id,leg.from_mp),b=point(leg.segment_id,leg.to_mp);return html`<path class="authority-band ${holding(w)?'':'proposed'} ${state.selected===w.run_id?'chosen':''}" d="M${a.x-12},${a.y}L${b.x-12},${b.y}"/>`;})).join('');
   const pins=current.runs.filter((r)=>r.position).map((r)=>{const v=point(r.position.segment_id,r.position.mp);return html`<g class="position-pin ${state.selected===r.id?'chosen':''}" tabindex="0" role="button" aria-label="Select ${escape(trainLabel(r))}, reported MP ${r.position.mp}" data-run="${escape(r.id)}"><circle class="position-dot" cx="${v.x}" cy="${v.y}" r="7"/><rect x="${v.x+14}" y="${v.y-15}" width="165" height="31" rx="9"/><text x="${v.x+24}" y="${v.y+5}">${escape(trainLabel(r,false))} ${r.direction==='east'?'↓':'↑'} · ${r.position.mp}</text><title>Reported ${escape(r.position.meet_time)} · ${escape(r.position.recorded_at)}</title></g>`;}).join('');
   return html`<svg class="strip-map" viewBox="0 0 600 ${height}" role="img" aria-label="Schematic topology, reported train positions and track warrant limits"><text class="mp-label" x="15" y="27">MP</text><text class="track-name" x="125" y="27">${escape(p.territories.map((t)=>t.name).join(' / '))}</text>${rails}${bands}${marks}${pins}</svg>`;
+}
+
+function referencePreview(p) {
+  return html`<details><summary>Independent references</summary><h3>Mileposts</h3>${(p.mileposts||[]).map(m=>html`<p>${escape(markerName(p,m.id))} · ${escape(m.node_id?pointName(p,m.node_id):p.segments.find(s=>s.id===m.segment_id)?.name || t('Unlinked reference'))}</p>`).join('')}<h3>Operating places</h3>${(p.locations||[]).map(l=>html`<p>${escape(l.name)} · ${escape((l.node_ids||[]).map(id=>pointName(p,id)).join('; '))}</p>`).join('')}<h3>Planning boundaries · not permissions</h3>${(p.limits||[]).map(l=>html`<p>${escape(l.name)} · ${escape(l.kind)} · ${escape(pointName(p,l.node_id))}${l.milepost_id?` · ${escape(markerName(p,l.milepost_id))}`:''}</p>`).join('')}</details>`;
+}
+function independentMap(current) {
+  const p=current.package,nodes=new Map(p.nodes.map(n=>[n.id,n])),segments=new Map(p.segments.map(s=>[s.id,s]));
+  const xy=n=>({x:n.x*6+20,y:n.y+75});
+  const anchor=ref=>{
+    if(Number.isFinite(ref.x)&&Number.isFinite(ref.y))return xy(ref);
+    if(ref.node_id&&nodes.has(ref.node_id))return xy(nodes.get(ref.node_id));
+    const s=segments.get(ref.segment_id);
+    if(s){const a=xy(nodes.get(s.from_node)),b=xy(nodes.get(s.to_node));return{x:(a.x+b.x)/2,y:(a.y+b.y)/2};}
+    return null;
+  };
+  const path=s=>{const a=xy(nodes.get(s.from_node)),b=xy(nodes.get(s.to_node));return`M${a.x},${a.y}L${b.x},${b.y}`;};
+  let height=Math.max(...p.nodes.map(n=>n.y),...(p.mileposts||[]).map(m=>m.y||0),...(p.locations||[]).map(l=>l.y||0))+170;
+  // Move labels, never track points: drawing coordinates are not distances.
+  const labelBoxes=[];
+  const label=(v,caption,css='',offset=0)=>{
+    const full=String(caption),short=full.length>30?`${full.slice(0,29)}…`:full;
+    const width=Math.max(35,short.length*8),x=Math.min(v.x+10,890-width);let y=v.y+offset;
+    while(labelBoxes.some(b=>x<b.x+b.width+8&&x+width+8>b.x&&y>b.y-20&&y-20<b.y))y+=22;
+    labelBoxes.push({x,y,width});height=Math.max(height,y+30);
+    return html`<text class="${css}" x="${x}" y="${y}">${escape(short)}<title>${escape(full)}</title></text>`;
+  };
+  const rails=p.segments.map(s=>html`<g data-segment="${escape(s.id)}"><title>${escape(s.name)} [${escape(s.id)}]</title><path class="tie" d="${path(s)}"/><path class="rail" d="${path(s)}"/></g>`).join('');
+  const bands=current.warrants.filter(w=>!closed(w)).flatMap(w=>w.path.map(leg=>html`<path class="authority-band ${holding(w)?'':'proposed'} ${state.selected===w.run_id?'chosen':''}" d="${path(segments.get(leg.segment_id))}"/>`)).join('');
+  const points=p.nodes.map(n=>{const v=xy(n);return html`<g data-point="${escape(n.id)}"><circle class="point" cx="${v.x}" cy="${v.y}" r="5"/>${label(v,n.name,'',-12)}<title>${escape(pointName(p,n.id))}</title></g>`;}).join('');
+  const markers=(p.mileposts||[]).map(m=>{const v=anchor(m);return v?html`<g data-milepost="${escape(m.id)}"><title>${escape(markerName(p,m.id))}</title><path class="mp-marker" d="M${v.x},${v.y-5}l5,5 -5,5 -5,-5Z"/>${label(v,`MP ${m.value} [${m.id}]`,'mp-label',20)}</g>`:'';}).join('');
+  const places=(p.locations||[]).map(l=>{const v=anchor(l);return v?html`<g data-place="${escape(l.id)}">${label(v,l.name,'place-label',44)}</g>`:'';}).join('');
+  const boundaries=(p.limits||[]).map(l=>{const v=xy(nodes.get(l.node_id));return html`<g data-boundary="${escape(l.id)}"><path class="planning-boundary" d="M${v.x-10},${v.y-10}l20,20m-20,0l20,-20"/><title>${escape(l.name)} · ${escape(l.kind)} · planning reference, not permission</title></g>`;}).join('');
+  const pins=current.runs.filter(r=>r.position).map(r=>{const ref=r.position.node_id?nodes.get(r.position.node_id):(p.mileposts||[]).find(m=>m.id===r.position.milepost_id),v=ref?anchor(ref):null;if(!v)return '';return html`<g class="position-pin" role="button" tabindex="0" data-run="${escape(r.id)}" aria-label="${escape(trainLabel(r))} · ${escape(positionReference(p,r.position))}"><circle class="position-dot" cx="${v.x}" cy="${v.y}" r="7"/><text x="${v.x+10}" y="${v.y-30}">${escape(trainLabel(r,false))}</text><title>${escape(positionReference(p,r.position))} · reported ${escape(r.position.meet_time)} · schematic reference</title></g>`;}).join('');
+  return html`<svg class="strip-map independent-map" viewBox="0 0 900 ${height}" role="img" aria-label="Independent mileposts and explicit track topology"><text class="track-name" x="20" y="27">${escape(p.territories.map(t=>t.name).join(' / '))}</text>${rails}${bands}${points}${markers}${places}${boundaries}${pins}</svg><div class="reference-catalogue">${referencePreview(p)}</div>`;
 }
 
 function renderConductor() {
@@ -293,15 +333,31 @@ function trainLabel(r,includeService=true) {
 }
 function schedule(r,p=session().package) {
   const eventLabels={arrive:'Arrival',depart:'Departure',pass:'Pass',switch:'Switching'};
-  return r.schedule.map((s)=>html`<div class="schedule-row"><time>${escape(s.time)}</time><span>${escape(p.nodes.find((n)=>n.id===s.node_id)?.name)}<br><small>${escape(t(eventLabels[s.event]||''))}${s.event&&s.work?' · ':''}${escape(s.work||'')}</small></span></div>`).join('')||html`<p class="muted">Extra train · no planned stops.</p>`;
+  return r.schedule.map((s)=>html`<div class="schedule-row"><time>${escape(s.time)}</time><span>${escape(s.location_id?(p.locations||[]).find(l=>l.id===s.location_id)?.name:p.nodes.find((n)=>n.id===s.node_id)?.name)}<br><small>${escape(t(eventLabels[s.event]||''))}${s.event&&s.work?' · ':''}${escape(s.work||'')}</small></span></div>`).join('')||html`<p class="muted">Extra train · no planned stops.</p>`;
 }
 function events(r) { return session().events.filter((e)=>e.target_id===r.id||session().warrants.some((w)=>w.id===e.target_id&&w.run_id===r.id)).slice(0,20).map((e)=>html`<div class="event"><strong>${escape(e.meet_time)}</strong> · ${escape(e.action.replaceAll('_',' '))}<br><small>Revision ${e.revision} · ${escape(e.actor)} · ${escape(e.recorded_at)}</small></div>`).join('')||html`<p class="muted">No reports yet.</p>`; }
 
 function segmentOptions() {return session().package.segments.map((s)=>html`<option value="${escape(s.id)}">${escape(s.name)} · ${escape(s.id)}</option>`).join('');}
-function legForm() {return html`<div class="path-leg"><label>Track segment<select name="segment">${segmentOptions()}</select></label><div class="form-row"><label>From MP<input name="from" type="number" step="any" required></label><label>To MP<input name="to" type="number" step="any" required></label><button type="button" class="remove-leg" aria-label="Remove segment">×</button></div></div>`;}
+function legForm() {return html`<div class="path-leg"><label>Track segment<select name="segment">${segmentOptions()}</select></label><div class="form-row">${independent()?html`<label>From point<select name="from" required></select></label><label>To point<select name="to" required></select></label>`:html`<label>From MP<input name="from" type="number" step="any" required></label><label>To MP<input name="to" type="number" step="any" required></label>`}<button type="button" class="remove-leg" aria-label="Remove segment">×</button></div></div>`;}
 function setupLeg(el) {
+  if(independent()){
+    const p=session().package,segment=el.querySelector('[name=segment]'),from=el.querySelector('[name=from]'),to=el.querySelector('[name=to]');
+    const refresh=()=>{const s=p.segments.find(s=>s.id===segment.value),options=[s.from_node,s.to_node].map(id=>`<option value="${escape(id)}">${escape(pointName(p,id))}</option>`).join('');from.innerHTML=options;to.innerHTML=options;from.value=s.from_node;to.value=s.to_node;};
+    const opposite=value=>{const s=p.segments.find(s=>s.id===segment.value);return value===s.from_node?s.to_node:s.from_node;};
+    from.onchange=()=>{to.value=opposite(from.value);};to.onchange=()=>{from.value=opposite(to.value);};segment.onchange=refresh;
+    el.querySelector('.remove-leg').onclick=()=>el.remove();refresh();return;
+  }
   const setLimits=()=>{const s=session().package.segments.find((v)=>v.id===el.querySelector('select').value),nodes=session().package.nodes;const a=nodes.find((n)=>n.id===s.from_node),b=nodes.find((n)=>n.id===s.to_node);el.querySelector('[name=from]').value=a.mp;el.querySelector('[name=to]').value=b.mp;};
   el.querySelector('select').onchange=setLimits;el.querySelector('.remove-leg').onclick=()=>el.remove();setLimits();
+}
+
+function readLeg(el) {
+  const segment_id=el.querySelector('[name=segment]').value,from=el.querySelector('[name=from]').value,to=el.querySelector('[name=to]').value;
+  return independent()?{segment_id,from_node:from,to_node:to}:{segment_id,from_mp:Number(from),to_mp:Number(to)};
+}
+function positionOptions(segmentId) {
+  const p=session().package,s=p.segments.find(s=>s.id===segmentId),ends=[s.from_node,s.to_node];
+  return ends.map(id=>`<option value="node:${escape(id)}">${escape(pointName(p,id))}</option>`).join('')+(p.mileposts||[]).filter(m=>m.segment_id?m.segment_id===s.id:ends.includes(m.node_id)).map(m=>`<option value="mp:${escape(m.id)}">${escape(markerName(p,m.id))}</option>`).join('');
 }
 
 async function action(name, warrantId, packageId) {
@@ -333,12 +389,17 @@ async function action(name, warrantId, packageId) {
   if(name==='draft'&&selected){
     modal(t('Draft · {train}', {train:trainLabel(selected)}),html`<form><label>Authority type<select name="kind"><option value="proceed">Proceed from … to …</option><option value="work">Work between … and …</option></select></label><p class="form-note">Choose an ordered, connected track path. Limits may differ from the timetable. This draft gives no authority to move.</p><div id="legs">${legForm()}</div><button id="add-leg" type="button">+ Track segment</button><label>Additional information<textarea name="notes" maxlength="1000" placeholder="Not machine-validated. Do not hide track limits or conflict exceptions here."></textarea></label>${formEnd(t("Save draft for review"))}</form>`);
     setupLeg(editor.querySelector('.path-leg'));editor.querySelector('#add-leg').onclick=()=>{editor.querySelector('#legs').insertAdjacentHTML('beforeend',legForm());setupLeg(editor.querySelector('.path-leg:last-child'));};
-    bindForm('draft',(fields,form)=>({run_id:selected.id,kind:fields.get('kind'),notes:fields.get('notes'),path:[...form.querySelectorAll('.path-leg')].map((el)=>({segment_id:el.querySelector('select').value,from_mp:Number(el.querySelector('[name=from]').value),to_mp:Number(el.querySelector('[name=to]').value)}))}));return;
+    if(independent())editor.querySelector('#legs').insertAdjacentHTML('beforebegin',html`<p class="form-note">Runtime v2 reserves whole track segments and shared endpoints. Mileposts and planning boundaries do not grant movement authority.</p>`);
+    bindForm('draft',(fields,form)=>({run_id:selected.id,kind:fields.get('kind'),notes:fields.get('notes'),path:[...form.querySelectorAll('.path-leg')].map(readLeg)}));return;
   }
   if((name==='report'||name==='request')&&selected){
     modal(t('Report · {train}', {train:trainLabel(selected)}),html`<form><label>Report type<select name="kind"><option value="position">Position</option><option value="request" ${name==='request'?'selected':''}>Request new authority</option><option value="delay">Delay</option><option value="problem">Problem</option></select></label><div id="position-fields"><div class="form-row"><label>Track segment<select name="segment">${segmentOptions()}</select></label><label>Reported MP<input type="number" step="any" name="mp"></label></div></div><label>Report / uncertainty<textarea name="message" required maxlength="1000" placeholder="Front at MP… / stopped clear of… / estimate only…"></textarea></label><p class="form-note">Reports never release an authority. Use the warrant’s explicit release action.</p>${formEnd(t("Send report"))}</form>`);
-    const kind=editor.querySelector('[name=kind]');const toggle=()=>{editor.querySelector('#position-fields').hidden=kind.value!=='position';editor.querySelector('[name=mp]').required=kind.value==='position';};kind.onchange=toggle;toggle();
-    bindForm('report',(fields)=>({run_id:selected.id,kind:fields.get('kind'),message:fields.get('message'),...(fields.get('kind')==='position'?{position:{segment_id:fields.get('segment'),mp:Number(fields.get('mp'))}}:{})}));return;
+    if(independent()){
+      editor.querySelector('#position-fields').innerHTML=html`<div class="form-row"><label>Track segment<select name="segment">${segmentOptions()}</select></label><label>Reported point<select name="point" required></select></label></div>`;
+      const segment=editor.querySelector('[name=segment]');const refresh=()=>{editor.querySelector('[name=point]').innerHTML=positionOptions(segment.value);};segment.onchange=refresh;refresh();
+    }
+    const kind=editor.querySelector('[name=kind]');const toggle=()=>{editor.querySelector('#position-fields').hidden=kind.value!=='position';editor.querySelector(independent()?'[name=point]':'[name=mp]').required=kind.value==='position';};kind.onchange=toggle;toggle();
+    bindForm('report',(fields)=>{const ref=String(fields.get('point')||''),position=independent()?{segment_id:fields.get('segment'),[ref.startsWith('node:')?'node_id':'milepost_id']:ref.slice(ref.indexOf(':')+1)}:{segment_id:fields.get('segment'),mp:Number(fields.get('mp'))};return {run_id:selected.id,kind:fields.get('kind'),message:fields.get('message'),...(fields.get('kind')==='position'?{position}:{})};});return;
   }
   if(name==='ready'&&selected){await command('ready',{run_id:selected.id});return;}
   const warrant=session().warrants.find((w)=>w.id===warrantId);
