@@ -43,6 +43,52 @@ med annat innehåll avvisas. Start är revisions-/idempotensskyddad och låser
 in en kopia. Kopplingstoken skickas aldrig till webbläsaren. Befintlig backup
 omfattar tabellerna och serverns träffnollställning rensar även dessa.
 
+## Fristående mileposts i runtime v2
+
+Server stöder både `trainmeet.us.runtime/1` + `tm-us-twc-manual-v1` och
+`trainmeet.us.runtime/2` + `tm-us-twc-manual-v2`. Uppdatera Server före publicering
+av v2 i Cloud. Gamla utkast, publiceringar och körningar uppgraderas inte automatiskt.
+Cloud-utkastets profil heter `tm-us-planning-v2`; den profilen är inte ett driftpaket.
+
+V2 behåller fyra oberoende kataloger: `mp_systems`, `mileposts`, `locations` och
+`limits`. Spårpunktens `mp` är inte tillåten i v2. `nodes` + `segments` anger
+verkliga förbindelser; samma MP-värde eller X/Y skapar aldrig en förbindelse.
+Platser kan omfatta flera spårpunkter. Tidtabellen måste ha en sammanhängande
+spårväg genom samtliga platser; en plats får inte fungera som teleport mellan spår.
+
+Körbesked väljer hela, ordnade segment med explicit riktning:
+
+```json
+{"segment_id": "crossover", "from_node": "main-1-switch", "to_node": "main-2-switch"}
+```
+
+Det fungerar även för växelförbindelser med samma MP-tal och för explicit anslutna
+Territories. Konflikter kontrolleras atomiskt mot samma segment, gemensamma
+ändpunkter och gemensamma `conflict_resources`. En geometrisk korsning skapar
+inte en förbindelse: deklarera en konfliktresurs när korsande spår delar utrymme.
+**Delsträckor angivna med numeriska MP-intervall ingår inte i v2.** Behövs en
+inre tillståndsgräns ska den först vara en uttrycklig spårpunkt som delar segmentet.
+
+Dispatcher väljer **From point / To point**, inte ett gissat MP-intervall.
+Kartans MP-, plats- och gränsmarkörer samt den utfällbara referenskatalogen
+hålls åtskilda från körbesked. Kartan är schematisk, inte en avståndsskala.
+Positionsrapporter väljer segment och exakt `node_id` eller tillhörande
+`milepost_id`. En rapporterad position varken aktiverar eller frigör ett körbesked.
+
+Referensnamn och instruktioner översätts inte; gränssnittet har fem språk.
+Utfärdad körbeskedstext lagras oföränderlig. En Cloud-uppdatering som ändrar
+spår, MP-betydelser, platser, gränser eller profil väntar medan öppna körbesked
+eller rapporterade positioner berörs. Rena X/Y-ändringar får tillämpas utan att
+återställa trafik, klocka eller historik.
+
+Planeringsgränser är **inte behörigheter**. V2 inför inte territoriella
+Dispatcher-roller, automatisk överlämning, NFC, fler dygn eller andra regelverk.
+Den befintliga TWC-kedjan och serverbehörigheten gäller oförändrade.
+V1 använder fortsatt sina äldre MP-intervall.
+
+Kontraktet verifieras med samma `tests/us_runtime_v2_package.json` i Cloud och
+Server samt negativa tester för tvetydiga referenser och parallella spår.
+
 ## Ursprunglig inventering, före Cloud 1.2.0
 
 - Server: `beahead-ab/trainmeet-server`, bas `f9a7d6b` (1.4.2). Isolerad

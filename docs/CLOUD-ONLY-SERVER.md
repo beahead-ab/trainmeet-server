@@ -7,6 +7,12 @@ separerade men delar en beständig träffspärr.
 
 ## Config och drift är olika saker
 
+US stöder både det äldre runtime v1-paketet och **runtime v2 med fristående
+mileposts, platser och gränser**. V2 använder uttryckliga spårpunkter och hela
+segment för körbesked, inte numeriska MP-intervall. Läs [US-kontraktet och
+driftbegränsningarna](TRAINMEET-US.md#fristående-mileposts-i-runtime-v2).
+Uppdatera Server innan Cloud publicerar v2. Ingen träff konverteras automatiskt.
+
 Träffens bana, stationer/territorier, tidtabell och övriga planering redigeras
 och publiceras i Cloud. Serverns byggläge och lokala import-/redigeringsvägar
 är borttagna. Äldre lokala data och historik raderas inte av denna förändring.
