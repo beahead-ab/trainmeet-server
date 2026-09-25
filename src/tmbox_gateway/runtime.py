@@ -678,6 +678,15 @@ class SQLiteRuntimeStore:
     def server_name(self) -> str | None:
         return self._setting("server_name")
 
+    def discovery_server_id(self) -> str:
+        """Installation identity, independent of IP, hostname and selected meet."""
+        with self._lock:
+            self._connection.execute(
+                "INSERT OR IGNORE INTO runtime_settings(key, value, updated_at) "
+                "VALUES ('discovery_server_id', ?, CURRENT_TIMESTAMP)", (str(uuid4()),),
+            )
+            return self._setting("discovery_server_id")
+
     def save_central_url(self, url: str) -> str:
         value = url.strip().rstrip("/")
         if not value:

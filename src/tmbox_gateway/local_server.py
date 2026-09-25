@@ -212,7 +212,7 @@ def main() -> None:
     )
     v2_adapter = MQTTV2Adapter(v2_gateway, host=broker_host, port=args.mqtt_port)
     discovery_advertiser = _start_discovery_advertiser(
-        args.mqtt_port, server_id=args.gateway_id
+        args.mqtt_port, server_id=runtime_store.discovery_server_id()
     )
 
     local_ip = args.advertised_host.strip() or _local_ip()
@@ -397,7 +397,7 @@ def _reset_operational_state(database_path: Path, state_directory: Path) -> None
             connection.execute(
                 "DELETE FROM clients WHERE kind NOT IN ('web_admin', 'swift_admin')"
             )
-            connection.execute("DELETE FROM runtime_settings WHERE key <> 'server_name'")
+            connection.execute("DELETE FROM runtime_settings WHERE key NOT IN ('server_name', 'discovery_server_id')")
     finally:
         connection.close()
     (state_directory / "connection-code.txt").unlink(missing_ok=True)
@@ -505,7 +505,7 @@ def _start_discovery_advertiser(
         )
     if command is None:
         LOGGER.warning(
-            "Lokal TMBox-upptäckt saknas; ange Raspberry Pi-adressen i boxens Wi-Fi-portal"
+            "Lokal TMBox-upptäckt saknas; installera eller aktivera mDNS/Avahi på servern"
         )
         return None
     try:
@@ -520,7 +520,7 @@ def _start_discovery_advertiser(
     time.sleep(0.05)
     if process.poll() is not None:
         LOGGER.warning(
-            "Lokal TMBox-upptäckt kunde inte starta; serveradressen kan anges manuellt"
+            "Lokal TMBox-upptäckt kunde inte starta; kontrollera mDNS/Avahi och det lokala nätverket"
         )
         return None
     LOGGER.info("Annonserar _tmbox._tcp på port %s", port)

@@ -232,6 +232,22 @@ class RuntimePublicationTests(unittest.TestCase):
 
 
 class RuntimeStoreTests(unittest.TestCase):
+    def test_discovery_identity_is_persistent_unique_and_independent_of_name(self):
+        from uuid import UUID
+        with tempfile.TemporaryDirectory() as directory:
+            first = SQLiteRuntimeStore(Path(directory) / "one.db")
+            second = SQLiteRuntimeStore(Path(directory) / "two.db")
+            identity = first.discovery_server_id()
+            self.assertEqual(str(UUID(identity)), identity)
+            self.assertNotEqual(identity, second.discovery_server_id())
+            first.save_server_name("New display name")
+            self.assertEqual(identity, first.discovery_server_id())
+            first.close()
+            first = SQLiteRuntimeStore(Path(directory) / "one.db")
+            self.assertEqual(identity, first.discovery_server_id())
+            first.close()
+            second.close()
+
     def test_legacy_link_enables_auto_sync_without_overriding_an_explicit_pause(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "runtime.db"
