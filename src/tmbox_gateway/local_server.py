@@ -410,11 +410,19 @@ def _external_clock_loop(application, stop):
     while not stop.is_set():
         try:
             application.poll_external_clock()
-            if application.on_terminal_tick:
-                application.on_terminal_tick()
         except Exception:
             # No request URLs or provider credentials in logs.
             LOGGER.warning("FastClock kunde inte uppdateras; försöker igen")
+        try:
+            if application.simulation:
+                application.simulation.tick()
+        except Exception:
+            LOGGER.warning("Simuleringen pausades efter ett simulatorfel")
+        try:
+            if application.on_terminal_tick:
+                application.on_terminal_tick()
+        except Exception:
+            LOGGER.warning("Terminalerna kunde inte uppdateras; försöker igen")
         stop.wait(0.5)
 
 

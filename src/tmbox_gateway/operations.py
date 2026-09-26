@@ -584,6 +584,7 @@ class SQLiteOperationsStore:
             "configured": True,
             "publication_id": str(row[0]),
             "time": _seconds_to_time(seconds),
+            "elapsed_seconds": seconds,
             "speed": float(row[3]),
             "running": bool(row[4]),
             "stopped_reason": row[5],
@@ -606,7 +607,7 @@ class SQLiteOperationsStore:
             self._connection.execute(
                 "UPDATE runtime_clock SET base_seconds = ?, base_recorded_at = ?, speed = ?, "
                 "running = ?, stopped_reason = ? WHERE singleton = 1",
-                (requested_seconds if requested_seconds is not None else _time_to_seconds(status["time"]),
+                (requested_seconds if requested_seconds is not None else status.get("elapsed_seconds", _time_to_seconds(status["time"])),
                  _datetime_iso(now), speed if speed is not None else status["speed"],
                  int(status["running"] if running is None else running),
                  None if running else status.get("stopped_reason")),
@@ -621,7 +622,7 @@ class SQLiteOperationsStore:
     ) -> dict[str, Any]:
         moment = now or datetime.now(timezone.utc)
         status = self.clock_status(now=moment)
-        base_seconds = _time_to_seconds(time_value) if time_value else _time_to_seconds(status["time"])
+        base_seconds = _time_to_seconds(time_value) if time_value else status.get("elapsed_seconds", _time_to_seconds(status["time"]))
         with self._lock:
             self._connection.execute(
                 """
@@ -642,7 +643,7 @@ class SQLiteOperationsStore:
                 SET base_seconds = ?, base_recorded_at = ?, running = 0, stopped_reason = ?
                 WHERE singleton = 1
                 """,
-                (_time_to_seconds(status["time"]), _now_iso(), reason or None),
+                (status.get("elapsed_seconds", _time_to_seconds(status["time"])), _now_iso(), reason or None),
             )
         return self.clock_status()
 
@@ -657,7 +658,7 @@ class SQLiteOperationsStore:
                 SET base_seconds = ?, base_recorded_at = ?, speed = ?
                 WHERE singleton = 1
                 """,
-                (_time_to_seconds(status["time"]), _now_iso(), speed),
+                (status.get("elapsed_seconds", _time_to_seconds(status["time"])), _now_iso(), speed),
             )
         return self.clock_status()
 
@@ -1733,6 +1734,8 @@ class SQLiteOperationsStore:
 
     def close(self) -> None:
         with self._lock:
+            if getattr(self, "simulation_controller", None):
+                self.simulation_controller.close()
             self._connection.close()
 
     def _upsert_position(

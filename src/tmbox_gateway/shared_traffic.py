@@ -78,6 +78,7 @@ class SharedPanelTraffic:
             cases = self.cases()
             publication = self.service.publication()
             fingerprint = (publication.publication_id if publication else None,
+                           self.service.runtime_scope().get("meet_generation"),
                            self.service.runtime_store.active_day(),
                            tuple(sorted((c["clearance_id"], c["revision"], self.service.case_departed(c)) for c in cases)))
             if fingerprint == self._fingerprint:

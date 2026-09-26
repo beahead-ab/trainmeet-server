@@ -122,6 +122,8 @@ class MQTTGatewayAdapter:
                 and topic_parts[4] == "hello"
             ):
                 self._handle_device_hello(topic_parts[3], message.payload)
+                if not message.retain and self.engine.shared_traffic:
+                    self.engine.shared_traffic.service.observe_operator(topic_parts[3])
                 client.ack(message.mid, message.qos)
                 return
             if len(topic_parts) != 5 or topic_parts[:3] != ["tambox", "v1", "client"]:
@@ -211,6 +213,8 @@ class MQTTGatewayAdapter:
         payload = json.loads(raw_payload.decode("utf-8"))
         if payload.get("status") != "online":
             return
+        if not retained and self.engine.shared_traffic:
+            self.engine.shared_traffic.service.observe_operator(client_id)
         request_id = payload.get("request_id")
         if request_id is None:
             # Existing v1 clients use presence to ask for a fresh snapshot.

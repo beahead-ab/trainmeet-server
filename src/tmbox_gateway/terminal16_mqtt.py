@@ -41,6 +41,7 @@ class Terminal16Gateway:
             if not connection or connection["boot"] != body["boot"]:
                 return
             connection["seen"] = self.now()
+            self.terminals.service.observe_operator(device)
             if leaf == "presence":
                 # A liveness reply is not a repeated assignment/config download.
                 self.publish(self.PREFIX + device + "/alive", {"boot": body["boot"], "nonce": body.get("nonce")}, False)

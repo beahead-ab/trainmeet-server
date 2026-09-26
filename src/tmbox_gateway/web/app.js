@@ -1,5 +1,139 @@
 const { t, html } = globalThis.TrainMeetI18n;
 
+let simulationState = null;
+let simulationConfirmation = null;
+let simulationRefreshing = false;
+let simulationStationSignature = null;
+let simulationTrainSignature = null;
+const simulationReasons = {
+  channel_occupied: "Sträckan är upptagen", track_occupied: "Planerat spår är upptaget",
+  simulation_train_not_ready: "Tåget är inte färdigt", simulation_station_control: "Stationen är manuellt bemannad",
+};
+
+function renderSimulation(data) {
+  simulationState = data;
+  const clock = data.clock || {};
+  document.querySelector("#simulation-summary").textContent = data.active
+    ? `${clock.running ? t("Går") : t("Pausad")} · ${clock.time} · ${clock.speed}× · ${t("Trafikdag")} ${data.day} · ${t("Scenario")} ${data.seed}${data.notice ? " · " + data.notice : ""}`
+    : t(data.supported ? "Ingen simulering är aktiv. Stoppa vanlig trafik innan du börjar." : "Koppla en EU-träff från Cloud för att simulera stationsarbetet.");
+  document.querySelector("#simulation-start-open").hidden = data.active;
+  document.querySelector("#simulation-start-open").disabled = !data.supported;
+  for (const id of ["simulation-pause", "simulation-reset-open", "simulation-finish-open", "simulation-stations-card", "simulation-trains-card"]) document.getElementById(id).hidden = !data.active;
+  document.querySelector("#simulation-pause").textContent = t(clock.running ? "Pausa" : "Fortsätt");
+  const stations = document.querySelector("#simulation-stations");
+  const stationSignature = JSON.stringify([document.documentElement.lang, data.stations]);
+  const names = new Map((data.stations || []).map(station => [station.id, station.code]));
+  if (stationSignature !== simulationStationSignature) {
+    simulationStationSignature = stationSignature;
+    stations.replaceChildren();
+    for (const station of data.stations || []) {
+      const card = document.createElement("div"); card.className = "simulation-station";
+      const title = document.createElement("strong"); title.textContent = `${station.code} · ${station.name}`;
+      const mode = document.createElement("p"); mode.textContent = t({automatic: "Automatisk", manual: "Manuell", disconnected: "Kontakt saknas – väntar"}[station.mode]);
+      card.append(title, mode);
+      if (station.operator) {
+        const operator = document.createElement("p"); operator.textContent = station.operator; card.append(operator);
+        const button = document.createElement("button"); button.type = "button"; button.className = "secondary";
+        button.textContent = t("Lämna till simulatorn");
+        button.addEventListener("click", () => confirmSimulation("automatic", t("Lämna till simulatorn"), `${station.name}: ${t("automatiken fortsätter från nuvarande trafikläge. Den anslutna klienten kan inte längre styra stationen.")}`, station.id));
+        card.append(button);
+      }
+      for (const device of station.available_operators || []) {
+        if (station.operator === device) continue;
+        const button = document.createElement("button"); button.type = "button"; button.className = "secondary";
+        button.textContent = `${t("Låt klient ta över")}: ${device}`;
+        button.addEventListener("click", () => confirmSimulation("manual", t("Lämna till operatör"), `${station.name}: ${device}`, station.id, device));
+        card.append(button);
+      }
+      stations.append(card);
+    }
+  }
+  const trainSignature = JSON.stringify([stationSignature, data.trains]);
+  if (trainSignature === simulationTrainSignature) return;
+  simulationTrainSignature = trainSignature;
+  const trains = document.querySelector("#simulation-trains"); trains.replaceChildren();
+  for (const train of data.trains || []) {
+    const tr = document.createElement("tr");
+    for (const value of [train.train_number, `${names.get(train.from_station_id)} → ${names.get(train.to_station_id)}`,
+      t({waiting: "Väntar", in_transit: "På väg", arrived: "Ankommet", stabled: "Uppställt"}[train.status]),
+      t(simulationReasons[train.reason] || train.reason) || (train.delay_seconds ? `${train.delay_seconds / 60} ${t("min extra stationsarbete")}` : "–")]) {
+      const td = document.createElement("td"); td.textContent = value; tr.append(td);
+    }
+    trains.append(tr);
+  }
+}
+
+async function refreshSimulation() {
+  if (simulationRefreshing || document.body.dataset.mode !== "simulation") return;
+  simulationRefreshing = true;
+  try {
+    const response = await authorizedFetch("/v1/simulation", {cache: "no-store"});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || t("Kunde inte läsa simuleringen"));
+    renderSimulation(data);
+  } catch (error) { setMessage(document.querySelector("#simulation-error"), error.message, "error"); }
+  finally { simulationRefreshing = false; }
+}
+
+async function sendSimulation(action, options = {}, context = simulationState) {
+  const response = await authorizedFetch("/v1/simulation", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({action, run_id: context?.run_id, meet_generation: context?.meet_generation, ...options})});
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || t("Simuleringen kunde inte ändras"));
+  renderSimulation(data);
+  // Run transitions fence old requests. Refresh the shell's command context too.
+  const server = await authorizedFetch("/v1/server-context", {cache: "no-store"});
+  if (server.ok) state.serverContext = await server.json();
+  await refreshLocalClock();
+}
+
+function confirmSimulation(action, title, description, station_id, device_id) {
+  simulationConfirmation = {action, station_id, device_id, context: {...simulationState}};
+  document.querySelector("#simulation-confirm-title").textContent = title;
+  document.querySelector("#simulation-confirm-description").textContent = description;
+  openModal("simulation-confirm-modal");
+}
+
+function bindSimulationUI() {
+  document.querySelector("#simulation-start-open").addEventListener("click", () => {
+    const clock = simulationState?.clock || {};
+    document.querySelector("#simulation-time").value = String(clock.time || "12:00").slice(0, 5);
+    document.querySelector("#simulation-speed").value = clock.speed || 1;
+    document.querySelector("#simulation-day").textContent = `${t("Vald trafikdag")}: ${simulationState?.active_day || "–"}`;
+    simulationConfirmation = {context: {...simulationState}};
+    openModal("simulation-start-modal");
+  });
+  document.querySelector("#simulation-pause").addEventListener("click", async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try { await sendSimulation(simulationState.clock.running ? "pause" : "resume"); }
+    catch (error) { setMessage(document.querySelector("#simulation-error"), error.message, "error"); }
+    finally { button.disabled = false; }
+  });
+  document.querySelector("#simulation-reset-open").addEventListener("click", () => confirmSimulation("reset", t("Återställ vid aktuell tid"),
+    t("Simuleringen pausas och får ett nytt läge enligt tidtabellen vid klockans aktuella tid när du bekräftar. Gamla störningar och förfrågningar ersätts. Stationstilldelningarna behålls. Vanlig drift påverkas inte.")));
+  document.querySelector("#simulation-finish-open").addEventListener("click", () => confirmSimulation("finish", t("Avsluta simulering"),
+    t("Alla klienter återgår till vanlig drift. Dess tidigare trafikläge och klocka finns kvar. Simuleringens data sparas separat.")));
+  for (const id of ["simulation-start-form", "simulation-confirm-form"]) {
+    document.getElementById(id).addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.target;
+      if (!beginModalAction(form)) return;
+      try {
+        if (id === "simulation-start-form") await sendSimulation("start", {
+          time: document.querySelector("#simulation-time").value, speed: Number(document.querySelector("#simulation-speed").value),
+          profile: document.querySelector("#simulation-profile").value, seed: document.querySelector("#simulation-seed").value,
+          stabling_minutes: Number(document.querySelector("#simulation-stabling").value),
+        }, simulationConfirmation.context);
+        else await sendSimulation(simulationConfirmation.action, {confirmed: true, station_id: simulationConfirmation.station_id, device_id: simulationConfirmation.device_id}, simulationConfirmation.context);
+        finishModal(form, t("Simuleringen uppdaterades."));
+      } catch (error) { setMessage(form.querySelector(".form-message"), error.message, "error"); }
+      finally { endModalAction(form); }
+    });
+  }
+  setInterval(refreshSimulation, 2000);
+}
+
 function createWebClientID() {
   const browserCrypto = globalThis.crypto;
   if (typeof browserCrypto?.randomUUID === "function") {
@@ -378,6 +512,7 @@ setupFinishForm.addEventListener("submit", async (event) => {
 const SETTINGS_SECTIONS = ["language", "meet", "identity", "access", "users", "devices", "software", "cloud", "system"];
 const WORKSPACE_PANELS = {
   kor: "#overview-view", installningar: "#admin-view",
+  simulation: "#simulation-view",
   skarmar: "#displays-view", tmbox: "#tmbox-v2-view",
 };
 const MODES = ["workspaces", ...Object.keys(WORKSPACE_PANELS)];
@@ -522,6 +657,7 @@ function setMode(mode) {
   } else if (next === "tmbox") {
     startTMBoxV2();
   } else if (next === "installningar") showSettings();
+  else if (next === "simulation") refreshSimulation();
   else if (next === "kor" && state.serverContext?.operating_region === "eu") renderOverview(state.overviewSnapshot);
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -544,6 +680,7 @@ function applyWorkspaceRoute() {
   appView.classList.remove("hidden");
   document.querySelector("#application-menu").open = false;
   if (route === "settings") setMode("installningar");
+  else if (route === "simulation") setMode("simulation");
   else if (route === "screens") setMode("skarmar");
   else if (route === "tmbox") {
     if (!availableWorkspaces().includes("tmbox")) { setMode("workspaces"); return; }
@@ -697,6 +834,7 @@ function bindAdminModals() {
   document.querySelectorAll("[data-open-modal]").forEach((button) => button.addEventListener("click", () => openModal(button.dataset.openModal, button)));
 }
 bindAdminModals();
+bindSimulationUI();
 document.querySelector("#overview-clock-start").addEventListener("click", () => controlLocalClock({ action: "start" }));
 document.querySelector("#overview-clock-stop").addEventListener("click", () => controlLocalClock({ action: "stop" }));
 

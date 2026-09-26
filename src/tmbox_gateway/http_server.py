@@ -283,6 +283,7 @@ class TrainMeetHTTPApplication:
         self.on_clock_changed = None
         self.on_terminal_tick = None
         self._terminal16 = None
+        self.simulation = None
         from .terminal16_public import SessionStore
         self.lab_sessions = SessionStore()
         self.external_clock = ExternalClock()
@@ -328,6 +329,8 @@ class TrainMeetHTTPApplication:
                     self.operations_store.ensure_publication(active)
                 from .shared_traffic import SharedPanelTraffic
                 SharedPanelTraffic(self.engine, self.station_service)
+                from .simulation import TrafficSimulation
+                self.simulation = TrafficSimulation(self.station_service)
 
     def _eu_runtime_guard(self):
         if not self.lifecycle:
@@ -338,6 +341,51 @@ class TrainMeetHTTPApplication:
             return "wrong_session"
         return None
 
+    def _no_simulation(self):
+        if self.simulation and self.simulation.active:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "simulation_active", "Avsluta simuleringen först. Vanlig drift och config är skyddade.")
+
+    @runtime_view
+    def simulation_status(self, client):
+        self._require_admin(client)
+        return {**(self.simulation.status() if self.simulation else {"active": False}),
+                "meet_generation": (self.lifecycle.selected() or {}).get("generation") if self.lifecycle else None,
+                "active_day": self.runtime_store.active_day() if self.runtime_store else None,
+                "clock": self.clock_status(client),
+                "supported": bool(self.station_service.publication()) if self.simulation else False}
+
+    @runtime_command("eu")
+    def control_simulation(self, client, payload):
+        self._require_admin(client)
+        from .simulation import SimulationError
+        if not self.simulation:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "simulation_unavailable", "Koppla en EU-träff först.")
+        selected = self.lifecycle.selected()
+        if type(payload.get("meet_generation")) is not int or payload["meet_generation"] != selected["generation"]:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_meet_context", "Läs in simuleringen igen.")
+        action = payload.get("action")
+        if action != "start" and (not self.simulation.active or payload.get("run_id") != self.simulation.run["id"]):
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_simulation", "Simuleringen har ändrats. Läs in sidan igen.")
+        try:
+            if action == "start":
+                self.simulation.start(payload)
+            elif action in {"pause", "resume"}:
+                getattr(self.simulation, action)()
+            elif action in {"reset", "finish"} and payload.get("confirmed") is True:
+                getattr(self.simulation, action)()
+            elif action == "automatic" and payload.get("confirmed") is True:
+                self.simulation.hand_back(str(payload.get("station_id") or ""))
+            elif action == "manual" and payload.get("confirmed") is True:
+                self.simulation.take_over(str(payload.get("station_id") or ""), str(payload.get("device_id") or ""))
+            else:
+                raise SimulationError("Ogiltig åtgärd eller bekräftelse saknas.")
+        except (SimulationError, ValueError, TypeError) as error:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "simulation_rejected", str(error)) from error
+        self.notify_clock_changed()
+        if self.on_config_applied:
+            self.on_config_applied()
+        return self.simulation_status(client)
+
     @property
     def terminal16(self):
         if self._terminal16 is None:
@@ -347,11 +395,13 @@ class TrainMeetHTTPApplication:
 
     @runtime_view
     def terminal16_frame(self, client):
+        self.station_service.observe_operator(client.client_id)
         self._require_box_access(client, client.client_id)
         return self.terminal16.frame(client.client_id)
 
     @runtime_view
     def terminal16_command(self, client, payload):
+        self.station_service.observe_operator(client.client_id)
         self._require_box_access(client, client.client_id)
         return self.terminal16.command(client.client_id, payload)
 
@@ -392,6 +442,7 @@ class TrainMeetHTTPApplication:
             "operating_region": region, "available_workspaces": workspaces,
             "cloud_update": self.cloud_config.status() if self.cloud_config and admin else {},
             "config_authority": "cloud", "local_editing": False,
+            "simulation": {"active": bool(self.simulation and self.simulation.active)},
             "transition_pending": bool(self.lifecycle and self.lifecycle.transition()),
             "error": self.lifecycle_error or None,
         }
@@ -955,6 +1006,7 @@ class TrainMeetHTTPApplication:
 
     def tmbox_v2_snapshot(self, client: PairedClient, station_id: str) -> dict[str, Any]:
         self._require_station_access(client, station_id)
+        self.station_service.observe_operator(client.client_id)
         payload = self.station_service.snapshot_payload(station_id)
         if payload is None:
             raise HTTPAPIError(
@@ -1263,6 +1315,8 @@ class TrainMeetHTTPApplication:
             snapshot["active_day"],
             station_id,
         )
+        if state["shift"]:
+            self.station_service.observe_operator(client.client_id, station_id)
         return {
             "protocol_version": 1,
             "publication_id": snapshot["publication_id"],
@@ -1271,6 +1325,7 @@ class TrainMeetHTTPApplication:
             "active_day": snapshot["active_day"],
             "station": station,
             "terminal": {"client_id": client.client_id, "display_name": client.display_name, "kind": client.kind.value},
+            "simulation": bool(self.simulation and self.simulation.active),
             "preflight": {
                 "server_online": True,
                 "clock_configured": bool(snapshot["clock"].get("configured", True)),
@@ -1310,6 +1365,7 @@ class TrainMeetHTTPApplication:
             )
         except ValueError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_shift", str(error)) from error
+        self.station_service.observe_operator(client.client_id, station_id)
         return {"shift": shift}
 
     @runtime_command("eu")
@@ -1625,6 +1681,7 @@ class TrainMeetHTTPApplication:
         # for a different meet or overwrite another administrator's change.
         with self.engine._lock:
             self._require_admin(client)
+            self._no_simulation()
             if not self.runtime_store or not self.lifecycle:
                 raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "clock_unavailable", "Koppla en träff först.")
             selected = self.lifecycle.selected()
@@ -1646,6 +1703,7 @@ class TrainMeetHTTPApplication:
             if (self.lifecycle.selected() != selected or self.lifecycle.transition()
                     or self.runtime_store.clock_source_settings(scope) != previous):
                 raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_meet_context", "Träffen eller klockinställningen har ändrats. Läs in sidan igen.")
+            self._no_simulation()
             old_clock = self.external_clock.status()
             self.runtime_store.save_clock_source_settings(scope, settings)
             self.external_clock.configure(scope, settings, sample)
@@ -1682,7 +1740,8 @@ class TrainMeetHTTPApplication:
         settings = self.runtime_store.clock_display_settings(self._clock_scope()) if self.runtime_store else {}
         styles = clock.get("available_styles") or list(AVAILABLE_CLOCK_STYLES)
         style = settings.get("style", styles[0])
-        return {**clock, "available_styles": styles, "style": style if style in styles else styles[0],
+        return {**clock, "simulation": bool(self.simulation and self.simulation.active),
+                "available_styles": styles, "style": style if style in styles else styles[0],
                 "show_seconds": settings.get("show_seconds", clock.get("show_seconds", True))}
 
     def clock_status(self, client: PairedClient) -> dict[str, Any]:
@@ -1695,6 +1754,26 @@ class TrainMeetHTTPApplication:
     @runtime_command()
     def control_clock(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
+        if self.simulation and self.simulation.active and payload.get("action") != "appearance":
+            if payload.get("time") is not None:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "simulation_clock", "Pausa och återställ simuleringen i stället för att hoppa i tiden.")
+            action = payload.get("action")
+            if action == "start":
+                self.simulation.resume()
+            elif action == "stop":
+                self.simulation.pause()
+            elif action in {"speed", "set"}:
+                try:
+                    speed = float(payload["speed"])
+                    if not 0 < speed <= 60:
+                        raise ValueError()
+                    self.operations_store.configure_clock(speed=speed)
+                except (KeyError, TypeError, ValueError) as error:
+                    raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock", "Välj en hastighet mellan 0 och 60.") from error
+            else:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_action", "Okänt klockkommando")
+            self.notify_clock_changed()
+            return self.clock_status(client)
         if payload.get("action") == "appearance":
             if self.runtime_store is None:
                 raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "clock_unavailable", "Klockinställningarna kan inte sparas")
@@ -1789,6 +1868,7 @@ class TrainMeetHTTPApplication:
         }
 
     def reset_operational_data(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._no_simulation()
         self._require_admin(client)
         if not self.config.allow_restart:
             raise HTTPAPIError(
@@ -1819,6 +1899,7 @@ class TrainMeetHTTPApplication:
         local_access: bool,
     ) -> dict[str, Any]:
         self._require_admin(client)
+        self._no_simulation()
         if not local_access:
             raise HTTPAPIError(
                 HTTPStatus.FORBIDDEN,
@@ -1881,6 +1962,7 @@ class TrainMeetHTTPApplication:
         """
 
         self._require_owner(client)
+        self._no_simulation()
         if not self.config.allow_restart:
             raise HTTPAPIError(
                 HTTPStatus.SERVICE_UNAVAILABLE,
@@ -2720,6 +2802,7 @@ class TrainMeetHTTPApplication:
 
     @runtime_command("eu")
     def set_active_day(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._no_simulation()
         """Change the operating day, never the published Cloud configuration."""
         self._require_admin(client)
         if self.runtime_store is None or self.runtime_store.active() is None:
@@ -2992,6 +3075,7 @@ class TrainMeetHTTPApplication:
             "/index.html": "index.html",
             "/assets/app.css": "app.css",
             "/assets/app.js": "app.js",
+            "/assets/simulation-banner.js": "simulation-banner.js",
             "/assets/i18n.js": "i18n.js",
             "/assets/i18n-messages.js": "i18n-messages.js",
             "/assets/shell-messages.js": "shell-messages.js",
@@ -3074,6 +3158,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/clock":
                 self._send_json(HTTPStatus.OK, self.server.application.clock_status(self._authenticated_client()))
+                return
+            if path == "/v1/simulation":
+                self._send_json(HTTPStatus.OK, self.server.application.simulation_status(self._authenticated_client()))
                 return
             if path == "/v1/clock/source":
                 self._send_json(HTTPStatus.OK, self.server.application.clock_source_settings(self._authenticated_client()))
@@ -3480,6 +3567,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/tmbox/terminal":
                 self._send_json(HTTPStatus.OK, self.server.application.terminal16_command(self._authenticated_client(), payload))
+                return
+            if path == "/v1/simulation":
+                self._send_json(HTTPStatus.OK, self.server.application.control_simulation(self._authenticated_client(), payload))
                 return
             if path == "/v1/tkl/shift/start":
                 client = self._authenticated_client()
