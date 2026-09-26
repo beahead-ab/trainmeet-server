@@ -57,7 +57,7 @@ class SimulationTests(unittest.TestCase):
         self.temp.cleanup()
 
     def start(self, **options):
-        return self.sim.start({"profile": "timetable", "time": "09:17", "speed": 1, **options})
+        return self.sim.start({"confirmed": True, "profile": "timetable", "time": "09:17", "speed": 1, **options})
 
     def advance(self, value):
         # Deterministic game-clock ticks, never wall-clock sleeps.
@@ -177,12 +177,92 @@ class SimulationTests(unittest.TestCase):
         self.advance(9 * 3600 + 20 * 60 + delay)
         self.assertTrue(self.sim.run["departed"])
 
-    def test_active_clock_and_live_traffic_block_start(self):
+    def test_takeover_preserves_open_clearance_and_running_normal_clock_is_paused(self):
         self.ops.start_clock()
-        with self.assertRaises(SimulationError): self.start()
-        self.ops.stop_clock()
         self.service.execute_station_command("test", "station-a", "clearance.request", {"movement_id": "movement-101-a", "connection_id": "connection-a-b"})
-        with self.assertRaises(SimulationError): self.start()
+        cases = self.service.open_cases(None)
+        self.assertTrue(cases)
+        before = self.ops.clock_status()["elapsed_seconds"]
+        self.start()
+        self.assertFalse(self.service.open_cases(None))
+        paused = self.sim.normal_connection.execute("SELECT base_seconds, running FROM runtime_clock").fetchone()
+        self.assertGreaterEqual(paused[0], before)
+        self.assertFalse(paused[1])
+        self.sim.finish()
+        self.assertEqual(self.service.open_cases(None), cases)
+        self.assertFalse(self.ops.clock_status()["running"])
+        self.assertEqual(self.ops.clock_status()["elapsed_seconds"], paused[0])
+
+    def test_takeover_preserves_train_on_line_and_station_assignment_after_restart(self):
+        box = self.register()
+        client = self.ids.client(box)
+        self.ops.record_traffic_position("777", status="connection", connection_id="connection-a-b")
+        before = self.ops.positions()
+        self.ops.start_clock()
+        self.start()
+        self.sim.close()
+        self.sim = TrafficSimulation(self.service)
+        self.app.simulation = self.sim
+        self.sim.finish()
+        self.assertEqual(self.ops.positions(), before)
+        self.assertFalse(self.ops.clock_status()["running"])
+        self.assertEqual(self.ids.client(box), client)
+        self.assertEqual(self.ids.station_for_client(box), "station-b")
+
+    def test_existing_connected_operator_controls_station_before_first_tick(self):
+        box = self.register()
+        self.sim.observe(box)
+        old_frame = self.app.terminal16.frame(box)
+        self.start()
+        self.assertEqual(self.sim._mode("station-b"), "manual")
+        self.advance(9 * 3600 + 20 * 60)
+        self.assertEqual(self.service.open_cases(None)[0]["status"], "waiting")
+        answer = self.app.terminal16.command(box, {"command_id": uuid4().hex, "key": "#", "view_token": old_frame["view_token"]})
+        self.assertEqual(answer["status"], "rejected")
+        self.assertNotEqual(self.app.terminal16.frame(box)["view_token"], old_frame["view_token"])
+
+    def test_stale_or_revoked_presence_is_not_carried_into_simulation(self):
+        stale = self.register("stale", "station-a")
+        self.sim.observe(stale)
+        self.time += 46
+        revoked = self.register("revoked")
+        self.sim.observe(revoked)
+        self.ids.assign_discovered_device(revoked, station_id="station-a")
+        self.start()
+        self.assertFalse(self.sim.run["stations"])
+
+    def test_invalid_candidate_does_not_pause_or_replace_normal_game(self):
+        from unittest.mock import patch
+        self.ops.start_clock()
+        self.ops.record_traffic_position("777", status="station", station_id="station-a")
+        before = self.ops.positions()
+        with patch.object(self.sim, "_seed", side_effect=SimulationError("Ogiltig tidtabell")):
+            with self.assertRaisesRegex(SimulationError, "tidtabell"):
+                self.start()
+        self.assertFalse(self.sim.active)
+        self.assertIs(self.ops._connection, self.sim.normal_connection)
+        self.assertTrue(self.ops.clock_status()["running"])
+        self.assertEqual(self.ops.positions(), before)
+        self.assertFalse(self.sim.control.execute("SELECT * FROM selection").fetchall())
+
+    def test_selection_failure_returns_to_normal_game_paused(self):
+        import sqlite3
+        self.ops.start_clock()
+        self.ops.record_traffic_position("777", status="station", station_id="station-a")
+        before = self.ops.positions()
+        self.sim.control.execute("CREATE TRIGGER reject_selection BEFORE INSERT ON selection BEGIN SELECT RAISE(FAIL, 'test failure'); END")
+        with self.assertRaises(sqlite3.IntegrityError): self.start()
+        self.assertFalse(self.sim.active)
+        self.assertIs(self.ops._connection, self.sim.normal_connection)
+        self.assertFalse(self.ops.clock_status()["running"])
+        self.assertEqual(self.ops.positions(), before)
+
+    def test_external_running_or_unavailable_clock_blocks_takeover_explicitly(self):
+        for clock in ({"running": True}, {"running": False, "available": False}):
+            self.sim.normal_external_source = lambda: clock
+            with self.assertRaisesRegex(SimulationError, "externa träffklockan"):
+                self.start()
+            self.assertFalse(self.sim.active)
 
     def test_recovery_is_paused_and_keeps_inflight_train(self):
         self.start(time="09:25")
@@ -197,7 +277,11 @@ class SimulationTests(unittest.TestCase):
     def test_http_control_requires_admin_generation_and_confirmation(self):
         self.register()
         with self.assertRaises(HTTPAPIError): self.app.simulation_status(self.ids.client("box-b"))
-        self.command("start", time="09:17", profile="timetable")
+        self.ops.start_clock()
+        for confirmed in (None, False, "true", 1):
+            with self.assertRaises(HTTPAPIError): self.command("start", confirmed=confirmed)
+            self.assertTrue(self.ops.clock_status()["running"])
+        self.command("start", confirmed=True, time="09:17", profile="timetable")
         with self.assertRaises(HTTPAPIError): self.command("reset")
         self.command("reset", confirmed=True)
         self.assertFalse(self.ops.clock_status()["running"])
@@ -351,11 +435,12 @@ class SimulationTests(unittest.TestCase):
 
     def test_finish_does_not_restart_external_live_clock(self):
         self.start()
-        self.sim.normal_external_source = lambda: {"running": True}
-        with self.assertRaisesRegex(SimulationError, "externa"):
-            self.sim.finish()
-        self.assertTrue(self.sim.active)
-        self.assertFalse(self.ops.clock_status()["running"])
+        for clock in ({"running": True}, {"running": False, "available": False}):
+            self.sim.normal_external_source = lambda: clock
+            with self.assertRaisesRegex(SimulationError, "externa"):
+                self.sim.finish()
+            self.assertTrue(self.sim.active)
+            self.assertFalse(self.ops.clock_status()["running"])
         self.sim.normal_external_source = None
 
     def test_new_run_releases_previous_suppression(self):

@@ -228,10 +228,11 @@
                 <label>Undanställning vid slutstation (spelminuter)<input id="simulation-stabling" type="number" min="1" max="60" value="5" required></label>
               </div>
               <p>Speltiden styr restider och stationsarbete. Tidigare tåg placeras enligt tidtabellen; tåg på linjen får sin återstående restid. Den externa träffklockan styrs inte.</p>
-              <p>Alla tilldelade TMBoxar och TKL-terminaler på denna server arbetar mot simuleringen tills den avslutas. Kör inte samtidigt mot en fysisk bana med verkliga tågrörelser.</p>
+              <p>Simuleringen tar över servern och alla anslutna TMBoxar och TKL-terminaler. Det vanliga spelet pausas och dess tåg och klareringar sparas separat. Enheterna behåller sina anslutningar och stationstilldelningar. När simuleringen avslutas återgår du till det sparade spelet, fortfarande pausat.</p>
+              <p>Stoppa eventuella fysiska tåg innan du fortsätter. En extern träffklocka måste vara stoppad; simulatorn styr den inte.</p>
               <p>På automatiska slutstationer rangeras ankomna tåg till simulerad uppställning utanför trafikspåren efter den valda tiden. På bemannade stationer styr operatören.</p>
               <p class="form-message" role="alert"></p>
-              <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Starta</button></div>
+              <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Pausa spelet och starta simulering</button></div>
             </form>
           </dialog>
           <dialog id="simulation-confirm-modal" class="admin-modal" aria-labelledby="simulation-confirm-title">

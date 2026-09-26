@@ -15,7 +15,7 @@ function renderSimulation(data) {
   const clock = data.clock || {};
   document.querySelector("#simulation-summary").textContent = data.active
     ? `${clock.running ? t("Går") : t("Pausad")} · ${clock.time} · ${clock.speed}× · ${t("Trafikdag")} ${data.day} · ${t("Scenario")} ${data.seed}${data.notice ? " · " + data.notice : ""}`
-    : t(data.supported ? "Ingen simulering är aktiv. Stoppa vanlig trafik innan du börjar." : "Koppla en EU-träff från Cloud för att simulera stationsarbetet.");
+    : t(data.supported ? "Ingen simulering är aktiv. När du startar pausas det vanliga spelet och dess trafikläge sparas." : "Koppla en EU-träff från Cloud för att simulera stationsarbetet.");
   document.querySelector("#simulation-start-open").hidden = data.active;
   document.querySelector("#simulation-start-open").disabled = !data.supported;
   for (const id of ["simulation-pause", "simulation-reset-open", "simulation-finish-open", "simulation-stations-card", "simulation-trains-card"]) document.getElementById(id).hidden = !data.active;
@@ -113,7 +113,7 @@ function bindSimulationUI() {
   document.querySelector("#simulation-reset-open").addEventListener("click", () => confirmSimulation("reset", t("Återställ vid aktuell tid"),
     t("Simuleringen pausas och får ett nytt läge enligt tidtabellen vid klockans aktuella tid när du bekräftar. Gamla störningar och förfrågningar ersätts. Stationstilldelningarna behålls. Vanlig drift påverkas inte.")));
   document.querySelector("#simulation-finish-open").addEventListener("click", () => confirmSimulation("finish", t("Avsluta simulering"),
-    t("Alla klienter återgår till vanlig drift. Dess tidigare trafikläge och klocka finns kvar. Simuleringens data sparas separat.")));
+    t("Alla klienter återgår till det sparade vanliga spelet med pausad klocka. Anslutningar och stationstilldelningar behålls. Simuleringens data sparas separat.")));
   for (const id of ["simulation-start-form", "simulation-confirm-form"]) {
     document.getElementById(id).addEventListener("submit", async event => {
       event.preventDefault();
@@ -121,6 +121,7 @@ function bindSimulationUI() {
       if (!beginModalAction(form)) return;
       try {
         if (id === "simulation-start-form") await sendSimulation("start", {
+          confirmed: true,
           time: document.querySelector("#simulation-time").value, speed: Number(document.querySelector("#simulation-speed").value),
           profile: document.querySelector("#simulation-profile").value, seed: document.querySelector("#simulation-seed").value,
           stabling_minutes: Number(document.querySelector("#simulation-stabling").value),
