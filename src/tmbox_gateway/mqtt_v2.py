@@ -96,8 +96,10 @@ class TMBoxV2Gateway:
 
         if leaf == "hello":
             self.handle_hello(device_id, body)
+            if not retained:
+                self.service.observe_operator(device_id)
         elif leaf == "presence":
-            self.handle_presence(device_id, body)
+            self.handle_presence(device_id, body, retained=retained)
         elif leaf == "command":
             self.handle_command(device_id, body)
         elif leaf == "preferences/set":
@@ -134,9 +136,11 @@ class TMBoxV2Gateway:
         )
         self.publish_device_state(device_id)
 
-    def handle_presence(self, device_id: str, body: dict[str, Any]) -> None:
+    def handle_presence(self, device_id: str, body: dict[str, Any], *, retained: bool = False) -> None:
         if str(body.get("status") or "online") != "online":
             return
+        if not retained:
+            self.service.observe_operator(device_id)
         # Retained topics already hold a complete state, but republishing on
         # presence costs nothing and closes the window where a box connected
         # before its station was assigned.

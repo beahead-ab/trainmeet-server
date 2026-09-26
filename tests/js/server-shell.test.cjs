@@ -208,7 +208,9 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     const userTable = await page.locator('#users-table').boundingBox();
     assert.ok(addUser.y + addUser.height <= userTable.y, 'Add user is above, not stuck against the bottom row');
     const modalIds = await page.locator('dialog.admin-modal').evaluateAll(nodes => nodes.map(node => node.id));
-    assert.equal(modalIds.length, 16);
+    assert.equal(modalIds.length, 18);
+    assert.ok(modalIds.includes('simulation-start-modal'));
+    assert.ok(modalIds.includes('simulation-confirm-modal'));
     assert.ok(modalIds.includes('tmbox-language-modal'));
     assert.ok(modalIds.includes('device-language-modal'));
     for (const width of [1200, 360]) {

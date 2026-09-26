@@ -97,12 +97,15 @@ class TMBoxStationService:
         self._cached_publication_id: str | None = None
         self._cached_session_config: SessionConfig | None = None
         self.lifecycle = None
+        self.simulation = None
         self._listeners: list[Callable[[], None]] = []
 
     def subscribe(self, listener: Callable[[], None]) -> None:
         self._listeners.append(listener)
 
     def notify_changed(self) -> None:
+        if self.simulation and self.simulation._initializing:
+            return  # Do not expose a candidate run before its generation fence.
         for listener in self._listeners:
             try:
                 listener()
@@ -203,6 +206,22 @@ class TMBoxStationService:
     def runtime_scope(self) -> dict[str, Any]:
         selected = self.lifecycle.selected() if self.lifecycle else None
         return {"meet_generation": selected["generation"], "publication_id": selected["publication_id"]} if selected else {}
+
+    def observe_operator(self, device_id, station_id=None):
+        if self.simulation:
+            self.simulation.observe(device_id, station_id)
+
+    def track_conflict(self, publication, day, station_id, movement_id, track_id):
+        states = self.operations_store.tkl_station_state(publication.publication_id, day, station_id)["movements"]
+        rows = publication.payload["trains"]
+        if self.simulation and self.simulation.active:
+            # A simulation represents actual occupation, not every future row
+            # sharing a planned track. Stabled terminal trains are off the line.
+            released = {self.simulation.legs[k]["to_movement_id"] for k in self.simulation.run.get("stabled", {})}
+            rows = [r for r in rows if r["id"] not in released and (
+                states.get(r["id"], {}).get("arrival") == "arrived" or
+                states.get(r["id"], {}).get("departure") in {"positioned", "ready"})]
+        return find_track_conflict(rows, states, station_id, day, movement_id, track_id)
 
     # -------------------------------------------------------------- payloads
 
@@ -527,6 +546,9 @@ class TMBoxStationService:
             raise CommandRejected("no_active_configuration")
         active_day = self.runtime_store.active_day() or publication.active_day
 
+        if self.simulation:
+            self.simulation.guard(device_id, station_id, action, payload.get("payload") or {})
+
         if action in CONFIG_ACTIONS:
             self._check_revision(payload, "config", station_id, self.config_version())
             return {"revision": {"scope": "config", "key": station_id, "value": self.config_version()}}
@@ -606,9 +628,7 @@ class TMBoxStationService:
                 raise CommandRejected("unknown_track") from error
             if track is None:
                 raise CommandRejected("unknown_track")
-            if find_track_conflict(publication.payload["trains"],
-                    self.operations_store.tkl_station_state(publication.publication_id, active_day, station_id)["movements"],
-                    station_id, active_day, movement_id, track) is not None:
+            if self.track_conflict(publication, active_day, station_id, movement_id, track) is not None:
                 raise CommandRejected("track_occupied")
 
         if action == CREW_ACTION:
@@ -622,16 +642,7 @@ class TMBoxStationService:
                 raise CommandRejected("unknown_track") from error
             if track is None:
                 raise CommandRejected("unknown_track")
-            conflict = find_track_conflict(
-                publication.payload["trains"],
-                self.operations_store.tkl_station_state(
-                    publication.publication_id, active_day, station_id
-                )["movements"],
-                station_id,
-                active_day,
-                movement_id,
-                track,
-            )
+            conflict = self.track_conflict(publication, active_day, station_id, movement_id, track)
             if conflict is not None:
                 raise CommandRejected("track_occupied", f"Spåret är upptaget av tåg {conflict.get('train_number') or '?'}")
         else:
@@ -681,6 +692,8 @@ class TMBoxStationService:
                 connection_id=case["connection_id"], from_station_id=station_id,
                 to_station_id=case["to_station_id"],
             )
+        if self.simulation:
+            self.simulation.record_action(action, movement_id)
         return {
             "revision": {
                 "scope": "movement",
@@ -932,7 +945,7 @@ class TMBoxStationService:
         active_day: str,
         clock: dict[str, Any],
     ) -> None:
-        if not bool(clock.get("running")):
+        if (self.simulation and self.simulation.active) or not bool(clock.get("running")):
             # A stopped meeting clock means the meet is paused. Nothing should
             # lapse while nobody is running trains.
             return

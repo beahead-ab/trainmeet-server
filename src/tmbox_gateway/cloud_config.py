@@ -192,6 +192,8 @@ class CloudConfiguration:
             self.state, self.message = "current", "Den valda configen används redan."
             return {"pending": False, "publication_id": publication_id, "operating_region": region}
         blockers = self._engine_blockers() if not previous or previous["region"] == "eu" else []
+        if getattr(app, "simulation", None) and app.simulation.active:
+            blockers.append("Avsluta simuleringen innan ny config eller annan träff aktiveras.")
         old_publication = self.store.active()
         us_session = app.us_store.context("config", True)["session"] if app.us_store else None
         if switching and us_session and us_session["status"] != "closed":

@@ -14,6 +14,7 @@
     <script src="/assets/i18n.js" defer></script>
     <script src="/assets/shell-messages.js" defer></script>
     <script src="/assets/i18n-init.js" defer></script>
+    <script src="/assets/simulation-banner.js" defer></script>
   </head>
   <body>
     <main class="page-shell">
@@ -32,6 +33,7 @@
             <summary aria-label="Öppna menyn">☰</summary>
             <nav aria-label="Servermeny">
               <a href="#settings" id="open-settings">Inställningar</a>
+              <a href="#simulation" id="open-simulation">Simulering</a>
               <a href="#screens">Skärmar</a>
               <a href="#workspaces">Byt arbetsyta</a>
               <button id="logout" type="button">Logga ut</button>
@@ -190,6 +192,55 @@
         <div class="server-admin-shell">
 
           <div class="server-workspace">
+
+        <section id="simulation-view" class="view-panel hidden" aria-labelledby="simulation-title">
+          <article class="card section-card">
+            <p class="eyebrow">TRAFIKSPEL</p>
+            <h2 id="simulation-title">Simulering</h2>
+            <p>Öva på den valda träffens tidtabell. Servern sköter obemannade stationer; anslutna, tilldelade operatörer tar över sin station. Vanlig driftdata hålls separat.</p>
+            <p id="simulation-summary" role="status">Läser simuleringen …</p>
+            <div class="simulation-actions">
+              <button id="simulation-start-open" type="button" class="primary">Starta simulering</button>
+              <button id="simulation-pause" type="button" class="secondary" hidden>Pausa</button>
+              <button id="simulation-reset-open" type="button" class="secondary" hidden>Återställ vid aktuell tid</button>
+              <button id="simulation-finish-open" type="button" class="secondary" hidden>Avsluta simulering</button>
+            </div>
+            <p id="simulation-error" class="form-message" role="alert"></p>
+          </article>
+          <article id="simulation-stations-card" class="card section-card" hidden>
+            <h3>Stationsbemanning</h3>
+            <p>En tilldelad klient tar över automatiskt när den ansluter. Tappad kontakt lämnar stationen väntande – automatiken tar inte över utan ditt beslut.</p>
+            <div id="simulation-stations" class="simulation-stations"></div>
+          </article>
+          <article id="simulation-trains-card" class="card section-card" hidden>
+            <h3>Tåg och väntelägen</h3>
+            <div class="simulation-table-scroll"><table class="simulation-table"><thead><tr><th>Tåg</th><th>Från → till</th><th>Läge</th><th>Orsak / stationsarbete</th></tr></thead><tbody id="simulation-trains"></tbody></table></div>
+          </article>
+          <dialog id="simulation-start-modal" class="admin-modal" aria-labelledby="simulation-start-title">
+            <h2 id="simulation-start-title">Starta simulering</h2>
+            <form id="simulation-start-form">
+              <p id="simulation-day"></p>
+              <div class="simulation-fields">
+                <label>Starttid<input id="simulation-time" type="time" required></label>
+                <label>Klockhastighet<input id="simulation-speed" type="number" min="0.1" max="60" step="0.1" required></label>
+                <label>Störningsnivå<select id="simulation-profile"><option value="timetable">Tidtabellstrogen</option><option value="normal" selected>Normal trafik</option><option value="disrupted">Störd trafik</option></select></label>
+                <label>Scenarionyckel (valfritt)<input id="simulation-seed" maxlength="64" placeholder="Samma nyckel ger samma störningar"></label>
+                <label>Undanställning vid slutstation (spelminuter)<input id="simulation-stabling" type="number" min="1" max="60" value="5" required></label>
+              </div>
+              <p>Speltiden styr restider och stationsarbete. Tidigare tåg placeras enligt tidtabellen; tåg på linjen får sin återstående restid. Den externa träffklockan styrs inte.</p>
+              <p>Alla tilldelade TMBoxar och TKL-terminaler på denna server arbetar mot simuleringen tills den avslutas. Kör inte samtidigt mot en fysisk bana med verkliga tågrörelser.</p>
+              <p>På automatiska slutstationer rangeras ankomna tåg till simulerad uppställning utanför trafikspåren efter den valda tiden. På bemannade stationer styr operatören.</p>
+              <p class="form-message" role="alert"></p>
+              <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Starta</button></div>
+            </form>
+          </dialog>
+          <dialog id="simulation-confirm-modal" class="admin-modal" aria-labelledby="simulation-confirm-title">
+            <h2 id="simulation-confirm-title">Bekräfta</h2>
+            <form id="simulation-confirm-form"><p id="simulation-confirm-description"></p><p class="form-message" role="alert"></p>
+              <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button id="simulation-confirm-submit" type="submit" class="primary">Bekräfta</button></div>
+            </form>
+          </dialog>
+        </section>
 
         <section id="overview-view" class="view-panel meet-overview">
           <article class="card meet-summary-card">

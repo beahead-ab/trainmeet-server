@@ -29,6 +29,36 @@ from runtime_fixture import runtime_package, runtime_package_v3
 
 
 class HTTPServerTests(unittest.TestCase):
+    def test_simulation_http_roundtrip_preserves_normal_data_and_clock(self):
+        self.operations_store.record_traffic_position("777", status="station", station_id="station-a")
+        normal = self._json_request("/v1/clock")
+        state = self._json_request("/v1/simulation")
+        self.assertFalse(state["active"])
+        state = self._json_request("/v1/simulation", {"action": "start", "time": "09:25", "profile": "timetable", "meet_generation": state["meet_generation"]})
+        self.assertTrue(state["active"])
+        self.assertEqual(state["trains"][0]["status"], "in_transit")
+        def act(action, **extra):
+            return self._json_request("/v1/simulation", {"action": action, "run_id": state["run_id"], "meet_generation": state["meet_generation"], **extra})
+        state = act("pause")
+        time_value = state["clock"]["time"]
+        run_id = state["run_id"]
+        state = act("reset", confirmed=True)
+        self.assertNotEqual(state["run_id"], run_id)
+        self.assertEqual(state["clock"]["time"], time_value)
+        self.assertFalse(state["clock"]["running"])
+        self.assertTrue(self._json_request("/v1/display")["clock"]["simulation"])
+        state = act("finish", confirmed=True)
+        self.assertFalse(state["active"])
+        self.assertEqual(self._json_request("/v1/clock"), normal)
+        self.assertEqual(self.operations_store.positions()[0]["train_number"], "777")
+
+    def test_simulation_api_is_not_available_to_public_clients(self):
+        box = self._public_client()
+        self._public_refused("/v1/simulation", status=401)
+        self._public_refused("/v1/simulation", {"action": "start"}, status=401)
+        self._public_refused("/v1/simulation", token=box["access_token"])
+        self._public_refused("/v1/simulation", {"action": "start"}, token=box["access_token"])
+
     def test_clock_source_http_is_admin_only_and_scoped_to_current_meet(self):
         from unittest.mock import MagicMock
         from test_external_clock import provider_status
