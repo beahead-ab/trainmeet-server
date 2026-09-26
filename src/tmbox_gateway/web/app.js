@@ -608,18 +608,26 @@ function endModalAction(element) {
   dialog.dataset.busy = "false";
   dialog.removeAttribute("aria-busy");
 }
-function openModal(id) {
+function openModal(id, trigger = document.activeElement) {
   const dialog = document.getElementById(id);
   if (!dialog || dialog.open || document.querySelector("dialog[open]")) return;
-  modalOrigins.set(dialog, document.activeElement);
+  if (id === "device-form-modal" && trigger?.dataset.openModal === id) {
+    // Manual code entry is only for explicitly restoring a removed client.
+    document.querySelector("#device-code").readOnly = false;
+    document.querySelector("#device-code").value = "";
+    deviceStation.value = "";
+    document.querySelector("#device-form-title").textContent = t("Återanslut borttagen klient");
+    setMessage(deviceMessage, "");
+  }
+  modalOrigins.set(dialog, trigger);
   if (id === "clock-source-modal") dialog.dataset.meetGeneration = String(state.serverContext?.selected_meet?.generation ?? "");
-  modalSections.set(dialog, document.activeElement?.closest("section"));
+  modalSections.set(dialog, trigger?.closest("section"));
   modalValues.set(dialog, [...dialog.querySelectorAll("input, select, textarea")].map((input) => [input, input.value, input.checked]));
   dialog.dataset.dirty = "false";
   dialog.querySelectorAll(".form-message").forEach((message) => setMessage(message, ""));
   document.body.append(dialog);
   dialog.showModal();
-  const initial = dialog.querySelector('input:not([type="hidden"]):not(:disabled), select:not(:disabled), textarea:not(:disabled)')
+  const initial = dialog.querySelector('input:not([type="hidden"]):not(:disabled):not([readonly]), select:not(:disabled), textarea:not(:disabled):not([readonly])')
     || dialog.querySelector('.modal-actions [data-close-modal]');
   initial?.focus({ preventScroll: true });
 }
@@ -686,7 +694,7 @@ function bindAdminModals() {
     });
     dialog.querySelectorAll("[data-close-modal]").forEach((button) => button.addEventListener("click", () => cancelModal(dialog)));
   });
-  document.querySelectorAll("[data-open-modal]").forEach((button) => button.addEventListener("click", () => openModal(button.dataset.openModal)));
+  document.querySelectorAll("[data-open-modal]").forEach((button) => button.addEventListener("click", () => openModal(button.dataset.openModal, button)));
 }
 bindAdminModals();
 document.querySelector("#overview-clock-start").addEventListener("click", () => controlLocalClock({ action: "start" }));
@@ -1601,11 +1609,15 @@ function renderDevices(payload) {
   const list = document.querySelector("#device-list");
   updateStationOptions(payload.stations || []);
   list.replaceChildren();
+  const waiting = payload.devices.filter(device => !device.station_id).length;
+  const waitingMessage = document.querySelector("#device-awaiting");
+  waitingMessage.hidden = !waiting;
+  waitingMessage.textContent = waiting ? `${t("Väntar på station")} · ${waiting}` : "";
   if (!payload.devices.length) {
     list.innerHTML = html`<div class="empty-status">${t("Inga anslutna klienter.")}</div>`;
     return;
   }
-  for (const device of payload.devices) {
+  for (const device of [...payload.devices].sort((a, b) => Number(!!a.station_id) - Number(!!b.station_id))) {
     const row = document.createElement("div");
     row.className = "status-row";
     const identity = document.createElement("div");
@@ -1618,16 +1630,20 @@ function renderDevices(payload) {
     const assignment = document.createElement("span");
     assignment.textContent = station
       ? `${station.code} · ${station.name}`
-      : "Väntar på station";
+      : t("Väntar på station");
     row.append(identity, assignment);
     const edit = document.createElement("button");
     edit.type = "button";
     edit.className = "secondary";
-    edit.dataset.tmText = "Ändra station";
-    edit.textContent = t("Ändra station");
+    const editLabel = device.station_id ? "Ändra station" : "Tilldela station";
+    edit.dataset.tmText = editLabel;
+    edit.textContent = t(editLabel);
     edit.addEventListener("click", () => {
       document.querySelector("#device-code").value = device.device_code;
+      document.querySelector("#device-code").readOnly = true;
       deviceStation.value = device.station_id || "";
+      document.querySelector("#device-form-title").textContent = t(editLabel);
+      setMessage(deviceMessage, "");
       openModal("device-form-modal");
     });
     const remove = document.createElement("button");
@@ -1673,6 +1689,7 @@ function updateStationOptions(stations) {
   deviceStation.dataset.signature = signature;
   const previous = deviceStation.value;
   deviceStation.replaceChildren();
+  deviceStation.append(new Option(t("Välj station"), ""));
   for (const station of stations) {
     const option = document.createElement("option");
     option.value = station.id;

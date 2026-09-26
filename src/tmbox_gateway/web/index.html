@@ -605,10 +605,13 @@
                 <div>
                   <p class="eyebrow"><tm-text data-tm-text="ANSLUTNA KLIENTER">ANSLUTNA KLIENTER</tm-text></p>
                   <h2><tm-text data-tm-text="TMBox och TKL">TMBox och TKL</tm-text></h2>
-                  <p><tm-text data-tm-text="Fysiska och virtuella klienter ansluter själva. Administratören tilldelar station via enhetskoden.">Fysiska och virtuella klienter ansluter själva. Administratören tilldelar station via enhetskoden.</tm-text></p>
+                  <p><tm-text data-tm-text="Starta klienten och välj den i listan. Tilldela station och spara – ingen kod behöver skrivas av.">Starta klienten och välj den i listan. Tilldela station och spara – ingen kod behöver skrivas av.</tm-text></p>
                 </div>
               </div>
-<button type="button" class="secondary modal-launch" data-open-modal="device-form-modal">Tilldela eller ändra station</button>
+<p id="device-awaiting" class="form-message" role="status" hidden></p>
+<details class="device-reconnect"><summary><tm-text data-tm-text="Återanslut borttagen klient">Återanslut borttagen klient</tm-text></summary>
+<button type="button" class="secondary modal-launch" data-open-modal="device-form-modal"><tm-text data-tm-text="Återanslut med enhetskod">Återanslut med enhetskod</tm-text></button>
+</details>
 <dialog id="device-form-modal" class="admin-modal" aria-labelledby="device-form-title"><h2 id="device-form-title">Tilldela eller ändra station</h2>
 <form id="device-form" class="device-form">
                 <label for="device-code"><tm-text data-tm-text="Enhetskod">Enhetskod</tm-text>

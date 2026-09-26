@@ -2,6 +2,11 @@
  * never translation keys. Uses the existing TrainMeet localization runtime. */
 (() => {
   const rows = [
+    ['Tilldela station', 'Assign station', 'Tildel station', 'Tildel stasjon', 'Bahnhof zuweisen'],
+    ['Väntar på station', 'Awaiting station assignment', 'Afventer station', 'Venter på stasjon', 'Wartet auf Bahnhof'],
+    ['Återanslut borttagen klient', 'Reconnect removed client', 'Tilslut fjernet klient igen', 'Koble til fjernet klient igjen', 'Entfernten Client erneut verbinden'],
+    ['Återanslut med enhetskod', 'Reconnect using device code', 'Tilslut igen med enhedskode', 'Koble til igjen med enhetskode', 'Mit Gerätecode erneut verbinden'],
+    ['Starta klienten och välj den i listan. Tilldela station och spara – ingen kod behöver skrivas av.', 'Start the client and select it in the list. Assign a station and save — no code to copy.', 'Start klienten og vælg den på listen. Tildel station og gem — ingen kode skal kopieres.', 'Start klienten og velg den i listen. Tildel stasjon og lagre — ingen kode må kopieres.', 'Client starten und in der Liste auswählen. Bahnhof zuweisen und speichern — kein Code muss übertragen werden.'],
     ['Alla skärmar och TMBoxar hämtar tiden från denna server. Välj intern klocka eller anslut träffens FastClock.', 'All screens and TMBoxes get their time from this server. Use the internal clock or connect the meet’s FastClock.', 'Alle skærme og TMBoxe henter tiden fra denne server. Vælg internt ur eller tilslut træffets FastClock.', 'Alle skjermer og TMBoxer henter tiden fra denne serveren. Velg intern klokke eller koble til treffets FastClock.', 'Alle Anzeigen und TMBoxen erhalten die Zeit von diesem Server. Interne Uhr verwenden oder die FastClock des Treffens verbinden.'],
     ['Anslut träffklocka', 'Connect meet clock', 'Tilslut træfur', 'Koble til treffklokke', 'Treffenuhr verbinden'],
     ['Klockkälla', 'Clock source', 'Urkilde', 'Klokkekilde', 'Uhrquelle'],

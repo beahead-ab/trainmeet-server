@@ -378,6 +378,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.locator('[data-language-picker]').selectOption('de');
     const overflow = await page.evaluate(() => ({ body: document.documentElement.scrollWidth, width: innerWidth }));
     assert.ok(overflow.body <= overflow.width + 1, JSON.stringify(overflow));
+    await page.locator('.device-reconnect > summary').click();
     await page.locator('[data-open-modal="device-form-modal"]').click();
     const rect = await page.locator('#device-form-modal').boundingBox();
     assert.ok(rect.x >= 0 && rect.x + rect.width <= 361, JSON.stringify(rect));

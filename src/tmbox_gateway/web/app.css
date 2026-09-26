@@ -1042,6 +1042,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 /* Connected clients are primary settings content, not tiny status metadata.
    Keep the same readable type for one or many devices; let the page scroll. */
 #device-list { gap: 12px; margin-top: 16px; max-height: none; overflow: visible; }
+.device-reconnect { margin-block: 16px; }
+.device-reconnect > summary { cursor: pointer; }
+.device-reconnect .modal-launch { margin-top: 12px; }
+#device-form input[readonly] { background: var(--paper, #f8f7f4); color: var(--muted); }
 #device-list .status-row { gap: 16px 24px; padding: 16px 20px; font-size: 16px; line-height: 1.5; }
 #device-list .status-row > div:first-child { flex: 1 1 260px; }
 #device-list .status-row b { font-size: 18px; line-height: 1.4; }

@@ -121,12 +121,23 @@ const root = path.resolve(__dirname, '../..');
     }
     for (const [width, station] of [[1280, 'station-a'], [360, 'station-b']]) {
       await page.setViewportSize({ width, height: width === 360 ? 780 : 960 });
-      await page.locator('#device-list .status-row').filter({ hasText: 'TBX-SMOKE' }).getByRole('button', { name: 'Ändra station', exact: true }).click();
+      const firstAssignment = width === 1280;
+      if (firstAssignment) assert.match(await page.locator('#device-awaiting').innerText(), /Väntar på station · 1/);
+      await page.locator('#device-list .status-row').filter({ hasText: 'TBX-SMOKE' }).getByRole('button', { name: firstAssignment ? 'Tilldela station' : 'Ändra station', exact: true }).click();
+      assert.equal(await page.locator('#device-code').getAttribute('readonly'), '');
+      assert.equal(await page.locator('#device-code').inputValue(), 'TBX-SMOKE');
+      assert.equal(await page.locator('#device-station').evaluate(node => document.activeElement === node), true,
+        'Station picker receives focus; the prefilled device code needs no interaction');
+      if (firstAssignment) {
+        assert.equal(await page.locator('#device-station').inputValue(), '');
+        assert.equal(await page.locator('#device-station').evaluate(node => node.checkValidity()), false);
+      }
       await page.locator('#device-station').selectOption(station);
       await checkDeviceDialog();
       await screenshot('device-edit-' + width);
       await page.locator('#device-form button[type="submit"]').click();
       await page.locator('#device-form-modal').waitFor({ state: 'hidden' });
+      assert.equal(await page.locator('#device-awaiting').isVisible(), false);
       assert.equal((await (await page.request.get(urls.eu + '/v1/devices')).json()).devices[0].station_id, station);
       await page.reload();
       await page.locator('#device-list .status-row').filter({ hasText: 'TBX-SMOKE' }).getByRole('button', { name: 'Ändra station', exact: true }).click();
@@ -134,7 +145,9 @@ const root = path.resolve(__dirname, '../..');
       await page.locator('#device-form [data-close-modal]').click();
     }
     await page.setViewportSize({ width: 1280, height: 960 });
-    await page.locator('#device-list .status-row').filter({ hasText: 'TBX-SMOKE' }).getByRole('button', { name: 'Ändra station', exact: true }).click();
+    await page.locator('.device-reconnect > summary').click();
+    await page.locator('[data-open-modal="device-form-modal"]').click();
+    assert.equal(await page.locator('#device-code').getAttribute('readonly'), null);
     await page.locator('#device-code').fill('TBX-UNKNOWN');
     await page.locator('#device-station').selectOption('station-a');
     await page.locator('#device-form button[type="submit"]').click();
@@ -158,6 +171,7 @@ const root = path.resolve(__dirname, '../..');
     assert.equal((await (await page.request.get(urls.eu + '/v1/devices')).json()).devices.length, 0);
     await page.reload();
     await page.locator('#device-list .empty-status').waitFor();
+    await page.locator('.device-reconnect > summary').click();
     const trafficAfterRemoval = await (await page.request.get(urls.eu + '/v1/display')).json();
     for (const key of ['stations', 'connections', 'routes', 'train_positions', 'connection_states']) {
       assert.deepEqual(trafficAfterRemoval[key], trafficBeforeRemoval[key], key + ' unchanged');
