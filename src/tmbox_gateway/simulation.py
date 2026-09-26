@@ -172,13 +172,17 @@ class TrafficSimulation:
         with self.store.command_lock:
             if self.active:
                 raise SimulationError("En simulering finns redan. Pausa eller återställ den.")
+            if options.get("confirmed") is not True:
+                raise SimulationError("Bekräfta att det vanliga spelet pausas och att simuleringen tar över alla anslutna klienter.")
             publication = self.service.publication()
             if publication is None:
                 raise SimulationError("Välj en EU-träff från Cloud först.")
-            if self.store.clock_status().get("running") or self.service.open_cases(None):
-                raise SimulationError("Stoppa vanlig drift och avsluta pågående klareringar först.")
-            if any(p.get("status") == "connection" for p in self.store.positions()):
-                raise SimulationError("Tåg finns på linjen i vanlig drift.")
+            external = self.normal_external_source() if self.normal_external_source else None
+            if external is not None:
+                if external.get("available") is False:
+                    raise SimulationError("Den externa träffklockan kan inte läsas. Kontrollera anslutningen och stoppa den före simulering.")
+                if external.get("running"):
+                    raise SimulationError("Stoppa den externa träffklockan först. Simulatorn kan inte pausa den åt dig.")
             day = self.service.runtime_store.active_day() or publication.active_day
             if options.get("day", day) != day:
                 raise SimulationError("Simuleringen använder träffens valda trafikdag.")
@@ -195,12 +199,20 @@ class TrafficSimulation:
             stabling = float(options.get("stabling_minutes", 5))
             if not math.isfinite(stabling) or not 1 <= stabling <= 60:
                 raise SimulationError("Undanställning ska ta mellan 1 och 60 spelminuter.")
-            self._new_run(publication, day, seconds, speed, profile, seed, stabling_seconds=stabling * 60)
-            self.store.configure_clock(running=True)
-            self._save()
+            # Preserve live operator ownership before the first automatic tick;
+            # no reconnect, re-enrollment or new station assignment is needed.
+            stations = {}
+            for device, (station, seen) in self.seen.items():
+                client = self.service.identities.client(device)
+                authorized = client and (client.kind.value in {"web_admin", "swift_admin"}
+                    or self.service.identities.station_for_client(device) == station)
+                if authorized and self.now() - seen <= PRESENCE_SECONDS and station in publication.session_config().stations:
+                    stations.setdefault(station, device)
+            self._new_run(publication, day, seconds, speed, profile, seed, stations,
+                          stabling_seconds=stabling * 60, takeover=True)
             return self.status()
 
-    def _new_run(self, publication, day, seconds, speed, profile, seed, stations=None, stabling_seconds=300):
+    def _new_run(self, publication, day, seconds, speed, profile, seed, stations=None, stabling_seconds=300, *, takeover=False):
         legs = build_plan(publication, day)
         run_id = uuid4().hex
         candidate = SQLiteOperationsStore(self._path(run_id))
@@ -224,7 +236,22 @@ class TrafficSimulation:
                 self._seed(seconds)
                 self.run["baseline_departed"] = dict(self.run["departed"])
                 self.run["baseline_arrived"] = dict(self.run["arrived"])
+                if takeover:
+                    self.store.configure_clock(running=True)
                 self._save()
+            if takeover:
+                # Only pause normal operation after the candidate is valid.
+                # A later failure leaves it safely paused, never clears traffic.
+                self._use(old_connection)
+                try:
+                    if external_clock := self.store.external_clock_source:
+                        external = external_clock()
+                        if external is not None and (external.get("running") or external.get("available") is False):
+                            raise SimulationError("Den externa träffklockan har ändrats. Stoppa den och försök igen.")
+                    if self.store.clock_status().get("running"):
+                        self.store.stop_clock("Pausat för simulering")
+                finally:
+                    self._use(candidate._connection)
             self._fence()
             self.control.execute("INSERT INTO selection VALUES(1,?) ON CONFLICT(id) DO UPDATE SET run_id=excluded.run_id", (run_id,))
         except BaseException:
@@ -285,6 +312,8 @@ class TrafficSimulation:
             self._require_run()
             self.pause()
             external = self.normal_external_source() if self.normal_external_source else None
+            if external and external.get("available") is False:
+                raise SimulationError("Den externa träffklockan kan inte läsas. Kontrollera att den är stoppad innan du återgår till vanlig drift.")
             if external and external.get("running"):
                 raise SimulationError("Stoppa den externa träffklockan innan du återgår till vanlig drift.")
             self._fence()

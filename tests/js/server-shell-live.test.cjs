@@ -353,6 +353,44 @@ const root = path.resolve(__dirname, '../..');
     page.once('dialog', dialog => dialog.accept());
     await page.keyboard.press('Escape');
     await page.locator('#editor').waitFor({ state: 'hidden' });
+    // Take over a running internal clock through the actual confirmation UI.
+    // Cancel must not pause it; successful takeover must leave it paused on return.
+    await page.setViewportSize({width: 1200, height: 900});
+    // The two localhost fixtures share the cookie host: restore the EU login.
+    await login(urls.eu);
+    await page.locator('#workspace-options button').first().click();
+    await page.goto(urls.eu + '/#simulation');
+    await page.locator('#simulation-start-open').waitFor({state: 'visible'});
+    const context = await (await page.request.get(urls.eu + '/v1/server-context')).json();
+    const clockResponse = await page.request.post(urls.eu + '/v1/clock', {data: {
+      action: 'start', meet_generation: context.selected_meet.generation,
+    }});
+    assert.equal(clockResponse.ok(), true);
+    await page.locator('#simulation-start-open').click();
+    const simulationDialog = page.locator('#simulation-start-modal');
+    assert.match(await simulationDialog.innerText(), /Enheterna behåller sina anslutningar/);
+    await simulationDialog.getByRole('button', {name: 'Avbryt', exact: true}).click();
+    assert.equal((await (await page.request.get(urls.eu + '/v1/clock')).json()).running, true);
+    await page.locator('#simulation-start-open').click();
+    await page.locator('#simulation-time').fill('09:17');
+    await page.locator('#simulation-profile').selectOption('timetable');
+    await page.setViewportSize({width: 360, height: 900});
+    const confirm = simulationDialog.getByRole('button', {name: 'Pausa spelet och starta simulering', exact: true});
+    const bounds = await confirm.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 360, 'Takeover button fits mobile');
+    await screenshot('simulation-takeover-mobile');
+    const startResponse = page.waitForResponse(response => response.url() === urls.eu + '/v1/simulation' && response.request().method() === 'POST');
+    await confirm.click();
+    assert.equal((await startResponse).ok(), true);
+    await simulationDialog.waitFor({state: 'hidden'});
+    let simulation = await (await page.request.get(urls.eu + '/v1/simulation')).json();
+    assert.equal(simulation.active, true);
+    await page.locator('#simulation-finish-open').click();
+    await page.locator('#simulation-confirm-submit').click();
+    await page.locator('#simulation-confirm-modal').waitFor({state: 'hidden'});
+    simulation = await (await page.request.get(urls.eu + '/v1/simulation')).json();
+    assert.equal(simulation.active, false);
+    assert.equal(simulation.clock.running, false);
     assert.deepEqual(errors, []);
     assert.ok(requests.every(url => url.startsWith(urls.eu + '/') || url.startsWith(urls.us + '/')), 'Unexpected non-fixture network request');
     console.log('LIVE isolated HTTP/SQLite smoke passed:', JSON.stringify(urls), 'EU/US clocks, chooser, Settings TMBox, Home, TKL setup + Home + Settings return, served i18n asset.');

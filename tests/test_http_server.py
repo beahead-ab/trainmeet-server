@@ -34,7 +34,7 @@ class HTTPServerTests(unittest.TestCase):
         normal = self._json_request("/v1/clock")
         state = self._json_request("/v1/simulation")
         self.assertFalse(state["active"])
-        state = self._json_request("/v1/simulation", {"action": "start", "time": "09:25", "profile": "timetable", "meet_generation": state["meet_generation"]})
+        state = self._json_request("/v1/simulation", {"action": "start", "confirmed": True, "time": "09:25", "profile": "timetable", "meet_generation": state["meet_generation"]})
         self.assertTrue(state["active"])
         self.assertEqual(state["trains"][0]["status"], "in_transit")
         def act(action, **extra):

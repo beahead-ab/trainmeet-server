@@ -4,11 +4,17 @@
 
 Administratören öppnar **hamburgermenyn → Simulering**. Simulatorn använder
 serverns valda EU-träff, publicerade config och trafikdag. Ingen ny träff skapas.
-Vanlig trafik måste vara stoppad, utan öppna klareringar eller tåg på linjen.
+Startdialogen bekräftar att simulatorn tar över. Du behöver inte stoppa den interna
+träffklockan eller avsluta klareringar först: det vanliga spelet pausas, och dess
+tåg och klareringar bevaras separat. Stoppa fysiska tåg på banan innan du bekräftar.
+En extern träffklocka måste däremot vara läsbar och stoppad; simulatorn styr den inte.
 
-1. Välj **Starta simulering** och ange starttid, klockhastighet och störningsnivå.
+1. Välj **Starta simulering**, ange starttid, klockhastighet och störningsnivå och
+   bekräfta med **Pausa spelet och starta simulering**. Avbryt/kryss ändrar inget.
 2. Obemannade stationer klarerar automatiskt. Tilldelade TMBoxar/TKL-terminaler
    arbetar mot samma simulerade trafik och tar över sin station när de ansluter.
+   Redan anslutna operatörer behåller stationen direkt, före första automatiska
+   trafiksteget. Ingen box behöver kopplas bort, startas om eller tilldelas på nytt.
 3. **Pausa/Fortsätt** styr spelklockan. Paus stoppar även manuella trafikändringar.
 4. **Återställ vid aktuell tid** skapar ett nytt tidtabellsenligt läge vid tiden
    som gäller när återställningen bekräftas. Klockan och stationstilldelningarna
@@ -86,6 +92,8 @@ Start/återställning återskapar tidtabellens tidigare avgångar och ankomster 
 samma trafikvalidering. Tåg vars restid fortfarande pågår placeras på linjen.
 Motstridiga spår-/linjetillstånd eller ofullständiga tågrutter stoppar skapandet
 med felmeddelande. Simulatorn gissar inte bort sådana planeringsproblem.
+Startläget valideras innan det vanliga spelet pausas. Ett senare fel vid själva
+bytet lämnar vanliga spelet pausat med bevarad trafik, inte en halvstartad simulering.
 
 ## Implementation och skydd
 
@@ -110,7 +118,8 @@ med felmeddelande. Simulatorn gissar inte bort sådana planeringsproblem.
 
 Admin-API: `GET /v1/simulation`, `POST /v1/simulation`. Alla ändringar kräver
 aktuell `meet_generation`; efter start också `run_id`. Återställning, avslut
-och överlämning kräver `confirmed: true`.
+och överlämning kräver `confirmed: true`. Även start kräver uttryckligen
+`confirmed: true`; äldre klienter kan inte oavsiktligt pausa spelet.
 
 ## Omfattning och verifiering
 
