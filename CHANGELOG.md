@@ -5,6 +5,32 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Typsnitten är alltid Inter och JetBrains Mono
+
+Tider, tågnummer, stationskoder och versionsrader under Drift ritades i
+enhetens eget kodtypsnitt, siffrorna på den analoga klockan i dess
+systemtypsnitt och simuleringsbannern i `system-ui`. En TV, en mobil och en
+Raspberry Pi såg därför olika ut. Nu pekar allt på de två paketerade
+familjerna. JetBrains Mono i halvfet (600) finns med, i stället för att ritas
+som fet. Inter laddas en gång per sida, inte två. `tests/test_fonts.py`
+håller fast vid det.
+
+### Wi-Fi: text på deltagarvyn, lösenordet i skärmarnas kod
+
+Deltagarvyn visar träffens nätverk och lösenord som text, utan QR-kod: den som
+läser sidan är redan på nätet, och en TMBox kan inte skanna. Wi-Fi-koden hör
+hemma på skärmarna och innehåller lösenordet, annars fungerar den inte.
+Kryssrutan ”Visa lösenordet på deltagarvyn och skärmarna” är borttagen. Vill
+man inte dela nätet lämnar man fälten tomma, så visas bara träffens kod.
+
+### Stationsnamnen på kartorna
+
+Där en kort bana ligger tätt intill huvudlinjen, eller ett spår går ned från
+en station, flyttas namnet till den fria sidan av stationen i stället för att
+krocka med grannens namn eller skäras av spåret. Kartor där inget krockar ser
+ut som förut. Översiktens karta använder hela bredden. Deltagarvyns karta på
+mobilen fyller kortets bredd.
+
 Säkerhetskopian innehöll ingenting.
 
 ### Simulatorns förval är TMBox v2
