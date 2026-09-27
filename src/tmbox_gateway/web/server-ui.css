@@ -293,6 +293,16 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .topology-tv .topology-name { font: 30px var(--font); fill: var(--display-fg); text-anchor: middle; }
 .topology-tv .topology-code { font: 22px var(--font-mono); fill: var(--display-muted); text-anchor: middle; }
 .topology-tv .topology-track { stroke-width: 8; }
+/* Train tags: blue, nose towards the direction of travel (all maps). */
+.topology-train-tag { fill: #2256c3; }
+.topology-train .train-number { fill: #fff; font: 700 9px/1 var(--font-mono); text-anchor: middle; }
+.topology-tv .topology-train .train-number { font-size: 28px; }
+.topology-tv .topology-train-tag { fill: var(--sc-primary, #7fa3ea); }
+.topology-tv .topology-train .train-number { fill: #0b0b0b; }
+.light .topology-tv .topology-train-tag { fill: #2256c3; }
+.light .topology-tv .topology-train .train-number { fill: #fff; }
+.topology-train-ring { fill: none; stroke: #2256c3; stroke-width: 2; }
+.topology-tv .topology-train-ring { stroke: var(--sc-primary, #7fa3ea); stroke-width: 4; }
 .topology-tv .topology-track.active { stroke: #4380f0; }
 #clock-view[data-us=true] .clock-digital { font-size: 320px; }            /* "12:34 PM" */
 #clock-view[data-us=true] .clock-digital[data-seconds=true] { font-size: 260px; }

@@ -2767,26 +2767,29 @@ function topologyBounds(sourcePositions, edges) {
   };
 }
 
-function appendLocomotive(target, point, trainNumber, direction = 1, options = {}) {
+// A train on the map is a blue tag whose nose points the way the train is
+// going, so the direction reads without an arrow character or a legend.
+// Size follows the surface: small on Drift, large on a TV.
+function trainBadgePath(width, height, nose, radius) {
+  const left = -width / 2, right = width / 2, top = -height / 2, bottom = height / 2;
+  return `M${left + radius},${top} H${right - nose} L${right},0 L${right - nose},${bottom} H${left + radius} A${radius},${radius} 0 0 1 ${left},${bottom - radius} V${top + radius} A${radius},${radius} 0 0 1 ${left + radius},${top} Z`;
+}
+
+function appendTrainBadge(target, point, trainNumber, direction = 1, options = {}) {
+  const label = String(trainNumber);
+  const tv = Boolean(options.tv);
+  const fontSize = tv ? 28 : 9, nose = tv ? 16 : 6, height = tv ? 44 : 16, radius = tv ? 8 : 4;
+  const width = Math.max(tv ? 96 : 30, label.length * fontSize * 0.62 + (tv ? 36 : 14)) + nose;
   const group = svgElement("g", {
     transform: `translate(${point.x},${point.y})`,
-    class: `topology-train${options.selected ? " selected" : ""}${options.dimmed ? " dimmed" : ""}${options.clickable ? " clickable" : ""}`,
+    class: `topology-train${tv ? " topology-train-badge" : ""}${options.selected ? " selected" : ""}${options.dimmed ? " dimmed" : ""}${options.clickable ? " clickable" : ""}`,
     role: options.clickable ? "button" : "img",
     tabindex: options.clickable ? "0" : "-1",
-    "aria-label": `Tåg ${trainNumber}`,
+    "aria-label": `Tåg ${label} ${direction > 0 ? "→" : "←"}`,
   });
-  if (options.selected) group.append(svgElement("circle", { r: 17, cy: -2, class: "topology-train-ring" }));
-  group.append(svgElement("text", { y: -14, class: "train-number" }, trainNumber));
-  const locomotive = svgElement("g", { transform: `scale(${direction},1)` });
-  locomotive.append(svgElement("rect", { x: -6, y: -4, width: 12, height: 7, rx: 3, fill: "hsl(0 72% 51%)" }));
-  locomotive.append(svgElement("rect", { x: -9, y: -6, width: 5, height: 9, rx: 1, fill: "hsl(0 72% 51%)", opacity: .9 }));
-  locomotive.append(svgElement("rect", { x: 4, y: -8, width: 2.5, height: 4, rx: 1, fill: "hsl(0 72% 51%)", opacity: .85 }));
-  locomotive.append(svgElement("circle", { cx: 5.25, cy: -10, r: 2, fill: "var(--display-muted)", opacity: .5 }));
-  locomotive.append(svgElement("polygon", { points: "6,3 9,1 9,3", fill: "hsl(0 72% 51%)", opacity: .8 }));
-  locomotive.append(svgElement("circle", { cx: -5, cy: 4, r: 2, fill: "var(--display-fg)", opacity: .7 }));
-  locomotive.append(svgElement("circle", { cx: 0, cy: 4, r: 2, fill: "var(--display-fg)", opacity: .7 }));
-  locomotive.append(svgElement("circle", { cx: 5, cy: 4, r: 1.5, fill: "var(--display-fg)", opacity: .7 }));
-  group.append(locomotive);
+  if (options.selected) group.append(svgElement("rect", { x: -width / 2 - 3, y: -height / 2 - 3, width: width + 6, height: height + 6, rx: radius + 3, class: "topology-train-ring" }));
+  group.append(svgElement("path", { d: trainBadgePath(width, height, nose, radius), transform: `scale(${direction},1)`, class: "topology-train-tag" }));
+  group.append(svgElement("text", { x: -direction * nose / 2, y: tv ? 10 : 3.2, "text-anchor": "middle", class: "train-number" }, label));
   if (options.clickable) {
     const activate = (event) => {
       event.stopPropagation();
@@ -2911,12 +2914,8 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const direction = position.from_station_id && position.to_station_id
       ? ((positions.get(position.to_station_id)?.x || 0) >= (positions.get(position.from_station_id)?.x || 0) ? 1 : -1)
       : 1;
-    if (options.tv) {
-      const badge = svgElement("g", {class:"topology-train-badge",role:"img","aria-label":`Tåg ${position.train_number}`});
-      badge.append(svgElement("rect",{x:point.x-58,y:point.y-50,width:116,height:44,rx:8,fill:"#2256c3"}));
-      badge.append(svgElement("text",{x:point.x,y:point.y-20,"text-anchor":"middle",fill:"white","font-size":28},`${position.train_number} ${direction>0?"→":"←"}`));
-      target.append(badge);
-    } else appendLocomotive(target, { x: point.x, y: point.y - 17 }, position.train_number, direction, {
+    appendTrainBadge(target, { x: point.x, y: point.y - (options.tv ? 28 : 15) }, position.train_number, direction, {
+      tv: Boolean(options.tv),
       selected: String(position.train_number) === String(options.selectedTrainNumber),
       dimmed: Boolean(selectedService && String(position.train_number) !== String(options.selectedTrainNumber)),
       clickable: Boolean(options.onTrainSelect),
