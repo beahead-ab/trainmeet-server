@@ -148,11 +148,6 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 #drift-simulation-details > div { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 10px; }
 .simulation-station { padding: 8px; }
 .simulation-station p { font-size: 12px; }
-#workspace-picker { max-width: 1000px; margin: 60px auto; }
-.workspace-picker-heading h2 { font-size: 28px; }
-.workspace-option { padding: 24px; }
-.workspace-option strong { font-size: 20px; }
-.workspace-option .workspace-detail { font-size: 13px; }
 #login, #setup { max-width: 680px; margin: 40px auto; padding: 24px; }
 @media (max-width: 1200px) {
   #header-server-meta { display: none; }
@@ -175,6 +170,123 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
   #drift-simulation-details > div { grid-template-columns: 1fr; }
 }
 
+/* ---------- Småputs: en knapp, en etikett, ett fält (design/komponenter.html) ----------
+   app.css is still loaded and its .app-view rules win over the kit's element
+   selectors, so these id-anchored rules restate the kit sizes once, for all. */
+#app-view button:not(.key):not(.tm-icon-btn):not(.route-number):not(.station-count-row):not(.modal-close),
+#app-chrome button:not(.tm-icon-btn), #app-view .tm-btn, .admin-modal button:not(.modal-close) {
+  min-height: 30px; padding: 6px 12px; font: 600 12.5px/16px var(--font); border-radius: 6px; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+#app-view button.compact { min-height: 30px; font-size: 12.5px; }
+#app-view .tm-btn--sm, #device-list .device-actions button { min-height: 26px; padding: 4px 10px; }
+#app-view label, .admin-modal label { font: 600 12px/1.3 var(--font); color: var(--text-2); gap: 5px; }
+#app-view label:has(> input[type=checkbox]), #app-view label:has(> input[type=radio]) { font-weight: 500; color: var(--text); align-items: center; }
+#app-view .server-field-label { font: 600 12px/1.3 var(--font); color: var(--text-2); }
+.admin-modal label:has(> input[type=checkbox]) { font: 500 13px/1.4 var(--font); color: var(--text); }
+#app-view input:not([type=checkbox]):not([type=radio]), #app-view select, #app-view textarea, .admin-modal input:not([type=checkbox]):not([type=radio]), .admin-modal select {
+  font-size: 13px; line-height: 18px; padding: 6px 10px; min-height: 32px;
+}
+#app-view select { padding-right: 26px; }
+.tm-clockrow__form input, .tm-clockrow__form select, .server-source > button { height: 32px; min-height: 32px; box-sizing: border-box; }
+#local-clock-time { width: 148px; }
+#local-clock-speed { width: 72px; }
+.tm-clockrow__form { gap: 12px; }
+.tm-clockrow__form > label, .tm-clockrow__form > .server-source { gap: 5px; }
+.server-divider { width: 1px; align-self: stretch; background: var(--border-soft); margin: 0 4px; }
+.server-field { display: flex; flex-direction: column; gap: 5px; }
+.server-wifi-fields { flex-basis: 100%; border-top: 1px solid var(--border-soft); padding-top: 10px; margin-top: 4px; }
+.server-wifi-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.server-wifi-row label { display: flex; flex-direction: column; }
+#connection-wifi-name, #connection-wifi-password { width: 220px; font-family: var(--font-mono); }
+.web-client-ttl-form { align-items: end; }
+.server-ttl-row { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text); }
+#web-client-ttl { width: 72px; font-family: var(--font-mono); }
+.server-field > label { margin: 0; }
+#meet-clock-style { width: 240px; }
+#connection-badge-form .connection-badge-screens { gap: 4px 16px; min-height: 32px; align-items: center; }
+#connection-badge-form .connection-badge-screens label { padding: 0; background: none; border-radius: 0; font: 500 12.5px/1.3 var(--font); color: var(--text); gap: 6px; }
+.clock-control-actions { gap: 8px; }
+.tm-clockrow__aside .server-actions button { align-self: flex-start; }
+.tm-clockrow__time .tm-eyebrow, .tm-clockrow__aside .tm-eyebrow { font: 700 11px/1.3 var(--font); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+#app-chrome .tm-status { line-height: 16px; }
+
+/* ---------- Deltagarvyn (SPEC A4): serverns startsida, utan inloggning ----------
+   One column on a phone, two above 900 px. Same kit, same map renderer. */
+body.participant-mode #app-chrome { display: none !important; }
+body.participant-mode #app-view { padding: 0; max-width: none; }
+.participant { display: flex; flex-direction: column; min-height: 100vh; background: var(--bg); }
+.pv-top { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--border); }
+.pv-top b { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-spacer { flex-grow: 1; }
+.pv-muted { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.pv-live { width: 8px; height: 8px; border-radius: 50%; background: var(--ok-text); flex-shrink: 0; }
+.pv-live.is-offline { background: var(--warn-dot); }
+.pv-page { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 14px; padding: 14px 20px 0; align-items: start; max-width: 1400px; width: 100%; box-sizing: border-box; margin: 0 auto; }
+.pv-main, .pv-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.pv-row { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.participant .tm-card { display: flex; flex-direction: column; overflow: hidden; }
+.participant .tm-card__head { padding: 9px 12px; border-bottom: 1px solid var(--border-soft); display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
+.participant .tm-card__head .c { font-size: 12px; color: var(--muted); font-weight: 500; }
+.participant .tm-card__body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.pv-clock-card { justify-content: center; }
+.pv-clock { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 16px 16px; text-align: center; }
+.pv-clock__digits { font: 700 72px/1 var(--font-mono); letter-spacing: -.02em; color: var(--ok-text); }
+.pv-clock__digits.is-stopped { color: var(--warn-text); }
+.pv-clock__face { width: 176px; height: 176px; line-height: 0; }
+.pv-clock__face .clock-face { width: 176px; height: 176px; filter: none; }
+.pv-clock__face.is-stopped { opacity: .6; }
+.pv-clock__status { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--ok-text); }
+.pv-clock__status::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--ok-text); }
+.pv-clock__status.is-stopped { color: var(--warn-text); }
+.pv-clock__status.is-stopped::before { background: var(--warn-dot); }
+.pv-clock__meta { font-size: 12px; color: var(--muted); }
+.pv-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px 14px 0; }
+.pv-stats .tm-stat { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border: 1px solid #eee; border-radius: 8px; background: var(--row-alt); }
+.pv-stats .tm-stat b { font-size: 18px; font-weight: 700; }
+.pv-stats .tm-stat span { font-size: 11.5px; color: var(--muted); }
+.pv-stats .tm-stat--ok { background: var(--ok-bg); border-color: #cfe8d8; }
+.pv-stats .tm-stat--ok b, .pv-stats .tm-stat--ok span { color: var(--ok-text); }
+.pv-map { padding: 10px 0 0 14px; overflow-x: auto; overflow-y: hidden; --display-fg: #0a0a0a; --display-muted: #525252; --display-line: #c8c8c6; --display-card: #fff; --display-primary: #2256c3; --display-bg: #fff; }
+.pv-map__scroll { display: inline-block; min-width: 100%; }
+.pv-topology { width: 100%; height: 220px; display: block; }
+.pv-map__hint { margin: 2px 14px 0; font-size: 11.5px; color: var(--muted); display: none; }
+.pv-map:has(.is-wide) + .pv-map__hint { display: block; }
+.pv-section { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; margin: 6px 0 -4px; }
+.pv-list { display: flex; flex-direction: column; }
+.pv-row-item { display: grid; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; align-items: center; }
+.pv-row-item:last-child { border-bottom: 0; }
+.pv-row-item--line { grid-template-columns: 44px minmax(0, 1fr) auto; }
+.pv-row-item--event { grid-template-columns: 44px 44px minmax(0, 1fr); }
+.pv-row-item b { font-family: var(--font-mono); }
+.pv-row-item .m { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.pv-row-item .mono { font-family: var(--font-mono); }
+.pv-empty, .pv-note { margin: 0; font-size: 12px; color: var(--text-3); line-height: 1.5; }
+.pv-link { background: none; border: 0; padding: 0; color: var(--primary); font-size: 12.5px; font-weight: 600; cursor: pointer; text-align: left; }
+#app-view button.pv-link { min-height: 0; padding: 0; border: 0; background: none; color: var(--primary); justify-content: flex-start; }
+.pv-btn-wide { justify-content: center; width: 100%; box-sizing: border-box; }
+#app-view .pv-btn-lg, .participant .pv-btn-lg { font-size: 14px; padding: 10px 18px; min-height: 40px; border-radius: 8px; }
+.pv-steps { padding: 0 14px; display: flex; flex-direction: column; }
+.pv-step { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--border-soft); }
+.pv-step:last-child { border-bottom: 0; }
+.pv-step .n { width: 26px; height: 26px; border-radius: 50%; background: var(--primary-soft); color: var(--primary-text); font-weight: 700; font-size: 12.5px; display: flex; align-items: center; justify-content: center; }
+.pv-step .h { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.pv-values { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
+.pv-wifi-qr { padding: 12px; background: white; width: 150px; margin: 8px 0; }
+.pv-wifi-qr svg { display: block; width: 100%; height: auto; }
+.pv-value { font: 600 14px/1.3 var(--font-mono); background: var(--row-alt); border: 1px solid var(--border-soft); border-radius: 6px; padding: 4px 8px; }
+.pv-value--big { font-size: 26px; padding: 6px 12px; letter-spacing: .04em; }
+.pv-value--muted { font-family: var(--font); font-weight: 500; color: var(--muted); }
+.pv-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px 20px; font-size: 12px; color: var(--muted); max-width: 1400px; width: 100%; box-sizing: border-box; margin: 0 auto; }
+.pv-foot a { font-weight: 600; }
+@media (max-width: 900px) {
+  .pv-page { grid-template-columns: minmax(0, 1fr); padding: 12px 16px 0; gap: 12px; }
+  .pv-row { grid-template-columns: minmax(0, 1fr); }
+  #app-view .pv-login { display: none; }
+  .pv-foot { flex-direction: column-reverse; align-items: flex-start; gap: 10px; padding: 14px 16px 20px; }
+}
+@media (min-width: 901px) { #pv-foot-login { display: none; } }
+
 /* All meeting screens share an exact 1920 × 1080 design canvas. Scaling only
    applies to public TV screens, not to admin controls or browser font sizes. */
 body.server-display { overflow: hidden; background: #0b0b0b; }
@@ -182,8 +294,22 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 #display-app { --display-bg: #0b0b0b; --display-card: #161616; --display-fg: #fff; --display-muted: #a3a3a3; background: var(--display-bg); }
 #display-app.light { --display-bg: #fbfaf9; --display-card: #fff; --display-fg: #0a0a0a; --display-muted: #525252; }
 #display-stage, #display-stage.toolbar-hidden { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; min-height: 0; padding: 32px 40px 28px; display: flex; flex-direction: column; gap: 16px; transform-origin: center; background: var(--display-bg); color: var(--display-fg); overflow: hidden; }
-#display-toolbar { position: fixed; left: 12px; right: 12px; top: 12px; z-index: 50; border-radius: 8px; min-height: 44px; background: #161616ed; padding: 8px 12px; }
+#display-toolbar { position: fixed; left: 12px; right: 12px; top: 12px; z-index: 50; border-radius: 8px; min-height: 44px; background: #1c1c1c; border: 1px solid #2a2a2a; padding: 7px 12px; }
+#display-app.light #display-toolbar { background: #fff; border-color: #e5e5e5; }
+/* The chrome row is for the person at the computer, not the hall: kit sizes
+   in px, because the kit's 13 px root makes every rem in app.css too small. */
+#display-toolbar { gap: 14px; }
+#display-toolbar .display-back { font-size: 12.5px; font-weight: 500; }
+#display-toolbar > strong { font-size: 13px; font-weight: 700; }
+#display-toolbar .display-toolbar-actions { gap: 8px; }
+#display-toolbar button, #display-toolbar .display-badge, #display-toolbar .display-live, #display-toolbar .display-select { min-height: 30px; padding: 5px 12px; font: 600 12.5px/1.3 var(--font); border-radius: 6px; }
+#display-toolbar .display-select { max-width: 280px; padding-right: 8px; font-weight: 500; }
+#display-toolbar .display-badge, #display-toolbar .display-live { font-weight: 500; }
 #display-toolbar.hidden-toolbar { opacity: 0; pointer-events: none; transform: translateY(-12px); }
+/* While the chrome row is showing it carries the meet name itself, so the
+   screen's own top row steps aside instead of showing through underneath. */
+#display-stage:not(.toolbar-hidden) .sc-top { opacity: 0; }
+.sc-top { transition: opacity .25s; }
 .sc-content { flex: 1; min-height: 0; position: relative; display: flex; }
 .sc-content > .display-visual { width: 100%; height: 100%; min-height: 0; }
 .sc-top__meet { font-size: 26px; }
@@ -194,25 +320,46 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 #display-connection { position: static; color: var(--display-muted); padding: 0; background: none; font-size: 26px; border: 0; }
 #display-connection-code { font: 700 30px var(--font-mono); color: var(--display-fg); }
 #clock-view { width: 100%; height: 100%; padding: 0; display: flex; }
-.sc-clock-layout { display: flex; align-items: center; justify-content: center; gap: 80px; width: 100%; }
-.sc-clock-layout .clock-face { flex: 0 0 820px; width: 820px; height: 820px; max-width: none; max-height: none; filter: none; }
-.sc-clock-side { display: flex; flex-direction: column; align-items: stretch; gap: 40px; min-width: 0; }
-.sc-clock-layout .clock-digital { font: 700 168px/1 var(--font-mono); letter-spacing: -.04em; color: var(--display-fg); white-space: nowrap; }
-.sc-clock-layout .clock-digital[data-seconds=true] { font-size: 125px; }
-.sc-clock-layout--digital { text-align: center; }
-.sc-clock-layout--digital .sc-clock-side { align-items: center; width: 100%; }
-.sc-clock-layout--digital .clock-digital { font-size: 440px; }
-.sc-clock-layout--digital .clock-digital[data-seconds=true] { font-size: 330px; }
-.sc-clock-layout .clock-digital.stopped { color: #a3a3a3; }
-.sc-clock-layout .clock-digital.stopped { opacity: 1; }
+/* The clock screen shows one clock: a face (analog, stationsur, swiss) or
+   digits (digital), centred, with the running/stopped line under it. The
+   clock screen has no top row or footer, so a running face uses nearly the
+   whole height and gives way only when the stop box appears under it. */
+.sc-clock-layout { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; width: 100%; height: 100%; min-height: 0; }
+.sc-clock-layout .clock-face { flex: 0 0 auto; width: 980px; height: 980px; max-width: none; max-height: none; filter: none; }
+.sc-clock-layout.is-stopped .clock-face { width: 700px; height: 700px; }
+/* The clock screen is the clock and the QR link, nothing else: no meet name,
+   no badge, no address line, no server name. 1020 px are left for the clock. */
+#display-stage[data-kind=clock] .sc-top { display: none; }
+#display-stage[data-kind=clock] .sc-foot { position: absolute; right: 40px; bottom: 28px; min-height: 0; padding: 0; }
+#display-stage[data-kind=clock] #screen-status, #display-stage[data-kind=clock] #display-connection { display: none; }
+/* The QR pair (1 · Wi-Fi, 2 · Träffen) sits at the footer's right on every
+   screen, the server name at its left; on the clock screen the footer is the corner. */
+.sc-qr { display: flex; align-items: flex-end; gap: 20px; margin-left: auto; }
+.sc-qr[hidden] { display: none; }
+.sc-qr__item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.sc-qr__code { background: #fff; padding: 10px; border-radius: 12px; line-height: 0; }
+.sc-qr__code svg { display: block; width: 130px; height: 130px; }
+.sc-qr__text { font-size: 22px; color: var(--display-muted); white-space: nowrap; }
+.light .sc-qr__code { border: 1px solid #e5e5e5; }
+#display-stage:not([data-kind=clock]) .sc-qr__code svg { width: 110px; height: 110px; }
+#display-stage:not([data-kind=clock]) .sc-qr__text { font-size: 20px; }
+#display-stage:not([data-kind=clock]) #screen-status { margin-left: 0; }
+#display-stage:not([data-kind=clock]) .sc-foot { align-items: flex-end; }
+#dashboard-view { grid-template-rows: 160px minmax(0,1fr) 245px; }
+.sc-clock-layout .clock-face.stopped { opacity: .6; }
+.sc-clock-layout .clock-digital { font: 700 440px/1 var(--font-mono); letter-spacing: -.04em; color: var(--display-fg); white-space: nowrap; }
+.sc-clock-layout .clock-digital[data-seconds=true] { font-size: 330px; }
+.sc-clock-layout .clock-digital.stopped { color: #a3a3a3; opacity: 1; }
 #display-connection #display-connection-address { font: 26px var(--font-mono); }
 .server-card.cloud-section-card { gap: 10px; }
 .server-settings-columns .server-card { padding: 12px 14px; }
 .server-card .section-heading h2 { font-size: 16px; }
 .admin-modal .modal-close { width: 44px; height: 44px; }
 .sc-clock-layout .sc-run { font-size: 30px; }
-.sc-clock-layout .sc-stopped { max-width: 100%; text-align: left; }
-.sc-stopped__reason { color: var(--display-fg); overflow-wrap: anywhere; max-width: 720px; }
+.sc-clock-layout .sc-stopped { max-width: 1240px; text-align: left; }
+.sc-stopped__reason { color: var(--display-fg); overflow-wrap: anywhere; max-width: 1100px; }
+.light .sc-run { color: #1f6b3d; }
+.light .sc-run::before { background: #1f6b3d; }
 .light .sc-stopped { background: #fff8e6; }
 .light .sc-stopped__title { color: #7a5a00; }
 #graph-scroll { width: 100%; height: 100%; overflow: hidden; border-radius: 14px; border: 1px solid #262626; }
@@ -233,10 +380,19 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .topology-tv .topology-name { font: 30px var(--font); fill: var(--display-fg); text-anchor: middle; }
 .topology-tv .topology-code { font: 22px var(--font-mono); fill: var(--display-muted); text-anchor: middle; }
 .topology-tv .topology-track { stroke-width: 8; }
+/* Train tags: blue, nose towards the direction of travel (all maps). */
+.topology-train-tag { fill: #2256c3; }
+.topology-train .train-number { fill: #fff; font: 700 9px/1 var(--font-mono); text-anchor: middle; }
+.topology-tv .topology-train .train-number { font-size: 28px; }
+.topology-tv .topology-train-tag { fill: var(--sc-primary, #7fa3ea); }
+.topology-tv .topology-train .train-number { fill: #0b0b0b; }
+.light .topology-tv .topology-train-tag { fill: #2256c3; }
+.light .topology-tv .topology-train .train-number { fill: #fff; }
+.topology-train-ring { fill: none; stroke: #2256c3; stroke-width: 2; }
+.topology-tv .topology-train-ring { stroke: var(--sc-primary, #7fa3ea); stroke-width: 4; }
 .topology-tv .topology-track.active { stroke: #4380f0; }
-#clock-view[data-us=true] .sc-clock-layout--digital .clock-digital { font-size: 320px; }
-#clock-view[data-us=true] .sc-clock-layout--digital .clock-digital[data-seconds=true] { font-size: 260px; }
-#clock-view[data-us=true] .sc-clock-layout:not(.sc-clock-layout--digital) .clock-digital { font-size: 110px; }
+#clock-view[data-us=true] .clock-digital { font-size: 320px; }            /* "12:34 PM" */
+#clock-view[data-us=true] .clock-digital[data-seconds=true] { font-size: 260px; }
 .server-us-infra, .server-us-card { background: var(--paper); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
 .server-us-infra svg { width: 100%; max-height: 360px; }
 .us-diagram-track { stroke: #525252; stroke-width: 4; }

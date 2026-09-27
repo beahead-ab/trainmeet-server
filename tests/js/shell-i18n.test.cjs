@@ -11,6 +11,7 @@ test('Cloud-only shell messages have all five languages and matching interpolati
   const context = { document: { body }, TrainMeetI18n: { annotate(root) { assert.equal(root, body); annotated = true; } } };
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(path.join(web, 'shell-messages.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(path.join(web, 'participant-messages.js'), 'utf8'), context);
   assert.equal(annotated, true);
   const rows = Object.entries(context.TrainMeetMessages);
   assert.ok(rows.length >= 50);
@@ -27,6 +28,7 @@ test('static shell translation runs before app data and cannot restore removed a
   const document = fs.readFileSync(path.join(web, 'index.html'), 'utf8');
   assert.ok(document.indexOf('/assets/i18n.js') < document.indexOf('/assets/shell-messages.js'));
   assert.ok(document.indexOf('/assets/shell-messages.js') < document.indexOf('/assets/i18n-init.js'));
+  assert.ok(document.indexOf('/assets/participant-messages.js') < document.indexOf('/assets/i18n-init.js'));
   assert.ok(document.indexOf('/assets/shell-messages.js') < document.indexOf('/assets/app.js'));
   assert.doesNotMatch(document, /id="(?:build-sidebar|build-view|meet-type-nav)"|data-operating-mode/);
 });

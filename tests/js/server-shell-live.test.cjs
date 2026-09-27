@@ -34,10 +34,7 @@ const root = path.resolve(__dirname, '../..');
       if (process.env.SERVER_SHELL_SCREENSHOTS) await page.screenshot({ path: path.join(process.env.SERVER_SHELL_SCREENSHOTS, 'live-' + name + '.png'), fullPage: true });
     };
     async function login(base) {
-      // A remembered workspace deliberately skips the chooser on `/`.
-      // Enter the chooser explicitly when changing between isolated servers.
-      await page.goto(base + '/#workspaces');
-      await page.locator('#workspace-options [data-workspace="administration"]').click();
+      await page.goto(base + '/login');
       await page.locator('#login-form').waitFor({ state: 'visible' }).catch(async error => {
         console.error('Login state:', page.url(), await page.locator('body').innerText());
         console.error('Requests:', requests);
@@ -50,12 +47,9 @@ const root = path.resolve(__dirname, '../..');
       await page.locator('#login-password').fill('isolated-browser-test');
       await page.locator('#login-form button[type="submit"]').click();
       await page.locator('#overview-view').waitFor({ state: 'visible' });
-      await page.goto(base + '/#workspaces');
-      await page.locator('#workspace-options button').first().waitFor();
     }
 
     await login(urls.eu);
-    await page.locator('#workspace-options button').first().click();
     await page.locator('#device-list .status-row').waitFor();
     assert.equal(await page.locator('#overview-traffic').isVisible(),true);
     assert.equal(await page.locator('#overview-graph').isVisible(),true);
@@ -171,8 +165,7 @@ const root = path.resolve(__dirname, '../..');
     await page.goto(urls.eu+'/#settings');await page.waitForURL(urls.eu+'/installningar');
     await page.goto(urls.eu+'/#overview');await page.waitForURL(urls.eu+'/drift');
     await login(urls.us);
-    assert.equal(await page.locator('#workspace-options button').count(),2);
-    await page.locator('#workspace-options button').first().click();
+    assert.equal(await page.locator('#workspace-options').count(),0);
     await page.locator('#server-region').filter({hasText:'US'}).waitFor();
     assert.equal(await page.locator('#drift-simulation').isVisible(),false);
     assert.equal(await page.locator('#device-management').isVisible(),false);
@@ -237,7 +230,6 @@ const root = path.resolve(__dirname, '../..');
     await page.setViewportSize({width: 1200, height: 900});
     // The two localhost fixtures share the cookie host: restore the EU login.
     await login(urls.eu);
-    await page.locator('#workspace-options button').first().click();
     await page.goto(urls.eu + '/#simulation');
     await page.locator('#simulation-start-open').waitFor({state: 'visible'});
     const context = await (await page.request.get(urls.eu + '/v1/server-context')).json();

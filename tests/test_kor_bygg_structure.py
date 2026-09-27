@@ -24,29 +24,35 @@ class ShellStructureTests(unittest.TestCase):
         self.assertNotIn('id="tkl-frame"', self.html)
         for retired_selector in ('#tkl-frame', '.tkl-toolbar', '.tkl-frame-wrap', '.overview-action {'):
             self.assertNotIn(retired_selector, self.css)
-        self.assertIn('path: "/tkl/"', self.js)
+        # TKL has its own platform; the server no longer offers it as a workspace.
+        self.assertNotIn('path: "/tkl/"', self.js)
         self.assertIn('path: "/tmbox/"', self.js)
         self.assertIn('location.replace("/tmbox/")', self.js)
 
-    def test_workspace_cards_have_local_decorative_icons_and_accessible_labels(self):
-        self.assertIn('const WORKSPACE_ICONS', self.js)
-        self.assertIn('button.setAttribute("aria-labelledby", title.id)', self.js)
-        self.assertIn('button.setAttribute("aria-describedby", detail.id)', self.js)
-        self.assertIn('icon.setAttribute("aria-hidden", "true")', self.js)
-        self.assertIn('.workspace-option:focus-visible', self.css)
+    def test_participant_view_replaces_the_workspace_cards(self):
+        # The start page is the participant view: readable without login,
+        # one link to Drift, one button that starts a virtual TMBox.
+        self.assertNotIn('const WORKSPACE_ICONS', self.js)
+        self.assertNotIn('id="workspace-options"', self.html)
+        self.assertIn('id="participant-view"', self.html)
+        self.assertIn('id="pv-login"', self.html)
+        self.assertIn('href="/tmbox/">Starta virtuell TMBox', self.html)
+        self.assertIn('aria-label="Sök i tidtabellen"', self.html)
+        self.assertIn('id="pv-topology"', self.html)
 
     def test_menu_is_single_settings_entry(self):
         self.assertEqual(1, self.html.count('id="open-settings"'))
         self.assertIn('id="application-menu"', self.html)
-        for route in ("#settings", "#screens", "#workspaces"):
+        for route in ("#settings", "#screens"):
             self.assertIn(f'href="{route}"', self.html)
+        self.assertNotIn('href="#workspaces"', self.html)
         self.assertNotIn('data-open-view="admin"', self.html)
 
-    def test_home_preserves_workspace(self):
-        self.assertIn("function workspaceHome()", self.js)
-        self.assertIn("sessionStorage.getItem(WORKSPACE_KEY)", self.js)
+    def test_home_leads_to_the_participant_view(self):
+        self.assertIn('function workspaceHome() { return "/"; }', self.js)
         self.assertIn('id="workspace-home"', self.html)
-        self.assertIn('id="workspace-picker"', self.html)
+        self.assertIn('id="participant-view"', self.html)
+        self.assertNotIn('id="workspace-picker"', self.html)
 
     def test_clock_actions_do_not_set_a_new_time(self):
         self.assertIn('controlLocalClock({ action: "start" })', self.js)

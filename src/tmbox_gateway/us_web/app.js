@@ -102,7 +102,7 @@ async function refresh(force=false) {
 function blockContext(message) {
   state.contextBlocked=true; state.online=true; state.data=null; state.signature=''; state.loginVisible=false;
   editor.close();
-  app.innerHTML=html`<section class="welcome"><h1>Workspace unavailable</h1><p>${escape(t(message))}</p><a class="button" href="/#workspaces">Change workspace</a></section>`;
+  app.innerHTML=html`<section class="welcome"><h1>Workspace unavailable</h1><p>${escape(t(message))}</p><a class="button" href="/">Back to the meet page</a></section>`;
   status();
 }
 

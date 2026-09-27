@@ -474,7 +474,7 @@ TMBox-simulering. De andra delarna installeras separat:
 - Den nativa iPhone-appen finns i
   [trainmeet-iphone](https://github.com/beahead-ab/trainmeet-iphone).
 - [TrainMeet TKL](https://github.com/beahead-ab/trainmeet-tkl) är den separata
-  stationsapplikationen. Samma UI ingår även under `/tkl/` på servern.
+  stationsapplikationen. Den installeras separat; Server serverar inte `/tkl/`.
 
 Under **Inställningar → TMBoxar** kan administratören välja **Ta bort** vid en
 box och bekräfta dess kod och station i ett modalfönster. Boxen försvinner ur
@@ -507,32 +507,31 @@ serverns egen Content-Security-Policy (`style-src 'self'`) avvisade vid varje
 sidladdning — ett konsolfel per besök och en DNS-uppslagning mot en extern
 värd som en server byggd för att köra en träff utan internet aldrig ska
 behöva.
-## Arbetsytor, inte byggläge
+## Deltagarvyn och Drift
 
-Arbetsytesväljaren är öppen utan inloggning. Drift och administration samt
-Inställningar kräver admininloggning först när de öppnas. Relevanta US-roller
-behåller sina befintliga åtkomstkrav.
-Hem leder till aktuell arbetsyta. Hamburgermenyn samlar Inställningar, Skärmar,
-Byt arbetsyta och Logga ut. Servern har inget byggläge och ingen offline-editor;
+`/` är deltagarvyn utan inloggning, även för en inloggad administratör. Här finns
+träffklockan, trafikläget, tidtabellen, anslutningsuppgifter och virtuell TMBox.
+`/drift` och `/installningar` kräver admininloggning. Skärmar öppnas från
+sidhuvudet. US-klienterna behåller sina befintliga åtkomstkrav.
+Servern har inget byggläge och ingen offline-editor;
 ett nätavbrott påverkar inte den lokala driften eller låser upp configredigering.
 Se [Cloud förbereder, Server kör](docs/CLOUD-ONLY-SERVER.md).
 
 ### Öppna klienter på lokalnätet
 
-- **TMBox** (utan versionsnummer i arbetsytesväljaren) skapar en egen
+- **Starta virtuell TMBox** på deltagarvyn eller i simuleringen öppnar `/tmbox` och skapar en egen
   webbläsaridentitet och visar en boxkod. Precis som en fysisk box väntar den
-  på att admin tilldelar station under **Inställningar → TMBoxar**. Först då
+  på att admin tilldelar station under **Drift → Stationer och klienter**. Först då
   kan den påverka trafikspelet. Den kan inte välja station, styra andra boxar
   eller ändra serverinställningar. Identiteten återanvänds vid omladdning.
   Borttagning av boxen spärrar också dess webbläsarnyckel.
-- **TKL** i väljaren öppnar `/tkl/`. Den får en egen enhetskod och väntar
-  på administratörens stationstilldelning, precis som TMBox. Ingen inloggning,
-  manuell serveradress eller stationsväljare visas. Admin kopplar även denna
-  klient under Inställningar. Omtilldelning byter arbetsstation; borttagning
-  spärrar klienten. Tidigare lokala stationsval ignoreras.
-- En uttryckligt separat demo finns kvar på `/tkl/?mode=demo` med två fiktiva
-  stationer. Den registreras inte och anropar aldrig det riktiga trafik-API:t.
-  Separat installerade Raspberry Pi-terminaler behåller sitt befintliga flöde.
+- Inaktiva, otilldelade virtuella TMBoxar städas efter 30 minuter som standard
+  (5–240 minuter under Inställningar). Tilldelade och fysiska klienter berörs inte.
+- TKL:s webbsida och demo ligger inte längre i Server. API:erna för den separat
+  installerade TKL-plattformen behålls.
+- Wi-Fi anges under Inställningar. Lösenord lämnar inte admin-API:t utan det
+  uttryckliga valet att visa det på deltagarvyn och skärmarna. QR-koder genereras
+  lokalt; länkkoden går till samma adress/protokoll som skärmen öppnats genom.
 
 Anonym TMBox- och TKL-registrering tillåts bara direkt från privat/lokalt nätverk,
 inte i externt inloggningsläge eller bakom proxyhuvuden. Registreringen är
@@ -855,8 +854,7 @@ Viktiga API:er:
 - `POST /v1/tkl/clearance`
 - `POST /v1/tkl/line-available`
 
-TKL-terminalen kopplas en gång med en lokal sexsiffrig kod, eller använder
-adminsessionen när `/tkl/` öppnas i en extern webbläsare. Före varje körning tar
+Den separat installerade TKL-terminalen kopplas med en lokal kod. Före varje körning tar
 en namngiven operatör stationen i tjänst. Pågående trafikärenden överlever
 överlämning, terminalbyte och serveromstart. Tågklarering, avgång och ankomst går
 via samma auktoritativa trafikmotor som de fysiska TMBoxarna.

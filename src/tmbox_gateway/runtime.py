@@ -39,6 +39,8 @@ AVAILABLE_CLOCK_STYLES = (
     "stationsur",
 )
 DISPLAY_SCREENS = ("clock", "topology", "graph", "dashboard", "territories")
+DEFAULT_WEB_CLIENT_TTL_MINUTES = 30
+WEB_CLIENT_TTL_MINUTES_RANGE = (5, 240)
 # 0 means the code never expires, which is the default: it is printed on the
 # meeting's screens and has to keep working for as long as it is up there.
 CONNECTION_CODE_VALIDITY_HOURS = (0, 12, 24, 72, 168)
@@ -804,6 +806,42 @@ class SQLiteRuntimeStore:
             raise RuntimePublicationError("Ogiltig giltighetstid för anslutningskoden")
         self._save_setting("connection_code_validity_hours", str(hours))
         return hours
+
+    # ------------------------------------------- deltagarvyn och skärmarna
+    def wifi_settings(self) -> dict[str, Any]:
+        """The meet's Wi-Fi as typed under ⚙: shown on the participant view and
+        encoded in the Wi-Fi QR on the screens. Empty means: not shared."""
+        return {"name": self._setting("wifi_name") or "", "password": self._setting("wifi_password") or "",
+                "show_password": self._setting("wifi_show_password") == "1"}
+
+    def save_wifi_settings(self, name: str, password: str, *, show_password: bool = False) -> dict[str, Any]:
+        name = name.strip()
+        if len(name) > 32:
+            raise RuntimePublicationError("Nätverksnamnet får vara högst 32 tecken")
+        if password and not 8 <= len(password) <= 63:
+            raise RuntimePublicationError("Wi-Fi-lösenordet ska vara 8–63 tecken, eller tomt för ett öppet nät")
+        if password and not name:
+            raise RuntimePublicationError("Ange nätverksnamnet också")
+        self._save_setting("wifi_name", name)
+        self._save_setting("wifi_password", password)
+        self._save_setting("wifi_show_password", "1" if show_password else "0")
+        return self.wifi_settings()
+
+    def web_client_ttl_minutes(self) -> int:
+        """Minutes an unassigned virtual TMBox may stay silent before it is removed."""
+        stored = self._setting("web_client_ttl_minutes")
+        try:
+            minutes = int(stored) if stored is not None else DEFAULT_WEB_CLIENT_TTL_MINUTES
+        except ValueError:
+            return DEFAULT_WEB_CLIENT_TTL_MINUTES
+        return min(max(minutes, WEB_CLIENT_TTL_MINUTES_RANGE[0]), WEB_CLIENT_TTL_MINUTES_RANGE[1])
+
+    def set_web_client_ttl_minutes(self, minutes: int) -> int:
+        if not WEB_CLIENT_TTL_MINUTES_RANGE[0] <= minutes <= WEB_CLIENT_TTL_MINUTES_RANGE[1]:
+            raise RuntimePublicationError(
+                f"Städtiden ska vara {WEB_CLIENT_TTL_MINUTES_RANGE[0]}–{WEB_CLIENT_TTL_MINUTES_RANGE[1]} minuter")
+        self._save_setting("web_client_ttl_minutes", str(minutes))
+        return minutes
 
     def set_cloud_auto_sync(self, enabled: bool) -> bool:
         self._save_setting("cloud_auto_sync", "1" if enabled else "0")

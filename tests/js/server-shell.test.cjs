@@ -107,10 +107,16 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       return route.fulfill({ status: 200, contentType, body: fs.readFileSync(target) });
     });
 
+    // "/" is the participant view: the meet, the clock, how to connect a box –
+    // no picker. A signed-in administrator gets one link on to Drift.
     await page.goto('http://127.0.0.1:9999/');
-    await page.locator('#workspace-options button').first().waitFor();
-    assert.equal(await page.locator('#workspace-options button').count(), 3);
-    await page.locator('#workspace-options button').first().click();
+    await page.locator('#participant-view').waitFor();
+    assert.equal(await page.locator('#application-menu').isVisible(), false);
+    assert.equal(await page.locator('#pv-meet-name').textContent(), 'Demo meet');
+    assert.equal(await page.locator('#workspace-options').count(), 0);
+    await page.locator('#pv-code').getByText(/\d{3}-\d{3}|—/).waitFor();
+    assert.equal(await page.locator('#participant-view a[href="/tmbox/"]').count(), 1, 'One button starts a virtual TMBox');
+    await page.locator('#pv-login').click();
     await page.waitForURL('**/drift');
     await page.locator('#device-list .status-row').waitFor();
     assert.equal(await page.locator('#application-menu').isVisible(), false);
@@ -183,12 +189,14 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       assert.ok(overflow.document<=overflow.width+1,JSON.stringify(overflow));
     }
     // Language preference lives in Settings, not an extra toolbar.
-    for(const [language, heading] of [['sv','Välj arbetsyta'],['da','Vælg arbejdsområde'],['nb','Velg arbeidsområde'],['en','Choose workspace'],['de','Arbeitsbereich auswählen']]){
+    for(const language of ['sv','da','nb','en','de']){
       await page.goto('http://127.0.0.1:9999/installningar');
       await page.locator('[data-language-picker]').selectOption(language);
       assert.equal(await page.locator('.server-settings-nav a[href="/installningar#farozon"]').textContent(),{sv:'Farozon',da:'Farezone',nb:'Faresone',en:'Danger zone',de:'Gefahrenbereich'}[language]);
+      // The old picker address lands on the participant view, whatever the language.
       await page.goto('http://127.0.0.1:9999/#workspaces');
-      await page.locator('#workspace-heading').filter({hasText:heading}).waitFor();
+      await page.locator('#participant-view').waitFor();
+      assert.equal(new URL(page.url()).hash, '');
     }
     await page.goto('http://127.0.0.1:9999/installningar');
     await page.locator('[data-language-picker]').selectOption('sv');

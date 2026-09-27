@@ -522,38 +522,21 @@ const WORKSPACE_PANELS = {
 };
 const MODES = ["workspaces", ...Object.keys(WORKSPACE_PANELS)];
 const WORKSPACE_KEY = "trainmeet.workspace";
+// "/" is the participant view (SPEC A4): no picker, no stored choice. The
+// names below still fence what a browser client may enroll as; TKL has its
+// own platform and is no longer offered by the server.
 const WORKSPACES = {
   administration: { title: "Drift och administration", detail: "Trafikläge, klocka och serverinställningar", path: "/drift" },
-  tkl: { title: "TKL", detail: "Starta klienten – administratören tilldelar station", path: "/tkl/" },
   tmbox: { title: "TMBox", detail: "Starta klienten – administratören tilldelar station", path: "/tmbox/" },
   dispatcher: { title: "Dispatcher", detail: "Trafikledning för träffens territorier", path: "/us/dispatcher" },
   conductor: { title: "Conductor", detail: "Tåguppdrag och körtillstånd", path: "/us/conductor" },
 };
 
-// Local vector illustrations: no fonts, remote assets or meet data in markup.
-const WORKSPACE_ICONS = {
-  administration: '<rect x="12" y="18" width="72" height="54" rx="9"/><path d="M12 34h72M30 34v38M21 26h1m7 0h1m7 0h1M39 62V50m11 12V43m11 19v-8"/><circle class="workspace-icon-fill" cx="72" cy="66" r="15"/><path d="M72 58v8l5 3"/>',
-  tkl: '<path d="M17 65h62M25 74h46M30 65l-8 17m44-17 8 17"/><rect class="workspace-icon-fill" x="28" y="14" width="40" height="51" rx="10"/><path d="M28 38h40M48 22v16M37 51h1m20 0h1M38 22h20"/><path d="M15 28v22m66-22v22M11 28h8m58 0h8"/>',
-  tmbox: '<rect class="workspace-icon-fill" x="24" y="9" width="48" height="78" rx="10"/><rect x="31" y="18" width="34" height="22" rx="3"/><path d="M37 25h17m-17 7h23M34 50h3m10 0h3m10 0h3M34 60h3m10 0h3m10 0h3M34 70h3m10 0h3m10 0h3M34 79h3m10 0h3m10 0h3"/>',
-  dispatcher: '<path d="M13 69h22l27-41h21M13 28h22l27 41h21M48 49v-30"/><circle class="workspace-icon-fill" cx="13" cy="28" r="6"/><circle class="workspace-icon-fill" cx="83" cy="28" r="6"/><circle class="workspace-icon-fill" cx="13" cy="69" r="6"/><circle class="workspace-icon-fill" cx="83" cy="69" r="6"/><circle class="workspace-icon-fill" cx="48" cy="49" r="8"/><path d="M42 15h12"/>',
-  conductor: '<rect class="workspace-icon-fill" x="22" y="17" width="52" height="66" rx="8"/><rect x="36" y="10" width="24" height="14" rx="4"/><path d="m33 41 4 4 7-8m-11 24 4 4 7-8M51 41h12M51 61h12"/>',
-};
-
-function workspaceIcon(key) {
-  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  icon.setAttribute("viewBox", "0 0 96 96");
-  icon.setAttribute("aria-hidden", "true");
-  icon.setAttribute("focusable", "false");
-  icon.innerHTML = WORKSPACE_ICONS[key];
-  return icon;
-}
-
 function currentMode() { return document.body.dataset.mode || "workspaces"; }
-function storedMode() { return sessionStorage.getItem(WORKSPACE_KEY) ? "kor" : "workspaces"; }
+function storedMode() { sessionStorage.removeItem(WORKSPACE_KEY); return "workspaces"; }
 
-function workspaceHome() {
-  return WORKSPACES[sessionStorage.getItem(WORKSPACE_KEY)]?.path || "/#workspaces";
-}
+// The logo always leads to the participant view; Drift is one click away from there.
+function workspaceHome() { return "/"; }
 
 function availableWorkspaces() {
   // Fail closed: a stale browser choice must not grant a role or select EU/US.
@@ -572,13 +555,9 @@ async function refreshServerContext() {
   const meet = payload.selected_meet;
   const name = meet?.name || t("Ingen träff vald");
   document.querySelector("#app-meet-name").textContent = name;
-  renderWorkspaceMeetLabel();
   const selected = sessionStorage.getItem(WORKSPACE_KEY);
-  if (selected && !availableWorkspaces().includes(selected)) {
-    sessionStorage.removeItem(WORKSPACE_KEY);
-    setMode("workspaces");
-  }
-  renderWorkspacePicker();
+  if (selected && !availableWorkspaces().includes(selected)) sessionStorage.removeItem(WORKSPACE_KEY);
+  globalThis.TrainMeetParticipant?.refresh();
   renderCloudStatus();
   const us = payload.operating_region === "us";
   document.querySelector("#us-runtime-summary").classList.toggle("hidden", !us);
@@ -591,56 +570,8 @@ async function refreshServerContext() {
   return payload;
 }
 
-function renderWorkspacePicker() {
-  const host = document.querySelector("#workspace-options");
-  const signature = availableWorkspaces().join(",") + ":" + document.documentElement.lang;
-  if (host.dataset.workspaces === signature) return;
-  host.dataset.workspaces = signature;
-  host.replaceChildren();
-  for (const key of availableWorkspaces()) {
-    const entry = WORKSPACES[key];
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "workspace-option";
-    button.dataset.workspace = key;
-    const illustration = document.createElement("span");
-    illustration.className = "workspace-illustration";
-    illustration.append(workspaceIcon(key));
-    const title = document.createElement("strong");
-    title.id = `workspace-title-${key}`;
-    title.textContent = t(entry.title);
-    const detail = document.createElement("span");
-    detail.id = `workspace-detail-${key}`;
-    detail.className = "workspace-detail";
-    detail.textContent = t(entry.detail);
-    button.setAttribute("aria-labelledby", title.id);
-    button.setAttribute("aria-describedby", detail.id);
-    const action = document.createElement("span");
-    action.className = "workspace-enter";
-    action.setAttribute("aria-hidden", "true");
-    action.textContent = t("Öppna arbetsyta") + " →";
-    button.append(illustration, title, detail, action);
-    button.addEventListener("click", () => {
-      sessionStorage.setItem(WORKSPACE_KEY, key);
-      if (key === "administration") {
-        history.pushState(null, "", "/drift");
-        applyWorkspaceRoute();
-      } else location.assign(entry.path);
-    });
-    host.append(button);
-  }
-}
-
-function renderWorkspaceMeetLabel() {
-  const meet = state.serverContext?.selected_meet;
-  document.querySelector("#workspace-meet").textContent = meet
-    ? t("{name} · alla arbetsytor använder samma träff.", { name: meet.name })
-    : t("Koppla servern till en publicerad träff i Cloud via Inställningar.");
-}
-
 globalThis.TrainMeetI18n.subscribe(() => {
-  renderWorkspacePicker();
-  renderWorkspaceMeetLabel();
+  globalThis.TrainMeetParticipant?.refresh();
   renderCloudStatus();
   renderUsers();
   renderCloudPresentation();
@@ -651,17 +582,15 @@ function setMode(mode) {
   const next = MODES.includes(mode) ? mode : "workspaces";
   document.body.dataset.mode = next;
   document.querySelector("#workspace-home").href = workspaceHome();
-  document.querySelector("#workspace-picker").classList.toggle("hidden", next !== "workspaces");
   document.querySelector(".server-admin-shell").classList.toggle("hidden", next === "workspaces");
+  if (next === "workspaces") globalThis.TrainMeetParticipant?.start(); else globalThis.TrainMeetParticipant?.stop();
   for (const [name, selector] of Object.entries(WORKSPACE_PANELS)) {
     document.querySelector(selector).classList.toggle("hidden", name !== next);
   }
   document.querySelector("#application-menu").open = false;
   document.querySelector("#settings-heading").classList.toggle("hidden", next !== "installningar");
   if (next !== "tmbox") stopTMBoxV2();
-  if (next === "workspaces") {
-    renderWorkspacePicker();
-  } else if (next === "tmbox") {
+  if (next === "tmbox") {
     startTMBoxV2();
   } else if (next === "installningar") showSettings();
   else if (next === "simulation") refreshSimulation();
@@ -683,7 +612,7 @@ function applyWorkspaceRoute() {
   let route = location.hash.slice(1);
   const legacy = {overview: "/drift", traffic: "/drift", settings: "/installningar", simulation: "/drift#drift-simulation", screens: "/installningar#skarmar"};
   if (legacy[route]) { history.replaceState(null, "", legacy[route]); route = location.hash.slice(1); }
-  if (route === "workspaces" && location.pathname !== "/") history.replaceState(null, "", "/#workspaces");
+  if (route === "workspaces") { history.replaceState(null, "", "/"); route = ""; }
   const path = location.pathname.replace(/\/$/, "") || "/";
   const protectedMode = {"/drift": "kor", "/installningar": "installningar", "/hjalp": "help", "/login": "kor"}[path];
   if (protectedMode) {
@@ -691,12 +620,6 @@ function applyWorkspaceRoute() {
     setup.classList.add("hidden"); login.classList.add("hidden"); appView.classList.remove("hidden");
     if (path === "/drift" || path === "/login") sessionStorage.setItem(WORKSPACE_KEY, "administration");
     setMode(protectedMode);
-    return;
-  }
-  if (!route && sessionStorage.getItem(WORKSPACE_KEY)) {
-    const destination = workspaceHome();
-    if (destination === "/drift") { history.replaceState(null, "", destination); applyWorkspaceRoute(); }
-    else location.replace(destination);
     return;
   }
   if (!state.authStatus?.authenticated && !["", "workspaces", "tmbox"].includes(route)) {
@@ -712,7 +635,6 @@ function applyWorkspaceRoute() {
   else if (route === "screens") setMode("skarmar");
   else if (route === "tmbox") {
     if (!availableWorkspaces().includes("tmbox")) { setMode("workspaces"); return; }
-    sessionStorage.setItem(WORKSPACE_KEY, "tmbox");
     location.replace("/tmbox/");
   }
   else if (route === "traffic" && availableWorkspaces().includes("administration")) {
@@ -722,12 +644,7 @@ function applyWorkspaceRoute() {
     setMode("kor");
     if (state.serverContext?.operating_region === "eu") document.querySelector("#overview-traffic").scrollIntoView();
   }
-  else if (!route || route === "workspaces" || !sessionStorage.getItem(WORKSPACE_KEY)) setMode("workspaces");
-  else if (sessionStorage.getItem(WORKSPACE_KEY) === "tmbox") {
-    location.replace("/tmbox/");
-  }
-  else if (sessionStorage.getItem(WORKSPACE_KEY) !== "administration") location.assign(workspaceHome());
-  else setMode("kor");
+  else setMode("workspaces");
 }
 
 document.body.dataset.mode = storedMode();
@@ -735,12 +652,8 @@ window.addEventListener("hashchange", applyWorkspaceRoute);
 window.addEventListener("popstate", applyWorkspaceRoute);
 document.querySelector("#workspace-home").addEventListener("click", (event) => {
   event.preventDefault();
-  const destination = workspaceHome();
-  if (destination.startsWith("/#")) {
-    const hash = destination.slice(1);
-    if (location.hash === hash) applyWorkspaceRoute();
-    else location.hash = hash;
-  } else location.assign(destination);
+  history.pushState(null, "", "/");
+  applyWorkspaceRoute();
 });
 bindUsersSection();
 bindRestore();
@@ -901,7 +814,7 @@ logoutButton.addEventListener("click", async () => {
   localStorage.removeItem("trainmeet.accessToken");
   localStorage.removeItem("trainmeet.panelID");
   sessionStorage.removeItem(WORKSPACE_KEY);
-  history.replaceState(null, "", "/#workspaces");
+  history.replaceState(null, "", "/");
   state.token = null;
   state.snapshots.clear();
   clearTimeout(state.snapshotTimer);
@@ -2057,12 +1970,13 @@ async function refreshLocalClock() {
       const payload = await display.json();
       state.overviewSnapshot = payload;
       renderOverview(payload);
-      renderConnectionBadgeSettings(payload.connection || {});
     }
   } else {
     const display = await fetch("/v1/display", {cache:"no-store"});
-    if (display.ok) { const payload = await display.json(); serverUI.us(payload.us); renderConnectionBadgeSettings(payload.connection || {}); }
+    if (display.ok) { const payload = await display.json(); serverUI.us(payload.us); }
   }
+  const connection = await authorizedFetch("/v1/display/connection", {cache: "no-store"});
+  if (connection.ok) renderConnectionBadgeSettings(await connection.json());
   const timeInput = document.querySelector("#local-clock-time");
   if (!editorActive(clockControlForm)) timeInput.value = clock.time || "12:00:00";
   const speedInput = document.querySelector("#local-clock-speed");
@@ -2124,6 +2038,21 @@ function renderConnectionBadgeSettings(connection) {
   }
   const validity = document.querySelector("#connection-badge-validity");
   if (validity && document.activeElement !== validity) validity.value = String(connection.validity_hours ?? 0);
+  const wifi = connection.wifi || {};
+  const wifiName = document.querySelector("#connection-wifi-name");
+  const wifiPassword = document.querySelector("#connection-wifi-password");
+  if (wifiName && document.activeElement !== wifiName) wifiName.value = wifi.name || "";
+  if (wifiPassword && document.activeElement !== wifiPassword) wifiPassword.value = wifi.password || "";
+  document.querySelector("#connection-wifi-share").checked = wifi.show_password === true;
+  const wifiNote = document.querySelector("#connection-wifi-note");
+  if (wifiNote) {
+    if (wifi.detected_name && wifi.detected_name !== wifi.name) {
+      wifiNote.dataset.tmText = "Serverns nätverk: {name}. Skriv in det ovan om det är träffens Wi-Fi.";
+      wifiNote.textContent = t(wifiNote.dataset.tmText, { name: wifi.detected_name });
+    } else setMessage(wifiNote, "Lösenord delas bara när du väljer det. Wi-Fi-koden följer samma val.");
+  }
+  const ttl = document.querySelector("#web-client-ttl");
+  if (ttl && document.activeElement !== ttl && !editorActive(ttl.closest("form"))) ttl.value = String(connection.web_client_ttl_minutes ?? 30);
   const badge = document.querySelector("#connection-badge-code");
   badge.textContent = connection.code
     ? `${connection.host}:${connection.port} · ${connection.code}`
@@ -2145,6 +2074,9 @@ async function saveConnectionBadgeSettings() {
       body: JSON.stringify({
         screens,
         validity_hours: Number(document.querySelector("#connection-badge-validity").value),
+        wifi_name: document.querySelector("#connection-wifi-name")?.value ?? "",
+        wifi_password: document.querySelector("#connection-wifi-password")?.value ?? "",
+        wifi_show_password: document.querySelector("#connection-wifi-share").checked,
       }),
     });
     const payload = await response.json();
@@ -2165,6 +2097,29 @@ async function saveConnectionBadgeSettings() {
     endModalAction(form);
   }
 }
+
+async function saveWebClientTTL(event) {
+  event.preventDefault();
+  const form = document.querySelector("#web-client-ttl-form");
+  const message = document.querySelector("#web-client-ttl-message");
+  if (!beginModalAction(form)) return;
+  try {
+    const response = await authorizedFetch("/v1/display/connection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ web_client_ttl_minutes: Number(document.querySelector("#web-client-ttl").value) }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Städtiden kunde inte sparas");
+    setMessage(message, "Sparat.", "success");
+    finishModal(form);
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  } finally {
+    endModalAction(form);
+  }
+}
+document.querySelector("#web-client-ttl-form")?.addEventListener("submit", saveWebClientTTL);
 
 async function controlLocalClock(command) {
   if (!beginModalAction(clockControlForm)) return;
@@ -2550,6 +2505,7 @@ async function showLogin() {
   clearTimeout(state.snapshotTimer);
   clearTimeout(state.adminTimer);
   stopTMBoxV2();
+  globalThis.TrainMeetParticipant?.stop();
   document.querySelector("#application-menu").open = false;
   state.authStatus = { ...(state.authStatus || {}), authenticated: false };
   // Flikar och lägesknappar leder ingenstans utan inloggning. De stod kvar
@@ -2767,26 +2723,29 @@ function topologyBounds(sourcePositions, edges) {
   };
 }
 
-function appendLocomotive(target, point, trainNumber, direction = 1, options = {}) {
+// A train on the map is a blue tag whose nose points the way the train is
+// going, so the direction reads without an arrow character or a legend.
+// Size follows the surface: small on Drift, large on a TV.
+function trainBadgePath(width, height, nose, radius) {
+  const left = -width / 2, right = width / 2, top = -height / 2, bottom = height / 2;
+  return `M${left + radius},${top} H${right - nose} L${right},0 L${right - nose},${bottom} H${left + radius} A${radius},${radius} 0 0 1 ${left},${bottom - radius} V${top + radius} A${radius},${radius} 0 0 1 ${left + radius},${top} Z`;
+}
+
+function appendTrainBadge(target, point, trainNumber, direction = 1, options = {}) {
+  const label = String(trainNumber);
+  const tv = Boolean(options.tv);
+  const fontSize = tv ? 28 : 9, nose = tv ? 16 : 6, height = tv ? 44 : 16, radius = tv ? 8 : 4;
+  const width = Math.max(tv ? 96 : 30, label.length * fontSize * 0.62 + (tv ? 36 : 14)) + nose;
   const group = svgElement("g", {
     transform: `translate(${point.x},${point.y})`,
-    class: `topology-train${options.selected ? " selected" : ""}${options.dimmed ? " dimmed" : ""}${options.clickable ? " clickable" : ""}`,
+    class: `topology-train${tv ? " topology-train-badge" : ""}${options.selected ? " selected" : ""}${options.dimmed ? " dimmed" : ""}${options.clickable ? " clickable" : ""}`,
     role: options.clickable ? "button" : "img",
     tabindex: options.clickable ? "0" : "-1",
-    "aria-label": `Tåg ${trainNumber}`,
+    "aria-label": `Tåg ${label} ${direction > 0 ? "→" : "←"}`,
   });
-  if (options.selected) group.append(svgElement("circle", { r: 17, cy: -2, class: "topology-train-ring" }));
-  group.append(svgElement("text", { y: -14, class: "train-number" }, trainNumber));
-  const locomotive = svgElement("g", { transform: `scale(${direction},1)` });
-  locomotive.append(svgElement("rect", { x: -6, y: -4, width: 12, height: 7, rx: 3, fill: "hsl(0 72% 51%)" }));
-  locomotive.append(svgElement("rect", { x: -9, y: -6, width: 5, height: 9, rx: 1, fill: "hsl(0 72% 51%)", opacity: .9 }));
-  locomotive.append(svgElement("rect", { x: 4, y: -8, width: 2.5, height: 4, rx: 1, fill: "hsl(0 72% 51%)", opacity: .85 }));
-  locomotive.append(svgElement("circle", { cx: 5.25, cy: -10, r: 2, fill: "var(--display-muted)", opacity: .5 }));
-  locomotive.append(svgElement("polygon", { points: "6,3 9,1 9,3", fill: "hsl(0 72% 51%)", opacity: .8 }));
-  locomotive.append(svgElement("circle", { cx: -5, cy: 4, r: 2, fill: "var(--display-fg)", opacity: .7 }));
-  locomotive.append(svgElement("circle", { cx: 0, cy: 4, r: 2, fill: "var(--display-fg)", opacity: .7 }));
-  locomotive.append(svgElement("circle", { cx: 5, cy: 4, r: 1.5, fill: "var(--display-fg)", opacity: .7 }));
-  group.append(locomotive);
+  if (options.selected) group.append(svgElement("rect", { x: -width / 2 - 3, y: -height / 2 - 3, width: width + 6, height: height + 6, rx: radius + 3, class: "topology-train-ring" }));
+  group.append(svgElement("path", { d: trainBadgePath(width, height, nose, radius), transform: `scale(${direction},1)`, class: "topology-train-tag" }));
+  group.append(svgElement("text", { x: -direction * nose / 2, y: tv ? 10 : 3.2, "text-anchor": "middle", class: "train-number" }, label));
   if (options.clickable) {
     const activate = (event) => {
       event.stopPropagation();
@@ -2911,12 +2870,8 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const direction = position.from_station_id && position.to_station_id
       ? ((positions.get(position.to_station_id)?.x || 0) >= (positions.get(position.from_station_id)?.x || 0) ? 1 : -1)
       : 1;
-    if (options.tv) {
-      const badge = svgElement("g", {class:"topology-train-badge",role:"img","aria-label":`Tåg ${position.train_number}`});
-      badge.append(svgElement("rect",{x:point.x-58,y:point.y-50,width:116,height:44,rx:8,fill:"#2256c3"}));
-      badge.append(svgElement("text",{x:point.x,y:point.y-20,"text-anchor":"middle",fill:"white","font-size":28},`${position.train_number} ${direction>0?"→":"←"}`));
-      target.append(badge);
-    } else appendLocomotive(target, { x: point.x, y: point.y - 17 }, position.train_number, direction, {
+    appendTrainBadge(target, { x: point.x, y: point.y - (options.tv ? 28 : 15) }, position.train_number, direction, {
+      tv: Boolean(options.tv),
       selected: String(position.train_number) === String(options.selectedTrainNumber),
       dimmed: Boolean(selectedService && String(position.train_number) !== String(options.selectedTrainNumber)),
       clickable: Boolean(options.onTrainSelect),
@@ -3428,17 +3383,65 @@ function updateAnalogClockHands(target, seconds, style, running) {
   target.querySelector('[data-clock-hand="second"]')?.setAttribute("transform", `rotate(${secondAngle} 100 100)`);
 }
 
+// The clock styles offered on a screen, in the same order as under ⚙ Inställningar.
+const DISPLAY_CLOCK_STYLES = ["digital", "analog", "stationsur", "swiss"];
+const DISPLAY_CLOCK_STYLE_KEY = "trainmeet.displayClockStyle";
+const DISPLAY_CLOCK_SECONDS_KEY = "trainmeet.displayClockSeconds";
+
+// The appearance chosen under ⚙ Inställningar is the default for every screen.
+// A screen may still choose its own style and seconds from its menu bar (the
+// TV in the hall and the laptop by the desk are different screens); that
+// choice lives in this browser only and an empty value follows the server.
+function displayClockPreference() {
+  try {
+    return { style: localStorage.getItem(DISPLAY_CLOCK_STYLE_KEY) || "", seconds: localStorage.getItem(DISPLAY_CLOCK_SECONDS_KEY) || "" };
+  } catch { return { style: "", seconds: "" }; }
+}
+
+function saveDisplayClockPreference(key, value) {
+  try { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); } catch {}
+}
+
+function resolveClockAppearance(snapshot) {
+  const available = snapshot.clock?.available_styles?.length ? snapshot.clock.available_styles : ["swiss", "swedish", "digital"];
+  const preference = displayClockPreference();
+  let style = available.includes(preference.style) ? preference.style : snapshot.clock?.style || available[0];
+  if (!available.includes(style)) style = available[0];
+  const showSeconds = preference.seconds === "on" ? true : preference.seconds === "off" ? false : snapshot.clock?.show_seconds !== false;
+  return { available, style, showSeconds, preference };
+}
+
+function renderClockToolbar(snapshot) {
+  const styleSelect = document.querySelector("#display-clock-style");
+  const secondsSelect = document.querySelector("#display-clock-seconds");
+  if (!styleSelect || !secondsSelect) return;
+  const { available, preference } = resolveClockAppearance(snapshot);
+  const styles = DISPLAY_CLOCK_STYLES.filter(value => available.includes(value));
+  if (snapshot.clock?.style && !styles.includes(snapshot.clock.style)) styles.push(snapshot.clock.style);
+  const serverStyle = t(clockStyleLabels[snapshot.clock?.style] || snapshot.clock?.style || "");
+  const serverSeconds = snapshot.clock?.show_seconds !== false;
+  const signature = [globalThis.TrainMeetI18n?.getLanguage?.(), styles.join(","), serverStyle, serverSeconds].join("|");
+  if (styleSelect.dataset.signature !== signature) {
+    styleSelect.dataset.signature = signature;
+    styleSelect.replaceChildren(
+      new Option(`${t("Enligt inställningar")} · ${serverStyle}`, ""),
+      ...styles.map(value => new Option(t(clockStyleLabels[value] || value), value)));
+    secondsSelect.replaceChildren(
+      new Option(`${t("Sekunder enligt inställningar")} · ${serverSeconds ? t("på") : t("av")}`, ""),
+      new Option(t("Med sekunder"), "on"),
+      new Option(t("Utan sekunder"), "off"));
+  }
+  styleSelect.value = styles.includes(preference.style) ? preference.style : "";
+  secondsSelect.value = ["on", "off"].includes(preference.seconds) ? preference.seconds : "";
+}
+
 function renderClock(snapshot) {
   const target = document.querySelector("#clock-view");
   target.dataset.us = String(snapshot.meet?.operating_region === "us");
-  const available = snapshot.clock?.available_styles?.length ? snapshot.clock.available_styles : ["swiss", "swedish", "digital"];
-  // The meeting server owns presentation too. Retired localStorage/URL choices
-  // must not silently override an administrator's change on another computer.
-  let style = snapshot.clock?.style || available[0];
-  if (!available.includes(style)) style = available[0];
+  const { style, showSeconds } = resolveClockAppearance(snapshot);
+  const digital = style === "digital";
   const seconds = currentClockSeconds(snapshot);
   const time = currentClockTime(snapshot);
-  const showSeconds = snapshot.clock?.show_seconds !== false;
   let displayTime = showSeconds ? time : time.slice(0, 5);
   if (snapshot.meet?.operating_region === "us" && /^\d\d:/.test(time)) {
     const hour = Number(time.slice(0, 2)); displayTime = `${hour % 12 || 12}${displayTime.slice(2)} ${hour >= 12 ? "PM" : "AM"}`;
@@ -3446,21 +3449,25 @@ function renderClock(snapshot) {
   const darkBackground = !document.querySelector("#display-app").classList.contains("light");
   const stopped = !snapshot.clock?.running;
   const externalMissing = snapshot.clock?.source === "fastclock" && !snapshot.clock.available;
-  const stopText = externalMissing ? t("FastClock: kontakt saknas") : snapshot.clock?.running ? "" : `STOPPAD${snapshot.clock?.stopped_reason ? ` · ${snapshot.clock.stopped_reason}` : ""}`;
+  const reason = snapshot.clock?.stopped_reason || (externalMissing ? t("Senast mottagna tid visas") : "");
   const meta = `${Number(snapshot.clock?.speed || 1)}× · ${snapshot.clock?.source === "fastclock" ? "FastClock" : t("Intern klocka")}`;
-  const renderSignature = [style, darkBackground, showSeconds, stopped, stopText, meta].join("|");
+  const renderSignature = [style, darkBackground, showSeconds, stopped, externalMissing, reason, meta].join("|");
   if (target.dataset.clockSignature !== renderSignature) {
     target.dataset.clockSignature = renderSignature;
-    const face = style === "digital" ? "" : clockSVG(style, style === "stationsur" ? false : darkBackground, showSeconds, stopped);
+    // A running face fills the screen on its own; the status line is only for
+    // digits (where it costs no size) and for a stopped or unreachable clock.
     const status = stopped || externalMissing
-      ? html`<div class="sc-stopped"><div><div class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan stoppad")}</div><div class="sc-stopped__reason">${escapeHTML(snapshot.clock?.stopped_reason || (externalMissing ? t("Senast mottagna tid visas") : ""))}</div><div class="sc-stopped__meta">${escapeHTML(meta)}</div></div></div>`
-      : html`<div class="sc-run">${t("Klockan går")} · ${escapeHTML(meta)}</div>`;
-    target.innerHTML = html`<div class="sc-clock-layout ${style === "digital" ? "sc-clock-layout--digital" : ""}">${face}<div class="sc-clock-side"><div class="clock-digital${stopped ? " stopped" : ""}"></div>${status}</div></div>`;
+      ? html`<div class="sc-stopped"><div><div class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan stoppad")}</div><div class="sc-stopped__reason">${escapeHTML(reason)}</div><div class="sc-stopped__meta">${escapeHTML(meta)}</div></div></div>`
+      : digital ? html`<div class="sc-run">${t("Klockan går")} · ${escapeHTML(meta)}</div>` : "";
+    // One clock only: a face never has digits beside it, and digits never have a face.
+    const clock = digital
+      ? html`<div class="clock-digital${stopped ? " stopped" : ""}" data-seconds="${showSeconds}"></div>`
+      : clockSVG(style, style === "stationsur" ? false : darkBackground, showSeconds, stopped);
+    target.innerHTML = html`<div class="sc-clock-layout ${digital ? "sc-clock-layout--digital" : "sc-clock-layout--face"}${stopped || externalMissing ? " is-stopped" : ""}">${clock}${status}</div>`;
   }
-  const digital = target.querySelector(".clock-digital");
-  if (digital) digital.dataset.seconds = String(showSeconds);
-  if (digital && digital.textContent !== displayTime) digital.textContent = displayTime;
-  if (style !== "digital") updateAnalogClockHands(target, seconds, style, !stopped);
+  const digits = target.querySelector(".clock-digital");
+  if (digits && digits.textContent !== displayTime) digits.textContent = displayTime;
+  if (!digital) updateAnalogClockHands(target, seconds, style, !stopped);
 }
 
 function renderDashboard(snapshot) {
@@ -3519,8 +3526,12 @@ function renderConnectionBadge(snapshot) {
   const connection = snapshot.connection || {};
   const screens = connection.screens || [];
   const address = connection.host ? `${connection.host}:${connection.port}` : "";
-  const visible = Boolean(connection.code) && Boolean(address) && screens.includes(displayKind);
+  const visible = screens.includes(displayKind);
   badge.classList.toggle("hidden", !visible);
+  // The same setting (⚙ › Skärmar och klocka) governs the QR codes: the meet's
+  // Wi-Fi first, then the link to this server. They replace the address line.
+  serverUI.qr({ link: new URL("/", location.href).href, wifi: connection.wifi }, visible);
+  badge.classList.add("hidden");
   if (!visible) return;
   document.querySelector("#display-connection-address").textContent = `TMBox ${address}`;
   document.querySelector("#display-connection-code").textContent = connection.code;
@@ -3535,6 +3546,8 @@ function renderDisplay(snapshot) {
   const isClock = displayKind === "clock";
   document.querySelector("#display-speed").classList.toggle("hidden", !isClock);
   document.querySelector("#display-speed").textContent = `${Number(snapshot.clock?.speed || 1)}×`;
+  document.querySelector("#display-clock-style").classList.toggle("hidden", !isClock);
+  document.querySelector("#display-clock-seconds").classList.toggle("hidden", !isClock);
   const trainSelect = document.querySelector("#display-train-select");
   const trainSelectable = displayKind === "topology" || displayKind === "graph";
   const services = uniqueOverviewServices(snapshot);
@@ -3554,6 +3567,7 @@ function renderDisplay(snapshot) {
   if (displayKind === "territories") serverUI.us(snapshot.us, true);
   if (displayKind === "clock") {
     document.querySelector("#display-selection").classList.add("hidden");
+    renderClockToolbar(snapshot);
     renderClock(snapshot);
   }
   if (displayKind === "dashboard") {
@@ -3620,6 +3634,14 @@ async function initDisplay() {
       graphLastCenteredSelection = null;
       renderGraph(displaySnapshot);
     }
+  });
+  document.querySelector("#display-clock-style").addEventListener("change", (event) => {
+    saveDisplayClockPreference(DISPLAY_CLOCK_STYLE_KEY, event.target.value);
+    if (displaySnapshot) renderClock(displaySnapshot);
+  });
+  document.querySelector("#display-clock-seconds").addEventListener("change", (event) => {
+    saveDisplayClockPreference(DISPLAY_CLOCK_SECONDS_KEY, event.target.value);
+    if (displaySnapshot) renderClock(displaySnapshot);
   });
   document.querySelector("#display-fullscreen").addEventListener("click", async () => {
     try {
