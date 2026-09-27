@@ -1,11 +1,46 @@
 <!doctype html>
 <html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TMBox · TrainMeet Server</title><link rel="stylesheet" href="/tmbox/style.css"><script src="/tmbox/terminal.js" defer></script><script src="/assets/simulation-banner.js" defer></script></head>
-<body data-terminal="live"><main>
-<header class="page-header"><div><p class="eyebrow">TRAINMEET · TMBOX</p><h1>TMBox</h1><p id="subtitle">Ansluter till denna TrainMeet Server…</p></div><a href="/">← Till träffens sida</a></header>
-<section class="intro"><div><strong>Din TMBox på den här servern</strong><p>Visa enhetskoden för administratören som tilldelar din station. Därefter arbetar boxen mot träffens riktiga trafik.</p></div><a href="/tmbox-lab/">Öppna isolerad provbänk →</a></section>
-<div id="connection" role="status">Ansluter…</div><p id="session-info"></p><button id="start-client" class="secondary" hidden>Starta ny TMBox</button>
-<section id="boxes" class="boxes" aria-label="Din TMBox"></section>
-<div hidden><button id="reset-all"></button><button id="reset-clearance"></button><button id="reset-direct"></button><p id="reset-status"></p><div id="language-samples"></div><p id="mode"></p><span id="event-count"></span><ol id="events"></ol></div>
-<p>Servern bestämmer texter och funktioner. Skriv tågnummer direkt och bekräfta med #. A öppnar förfrågningskön. B i översikten öppnar aktiva tåg; C/D växlar mellan dem och # utför det visade tågets åtgärd. Efter avgång väljer du nästa tåg med C/D. * öppnar språkvalet i översikten.</p>
+<title>TMBox · TrainMeet Server</title>
+<link rel="icon" type="image/svg+xml" href="/assets/ikon/trainmeet-ikon.svg">
+<link rel="stylesheet" href="/assets/server-design.css"><link rel="stylesheet" href="/tmbox/style.css">
+<script src="/tmbox/terminal.js" defer></script><script src="/assets/simulation-banner.js" defer></script></head>
+<body data-terminal="live">
+<header class="tm-top">
+  <img class="tm-top__mark" src="/assets/ikon/trainmeet-ikon.svg" alt="" width="26" height="26">
+  <b id="meet-name" class="tm-top__name">TrainMeet Server</b><span id="meet-region" class="tm-badge tm-badge--eu" hidden></span>
+  <span class="tm-top__sub">Virtuell TMBox</span>
+  <span class="tm-top__spacer"></span>
+  <span id="connection-dot" class="tm-top__live is-offline" title="Ansluter…"></span>
+  <a class="tm-btn tm-btn--sm" href="/">Träffens sida</a>
+</header>
+<main>
+  <h1 class="visually-hidden">TMBox</h1>
+  <div class="tm-columns">
+    <section id="boxes" class="boxes" aria-label="Din TMBox"></section>
+    <div class="tm-side">
+      <section class="tm-card" aria-labelledby="identity-title">
+        <div class="tm-card__head"><span id="identity-title">Din TMBox</span><span class="c">på den här servern</span></div>
+        <div class="tm-card__body">
+          <div id="box-state" class="tm-state"><span class="tm-dot"></span><span id="box-state-text">Ansluter…</span></div>
+          <div id="box-identity" class="tm-code is-big" hidden><span class="tm-eyebrow">Enhetskod</span><span id="box-identity-code" class="pv-value pv-value--big"></span></div>
+          <p id="box-note" class="tm-note">Visa koden för trafikledningen, som tilldelar din station under Inställningar → TMBoxar. Boxen börjar arbeta direkt när den är tilldelad – du behöver inte ladda om sidan.</p>
+          <p class="tm-meta"><span id="connection" role="status">Ansluter…</span><span id="connection-rate"> · uppdateras varje sekund</span></p>
+        </div>
+      </section>
+      <details id="key-help" class="tm-card tm-help">
+        <summary>Så fungerar knapparna <span class="c">servern bestämmer texter och funktioner</span></summary>
+        <div class="tm-card__body tm-card__body--rows">
+          <div class="krow"><b>0–9</b><span>Skriv tågnumret direkt. Siffrorna stannar i boxen tills du trycker #.</span></div>
+          <div class="krow"><b>#</b><span>Bekräftar. Utför det visade tågets åtgärd: sök, begär klartecken, ge klart, rapportera avgång eller ankomst.</span></div>
+          <div class="krow"><b>*</b><span>Tillbaka eller avbryt. Under inmatning töms numret. I översikten öppnas språkvalet.</span></div>
+          <div class="krow"><b>A</b><span>Förfrågningskön – alltid, oavsett var du är.</span></div>
+          <div class="krow"><b>B</b><span>Aktiva tåg från översikten. Under inmatning suddar B sista siffran.</span></div>
+          <div class="krow"><b>C / D</b><span>Bläddrar: mellan aktiva tåg, i kön eller i tidtabellen.</span></div>
+        </div>
+      </details>
+    </div>
+  </div>
+  <footer class="tm-foot"><span><span id="server-version">TrainMeet Server</span> · <span id="subtitle">Ansluter till denna TrainMeet Server…</span></span><button id="start-client" class="pv-link" hidden>Starta ny TMBox</button></footer>
+  <p id="session-info" hidden></p>
+  <div hidden><button id="reset-all"></button><button id="reset-clearance"></button><button id="reset-direct"></button><p id="reset-status"></p><div id="language-samples"></div><p id="mode"></p><span id="event-count"></span><ol id="events"></ol></div>
 </main></body></html>

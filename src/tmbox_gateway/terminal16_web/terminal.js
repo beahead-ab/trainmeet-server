@@ -166,6 +166,47 @@
       render(model); setTimeout(() => render(model), model.frame.input_guard_ms + 10);
     }
   }
+  // Page chrome only: the dot in the header and the "Din TMBox" card. Nothing here
+  // reads or changes traffic; it mirrors the same frame the box itself renders.
+  function showConnection(online) {
+    const dot = document.querySelector("#connection-dot");
+    if (!dot) return;
+    dot.classList.toggle("is-offline", !online);
+    dot.title = document.querySelector("#connection").textContent;
+  }
+  function renderIdentity(frame) {
+    const state = document.querySelector("#box-state");
+    if (!state || !identity) return;
+    const assigned = Boolean(frame.station);
+    state.classList.toggle("tm-state--ok", assigned);
+    document.querySelector("#box-state-text").textContent = assigned ? `Tilldelad station: ${frame.station}` : "Väntar på station";
+    const code = document.querySelector("#box-identity");
+    code.hidden = false; code.classList.toggle("is-big", !assigned);
+    document.querySelector("#box-identity-code").textContent = identity.device_code || "";
+    document.querySelector("#box-note").textContent = assigned
+      ? "Boxen arbetar mot träffens riktiga trafik. Trafikledningen kan flytta den till en annan station eller ta bort den under Inställningar → TMBoxar. Språket byter du med * på boxen."
+      : "Visa koden för trafikledningen, som tilldelar din station under Inställningar → TMBoxar. Boxen börjar arbeta direkt när den är tilldelad – du behöver inte ladda om sidan.";
+  }
+  async function loadLiveChrome() {
+    const help = document.querySelector("#key-help");
+    if (help && matchMedia("(min-width: 901px)").matches) help.open = true;
+    try {
+      const response = await fetch("/v1/workspaces", {credentials: "omit", cache: "no-store", signal: AbortSignal.timeout(5000)});
+      const meet = response.ok ? (await response.json()).selected_meet : null;
+      if (meet?.name) document.querySelector("#meet-name").textContent = meet.name;
+      const region = document.querySelector("#meet-region");
+      if (meet?.operating_region) {
+        region.textContent = meet.operating_region.toUpperCase();
+        region.className = `tm-badge tm-badge--${meet.operating_region === "us" ? "us" : "eu"}`;
+        region.hidden = false;
+      }
+    } catch {}
+    try {
+      const response = await fetch("/healthz", {credentials: "omit", cache: "no-store", signal: AbortSignal.timeout(5000)});
+      const health = response.ok ? await response.json() : null;
+      if (health?.version) document.querySelector("#server-version").textContent = `TrainMeet Server ${health.version}`;
+    } catch {}
+  }
   function update(state) {
     connected = true; text = state.text;
     if (state.placement) placement = state.placement;
@@ -174,7 +215,9 @@
     document.querySelector("#subtitle").textContent = text.subtitle;
     document.querySelector("#connection").textContent = text.ready;
     document.querySelector("#session-info").textContent = text.session || "";
+    showConnection(true);
     for (const frame of state.frames) apply(frame);
+    if (live && state.frames.length) renderIdentity(state.frames[0]);
     for (const [device, timetable] of Object.entries(state.timetables || {})) {
       const model = boxes.get(device); if (model) renderTimetable(model, timetable);
     }
@@ -194,7 +237,7 @@
   }
   const events = live ? {} : new EventSource("./events");
   events.onmessage = event => update(JSON.parse(event.data));
-  events.onerror = () => { connected = false; resetButtons(); document.querySelector("#connection").textContent = text.offline || "Testservern är inte ansluten."; for (const model of boxes.values()) render(model); };
+  events.onerror = () => { connected = false; resetButtons(); document.querySelector("#connection").textContent = text.offline || (live ? "Servern är inte ansluten." : "Testservern är inte ansluten."); showConnection(false); for (const model of boxes.values()) render(model); };
   async function startLive() {
     document.querySelector("#start-client").hidden = true;
     try {
@@ -220,7 +263,7 @@
         const frame = await response.json();
         if (!response.ok) throw Error(frame.message || "Anslutningen bröts.");
         if (version === pollVersion) update({frames:[frame],audit:[],text:{title:"TMBox",subtitle:location.host,
-          session:`Enhetskod: ${identity.device_code} · Station tilldelas av administratören`,ready:"Ansluten till servern",entry:"Siffrorna stannar här tills du trycker #.",sending:"Inväntar servern…"}});
+          session:`Enhetskod: ${identity.device_code} · Station tilldelas av administratören`,ready:"Ansluten till servern",offline:"Servern är inte ansluten.",entry:"Siffrorna stannar här tills du trycker #.",sending:"Inväntar servern…"}});
       } catch { events.onerror(); }
     }
     setTimeout(pollLive,1000);
@@ -228,6 +271,7 @@
   if (live) {
     document.querySelector("#start-client").addEventListener("click",()=>{localStorage.removeItem("trainmeet.browser-tmbox");startLive();});
     document.addEventListener("visibilitychange",()=>{if(document.hidden){++pollVersion;for(const model of boxes.values())model.entry.clear();events.onerror();}});
+    loadLiveChrome();
     startLive().then(pollLive);
   }
   function resetButtons() {
