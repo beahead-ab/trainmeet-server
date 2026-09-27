@@ -145,7 +145,7 @@
     const conflicts = !us && api.presentation?.findings?.filter(f => f.level === "conflict").length;
     const newer = Boolean(update.pending_publication_id || update.available_publication_id);
     const status = $("#header-cloud-status");
-    const offline = update.linked && update.last_checked_at && Date.now() - Date.parse(update.last_checked_at) > 600000;
+    const offline = update.linked && update.state === "error" && (!update.last_checked_at || Date.now() - Date.parse(update.last_checked_at) > 600000);
     status.textContent = newer ? t("Ny version finns i Cloud") : offline ? t("Cloud inte nådd") : version + (conflicts ? ` · ${conflicts} ${t("konflikter")}` : "");
     status.className = `tm-status tm-status--${newer ? "newer" : offline ? "offline" : "published"}`;
     $("#cloud-connection-meta").textContent = version;
@@ -234,7 +234,8 @@
     meet.replaceChildren(make("span", "", snapshot.meet?.name || "TrainMeet"), make("span", `sc-badge sc-badge--${us ? "us" : "eu"}`, us ? "US" : "EU"));
     const labels = {clock:"Träffklocka", topology:"Banöversikt", graph:"Tågdiagram", dashboard:"Översikt", territories:"Områdestavla"};
     if (kind !== "clock") meet.append(make("span", "sc-subtitle", t(labels[kind])));
-    $("#screen-time").textContent = kind === "clock" ? "" : time.slice(0, 5);
+    const hour = Number(time.slice(0,2));
+    $("#screen-time").textContent = kind === "clock" ? "" : us ? `${hour%12||12}${time.slice(2,5)} ${hour>=12?"PM":"AM"}` : time.slice(0, 5);
     $("#screen-status").textContent = snapshot.server_name || "TrainMeet Server";
     $("#display-stage").dataset.kind = kind;
     api.lastDisplayContact = Date.now();

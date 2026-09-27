@@ -3524,7 +3524,7 @@ function renderDisplay(snapshot) {
   displaySnapshot = snapshot;
   serverUI.display(snapshot, displayKind, currentClockTime(snapshot));
   document.querySelector("#display-loading").classList.add("hidden");
-  document.querySelector("#display-title").textContent = `${snapshot.meet?.name || "TrainMeet"} · ${({ topology: t("Banöversikt"), graph: "Tågdiagram", clock: t("Träffklocka"), dashboard: t("Översikt") })[displayKind]}`;
+  document.querySelector("#display-title").textContent = `${snapshot.meet?.name || "TrainMeet"} · ${({ topology: t("Banöversikt"), graph: "Tågdiagram", clock: t("Träffklocka"), dashboard: t("Översikt"), territories: t("Områdestavla") })[displayKind]}`;
   document.querySelector("#display-day").textContent = snapshot.active_day || "Dagl";
   const isClock = displayKind === "clock";
   document.querySelector("#display-speed").classList.toggle("hidden", !isClock);

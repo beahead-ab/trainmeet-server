@@ -34,7 +34,9 @@ const root = path.resolve(__dirname, '../..');
       if (process.env.SERVER_SHELL_SCREENSHOTS) await page.screenshot({ path: path.join(process.env.SERVER_SHELL_SCREENSHOTS, 'live-' + name + '.png'), fullPage: true });
     };
     async function login(base) {
-      await page.goto(base);
+      // A remembered workspace deliberately skips the chooser on `/`.
+      // Enter the chooser explicitly when changing between isolated servers.
+      await page.goto(base + '/#workspaces');
       await page.locator('#workspace-options [data-workspace="administration"]').click();
       await page.locator('#login-form').waitFor({ state: 'visible' }).catch(async error => {
         console.error('Login state:', page.url(), await page.locator('body').innerText());
