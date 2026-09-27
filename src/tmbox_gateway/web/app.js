@@ -2772,6 +2772,106 @@ function topologyEdgeKey(a, b) {
   return [String(a), String(b)].sort().join("::");
 }
 
+// Station names sit centred under their node. That is the right place on a
+// straight line, but not where a short branch runs close to the main line
+// (two names in one another) or where a track leaves the node downwards (the
+// line runs through the name). Only those names move, to the free side of
+// their node; a map where nothing collides looks exactly as before. Each move
+// strictly lowers the total overlap, so the search always ends.
+const TOPOLOGY_LABEL_SIDES = {
+  // [horizontal −1 left · 0 centred · 1 right, vertical −1 above · 0 centred · 1 below, preference]
+  below: [0, 1, 0], above: [0, -1, 3], right: [1, 0, 4], left: [-1, 0, 5],
+  "below-right": [1, 1, 6], "above-right": [1, -1, 7], "below-left": [-1, 1, 8], "above-left": [-1, -1, 9],
+};
+
+function placeTopologyLabels(items, segments, viewBox, options = {}) {
+  if (!items.length) return;
+  const tv = Boolean(options.tv);
+  const gap = tv ? 14 : 5;
+  const lineGap = 30; // TV: from the name's baseline to the code line's
+  const measure = (element) => {
+    const size = parseFloat(getComputedStyle(element).fontSize) || (tv ? 30 : 11);
+    let width = 0;
+    try { width = element.getComputedTextLength(); } catch { width = 0; }
+    return { size, width: width > 0 ? width : element.textContent.length * size * 0.58 };
+  };
+  for (const item of items) {
+    item.nameSize = measure(item.name);
+    item.codeSize = item.code ? measure(item.code) : null;
+    item.below = Number(item.name.getAttribute("y")) - item.point.y;
+    item.node = { x1: item.point.x - item.radius - 2, y1: item.point.y - item.radius - 2, x2: item.point.x + item.radius + 2, y2: item.point.y + item.radius + 2 };
+  }
+  const layout = (item, side) => {
+    const [horizontal, vertical, preference] = TOPOLOGY_LABEL_SIDES[side];
+    const { x, y } = item.point, radius = item.radius, name = item.nameSize, code = item.codeSize;
+    const width = Math.max(name.width, code ? code.width : 0);
+    const ascent = name.size * 0.75;
+    const height = ascent + (code ? lineGap + code.size * 0.22 : name.size * 0.22);
+    const corner = horizontal && vertical ? radius * 0.75 + (tv ? 6 : 2) : 0;
+    let baseline;
+    // A name beside and below its node keeps the row's baseline when there is room.
+    if (vertical > 0) baseline = horizontal ? Math.max(y + corner + ascent, y + item.below) : y + item.below;
+    else if (vertical < 0) baseline = (horizontal ? y - corner : y - radius - gap) - height + ascent;
+    else baseline = y - height / 2 + ascent;
+    const anchor = horizontal > 0 ? "start" : horizontal < 0 ? "end" : "middle";
+    const textX = horizontal ? x + horizontal * (corner || radius + gap) : x;
+    const x1 = anchor === "start" ? textX : anchor === "end" ? textX - width : textX - width / 2;
+    return { side, preference, anchor, textX, baseline, box: { x1, x2: x1 + width, y1: baseline - ascent, y2: baseline - ascent + height } };
+  };
+  const overlap = (a, b, margin = 0) => Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) + margin) * Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1) + margin);
+  const clearance = tv ? 10 : 6; // two names never closer than this
+  const inside = (box, p) => p.x >= box.x1 && p.x <= box.x2 && p.y >= box.y1 && p.y <= box.y2;
+  const crosses = (box, [a, b]) => {
+    if (inside(box, a) || inside(box, b)) return true;
+    const side = (p, q, r) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+    const corners = [{ x: box.x1, y: box.y1 }, { x: box.x2, y: box.y1 }, { x: box.x2, y: box.y2 }, { x: box.x1, y: box.y2 }];
+    return corners.some((c, i) => {
+      const d = corners[(i + 1) % 4];
+      return side(a, b, c) !== side(a, b, d) && side(c, d, a) !== side(c, d, b);
+    });
+  };
+  const [viewX, viewY, viewWidth, viewHeight] = String(viewBox).split(" ").map(Number);
+  const placed = new Map(items.map((item) => [item, layout(item, "below")]));
+  const penalty = (item, spot) => {
+    let cost = spot.preference;
+    for (const other of items) {
+      if (other === item) continue;
+      const labels = overlap(spot.box, placed.get(other).box, clearance);
+      const node = overlap(spot.box, other.node);
+      if (labels > 0) cost += 1000 + labels;
+      if (node > 0) cost += 1000 + node;
+    }
+    for (const segment of segments) if (crosses(spot.box, segment)) cost += 300;
+    if (!options.refit && Number.isFinite(viewWidth)
+      && (spot.box.x1 < viewX || spot.box.x2 > viewX + viewWidth || spot.box.y1 < viewY || spot.box.y2 > viewY + viewHeight)) cost += 600;
+    return cost;
+  };
+  for (let round = 0; round < items.length * 4; round += 1) {
+    let best = null;
+    for (const item of items) {
+      const current = penalty(item, placed.get(item));
+      if (current < 100) continue;
+      for (const side of Object.keys(TOPOLOGY_LABEL_SIDES)) {
+        const spot = layout(item, side);
+        const gain = current - penalty(item, spot);
+        if (gain > 0 && (!best || gain > best.gain)) best = { item, spot, gain };
+      }
+    }
+    if (!best) break;
+    placed.set(best.item, best.spot);
+  }
+  for (const [item, spot] of placed) {
+    if (spot.side === "below") continue;
+    for (const [element, offset] of [[item.name, 0], [item.code, lineGap]]) {
+      if (!element) continue;
+      element.setAttribute("x", spot.textX);
+      element.setAttribute("y", spot.baseline + offset);
+      element.classList.toggle("label-start", spot.anchor === "start");
+      element.classList.toggle("label-end", spot.anchor === "end");
+    }
+  }
+}
+
 function renderTopology(snapshot, target = document.querySelector("#topology-svg"), options = {}) {
   if (!target) return;
   let { positions, edges, viewBox } = topologyLayout(snapshot);
@@ -2783,9 +2883,14 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const minX = Math.min(...points.map(p=>p.x)), maxX = Math.max(...points.map(p=>p.x));
     const minY = Math.min(...points.map(p=>p.y)), maxY = Math.max(...points.map(p=>p.y));
     const width = maxX-minX, depth = maxY-minY;
-    const scale = points.length > 1 ? Math.min(width ? 1480/width : Infinity, depth ? (height-180)/depth : Infinity) : 1;
-    const safeScale = Number.isFinite(scale) ? scale : 1;
-    positions = new Map([...positions].map(([id,p])=>[id,{x:(p.x-(minX+maxX)/2)*safeScale+920,y:(p.y-(minY+maxY)/2)*safeScale+height/2-30}]));
+    // The line always uses the full width. A low map (the Översikt card) is
+    // squeezed vertically rather than shrunk as a whole, which would crowd the
+    // names on the main line; the drawing is never stretched upwards.
+    const fitDepth = depth ? (height-180)/depth : Infinity;
+    const scaleX = points.length > 1 ? (width ? 1480/width : fitDepth) : 1;
+    const safeX = Number.isFinite(scaleX) ? scaleX : 1;
+    const safeY = Math.min(safeX, fitDepth);
+    positions = new Map([...positions].map(([id,p])=>[id,{x:(p.x-(minX+maxX)/2)*safeX+920,y:(p.y-(minY+maxY)/2)*safeY+height/2-30}]));
     viewBox = `0 0 1840 ${height}`;
   }
   target.setAttribute("viewBox", viewBox);
@@ -2831,6 +2936,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
       target.append(svgElement("line", { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: lineClass, "stroke-dasharray": edge.autonomous ? "4 3" : "none" }));
     }
   }
+  const labels = [];
   for (const station of snapshot.stations || []) {
     const point = positions.get(station.id);
     if (!point) continue;
@@ -2850,11 +2956,15 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     if (onRoute || selected) group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + 5, class: "topology-station-ring" }));
     group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + 1, class: "topology-mask" }));
     group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius, class: `topology-station${autonomous ? " autonomous" : ""}${activeStationIDs.has(station.id) ? " active" : ""}${onRoute || selected ? " highlighted" : ""}` }));
-    group.append(svgElement("text", { x: point.x, y: point.y + (options.tv ? 40 : autonomous ? 16 : 20), class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name));
+    const name = svgElement("text", { x: point.x, y: point.y + (options.tv ? 40 : autonomous ? 16 : 20), class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name);
+    group.append(name);
+    let code = null;
     if (options.tv) {
       const count = (snapshot.train_positions || []).filter(p=>p.station_id===station.id && !p.connection_id).length;
-      group.append(svgElement("text", {x:point.x,y:point.y+70,class:"topology-code"}, `${station.code || ""} · ${count} ${t("tåg")}`));
+      code = svgElement("text", {x:point.x,y:point.y+70,class:"topology-code"}, `${station.code || ""} · ${count} ${t("tåg")}`);
+      group.append(code);
     }
+    labels.push({ point, radius, name, code });
     const activate = (event) => {
       event.stopPropagation();
       options.onStationSelect?.(station.id);
@@ -2867,6 +2977,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     }
     target.append(group);
   }
+  placeTopologyLabels(labels, edges.map((edge) => [positions.get(edge.from), positions.get(edge.to)]).filter(([from, to]) => from && to), viewBox, options);
   for (const position of snapshot.train_positions || []) {
     let point = null;
     if (position.status === "station") point = positions.get(position.station_id);

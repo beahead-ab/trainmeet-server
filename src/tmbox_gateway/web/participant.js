@@ -90,7 +90,7 @@
     $("#pv-stat-staffed").textContent = staffed == null ? String(stations) : `${staffed} / ${stations}`;
     label($("#pv-stat-staffed-label"), staffed == null ? "stationer" : "bemannade");
     const svg = $("#pv-topology");
-    renderTopology(snapshot, svg, { showBadge: false, selectedStationID: selectedStation,
+    renderTopology(snapshot, svg, { showBadge: false, refit: true, selectedStationID: selectedStation,
       onStationSelect: id => { selectedStation = selectedStation === id ? null : id; renderTrack(); renderTimetable(); },
       onClear: () => { selectedStation = null; renderTrack(); renderTimetable(); } });
     $("#pv-clear-station").hidden = !selectedStation;

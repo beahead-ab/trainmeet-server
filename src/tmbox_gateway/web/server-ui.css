@@ -386,6 +386,9 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .topology-tv .topology-track { stroke-width: 8; }
 .topology-tv .topology-name, .topology-tv .topology-code { paint-order: stroke; stroke: var(--display-bg); stroke-width: 8px; stroke-linejoin: round; }
 #dashboard-topology .topology-name, #dashboard-topology .topology-code { stroke: var(--display-card); }
+/* Names moved to the free side of their node (placeTopologyLabels in app.js). */
+.topology-node .topology-name.label-start, .topology-node .topology-code.label-start { text-anchor: start; }
+.topology-node .topology-name.label-end, .topology-node .topology-code.label-end { text-anchor: end; }
 /* Train tags: blue, nose towards the direction of travel (all maps). */
 .topology-train-tag { fill: #2256c3; }
 .topology-train .train-number { fill: #fff; font: 700 9px/1 var(--font-mono); text-anchor: middle; }
