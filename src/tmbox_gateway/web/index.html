@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="/assets/server-ui.css">
     <script src="/assets/i18n.js" defer></script>
     <script src="/assets/shell-messages.js" defer></script>
+    <script src="/assets/participant-messages.js" defer></script>
     <script src="/assets/i18n-init.js" defer></script>
     <script src="/assets/simulation-banner.js" defer></script>
   </head>
@@ -153,7 +154,7 @@
       </section>
 
       <section id="login" class="card pairing-card hidden">
-        <a href="/">← Till träffens sida</a>
+        <a href="/" data-tm-text="← Till träffens sida">← Till träffens sida</a>
         <img class="pairing-icon" src="/trainmeet-logo.png" alt="TrainMeet" data-tm-alt="TrainMeet">
         <div id="login-intro">
           <p class="eyebrow"><tm-text data-tm-text="ADMIN">ADMIN</tm-text></p>
@@ -228,7 +229,8 @@
                   <div class="tm-stat tm-stat--ok"><b id="pv-stat-staffed">–</b><span id="pv-stat-staffed-label">bemannade</span></div>
                 </div>
                 <div class="pv-map"><div class="pv-map__scroll"><svg id="pv-topology" class="pv-topology" role="img" aria-label="Banöversikt" data-tm-aria-label="Banöversikt"></svg></div></div>
-                <p class="pv-map__hint">Dra i sidled för hela banan.</p>
+                <p class="pv-map__hint">Dra i sidled för hela banan · tryck på en station för dess tåg</p>
+                <button id="pv-clear-station" class="pv-link" type="button" hidden>Visa alla stationer</button>
                 <div class="tm-card__body pv-track-lists">
                   <div class="pv-section">På linjen</div>
                   <div id="pv-on-line" class="pv-list"></div>
@@ -239,13 +241,18 @@
               </section>
             </div>
             <aside class="pv-side">
-              <section class="tm-card" id="pv-connect-card">
+              <section class="tm-card" data-pv-us hidden>
+                <div class="tm-card__head"><span>Conductor</span></div>
+                <div class="tm-card__body"><p class="pv-note">Conductorn öppnar sin klient här. Dispatchern tilldelar tåglopp.</p><a class="tm-btn" href="/us/conductor">Conductor</a></div>
+              </section>
+              <section class="tm-card" id="pv-connect-card" data-pv-eu>
                 <div class="tm-card__head"><span>Anslut din TMBox</span><span class="c">tre steg, i den här ordningen</span></div>
                 <div class="pv-steps">
                   <div class="pv-step"><div class="n">1</div><div>
                     <div class="h">Koppla boxen till träffens Wi-Fi</div>
                     <div id="pv-wifi" class="pv-values"></div>
                     <p id="pv-wifi-note" class="pv-note"></p>
+                    <div id="pv-wifi-qr" class="pv-wifi-qr" hidden></div>
                   </div></div>
                   <div class="pv-step"><div class="n">2</div><div>
                     <div class="h">Ange serverns adress i boxen</div>
@@ -957,8 +964,9 @@
               <span class="server-field-label"><tm-text data-tm-text="Träffens Wi-Fi – visas på deltagarvyn och som QR-kod på skärmarna">Träffens Wi-Fi – visas på deltagarvyn och som QR-kod på skärmarna</tm-text></span>
               <div class="server-wifi-row">
                 <label><tm-text data-tm-text="Nätverksnamn">Nätverksnamn</tm-text><input id="connection-wifi-name" maxlength="32" autocomplete="off" placeholder="Lämna tomt om nätet inte ska delas" data-tm-placeholder="Lämna tomt om nätet inte ska delas"></label>
-                <label><tm-text data-tm-text="Lösenord">Lösenord</tm-text><input id="connection-wifi-password" maxlength="63" autocomplete="off" placeholder="Tomt = öppet nät" data-tm-placeholder="Tomt = öppet nät"></label>
+                <label><tm-text data-tm-text="Lösenord">Lösenord</tm-text><input id="connection-wifi-password" type="password" maxlength="63" autocomplete="off" placeholder="Tomt = öppet nät" data-tm-placeholder="Tomt = öppet nät"></label>
               </div>
+              <label class="server-check"><input id="connection-wifi-share" type="checkbox"><tm-text data-tm-text="Visa lösenordet på deltagarvyn och skärmarna">Visa lösenordet på deltagarvyn och skärmarna</tm-text></label>
               <p id="connection-wifi-note" class="pv-note"></p>
             </div>
             <p id="connection-badge-message" class="form-message"></p>

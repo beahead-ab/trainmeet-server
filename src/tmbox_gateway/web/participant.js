@@ -12,6 +12,8 @@
   let active = false;
   let fullTimetable = false;
   let query = "";
+  let selectedStation = null;
+  let bound = false;
 
   const minutes = (time) => {
     if (!time) return null;
@@ -21,8 +23,8 @@
   const stationNameOf = (id) => snapshot?.stations?.find((station) => station.id === id)?.name || id || "—";
   const nowMinutes = () => Math.floor(currentClockSeconds(snapshot) / 60);
   const relative = (time) => {
+    if (minutes(time) === null) return "";
     const delta = minutes(time) - nowMinutes();
-    if (delta === null || Number.isNaN(delta)) return "";
     if (delta < 0) return t("gick {n} min sedan", { n: -delta });
     if (delta === 0) return t("nu");
     return t("om {n} min", { n: delta });
@@ -63,7 +65,7 @@
     const status = stopped
       ? html`<div class="pv-clock__status is-stopped">${t("Klockan stoppad")}${clock.stopped_reason ? ` · ${escapeHTML(clock.stopped_reason)}` : ""}</div>`
       : html`<div class="pv-clock__status">${t("Klockan går")} · ${Number(clock.speed || 1)}×</div>`;
-    const signature = [style, showSeconds, stopped, clock.stopped_reason, meta].join("|");
+    const signature = [style, showSeconds, stopped, clock.stopped_reason, clock.speed, meta, TrainMeetI18n.getLanguage()].join("|");
     if (target.dataset.signature !== signature) {
       target.dataset.signature = signature;
       const face = digital
@@ -79,6 +81,7 @@
   function renderTrack() {
     const positions = snapshot.train_positions || [];
     const moving = positions.filter((position) => position.connection_id);
+    const visibleMoving = moving.filter(p => !selectedStation || [p.from_station_id, p.to_station_id].includes(selectedStation));
     const now = nowMinutes();
     const staffed = snapshot.staffed_station_count;
     const stations = snapshot.stations?.length || 0;
@@ -87,7 +90,10 @@
     $("#pv-stat-staffed").textContent = staffed == null ? String(stations) : `${staffed} / ${stations}`;
     label($("#pv-stat-staffed-label"), staffed == null ? "stationer" : "bemannade");
     const svg = $("#pv-topology");
-    renderTopology(snapshot, svg, { showBadge: false });
+    renderTopology(snapshot, svg, { showBadge: false, selectedStationID: selectedStation,
+      onStationSelect: id => { selectedStation = selectedStation === id ? null : id; renderTrack(); renderTimetable(); },
+      onClear: () => { selectedStation = null; renderTrack(); renderTimetable(); } });
+    $("#pv-clear-station").hidden = !selectedStation;
     // Fit the drawing to its stations, not to the editor's padded canvas, so a
     // small layout is not a speck in the corner of the phone.
     try {
@@ -97,7 +103,7 @@
         // Height is fixed; the width follows the layout's shape. Wider than the
         // phone means it scrolls sideways, as the hint under it says.
         const host = svg.closest(".pv-map");
-        const width = Math.max(host?.clientWidth || 0, Math.round(((box.width + 48) / (box.height + 48)) * 220));
+        const width = Math.max(640, host?.clientWidth || 0, Math.round(((box.width + 48) / (box.height + 48)) * 220));
         svg.style.width = `${Math.min(width, 1400)}px`;
         svg.classList.toggle("is-wide", width > (host?.clientWidth || 0));
       }
@@ -105,19 +111,21 @@
     const arrival = (position) => (snapshot.routes || []).find((route) => route.train_number === position.train_number && route.station_id === position.to_station_id)?.arrival_time;
     const line = $("#pv-on-line");
     line.replaceChildren();
-    if (!moving.length) line.append(Object.assign(document.createElement("p"), { className: "pv-empty", textContent: t("Inget tåg är ute på linjen just nu.") }));
-    for (const position of moving.slice(0, 6)) {
+    if (!visibleMoving.length) line.append(Object.assign(document.createElement("p"), { className: "pv-empty", textContent: t("Inget tåg är ute på linjen just nu.") }));
+    for (const position of visibleMoving.slice(0, 6)) {
       line.insertAdjacentHTML("beforeend", html`<div class="pv-row-item pv-row-item--line"><b>${escapeHTML(position.train_number)}</b><span>${escapeHTML(stationNameOf(position.from_station_id))} → ${escapeHTML(stationNameOf(position.to_station_id))}</span><span class="m">${arrival(position) ? `${t("ank")} ${escapeHTML(arrival(position))}` : ""}</span></div>`);
     }
     const upcoming = (snapshot.routes || [])
-      .filter((route) => minutes(route.departure_time || route.arrival_time) >= now)
-      .sort((a, b) => minutes(a.departure_time || a.arrival_time) - minutes(b.departure_time || b.arrival_time))
+      .filter(route => !selectedStation || route.station_id === selectedStation)
+      .flatMap(route => ["arrival_time", "departure_time"].filter(key => route[key]).map(key => ({...route, eventTime: route[key], departure: key === "departure_time"})))
+      .filter((route) => minutes(route.eventTime) >= now)
+      .sort((a, b) => minutes(a.eventTime) - minutes(b.eventTime))
       .slice(0, 4);
     const events = $("#pv-events");
     events.replaceChildren();
     if (!upcoming.length) events.append(Object.assign(document.createElement("p"), { className: "pv-empty", textContent: t("Inga fler planerade händelser idag.") }));
     for (const route of upcoming) {
-      events.insertAdjacentHTML("beforeend", html`<div class="pv-row-item pv-row-item--event"><span class="m mono">${escapeHTML(route.departure_time || route.arrival_time)}</span><b>${escapeHTML(route.train_number)}</b><span>${escapeHTML(route.station_name || stationNameOf(route.station_id))} · ${route.departure_time ? t("avgång") : t("ankomst")}</span></div>`);
+      events.insertAdjacentHTML("beforeend", html`<div class="pv-row-item pv-row-item--event"><span class="m mono">${escapeHTML(route.eventTime)}</span><b>${escapeHTML(route.train_number)}</b><span>${escapeHTML(route.station_name || stationNameOf(route.station_id))} · ${route.departure ? t("avgång") : t("ankomst")}</span></div>`);
     }
   }
 
@@ -125,15 +133,15 @@
     const now = nowMinutes();
     const out = new Set((snapshot.train_positions || []).filter((position) => position.connection_id).map((position) => String(position.train_number)));
     const needle = query.trim().toLowerCase();
-    const services = (snapshot.services || []).map((service) => {
+    const services = (snapshot.services || []).filter(service => !selectedStation || (service.stops || []).some(stop => stop.station_id === selectedStation)).map((service) => {
       const stops = service.stops || [];
       const first = stops[0], last = stops[stops.length - 1];
-      return { number: String(service.train_number), from: first?.station_name || stationNameOf(first?.station_id), to: last?.station_name || stationNameOf(last?.station_id),
+      return { number: String(service.train_number), search: stops.map(stop => stop.station_name || stationNameOf(stop.station_id)).join(" ").toLowerCase(), from: first?.station_name || stationNameOf(first?.station_id), to: last?.station_name || stationNameOf(last?.station_id),
                departure: first?.departure_time || first?.arrival_time || "", arrival: last?.arrival_time || last?.departure_time || "" };
     }).filter((row) => row.departure)
       .sort((a, b) => minutes(a.departure) - minutes(b.departure));
     const matches = needle
-      ? services.filter((row) => row.number.toLowerCase().includes(needle) || row.from.toLowerCase().includes(needle) || row.to.toLowerCase().includes(needle))
+      ? services.filter((row) => row.number.toLowerCase().includes(needle) || row.search.includes(needle))
       : services;
     const upcoming = matches.filter((row) => minutes(row.arrival || row.departure) >= now);
     const rows = fullTimetable || needle ? matches : (upcoming.length ? upcoming.slice(0, 5) : matches.slice(-5));
@@ -153,15 +161,22 @@
   function renderConnect() {
     const connection = snapshot.connection || {};
     const wifi = connection.wifi || {};
-    const name = wifi.name || wifi.detected_name || "";
+    const name = wifi.name || "";
     const wifiHost = $("#pv-wifi");
     wifiHost.replaceChildren();
     if (name) {
       wifiHost.insertAdjacentHTML("beforeend", html`<span class="pv-value">${escapeHTML(name)}</span>${wifi.password ? html`<span class="pv-value">${escapeHTML(wifi.password)}</span>` : ""}`);
-      label($("#pv-wifi-note"), wifi.password ? "Nätverk och lösenord, som boxen frågar efter. Din mobil är redan på nätet – annars hade du inte sett den här sidan." : "Öppet nätverk – inget lösenord behövs.");
+      label($("#pv-wifi-note"), wifi.password ? "Skanna Wi-Fi-koden för att ansluta till träffens nätverk." : wifi.has_password ? "Fråga trafikledningen om lösenordet till träffens Wi-Fi." : "Öppet nätverk – inget lösenord behövs.");
     } else {
       wifiHost.insertAdjacentHTML("beforeend", html`<span class="pv-value pv-value--muted">${t("Fråga trafikledningen om träffens Wi-Fi")}</span>`);
       label($("#pv-wifi-note"), "Nätverket är inte inskrivet på servern ännu.");
+    }
+    const qrHost = $("#pv-wifi-qr");
+    const qrPayload = serverUI.wifiQR(wifi);
+    qrHost.hidden = !qrPayload;
+    if (qrPayload && qrHost.dataset.payload !== qrPayload) {
+      qrHost.dataset.payload = qrPayload;
+      qrHost.innerHTML = serverUI.qrSVG(qrPayload);
     }
     const address = connection.host ? `${connection.host}` : "";
     $("#pv-address").replaceChildren();
@@ -175,8 +190,8 @@
       : "Ingen parningskod är utfärdad just nu.");
     if (connection.code && connection.validity_hours) $("#pv-code-note").textContent = t($("#pv-code-note").dataset.tmText, { n: connection.validity_hours });
     const ttl = Number(connection.web_client_ttl_minutes || 30);
-    label($("#pv-virtual-ttl"), "En box som ingen tilldelat tas bort efter {n} minuter.");
-    $("#pv-virtual-ttl").textContent = t("En box som ingen tilldelat tas bort efter {n} minuter.", { n: ttl });
+    label($("#pv-virtual-ttl"), "En inaktiv virtuell TMBox utan station tas bort efter {n} minuter.");
+    $("#pv-virtual-ttl").textContent = t("En inaktiv virtuell TMBox utan station tas bort efter {n} minuter.", { n: ttl });
   }
 
   function render() {
@@ -224,11 +239,17 @@
     active = true;
     document.body.classList.add("participant-mode");
     $("#participant-view").classList.remove("hidden");
-    $("#pv-timetable-search")?.addEventListener("input", (event) => { query = event.target.value; if (snapshot) renderTimetable(); });
-    $("#pv-timetable-toggle")?.addEventListener("click", () => { fullTimetable = !fullTimetable; if (snapshot) renderTimetable(); });
+    if (!bound) {
+      bound = true;
+      // Annotate only authored, empty markup once, before any meet data arrives.
+      TrainMeetI18n.annotate($("#participant-view"));
+      $("#pv-timetable-search")?.addEventListener("input", (event) => { query = event.target.value; if (snapshot) renderTimetable(); });
+      $("#pv-timetable-toggle")?.addEventListener("click", () => { fullTimetable = !fullTimetable; if (snapshot) renderTimetable(); });
+      $("#pv-clear-station")?.addEventListener("click", () => { selectedStation = null; if (snapshot) { renderTrack(); renderTimetable(); } });
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && active) poll(); });
+    }
     poll();
     frameTimer = requestAnimationFrame(tick);
-    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && active) poll(); });
   }
 
   function stop() {

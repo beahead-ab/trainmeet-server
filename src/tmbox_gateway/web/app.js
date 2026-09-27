@@ -533,7 +533,7 @@ const WORKSPACES = {
 };
 
 function currentMode() { return document.body.dataset.mode || "workspaces"; }
-function storedMode() { return sessionStorage.getItem(WORKSPACE_KEY) === "administration" ? "kor" : "workspaces"; }
+function storedMode() { sessionStorage.removeItem(WORKSPACE_KEY); return "workspaces"; }
 
 // The logo always leads to the participant view; Drift is one click away from there.
 function workspaceHome() { return "/"; }
@@ -1970,12 +1970,13 @@ async function refreshLocalClock() {
       const payload = await display.json();
       state.overviewSnapshot = payload;
       renderOverview(payload);
-      renderConnectionBadgeSettings(payload.connection || {});
     }
   } else {
     const display = await fetch("/v1/display", {cache:"no-store"});
-    if (display.ok) { const payload = await display.json(); serverUI.us(payload.us); renderConnectionBadgeSettings(payload.connection || {}); }
+    if (display.ok) { const payload = await display.json(); serverUI.us(payload.us); }
   }
+  const connection = await authorizedFetch("/v1/display/connection", {cache: "no-store"});
+  if (connection.ok) renderConnectionBadgeSettings(await connection.json());
   const timeInput = document.querySelector("#local-clock-time");
   if (!editorActive(clockControlForm)) timeInput.value = clock.time || "12:00:00";
   const speedInput = document.querySelector("#local-clock-speed");
@@ -2042,12 +2043,13 @@ function renderConnectionBadgeSettings(connection) {
   const wifiPassword = document.querySelector("#connection-wifi-password");
   if (wifiName && document.activeElement !== wifiName) wifiName.value = wifi.name || "";
   if (wifiPassword && document.activeElement !== wifiPassword) wifiPassword.value = wifi.password || "";
+  document.querySelector("#connection-wifi-share").checked = wifi.show_password === true;
   const wifiNote = document.querySelector("#connection-wifi-note");
   if (wifiNote) {
     if (wifi.detected_name && wifi.detected_name !== wifi.name) {
-      wifiNote.dataset.tmText = "Servern sitter på nätet {name} – lämna namnet tomt så används det.";
+      wifiNote.dataset.tmText = "Serverns nätverk: {name}. Skriv in det ovan om det är träffens Wi-Fi.";
       wifiNote.textContent = t(wifiNote.dataset.tmText, { name: wifi.detected_name });
-    } else setMessage(wifiNote, "Lösenordet måste finnas med för att Wi-Fi-koden ska fungera; boxens operatör läser det på deltagarvyn.");
+    } else setMessage(wifiNote, "Lösenord delas bara när du väljer det. Wi-Fi-koden följer samma val.");
   }
   const ttl = document.querySelector("#web-client-ttl");
   if (ttl && document.activeElement !== ttl && !editorActive(ttl.closest("form"))) ttl.value = String(connection.web_client_ttl_minutes ?? 30);
@@ -2074,6 +2076,7 @@ async function saveConnectionBadgeSettings() {
         validity_hours: Number(document.querySelector("#connection-badge-validity").value),
         wifi_name: document.querySelector("#connection-wifi-name")?.value ?? "",
         wifi_password: document.querySelector("#connection-wifi-password")?.value ?? "",
+        wifi_show_password: document.querySelector("#connection-wifi-share").checked,
       }),
     });
     const payload = await response.json();
@@ -3523,11 +3526,11 @@ function renderConnectionBadge(snapshot) {
   const connection = snapshot.connection || {};
   const screens = connection.screens || [];
   const address = connection.host ? `${connection.host}:${connection.port}` : "";
-  const visible = Boolean(connection.code) && Boolean(address) && screens.includes(displayKind);
+  const visible = screens.includes(displayKind);
   badge.classList.toggle("hidden", !visible);
   // The same setting (⚙ › Skärmar och klocka) governs the QR codes: the meet's
   // Wi-Fi first, then the link to this server. They replace the address line.
-  serverUI.qr({ link: address ? `http://${address}/` : "", wifi: connection.wifi }, visible);
+  serverUI.qr({ link: new URL("/", location.href).href, wifi: connection.wifi }, visible);
   badge.classList.add("hidden");
   if (!visible) return;
   document.querySelector("#display-connection-address").textContent = `TMBox ${address}`;

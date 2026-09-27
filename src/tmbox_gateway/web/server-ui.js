@@ -272,24 +272,29 @@
     $("#display-stage").dataset.kind = kind;
     api.lastDisplayContact = Date.now();
   };
-  const wifiQR = (wifi) => {
+  api.wifiQR = (wifi) => {
     if (!wifi?.name) return "";
     const esc = (value) => String(value).replace(/([\\;,":])/g, "\\$1");
-    return wifi.password ? `WIFI:T:WPA;S:${esc(wifi.name)};P:${esc(wifi.password)};;` : `WIFI:T:nopass;S:${esc(wifi.name)};;`;
+    if (wifi.password) return `WIFI:T:WPA;S:${esc(wifi.name)};P:${esc(wifi.password)};;`;
+    return wifi.has_password ? `WIFI:T:WPA;S:${esc(wifi.name)};;` : `WIFI:T:nopass;S:${esc(wifi.name)};;`;
+  };
+  api.qrSVG = (payload) => {
+    globalThis.qrcode.stringToBytes = globalThis.qrcode.stringToBytesFuncs["UTF-8"];
+    const qr = globalThis.qrcode(0, "M"); qr.addData(payload); qr.make();
+    return qr.createSvgTag({cellSize: 4, margin: 0, scalable: true});
   };
   api.qr = ({ link = "", wifi = null } = {}, visible) => {
     const host = $("#screen-qr"); if (!host) return;
     host.hidden = !visible || !link || typeof globalThis.qrcode !== "function";
     if (host.hidden) return;
-    const network = wifiQR(wifi);
+    const network = api.wifiQR(wifi);
     const signature = `${network}|${link}`;
     if (host.dataset.signature === signature) return;
     host.dataset.signature = signature;
     const item = (payload, caption) => {
       const wrap = make("div", "sc-qr__item");
       const code = make("div", "sc-qr__code");
-      const qr = globalThis.qrcode(0, "M"); qr.addData(payload); qr.make();
-      code.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+      code.innerHTML = api.qrSVG(payload);
       wrap.append(code, authored("span", "sc-qr__text", caption));
       return wrap;
     };

@@ -808,14 +808,14 @@ class SQLiteRuntimeStore:
         return hours
 
     # ------------------------------------------- deltagarvyn och skärmarna
-    def wifi_settings(self) -> dict[str, str]:
+    def wifi_settings(self) -> dict[str, Any]:
         """The meet's Wi-Fi as typed under ⚙: shown on the participant view and
         encoded in the Wi-Fi QR on the screens. Empty means: not shared."""
-        return {"name": self._setting("wifi_name") or "", "password": self._setting("wifi_password") or ""}
+        return {"name": self._setting("wifi_name") or "", "password": self._setting("wifi_password") or "",
+                "show_password": self._setting("wifi_show_password") == "1"}
 
-    def save_wifi_settings(self, name: str, password: str) -> dict[str, str]:
+    def save_wifi_settings(self, name: str, password: str, *, show_password: bool = False) -> dict[str, Any]:
         name = name.strip()
-        password = password.strip()
         if len(name) > 32:
             raise RuntimePublicationError("Nätverksnamnet får vara högst 32 tecken")
         if password and not 8 <= len(password) <= 63:
@@ -824,7 +824,8 @@ class SQLiteRuntimeStore:
             raise RuntimePublicationError("Ange nätverksnamnet också")
         self._save_setting("wifi_name", name)
         self._save_setting("wifi_password", password)
-        return {"name": name, "password": password}
+        self._save_setting("wifi_show_password", "1" if show_password else "0")
+        return self.wifi_settings()
 
     def web_client_ttl_minutes(self) -> int:
         """Minutes an unassigned virtual TMBox may stay silent before it is removed."""

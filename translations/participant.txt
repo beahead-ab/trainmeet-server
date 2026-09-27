@@ -1,0 +1,78 @@
+# Reviewed Server 1.15 participant/clock/settings copy: en|sv|da|nb|de.
+Participant view|Deltagarvyn|Deltagervisning|Deltakervisning|Teilnehmeransicht
+Clock running|Klockan går|Uret går|Klokken går|Uhr läuft
+Show all stations|Visa alla stationer|Vis alle stationer|Vis alle stasjoner|Alle Bahnhöfe anzeigen
+← Meet information|← Till träffens sida|← Til træffets side|← Til treffets side|← Zur Treffenseite
+Go to operations →|Till driften →|Til driften →|Til driften →|Zum Betrieb →
+Start virtual TMBox|Starta virtuell TMBox|Start virtuel TMBox|Start virtuell TMBox|Virtuelle TMBox starten
+On the layout now|På banan just nu|På banen lige nu|På banen akkurat nå|Aktuell auf der Anlage
+updates every 5 seconds|uppdateras var 5:e sekund|opdateres hvert 5. sekund|oppdateres hvert 5. sekund|Aktualisierung alle 5 Sekunden
+Updates every 5 seconds|Uppdateras var 5:e sekund|Opdateres hvert 5. sekund|Oppdateres hvert 5. sekund|Aktualisierung alle 5 Sekunden
+trains on the line|tåg på linjen|tog på strækningen|tog på strekningen|Züge auf der Strecke
+at a station|inne på station|på station|på stasjon|im Bahnhof
+staffed|bemannade|bemandede|bemannede|besetzt
+stations|stationer|stationer|stasjoner|Bahnhöfe
+Scroll sideways for the whole layout · tap a station for its trains|Dra i sidled för hela banan · tryck på en station för dess tåg|Rul sidelæns for hele banen · tryk på en station for dens tog|Rull sidelengs for hele banen · trykk på en stasjon for dens tog|Seitlich zur ganzen Anlage scrollen · Bahnhof für seine Züge antippen
+On the line|På linjen|På strækningen|På strekningen|Auf der Strecke
+Next events|Nästa händelser|Næste hændelser|Neste hendelser|Nächste Ereignisse
+Open train diagram ↗|Öppna tågdiagrammet ↗|Åbn togdiagrammet ↗|Åpne togdiagrammet ↗|Zugdiagramm öffnen ↗
+Search train number or station|Sök tågnummer eller station|Søg tognummer eller station|Søk tognummer eller stasjon|Zugnummer oder Bahnhof suchen
+Search timetable|Sök i tidtabellen|Søg i køreplanen|Søk i rutetabellen|Fahrplan durchsuchen
+Show full timetable ↓|Visa hela tidtabellen ↓|Vis hele køreplanen ↓|Vis hele rutetabellen ↓|Gesamten Fahrplan anzeigen ↓
+Show only upcoming trains ↑|Visa bara de närmaste ↑|Vis kun de næste ↑|Vis bare de nærmeste ↑|Nur nächste Züge anzeigen ↑
+Connect your TMBox|Anslut din TMBox|Tilslut din TMBox|Koble til din TMBox|TMBox verbinden
+three steps, in this order|tre steg, i den här ordningen|tre trin, i denne rækkefølge|tre trinn, i denne rekkefølgen|drei Schritte, in dieser Reihenfolge
+Connect the TMBox to the meet's Wi-Fi|Koppla boxen till träffens Wi-Fi|Tilslut boksen til træffets Wi-Fi|Koble boksen til treffets Wi-Fi|Box mit dem WLAN des Treffens verbinden
+Enter the server address on the TMBox|Ange serverns adress i boxen|Angiv serverens adresse på boksen|Angi serveradressen på boksen|Serveradresse an der Box eingeben
+The TrainMeet Server address on the meet's network.|Adressen till TrainMeet Server på träffens nätverk.|Adressen til TrainMeet Server på træffets netværk.|Adressen til TrainMeet Server på treffets nettverk.|Adresse von TrainMeet Server im Netzwerk des Treffens.
+Enter the pairing code|Skriv in parningskoden|Indtast parringskoden|Skriv inn paringskoden|Kopplungscode eingeben
+Operate a station in your browser|Kör en station i webbläsaren|Betjen en station i browseren|Betjen en stasjon i nettleseren|Bahnhof im Browser bedienen
+No TMBox to hand? Start a virtual TMBox on your phone, tablet or computer. Operations sees it waiting for a station and assigns one, just like a physical TMBox. Until then it cannot affect the traffic game. During a simulation you take over a station otherwise operated automatically.|Ingen box till hands? Starta en virtuell TMBox här på mobilen, iPaden eller datorn. Den fungerar som en riktig box: trafikledningen ser den som ”väntar på station” och tilldelar den en station. Innan dess visar den bara – den kan inte påverka spelet. Kör servern en simulering tar du över en station som simulatorn annars sköter själv.|Ingen boks ved hånden? Start en virtuel TMBox på mobilen, iPaden eller computeren. Trafikledelsen ser den som ”venter på station” og tildeler den en station ligesom en fysisk boks. Indtil da kan den ikke påvirke spillet. Under simulering overtager du en station, som simulatoren ellers styrer.|Ingen boks tilgjengelig? Start en virtuell TMBox på mobilen, iPaden eller datamaskinen. Trafikkledelsen ser den som «venter på stasjon» og tildeler den en stasjon, akkurat som en fysisk boks. Før det kan den ikke påvirke spillet. Under simulering overtar du en stasjon som simulatoren ellers styrer.|Keine Box zur Hand? Starten Sie eine virtuelle TMBox auf Smartphone, iPad oder Computer. Die Betriebsleitung sieht sie als „wartet auf Bahnhof“ und weist ihr wie einer physischen Box einen Bahnhof zu. Vorher beeinflusst sie das Betriebsspiel nicht. Bei einer Simulation übernehmen Sie einen sonst automatisch bedienten Bahnhof.
+An inactive virtual TMBox without a station is removed after {n} minutes.|En inaktiv virtuell TMBox utan station tas bort efter {n} minuter.|En inaktiv virtuel TMBox uden station fjernes efter {n} minutter.|En inaktiv virtuell TMBox uten stasjon fjernes etter {n} minutter.|Eine inaktive virtuelle TMBox ohne Bahnhof wird nach {n} Minuten entfernt.
+departed {n} min ago|gick {n} min sedan|afgik for {n} min siden|avgikk for {n} min siden|vor {n} Min. abgefahren
+now|nu|nu|nå|jetzt
+in {n} min|om {n} min|om {n} min|om {n} min|in {n} Min.
+internal clock|intern klocka|internt ur|intern klokke|interne Uhr
+No train is on the line at the moment.|Inget tåg är ute på linjen just nu.|Intet tog er på strækningen lige nu.|Ingen tog er på strekningen akkurat nå.|Zurzeit ist kein Zug auf der Strecke.
+arr|ank|ank|ank|an
+departure|avgång|afgang|avgang|Abfahrt
+arrival|ankomst|ankomst|ankomst|Ankunft
+trains|tåg|tog|tog|Züge
+out|ute|ude|ute|unterwegs
+No train matches the search.|Inget tåg matchar sökningen.|Intet tog matcher søgningen.|Ingen tog samsvarer med søket.|Kein Zug entspricht der Suche.
+No timetable for this day.|Ingen tidtabell för dagen.|Ingen køreplan for dagen.|Ingen rutetabell for dagen.|Kein Fahrplan für diesen Tag.
+Scan the Wi-Fi code to join the meet's network.|Skanna Wi-Fi-koden för att ansluta till träffens nätverk.|Scan Wi-Fi-koden for at tilslutte træffets netværk.|Skann Wi-Fi-koden for å koble til treffets nettverk.|WLAN-Code scannen, um sich mit dem Netzwerk des Treffens zu verbinden.
+Ask operations for the meet's Wi-Fi password.|Fråga trafikledningen om lösenordet till träffens Wi-Fi.|Spørg trafikledelsen om adgangskoden til træffets Wi-Fi.|Spør trafikkledelsen om passordet til treffets Wi-Fi.|Betriebsleitung nach dem WLAN-Passwort des Treffens fragen.
+Open network – no password required.|Öppet nätverk – inget lösenord behövs.|Åbent netværk – ingen adgangskode nødvendig.|Åpent nettverk – passord er ikke nødvendig.|Offenes Netzwerk – kein Passwort erforderlich.
+Ask operations about the meet's Wi-Fi|Fråga trafikledningen om träffens Wi-Fi|Spørg trafikledelsen om træffets Wi-Fi|Spør trafikkledelsen om treffets Wi-Fi|Betriebsleitung nach dem WLAN des Treffens fragen
+The network has not been entered on the server yet.|Nätverket är inte inskrivet på servern ännu.|Netværket er endnu ikke indtastet på serveren.|Nettverket er ikke lagt inn på serveren ennå.|Das Netzwerk ist noch nicht auf dem Server eingetragen.
+port|port|port|port|Port
+The address appears when the server is on the network|Adressen visas när servern är på nätverket|Adressen vises, når serveren er på netværket|Adressen vises når serveren er på nettverket|Die Adresse erscheint, sobald der Server im Netzwerk ist
+The code is valid for {n} hours from server startup. Operations sees the TMBox waiting for a station and assigns one.|Koden gäller {n} timmar från att servern startades. Boxen dyker upp hos trafikledningen som ”väntar på station” och får sin station därifrån.|Koden gælder i {n} timer fra serverstart. Trafikledelsen ser boksen som ”venter på station” og tildeler den en station.|Koden gjelder i {n} timer fra serverstart. Trafikkledelsen ser boksen som «venter på stasjon» og tildeler den en stasjon.|Der Code gilt {n} Stunden ab Serverstart. Die Betriebsleitung sieht die Box als „wartet auf Bahnhof“ und weist ihr einen Bahnhof zu.
+The code has no expiry. Operations sees the TMBox waiting for a station and assigns one.|Koden gäller tills vidare. Boxen dyker upp hos trafikledningen som ”väntar på station” och får sin station därifrån.|Koden gælder indtil videre. Trafikledelsen ser boksen som ”venter på station” og tildeler den en station.|Koden gjelder inntil videre. Trafikkledelsen ser boksen som «venter på stasjon» og tildeler den en stasjon.|Der Code gilt bis auf Weiteres. Die Betriebsleitung sieht die Box als „wartet auf Bahnhof“ und weist ihr einen Bahnhof zu.
+No pairing code has been issued.|Ingen parningskod är utfärdad just nu.|Der er ikke udstedt en parringskode.|Ingen paringskode er utstedt nå.|Derzeit ist kein Kopplungscode ausgestellt.
+The server's network: {name}. Enter it above if it is the meet's Wi-Fi.|Serverns nätverk: {name}. Skriv in det ovan om det är träffens Wi-Fi.|Serverens netværk: {name}. Indtast det ovenfor, hvis det er træffets Wi-Fi.|Serverens nettverk: {name}. Skriv det inn ovenfor hvis det er treffets Wi-Fi.|Netzwerk des Servers: {name}. Oben eintragen, wenn es das WLAN des Treffens ist.
+Passwords are shared only when you choose to. The Wi-Fi code follows the same choice.|Lösenord delas bara när du väljer det. Wi-Fi-koden följer samma val.|Adgangskoden deles kun, når du vælger det. Wi-Fi-koden følger samme valg.|Passord deles bare når du velger det. Wi-Fi-koden følger samme valg.|Passwörter werden nur auf Wunsch geteilt. Dasselbe gilt für den WLAN-Code.
+Show the password on the participant view and displays|Visa lösenordet på deltagarvyn och skärmarna|Vis adgangskoden i deltagervisningen og på skærmene|Vis passordet i deltakervisningen og på skjermene|Passwort in der Teilnehmeransicht und auf den Anzeigen zeigen
+Meet Wi-Fi – shown on the participant view and as a QR code on displays|Träffens Wi-Fi – visas på deltagarvyn och som QR-kod på skärmarna|Træffets Wi-Fi – vises i deltagervisningen og som QR-kode på skærmene|Treffets Wi-Fi – vises i deltakervisningen og som QR-kode på skjermene|WLAN des Treffens – in der Teilnehmeransicht und als QR-Code auf den Anzeigen
+Network name|Nätverksnamn|Netværksnavn|Nettverksnavn|Netzwerkname
+Leave blank to keep the network private|Lämna tomt om nätet inte ska delas|Lad feltet være tomt for ikke at dele netværket|La feltet stå tomt for ikke å dele nettverket|Leer lassen, wenn das Netzwerk nicht geteilt werden soll
+Blank = open network|Tomt = öppet nät|Tomt = åbent netværk|Tomt = åpent nettverk|Leer = offenes Netzwerk
+Could not save cleanup time|Städtiden kunde inte sparas|Oprydningstiden kunne ikke gemmes|Oppryddingstiden kunne ikke lagres|Bereinigungszeit konnte nicht gespeichert werden
+Virtual TMBoxes without a station are removed after|Virtuella TMBoxar utan station tas bort efter|Virtuelle TMBoxe uden station fjernes efter|Virtuelle TMBoxer uten stasjon fjernes etter|Virtuelle TMBoxen ohne Bahnhof werden entfernt nach
+minutes|minuter|minutter|minutter|Minuten
+Follows settings|Enligt inställningar|Ifølge indstillinger|Følger innstillingene|Gemäß Einstellungen
+Seconds follow settings|Sekunder enligt inställningar|Sekunder ifølge indstillinger|Sekunder følger innstillingene|Sekunden gemäß Einstellungen
+on|på|til|på|ein
+off|av|fra|av|aus
+With seconds|Med sekunder|Med sekunder|Med sekunder|Mit Sekunden
+Without seconds|Utan sekunder|Uden sekunder|Uten sekunder|Ohne Sekunden
+Clock style on this display|Klockstil på den här skärmen|Urstil på denne skærm|Klokkestil på denne skjermen|Uhrenstil auf dieser Anzeige
+Seconds on this display|Sekunder på den här skärmen|Sekunder på denne skærm|Sekunder på denne skjermen|Sekunden auf dieser Anzeige
+QR codes and connection code shown on|QR-koder och anslutningskod visas på|QR-koder og tilslutningskode vises på|QR-koder og tilkoblingskode vises på|QR-Codes und Verbindungscode anzeigen auf
+1 · Wi-Fi|1 · Wi-Fi|1 · Wi-Fi|1 · Wi-Fi|1 · WLAN
+2 · Meet|2 · Träffen|2 · Træffet|2 · Treffet|2 · Treffen
+Scan – meet information|Skanna – allt om träffen|Scan – alt om træffet|Skann – alt om treffet|Scannen – alles zum Treffen
+Authorities and territories are shown on the territory board.|Körtillstånd och trafikområden visas på områdestavlan.|Køretilladelser og trafikområder vises på områdetavlen.|Kjøretillatelser og trafikkområder vises på områdetavlen.|Fahrberechtigungen und Gebiete werden auf der Gebietsübersicht angezeigt.
+Open territory board ↗|Öppna områdestavlan ↗|Åbn områdetavlen ↗|Åpne områdetavlen ↗|Gebietsübersicht öffnen ↗
+The conductor opens their client here. The dispatcher assigns the train run.|Conductorn öppnar sin klient här. Dispatchern tilldelar tåglopp.|Conductoren åbner sin klient her. Dispatcheren tildeler togløb.|Conductoren åpner klienten sin her. Dispatcheren tildeler togløp.|Der Conductor öffnet hier seinen Client. Der Dispatcher weist den Zuglauf zu.

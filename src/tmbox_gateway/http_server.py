@@ -317,7 +317,6 @@ class TrainMeetHTTPApplication:
             )
         )
         self.web_root = files("tmbox_gateway").joinpath("web")
-        self.tkl_web_root = files("tmbox_gateway").joinpath("tkl")
         self.us_web_root = files("tmbox_gateway").joinpath("us_web")
 
         if self.runtime_store is not None and self.runtime_store.central_url():
@@ -1114,7 +1113,8 @@ class TrainMeetHTTPApplication:
             if seen > limit:
                 continue
             try:
-                self.identities.remove_discovered_device(device.device_id)
+                if not self.identities.remove_discovered_device(device.device_id, idle_before=limit):
+                    continue
             except PairingError:
                 continue
             removed.append(device.device_id)
@@ -1297,7 +1297,7 @@ class TrainMeetHTTPApplication:
             "requests": [fields(r, ("id", "run_id", "kind", "message", "meet_time")) for r in (session or {}).get("reports", []) if r.get("kind") in {"request", "delay", "problem"}],
         }
 
-    def connection_details(self, request_host: str = "") -> dict[str, Any]:
+    def connection_details(self, request_host: str = "", *, private: bool = False) -> dict[str, Any]:
         """Address and code a TMBox needs, plus the screens allowed to show it.
 
         A guessed LAN address is used when there is one. On a host whose own
@@ -1315,7 +1315,14 @@ class TrainMeetHTTPApplication:
         host = self.config.local_ip
         if (not host or _is_loopback_address(host)) and request_host:
             host = _hostname_without_port(request_host)
-        wifi = self.runtime_store.wifi_settings() if self.runtime_store is not None else {"name": "", "password": ""}
+        wifi = self.runtime_store.wifi_settings() if self.runtime_store is not None else {"name": "", "password": "", "show_password": False}
+        wifi = {**wifi, "has_password": bool(wifi["password"])}
+        if private:
+            # Only an administrator may inspect the host's SSID. It is never
+            # silently published as the meet's network.
+            wifi["detected_name"] = detected_wifi_name()
+        elif not wifi["show_password"]:
+            wifi["password"] = ""
         return {
             "host": host,
             "port": self.config.http_port,
@@ -1328,7 +1335,7 @@ class TrainMeetHTTPApplication:
             ),
             # The meet's Wi-Fi, as typed under ⚙, plus the network this host is
             # on right now (a Pi on Wi-Fi knows its own SSID; on a cable it does not).
-            "wifi": {**wifi, "detected_name": detected_wifi_name()},
+            "wifi": wifi,
             "web_client_ttl_minutes": (
                 self.runtime_store.web_client_ttl_minutes()
                 if self.runtime_store is not None
@@ -1361,12 +1368,16 @@ class TrainMeetHTTPApplication:
             except RuntimePublicationError as error:
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_validity", str(error)) from error
             changed_validity = hours != previous_hours
-        if "wifi_name" in payload or "wifi_password" in payload:
+        if any(key in payload for key in ("wifi_name", "wifi_password", "wifi_show_password")):
             current = self.runtime_store.wifi_settings()
+            show_password = payload.get("wifi_show_password", current["show_password"])
+            if not isinstance(show_password, bool):
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_wifi", "Ogiltigt val för visning av lösenord")
             try:
                 self.runtime_store.save_wifi_settings(
                     str(payload.get("wifi_name", current["name"]) or ""),
                     str(payload.get("wifi_password", current["password"]) or ""),
+                    show_password=show_password,
                 )
             except RuntimePublicationError as error:
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_wifi", str(error)) from error
@@ -1378,7 +1389,7 @@ class TrainMeetHTTPApplication:
             except RuntimePublicationError as error:
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_ttl", str(error)) from error
         return {
-            **self.connection_details(),
+            **self.connection_details(private=True),
             # Screens follow immediately; the lifetime is applied to the code the
             # next time the server issues it, which happens at start-up.
             "restart_required": changed_validity,
@@ -3222,17 +3233,6 @@ class TrainMeetHTTPApplication:
             if name not in {"app.js", "style.css", "workspace-messages.js"}:
                 name = "index.html"
             return self.us_web_root.joinpath(name).read_bytes(), mimetypes.guess_type(name)[0] or "text/plain"
-        if path.startswith("/tkl/"):
-            relative_tkl = path.removeprefix("/tkl/") or "index.html"
-            if ".." in Path(relative_tkl).parts:
-                return None
-            asset = self.tkl_web_root.joinpath(relative_tkl)
-            try:
-                data = asset.read_bytes()
-            except (FileNotFoundError, IsADirectoryError):
-                return None
-            mime_type = mimetypes.guess_type(relative_tkl)[0] or "application/octet-stream"
-            return data, mime_type
         relative = {
             "/": "index.html",
             "/index.html": "index.html",
@@ -3240,6 +3240,7 @@ class TrainMeetHTTPApplication:
             "/assets/app.js": "app.js",
             "/assets/server-ui.js": "server-ui.js",
             "/assets/participant.js": "participant.js",
+            "/assets/participant-messages.js": "participant-messages.js",
             "/assets/qrcode.js": "qrcode.js",
             "/assets/server-ui.css": "server-ui.css",
             "/assets/server-design.css": "server-design.css",
@@ -3363,11 +3364,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                         result = None
                     self._send_json(HTTPStatus.OK, {"result": result})
                 return
-            if path == "/tkl":
-                self.send_response(HTTPStatus.PERMANENT_REDIRECT)
-                self.send_header("Location", "/tkl/")
-                self.send_header("Content-Length", "0")
-                self.end_headers()
+            if path == "/v1/display/connection":
+                application = self.server.application
+                application._require_admin(self._authenticated_client())
+                self._send_json(HTTPStatus.OK, application.connection_details(self.headers.get("Host", ""), private=True))
                 return
             if path == "/v1/display":
                 self._send_json(

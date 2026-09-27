@@ -272,6 +272,8 @@ body.participant-mode #app-view { padding: 0; max-width: none; }
 .pv-step .n { width: 26px; height: 26px; border-radius: 50%; background: var(--primary-soft); color: var(--primary-text); font-weight: 700; font-size: 12.5px; display: flex; align-items: center; justify-content: center; }
 .pv-step .h { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
 .pv-values { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
+.pv-wifi-qr { padding: 12px; background: white; width: 150px; margin: 8px 0; }
+.pv-wifi-qr svg { display: block; width: 100%; height: auto; }
 .pv-value { font: 600 14px/1.3 var(--font-mono); background: var(--row-alt); border: 1px solid var(--border-soft); border-radius: 6px; padding: 4px 8px; }
 .pv-value--big { font-size: 26px; padding: 6px 12px; letter-spacing: .04em; }
 .pv-value--muted { font-family: var(--font); font-weight: 500; color: var(--muted); }
@@ -343,7 +345,7 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 #display-stage:not([data-kind=clock]) .sc-qr__text { font-size: 20px; }
 #display-stage:not([data-kind=clock]) #screen-status { margin-left: 0; }
 #display-stage:not([data-kind=clock]) .sc-foot { align-items: flex-end; }
-#dashboard-view { grid-template-rows: 160px minmax(0,1fr) 220px; }
+#dashboard-view { grid-template-rows: 160px minmax(0,1fr) 245px; }
 .sc-clock-layout .clock-face.stopped { opacity: .6; }
 .sc-clock-layout .clock-digital { font: 700 440px/1 var(--font-mono); letter-spacing: -.04em; color: var(--display-fg); white-space: nowrap; }
 .sc-clock-layout .clock-digital[data-seconds=true] { font-size: 330px; }
@@ -412,7 +414,7 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .server-dashboard-bottom p { font-size: 24px; }
 .server-dashboard-bottom .server-event { font-size: 24px; line-height: 28px; padding: 4px 0; }
 .server-dashboard-bottom .server-event > :last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#dashboard-view { grid-template-rows: 160px minmax(0,1fr) 220px; }
+#dashboard-view { grid-template-rows: 160px minmax(0,1fr) 245px; }
 @media (max-width: 600px) {
   .tm-clockrow__time { flex-basis: 100%; border-bottom: 1px solid var(--border); }
   .tm-clockrow__form { flex-basis: 100%; flex-wrap: wrap; min-width: 0; }

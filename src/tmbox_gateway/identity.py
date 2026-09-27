@@ -855,7 +855,7 @@ class IdentityStore:
         ):
             raise InvalidClientError("Enheten är inte en TMBox eller virtuell TKL")
 
-    def remove_discovered_device(self, device_id: str) -> None:
+    def remove_discovered_device(self, device_id: str, *, idle_before: datetime | None = None) -> bool:
         """Revoke a box, preserving traffic and a tombstone against rediscovery.
 
         A retained MQTT hello must not undo the administrator's decision.
@@ -864,6 +864,23 @@ class IdentityStore:
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
+                if idle_before is not None:
+                    # Re-check liveness and assignment in the same transaction
+                    # as revocation: a stale polling snapshot may not remove a
+                    # box an administrator just assigned or that just checked in.
+                    row = self._connection.execute(
+                        "SELECT d.last_seen_at FROM discovered_devices d JOIN clients c ON c.client_id = d.device_id "
+                        "WHERE d.device_id = ? AND d.removed_at IS NULL AND c.enabled = 1 "
+                        "AND c.browser_workspace = 'tmbox' AND c.station_id IS NULL "
+                        "AND NOT EXISTS (SELECT 1 FROM client_panels p WHERE p.client_id = c.client_id)",
+                        (device_id,),
+                    ).fetchone()
+                    seen = datetime.fromisoformat(row[0]) if row else None
+                    if seen is not None and seen.tzinfo is None:
+                        seen = seen.replace(tzinfo=timezone.utc)
+                    if seen is None or seen > idle_before:
+                        self._connection.execute("COMMIT")
+                        return False
                 self.discovered_device(device_id)  # Reject unknown IDs before writing.
                 self._require_physical_box_locked(device_id)
                 self._connection.execute(
@@ -876,6 +893,7 @@ class IdentityStore:
                 )
                 self._connection.execute("DELETE FROM client_panels WHERE client_id = ?", (device_id,))
                 self._connection.execute("COMMIT")
+                return True
             except Exception:
                 if self._connection.in_transaction:
                     self._connection.execute("ROLLBACK")
