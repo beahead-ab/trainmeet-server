@@ -35,8 +35,10 @@ AVAILABLE_CLOCK_STYLES = (
     "italian",
     "american",
     "digital",
+    "analog",
+    "stationsur",
 )
-DISPLAY_SCREENS = ("clock", "topology", "graph", "dashboard")
+DISPLAY_SCREENS = ("clock", "topology", "graph", "dashboard", "territories")
 # 0 means the code never expires, which is the default: it is printed on the
 # meeting's screens and has to keep working for as long as it is up there.
 CONNECTION_CODE_VALIDITY_HOURS = (0, 12, 24, 72, 168)

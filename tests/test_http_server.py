@@ -394,10 +394,14 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="overview-graph"', html)
         self.assertIn('<h2><tm-text data-tm-text="Inloggning">Inloggning</tm-text></h2>', html)
         self.assertIn('data-language-picker', html)
-        for asset in ("i18n.js", "i18n-messages.js", "i18n-init.js"):
+        for asset in ("i18n.js", "i18n-messages.js", "i18n-init.js", "server-ui.js", "server-ui.css", "server-design.css", "fonts/fonts.css", "fonts/jetbrains-mono-latin-700-normal.woff2"):
             with urlopen(f"{self.base_url}/assets/{asset}", timeout=2) as response:
                 self.assertEqual(response.status, 200)
                 self.assertTrue(response.read())
+        for path in ("/drift", "/installningar", "/hjalp", "/login", "/setup", "/display/territories"):
+            with urlopen(f"{self.base_url}{path}", timeout=2) as response:
+                self.assertEqual(response.status, 200)
+                self.assertIn(b"server-ui.js", response.read())
         self.assertIn('id="login-form"', html)
         self.assertIn("Skärmar", html)
         self.assertIn('/trainmeet-logo.png', html)
@@ -1308,7 +1312,7 @@ class ConnectionBadgeTests(unittest.TestCase):
     def test_default_screens_and_forever_validity(self):
         connection = self._connection()
 
-        self.assertEqual(connection["screens"], ["clock", "topology", "graph", "dashboard"])
+        self.assertEqual(connection["screens"], ["clock", "topology", "graph", "dashboard", "territories"])
         self.assertEqual(connection["validity_hours"], 0)
 
 

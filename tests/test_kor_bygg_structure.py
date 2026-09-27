@@ -53,11 +53,12 @@ class ShellStructureTests(unittest.TestCase):
         self.assertIn('controlLocalClock({ action: "stop" })', self.js)
         self.assertIn('authorizedFetch("/v1/clock"', self.js)
 
-    def test_settings_include_runtime_devices(self):
+    def test_settings_and_drift_have_separate_responsibilities(self):
         sections = re.search(r"const SETTINGS_SECTIONS = \[([^\]]*)\]", self.js)
         self.assertIsNotNone(sections)
-        for name in ("identity", "access", "users", "devices", "software", "cloud", "system"):
+        for name in ("identity", "users", "software", "cloud", "system"):
             self.assertIn(f'"{name}"', sections.group(1))
+        self.assertNotIn('"devices"', sections.group(1))
 
     def test_admin_forms_are_real_dialogs(self):
         for name in ("server-identity-form", "admin-access-form", "users-invite-form",

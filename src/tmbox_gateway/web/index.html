@@ -11,6 +11,8 @@
     <script src="/assets/i18n-messages.js" defer></script>
     <script src="/assets/meet-type-messages.js" defer></script>
     <link rel="stylesheet" href="/assets/meet-type.css">
+    <link rel="stylesheet" href="/assets/server-design.css">
+    <link rel="stylesheet" href="/assets/server-ui.css">
     <script src="/assets/i18n.js" defer></script>
     <script src="/assets/shell-messages.js" defer></script>
     <script src="/assets/i18n-init.js" defer></script>
@@ -19,12 +21,14 @@
   <body>
     <main class="page-shell">
 
-      <header class="topbar" id="app-chrome">
+      <header class="tm-header" id="app-chrome">
         <a href="#overview" id="workspace-home" class="brand-lockup" aria-label="Hem i arbetsytan">
           <img class="brand-mark" src="/assets/ikon/trainmeet-ikon.svg" alt="" width="28" height="28" data-tm-alt="">
-          <h1 id="app-meet-name"><tm-text data-tm-text="TrainMeet Server">TrainMeet Server</tm-text></h1>
+          <span class="tm-logo__lines">TrainMeet<span class="tm-logo__product">SERVER</span></span>
         </a>
-
+        <div class="tm-switch tm-switch--static"><strong id="app-meet-name">TrainMeet Server</strong><span id="server-region" class="tm-badge"></span><span id="header-server-meta" class="tm-switch__meta"></span></div>
+        <span class="tm-header__spacer"></span>
+        <a id="header-cloud-status" href="/installningar#traff" class="tm-status tm-status--published"></a>
         <div class="topbar-right">
           <span id="app-clock" class="app-clock" aria-label="Träffklocka" data-tm-aria-label="Träffklocka">–&#8202;–:–&#8202;–</span>
           <span id="app-devices" class="app-devices"><i></i><tm-text data-tm-text="Inga boxar">Inga boxar</tm-text></span>
@@ -39,6 +43,15 @@
               <button id="logout" type="button">Logga ut</button>
             </nav>
           </details>
+          <details class="screen-menu"><summary class="tm-btn">Öppna på skärm ▾</summary><nav>
+            <a href="/display/clock" target="_blank" rel="noopener">Träffklocka</a>
+            <a href="/display/dashboard" target="_blank" rel="noopener" data-eu-only>Översikt</a>
+            <a href="/display/topology" target="_blank" rel="noopener" data-eu-only>Banöversikt</a>
+            <a href="/display/graph" target="_blank" rel="noopener" data-eu-only>Tågdiagram</a>
+            <a href="/display/territories" target="_blank" rel="noopener" data-us-only hidden>Områdestavla</a>
+          </nav></details>
+          <a class="tm-icon-btn" href="/installningar" aria-label="Inställningar" title="Inställningar">⚙</a>
+          <a class="tm-icon-btn" href="/hjalp" aria-label="Hjälp" title="Hjälp">?</a>
         </div>
       </header>
 
@@ -933,6 +946,7 @@
     <script src="/assets/tmbox-render.js?v=20260821-1" defer></script>
     <script src="/assets/tmbox-nav.js?v=20260821-1" defer></script>
     <script src="/assets/tmbox-attention.js?v=20260821-1" defer></script>
-    <script src="/assets/app.js?v=20260821-1" defer></script>
+    <script src="/assets/server-ui.js" defer></script>
+    <script src="/assets/app.js?v=20260927-1" defer></script>
   </body>
 </html>

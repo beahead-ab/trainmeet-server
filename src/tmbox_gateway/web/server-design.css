@@ -1,0 +1,306 @@
+@import url("fonts/fonts.css");
+
+/* TrainMeet UI-kit (v1.1, 2026-09-27) – Cloud v1 + tillägg för TrainMeet Server
+   Del 1 är Clouds ui.css oförändrad. Del 2 (”Server-tillägg”) och del 3 (”Skärmtema”) är nya.
+   Använd klasserna som de är; markup-exempel finns i komponenter.html. */
+
+:root {
+  --font: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --fs-body: 13px; --fs-small: 12px; --fs-micro: 11.5px; --fs-label: 11px;
+  --fs-title: 22px; --fs-h2: 16px; --fs-h3: 13px;
+  --lh: 1.45;
+
+  --bg: #fbfaf9; --card: #ffffff; --border: #e5e5e5; --border-soft: #f0f0ef; --row-alt: #fafaf9;
+  --text: #0a0a0a; --text-2: #404040; --text-3: #525252; --muted: #737373; --faint: #a3a3a3;
+
+  --primary: #2256c3; --primary-hover: #183f94; --primary-soft: #eef3fb; --primary-text: #1f3f8a;
+  --warn-bg: #fff8e6; --warn-border: #f2d27a; --warn-dot: #f2c230; --warn-text: #7a5a00;
+  --ok-bg: #e8f5ee; --ok-text: #1f6b3d;
+  --danger-bg: #fdecec; --danger-text: #a11a1a; --danger-line: #d33a3a;
+  --us-bg: #fdf1e6; --us-text: #8a4a0a;
+  --neutral-bg: #f0f0ef; --neutral-text: #525252;
+
+  --radius: 8px; --radius-sm: 6px; --radius-pill: 999px;
+  --header-h: 52px; --page-x: 24px; --gap: 12px;
+  --panel-w: 380px;
+  --shadow-menu: 0 12px 32px rgba(0,0,0,.12);
+}
+
+html, body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-body)/var(--lh) var(--font); }
+a { color: var(--primary); text-decoration: none; } a:hover { color: var(--primary-hover); }
+button, input, select { font: inherit; }
+* { box-sizing: border-box; }
+
+/* ---------- Sidhuvud ---------- */
+.tm-header { height: var(--header-h); padding: 0 20px; display: flex; align-items: center; gap: 14px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; }
+.tm-logo { display: flex; align-items: center; gap: 8px; width: 118px; font-weight: 700; }
+.tm-logo__mark { width: 26px; height: 26px; border-radius: 7px; background: var(--primary); display: flex; align-items: center; justify-content: center; color: #fff; }
+.tm-switch { display: flex; align-items: center; gap: 10px; padding: 5px 10px 5px 12px; border: 1px solid #d9d9d9; border-radius: var(--radius); background: var(--card); color: var(--text); cursor: pointer; }
+.tm-switch[aria-expanded="true"] { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.tm-switch__name { font-size: 14px; font-weight: 700; }
+.tm-switch__meta { font-size: var(--fs-micro); color: var(--muted); }
+.tm-tabs { display: flex; gap: 2px; margin-left: 6px; }
+.tm-tab { padding: 16px 12px; font-size: 13.5px; font-weight: 600; color: var(--text-3); border-bottom: 2px solid transparent; }
+.tm-tab[aria-current="page"], .tm-tab.is-active { color: var(--primary); border-bottom-color: var(--primary); }
+.tm-header__spacer { flex-grow: 1; }
+.tm-icon-btn { width: 32px; height: 32px; border: 0; background: transparent; border-radius: var(--radius); display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); cursor: pointer; padding: 0; }
+.tm-icon-btn:hover, .tm-icon-btn.is-active { background: var(--primary-soft); color: var(--primary-text); }
+
+/* Statuspill (A4) */
+.tm-status { font-size: var(--fs-small); font-weight: 600; border-radius: var(--radius-pill); padding: 4px 10px; border: 1px solid transparent; cursor: pointer; }
+.tm-status--unpublished { color: var(--warn-text); background: var(--warn-bg); border-color: var(--warn-border); }
+.tm-status--published { color: var(--neutral-text); background: var(--neutral-bg); border-color: var(--border); }
+.tm-status--published .tm-status__conflicts { color: var(--warn-text); }
+
+/* ---------- Träffväxlarens meny (A3) ---------- */
+.tm-menu { width: 560px; background: var(--card); border: 1px solid #d9d9d9; border-radius: 10px; box-shadow: var(--shadow-menu); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.tm-menu__search { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.tm-menu__search input { flex-grow: 1; border: 0; background: transparent; outline: none; }
+.tm-menu__row { display: grid; grid-template-columns: 14px minmax(0,1fr) 34px 84px 170px; gap: 10px; align-items: center; padding: 9px 12px; border-radius: var(--radius); cursor: pointer; white-space: nowrap; }
+.tm-menu__row:hover, .tm-menu__row[aria-selected="true"] { background: var(--neutral-bg); }
+.tm-menu__row.is-current { background: var(--primary-soft); }
+.tm-menu__name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.tm-menu__size { text-align: right; color: var(--muted); font-size: var(--fs-small); overflow: hidden; text-overflow: ellipsis; }
+.tm-menu__foot { border-top: 1px solid #eee; margin: 2px -8px 0; padding: 8px 12px 2px; display: flex; align-items: center; gap: 14px; font-size: 12.5px; }
+.tm-kbd { display: inline-block; font-size: 10.5px; padding: 1px 5px; border: 1px solid #d9d9d9; border-bottom-width: 2px; border-radius: 4px; background: var(--card); color: var(--text-3); }
+
+/* ---------- Märken och chips ---------- */
+.tm-badge { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; padding: 2px 6px; border-radius: 4px; white-space: nowrap; text-align: center; }
+.tm-badge--eu { background: var(--primary-soft); color: var(--primary-text); }
+.tm-badge--us { background: var(--us-bg); color: var(--us-text); }
+.tm-badge--version { background: var(--ok-bg); color: var(--ok-text); }
+.tm-badge--draft { background: var(--neutral-bg); color: var(--neutral-text); }
+.tm-tag { display: inline-block; font-size: var(--fs-label); padding: 1px 7px; border-radius: var(--radius-pill); font-weight: 600; }
+.tm-tag--ok { background: var(--ok-bg); color: var(--ok-text); }
+.tm-tag--neutral { background: var(--neutral-bg); color: var(--neutral-text); }
+.tm-tag--danger { background: var(--danger-bg); color: var(--danger-text); }
+.tm-tag--warn { background: var(--warn-bg); color: var(--warn-text); }
+.tm-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 9px; }
+.tm-level { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .05em; padding: 2px 6px; border-radius: 4px; background: var(--warn-bg); color: var(--warn-text); }
+.tm-level--question { background: var(--primary); color: #fff; }
+.tm-level--observation { background: var(--neutral-bg); color: var(--neutral-text); }
+
+/* ---------- Knappar ---------- */
+.tm-btn { font-size: 12.5px; font-weight: 600; border-radius: var(--radius-sm); padding: 6px 12px; cursor: pointer; border: 1px solid #d9d9d9; background: var(--card); color: var(--text); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.tm-btn:hover { background: var(--row-alt); }
+.tm-btn--primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.tm-btn--primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.tm-btn--lg { font-size: 14px; padding: 10px 18px; border-radius: var(--radius); }
+.tm-btn--sm { padding: 4px 10px; }
+.tm-btn:disabled, .tm-btn.is-disabled { color: var(--faint); border-color: var(--border); background: var(--card); cursor: default; }
+.tm-btn--warn { border-color: var(--warn-border); background: var(--warn-bg); color: var(--warn-text); }
+
+/* Dataset-knappar (Data, verktygsrad 1) */
+.tm-seg { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: var(--text-2); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 10px; cursor: pointer; }
+.tm-seg b { font-weight: 700; color: var(--text); }
+.tm-seg.is-active { background: var(--primary-soft); border-color: var(--primary); color: var(--primary-text); }
+.tm-seg.is-active b { color: var(--primary-text); }
+.tm-select { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); background: var(--card); border: 1px solid #d9d9d9; border-radius: var(--radius-sm); padding: 5px 10px; cursor: pointer; }
+.tm-search { display: flex; align-items: center; gap: 8px; width: 280px; padding: 5px 10px; border: 1px solid #d9d9d9; border-radius: var(--radius-sm); background: var(--card); }
+.tm-search input { flex-grow: 1; border: 0; background: transparent; outline: none; font-size: 12.5px; }
+
+/* ---------- Sida, kort, rubriker ---------- */
+.tm-page { padding: 12px var(--page-x) 16px; display: flex; flex-direction: column; gap: var(--gap); }
+.tm-page--overview { padding-top: 18px; gap: 14px; }
+.tm-title-row { display: flex; align-items: center; gap: 14px; }
+.tm-title { font-size: var(--fs-title); font-weight: 700; letter-spacing: -.01em; }
+.tm-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; }
+.tm-card__head { padding: 9px 12px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px; font-size: var(--fs-h3); font-weight: 700; }
+.tm-card__head .c { font-size: var(--fs-small); color: var(--muted); font-weight: 500; }
+.tm-card__body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.tm-card__foot { padding: 8px 12px; font-size: var(--fs-micro); color: var(--muted); border-top: 1px solid var(--border-soft); }
+.tm-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: var(--gap); }
+.tm-grid-2--wide-left { grid-template-columns: minmax(0,1.25fr) minmax(0,1fr); }
+
+/* Nyckeltalsrad (Översikt) */
+.tm-stats { display: flex; background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.tm-stat { display: flex; flex-direction: column; gap: 2px; padding: 12px 18px; border-right: 1px solid #eee; flex-grow: 1; }
+.tm-stat:last-child { border-right: 0; }
+.tm-stat b { font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+.tm-stat span { font-size: var(--fs-small); color: var(--muted); }
+.tm-stat--warn { background: var(--warn-bg); } .tm-stat--warn b, .tm-stat--warn span { color: var(--warn-text); }
+
+/* Lägesrader (Publicering, Kontroll) */
+.tm-state { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--warn-border); background: var(--warn-bg); border-radius: var(--radius); font-size: 13.5px; font-weight: 600; color: var(--warn-text); }
+.tm-state--ok { border-color: #bfe3cc; background: var(--ok-bg); color: var(--ok-text); }
+.tm-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--warn-dot); display: inline-block; flex-shrink: 0; }
+.tm-state--ok .tm-dot { background: #2a9d5c; }
+.tm-line { display: flex; align-items: center; gap: 12px; font-size: 12.5px; padding: 5px 0; border-bottom: 1px solid var(--border-soft); }
+.tm-line:last-child { border-bottom: 0; }
+.tm-line__key { font-weight: 600; width: 150px; }
+.tm-check { display: flex; align-items: center; gap: 10px; font-size: var(--fs-body); padding: 7px 0; border-bottom: 1px solid var(--border-soft); }
+.tm-check:last-child { border-bottom: 0; }
+.tm-check__icon { width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--ok-bg); color: var(--ok-text); }
+.tm-check__icon--warn { background: var(--warn-bg); color: var(--warn-text); }
+.tm-check__icon--info { background: var(--primary-soft); color: var(--primary-text); }
+.tm-check__icon--neutral { background: var(--neutral-bg); color: var(--neutral-text); }
+
+/* ---------- Tabeller ---------- */
+.tm-table { border-collapse: collapse; width: 100%; font-size: 12.5px; table-layout: fixed; }
+.tm-table th { font-weight: 600; font-size: var(--fs-micro); color: var(--text-3); text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--row-alt); white-space: nowrap; }
+.tm-table td { padding: 5px 10px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 18px; vertical-align: middle; }
+.tm-table td.m { color: var(--muted); }
+.tm-table td.e { text-align: right; } .tm-table td.e a { font-size: var(--fs-small); font-weight: 600; }
+.tm-table tr.q td { background: var(--primary-soft); white-space: normal; padding: 8px 10px; }
+
+/* Rutnätet (Data) */
+.tm-grid { border-collapse: collapse; width: 100%; font-size: 12.5px; table-layout: fixed; }
+.tm-grid th { font-weight: 600; font-size: var(--fs-micro); color: var(--text-3); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--row-alt); white-space: nowrap; position: sticky; top: 0; }
+.tm-grid td { padding: 4px 8px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 18px; }
+.tm-grid td.n { color: var(--faint); text-align: right; font-size: var(--fs-label); }
+.tm-grid td.m { color: var(--muted); }
+.tm-grid tr.grp td { background: #f5f5f4; font-weight: 600; color: var(--text-2); padding: 5px 8px; }
+.tm-grid tr.is-conflict td { background: var(--warn-bg); }
+.tm-grid tr.is-conflict td.n { color: var(--warn-text); font-weight: 700; }
+.tm-grid tr.is-selected td { background: #ffefb8; }
+.tm-grid td.is-cell-active { outline: 2px solid var(--primary); outline-offset: -2px; }
+.tm-grid-status { height: 30px; border-top: 1px solid var(--border); background: var(--row-alt); display: flex; align-items: center; gap: 16px; padding: 0 12px; font-size: var(--fs-micro); color: var(--muted); }
+
+/* ---------- Konfliktpanel (B8) ---------- */
+.tm-panel { width: var(--panel-w); flex-shrink: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; }
+.tm-panel__head { padding: 10px 12px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px; }
+.tm-panel__title { font-size: var(--fs-h3); font-weight: 700; }
+.tm-panel__filters { padding: 8px 12px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tm-panel__intro { padding: 8px 12px; border-bottom: 1px solid #eee; font-size: var(--fs-micro); color: var(--text-3); line-height: 1.4; }
+.tm-panel__list { flex-grow: 1; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; overflow: auto; }
+.tm-panel__foot { padding: 8px 12px; border-top: 1px solid #eee; font-size: var(--fs-micro); color: var(--muted); }
+.tm-pill { display: inline-block; font-size: var(--fs-label); padding: 2px 7px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--card); color: var(--text-2); }
+.tm-pill.is-active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-text); font-weight: 600; }
+.tm-finding { border: 1px solid #eee; border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: var(--card); }
+.tm-finding.is-selected { border-color: var(--warn-dot); background: #fffdf5; }
+.tm-finding__title { font-size: 12.5px; font-weight: 700; display: flex; gap: 8px; align-items: center; }
+.tm-finding__text { font-size: var(--fs-small); color: var(--text-3); line-height: 1.4; }
+.tm-finding__meta { display: flex; gap: 12px; font-size: var(--fs-micro); align-items: center; }
+.tm-finding__meta .src { color: var(--muted); }
+.tm-finding__more { font-size: var(--fs-micro); color: var(--text-3); padding-top: 4px; border-top: 1px dashed var(--warn-dot); cursor: pointer; }
+.tm-question { border: 1px solid var(--primary); background: var(--primary-soft); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.tm-question__actions { display: flex; gap: 6px; align-items: center; }
+
+/* ---------- Formulär ---------- */
+.tm-field { display: flex; flex-direction: column; gap: 5px; font-size: var(--fs-small); font-weight: 600; color: var(--text-2); }
+.tm-field input[type="text"], .tm-field input[type="email"] { font-size: 13px; padding: 7px 10px; border: 1px solid #d9d9d9; border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
+.tm-option { display: flex; gap: 10px; align-items: flex-start; padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); cursor: pointer; }
+.tm-option.is-selected { border-color: var(--primary); background: var(--primary-soft); }
+.tm-option b { font-size: 13px; font-weight: 700; display: block; }
+.tm-option span { font-size: var(--fs-small); color: var(--text-3); line-height: 1.4; }
+.tm-checkbox { display: flex; align-items: center; gap: 8px; font-size: var(--fs-body); padding: 6px 0; }
+.tm-role { display: inline-block; font-size: var(--fs-micro); font-weight: 600; padding: 2px 8px; border-radius: var(--radius-pill); border: 1px solid #d9d9d9; background: var(--card); }
+.tm-role--admin { border-color: var(--primary); color: var(--primary-text); background: var(--primary-soft); }
+
+/* ---------- Mobil ---------- */
+@media (max-width: 900px) {
+  .tm-header { flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 8px; }
+  .tm-tabs { order: 10; width: 100%; margin-left: 0; }
+  .tm-tab { padding: 10px 10px; }
+  .tm-switch { flex-grow: 1; }
+  .tm-panel { width: 100%; }
+  .tm-grid-2, .tm-grid-2--wide-left { grid-template-columns: minmax(0,1fr); }
+  :root { --page-x: 12px; }
+}
+
+
+/* =====================================================================
+   DEL 2 · SERVER-TILLÄGG (TrainMeet Server, admin i webbläsaren)
+   Samma tokens som Cloud. Allt nedan används av design/02–04-*.html.
+   ===================================================================== */
+
+/* Logotyp med produktrad: ”TrainMeet” + ”SERVER” under (A2) */
+.tm-logo--server { width: 150px; }
+.tm-logo__lines { display: flex; flex-direction: column; line-height: 1.05; }
+.tm-logo__product { font-size: 9.5px; font-weight: 700; letter-spacing: .1em; color: var(--muted); }
+
+/* Träffblocket: samma utseende som tm-switch men ingen växling (servern kör en träff) */
+.tm-switch--static { cursor: default; }
+.tm-switch--static .tm-switch__meta { white-space: nowrap; }
+
+/* Statuspill – serverns lägen (A4) */
+.tm-status--newer { color: var(--warn-text); background: var(--warn-bg); border-color: var(--warn-border); }   /* Version 9 finns i Cloud */
+.tm-status--offline { color: var(--neutral-text); background: var(--neutral-bg); border-color: var(--border); } /* Cloud inte nådd */
+
+/* Klockpill i sidhuvudet och klockraden (A5) */
+.tm-clock { font-family: var(--font-mono); font-weight: 700; font-size: 15px; color: var(--ok-text); background: var(--ok-bg); padding: 4px 9px; border-radius: var(--radius-sm); white-space: nowrap; }
+.tm-clock--stopped { color: var(--warn-text); background: var(--warn-bg); }
+.tm-clockrow { flex-direction: row; align-items: stretch; }
+.tm-clockrow__time { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 12px 18px; width: 200px; border-right: 1px solid #eee; }
+.tm-clockrow__big { font-family: var(--font-mono); font-size: 38px; font-weight: 700; color: var(--ok-text); line-height: 1; }
+.tm-clockrow__big.is-stopped { color: var(--warn-text); }
+.tm-clockrow__form { display: flex; align-items: flex-end; gap: 12px; padding: 12px 16px; flex-grow: 1; flex-wrap: wrap; }
+.tm-clockrow__aside { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 12px 16px; width: 240px; border-left: 1px solid #eee; background: var(--row-alt); }
+.tm-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--muted); }
+
+/* Formulär i rad: fält med rubrik ovanför, segmenterad väljare */
+.tm-input { font-size: 13px; padding: 7px 10px; border: 1px solid #d9d9d9; border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
+.tm-input--mono { font-family: var(--font-mono); }
+.tm-toggle { display: inline-flex; border: 1px solid #d9d9d9; border-radius: var(--radius-sm); overflow: hidden; }
+.tm-toggle button { font-size: 12.5px; font-weight: 600; padding: 7px 12px; border: 0; background: var(--card); color: var(--text-3); cursor: pointer; }
+.tm-toggle button.is-active { background: var(--primary); color: #fff; }
+
+/* Klienttabellen (A6): väntande rader gula, åtgärd i raden */
+.tm-table tr.is-waiting td { background: #fffdf5; }
+.tm-table__inline { display: inline-flex; gap: 6px; align-items: center; }
+.tm-tag--info { background: var(--primary-soft); color: var(--primary-text); }
+
+/* Farozon och destruktiva knappar (A8) */
+.tm-btn--danger { border-color: #e6b8b8; color: var(--danger-text); }
+.tm-card--danger { border-color: #e6b8b8; }
+.tm-card--danger .tm-card__head { color: var(--danger-text); border-bottom-color: #f5e0e0; }
+
+/* Nyckeltal i kort (Trafik just nu) – mindre variant av tm-stat */
+.tm-stat--sm { padding: 8px 12px; border: 1px solid #eee; border-radius: var(--radius); background: var(--row-alt); }
+.tm-stat--sm b { font-size: 18px; }
+.tm-stat--sm span { font-size: 11.5px; }
+.tm-stat--ok { background: var(--ok-bg); border-color: #cfe8d8; } .tm-stat--ok b, .tm-stat--ok span { color: var(--ok-text); }
+
+/* Hopfällt kort (Tidtabell och tågrutter, Graph-tidtabell) */
+.tm-card--collapsed { flex-direction: row; align-items: center; padding: 10px 12px; gap: 16px; font-size: 12.5px; }
+.tm-card--collapsed > a:first-child { font-weight: 700; color: var(--text); }
+
+/* =====================================================================
+   DEL 3 · SKÄRMTEMA (fullskärmsvyer på TV, 1920×1080, Del C i SPEC.md)
+   Mörk botten, stora mått. Används av design/05–16-*.html.
+   ===================================================================== */
+:root {
+  --sc-bg: #0b0b0b; --sc-card: #161616; --sc-border: #262626; --sc-line: #222222;
+  --sc-text: #f5f5f4; --sc-text-2: #d4d4d3; --sc-muted: #8f8f8d; --sc-faint: #5c5c5a;
+  --sc-track: #3a3a38; --sc-primary: #7fa3ea; --sc-primary-text: #9db9f0;
+  --sc-ok: #5fcf8a; --sc-warn: #f2c230; --sc-warn-bg: rgba(242,194,48,.14); --sc-us: #f4b978;
+  --sc-radius: 20px;
+  --sc-fs-min: 22px; --sc-fs-list: 30px; --sc-fs-label: 26px; --sc-fs-title: 36px; --sc-fs-stat: 80px; --sc-fs-clock: 440px;
+}
+.sc-screen { width: 1920px; height: 1080px; box-sizing: border-box; padding: 32px 40px 28px; display: flex; flex-direction: column; gap: 16px; background: var(--sc-bg); color: var(--sc-text); font-family: var(--font); overflow: hidden; }
+.sc-screen--clock { padding: 56px 72px; justify-content: space-between; }
+.sc-top { display: flex; align-items: center; justify-content: space-between; }
+.sc-top__meet { display: flex; align-items: center; gap: 16px; font-size: var(--sc-fs-title); font-weight: 700; }
+.sc-top__clock { font-family: var(--font-mono); font-size: 64px; font-weight: 700; line-height: 1; color: #fff; }
+.sc-badge { display: inline-block; font-size: 22px; font-weight: 700; letter-spacing: .06em; padding: 4px 12px; border-radius: 8px; white-space: nowrap; }
+.sc-badge--eu { background: rgba(127,163,234,.2); color: var(--sc-primary-text); }
+.sc-badge--us { background: rgba(240,163,94,.2); color: var(--sc-us); }
+.sc-card { background: var(--sc-card); border: 1px solid var(--sc-border); border-radius: var(--sc-radius); display: flex; flex-direction: column; overflow: hidden; }
+.sc-head { display: flex; align-items: center; gap: 16px; padding: 13px 28px; border-bottom: 1px solid var(--sc-border); font-size: var(--sc-fs-label); font-weight: 700; }
+.sc-head .c { font-size: 22px; color: var(--sc-muted); font-weight: 500; }
+.sc-tile { display: flex; flex-direction: column; gap: 2px; padding: 20px 28px; background: var(--sc-card); border: 1px solid var(--sc-border); border-radius: var(--sc-radius); flex-grow: 1; min-width: 0; }
+.sc-tile b { font-size: var(--sc-fs-stat); font-weight: 700; line-height: 1; letter-spacing: -.02em; }
+.sc-tile span { font-size: 25px; color: var(--sc-muted); white-space: nowrap; }
+.sc-tile--ok b { color: var(--sc-ok); }
+.sc-row { display: grid; grid-template-columns: 110px 120px 1fr 120px; gap: 20px; align-items: center; font-size: 29px; padding: 9px 28px; border-bottom: 1px solid var(--sc-line); }
+.sc-row:last-child { border-bottom: 0; }
+.sc-run { display: inline-flex; align-items: center; gap: 12px; color: var(--sc-ok); font-weight: 600; }
+.sc-run::before { content: ""; width: 18px; height: 18px; border-radius: 50%; background: var(--sc-ok); }
+.sc-stopped { display: flex; align-items: center; gap: 24px; padding: 24px 32px; border-radius: 24px; background: var(--sc-warn-bg); border: 3px solid var(--sc-warn); }
+.sc-stopped::before { content: ""; width: 24px; height: 24px; border-radius: 50%; background: var(--sc-warn); flex-shrink: 0; }
+.sc-stopped__title { font-size: 52px; font-weight: 700; color: var(--sc-warn); line-height: 1.1; }
+.sc-stopped__reason { font-size: 34px; color: var(--sc-text); }
+.sc-stopped__meta { font-size: 28px; color: var(--sc-muted); }
+.sc-digital { font-family: var(--font-mono); font-weight: 700; line-height: 1; letter-spacing: -.02em; color: #fff; }
+.sc-digital--big { font-size: var(--sc-fs-clock); }
+.sc-digital--side { font-size: 200px; }
+.sc-digital.is-stopped { color: #a3a3a3; }
+.sc-foot { display: flex; align-items: flex-end; justify-content: space-between; font-size: 26px; color: var(--sc-muted); }
+.sc-foot__code { font-family: var(--font-mono); font-size: 30px; }
+.sc-foot__code b { color: #fff; }
+.sc-train { fill: var(--sc-primary); }                 /* tågbricka i SVG */
+.sc-train-label { fill: #0b0b0b; font-weight: 700; font-family: var(--font-mono); }
+.sc-track { stroke: var(--sc-track); }                 /* sträcka utan tåg */
+.sc-track--busy { stroke: var(--sc-primary); }         /* sträcka med tåg eller gällande körtillstånd */
+.sc-now { stroke: var(--sc-warn); }                    /* nu-linjen i tågdiagrammet */

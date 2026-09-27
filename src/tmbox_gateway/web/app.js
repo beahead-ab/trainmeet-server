@@ -1,4 +1,6 @@
 const { t, html } = globalThis.TrainMeetI18n;
+const serverUI = globalThis.TrainMeetServerUI;
+function editorActive(form) { return Boolean(form?.closest("dialog")?.open || form?.dataset.dirty === "true" || form?.dataset.busy === "true"); }
 
 let simulationState = null;
 let simulationConfirmation = null;
@@ -12,6 +14,7 @@ const simulationReasons = {
 
 function renderSimulation(data) {
   simulationState = data;
+  document.querySelector("#drift-simulation-details").hidden = !data.active || state.serverContext?.operating_region === "us";
   const clock = data.clock || {};
   document.querySelector("#simulation-summary").textContent = data.active
     ? `${clock.running ? t("Går") : t("Pausad")} · ${clock.time} · ${clock.speed}× · ${t("Trafikdag")} ${data.day} · ${t("Scenario")} ${data.seed}${data.notice ? " · " + data.notice : ""}`
@@ -64,7 +67,7 @@ function renderSimulation(data) {
 }
 
 async function refreshSimulation() {
-  if (simulationRefreshing || document.body.dataset.mode !== "simulation") return;
+  if (simulationRefreshing || !["simulation", "kor"].includes(document.body.dataset.mode) || state.serverContext?.operating_region === "us") return;
   simulationRefreshing = true;
   try {
     const response = await authorizedFetch("/v1/simulation", {cache: "no-store"});
@@ -510,16 +513,17 @@ setupFinishForm.addEventListener("submit", async (event) => {
 
 
 // Server workspaces select an interface, never a different meet or engine.
-const SETTINGS_SECTIONS = ["language", "meet", "identity", "access", "users", "devices", "software", "cloud", "system"];
+const SETTINGS_SECTIONS = ["language", "meet", "identity", "users", "software", "cloud", "system"];
 const WORKSPACE_PANELS = {
   kor: "#overview-view", installningar: "#admin-view",
   simulation: "#simulation-view",
   skarmar: "#displays-view", tmbox: "#tmbox-v2-view",
+  help: "#help-view",
 };
 const MODES = ["workspaces", ...Object.keys(WORKSPACE_PANELS)];
 const WORKSPACE_KEY = "trainmeet.workspace";
 const WORKSPACES = {
-  administration: { title: "Drift och administration", detail: "Trafikläge, klocka och serverinställningar", path: "/#overview" },
+  administration: { title: "Drift och administration", detail: "Trafikläge, klocka och serverinställningar", path: "/drift" },
   tkl: { title: "TKL", detail: "Starta klienten – administratören tilldelar station", path: "/tkl/" },
   tmbox: { title: "TMBox", detail: "Starta klienten – administratören tilldelar station", path: "/tmbox/" },
   dispatcher: { title: "Dispatcher", detail: "Trafikledning för träffens territorier", path: "/us/dispatcher" },
@@ -561,6 +565,7 @@ async function refreshServerContext() {
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || "Serverns träff kunde inte läsas.");
   state.serverContext = payload;
+  serverUI.context = payload;
   const warning = document.querySelector("#server-context-warning");
   setMessage(warning, payload.error?.message || (typeof payload.error === "string" ? payload.error : "") || (payload.transition_pending ? "Byte av träff pågår. Trafikkommandon är tillfälligt spärrade." : ""), "error");
   warning.classList.toggle("hidden", !warning.textContent);
@@ -582,6 +587,7 @@ async function refreshServerContext() {
   document.querySelectorAll("#overview-view .topology-overview-card, #overview-traffic, #overview-timetable")
     .forEach((node) => node.classList.toggle("hidden", us));
   document.querySelector("#workspace-home").href = workspaceHome();
+  serverUI.refreshHeader();
   return payload;
 }
 
@@ -617,9 +623,8 @@ function renderWorkspacePicker() {
     button.addEventListener("click", () => {
       sessionStorage.setItem(WORKSPACE_KEY, key);
       if (key === "administration") {
-        const hash = key === "tmbox" ? "#tmbox" : "#overview";
-        if (location.hash === hash) applyWorkspaceRoute();
-        else location.hash = hash;
+        history.pushState(null, "", "/drift");
+        applyWorkspaceRoute();
       } else location.assign(entry.path);
     });
     host.append(button);
@@ -661,6 +666,9 @@ function setMode(mode) {
   } else if (next === "installningar") showSettings();
   else if (next === "simulation") refreshSimulation();
   else if (next === "kor" && state.serverContext?.operating_region === "eu") renderOverview(state.overviewSnapshot);
+  if (next === "kor") refreshSimulation();
+  if (next === "help") { buildTMBoxGuide(); buildScreenCatalog(); buildFlowList(); }
+  serverUI.mode(next);
   window.scrollTo({ top: 0, behavior: "auto" });
 }
 
@@ -672,7 +680,25 @@ function showSettings() {
 }
 
 function applyWorkspaceRoute() {
-  const route = location.hash.slice(1);
+  let route = location.hash.slice(1);
+  const legacy = {overview: "/drift", traffic: "/drift", settings: "/installningar", simulation: "/drift#drift-simulation", screens: "/installningar#skarmar"};
+  if (legacy[route]) { history.replaceState(null, "", legacy[route]); route = location.hash.slice(1); }
+  if (route === "workspaces" && location.pathname !== "/") history.replaceState(null, "", "/#workspaces");
+  const path = location.pathname.replace(/\/$/, "") || "/";
+  const protectedMode = {"/drift": "kor", "/installningar": "installningar", "/hjalp": "help", "/login": "kor"}[path];
+  if (protectedMode) {
+    if (!state.authStatus?.authenticated) { showLogin(); return; }
+    setup.classList.add("hidden"); login.classList.add("hidden"); appView.classList.remove("hidden");
+    if (path === "/drift" || path === "/login") sessionStorage.setItem(WORKSPACE_KEY, "administration");
+    setMode(protectedMode);
+    return;
+  }
+  if (!route && sessionStorage.getItem(WORKSPACE_KEY)) {
+    const destination = workspaceHome();
+    if (destination === "/drift") { history.replaceState(null, "", destination); applyWorkspaceRoute(); }
+    else location.replace(destination);
+    return;
+  }
   if (!state.authStatus?.authenticated && !["", "workspaces", "tmbox"].includes(route)) {
     showLogin();
     return;
@@ -706,6 +732,7 @@ function applyWorkspaceRoute() {
 
 document.body.dataset.mode = storedMode();
 window.addEventListener("hashchange", applyWorkspaceRoute);
+window.addEventListener("popstate", applyWorkspaceRoute);
 document.querySelector("#workspace-home").addEventListener("click", (event) => {
   event.preventDefault();
   const destination = workspaceHome();
@@ -729,7 +756,7 @@ function modalChanged(dialog) {
   return (modalValues.get(dialog) || []).some(([input, value, checked]) => input.value !== value || input.checked !== checked);
 }
 function beginModalAction(element) {
-  const dialog = element?.closest("dialog");
+  const dialog = element?.closest("dialog") || element?.closest("form");
   if (!dialog) return true;
   if (dialog.dataset.busy === "true") return false;
   dialog.dataset.busy = "true";
@@ -740,7 +767,7 @@ function beginModalAction(element) {
   return true;
 }
 function endModalAction(element) {
-  const dialog = element?.closest("dialog");
+  const dialog = element?.closest("dialog") || element?.closest("form");
   if (!dialog) return;
   (modalControls.get(dialog) || []).forEach(([control, disabled]) => { control.disabled = disabled; });
   modalControls.delete(dialog);
@@ -786,6 +813,8 @@ function cancelModal(dialog) {
 }
 let modalResultTimer;
 function finishModal(form, confirmation = null) {
+  delete form.dataset.dirty;
+  delete form.dataset.meetGeneration;
   const dialog = form.closest("dialog");
   if (dialog) {
     let receipt = document.querySelector("#modal-result");
@@ -969,6 +998,7 @@ clockControlForm.addEventListener("submit", async (event) => {
     action: "set",
     time: document.querySelector("#local-clock-time").value,
     speed,
+    meet_generation: clockControlForm.dataset.meetGeneration ? Number(clockControlForm.dataset.meetGeneration) : state.serverContext?.selected_meet?.generation,
   });
 });
 
@@ -1362,9 +1392,10 @@ function renderCloudStatus() {
     "Senaste fungerande config används även utan internet.");
   runtimeCheckUpdate.disabled = !update.linked;
   document.querySelector("#cloud-auto-edit").disabled = !update.linked;
-  if (!document.querySelector("#cloud-auto-modal").open) {
+  if (!editorActive(document.querySelector("#cloud-auto-form"))) {
     document.querySelector("#cloud-auto-enabled").checked = Boolean(update.auto_sync);
   }
+  serverUI.refreshHeader();
 }
 
 softwareCheck.addEventListener("click", checkSoftwareUpdate);
@@ -1512,6 +1543,7 @@ function renderSoftwareUpdate(payload) {
 
   const failed = payload.status === "failed";
   const running = (payload.steps || []).some((step) => step.state === "active");
+  document.querySelector("#update-progress").classList.toggle("hidden", !running && !failed);
   softwareRetry.classList.toggle("hidden", !failed);
   softwareCheck.disabled = running;
 
@@ -1623,6 +1655,8 @@ async function refreshInfo() {
   const response = await authorizedFetch("/v1/info");
   if (!response.ok) return;
   const info = await response.json();
+  serverUI.info = info;
+  serverUI.refreshHeader();
   document.querySelector("#server-name").textContent = info.gateway_id || "TrainMeet Server";
   document.querySelector("#server-detail").textContent =
     `Kör lokalt · aktiv trafiksession: ${info.traffic_session_name}`;
@@ -1630,7 +1664,7 @@ async function refreshInfo() {
   document.querySelector("#system-runtime-name").textContent = state.serverContext?.selected_meet?.name || t("Ingen aktiv träff");
   document.querySelector("#system-cloud-state").textContent = state.serverContext?.cloud_update?.linked ? t("Kopplad") : t("Inte kopplad");
   const serverNameInput = document.querySelector("#admin-server-name");
-  if (!serverIdentityForm.closest("dialog").open) {
+  if (!editorActive(serverIdentityForm)) {
     serverNameInput.value = info.runtime?.server_name || info.gateway_id || "";
   }
   const pill = document.querySelector("#runtime-pill");
@@ -1748,6 +1782,10 @@ function renderDevices(payload) {
   document.querySelector("#app-devices").textContent = `${state.devices.length} ${t("klienter")}`;
   const list = document.querySelector("#device-list");
   updateStationOptions(payload.stations || []);
+  if (list.querySelector(".device-inline-edit")) return;
+  const signature = JSON.stringify([payload, document.documentElement.lang]);
+  if (list.dataset.signature === signature) return;
+  list.dataset.signature = signature;
   list.replaceChildren();
   const waiting = payload.devices.filter(device => !device.station_id).length;
   const waitingMessage = document.querySelector("#device-awaiting");
@@ -1779,12 +1817,27 @@ function renderDevices(payload) {
     edit.dataset.tmText = editLabel;
     edit.textContent = t(editLabel);
     edit.addEventListener("click", () => {
-      document.querySelector("#device-code").value = device.device_code;
-      document.querySelector("#device-code").readOnly = true;
-      deviceStation.value = device.station_id || "";
-      document.querySelector("#device-form-title").textContent = t(editLabel);
-      setMessage(deviceMessage, "");
-      openModal("device-form-modal");
+      const meetGeneration = state.serverContext?.selected_meet?.generation;
+      const form = document.createElement("form"); form.className = "device-inline-edit server-actions";
+      const select = document.createElement("select"); select.required = true; select.setAttribute("aria-label", t("Station"));
+      select.append(new Option(t("Välj station"), ""));
+      (payload.stations || []).forEach(s => select.append(new Option(`${s.code} · ${s.name}`, s.id)));
+      select.value = device.station_id || "";
+      const save = document.createElement("button"); save.type = "submit"; save.textContent = t("Spara");
+      const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = t("Avbryt");
+      const message = document.createElement("span"); message.setAttribute("role", "status");
+      const close = () => { form.remove(); delete list.dataset.signature; renderDevices({devices: state.devices, stations: state.stations}); };
+      cancel.addEventListener("click", close);
+      form.append(select, save, cancel, message); actions.replaceChildren(form); select.focus();
+      form.addEventListener("submit", async event => {
+        event.preventDefault(); if (save.disabled) return; save.disabled = cancel.disabled = select.disabled = true;
+        try {
+          const response = await authorizedFetch("/v1/devices/assign", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({device_code: device.device_code, station_id: select.value, meet_generation: meetGeneration})});
+          const result = await response.json(); if (!response.ok) throw new Error(result.message || t("Kunde inte tilldela station"));
+          close(); await refreshDevices();
+        } catch (error) { message.textContent = error.message; }
+        finally { save.disabled = cancel.disabled = select.disabled = false; }
+      });
     });
     const remove = document.createElement("button");
     remove.type = "button";
@@ -1792,11 +1845,22 @@ function renderDevices(payload) {
     remove.dataset.tmText = "Ta bort";
     remove.textContent = t("Ta bort");
     remove.addEventListener("click", () => {
-      document.querySelector("#device-remove-form").dataset.deviceId = device.device_id;
-      document.querySelector("#device-remove-code").textContent = device.device_code;
-      document.querySelector("#device-remove-station").textContent = assignment.textContent;
-      setMessage(document.querySelector("#device-list-message"), "");
-      openModal("device-remove-modal");
+      const meetGeneration = state.serverContext?.selected_meet?.generation;
+      const confirm = document.createElement("div"); confirm.className = "device-inline-edit server-actions";
+      const question = document.createElement("span"); question.textContent = t("Koppla bort klienten? Trafik och historik behålls.");
+      const yes = document.createElement("button"); yes.type = "button"; yes.textContent = t("Ta bort");
+      const no = document.createElement("button"); no.type = "button"; no.textContent = t("Avbryt");
+      no.addEventListener("click", () => { confirm.remove(); delete list.dataset.signature; renderDevices(payload); });
+      yes.addEventListener("click", async () => {
+        yes.disabled = no.disabled = true;
+        try {
+          const response = await authorizedFetch("/v1/devices/remove", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({device_id: device.device_id, meet_generation: meetGeneration})});
+          const result = await response.json(); if (!response.ok) throw new Error(result.message || t("Kunde inte ta bort klienten"));
+          confirm.remove(); delete list.dataset.signature; renderDevices({devices: state.devices, stations: state.stations}); await refreshDevices();
+        } catch (error) { question.textContent = error.message; }
+        finally { yes.disabled = no.disabled = false; }
+      });
+      confirm.append(question, yes, no); actions.replaceChildren(confirm); no.focus();
     });
     const actions = document.createElement("div");
     actions.className = "device-actions";
@@ -1866,6 +1930,10 @@ async function refreshCloudPresentation() {
 
 function renderCloudPresentation() {
   const data = cloudPresentation;
+  serverUI.presentation = data;
+  serverUI.refreshHeader();
+  // Keep the displayed publication/configuration fence with an inline draft.
+  if (document.querySelector(".placement-inline-edit")) return;
   document.querySelector("#display-placement-section").hidden = !data?.supported;
   document.querySelector("#published-findings").hidden = !data?.supported;
   const rows = document.querySelector("#display-placement-rows");
@@ -1886,7 +1954,9 @@ function renderCloudPresentation() {
     const button = document.createElement("button"); button.type = "button"; button.className = "secondary";
     button.textContent = t("Redigera"); button.disabled = !station.connections.length;
     button.setAttribute("aria-label", `${t("TMBox-placering")} · ${station.name}`);
-    button.addEventListener("click", () => editDisplayPlacement(station.station_id, button));
+    button.addEventListener("click", () => station.connections.length <= 2
+      ? editInlinePlacement(station, action, data)
+      : editDisplayPlacement(station.station_id, button));
     const dialog = document.querySelector("#display-placement-modal");
     if (dialog.open && placementEdit?.station_id === station.station_id) modalOrigins.set(dialog, button);
     action.append(button); tr.append(action); rows.append(tr);
@@ -1902,6 +1972,36 @@ function renderCloudPresentation() {
     li.textContent = `${kind}${finding.rule ? ` ${finding.rule}` : ""} · ${typeof finding.message === "string" ? finding.message : "—"}`;
     list.append(li);
   }
+  serverUI.stationRows(rows);
+}
+
+function editInlinePlacement(station, host, data) {
+  const fence = {publication_id: data.publication_id, config_version: data.config_version, station_id: station.station_id, meet_generation: state.serverContext?.selected_meet?.generation};
+  const form = document.createElement("form"); form.className = "placement-inline-edit server-actions";
+  station.connections.forEach(connection => {
+    const label = document.createElement("label"); label.textContent = connection.other_station_code;
+    const select = document.createElement("select"); select.name = connection.connection_id;
+    select.append(new Option(`${t("Följ Cloud")} · ${t(connection.default_side === "left" ? "Vänster" : "Höger")}`, ""), new Option(t("Vänster"), "left"), new Option(t("Höger"), "right"));
+    select.value = connection.overridden ? connection.side : ""; label.append(select); form.append(label);
+  });
+  const save = document.createElement("button"); save.type = "submit"; save.textContent = t("Spara");
+  const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = t("Avbryt");
+  const message = document.createElement("span"); message.setAttribute("role", "status");
+  const close = () => { form.remove(); renderCloudPresentation(); };
+  cancel.addEventListener("click", close); form.append(save, cancel, message); host.replaceChildren(form);
+  form.querySelector("select").focus();
+  form.addEventListener("submit", async event => {
+    event.preventDefault(); if (save.disabled) return;
+    const selects = [...form.querySelectorAll("select")];
+    const sides = Object.fromEntries(selects.filter(s => s.value).map(s => [s.name, s.value]));
+    save.disabled = cancel.disabled = true; selects.forEach(s => { s.disabled = true; });
+    try {
+      const response = await authorizedFetch("/v1/cloud/display-placement", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...fence,sides})});
+      const result = await response.json(); if (!response.ok) throw new Error(result.message || t("Inställningen kunde inte sparas."));
+      ++presentationRequest; cloudPresentation = result; close();
+    } catch(error) { message.textContent = error.message; }
+    finally { save.disabled = cancel.disabled = false; selects.forEach(s => { s.disabled = false; }); }
+  });
 }
 
 function editDisplayPlacement(stationId, origin) {
@@ -1960,21 +2060,18 @@ async function refreshLocalClock() {
       renderConnectionBadgeSettings(payload.connection || {});
     }
   } else {
-    const meet = state.serverContext.selected_meet;
-    document.querySelector("#overview-meet-name").textContent = meet?.name || "TrainMeet Server";
-    document.querySelector("#overview-runtime-meta").textContent = t("Publicerad config · {version}", { version: meet?.publication_id || "–" });
-    document.querySelector("#overview-station-meta").textContent = t("Territorier och tåguppdrag från Cloud");
-    document.querySelector("#overview-day").textContent = "";
-    document.querySelector("#us-runtime-detail").textContent = t(clock.configured ? "Körningen finns lokalt på servern." : "Träffen är hämtad. Starta klockan när körningen ska börja.");
+    const display = await fetch("/v1/display", {cache:"no-store"});
+    if (display.ok) { const payload = await display.json(); serverUI.us(payload.us); renderConnectionBadgeSettings(payload.connection || {}); }
   }
   const timeInput = document.querySelector("#local-clock-time");
-  if (!clockControlForm.closest("dialog").open) timeInput.value = clock.time || "12:00:00";
+  if (!editorActive(clockControlForm)) timeInput.value = clock.time || "12:00:00";
   const speedInput = document.querySelector("#local-clock-speed");
-  if (!clockControlForm.closest("dialog").open) speedInput.value = Number(clock.speed || 1);
+  if (!editorActive(clockControlForm)) speedInput.value = Number(clock.speed || 1);
   const stateLabel = document.querySelector("#clock-state");
-  if (!document.querySelector("#clock-appearance-modal").open) {
+  if (!editorActive(document.querySelector("#clock-appearance-form"))) {
     const styleSelect = document.querySelector("#meet-clock-style");
-    const styles = clock.available_styles || Object.keys(clockStyleLabels);
+    const styles = ["digital", "analog", "stationsur", "swiss"];
+    if (clock.style && !styles.includes(clock.style)) styles.push(clock.style);
     styleSelect.replaceChildren(...styles.map(value => new Option(t(clockStyleLabels[value] || value), value)));
     styleSelect.value = clock.style || styles[0];
     document.querySelector("#meet-clock-seconds").checked = clock.show_seconds !== false;
@@ -2005,6 +2102,7 @@ async function refreshLocalClock() {
   document.querySelector("#overview-clock").textContent = String(clock.time || "--:--").slice(0, 5);
   document.querySelector("#app-clock").textContent = String(clock.time || "--:--").slice(0, 5);
   updateClockControlAvailability();
+  serverUI.refreshClock(clock);
 }
 
 function updateClockControlAvailability() {
@@ -2016,9 +2114,10 @@ function updateClockControlAvailability() {
 }
 
 function renderConnectionBadgeSettings(connection) {
+  serverUI.network(connection);
   const container = document.querySelector("#connection-badge-screens");
   if (!container) return;
-  if (container.closest("dialog")?.open) return;
+  if (editorActive(container.closest("form"))) return;
   const screens = connection.screens || [];
   for (const input of container.querySelectorAll("input[type=checkbox]")) {
     if (document.activeElement !== input) input.checked = screens.includes(input.value);
@@ -2071,7 +2170,7 @@ async function controlLocalClock(command) {
   if (!beginModalAction(clockControlForm)) return;
   const buttons = [...clockControlForm.querySelectorAll("button"), document.querySelector("#overview-clock-start"), document.querySelector("#overview-clock-stop")];
   buttons.forEach((button) => { button.disabled = true; });
-  const message = clockControlForm.closest("dialog").open ? clockControlMessage : document.querySelector("#overview-clock-message");
+  const message = clockControlMessage;
   setMessage(message, "Uppdaterar den lokala klockan …", "notice");
   try {
     const response = await authorizedFetch("/v1/clock", {
@@ -2086,7 +2185,7 @@ async function controlLocalClock(command) {
       payload.running ? `Klockan går från ${payload.time.slice(0, 5)} i ${Number(payload.speed)}×.` : "Klockan är stoppad.",
       "success",
     );
-    if (clockControlForm.closest("dialog").open) finishModal(clockControlForm);
+    finishModal(clockControlForm);
     await refreshLocalClock();
   } catch (error) {
     setMessage(message, error.message, "error");
@@ -2708,7 +2807,14 @@ function topologyEdgeKey(a, b) {
 
 function renderTopology(snapshot, target = document.querySelector("#topology-svg"), options = {}) {
   if (!target) return;
-  const { positions, edges, viewBox } = topologyLayout(snapshot);
+  let { positions, edges, viewBox } = topologyLayout(snapshot);
+  target.classList.toggle("topology-tv", Boolean(options.tv));
+  if (options.tv) {
+    const [vx,vy,vw,vh] = viewBox.split(/\s+/).map(Number), height = options.height || 680;
+    const scale = Math.min(1540/vw,(height-160)/vh);
+    positions = new Map([...positions].map(([id,p])=>[id,{x:(p.x-vx)*scale+(1840-vw*scale)/2,y:(p.y-vy)*scale+(height-vh*scale)/2-20}]));
+    viewBox = `0 0 1840 ${height}`;
+  }
   target.setAttribute("viewBox", viewBox);
   target.replaceChildren();
   target.onclick = (event) => {
@@ -2771,7 +2877,11 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     if (onRoute || selected) group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + 5, class: "topology-station-ring" }));
     group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + 1, class: "topology-mask" }));
     group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius, class: `topology-station${autonomous ? " autonomous" : ""}${activeStationIDs.has(station.id) ? " active" : ""}${onRoute || selected ? " highlighted" : ""}` }));
-    group.append(svgElement("text", { x: point.x, y: point.y + (autonomous ? 16 : 20), class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name));
+    group.append(svgElement("text", { x: point.x, y: point.y + (options.tv ? 40 : autonomous ? 16 : 20), class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name));
+    if (options.tv) {
+      const count = (snapshot.train_positions || []).filter(p=>p.station_id===station.id && !p.connection_id).length;
+      group.append(svgElement("text", {x:point.x,y:point.y+70,class:"topology-code"}, `${station.code || ""} · ${count} ${t("tåg")}`));
+    }
     const activate = (event) => {
       event.stopPropagation();
       options.onStationSelect?.(station.id);
@@ -2795,7 +2905,12 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const direction = position.from_station_id && position.to_station_id
       ? ((positions.get(position.to_station_id)?.x || 0) >= (positions.get(position.from_station_id)?.x || 0) ? 1 : -1)
       : 1;
-    appendLocomotive(target, { x: point.x, y: point.y - 17 }, position.train_number, direction, {
+    if (options.tv) {
+      const badge = svgElement("g", {class:"topology-train-badge",role:"img","aria-label":`Tåg ${position.train_number}`});
+      badge.append(svgElement("rect",{x:point.x-58,y:point.y-50,width:116,height:44,rx:8,fill:"#2256c3"}));
+      badge.append(svgElement("text",{x:point.x,y:point.y-20,"text-anchor":"middle",fill:"white","font-size":28},`${position.train_number} ${direction>0?"→":"←"}`));
+      target.append(badge);
+    } else appendLocomotive(target, { x: point.x, y: point.y - 17 }, position.train_number, direction, {
       selected: String(position.train_number) === String(options.selectedTrainNumber),
       dimmed: Boolean(selectedService && String(position.train_number) !== String(options.selectedTrainNumber)),
       clickable: Boolean(options.onTrainSelect),
@@ -2988,6 +3103,46 @@ function renderDisplaySelection(snapshot) {
 
 function renderGraph(snapshot) {
   const svg = document.querySelector("#graph-svg");
+  const width = 1840, height = 850, left = 270, top = 65, bottom = 50;
+  const now = currentClockSeconds(snapshot) / 60;
+  const min = now - 60, max = now + 120;
+  const stations = orderedStations(snapshot);
+  const stationIndex = new Map(stations.map((s, i) => [s.id, i]));
+  const x = minute => left + (minute - min) / (max - min) * (width - left - 30);
+  const y = i => top + i * (height - top - bottom) / Math.max(1, stations.length - 1);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`); svg.removeAttribute("width"); svg.removeAttribute("height"); svg.replaceChildren();
+  const defs = svgElement("defs"), clip = svgElement("clipPath", {id: "screen-graph-clip"});
+  clip.append(svgElement("rect", {x: left, y: top - 24, width: width - left, height: height - top - bottom + 48})); defs.append(clip); svg.append(defs);
+  for (let minute = Math.ceil(min / 30) * 30; minute <= max; minute += 30) {
+    svg.append(svgElement("line", {x1:x(minute), x2:x(minute), y1:top - 24, y2:height - bottom, class:"graph-grid"}));
+    const normalized = (Math.floor(minute) % 1440 + 1440) % 1440;
+    svg.append(svgElement("text", {x:x(minute), y:height - 12, "text-anchor":"middle", class:"sc-graph-label"}, `${String(Math.floor(normalized/60)).padStart(2,"0")}:${String(normalized%60).padStart(2,"0")}`));
+  }
+  stations.forEach((station, i) => {
+    svg.append(svgElement("line", {x1:left, x2:width, y1:y(i), y2:y(i), class:"graph-grid"}));
+    svg.append(svgElement("text", {x:10, y:y(i)-7, class:"sc-graph-label"}, station.name));
+    svg.append(svgElement("text", {x:10, y:y(i)+24, class:"sc-graph-code"}, station.code || ""));
+  });
+  const trains = svgElement("g", {"clip-path":"url(#screen-graph-clip)"});
+  const active = new Set((snapshot.train_positions || []).map(p => String(p.train_number)));
+  for (const service of graphServices(snapshot)) {
+    const points = servicePoints({...service, stops:[...service.stops].sort((a,b)=>a.stop_order-b.stop_order)}, stationIndex);
+    if (points.length < 2) continue;
+    // Choose the daily occurrence intersecting this rolling window. This also
+    // keeps a 23:55–00:15 train continuous when the clock crosses midnight.
+    const centre = (points[0].minute + points.at(-1).minute) / 2;
+    const shift = Math.round((now - centre) / 1440) * 1440;
+    if (points.at(-1).minute + shift < min || points[0].minute + shift > max) continue;
+    const colour = active.has(String(service.train_number)) ? "#7fa3ea" : "#737373";
+    trains.append(svgElement("polyline", {points:points.map(p=>`${x(p.minute+shift)},${y(p.station)}`).join(" "), fill:"none", stroke:colour, "stroke-width":3}));
+    const visible = points.find(p=>p.minute+shift >= min && p.minute+shift <= max) || points[0];
+    trains.append(svgElement("text", {x:Math.max(left+8,x(visible.minute+shift)+8), y:y(visible.station)-10, fill:colour, "font-size":26}, service.train_number));
+  }
+  svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top-24, y2:height-bottom, stroke:"#f2c230", "stroke-width":3}));
+}
+
+function renderScrollableGraph(snapshot) {
+  const svg = document.querySelector("#graph-svg");
   const canvas = document.querySelector("#graph-canvas");
   const stationOverlay = document.querySelector("#graph-station-overlay");
   const stationLabels = document.querySelector("#graph-station-labels");
@@ -3112,6 +3267,8 @@ function renderGraph(snapshot) {
 }
 
 const clockStyleConfig = {
+  analog: { hourMarkerWidth: 3, hourMarkerLength: 10, minuteMarkerWidth: 1, minuteMarkerLength: 4, hourHandWidth: 5, hourHandLength: 50, minuteHandWidth: 3, minuteHandLength: 75, secondHandColor: "#7fa3ea", secondHandWidth: 1, secondHandLength: 80, secondBallRadius: 0, hasNumbers: true, centerDotRadius: 3, bezelWidth: 1 },
+  stationsur: { hourMarkerWidth: 4, hourMarkerLength: 14, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#2256c3", secondHandWidth: 1.5, secondHandLength: 78, secondBallRadius: 0, hasNumbers: false, centerDotRadius: 4, bezelWidth: 3 },
   swiss: { hourMarkerWidth: 6, hourMarkerLength: 18, minuteMarkerWidth: 2, minuteMarkerLength: 8, hourHandWidth: 8, hourHandLength: 55, minuteHandWidth: 6, minuteHandLength: 78, secondHandColor: "#e2000a", secondHandWidth: 2, secondHandLength: 70, secondBallRadius: 7, secondBallOffset: 62, hasNumbers: false, centerDotRadius: 5, bezelWidth: 4 },
   swedish: { hourMarkerWidth: 4, hourMarkerLength: 14, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#1a5276", secondHandWidth: 1.5, secondHandLength: 72, secondBallRadius: 0, secondBallOffset: 0, hasNumbers: true, centerDotRadius: 4, bezelWidth: 3 },
   norwegian: { hourMarkerWidth: 5, hourMarkerLength: 16, minuteMarkerWidth: 1.5, minuteMarkerLength: 7, hourHandWidth: 7, hourHandLength: 50, minuteHandWidth: 5, minuteHandLength: 75, secondHandColor: "#ba2025", secondHandWidth: 1.5, secondHandLength: 68, secondBallRadius: 5, secondBallOffset: 60, hasNumbers: false, centerDotRadius: 5, bezelWidth: 5 },
@@ -3126,6 +3283,7 @@ const clockStyleConfig = {
 };
 
 const clockStyleLabels = {
+  analog: "Analog", stationsur: "Stationsur",
   swiss: "Schweizisk (SBB)", swedish: "Svensk (SJ)", norwegian: "Norsk (NSB)",
   danish: "Dansk (DSB)", german: "Tysk (DB)", finnish: "Finsk (VR)",
   polish: "Polsk (PKP)", dutch: "Nederländsk (NS)", french: "Fransk (SNCF)",
@@ -3257,6 +3415,7 @@ function updateAnalogClockHands(target, seconds, style, running) {
 
 function renderClock(snapshot) {
   const target = document.querySelector("#clock-view");
+  target.dataset.us = String(snapshot.meet?.operating_region === "us");
   const available = snapshot.clock?.available_styles?.length ? snapshot.clock.available_styles : ["swiss", "swedish", "digital"];
   // The meeting server owns presentation too. Retired localStorage/URL choices
   // must not silently override an administrator's change on another computer.
@@ -3265,47 +3424,56 @@ function renderClock(snapshot) {
   const seconds = currentClockSeconds(snapshot);
   const time = currentClockTime(snapshot);
   const showSeconds = snapshot.clock?.show_seconds !== false;
-  const displayTime = showSeconds ? time : time.slice(0, 5);
+  let displayTime = showSeconds ? time : time.slice(0, 5);
+  if (snapshot.meet?.operating_region === "us" && /^\d\d:/.test(time)) {
+    const hour = Number(time.slice(0, 2)); displayTime = `${hour % 12 || 12}${displayTime.slice(2)} ${hour >= 12 ? "PM" : "AM"}`;
+  }
   const darkBackground = !document.querySelector("#display-app").classList.contains("light");
   const stopped = !snapshot.clock?.running;
   const externalMissing = snapshot.clock?.source === "fastclock" && !snapshot.clock.available;
   const stopText = externalMissing ? t("FastClock: kontakt saknas") : snapshot.clock?.running ? "" : `STOPPAD${snapshot.clock?.stopped_reason ? ` · ${snapshot.clock.stopped_reason}` : ""}`;
-  const renderSignature = [style, darkBackground, showSeconds, stopped, stopText].join("|");
+  const meta = `${Number(snapshot.clock?.speed || 1)}× · ${snapshot.clock?.source === "fastclock" ? "FastClock" : t("Intern klocka")}`;
+  const renderSignature = [style, darkBackground, showSeconds, stopped, stopText, meta].join("|");
   if (target.dataset.clockSignature !== renderSignature) {
     target.dataset.clockSignature = renderSignature;
-    const face = style === "digital"
-      ? html`<div class="clock-digital${stopped ? " stopped" : ""}"></div>`
-      : clockSVG(style, darkBackground, showSeconds, stopped);
-    const reason = stopText ? html`<div class="clock-stopped">${escapeHTML(stopText)}</div>` : "";
-    target.innerHTML = html`<div class="clock-shell${style === "digital" ? " clock-shell--digital" : ""}">${face}${reason}</div>`;
+    const face = style === "digital" ? "" : clockSVG(style, style === "stationsur" ? false : darkBackground, showSeconds, stopped);
+    const status = stopped || externalMissing
+      ? html`<div class="sc-stopped"><div><div class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan stoppad")}</div><div class="sc-stopped__reason">${escapeHTML(snapshot.clock?.stopped_reason || (externalMissing ? t("Senast mottagna tid visas") : ""))}</div><div class="sc-stopped__meta">${escapeHTML(meta)}</div></div></div>`
+      : html`<div class="sc-run">${t("Klockan går")} · ${escapeHTML(meta)}</div>`;
+    target.innerHTML = html`<div class="sc-clock-layout ${style === "digital" ? "sc-clock-layout--digital" : ""}">${face}<div class="sc-clock-side"><div class="clock-digital${stopped ? " stopped" : ""}"></div>${status}</div></div>`;
   }
-  if (style === "digital") {
-    const digital = target.querySelector(".clock-digital");
-    if (digital) digital.dataset.seconds = String(showSeconds);
-    if (digital && digital.textContent !== displayTime) digital.textContent = displayTime;
-  } else {
-    updateAnalogClockHands(target, seconds, style, !stopped);
-  }
+  const digital = target.querySelector(".clock-digital");
+  if (digital) digital.dataset.seconds = String(showSeconds);
+  if (digital && digital.textContent !== displayTime) digital.textContent = displayTime;
+  if (style !== "digital") updateAnalogClockHands(target, seconds, style, !stopped);
 }
 
 function renderDashboard(snapshot) {
   const target = document.querySelector("#dashboard-view");
-  const activeConnections = (snapshot.connection_states || []).filter((state) => state.state !== "free").length;
-  const activeTrains = (snapshot.train_positions || []).length;
+  const positions = snapshot.train_positions || [];
+  const moving = positions.filter(p => p.connection_id);
+  const now = currentClockTime(snapshot).slice(0, 5);
+  const late = moving.filter(p => (snapshot.routes || []).some(r => r.train_number === p.train_number && r.station_id === p.to_station_id && r.arrival_time && r.arrival_time < now));
+  const upcoming = (snapshot.routes || []).filter(r => (r.departure_time || r.arrival_time || "") >= now).sort((a,b)=>(a.departure_time||a.arrival_time).localeCompare(b.departure_time||b.arrival_time)).slice(0,4);
+  const stationName = id => snapshot.stations?.find(s=>s.id===id)?.name || id || "—";
+  const staffed = snapshot.staffed_station_count;
   target.innerHTML = html`<div class="dashboard-column">
     <section class="display-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><p class="clock-meta">${Number(snapshot.clock?.speed || 1)}× · ${snapshot.clock?.running ? "Klockan går" : "Klockan är stoppad"}</p></section>
     <section class="display-card dashboard-stats">
-      <div class="dashboard-stat"><b>${activeTrains}</b><span>aktiva tåg</span></div>
-      <div class="dashboard-stat"><b>${activeConnections}</b><span>upptagna sträckor</span></div>
-      <div class="dashboard-stat"><b>${snapshot.stations?.length || 0}</b><span>stationer</span></div>
-      <div class="dashboard-stat"><b>${uniqueOverviewServices(snapshot).length}</b><span>tågturer idag</span></div>
+      <div class="dashboard-stat"><b>${moving.length}</b><span>tåg på linjen</span></div>
+      <div class="dashboard-stat"><b>${positions.filter(p=>p.station_id && !p.connection_id).length}</b><span>inne på stationerna</span></div>
+      <div class="dashboard-stat"><b>${staffed == null ? (snapshot.stations?.length || 0) : `${staffed} / ${snapshot.stations?.length || 0}`}</b><span>${staffed == null ? "stationer" : "stationer bemannade"}</span></div>
+      <div class="dashboard-stat"><b>${late.length}</b><span>sena ankomster</span></div>
     </section>
-  </div><section class="display-card"><svg id="dashboard-topology" class="display-visual" role="img" aria-label="Banöversikt"></svg></section>`;
-  renderTopology(snapshot, document.querySelector("#dashboard-topology"));
+  </div><section class="display-card"><svg id="dashboard-topology" class="display-visual" role="img" aria-label="Banöversikt"></svg></section>
+  <div class="server-dashboard-bottom"><section class="display-card"><h3>Nästa händelser</h3>${upcoming.map(r=>html`<div class="server-event"><span>${escapeHTML(r.departure_time||r.arrival_time)}</span><b>${escapeHTML(r.train_number)}</b><span>${escapeHTML(stationName(r.station_id))} · ${r.departure_time?t("Avgång"):t("Ankomst")}</span></div>`).join("") || html`<p>Inga fler planerade händelser idag.</p>`}</section>
+  <section class="display-card"><h3>På linjen just nu</h3>${moving.slice(0,4).map(p=>html`<div class="server-event"><b>${escapeHTML(p.train_number)}</b><span>${escapeHTML(stationName(p.from_station_id))} → ${escapeHTML(stationName(p.to_station_id))}</span></div>`).join("") || html`<p>Inget tåg är ute på linjen</p>`}</section></div>`;
+  renderTopology(snapshot, document.querySelector("#dashboard-topology"), {tv:true,height:450});
 }
 
 function renderDisplayTopology(snapshot) {
   renderTopology(snapshot, document.querySelector("#topology-svg"), {
+    tv: true,
     selectedTrainNumber: state.displaySelectedTrainNumber,
     selectedStationID: state.displaySelectedStationID,
     onTrainSelect: (trainNumber) => {
@@ -3345,6 +3513,7 @@ function renderConnectionBadge(snapshot) {
 
 function renderDisplay(snapshot) {
   displaySnapshot = snapshot;
+  serverUI.display(snapshot, displayKind, currentClockTime(snapshot));
   document.querySelector("#display-loading").classList.add("hidden");
   document.querySelector("#display-title").textContent = `${snapshot.meet?.name || "TrainMeet"} · ${({ topology: t("Banöversikt"), graph: "Tågdiagram", clock: t("Träffklocka"), dashboard: t("Översikt") })[displayKind]}`;
   document.querySelector("#display-day").textContent = snapshot.active_day || "Dagl";
@@ -3363,10 +3532,11 @@ function renderDisplay(snapshot) {
   if (!services.some((service) => String(service.train_number) === state.displaySelectedTrainNumber)) state.displaySelectedTrainNumber = null;
   trainSelect.value = state.displaySelectedTrainNumber || "";
   renderConnectionBadge(snapshot);
-  const ids = { topology: "topology-svg", graph: "graph-scroll", clock: "clock-view", dashboard: "dashboard-view" };
+  const ids = { topology: "topology-svg", graph: "graph-scroll", clock: "clock-view", dashboard: "dashboard-view", territories:"territories-view" };
   for (const id of Object.values(ids)) document.querySelector(`#${id}`).classList.toggle("hidden", id !== ids[displayKind]);
   if (displayKind === "topology") renderDisplayTopology(snapshot);
   if (displayKind === "graph") renderGraph(snapshot);
+  if (displayKind === "territories") serverUI.us(snapshot.us, true);
   if (displayKind === "clock") {
     document.querySelector("#display-selection").classList.add("hidden");
     renderClock(snapshot);
@@ -3412,6 +3582,7 @@ async function pollDisplay() {
 }
 
 async function initDisplay() {
+  serverUI.initDisplay();
   const displayApp = document.querySelector("#display-app");
   displayApp.classList.remove("hidden");
   const light = localStorage.getItem("trainmeet.displayTheme") === "light";
@@ -3452,6 +3623,8 @@ async function initDisplay() {
   };
   displayApp.addEventListener("mousemove", showToolbar);
   displayApp.addEventListener("click", showToolbar);
+  displayApp.addEventListener("touchstart", showToolbar, {passive:true});
+  document.addEventListener("keydown", showToolbar);
   showToolbar();
   try { await navigator.wakeLock?.request("screen"); } catch {}
   const animateClock = () => {
@@ -3467,7 +3640,7 @@ async function initDisplay() {
   pollDisplay();
 }
 
-if (displayKind && ["topology", "graph", "clock", "dashboard"].includes(displayKind)) initDisplay();
+if (displayKind && ["topology", "graph", "clock", "dashboard", "territories"].includes(displayKind)) initDisplay();
 else bootstrap();
 
 /* ---------------------------------------------------------------- TMBox v2
@@ -4429,7 +4602,7 @@ function v2Payload(command) {
 // hallskärmarna. Ingenting här är exempeldata, och ingenting härleds på ett
 // annat sätt än motorn gör det.
 
-const trafficState = { station: "", onlyDeviations: false };
+const trafficState = { station: "", onlyDeviations: true };
 
 document.querySelector("#traffic-station")?.addEventListener("change", (event) => {
   trafficState.station = event.target.value;
@@ -4442,6 +4615,7 @@ document.querySelector("#traffic-only-deviations")?.addEventListener("change", (
 
 function renderTraffic(snapshot) {
   if (!snapshot) return;
+  serverUI.traffic(snapshot, trafficState.station);
 
   fillTrafficStationFilter(snapshot);
   renderTrafficOnline(snapshot);
