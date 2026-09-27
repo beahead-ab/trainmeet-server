@@ -136,6 +136,16 @@ const root = path.resolve(__dirname, '../..');
       if(path==='dashboard'){
         const cards=await clockScreen.locator('#dashboard-view > *').evaluateAll(nodes=>nodes.map(n=>({top:n.getBoundingClientRect().top,bottom:n.getBoundingClientRect().bottom})));
         assert.ok(cards[0].bottom<=cards[1].top,'Dashboard statistics do not overlap the map');
+        // Stress the presentation with four future events. Render an isolated
+        // snapshot only; no traffic or timetable records are changed.
+        const snapshot=await (await page.request.get(urls.eu+'/v1/display')).json();
+        const eventsFit=await clockScreen.evaluate(snapshot=>{
+          renderDashboard({...snapshot,routes:Array.from({length:4},(_,i)=>({...snapshot.routes[0],departure_time:`23:5${i}`,arrival_time:null,train_number:String(900+i)}))});
+          const card=document.querySelector('.server-dashboard-bottom .display-card');
+          const events=[...card.querySelectorAll('.server-event')];
+          return events.length===4 && events.every(row=>row.getBoundingClientRect().bottom<=card.getBoundingClientRect().bottom-8);
+        },snapshot);
+        assert.ok(eventsFit,'All four upcoming events fit inside the TV card');
       }
     }
     await screenContext.close();
