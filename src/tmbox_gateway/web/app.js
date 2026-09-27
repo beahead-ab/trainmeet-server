@@ -2731,21 +2731,31 @@ function trainBadgePath(width, height, nose, radius) {
   return `M${left + radius},${top} H${right - nose} L${right},0 L${right - nose},${bottom} H${left + radius} A${radius},${radius} 0 0 1 ${left},${bottom - radius} V${top + radius} A${radius},${radius} 0 0 1 ${left + radius},${top} Z`;
 }
 
+// Same tag with the nose at the bottom (mirrored for up), for track that runs
+// top to bottom – the phone gets the line in portrait.
+function trainBadgePathVertical(width, height, nose, radius) {
+  const left = -width / 2, right = width / 2, top = -height / 2, bottom = height / 2;
+  return `M${left + radius},${top} H${right - radius} A${radius},${radius} 0 0 1 ${right},${top + radius} V${bottom - radius} A${radius},${radius} 0 0 1 ${right - radius},${bottom} H${nose} L0,${bottom + nose} L${-nose},${bottom} H${left + radius} A${radius},${radius} 0 0 1 ${left},${bottom - radius} V${top + radius} A${radius},${radius} 0 0 1 ${left + radius},${top} Z`;
+}
+
 function appendTrainBadge(target, point, trainNumber, direction = 1, options = {}) {
   const label = String(trainNumber);
   const tv = Boolean(options.tv);
   const fontSize = tv ? 28 : 9, nose = tv ? 16 : 6, height = tv ? 44 : 16, radius = tv ? 8 : 4;
-  const width = Math.max(tv ? 96 : 30, label.length * fontSize * 0.62 + (tv ? 36 : 14)) + nose;
+  const vertical = options.vertical || 0; // 1 = down, -1 = up, 0 = sideways
+  const width = Math.max(tv ? 96 : 30, label.length * fontSize * 0.62 + (tv ? 36 : 14)) + (vertical ? 0 : nose);
   const group = svgElement("g", {
     transform: `translate(${point.x},${point.y})`,
     class: `topology-train${tv ? " topology-train-badge" : ""}${options.selected ? " selected" : ""}${options.dimmed ? " dimmed" : ""}${options.clickable ? " clickable" : ""}`,
     role: options.clickable ? "button" : "img",
     tabindex: options.clickable ? "0" : "-1",
-    "aria-label": `Tåg ${label} ${direction > 0 ? "→" : "←"}`,
+    "aria-label": `Tåg ${label} ${vertical ? (vertical > 0 ? "↓" : "↑") : direction > 0 ? "→" : "←"}`,
   });
   if (options.selected) group.append(svgElement("rect", { x: -width / 2 - 3, y: -height / 2 - 3, width: width + 6, height: height + 6, rx: radius + 3, class: "topology-train-ring" }));
-  group.append(svgElement("path", { d: trainBadgePath(width, height, nose, radius), transform: `scale(${direction},1)`, class: "topology-train-tag" }));
-  group.append(svgElement("text", { x: -direction * nose / 2, y: tv ? 10 : 3.2, "text-anchor": "middle", class: "train-number" }, label));
+  group.append(vertical
+    ? svgElement("path", { d: trainBadgePathVertical(width, height, nose, radius), transform: `scale(1,${vertical})`, class: "topology-train-tag" })
+    : svgElement("path", { d: trainBadgePath(width, height, nose, radius), transform: `scale(${direction},1)`, class: "topology-train-tag" }));
+  group.append(svgElement("text", { x: vertical ? 0 : -direction * nose / 2, y: tv ? 10 : 3.2, "text-anchor": "middle", class: "train-number" }, label));
   if (options.clickable) {
     const activate = (event) => {
       event.stopPropagation();
@@ -2867,11 +2877,13 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
       if (from && to) point = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
     }
     if (!point) continue;
-    const direction = position.from_station_id && position.to_station_id
-      ? ((positions.get(position.to_station_id)?.x || 0) >= (positions.get(position.from_station_id)?.x || 0) ? 1 : -1)
-      : 1;
-    appendTrainBadge(target, { x: point.x, y: point.y - (options.tv ? 28 : 15) }, position.train_number, direction, {
+    const fromPoint = positions.get(position.from_station_id), toPoint = positions.get(position.to_station_id);
+    const dx = (toPoint?.x || 0) - (fromPoint?.x || 0), dy = (toPoint?.y || 0) - (fromPoint?.y || 0);
+    const vertical = fromPoint && toPoint && Math.abs(dy) > Math.abs(dx) * 1.2 ? Math.sign(dy) : 0;
+    const direction = fromPoint && toPoint ? (dx >= 0 ? 1 : -1) : 1;
+    appendTrainBadge(target, { x: point.x + (vertical ? (options.tv ? 0 : 0) : 0), y: point.y - (vertical ? 0 : options.tv ? 28 : 15) }, position.train_number, direction, {
       tv: Boolean(options.tv),
+      vertical,
       selected: String(position.train_number) === String(options.selectedTrainNumber),
       dimmed: Boolean(selectedService && String(position.train_number) !== String(options.selectedTrainNumber)),
       clickable: Boolean(options.onTrainSelect),
@@ -3277,7 +3289,7 @@ function clockSVG(style, darkBackground, showSeconds, stopped) {
   const numbers = config.hasNumbers ? Array.from({ length: 12 }, (_, index) => {
     const value = index === 0 ? 12 : index;
     const angle = (index * 30 - 90) * Math.PI / 180;
-    return html`<text x="${100 + 68 * Math.cos(angle)}" y="${100 + 68 * Math.sin(angle)}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="bold" fill="${numberColor}" font-family="sans-serif">${value}</text>`;
+    return html`<text x="${100 + 68 * Math.cos(angle)}" y="${100 + 68 * Math.sin(angle)}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="700" fill="${numberColor}" class="clock-numeral">${value}</text>`;
   }).join("") : "";
   const secondHand = showSeconds ? html`<g data-clock-hand="second" transform="rotate(0 100 100)">
     <line x1="100" y1="118" x2="100" y2="${100 - config.secondHandLength}" stroke="${config.secondHandColor}" stroke-width="${config.secondHandWidth}" stroke-linecap="round"/>
@@ -3490,7 +3502,9 @@ function renderDashboard(snapshot) {
   </div><section class="display-card"><svg id="dashboard-topology" class="display-visual" role="img" aria-label="Banöversikt"></svg></section>
   <div class="server-dashboard-bottom"><section class="display-card"><h3>Nästa händelser</h3>${upcoming.map(r=>html`<div class="server-event"><span>${escapeHTML(r.departure_time||r.arrival_time)}</span><b>${escapeHTML(r.train_number)}</b><span>${escapeHTML(stationName(r.station_id))} · ${r.departure_time?t("Avgång"):t("Ankomst")}</span></div>`).join("") || html`<p>Inga fler planerade händelser idag.</p>`}</section>
   <section class="display-card"><h3>På linjen just nu</h3>${moving.slice(0,4).map(p=>html`<div class="server-event"><b>${escapeHTML(p.train_number)}</b><span>${escapeHTML(stationName(p.from_station_id))} → ${escapeHTML(stationName(p.to_station_id))}</span></div>`).join("") || html`<p>Inget tåg är ute på linjen</p>`}</section></div>`;
-  renderTopology(snapshot, document.querySelector("#dashboard-topology"), {tv:true,height:450});
+  // Draw for the height the card really has, so station names stay at their 30 px.
+  const dashboardMap = document.querySelector("#dashboard-topology");
+  renderTopology(snapshot, dashboardMap, {tv:true, height: Math.max(300, Math.round(dashboardMap.clientHeight || 450))});
 }
 
 function renderDisplayTopology(snapshot) {

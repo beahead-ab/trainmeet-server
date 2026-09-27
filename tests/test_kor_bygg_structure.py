@@ -127,7 +127,10 @@ class DesignTokenTests(unittest.TestCase):
                          ".traffic-train-number", ".traffic-station-code"):
             index = self.css.index(selector + " {")
             block = self.css[index:index + 400]
-            self.assertIn("ui-monospace", block, selector)
+            # Through the token, so every one of them is the shipped JetBrains Mono.
+            self.assertIn("var(--font-mono)", block, selector)
+        self.assertIn('--font-mono: "JetBrains Mono"', self.css)
+        self.assertNotRegex(self.css, r"font-family:\s*ui-monospace")
 
     def test_motion_is_only_where_it_means_something(self):
         """DEL 7.7: blinkar allt betyder blinkandet ingenting."""

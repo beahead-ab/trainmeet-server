@@ -1,43 +1,10 @@
 tm-text { display: contents; }
 .us-entry { text-decoration: none; white-space: nowrap; }
 /* ----------------------------------------------------------------- fonts
-   Inter, served from this server rather than fetched from Google.
-
-   The page used to link fonts.googleapis.com, which its own
-   Content-Security-Policy (`style-src 'self'`) refused on every load - a
-   console error on every page view, and a DNS lookup to an external host
-   that a server built to run a meet without internet should never need.
-
-   Four weights, latin only, ~92 kB in total. DM Sans is gone: it was used
-   for exactly one heading, and Inter at 700 carries it.                    */
-@font-face {
-  font-family: Inter;
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/assets/fonts/inter-400.woff2") format("woff2");
-}
-@font-face {
-  font-family: Inter;
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/assets/fonts/inter-500.woff2") format("woff2");
-}
-@font-face {
-  font-family: Inter;
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("/assets/fonts/inter-600.woff2") format("woff2");
-}
-@font-face {
-  font-family: Inter;
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/assets/fonts/inter-700.woff2") format("woff2");
-}
+   Inter and JetBrains Mono are declared once, in /assets/fonts/fonts.css
+   (imported by server-design.css), served from this server. This file used to
+   declare Inter a second time from other files, which made every page fetch
+   the same four fonts twice. Monospace text uses var(--font-mono) only.     */
 
 :root {
   color-scheme: light;
@@ -126,7 +93,7 @@ tm-text { display: contents; }
   --key: #090b10;
   --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-brand: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
 .dark {
@@ -370,7 +337,7 @@ p { line-height: 1.5; }
 }
 .setup-runtime-summary span { color: var(--muted); font-size: 11px; }
 .code-boxes { display: flex; align-items: center; gap: 7px; }
-.code-boxes input { width: 40px; height: 48px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--ink); text-align: center; font: 700 22px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.code-boxes input { width: 40px; height: 48px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--ink); text-align: center; font: 700 22px/1 var(--font-mono); }
 .code-boxes input:focus { outline: 2px solid var(--trainmeet); outline-offset: 1px; }
 .code-boxes-dash { color: var(--muted); font-size: 18px; font-weight: 700; }
 .inline-form .code-boxes { margin-right: 4px; }
@@ -1662,7 +1629,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .technical-details summary { cursor: pointer; color: var(--muted, #6b7280); }
 .technical-details dl { margin: 0.5rem 0 0; display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.8rem; }
 .technical-details dt { color: var(--muted, #6b7280); }
-.technical-details dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.technical-details dd { margin: 0; font-family: var(--font-mono); }
 
 /* ===================================================== KÖR / BYGG-skelettet
    Fasta produktmått för TMBox v2-simulatorn:
@@ -1725,7 +1692,7 @@ body[data-mode="bygg"] .page-shell > .topbar { top: 50px; }
 .topbar-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 
 .app-clock {
-  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 15px; font-weight: 600; color: var(--go-green);
 }
 .app-devices { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-muted); }
@@ -1913,18 +1880,18 @@ body[data-mode="bygg"] .server-workspace { flex: 1 1 auto; }
 }
 .traffic-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .traffic-train-number {
-  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 22px; font-weight: 600; color: var(--ink-strong);
 }
 .traffic-train-number.small { font-size: 13px; }
 .traffic-station-code {
-  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12.5px; color: var(--ink-muted);
 }
 .traffic-leg { margin: 0; font-size: 13px; color: var(--ink-muted); }
 .traffic-times {
   margin: 0; font-size: 12.5px; color: var(--ink-muted);
-  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .traffic-progress {
@@ -1948,7 +1915,7 @@ body[data-mode="bygg"] .server-workspace { flex: 1 1 auto; }
 }
 .traffic-station-rows li + li { border-top: 1px solid var(--line-inner); }
 .traffic-time {
-  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 13px; color: var(--ink-strong);
 }
 .traffic-status { font-size: 12.5px; color: var(--ink-muted); }
@@ -2179,7 +2146,7 @@ body[data-source-locked="true"] .build-panel textarea {
 .update-explainer { max-width: 62ch; margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-muted); }
 .version-row {
   flex: 0 0 auto;
-  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 13px; color: var(--ink-muted); white-space: nowrap;
 }
 .update-actions { flex-wrap: wrap; gap: 8px; margin-top: 14px; }
@@ -2435,7 +2402,7 @@ body[data-source-locked="true"] .build-panel textarea {
 .topology-field.signature {
   flex: none;
   width: 76px;
-  font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   letter-spacing: 0.04em;
 }
