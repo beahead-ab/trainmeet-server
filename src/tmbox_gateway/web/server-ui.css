@@ -175,6 +175,40 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
   #drift-simulation-details > div { grid-template-columns: 1fr; }
 }
 
+/* ---------- Småputs: en knapp, en etikett, ett fält (design/komponenter.html) ----------
+   app.css is still loaded and its .app-view rules win over the kit's element
+   selectors, so these id-anchored rules restate the kit sizes once, for all. */
+#app-view button:not(.key):not(.tm-icon-btn):not(.workspace-option):not(.route-number):not(.station-count-row):not(.modal-close),
+#app-chrome button:not(.tm-icon-btn), #app-view .tm-btn, .admin-modal button:not(.modal-close) {
+  min-height: 30px; padding: 6px 12px; font: 600 12.5px/16px var(--font); border-radius: 6px; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+#app-view button.compact { min-height: 30px; font-size: 12.5px; }
+#app-view .tm-btn--sm, #device-list .device-actions button { min-height: 26px; padding: 4px 10px; }
+#app-view label, .admin-modal label { font: 600 12px/1.3 var(--font); color: var(--text-2); gap: 5px; }
+#app-view label:has(> input[type=checkbox]), #app-view label:has(> input[type=radio]) { font-weight: 500; color: var(--text); align-items: center; }
+#app-view .server-field-label { font: 600 12px/1.3 var(--font); color: var(--text-2); }
+.admin-modal label:has(> input[type=checkbox]) { font: 500 13px/1.4 var(--font); color: var(--text); }
+#app-view input:not([type=checkbox]):not([type=radio]), #app-view select, #app-view textarea, .admin-modal input:not([type=checkbox]):not([type=radio]), .admin-modal select {
+  font-size: 13px; line-height: 18px; padding: 6px 10px; min-height: 32px;
+}
+#app-view select { padding-right: 26px; }
+.tm-clockrow__form input, .tm-clockrow__form select, .server-source > button { height: 32px; min-height: 32px; box-sizing: border-box; }
+#local-clock-time { width: 148px; }
+#local-clock-speed { width: 72px; }
+.tm-clockrow__form { gap: 12px; }
+.tm-clockrow__form > label, .tm-clockrow__form > .server-source { gap: 5px; }
+.server-divider { width: 1px; align-self: stretch; background: var(--border-soft); margin: 0 4px; }
+.server-field { display: flex; flex-direction: column; gap: 5px; }
+.server-field > label { margin: 0; }
+#meet-clock-style { width: 240px; }
+#connection-badge-form .connection-badge-screens { gap: 4px 16px; min-height: 32px; align-items: center; }
+#connection-badge-form .connection-badge-screens label { padding: 0; background: none; border-radius: 0; font: 500 12.5px/1.3 var(--font); color: var(--text); gap: 6px; }
+.clock-control-actions { gap: 8px; }
+.tm-clockrow__aside .server-actions button { align-self: flex-start; }
+.tm-clockrow__time .tm-eyebrow, .tm-clockrow__aside .tm-eyebrow { font: 700 11px/1.3 var(--font); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+#app-chrome .tm-status { line-height: 16px; }
+
 /* All meeting screens share an exact 1920 × 1080 design canvas. Scaling only
    applies to public TV screens, not to admin controls or browser font sizes. */
 body.server-display { overflow: hidden; background: #0b0b0b; }
@@ -182,8 +216,22 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 #display-app { --display-bg: #0b0b0b; --display-card: #161616; --display-fg: #fff; --display-muted: #a3a3a3; background: var(--display-bg); }
 #display-app.light { --display-bg: #fbfaf9; --display-card: #fff; --display-fg: #0a0a0a; --display-muted: #525252; }
 #display-stage, #display-stage.toolbar-hidden { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; min-height: 0; padding: 32px 40px 28px; display: flex; flex-direction: column; gap: 16px; transform-origin: center; background: var(--display-bg); color: var(--display-fg); overflow: hidden; }
-#display-toolbar { position: fixed; left: 12px; right: 12px; top: 12px; z-index: 50; border-radius: 8px; min-height: 44px; background: #161616ed; padding: 8px 12px; }
+#display-toolbar { position: fixed; left: 12px; right: 12px; top: 12px; z-index: 50; border-radius: 8px; min-height: 44px; background: #1c1c1c; border: 1px solid #2a2a2a; padding: 7px 12px; }
+#display-app.light #display-toolbar { background: #fff; border-color: #e5e5e5; }
+/* The chrome row is for the person at the computer, not the hall: kit sizes
+   in px, because the kit's 13 px root makes every rem in app.css too small. */
+#display-toolbar { gap: 14px; }
+#display-toolbar .display-back { font-size: 12.5px; font-weight: 500; }
+#display-toolbar > strong { font-size: 13px; font-weight: 700; }
+#display-toolbar .display-toolbar-actions { gap: 8px; }
+#display-toolbar button, #display-toolbar .display-badge, #display-toolbar .display-live, #display-toolbar .display-select { min-height: 30px; padding: 5px 12px; font: 600 12.5px/1.3 var(--font); border-radius: 6px; }
+#display-toolbar .display-select { max-width: 280px; padding-right: 8px; font-weight: 500; }
+#display-toolbar .display-badge, #display-toolbar .display-live { font-weight: 500; }
 #display-toolbar.hidden-toolbar { opacity: 0; pointer-events: none; transform: translateY(-12px); }
+/* While the chrome row is showing it carries the meet name itself, so the
+   screen's own top row steps aside instead of showing through underneath. */
+#display-stage:not(.toolbar-hidden) .sc-top { opacity: 0; }
+.sc-top { transition: opacity .25s; }
 .sc-content { flex: 1; min-height: 0; position: relative; display: flex; }
 .sc-content > .display-visual { width: 100%; height: 100%; min-height: 0; }
 .sc-top__meet { font-size: 26px; }
@@ -194,25 +242,26 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 #display-connection { position: static; color: var(--display-muted); padding: 0; background: none; font-size: 26px; border: 0; }
 #display-connection-code { font: 700 30px var(--font-mono); color: var(--display-fg); }
 #clock-view { width: 100%; height: 100%; padding: 0; display: flex; }
-.sc-clock-layout { display: flex; align-items: center; justify-content: center; gap: 80px; width: 100%; }
-.sc-clock-layout .clock-face { flex: 0 0 820px; width: 820px; height: 820px; max-width: none; max-height: none; filter: none; }
-.sc-clock-side { display: flex; flex-direction: column; align-items: stretch; gap: 40px; min-width: 0; }
-.sc-clock-layout .clock-digital { font: 700 168px/1 var(--font-mono); letter-spacing: -.04em; color: var(--display-fg); white-space: nowrap; }
-.sc-clock-layout .clock-digital[data-seconds=true] { font-size: 125px; }
-.sc-clock-layout--digital { text-align: center; }
-.sc-clock-layout--digital .sc-clock-side { align-items: center; width: 100%; }
-.sc-clock-layout--digital .clock-digital { font-size: 440px; }
-.sc-clock-layout--digital .clock-digital[data-seconds=true] { font-size: 330px; }
-.sc-clock-layout .clock-digital.stopped { color: #a3a3a3; }
-.sc-clock-layout .clock-digital.stopped { opacity: 1; }
+/* The clock screen shows one clock: a face (analog, stationsur, swiss) or
+   digits (digital), centred, with the running/stopped line under it. The
+   content area is 914 px tall; the face gives way when the stop box appears. */
+.sc-clock-layout { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; width: 100%; height: 100%; min-height: 0; }
+.sc-clock-layout .clock-face { flex: 0 0 auto; width: 760px; height: 760px; max-width: none; max-height: none; filter: none; }
+.sc-clock-layout.is-stopped .clock-face { width: 620px; height: 620px; }
+.sc-clock-layout .clock-face.stopped { opacity: .6; }
+.sc-clock-layout .clock-digital { font: 700 440px/1 var(--font-mono); letter-spacing: -.04em; color: var(--display-fg); white-space: nowrap; }
+.sc-clock-layout .clock-digital[data-seconds=true] { font-size: 330px; }
+.sc-clock-layout .clock-digital.stopped { color: #a3a3a3; opacity: 1; }
 #display-connection #display-connection-address { font: 26px var(--font-mono); }
 .server-card.cloud-section-card { gap: 10px; }
 .server-settings-columns .server-card { padding: 12px 14px; }
 .server-card .section-heading h2 { font-size: 16px; }
 .admin-modal .modal-close { width: 44px; height: 44px; }
 .sc-clock-layout .sc-run { font-size: 30px; }
-.sc-clock-layout .sc-stopped { max-width: 100%; text-align: left; }
-.sc-stopped__reason { color: var(--display-fg); overflow-wrap: anywhere; max-width: 720px; }
+.sc-clock-layout .sc-stopped { max-width: 1240px; text-align: left; }
+.sc-stopped__reason { color: var(--display-fg); overflow-wrap: anywhere; max-width: 1100px; }
+.light .sc-run { color: #1f6b3d; }
+.light .sc-run::before { background: #1f6b3d; }
 .light .sc-stopped { background: #fff8e6; }
 .light .sc-stopped__title { color: #7a5a00; }
 #graph-scroll { width: 100%; height: 100%; overflow: hidden; border-radius: 14px; border: 1px solid #262626; }
@@ -234,9 +283,8 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .topology-tv .topology-code { font: 22px var(--font-mono); fill: var(--display-muted); text-anchor: middle; }
 .topology-tv .topology-track { stroke-width: 8; }
 .topology-tv .topology-track.active { stroke: #4380f0; }
-#clock-view[data-us=true] .sc-clock-layout--digital .clock-digital { font-size: 320px; }
-#clock-view[data-us=true] .sc-clock-layout--digital .clock-digital[data-seconds=true] { font-size: 260px; }
-#clock-view[data-us=true] .sc-clock-layout:not(.sc-clock-layout--digital) .clock-digital { font-size: 110px; }
+#clock-view[data-us=true] .clock-digital { font-size: 320px; }            /* "12:34 PM" */
+#clock-view[data-us=true] .clock-digital[data-seconds=true] { font-size: 260px; }
 .server-us-infra, .server-us-card { background: var(--paper); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
 .server-us-infra svg { width: 100%; max-height: 360px; }
 .us-diagram-track { stroke: #525252; stroke-width: 4; }

@@ -49,9 +49,17 @@
   const clockForm = inlineForm("#clock-control-form", row);
   clockForm.classList.add("tm-clockrow__form");
   const source = make("div", "server-source");
-  source.append(authored("span", "tm-eyebrow", "Klockkälla"));
+  source.append(authored("span", "server-field-label", "Klockkälla"));
   move('[data-open-modal="clock-source-modal"]', source);
-  clockForm.insertBefore(source, $("#local-clock-reason").closest("label"));
+  const reasonField = $("#local-clock-reason").closest("label");
+  clockForm.insertBefore(source, reasonField);
+  // Kit order (SPEC A5): time · speed · source · Spara │ reason · Stoppa/Starta.
+  // Saving an edited time is the quiet action; stopping and starting is the one
+  // primary button, so the two never compete in blue.
+  const save = clockForm.querySelector('button[type="submit"]');
+  save.className = "secondary"; source.after(save);
+  save.after(make("div", "server-divider"));
+  $("#stop-local-clock").className = "primary";
   move("#overview-clock-start", clockForm.querySelector(".clock-control-actions"));
   mark("#overview-clock-stop"); mark("#clock-adjust");
   const simulation = make("aside", "tm-clockrow__aside"); simulation.id = "drift-simulation";
@@ -59,6 +67,7 @@
   move("#simulation-summary", simulation);
   const actions = make("div", "server-actions");
   for (const id of ["simulation-start-open", "simulation-pause", "simulation-reset-open", "simulation-finish-open"]) move(`#${id}`, actions);
+  actions.querySelector("#simulation-start-open").className = "secondary";
   simulation.append(actions); move("#simulation-error", simulation); row.append(simulation);
   overview.prepend(row);
   mark(".meet-summary-card"); mark(".overview-actions");
@@ -113,7 +122,13 @@
   label(appearance.querySelector("h2"), "Skärmar och klocka");
   appearance.querySelectorAll(".eyebrow, .compact-heading p, .modal-launch").forEach(n => n.classList.add("legacy-internal"));
   inlineForm("#clock-appearance-form", appearance);
+  const styleField = make("div", "server-field");
+  $('label[for="meet-clock-style"]').before(styleField);
+  styleField.append($('label[for="meet-clock-style"]'), $("#meet-clock-style"));
   inlineForm("#connection-badge-form", appearance);
+  const screensField = make("div", "server-field");
+  $("#connection-badge-screens").before(screensField);
+  screensField.append(authored("span", "server-field-label", "Anslutningskoden visas på"), $("#connection-badge-screens"));
   const code = move("#connection-badge-code", appearance); code.classList.add("server-network");
   const workspace = authored("a", "tm-btn", "Byt arbetsyta"); workspace.href = "/#workspaces"; $("#language-settings").append(workspace);
   label($("#users-invite-open"), "+ Bjud in");
@@ -144,13 +159,19 @@
     $("#server-region").className = `tm-badge tm-badge--${us ? "us" : "eu"}`;
     // A publication UUID is not a human version number.
     const ordinal = meet?.version_number ?? meet?.publication_version;
-    const version = Number.isInteger(ordinal) ? `${t("Version")} ${ordinal}` : (meet ? t("Publicerad träff") : t("Ingen träff vald"));
-    $("#header-server-meta").textContent = [version, api.info?.runtime?.server_name].filter(Boolean).join(" · ");
+    const hasVersion = Number.isInteger(ordinal);
+    const version = hasVersion ? `${t("Version")} ${ordinal}` : (meet ? t("Publicerad träff") : t("Ingen träff vald"));
+    // The meet block says version · server; the status pill says the state.
+    // Without a version number from Cloud the block shows only the server name,
+    // so "Publicerad träff" is never written twice side by side.
+    $("#header-server-meta").textContent = [hasVersion || !meet ? version : "", api.info?.runtime?.server_name].filter(Boolean).join(" · ");
     const conflicts = !us && api.presentation?.findings?.filter(f => f.level === "conflict").length;
     const newer = Boolean(update.pending_publication_id || update.available_publication_id);
     const status = $("#header-cloud-status");
     const offline = update.linked && update.state === "error" && (!update.last_checked_at || Date.now() - Date.parse(update.last_checked_at) > 600000);
-    status.textContent = newer ? t("Ny version finns i Cloud") : offline ? t("Cloud inte nådd") : version + (conflicts ? ` · ${conflicts} ${t("konflikter")}` : "");
+    status.textContent = newer ? t("Ny version finns i Cloud")
+      : offline ? (hasVersion ? `${t("Cloud inte nådd")} · ${t("kör")} ${version.toLowerCase()}` : t("Cloud inte nådd"))
+      : (hasVersion ? version : t("Publicerad")) + (conflicts ? ` · ${conflicts} ${t("konflikter")}` : "");
     status.className = `tm-status tm-status--${newer ? "newer" : offline ? "offline" : "published"}`;
     $("#cloud-connection-meta").textContent = version;
     $("#drift-simulation").hidden = us;

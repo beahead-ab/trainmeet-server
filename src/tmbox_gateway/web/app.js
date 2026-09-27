@@ -3428,17 +3428,65 @@ function updateAnalogClockHands(target, seconds, style, running) {
   target.querySelector('[data-clock-hand="second"]')?.setAttribute("transform", `rotate(${secondAngle} 100 100)`);
 }
 
+// The clock styles offered on a screen, in the same order as under ⚙ Inställningar.
+const DISPLAY_CLOCK_STYLES = ["digital", "analog", "stationsur", "swiss"];
+const DISPLAY_CLOCK_STYLE_KEY = "trainmeet.displayClockStyle";
+const DISPLAY_CLOCK_SECONDS_KEY = "trainmeet.displayClockSeconds";
+
+// The appearance chosen under ⚙ Inställningar is the default for every screen.
+// A screen may still choose its own style and seconds from its menu bar (the
+// TV in the hall and the laptop by the desk are different screens); that
+// choice lives in this browser only and an empty value follows the server.
+function displayClockPreference() {
+  try {
+    return { style: localStorage.getItem(DISPLAY_CLOCK_STYLE_KEY) || "", seconds: localStorage.getItem(DISPLAY_CLOCK_SECONDS_KEY) || "" };
+  } catch { return { style: "", seconds: "" }; }
+}
+
+function saveDisplayClockPreference(key, value) {
+  try { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); } catch {}
+}
+
+function resolveClockAppearance(snapshot) {
+  const available = snapshot.clock?.available_styles?.length ? snapshot.clock.available_styles : ["swiss", "swedish", "digital"];
+  const preference = displayClockPreference();
+  let style = available.includes(preference.style) ? preference.style : snapshot.clock?.style || available[0];
+  if (!available.includes(style)) style = available[0];
+  const showSeconds = preference.seconds === "on" ? true : preference.seconds === "off" ? false : snapshot.clock?.show_seconds !== false;
+  return { available, style, showSeconds, preference };
+}
+
+function renderClockToolbar(snapshot) {
+  const styleSelect = document.querySelector("#display-clock-style");
+  const secondsSelect = document.querySelector("#display-clock-seconds");
+  if (!styleSelect || !secondsSelect) return;
+  const { available, preference } = resolveClockAppearance(snapshot);
+  const styles = DISPLAY_CLOCK_STYLES.filter(value => available.includes(value));
+  if (snapshot.clock?.style && !styles.includes(snapshot.clock.style)) styles.push(snapshot.clock.style);
+  const serverStyle = t(clockStyleLabels[snapshot.clock?.style] || snapshot.clock?.style || "");
+  const serverSeconds = snapshot.clock?.show_seconds !== false;
+  const signature = [globalThis.TrainMeetI18n?.getLanguage?.(), styles.join(","), serverStyle, serverSeconds].join("|");
+  if (styleSelect.dataset.signature !== signature) {
+    styleSelect.dataset.signature = signature;
+    styleSelect.replaceChildren(
+      new Option(`${t("Enligt inställningar")} · ${serverStyle}`, ""),
+      ...styles.map(value => new Option(t(clockStyleLabels[value] || value), value)));
+    secondsSelect.replaceChildren(
+      new Option(`${t("Sekunder enligt inställningar")} · ${serverSeconds ? t("på") : t("av")}`, ""),
+      new Option(t("Med sekunder"), "on"),
+      new Option(t("Utan sekunder"), "off"));
+  }
+  styleSelect.value = styles.includes(preference.style) ? preference.style : "";
+  secondsSelect.value = ["on", "off"].includes(preference.seconds) ? preference.seconds : "";
+}
+
 function renderClock(snapshot) {
   const target = document.querySelector("#clock-view");
   target.dataset.us = String(snapshot.meet?.operating_region === "us");
-  const available = snapshot.clock?.available_styles?.length ? snapshot.clock.available_styles : ["swiss", "swedish", "digital"];
-  // The meeting server owns presentation too. Retired localStorage/URL choices
-  // must not silently override an administrator's change on another computer.
-  let style = snapshot.clock?.style || available[0];
-  if (!available.includes(style)) style = available[0];
+  const { style, showSeconds } = resolveClockAppearance(snapshot);
+  const digital = style === "digital";
   const seconds = currentClockSeconds(snapshot);
   const time = currentClockTime(snapshot);
-  const showSeconds = snapshot.clock?.show_seconds !== false;
   let displayTime = showSeconds ? time : time.slice(0, 5);
   if (snapshot.meet?.operating_region === "us" && /^\d\d:/.test(time)) {
     const hour = Number(time.slice(0, 2)); displayTime = `${hour % 12 || 12}${displayTime.slice(2)} ${hour >= 12 ? "PM" : "AM"}`;
@@ -3446,21 +3494,23 @@ function renderClock(snapshot) {
   const darkBackground = !document.querySelector("#display-app").classList.contains("light");
   const stopped = !snapshot.clock?.running;
   const externalMissing = snapshot.clock?.source === "fastclock" && !snapshot.clock.available;
-  const stopText = externalMissing ? t("FastClock: kontakt saknas") : snapshot.clock?.running ? "" : `STOPPAD${snapshot.clock?.stopped_reason ? ` · ${snapshot.clock.stopped_reason}` : ""}`;
+  const reason = snapshot.clock?.stopped_reason || (externalMissing ? t("Senast mottagna tid visas") : "");
   const meta = `${Number(snapshot.clock?.speed || 1)}× · ${snapshot.clock?.source === "fastclock" ? "FastClock" : t("Intern klocka")}`;
-  const renderSignature = [style, darkBackground, showSeconds, stopped, stopText, meta].join("|");
+  const renderSignature = [style, darkBackground, showSeconds, stopped, externalMissing, reason, meta].join("|");
   if (target.dataset.clockSignature !== renderSignature) {
     target.dataset.clockSignature = renderSignature;
-    const face = style === "digital" ? "" : clockSVG(style, style === "stationsur" ? false : darkBackground, showSeconds, stopped);
     const status = stopped || externalMissing
-      ? html`<div class="sc-stopped"><div><div class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan stoppad")}</div><div class="sc-stopped__reason">${escapeHTML(snapshot.clock?.stopped_reason || (externalMissing ? t("Senast mottagna tid visas") : ""))}</div><div class="sc-stopped__meta">${escapeHTML(meta)}</div></div></div>`
+      ? html`<div class="sc-stopped"><div><div class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan stoppad")}</div><div class="sc-stopped__reason">${escapeHTML(reason)}</div><div class="sc-stopped__meta">${escapeHTML(meta)}</div></div></div>`
       : html`<div class="sc-run">${t("Klockan går")} · ${escapeHTML(meta)}</div>`;
-    target.innerHTML = html`<div class="sc-clock-layout ${style === "digital" ? "sc-clock-layout--digital" : ""}">${face}<div class="sc-clock-side"><div class="clock-digital${stopped ? " stopped" : ""}"></div>${status}</div></div>`;
+    // One clock only: a face never has digits beside it, and digits never have a face.
+    const clock = digital
+      ? html`<div class="clock-digital${stopped ? " stopped" : ""}" data-seconds="${showSeconds}"></div>`
+      : clockSVG(style, style === "stationsur" ? false : darkBackground, showSeconds, stopped);
+    target.innerHTML = html`<div class="sc-clock-layout ${digital ? "sc-clock-layout--digital" : "sc-clock-layout--face"}${stopped || externalMissing ? " is-stopped" : ""}">${clock}${status}</div>`;
   }
-  const digital = target.querySelector(".clock-digital");
-  if (digital) digital.dataset.seconds = String(showSeconds);
-  if (digital && digital.textContent !== displayTime) digital.textContent = displayTime;
-  if (style !== "digital") updateAnalogClockHands(target, seconds, style, !stopped);
+  const digits = target.querySelector(".clock-digital");
+  if (digits && digits.textContent !== displayTime) digits.textContent = displayTime;
+  if (!digital) updateAnalogClockHands(target, seconds, style, !stopped);
 }
 
 function renderDashboard(snapshot) {
@@ -3535,6 +3585,8 @@ function renderDisplay(snapshot) {
   const isClock = displayKind === "clock";
   document.querySelector("#display-speed").classList.toggle("hidden", !isClock);
   document.querySelector("#display-speed").textContent = `${Number(snapshot.clock?.speed || 1)}×`;
+  document.querySelector("#display-clock-style").classList.toggle("hidden", !isClock);
+  document.querySelector("#display-clock-seconds").classList.toggle("hidden", !isClock);
   const trainSelect = document.querySelector("#display-train-select");
   const trainSelectable = displayKind === "topology" || displayKind === "graph";
   const services = uniqueOverviewServices(snapshot);
@@ -3554,6 +3606,7 @@ function renderDisplay(snapshot) {
   if (displayKind === "territories") serverUI.us(snapshot.us, true);
   if (displayKind === "clock") {
     document.querySelector("#display-selection").classList.add("hidden");
+    renderClockToolbar(snapshot);
     renderClock(snapshot);
   }
   if (displayKind === "dashboard") {
@@ -3620,6 +3673,14 @@ async function initDisplay() {
       graphLastCenteredSelection = null;
       renderGraph(displaySnapshot);
     }
+  });
+  document.querySelector("#display-clock-style").addEventListener("change", (event) => {
+    saveDisplayClockPreference(DISPLAY_CLOCK_STYLE_KEY, event.target.value);
+    if (displaySnapshot) renderClock(displaySnapshot);
+  });
+  document.querySelector("#display-clock-seconds").addEventListener("change", (event) => {
+    saveDisplayClockPreference(DISPLAY_CLOCK_SECONDS_KEY, event.target.value);
+    if (displaySnapshot) renderClock(displaySnapshot);
   });
   document.querySelector("#display-fullscreen").addEventListener("click", async () => {
     try {
