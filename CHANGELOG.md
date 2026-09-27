@@ -7,6 +7,25 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 Säkerhetskopian innehöll ingenting.
 
+### Den virtuella TMBoxen ser ut som resten av servern
+
+Deltagaren scannar QR-koden på TV:n, landar i deltagarvyn och trycker
+**Starta virtuell TMBox**. Förut hamnade hen då på en sida med beige
+bakgrund, kopparfärgade rubriker och andra typsnitt – en annan produkt.
+`/tmbox/` och provbänken `/tmbox-lab/` använder nu Serverns UI-kit: samma
+sidhuvud som deltagarvyn med träffens namn, samma kort, knappar och typsnitt.
+
+På `/tmbox/` visar kortet **Din TMBox** om boxen väntar på station eller är
+tilldelad, och enhetskoden stort medan den väntar. Knapparnas betydelse står i
+ett eget kort i stället för i ett textstycke. Länken till provbänken är borta
+från deltagarens sida; administratören når den från Hjälp.
+
+**Själva boxen är oförändrad.** Det rosa skalet, den blå displayen och
+knappsatsen ser ut exakt som den fysiska TMBoxen och är låsta i ett eget block
+i `terminal16_web/style.css`. `tests/tmbox_case_golden.css` håller blocket och
+ett test faller om någon ändrar det. Boxen renderades med den gamla och den nya
+stilmallen och jämfördes pixel för pixel i fyra bredder: identisk.
+
 ### Simulatorns förval är TMBox v2
 
 TMBox v2 är fastställd som ESP32-S3 med en 20×4-display. Simulatorn under
