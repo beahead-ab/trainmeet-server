@@ -214,14 +214,19 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(frame["station_code"], "CDA")
         self._public_refused("/v1/admin/users", token=token)
 
-    def test_wifi_settings_are_admin_only_and_public_snapshot_requires_opt_in(self):
+    def test_wifi_settings_are_admin_only_and_published_as_typed(self):
+        # Only an administrator may change the meet's Wi-Fi. What is typed is
+        # published to the participant view and the screens' QR as it is; the
+        # host's own detected network is never published.
         box = self._public_client()
         self._public_refused("/v1/display/connection", status=401)
         self._public_refused("/v1/display/connection", token=box["access_token"])
         self._json_request("/v1/auth/login", {"username": "admin", "password": "test-password"})
         self._json_request("/v1/display/connection", {"wifi_name": "Träffen", "wifi_password": "test-only-secret"})
         self.assertEqual(self._json_request("/v1/display/connection")["wifi"]["password"], "test-only-secret")
-        self.assertEqual(self._json_request("/v1/display")["connection"]["wifi"]["password"], "")
+        public = self._json_request("/v1/display")["connection"]["wifi"]
+        self.assertEqual((public["name"], public["password"]), ("Träffen", "test-only-secret"))
+        self.assertNotIn("detected_name", public)
 
     def test_idle_cleanup_rechecks_assignment_liveness_and_client_kind(self):
         from datetime import datetime, timedelta, timezone
@@ -1370,7 +1375,7 @@ class ConnectionBadgeTests(unittest.TestCase):
         self.assertEqual(before["wifi"]["name"], "")
         self.assertEqual(before["wifi"]["password"], "")
         self.assertNotIn("detected_name", before["wifi"])
-        self.assertFalse(before["wifi"]["show_password"])
+        self.assertNotIn("show_password", before["wifi"])
         self.assertEqual(before["web_client_ttl_minutes"], 30)
 
         admin = self.application.local_admin()
@@ -1379,15 +1384,18 @@ class ConnectionBadgeTests(unittest.TestCase):
         )
         self.assertEqual(saved["wifi"]["name"], "Grimslov-Traff")
         self.assertEqual(saved["web_client_ttl_minutes"], 45)
+        # What is typed is what is shared: the screens' Wi-Fi QR only works
+        # with the password in it. Not sharing means leaving the fields empty.
         after = self._connection()
-        self.assertEqual(after["wifi"]["password"], "")
+        self.assertEqual(after["wifi"]["password"], "lokomotiv2027")
         self.assertTrue(after["wifi"]["has_password"])
         self.assertEqual(saved["wifi"]["password"], "lokomotiv2027")
-        self.application.configure_connection_badge(admin, {"wifi_show_password": True})
-        self.assertEqual(self._connection()["wifi"]["password"], "lokomotiv2027")
+        # An older admin page may still send the retired checkbox; it changes nothing.
         self.application.configure_connection_badge(admin, {"wifi_show_password": False})
-        self.assertEqual(self._connection()["wifi"]["password"], "")
+        self.assertEqual(self._connection()["wifi"]["password"], "lokomotiv2027")
         self.assertEqual(after["screens"], ["clock"])
+        self.application.configure_connection_badge(admin, {"wifi_name": "", "wifi_password": ""})
+        self.assertEqual(self._connection()["wifi"], {"name": "", "password": "", "has_password": False})
 
         with self.assertRaises(HTTPAPIError):
             self.application.configure_connection_badge(admin, {"screens": [], "wifi_name": "x", "wifi_password": "kort"})

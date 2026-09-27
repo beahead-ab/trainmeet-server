@@ -2043,13 +2043,12 @@ function renderConnectionBadgeSettings(connection) {
   const wifiPassword = document.querySelector("#connection-wifi-password");
   if (wifiName && document.activeElement !== wifiName) wifiName.value = wifi.name || "";
   if (wifiPassword && document.activeElement !== wifiPassword) wifiPassword.value = wifi.password || "";
-  document.querySelector("#connection-wifi-share").checked = wifi.show_password === true;
   const wifiNote = document.querySelector("#connection-wifi-note");
   if (wifiNote) {
     if (wifi.detected_name && wifi.detected_name !== wifi.name) {
       wifiNote.dataset.tmText = "Serverns nätverk: {name}. Skriv in det ovan om det är träffens Wi-Fi.";
       wifiNote.textContent = t(wifiNote.dataset.tmText, { name: wifi.detected_name });
-    } else setMessage(wifiNote, "Lösenord delas bara när du väljer det. Wi-Fi-koden följer samma val.");
+    } else setMessage(wifiNote, "Namn och lösenord står på deltagarvyn och finns i Wi-Fi-koden på skärmarna. Lämna fälten tomma om nätet inte ska delas.");
   }
   const ttl = document.querySelector("#web-client-ttl");
   if (ttl && document.activeElement !== ttl && !editorActive(ttl.closest("form"))) ttl.value = String(connection.web_client_ttl_minutes ?? 30);
@@ -2076,7 +2075,6 @@ async function saveConnectionBadgeSettings() {
         validity_hours: Number(document.querySelector("#connection-badge-validity").value),
         wifi_name: document.querySelector("#connection-wifi-name")?.value ?? "",
         wifi_password: document.querySelector("#connection-wifi-password")?.value ?? "",
-        wifi_show_password: document.querySelector("#connection-wifi-share").checked,
       }),
     });
     const payload = await response.json();

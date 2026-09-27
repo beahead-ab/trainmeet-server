@@ -184,17 +184,12 @@
     wifiHost.replaceChildren();
     if (name) {
       wifiHost.insertAdjacentHTML("beforeend", html`<span class="pv-value">${escapeHTML(name)}</span>${wifi.password ? html`<span class="pv-value">${escapeHTML(wifi.password)}</span>` : ""}`);
-      label($("#pv-wifi-note"), wifi.password ? "Skanna Wi-Fi-koden för att ansluta till träffens nätverk." : wifi.has_password ? "Fråga trafikledningen om lösenordet till träffens Wi-Fi." : "Öppet nätverk – inget lösenord behövs.");
+      // No QR here: whoever reads this page is already on the network, and a
+      // TMBox cannot scan. The Wi-Fi QR belongs on the screens.
+      label($("#pv-wifi-note"), wifi.password ? "Nätverk och lösenord, som boxen frågar efter." : wifi.has_password ? "Fråga trafikledningen om lösenordet till träffens Wi-Fi." : "Öppet nätverk – inget lösenord behövs.");
     } else {
       wifiHost.insertAdjacentHTML("beforeend", html`<span class="pv-value pv-value--muted">${t("Fråga trafikledningen om träffens Wi-Fi")}</span>`);
       label($("#pv-wifi-note"), "Nätverket är inte inskrivet på servern ännu.");
-    }
-    const qrHost = $("#pv-wifi-qr");
-    const qrPayload = serverUI.wifiQR(wifi);
-    qrHost.hidden = !qrPayload;
-    if (qrPayload && qrHost.dataset.payload !== qrPayload) {
-      qrHost.dataset.payload = qrPayload;
-      qrHost.innerHTML = serverUI.qrSVG(qrPayload);
     }
     const address = connection.host ? `${connection.host}` : "";
     $("#pv-address").replaceChildren();
