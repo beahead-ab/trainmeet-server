@@ -3499,9 +3499,11 @@ function renderClock(snapshot) {
   const renderSignature = [style, darkBackground, showSeconds, stopped, externalMissing, reason, meta].join("|");
   if (target.dataset.clockSignature !== renderSignature) {
     target.dataset.clockSignature = renderSignature;
+    // A running face fills the screen on its own; the status line is only for
+    // digits (where it costs no size) and for a stopped or unreachable clock.
     const status = stopped || externalMissing
       ? html`<div class="sc-stopped"><div><div class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan stoppad")}</div><div class="sc-stopped__reason">${escapeHTML(reason)}</div><div class="sc-stopped__meta">${escapeHTML(meta)}</div></div></div>`
-      : html`<div class="sc-run">${t("Klockan går")} · ${escapeHTML(meta)}</div>`;
+      : digital ? html`<div class="sc-run">${t("Klockan går")} · ${escapeHTML(meta)}</div>` : "";
     // One clock only: a face never has digits beside it, and digits never have a face.
     const clock = digital
       ? html`<div class="clock-digital${stopped ? " stopped" : ""}" data-seconds="${showSeconds}"></div>`

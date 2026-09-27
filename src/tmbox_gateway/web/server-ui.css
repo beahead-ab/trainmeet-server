@@ -244,9 +244,10 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 #clock-view { width: 100%; height: 100%; padding: 0; display: flex; }
 /* The clock screen shows one clock: a face (analog, stationsur, swiss) or
    digits (digital), centred, with the running/stopped line under it. The
-   content area is 914 px tall; the face gives way when the stop box appears. */
+   content area is 914 px tall: a running face uses nearly all of it and gives
+   way only when the stop box appears under it. */
 .sc-clock-layout { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; width: 100%; height: 100%; min-height: 0; }
-.sc-clock-layout .clock-face { flex: 0 0 auto; width: 760px; height: 760px; max-width: none; max-height: none; filter: none; }
+.sc-clock-layout .clock-face { flex: 0 0 auto; width: 884px; height: 884px; max-width: none; max-height: none; filter: none; }
 .sc-clock-layout.is-stopped .clock-face { width: 620px; height: 620px; }
 .sc-clock-layout .clock-face.stopped { opacity: .6; }
 .sc-clock-layout .clock-digital { font: 700 440px/1 var(--font-mono); letter-spacing: -.04em; color: var(--display-fg); white-space: nowrap; }
