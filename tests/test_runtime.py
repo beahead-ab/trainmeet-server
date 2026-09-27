@@ -390,7 +390,7 @@ class RuntimeStoreTests(unittest.TestCase):
             store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
             try:
                 self.assertEqual(
-                    ["clock", "topology", "graph", "dashboard"],
+                    ["clock", "topology", "graph", "dashboard", "territories"],
                     store.connection_badge_screens(),
                 )
                 self.assertEqual(0, store.connection_code_validity_hours())

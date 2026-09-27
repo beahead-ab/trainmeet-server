@@ -42,6 +42,26 @@ class USLiveReadScopeTests(CloudDeliveryFixture):
         conductor = PairedClient("crew", "Crew", DeviceKind.US_CONDUCTOR, ())
         self.assertEqual(HTTPStatus.FORBIDDEN, self.get("/v1/us/package", conductor)[0])
 
+    def test_public_board_is_a_read_only_allowlisted_projection(self):
+        before = self.us.current_session()
+        board = self.application.display_snapshot()["us"]
+        self.assertFalse(board["active"])
+        self.assertEqual(before, self.us.current_session(), "Opening a screen must never start traffic")
+        self.assertEqual(self.package["territories"], board["territories"])
+        self.start("start-board")
+        board = self.application.display_snapshot()["us"]
+        self.assertTrue(board["active"])
+        self.assertNotIn("session_id", board)
+        self.assertNotIn("package", board)
+        self.assertNotIn("events", board)
+        self.assertNotIn("planning", board)
+        self.assertNotIn("conductor_id", board["runs"][0])
+        self.assertEqual({"active", "territories", "nodes", "segments", "mileposts", "runs", "warrants", "requests"}, set(board))
+        selected = self.application.lifecycle.selected()
+        self.application.lifecycle.select("eu", "eu-meet", "eu-package", allow_switch=True)
+        self.assertEqual({}, self.application.us_display_snapshot())
+        self.assertIsNone(self.application.display_snapshot()["us"])
+
     def test_eu_selection_and_interrupted_transition_block_live_us_reads(self):
         selected = self.application.lifecycle.selected()
         ticket = self.application.lifecycle.begin_transition("us", selected["meet_id"], "next")

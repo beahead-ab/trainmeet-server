@@ -1214,7 +1214,32 @@ class TrainMeetHTTPApplication:
             "clock": clock,
             "train_positions": positions,
             "connection": self.connection_details(request_host),
+            "server_name": self.runtime_store.server_name() if self.runtime_store else self.config.gateway_id,
+            "us": self.us_display_snapshot() if selected and selected["region"] == "us" else None,
             "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+
+    def us_display_snapshot(self) -> dict[str, Any]:
+        """Public board projection: operational facts, never credentials,
+        identity records, command history or permission-bearing tokens."""
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        if not selected or selected["region"] != "us" or not self.us_store:
+            return {}
+        session = self.us_store.context("display", True).get("session")
+        if session and session["package"]["publication_id"] != selected["publication_id"]:
+            session = None
+        package = session["package"] if session else self.us_store.saved_package(selected["publication_id"])
+        def fields(row, names):
+            return {name: row[name] for name in names if name in row}
+        return {
+            "active": bool(session and session.get("status") != "closed"),
+            "territories": [fields(r, ("id", "name")) for r in package.get("territories", [])],
+            "nodes": [fields(r, ("id", "name", "territory_id", "mp", "x", "y")) for r in package.get("nodes", [])],
+            "segments": [fields(r, ("id", "name", "from_node", "to_node")) for r in package.get("segments", [])],
+            "mileposts": [fields(r, ("id", "name", "value", "mp_system_id")) for r in package.get("mileposts", [])],
+            "runs": [fields(r, ("id", "symbol", "train_number", "railroad", "name", "job", "ready", "position", "status", "conductor_name")) for r in (session or {}).get("runs", [])],
+            "warrants": [fields(r, ("id", "number", "run_id", "kind", "path", "status", "text")) for r in (session or {}).get("warrants", [])],
+            "requests": [fields(r, ("id", "run_id", "kind", "message", "meet_time")) for r in (session or {}).get("reports", []) if r.get("kind") in {"request", "delay", "problem"}],
         }
 
     def connection_details(self, request_host: str = "") -> dict[str, Any]:
@@ -1739,7 +1764,7 @@ class TrainMeetHTTPApplication:
 
     def _clock_display(self, clock: dict[str, Any]) -> dict[str, Any]:
         settings = self.runtime_store.clock_display_settings(self._clock_scope()) if self.runtime_store else {}
-        styles = clock.get("available_styles") or list(AVAILABLE_CLOCK_STYLES)
+        styles = list(dict.fromkeys([*(clock.get("available_styles") or list(AVAILABLE_CLOCK_STYLES)), "analog", "stationsur", "digital", "swiss"]))
         style = settings.get("style", styles[0])
         return {**clock, "simulation": bool(self.simulation and self.simulation.active),
                 "available_styles": styles, "style": style if style in styles else styles[0],
@@ -3098,6 +3123,16 @@ class TrainMeetHTTPApplication:
             )
 
     def static_asset(self, path: str) -> tuple[bytes, str] | None:
+        if path in {"/drift", "/installningar", "/hjalp", "/login", "/setup", "/display/territories"}:
+            path = "/index.html"
+        if path.startswith("/assets/fonts/"):
+            name = path.removeprefix("/assets/fonts/")
+            if "/" in name or ".." in name or not name.endswith((".woff2", ".css")):
+                return None
+            try:
+                return self.web_root.joinpath("fonts", name).read_bytes(), mimetypes.guess_type(name)[0] or "font/woff2"
+            except FileNotFoundError:
+                return None
         terminal_asset = {"/tmbox/": "live.html", "/tmbox": "live.html", "/tmbox/terminal.js": "terminal.js", "/tmbox/style.css": "style.css"}.get(path)
         if terminal_asset:
             return files("tmbox_gateway").joinpath("terminal16_web", terminal_asset).read_bytes(), mimetypes.guess_type(terminal_asset)[0] or "text/plain"
@@ -3122,6 +3157,9 @@ class TrainMeetHTTPApplication:
             "/index.html": "index.html",
             "/assets/app.css": "app.css",
             "/assets/app.js": "app.js",
+            "/assets/server-ui.js": "server-ui.js",
+            "/assets/server-ui.css": "server-ui.css",
+            "/assets/server-design.css": "server-design.css",
             "/assets/simulation-banner.js": "simulation-banner.js",
             "/assets/i18n.js": "i18n.js",
             "/assets/i18n-messages.js": "i18n-messages.js",
