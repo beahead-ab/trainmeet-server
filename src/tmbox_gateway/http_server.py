@@ -6,6 +6,8 @@ import logging
 import mimetypes
 import re
 import secrets
+import shutil
+import subprocess
 import threading
 import time
 from dataclasses import dataclass, replace
@@ -58,6 +60,7 @@ from .us_clock import clock_settings as validate_us_clock_settings
 from .protocol_v2 import TMBoxStationService, find_track_conflict
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
+    DEFAULT_WEB_CLIENT_TTL_MINUTES,
     DISPLAY_SCREENS,
     RuntimePublication,
     RuntimePublicationError,
@@ -260,6 +263,8 @@ class TrainMeetHTTPApplication:
         self._box_enrollment_lock = threading.Lock()
         self._box_enrollment_attempts: dict[str, list[float]] = {}
         self._browser_enrollment_attempts: dict[str, list[float]] = {}
+        self._browser_touch_at: dict[str, float] = {}
+        self._last_browser_prune: datetime | None = None
         self.us_store = us_store
         self.lifecycle = lifecycle or (SQLiteMeetLifecycle(runtime_store.path) if runtime_store else None)
         self.lifecycle_error = ""
@@ -398,7 +403,20 @@ class TrainMeetHTTPApplication:
     def terminal16_frame(self, client):
         self.station_service.observe_operator(client.client_id)
         self._require_box_access(client, client.client_id)
+        self._touch_browser_client(client.client_id)
         return self.terminal16.frame(client.client_id)
+
+    def _touch_browser_client(self, client_id: str) -> None:
+        """A polling web box is alive; note it at most every 30 s so the idle
+        cleanup measures silence, not registration time."""
+        if not client_id.startswith("browser-"):
+            return
+        now = time.monotonic()
+        last = self._browser_touch_at.get(client_id, 0.0)
+        if now - last < 30:
+            return
+        self._browser_touch_at[client_id] = now
+        self.identities.touch_discovered_device(client_id)
 
     @runtime_view
     def terminal16_command(self, client, payload):
@@ -1072,8 +1090,42 @@ class TrainMeetHTTPApplication:
         )
         return {"stations": sorted(stations, key=lambda entry: entry["name"])}
 
+    def prune_idle_browser_clients(self, *, now: datetime | None = None) -> list[str]:
+        """Remove virtual TMBoxes nobody assigned a station and that have been
+        silent longer than ⚙ allows. Physical boxes and assigned web boxes stay.
+        Cheap enough to run from the polling endpoints; throttled to once a minute."""
+        if self.runtime_store is None:
+            return []
+        moment = now or datetime.now(timezone.utc)
+        if now is None and self._last_browser_prune and (moment - self._last_browser_prune) < timedelta(seconds=60):
+            return []
+        self._last_browser_prune = moment
+        limit = moment - timedelta(minutes=self.runtime_store.web_client_ttl_minutes())
+        removed: list[str] = []
+        for device in self.identities.discovered_devices():
+            if not device.device_id.startswith("browser-") or device.station_id or device.panel_ids:
+                continue
+            try:
+                seen = datetime.fromisoformat(device.last_seen_at)
+            except ValueError:
+                continue
+            if seen.tzinfo is None:
+                seen = seen.replace(tzinfo=timezone.utc)
+            if seen > limit:
+                continue
+            try:
+                self.identities.remove_discovered_device(device.device_id)
+            except PairingError:
+                continue
+            removed.append(device.device_id)
+            self._notify_device_assignment(device.device_id)
+        if removed:
+            LOGGER.info("Removed %d idle virtual TMBox(es) without a station", len(removed))
+        return removed
+
     def devices(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
+        self.prune_idle_browser_clients()
         from .device_ui import LANGUAGES
         return {
             "languages": [{"code": code, "name": name} for code, name in LANGUAGES],
@@ -1137,6 +1189,9 @@ class TrainMeetHTTPApplication:
 
     @runtime_view
     def display_snapshot(self, request_host: str = "") -> dict[str, Any]:
+        # Screens and the participant view poll this every few seconds: a good
+        # moment to let go of virtual boxes nobody assigned (throttled inside).
+        self.prune_idle_browser_clients()
         publication = self.runtime_store.active() if self.runtime_store is not None else None
         if publication is not None:
             active_day = self.runtime_store.active_day() or publication.active_day
@@ -1260,6 +1315,7 @@ class TrainMeetHTTPApplication:
         host = self.config.local_ip
         if (not host or _is_loopback_address(host)) and request_host:
             host = _hostname_without_port(request_host)
+        wifi = self.runtime_store.wifi_settings() if self.runtime_store is not None else {"name": "", "password": ""}
         return {
             "host": host,
             "port": self.config.http_port,
@@ -1269,6 +1325,14 @@ class TrainMeetHTTPApplication:
                 self.runtime_store.connection_code_validity_hours()
                 if self.runtime_store is not None
                 else 0
+            ),
+            # The meet's Wi-Fi, as typed under ⚙, plus the network this host is
+            # on right now (a Pi on Wi-Fi knows its own SSID; on a cable it does not).
+            "wifi": {**wifi, "detected_name": detected_wifi_name()},
+            "web_client_ttl_minutes": (
+                self.runtime_store.web_client_ttl_minutes()
+                if self.runtime_store is not None
+                else DEFAULT_WEB_CLIENT_TTL_MINUTES
             ),
         }
 
@@ -1281,9 +1345,10 @@ class TrainMeetHTTPApplication:
         if self.runtime_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal lagring saknas")
         screens = payload.get("screens")
-        if not isinstance(screens, list):
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_screens", "Skärmvalet måste vara en lista")
-        self.runtime_store.set_connection_badge_screens(screens)
+        if screens is not None:
+            if not isinstance(screens, list):
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_screens", "Skärmvalet måste vara en lista")
+            self.runtime_store.set_connection_badge_screens(screens)
         previous_hours = self.runtime_store.connection_code_validity_hours()
         changed_validity = False
         if payload.get("validity_hours") is not None:
@@ -1296,6 +1361,22 @@ class TrainMeetHTTPApplication:
             except RuntimePublicationError as error:
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_validity", str(error)) from error
             changed_validity = hours != previous_hours
+        if "wifi_name" in payload or "wifi_password" in payload:
+            current = self.runtime_store.wifi_settings()
+            try:
+                self.runtime_store.save_wifi_settings(
+                    str(payload.get("wifi_name", current["name"]) or ""),
+                    str(payload.get("wifi_password", current["password"]) or ""),
+                )
+            except RuntimePublicationError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_wifi", str(error)) from error
+        if payload.get("web_client_ttl_minutes") is not None:
+            try:
+                self.runtime_store.set_web_client_ttl_minutes(int(payload["web_client_ttl_minutes"]))
+            except (TypeError, ValueError) as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_ttl", "Ogiltig städtid") from error
+            except RuntimePublicationError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_ttl", str(error)) from error
         return {
             **self.connection_details(),
             # Screens follow immediately; the lifetime is applied to the code the
@@ -3158,6 +3239,7 @@ class TrainMeetHTTPApplication:
             "/assets/app.css": "app.css",
             "/assets/app.js": "app.js",
             "/assets/server-ui.js": "server-ui.js",
+            "/assets/participant.js": "participant.js",
             "/assets/qrcode.js": "qrcode.js",
             "/assets/server-ui.css": "server-ui.css",
             "/assets/server-design.css": "server-design.css",
@@ -4127,6 +4209,33 @@ class TrainMeetHTTPServer(ThreadingHTTPServer):
     def request_operational_reset(self) -> None:
         self.operational_reset_requested = True
         self.request_restart()
+
+
+_WIFI_CACHE: dict[str, Any] = {"at": 0.0, "name": ""}
+
+
+def detected_wifi_name() -> str:
+    """The SSID this host is connected to, when it is on Wi-Fi and the usual
+    Linux tools can tell (iwgetid, then nmcli). Empty otherwise; cached a minute."""
+    now = time.monotonic()
+    if now - _WIFI_CACHE["at"] < 60:
+        return _WIFI_CACHE["name"]
+    name = ""
+    try:
+        if shutil.which("iwgetid"):
+            result = subprocess.run(["iwgetid", "-r"], capture_output=True, text=True, timeout=2)
+            name = result.stdout.strip() if result.returncode == 0 else ""
+        if not name and shutil.which("nmcli"):
+            result = subprocess.run(["nmcli", "-t", "-f", "active,ssid", "dev", "wifi"], capture_output=True, text=True, timeout=3)
+            for line in result.stdout.splitlines():
+                active, _, ssid = line.partition(":")
+                if active == "yes" and ssid:
+                    name = ssid.strip()
+                    break
+    except (OSError, subprocess.SubprocessError):
+        name = ""
+    _WIFI_CACHE.update(at=now, name=name[:32])
+    return _WIFI_CACHE["name"]
 
 
 def _is_loopback_address(host: str) -> bool:

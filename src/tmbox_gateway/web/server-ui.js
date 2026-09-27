@@ -68,6 +68,8 @@
   const actions = make("div", "server-actions");
   for (const id of ["simulation-start-open", "simulation-pause", "simulation-reset-open", "simulation-finish-open"]) move(`#${id}`, actions);
   actions.querySelector("#simulation-start-open").className = "secondary";
+  const virtualBox = authored("a", "secondary", "Starta virtuell TMBox"); virtualBox.href = "/tmbox/"; virtualBox.target = "_blank"; virtualBox.rel = "noopener";
+  virtualBox.id = "simulation-virtual-tmbox"; actions.append(virtualBox);
   simulation.append(actions); move("#simulation-error", simulation); row.append(simulation);
   overview.prepend(row);
   mark(".meet-summary-card"); mark(".overview-actions");
@@ -116,6 +118,7 @@
   const identity = $("#server-identity-settings");
   inlineForm("#server-identity-form", identity);
   mark('[data-open-modal="server-identity-form-modal"]');
+  inlineForm("#web-client-ttl-form", identity);
   const networkSettings = make("p", "server-network"); networkSettings.id = "server-network"; identity.append(networkSettings);
   const danger = $("#server-system-settings"); danger.prepend(authored("h2", "", "Farozon"));
   const appearance = $(".clock-control-card");
@@ -128,9 +131,8 @@
   inlineForm("#connection-badge-form", appearance);
   const screensField = make("div", "server-field");
   $("#connection-badge-screens").before(screensField);
-  screensField.append(authored("span", "server-field-label", "Anslutningskoden visas på"), $("#connection-badge-screens"));
+  screensField.append(authored("span", "server-field-label", "QR-koder och anslutningskod visas på"), $("#connection-badge-screens"));
   const code = move("#connection-badge-code", appearance); code.classList.add("server-network");
-  const workspace = authored("a", "tm-btn", "Byt arbetsyta"); workspace.href = "/#workspaces"; $("#language-settings").append(workspace);
   label($("#users-invite-open"), "+ Bjud in");
 
   // Documentation is separate from the operator client. No legacy emulator is
@@ -246,12 +248,12 @@
     const footer = make("footer", "sc-foot"); footer.id = "screen-footer";
     move("#display-connection", footer);
     const status = make("span", ""); status.id = "screen-status"; footer.append(status);
-    // QR badge: the link to this server for anyone in the hall. Absolutely
-    // positioned in the corner so the clock face keeps the whole height.
+    // QR codes for anyone in the hall: first the Wi-Fi, then the link to the
+    // participant view (a local address, so the Wi-Fi has to come first).
+    // They live in the footer; on the clock screen the footer is the corner.
     const qr = make("div", "sc-qr"); qr.id = "screen-qr"; qr.hidden = true;
-    const code = make("div", "sc-qr__code"); code.id = "screen-qr-code";
-    qr.append(code, authored("span", "sc-qr__text", "Skanna – allt om träffen"));
-    stage.append(header, content, footer, qr);
+    footer.append(qr);
+    stage.append(header, content, footer);
     const resize = () => {
       const scale = Math.min(innerWidth / 1920, innerHeight / 1080);
       stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
@@ -270,14 +272,28 @@
     $("#display-stage").dataset.kind = kind;
     api.lastDisplayContact = Date.now();
   };
-  api.qr = (url, visible) => {
+  const wifiQR = (wifi) => {
+    if (!wifi?.name) return "";
+    const esc = (value) => String(value).replace(/([\\;,":])/g, "\\$1");
+    return wifi.password ? `WIFI:T:WPA;S:${esc(wifi.name)};P:${esc(wifi.password)};;` : `WIFI:T:nopass;S:${esc(wifi.name)};;`;
+  };
+  api.qr = ({ link = "", wifi = null } = {}, visible) => {
     const host = $("#screen-qr"); if (!host) return;
-    host.hidden = !visible || !url || typeof globalThis.qrcode !== "function";
-    if (host.hidden || host.dataset.url === url) return;
-    host.dataset.url = url;
-    const code = globalThis.qrcode(0, "M"); code.addData(url); code.make();
-    $("#screen-qr-code").innerHTML = code.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
-    host.title = url;
+    host.hidden = !visible || !link || typeof globalThis.qrcode !== "function";
+    if (host.hidden) return;
+    const network = wifiQR(wifi);
+    const signature = `${network}|${link}`;
+    if (host.dataset.signature === signature) return;
+    host.dataset.signature = signature;
+    const item = (payload, caption) => {
+      const wrap = make("div", "sc-qr__item");
+      const code = make("div", "sc-qr__code");
+      const qr = globalThis.qrcode(0, "M"); qr.addData(payload); qr.make();
+      code.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+      wrap.append(code, authored("span", "sc-qr__text", caption));
+      return wrap;
+    };
+    host.replaceChildren(...(network ? [item(network, "1 · Wi-Fi"), item(link, "2 · Träffen")] : [item(link, "Skanna – allt om träffen")]));
   };
   api.us = (data, screen = false) => {
     const host = screen ? $("#territories-view") : $("#us-runtime-summary");

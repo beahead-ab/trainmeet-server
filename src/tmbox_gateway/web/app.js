@@ -522,38 +522,21 @@ const WORKSPACE_PANELS = {
 };
 const MODES = ["workspaces", ...Object.keys(WORKSPACE_PANELS)];
 const WORKSPACE_KEY = "trainmeet.workspace";
+// "/" is the participant view (SPEC A4): no picker, no stored choice. The
+// names below still fence what a browser client may enroll as; TKL has its
+// own platform and is no longer offered by the server.
 const WORKSPACES = {
   administration: { title: "Drift och administration", detail: "Trafikläge, klocka och serverinställningar", path: "/drift" },
-  tkl: { title: "TKL", detail: "Starta klienten – administratören tilldelar station", path: "/tkl/" },
   tmbox: { title: "TMBox", detail: "Starta klienten – administratören tilldelar station", path: "/tmbox/" },
   dispatcher: { title: "Dispatcher", detail: "Trafikledning för träffens territorier", path: "/us/dispatcher" },
   conductor: { title: "Conductor", detail: "Tåguppdrag och körtillstånd", path: "/us/conductor" },
 };
 
-// Local vector illustrations: no fonts, remote assets or meet data in markup.
-const WORKSPACE_ICONS = {
-  administration: '<rect x="12" y="18" width="72" height="54" rx="9"/><path d="M12 34h72M30 34v38M21 26h1m7 0h1m7 0h1M39 62V50m11 12V43m11 19v-8"/><circle class="workspace-icon-fill" cx="72" cy="66" r="15"/><path d="M72 58v8l5 3"/>',
-  tkl: '<path d="M17 65h62M25 74h46M30 65l-8 17m44-17 8 17"/><rect class="workspace-icon-fill" x="28" y="14" width="40" height="51" rx="10"/><path d="M28 38h40M48 22v16M37 51h1m20 0h1M38 22h20"/><path d="M15 28v22m66-22v22M11 28h8m58 0h8"/>',
-  tmbox: '<rect class="workspace-icon-fill" x="24" y="9" width="48" height="78" rx="10"/><rect x="31" y="18" width="34" height="22" rx="3"/><path d="M37 25h17m-17 7h23M34 50h3m10 0h3m10 0h3M34 60h3m10 0h3m10 0h3M34 70h3m10 0h3m10 0h3M34 79h3m10 0h3m10 0h3"/>',
-  dispatcher: '<path d="M13 69h22l27-41h21M13 28h22l27 41h21M48 49v-30"/><circle class="workspace-icon-fill" cx="13" cy="28" r="6"/><circle class="workspace-icon-fill" cx="83" cy="28" r="6"/><circle class="workspace-icon-fill" cx="13" cy="69" r="6"/><circle class="workspace-icon-fill" cx="83" cy="69" r="6"/><circle class="workspace-icon-fill" cx="48" cy="49" r="8"/><path d="M42 15h12"/>',
-  conductor: '<rect class="workspace-icon-fill" x="22" y="17" width="52" height="66" rx="8"/><rect x="36" y="10" width="24" height="14" rx="4"/><path d="m33 41 4 4 7-8m-11 24 4 4 7-8M51 41h12M51 61h12"/>',
-};
-
-function workspaceIcon(key) {
-  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  icon.setAttribute("viewBox", "0 0 96 96");
-  icon.setAttribute("aria-hidden", "true");
-  icon.setAttribute("focusable", "false");
-  icon.innerHTML = WORKSPACE_ICONS[key];
-  return icon;
-}
-
 function currentMode() { return document.body.dataset.mode || "workspaces"; }
-function storedMode() { return sessionStorage.getItem(WORKSPACE_KEY) ? "kor" : "workspaces"; }
+function storedMode() { return sessionStorage.getItem(WORKSPACE_KEY) === "administration" ? "kor" : "workspaces"; }
 
-function workspaceHome() {
-  return WORKSPACES[sessionStorage.getItem(WORKSPACE_KEY)]?.path || "/#workspaces";
-}
+// The logo always leads to the participant view; Drift is one click away from there.
+function workspaceHome() { return "/"; }
 
 function availableWorkspaces() {
   // Fail closed: a stale browser choice must not grant a role or select EU/US.
@@ -572,13 +555,9 @@ async function refreshServerContext() {
   const meet = payload.selected_meet;
   const name = meet?.name || t("Ingen träff vald");
   document.querySelector("#app-meet-name").textContent = name;
-  renderWorkspaceMeetLabel();
   const selected = sessionStorage.getItem(WORKSPACE_KEY);
-  if (selected && !availableWorkspaces().includes(selected)) {
-    sessionStorage.removeItem(WORKSPACE_KEY);
-    setMode("workspaces");
-  }
-  renderWorkspacePicker();
+  if (selected && !availableWorkspaces().includes(selected)) sessionStorage.removeItem(WORKSPACE_KEY);
+  globalThis.TrainMeetParticipant?.refresh();
   renderCloudStatus();
   const us = payload.operating_region === "us";
   document.querySelector("#us-runtime-summary").classList.toggle("hidden", !us);
@@ -591,56 +570,8 @@ async function refreshServerContext() {
   return payload;
 }
 
-function renderWorkspacePicker() {
-  const host = document.querySelector("#workspace-options");
-  const signature = availableWorkspaces().join(",") + ":" + document.documentElement.lang;
-  if (host.dataset.workspaces === signature) return;
-  host.dataset.workspaces = signature;
-  host.replaceChildren();
-  for (const key of availableWorkspaces()) {
-    const entry = WORKSPACES[key];
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "workspace-option";
-    button.dataset.workspace = key;
-    const illustration = document.createElement("span");
-    illustration.className = "workspace-illustration";
-    illustration.append(workspaceIcon(key));
-    const title = document.createElement("strong");
-    title.id = `workspace-title-${key}`;
-    title.textContent = t(entry.title);
-    const detail = document.createElement("span");
-    detail.id = `workspace-detail-${key}`;
-    detail.className = "workspace-detail";
-    detail.textContent = t(entry.detail);
-    button.setAttribute("aria-labelledby", title.id);
-    button.setAttribute("aria-describedby", detail.id);
-    const action = document.createElement("span");
-    action.className = "workspace-enter";
-    action.setAttribute("aria-hidden", "true");
-    action.textContent = t("Öppna arbetsyta") + " →";
-    button.append(illustration, title, detail, action);
-    button.addEventListener("click", () => {
-      sessionStorage.setItem(WORKSPACE_KEY, key);
-      if (key === "administration") {
-        history.pushState(null, "", "/drift");
-        applyWorkspaceRoute();
-      } else location.assign(entry.path);
-    });
-    host.append(button);
-  }
-}
-
-function renderWorkspaceMeetLabel() {
-  const meet = state.serverContext?.selected_meet;
-  document.querySelector("#workspace-meet").textContent = meet
-    ? t("{name} · alla arbetsytor använder samma träff.", { name: meet.name })
-    : t("Koppla servern till en publicerad träff i Cloud via Inställningar.");
-}
-
 globalThis.TrainMeetI18n.subscribe(() => {
-  renderWorkspacePicker();
-  renderWorkspaceMeetLabel();
+  globalThis.TrainMeetParticipant?.refresh();
   renderCloudStatus();
   renderUsers();
   renderCloudPresentation();
@@ -651,17 +582,15 @@ function setMode(mode) {
   const next = MODES.includes(mode) ? mode : "workspaces";
   document.body.dataset.mode = next;
   document.querySelector("#workspace-home").href = workspaceHome();
-  document.querySelector("#workspace-picker").classList.toggle("hidden", next !== "workspaces");
   document.querySelector(".server-admin-shell").classList.toggle("hidden", next === "workspaces");
+  if (next === "workspaces") globalThis.TrainMeetParticipant?.start(); else globalThis.TrainMeetParticipant?.stop();
   for (const [name, selector] of Object.entries(WORKSPACE_PANELS)) {
     document.querySelector(selector).classList.toggle("hidden", name !== next);
   }
   document.querySelector("#application-menu").open = false;
   document.querySelector("#settings-heading").classList.toggle("hidden", next !== "installningar");
   if (next !== "tmbox") stopTMBoxV2();
-  if (next === "workspaces") {
-    renderWorkspacePicker();
-  } else if (next === "tmbox") {
+  if (next === "tmbox") {
     startTMBoxV2();
   } else if (next === "installningar") showSettings();
   else if (next === "simulation") refreshSimulation();
@@ -683,7 +612,7 @@ function applyWorkspaceRoute() {
   let route = location.hash.slice(1);
   const legacy = {overview: "/drift", traffic: "/drift", settings: "/installningar", simulation: "/drift#drift-simulation", screens: "/installningar#skarmar"};
   if (legacy[route]) { history.replaceState(null, "", legacy[route]); route = location.hash.slice(1); }
-  if (route === "workspaces" && location.pathname !== "/") history.replaceState(null, "", "/#workspaces");
+  if (route === "workspaces") { history.replaceState(null, "", "/"); route = ""; }
   const path = location.pathname.replace(/\/$/, "") || "/";
   const protectedMode = {"/drift": "kor", "/installningar": "installningar", "/hjalp": "help", "/login": "kor"}[path];
   if (protectedMode) {
@@ -691,12 +620,6 @@ function applyWorkspaceRoute() {
     setup.classList.add("hidden"); login.classList.add("hidden"); appView.classList.remove("hidden");
     if (path === "/drift" || path === "/login") sessionStorage.setItem(WORKSPACE_KEY, "administration");
     setMode(protectedMode);
-    return;
-  }
-  if (!route && sessionStorage.getItem(WORKSPACE_KEY)) {
-    const destination = workspaceHome();
-    if (destination === "/drift") { history.replaceState(null, "", destination); applyWorkspaceRoute(); }
-    else location.replace(destination);
     return;
   }
   if (!state.authStatus?.authenticated && !["", "workspaces", "tmbox"].includes(route)) {
@@ -712,7 +635,6 @@ function applyWorkspaceRoute() {
   else if (route === "screens") setMode("skarmar");
   else if (route === "tmbox") {
     if (!availableWorkspaces().includes("tmbox")) { setMode("workspaces"); return; }
-    sessionStorage.setItem(WORKSPACE_KEY, "tmbox");
     location.replace("/tmbox/");
   }
   else if (route === "traffic" && availableWorkspaces().includes("administration")) {
@@ -722,12 +644,7 @@ function applyWorkspaceRoute() {
     setMode("kor");
     if (state.serverContext?.operating_region === "eu") document.querySelector("#overview-traffic").scrollIntoView();
   }
-  else if (!route || route === "workspaces" || !sessionStorage.getItem(WORKSPACE_KEY)) setMode("workspaces");
-  else if (sessionStorage.getItem(WORKSPACE_KEY) === "tmbox") {
-    location.replace("/tmbox/");
-  }
-  else if (sessionStorage.getItem(WORKSPACE_KEY) !== "administration") location.assign(workspaceHome());
-  else setMode("kor");
+  else setMode("workspaces");
 }
 
 document.body.dataset.mode = storedMode();
@@ -735,12 +652,8 @@ window.addEventListener("hashchange", applyWorkspaceRoute);
 window.addEventListener("popstate", applyWorkspaceRoute);
 document.querySelector("#workspace-home").addEventListener("click", (event) => {
   event.preventDefault();
-  const destination = workspaceHome();
-  if (destination.startsWith("/#")) {
-    const hash = destination.slice(1);
-    if (location.hash === hash) applyWorkspaceRoute();
-    else location.hash = hash;
-  } else location.assign(destination);
+  history.pushState(null, "", "/");
+  applyWorkspaceRoute();
 });
 bindUsersSection();
 bindRestore();
@@ -901,7 +814,7 @@ logoutButton.addEventListener("click", async () => {
   localStorage.removeItem("trainmeet.accessToken");
   localStorage.removeItem("trainmeet.panelID");
   sessionStorage.removeItem(WORKSPACE_KEY);
-  history.replaceState(null, "", "/#workspaces");
+  history.replaceState(null, "", "/");
   state.token = null;
   state.snapshots.clear();
   clearTimeout(state.snapshotTimer);
@@ -2124,6 +2037,20 @@ function renderConnectionBadgeSettings(connection) {
   }
   const validity = document.querySelector("#connection-badge-validity");
   if (validity && document.activeElement !== validity) validity.value = String(connection.validity_hours ?? 0);
+  const wifi = connection.wifi || {};
+  const wifiName = document.querySelector("#connection-wifi-name");
+  const wifiPassword = document.querySelector("#connection-wifi-password");
+  if (wifiName && document.activeElement !== wifiName) wifiName.value = wifi.name || "";
+  if (wifiPassword && document.activeElement !== wifiPassword) wifiPassword.value = wifi.password || "";
+  const wifiNote = document.querySelector("#connection-wifi-note");
+  if (wifiNote) {
+    if (wifi.detected_name && wifi.detected_name !== wifi.name) {
+      wifiNote.dataset.tmText = "Servern sitter på nätet {name} – lämna namnet tomt så används det.";
+      wifiNote.textContent = t(wifiNote.dataset.tmText, { name: wifi.detected_name });
+    } else setMessage(wifiNote, "Lösenordet måste finnas med för att Wi-Fi-koden ska fungera; boxens operatör läser det på deltagarvyn.");
+  }
+  const ttl = document.querySelector("#web-client-ttl");
+  if (ttl && document.activeElement !== ttl && !editorActive(ttl.closest("form"))) ttl.value = String(connection.web_client_ttl_minutes ?? 30);
   const badge = document.querySelector("#connection-badge-code");
   badge.textContent = connection.code
     ? `${connection.host}:${connection.port} · ${connection.code}`
@@ -2145,6 +2072,8 @@ async function saveConnectionBadgeSettings() {
       body: JSON.stringify({
         screens,
         validity_hours: Number(document.querySelector("#connection-badge-validity").value),
+        wifi_name: document.querySelector("#connection-wifi-name")?.value ?? "",
+        wifi_password: document.querySelector("#connection-wifi-password")?.value ?? "",
       }),
     });
     const payload = await response.json();
@@ -2165,6 +2094,29 @@ async function saveConnectionBadgeSettings() {
     endModalAction(form);
   }
 }
+
+async function saveWebClientTTL(event) {
+  event.preventDefault();
+  const form = document.querySelector("#web-client-ttl-form");
+  const message = document.querySelector("#web-client-ttl-message");
+  if (!beginModalAction(form)) return;
+  try {
+    const response = await authorizedFetch("/v1/display/connection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ web_client_ttl_minutes: Number(document.querySelector("#web-client-ttl").value) }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "Städtiden kunde inte sparas");
+    setMessage(message, "Sparat.", "success");
+    finishModal(form);
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  } finally {
+    endModalAction(form);
+  }
+}
+document.querySelector("#web-client-ttl-form")?.addEventListener("submit", saveWebClientTTL);
 
 async function controlLocalClock(command) {
   if (!beginModalAction(clockControlForm)) return;
@@ -2550,6 +2502,7 @@ async function showLogin() {
   clearTimeout(state.snapshotTimer);
   clearTimeout(state.adminTimer);
   stopTMBoxV2();
+  globalThis.TrainMeetParticipant?.stop();
   document.querySelector("#application-menu").open = false;
   state.authStatus = { ...(state.authStatus || {}), authenticated: false };
   // Flikar och lägesknappar leder ingenstans utan inloggning. De stod kvar
@@ -3572,8 +3525,10 @@ function renderConnectionBadge(snapshot) {
   const address = connection.host ? `${connection.host}:${connection.port}` : "";
   const visible = Boolean(connection.code) && Boolean(address) && screens.includes(displayKind);
   badge.classList.toggle("hidden", !visible);
-  // The same setting (⚙ › Skärmar och klocka) also governs the QR link to this server.
-  serverUI.qr(address ? `http://${address}/` : "", visible);
+  // The same setting (⚙ › Skärmar och klocka) governs the QR codes: the meet's
+  // Wi-Fi first, then the link to this server. They replace the address line.
+  serverUI.qr({ link: address ? `http://${address}/` : "", wifi: connection.wifi }, visible);
+  badge.classList.add("hidden");
   if (!visible) return;
   document.querySelector("#display-connection-address").textContent = `TMBox ${address}`;
   document.querySelector("#display-connection-code").textContent = connection.code;

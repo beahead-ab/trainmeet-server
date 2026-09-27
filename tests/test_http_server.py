@@ -185,6 +185,23 @@ class HTTPServerTests(unittest.TestCase):
             self.application.create_browser_client({"workspace": "tmbox"}, "same-peer")
         self.assertEqual(caught.exception.status, 429)
 
+    def test_idle_virtual_boxes_without_a_station_are_removed_after_the_ttl(self):
+        from datetime import datetime, timedelta, timezone
+        # Two virtual boxes enrolled from the participant view; one gets a station.
+        waiting = self._public_client()
+        assigned = self._public_client()
+        self.application.assign_device(self.application.local_admin(), {"device_code": assigned["device_code"], "station_id": "station-a"})
+        codes = lambda: {device.device_code for device in self.identities.discovered_devices()}
+        self.assertEqual(codes(), {waiting["device_code"], assigned["device_code"]})
+
+        # Fresh boxes stay, even when the cleanup runs.
+        self.assertEqual(self.application.prune_idle_browser_clients(now=datetime.now(timezone.utc)), [])
+        # Half an hour of silence: the unassigned one goes, the assigned one stays.
+        later = datetime.now(timezone.utc) + timedelta(minutes=31)
+        removed = self.application.prune_idle_browser_clients(now=later)
+        self.assertEqual(removed, [waiting["client_id"]])
+        self.assertEqual(codes(), {assigned["device_code"]})
+
     def test_terminal_profile_is_self_scoped_and_has_no_actions_until_assigned(self):
         box = self._public_client()
         token = box["access_token"]
@@ -377,7 +394,8 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="overview-topology"', html)
         self.assertIn('id="overview-route-list"', html)
         self.assertIn("TÅGRUTTER", html)
-        self.assertIn('id="workspace-picker"', html)
+        self.assertIn('id="participant-view"', html)
+        self.assertNotIn('id="workspace-picker"', html)
         self.assertIn('id="application-menu"', html)
         self.assertIn('id="overview-clock-start"', html)
         self.assertIn('id="overview-clock-stop"', html)
@@ -1314,6 +1332,30 @@ class ConnectionBadgeTests(unittest.TestCase):
 
         self.assertEqual(connection["screens"], ["clock", "topology", "graph", "dashboard", "territories"])
         self.assertEqual(connection["validity_hours"], 0)
+
+    def test_wifi_and_cleanup_settings_travel_with_the_connection_details(self):
+        # Nothing shared until the administrator types it; the participant view
+        # and the screens' Wi-Fi QR both read these fields.
+        before = self._connection()
+        self.assertEqual(before["wifi"]["name"], "")
+        self.assertEqual(before["wifi"]["password"], "")
+        self.assertIn("detected_name", before["wifi"])
+        self.assertEqual(before["web_client_ttl_minutes"], 30)
+
+        admin = self.application.local_admin()
+        saved = self.application.configure_connection_badge(
+            admin, {"screens": ["clock"], "wifi_name": "Grimslov-Traff", "wifi_password": "lokomotiv2027", "web_client_ttl_minutes": 45}
+        )
+        self.assertEqual(saved["wifi"]["name"], "Grimslov-Traff")
+        self.assertEqual(saved["web_client_ttl_minutes"], 45)
+        after = self._connection()
+        self.assertEqual(after["wifi"]["password"], "lokomotiv2027")
+        self.assertEqual(after["screens"], ["clock"])
+
+        with self.assertRaises(HTTPAPIError):
+            self.application.configure_connection_badge(admin, {"screens": [], "wifi_name": "x", "wifi_password": "kort"})
+        with self.assertRaises(HTTPAPIError):
+            self.application.configure_connection_badge(admin, {"screens": [], "web_client_ttl_minutes": 2})
 
 
 if __name__ == "__main__":

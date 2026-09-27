@@ -17,7 +17,9 @@ class MeetTypeNavigationTests(unittest.TestCase):
         self.assertIn("available_workspaces", script)
         self.assertIn("operating_region", script)
         self.assertIn('const WORKSPACE_KEY = "trainmeet.workspace"', script)
-        self.assertIn("sessionStorage.setItem(WORKSPACE_KEY, key)", script)
+        # "/" is the participant view (no picker); a stored choice never redirects.
+        self.assertIn('globalThis.TrainMeetParticipant?.start()', script)
+        self.assertNotIn("sessionStorage.setItem(WORKSPACE_KEY, key)", script)
         self.assertNotIn('const BUILD_STEPS', script)
 
     def test_us_language_scope_is_preserved(self):

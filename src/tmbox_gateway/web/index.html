@@ -39,7 +39,6 @@
               <a href="#settings" id="open-settings">Inställningar</a>
               <a href="#simulation" id="open-simulation">Simulering</a>
               <a href="#screens">Skärmar</a>
-              <a href="#workspaces">Byt arbetsyta</a>
               <button id="logout" type="button">Logga ut</button>
             </nav>
           </details>
@@ -154,7 +153,7 @@
       </section>
 
       <section id="login" class="card pairing-card hidden">
-        <a href="#workspaces">Tillbaka till arbetsytor</a>
+        <a href="/">← Till träffens sida</a>
         <img class="pairing-icon" src="/trainmeet-logo.png" alt="TrainMeet" data-tm-alt="TrainMeet">
         <div id="login-intro">
           <p class="eyebrow"><tm-text data-tm-text="ADMIN">ADMIN</tm-text></p>
@@ -195,12 +194,82 @@
 
       <section id="app-view" class="app-view hidden">
         <p id="server-context-warning" class="form-message error context-warning hidden" role="alert"></p>
-        <section id="workspace-picker" class="card workspace-picker hidden" aria-labelledby="workspace-heading">
-          <p class="eyebrow">TRAINMEET SERVER</p>
-          <h2 id="workspace-heading">Välj arbetsyta</h2>
-          <p id="workspace-meet">En server, en träff. Välj vad du vill arbeta med.</p>
-          <div id="workspace-options" class="workspace-options"></div>
-          <p id="workspace-message" class="form-message" role="status"></p>
+        <section id="participant-view" class="participant hidden" aria-label="Deltagarvyn" data-tm-aria-label="Deltagarvyn">
+          <header class="pv-top">
+            <img class="brand-mark" src="/assets/ikon/trainmeet-ikon.svg" alt="" width="26" height="26" data-tm-alt="">
+            <b id="pv-meet-name">TrainMeet Server</b><span id="pv-region" class="tm-badge"></span>
+            <span class="pv-spacer"></span>
+            <span id="pv-day" class="pv-muted"></span>
+            <span id="pv-live" class="pv-live" title="Uppdateras var 5:e sekund" data-tm-title="Uppdateras var 5:e sekund"></span>
+            <a id="pv-login" class="tm-btn tm-btn--sm pv-login" href="/login">Logga in</a>
+          </header>
+          <div class="pv-page">
+            <div class="pv-main">
+              <div class="pv-row">
+                <section class="tm-card pv-clock-card"><div class="pv-clock" id="pv-clock"></div></section>
+                <section class="tm-card" id="pv-timetable-card" data-pv-eu>
+                  <div class="tm-card__head"><span>Tidtabell</span><span class="c" id="pv-timetable-count"></span></div>
+                  <div class="tm-card__body">
+                    <input id="pv-timetable-search" class="tm-input" type="search" placeholder="Sök tågnummer eller station" data-tm-placeholder="Sök tågnummer eller station" aria-label="Sök i tidtabellen" data-tm-aria-label="Sök i tidtabellen">
+                    <div id="pv-timetable" class="pv-list"></div>
+                    <button id="pv-timetable-toggle" type="button" class="pv-link">Visa hela tidtabellen ↓</button>
+                  </div>
+                </section>
+                <section class="tm-card" data-pv-us hidden>
+                  <div class="tm-card__head"><span>Områdestavla</span></div>
+                  <div class="tm-card__body"><p class="pv-note">Körtillstånd och trafikområden visas på områdestavlan.</p><a class="tm-btn" href="/display/territories">Öppna områdestavlan ↗</a></div>
+                </section>
+              </div>
+              <section class="tm-card" id="pv-track-card" data-pv-eu>
+                <div class="tm-card__head"><span>På banan just nu</span><span class="c">uppdateras var 5:e sekund</span></div>
+                <div class="pv-stats">
+                  <div class="tm-stat"><b id="pv-stat-line">–</b><span>tåg på linjen</span></div>
+                  <div class="tm-stat"><b id="pv-stat-station">–</b><span>inne på station</span></div>
+                  <div class="tm-stat tm-stat--ok"><b id="pv-stat-staffed">–</b><span id="pv-stat-staffed-label">bemannade</span></div>
+                </div>
+                <div class="pv-map"><div class="pv-map__scroll"><svg id="pv-topology" class="pv-topology" role="img" aria-label="Banöversikt" data-tm-aria-label="Banöversikt"></svg></div></div>
+                <p class="pv-map__hint">Dra i sidled för hela banan.</p>
+                <div class="tm-card__body pv-track-lists">
+                  <div class="pv-section">På linjen</div>
+                  <div id="pv-on-line" class="pv-list"></div>
+                  <div class="pv-section">Nästa händelser</div>
+                  <div id="pv-events" class="pv-list"></div>
+                  <a class="tm-btn pv-btn-wide" href="/display/graph">Öppna tågdiagrammet ↗</a>
+                </div>
+              </section>
+            </div>
+            <aside class="pv-side">
+              <section class="tm-card" id="pv-connect-card">
+                <div class="tm-card__head"><span>Anslut din TMBox</span><span class="c">tre steg, i den här ordningen</span></div>
+                <div class="pv-steps">
+                  <div class="pv-step"><div class="n">1</div><div>
+                    <div class="h">Koppla boxen till träffens Wi-Fi</div>
+                    <div id="pv-wifi" class="pv-values"></div>
+                    <p id="pv-wifi-note" class="pv-note"></p>
+                  </div></div>
+                  <div class="pv-step"><div class="n">2</div><div>
+                    <div class="h">Ange serverns adress i boxen</div>
+                    <div id="pv-address" class="pv-values"></div>
+                    <p class="pv-note">Adressen till TrainMeet Server på träffens nätverk.</p>
+                  </div></div>
+                  <div class="pv-step"><div class="n">3</div><div>
+                    <div class="h">Skriv in parningskoden</div>
+                    <div class="pv-values"><span id="pv-code" class="pv-value pv-value--big">—</span></div>
+                    <p id="pv-code-note" class="pv-note"></p>
+                  </div></div>
+                </div>
+              </section>
+              <section class="tm-card" id="pv-virtual-card" data-pv-eu>
+                <div class="tm-card__head"><span>Kör en station i webbläsaren</span></div>
+                <div class="tm-card__body">
+                  <p class="pv-note">Ingen box till hands? Starta en virtuell TMBox här på mobilen, iPaden eller datorn. Den fungerar som en riktig box: trafikledningen ser den som ”väntar på station” och tilldelar den en station. Innan dess visar den bara – den kan inte påverka spelet. Kör servern en simulering tar du över en station som simulatorn annars sköter själv.</p>
+                  <a class="tm-btn tm-btn--primary pv-btn-wide pv-btn-lg" href="/tmbox/">Starta virtuell TMBox</a>
+                  <p id="pv-virtual-ttl" class="pv-note pv-muted"></p>
+                </div>
+              </section>
+            </aside>
+          </div>
+          <footer class="pv-foot"><span id="pv-foot-meta"></span><a id="pv-foot-login" href="/login">Logga in</a></footer>
         </section>
         <div class="server-admin-shell">
 
@@ -477,6 +546,11 @@
               <div><small><tm-text data-tm-text="CLOUD">CLOUD</tm-text></small><b id="system-cloud-state"><tm-text data-tm-text="Inte kopplad">Inte kopplad</tm-text></b></div>
             </div>
 <button type="button" class="secondary modal-launch" data-open-modal="server-identity-form-modal">Ändra servernamn</button>
+<form id="web-client-ttl-form" class="server-inline-form web-client-ttl-form">
+  <label><tm-text data-tm-text="Virtuella TMBoxar utan station tas bort efter">Virtuella TMBoxar utan station tas bort efter</tm-text><span class="server-ttl-row"><input id="web-client-ttl" type="number" min="5" max="240" step="5" value="30" required> <tm-text data-tm-text="minuter">minuter</tm-text></span></label>
+  <div class="modal-actions"><button type="submit" class="secondary">Spara</button></div>
+  <p id="web-client-ttl-message" class="form-message" role="status"></p>
+</form>
 <dialog id="server-identity-form-modal" class="admin-modal" aria-labelledby="server-identity-form-title"><h2 id="server-identity-form-title">Ändra servernamn</h2>
 <form id="server-identity-form" class="server-identity-form">
               <label for="admin-server-name"><tm-text data-tm-text="Servernamn">Servernamn</tm-text></label>
@@ -879,6 +953,14 @@
                 <option value="168" data-tm-text="7 dygn">7 dygn</option>
               </select>
             </label>
+            <div class="server-field server-wifi-fields">
+              <span class="server-field-label"><tm-text data-tm-text="Träffens Wi-Fi – visas på deltagarvyn och som QR-kod på skärmarna">Träffens Wi-Fi – visas på deltagarvyn och som QR-kod på skärmarna</tm-text></span>
+              <div class="server-wifi-row">
+                <label><tm-text data-tm-text="Nätverksnamn">Nätverksnamn</tm-text><input id="connection-wifi-name" maxlength="32" autocomplete="off" placeholder="Lämna tomt om nätet inte ska delas" data-tm-placeholder="Lämna tomt om nätet inte ska delas"></label>
+                <label><tm-text data-tm-text="Lösenord">Lösenord</tm-text><input id="connection-wifi-password" maxlength="63" autocomplete="off" placeholder="Tomt = öppet nät" data-tm-placeholder="Tomt = öppet nät"></label>
+              </div>
+              <p id="connection-wifi-note" class="pv-note"></p>
+            </div>
             <p id="connection-badge-message" class="form-message"></p>
 <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara</button></div></form></dialog>
           </section>
@@ -950,6 +1032,7 @@
     <script src="/assets/tmbox-attention.js?v=20260821-1" defer></script>
     <script src="/assets/qrcode.js" defer></script>
     <script src="/assets/server-ui.js" defer></script>
-    <script src="/assets/app.js?v=20260927-5" defer></script>
+    <script src="/assets/app.js?v=20260927-6" defer></script>
+    <script src="/assets/participant.js" defer></script>
   </body>
 </html>

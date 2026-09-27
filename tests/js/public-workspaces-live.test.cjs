@@ -29,15 +29,19 @@ const root = path.resolve(__dirname, '../..');
     const screenshot = async name => {
       if (process.env.SERVER_SHELL_SCREENSHOTS) await page.screenshot({path: path.join(process.env.SERVER_SHELL_SCREENSHOTS, 'public-' + name + '.png'), fullPage: true});
     };
+    // A guest at "/" sees the participant view, never a login wall or a picker.
     await page.goto(urls.eu);
-    await page.locator('#workspace-picker').waitFor({state: 'visible'});
+    await page.locator('#participant-view').waitFor({state: 'visible'});
     assert.equal(await page.locator('#login').isVisible(), false);
-    assert.equal(await page.locator('#workspace-options button').count(), 3);
-    await screenshot('picker');
-    await page.getByRole('button', {name: 'Drift och administration', exact: true}).click();
+    assert.equal(await page.locator('#workspace-options').count(), 0);
+    assert.equal((await page.request.get(urls.eu + '/v1/devices')).status(), 401);
+    await screenshot('participant');
+    // Phone widths show the login link in the foot, wider ones in the top row.
+    await page.locator('#pv-login:visible, #pv-foot-login:visible').first().click();
     await page.locator('#login-form').waitFor({state: 'visible'});
-    await page.locator('#login a[href="#workspaces"]').click();
-    await page.getByRole('button', {name: 'TMBox', exact: true}).click();
+    await page.locator('#login a[href="/"]').click();
+    await page.locator('#participant-view').waitFor({state: 'visible'});
+    await page.locator('#pv-virtual-card a[href="/tmbox/"]').click();
     await page.locator('.box-code').getByText(/^WEB/).waitFor();
     const box = await page.evaluate(() => JSON.parse(localStorage.getItem('trainmeet.browser-tmbox')));
     assert.equal(await page.locator('input, select').count(), 0, 'No station or address controls');
@@ -71,9 +75,11 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('.keypad [data-key="#"]').click();
     await page.waitForFunction(()=>document.querySelector('.lcd').textContent.includes('Språk'));
     assert.equal((await page.request.get(urls.eu+'/v1/admin/users',{headers:{Authorization:`Bearer ${box.access_token}`}})).status(),403);
-    await page.getByRole('link',{name:'Byt arbetsyta'}).click();
-    await page.locator('#workspace-picker').waitFor({state:'visible'});
-    await page.getByRole('button', {name: 'TKL', exact: true}).click();
+    await page.getByRole('link',{name:'← Till träffens sida'}).click();
+    await page.locator('#participant-view').waitFor({state:'visible'});
+    // TKL is no longer offered from the server's start page; its client is still served.
+    assert.equal(await page.getByRole('link', {name: 'TKL', exact: true}).count(), 0);
+    await page.goto(urls.eu + '/tkl/');
     await page.getByRole('heading', {name: 'Väntar på administratören'}).waitFor();
     assert.equal(await page.locator('main input, main select').count(), 0, 'Unassigned TKL cannot choose its station or login');
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('trainmeet-tkl.managed-client'))?.device_code);
@@ -124,15 +130,15 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(posts.filter(path => path === '/v1/auth/login').length, 0, 'Neither client has used admin login');
     assert.equal((await visitor.cookies()).length, 0, 'Guest clients do not receive administrator cookies');
     await page.locator('.demo-notice a[href="/#workspaces"]').click();
-    await page.locator('#workspace-picker').waitFor({state: 'visible'});
-    await page.getByRole('button', {name: 'TMBox', exact: true}).click();
+    await page.locator('#participant-view').waitFor({state: 'visible'});
+    await page.locator('#pv-virtual-card a[href="/tmbox/"]').click();
     await page.locator('.box h2').getByText('Charlottendahl',{exact:true}).waitFor();
     await admin.request.post(urls.eu + '/v1/devices/remove', {data: {device_id: box.client_id}});
     await page.waitForFunction(()=>document.querySelector('#connection').textContent.includes('inte ansluten'));
     assert.equal(posts.filter(path => path === '/v1/browser-clients').length, 2, 'Revoked box does not recreate itself automatically');
     assert.equal(await page.locator('.keypad button:not(:disabled)').count(), 0);
     assert.deepEqual(errors, []);
-    console.log('Public workspace tests passed: guest picker, protected admin, unique TMBox + admin assignment + revocation, local input, managed TKL assignment/revocation and isolated explicit demo with no server API calls.');
+    console.log('Public workspace tests passed: guest participant view, protected admin, unique TMBox + admin assignment + revocation, local input, managed TKL assignment/revocation and isolated explicit demo with no server API calls.');
   } catch (error) {
     console.error(diagnostics);
     if (page) {
