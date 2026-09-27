@@ -13,6 +13,12 @@ versionsnummer. En större fysisk display visar tills vidare 16×2-profilen.
 - `/tmbox-lab/`: isolerad provbänk med demodata per webbläsarsession. Samma
   skärm- och tangentlogik, men ingen åtkomst till träffens trafik eller databas.
 
+Båda webbsidorna använder Serverns UI-kit (`web/server-design.css`) runt boxen.
+Boxen själv – skal, display och knappsats – är låst i blocket `FRUSET` i
+`terminal16_web/style.css` och i `tests/tmbox_case_golden.css`. Den ska se ut
+som den fysiska boxen; ändra den bara när hårdvaran ändras. Se
+[TMBOX-WEBBKLIENT-DESIGN-2026-09-27.md](TMBOX-WEBBKLIENT-DESIGN-2026-09-27.md).
+
 På en internetexponerad server är publik klientregistrering avstängd som
 standard. `TRAINMEET_PUBLIC_CLIENT_ORIGIN=https://server.trainmeet.app`
 aktiverar den enbart för exakt angiven HTTPS-origin bakom betrodd lokal proxy.

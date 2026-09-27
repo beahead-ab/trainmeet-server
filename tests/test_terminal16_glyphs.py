@@ -60,6 +60,29 @@ class Terminal16GlyphTests(unittest.TestCase):
             pattern = rf"--{name}:\s*(#[0-9a-f]+)"
             self.assertEqual(re.search(pattern, pilot)[1], re.search(pattern, original)[1])
 
+    def test_tmbox_case_block_is_frozen(self):
+        # The pink shell, blue LCD and keypad look exactly like the physical
+        # TMBox. The page around it may follow the Server UI kit; the box may not
+        # change. Update tests/tmbox_case_golden.css only on a deliberate
+        # hardware-driven change.
+        root = Path(__file__).resolve().parents[1]
+        css = (root / "src/tmbox_gateway/terminal16_web/style.css").read_text()
+        start = css.index("/* ===== FRUSET: TMBox-skalet. Ändra inte. ===== */")
+        end = css.index("/* ===== slut FRUSET ===== */")
+        golden = (root / "tests/tmbox_case_golden.css").read_text()
+        self.assertEqual(css[start:end].strip(), golden.strip())
+        # Nothing after the frozen block may restyle the box's own parts.
+        page = css[end:]
+        for selector in ("tmbox-case", "lcd-frame", "lcd", "lcd-row", "lcd-cell", "keypad", "key"):
+            self.assertIsNone(re.search(rf"\.{selector}(?![\w-])", page), selector)
+
+    def test_tmbox_pages_load_the_server_ui_kit(self):
+        web = Path(__file__).resolve().parents[1] / "src/tmbox_gateway/terminal16_web"
+        for name in ("live.html", "index.html"):
+            html = (web / name).read_text()
+            self.assertLess(html.index("/assets/server-design.css"), html.index("style.css\""), name)
+            self.assertNotIn("style=\"", html, name)  # CSP: style-src 'self'
+
 
 if __name__ == "__main__":
     unittest.main()

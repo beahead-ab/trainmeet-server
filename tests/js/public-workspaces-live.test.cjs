@@ -105,7 +105,7 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('.keypad [data-key="#"]').click();
     await page.waitForFunction(()=>document.querySelector('.lcd').textContent.includes('Språk'));
     assert.equal((await page.request.get(urls.eu+'/v1/admin/users',{headers:{Authorization:`Bearer ${box.access_token}`}})).status(),403);
-    await page.getByRole('link',{name:'← Till träffens sida'}).click();
+    await page.getByRole('link',{name:'Träffens sida',exact:true}).click();
     await page.locator('#participant-view').waitFor({state:'visible'});
     // TKL is a separately hosted application. Its backend contract stays,
     // but bundled pages and assets must not survive a Server release.
