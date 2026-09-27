@@ -2810,9 +2810,15 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   let { positions, edges, viewBox } = topologyLayout(snapshot);
   target.classList.toggle("topology-tv", Boolean(options.tv));
   if (options.tv) {
-    const [vx,vy,vw,vh] = viewBox.split(/\s+/).map(Number), height = options.height || 680;
-    const scale = Math.min(1540/vw,(height-160)/vh);
-    positions = new Map([...positions].map(([id,p])=>[id,{x:(p.x-vx)*scale+(1840-vw*scale)/2,y:(p.y-vy)*scale+(height-vh*scale)/2-20}]));
+    // Fit the actual nodes, not the editor's padded canvas. Small layouts
+    // otherwise collapse to an unreadable cluster in the middle of a TV.
+    const points = [...positions.values()], height = options.height || 680;
+    const minX = Math.min(...points.map(p=>p.x)), maxX = Math.max(...points.map(p=>p.x));
+    const minY = Math.min(...points.map(p=>p.y)), maxY = Math.max(...points.map(p=>p.y));
+    const width = maxX-minX, depth = maxY-minY;
+    const scale = points.length > 1 ? Math.min(width ? 1480/width : Infinity, depth ? (height-180)/depth : Infinity) : 1;
+    const safeScale = Number.isFinite(scale) ? scale : 1;
+    positions = new Map([...positions].map(([id,p])=>[id,{x:(p.x-(minX+maxX)/2)*safeScale+920,y:(p.y-(minY+maxY)/2)*safeScale+height/2-30}]));
     viewBox = `0 0 1840 ${height}`;
   }
   target.setAttribute("viewBox", viewBox);
@@ -3142,7 +3148,7 @@ function renderGraph(snapshot) {
     const select=()=>{state.displaySelectedTrainNumber=state.displaySelectedTrainNumber===String(service.train_number)?null:String(service.train_number); document.querySelector("#display-train-select").value=state.displaySelectedTrainNumber||"";updateDisplayGraphSelection();renderDisplaySelection(snapshot);};
     group.addEventListener("click",select);group.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select();}});
     const visible = points.find(p=>p.minute+shift >= min && p.minute+shift <= max) || points[0];
-    group.append(svgElement("text", {x:Math.max(left+8,x(visible.minute+shift)+8), y:y(visible.station)-10, fill:colour, "font-size":26}, service.train_number));
+    group.append(svgElement("text", {x:Math.max(left+8,x(visible.minute+shift)+8), y:y(visible.station)+(visible.station===0?32:-10), fill:colour, "font-size":26}, service.train_number));
     trains.append(group);
   }
   svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top-24, y2:height-bottom, stroke:"#f2c230", "stroke-width":3}));

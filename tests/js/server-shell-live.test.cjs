@@ -129,6 +129,14 @@ const root = path.resolve(__dirname, '../..');
       await clockScreen.locator('#display-loading').waitFor({state:'hidden'});
       assert.equal(await clockScreen.locator('#screen-header').isVisible(),true);
       assert.equal(await clockScreen.locator('#screen-footer').isVisible(),true);
+      if(path==='topology'){
+        const bounds=await clockScreen.locator('#topology-svg .topology-name').evaluateAll(nodes=>nodes.map(n=>Number(n.getAttribute('x'))));
+        assert.ok(Math.max(...bounds)-Math.min(...bounds)>1000,'Two-station TV layout uses the available width');
+      }
+      if(path==='dashboard'){
+        const cards=await clockScreen.locator('#dashboard-view > *').evaluateAll(nodes=>nodes.map(n=>({top:n.getBoundingClientRect().top,bottom:n.getBoundingClientRect().bottom})));
+        assert.ok(cards[0].bottom<=cards[1].top,'Dashboard statistics do not overlap the map');
+      }
     }
     await screenContext.close();
     await page.goto(urls.eu+'/drift');

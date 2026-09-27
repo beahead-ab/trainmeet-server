@@ -186,6 +186,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     for(const [language, heading] of [['sv','Välj arbetsyta'],['da','Vælg arbejdsområde'],['nb','Velg arbeidsområde'],['en','Choose workspace'],['de','Arbeitsbereich auswählen']]){
       await page.goto('http://127.0.0.1:9999/installningar');
       await page.locator('[data-language-picker]').selectOption(language);
+      assert.equal(await page.locator('.server-settings-nav a[href="/installningar#farozon"]').textContent(),{sv:'Farozon',da:'Farezone',nb:'Faresone',en:'Danger zone',de:'Gefahrenbereich'}[language]);
       await page.goto('http://127.0.0.1:9999/#workspaces');
       await page.locator('#workspace-heading').filter({hasText:heading}).waitFor();
     }

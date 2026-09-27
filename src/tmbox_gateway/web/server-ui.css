@@ -256,7 +256,7 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .server-dashboard-bottom h3 { font-size: 26px; }
 .server-dashboard-bottom p { font-size: 24px; }
 .server-dashboard-bottom .server-event { font-size: 24px; padding: 8px 0; }
-#dashboard-view { grid-template-rows: 130px minmax(0,1fr) 245px; }
+#dashboard-view { grid-template-rows: 160px minmax(0,1fr) 245px; }
 @media (max-width: 600px) {
   .tm-clockrow__time { flex-basis: 100%; border-bottom: 1px solid var(--border); }
   .tm-clockrow__form { flex-basis: 100%; flex-wrap: wrap; min-width: 0; }

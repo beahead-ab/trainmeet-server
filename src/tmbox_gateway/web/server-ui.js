@@ -8,6 +8,10 @@
   const move = (selector, parent) => { const node = $(selector); if (node) parent.append(node); return node; };
   const mark = selector => $(selector)?.classList.add("legacy-internal");
   const t = text => globalThis.TrainMeetI18n.t(text);
+  const authored = (tag, className, source) => {
+    const node = make(tag, className, t(source)); node.dataset.tmText = source; return node;
+  };
+  const label = (node, source) => { node.dataset.tmText = source; node.textContent = t(source); };
   function inlineForm(id, parent) {
     const form = move(id, parent);
     form.classList.add("server-inline-form");
@@ -22,10 +26,10 @@
   }
   function card(title, id) {
     const node = make("section", "card section-card server-card"); node.id = id;
-    node.append(make("h2", "", t(title))); return node;
+    node.append(authored("h2", "", title)); return node;
   }
   function details(title, content) {
-    const d = make("details", "server-details"); d.append(make("summary", "", t(title)), content); return d;
+    const d = make("details", "server-details"); d.append(authored("summary", "", title), content); return d;
   }
 
   // Persistent header, with no second navigation system hidden behind a burger.
@@ -38,20 +42,20 @@
   const row = make("section", "card tm-clockrow server-clockrow"); row.id = "drift-clock";
   overview.prepend(row);
   const time = make("div", "tm-clockrow__time");
-  time.append(make("span", "tm-eyebrow", t("Träffklocka")));
+  time.append(authored("span", "tm-eyebrow", "Träffklocka"));
   move("#overview-clock", time).className = "tm-clockrow__big";
   move("#clock-state", time); move("#clock-source-status", time);
   row.append(time);
   const clockForm = inlineForm("#clock-control-form", row);
   clockForm.classList.add("tm-clockrow__form");
   const source = make("div", "server-source");
-  source.append(make("span", "tm-eyebrow", t("Klockkälla")));
+  source.append(authored("span", "tm-eyebrow", "Klockkälla"));
   move('[data-open-modal="clock-source-modal"]', source);
   clockForm.insertBefore(source, $("#local-clock-reason").closest("label"));
   move("#overview-clock-start", clockForm.querySelector(".clock-control-actions"));
   mark("#overview-clock-stop"); mark("#clock-adjust");
   const simulation = make("aside", "tm-clockrow__aside"); simulation.id = "drift-simulation";
-  simulation.append(make("span", "tm-eyebrow", t("Simulering")));
+  simulation.append(authored("span", "tm-eyebrow", "Simulering"));
   move("#simulation-summary", simulation);
   const actions = make("div", "server-actions");
   for (const id of ["simulation-start-open", "simulation-pause", "simulation-reset-open", "simulation-finish-open"]) move(`#${id}`, actions);
@@ -63,7 +67,7 @@
   row.after(simDetails);
   move("#device-management", overview).classList.remove("admin-section-panel", "hidden");
   simDetails.after($("#device-management"));
-  $("#device-management h2").textContent = t("Stationer och klienter");
+  label($("#device-management h2"), "Stationer och klienter");
   $("#device-management").querySelectorAll(".eyebrow, .compact-heading p").forEach(n => n.classList.add("legacy-internal"));
   const network = make("p", "server-network"); network.id = "client-network";
   $("#device-management .section-heading").append(network);
@@ -87,8 +91,8 @@
   $("#settings-heading p").textContent = "";
   const nav = make("nav", "server-settings-nav"); nav.setAttribute("aria-label", t("Inställningar"));
   const targets = [["traff", "Träff och Cloud"], ["server", "Den här servern"], ["anvandare", "Användare"], ["skarmar", "Skärmar och klocka"], ["sprak", "Språk"], ["uppdatering", "Programuppdatering"], ["farozon", "Farozon"]];
-  for (const [id, label] of targets) { const a = make("a", "tm-seg", t(label)); a.href = `/installningar#${id}`; nav.append(a); }
-  const back = make("a", "tm-btn", t("← Tillbaka till driften")); back.href = "/drift"; nav.append(back);
+  for (const [id, label] of targets) { const a = authored("a", "tm-seg", label); a.href = `/installningar#${id}`; nav.append(a); }
+  const back = authored("a", "tm-btn", "← Tillbaka till driften"); back.href = "/drift"; nav.append(back);
   $("#settings-heading").append(nav);
   const columns = make("div", "server-settings-columns"); const left = make("div"); const right = make("div"); columns.append(left, right); settings.append(columns);
   const sections = [["#sync-and-devices", left, "traff"], ["#server-identity-settings", left, "server"], ["#server-system-settings", left, "farozon"], ["#admin-users-settings", right, "anvandare"], [".clock-control-card", right, "skarmar"], ["#language-settings", right, "sprak"], ["#software-update-settings", right, "uppdatering"]];
@@ -97,29 +101,29 @@
     const link = make("span", "server-anchor"); link.id = anchor; section.prepend(link);
   }
   mark("#admin-access-settings");
-  $("#sync-and-devices h2").textContent = t("Träff och Cloud");
+  label($("#sync-and-devices h2"), "Träff och Cloud");
   inlineForm("#cloud-auto-form", $("#sync-and-devices")); mark("#cloud-auto-edit");
   $("#cloud-auto-form > p").classList.add("legacy-internal");
   const identity = $("#server-identity-settings");
   inlineForm("#server-identity-form", identity);
   mark('[data-open-modal="server-identity-form-modal"]');
   const networkSettings = make("p", "server-network"); networkSettings.id = "server-network"; identity.append(networkSettings);
-  const danger = $("#server-system-settings"); danger.prepend(make("h2", "", t("Farozon")));
+  const danger = $("#server-system-settings"); danger.prepend(authored("h2", "", "Farozon"));
   const appearance = $(".clock-control-card");
-  appearance.querySelector("h2").textContent = t("Skärmar och klocka");
+  label(appearance.querySelector("h2"), "Skärmar och klocka");
   appearance.querySelectorAll(".eyebrow, .compact-heading p, .modal-launch").forEach(n => n.classList.add("legacy-internal"));
   inlineForm("#clock-appearance-form", appearance);
   inlineForm("#connection-badge-form", appearance);
   const code = move("#connection-badge-code", appearance); code.classList.add("server-network");
-  const workspace = make("a", "tm-btn", t("Byt arbetsyta")); workspace.href = "/#workspaces"; $("#language-settings").append(workspace);
-  $("#users-invite-open").textContent = t("+ Bjud in");
+  const workspace = authored("a", "tm-btn", "Byt arbetsyta"); workspace.href = "/#workspaces"; $("#language-settings").append(workspace);
+  label($("#users-invite-open"), "+ Bjud in");
 
   // Documentation is separate from the operator client. No legacy emulator is
   // started by merely visiting Help.
   const help = card("Hjälp", "help-view"); help.classList.add("view-panel", "hidden");
   const helpLinks = make("div", "server-actions");
   for (const [path, label] of [["/tmbox/", "Öppna TMBox"], ["/tmbox-lab/", "TMBox-provbänk"], ["/drift", "Tillbaka till driften"]]) {
-    const a = make("a", "tm-btn", t(label)); a.href = path; helpLinks.append(a);
+    const a = authored("a", "tm-btn", label); a.href = path; helpLinks.append(a);
   }
   help.append(helpLinks);
   for (const [id, label] of [["#tmbox-pane-floden", "Flöden"], ["#tmbox-pane-skarmar", "Skärmkatalog"], ["#tmbox-pane-referens", "Referens"]]) {
@@ -130,7 +134,7 @@
   const api = { make, move, t, context: null, info: null, presentation: null };
   const territoryScreen = make("div", "sc-territories hidden"); territoryScreen.id = "territories-view"; $("#display-stage").append(territoryScreen);
   const territoryCheck = make("label"); const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.value = "territories";
-  territoryCheck.append(checkbox, document.createTextNode(t("Områdestavla"))); $("#connection-badge-screens").append(territoryCheck);
+  territoryCheck.append(checkbox, authored("span", "", "Områdestavla")); $("#connection-badge-screens").append(territoryCheck);
   api.refreshHeader = () => {
     const context = api.context || {}, meet = context.selected_meet, update = context.cloud_update || {};
     const us = context.operating_region === "us"; document.body.dataset.region = us ? "us" : "eu";
@@ -180,7 +184,7 @@
     host.replaceChildren();
     const table = make("table", "tm-table");
     const head = make("thead"), heading = make("tr");
-    for (const label of ["Station", "Vänster", "Höger", "TMBox-visning"]) heading.append(make("th", "", t(label)));
+    for (const label of ["Station", "Vänster", "Höger", "TMBox-visning"]) heading.append(authored("th", "", label));
     head.append(heading); table.append(head);
     const body = make("tbody"); table.append(body);
     const all = [...rows.children]; all.slice(0, 5).forEach(row => body.append(row)); host.append(table);
@@ -199,14 +203,14 @@
     const delayed = moving.filter(p => (snapshot.routes || []).some(r => r.train_number === p.train_number && r.station_id === p.to_station_id && r.arrival_time && r.arrival_time < now));
     const stats = $("#drift-traffic-stats"); stats.replaceChildren();
     for (const [count, label] of [[moving.length, "På linjen"], [positions.filter(p => !p.connection_id && p.station_id).length, "På station"], [delayed.length, "Sena ankomster"]]) {
-      const stat = make("div"); stat.append(make("strong", "", String(count)), make("span", "", t(label))); stats.append(stat);
+      const stat = make("div"); stat.append(make("strong", "", String(count)), authored("span", "", label)); stats.append(stat);
     }
-    const events = $("#drift-upcoming"); events.replaceChildren(make("strong", "", t("Kommande enligt tidtabell")));
+    const events = $("#drift-upcoming"); events.replaceChildren(authored("strong", "", "Kommande enligt tidtabell"));
     for (const row of upcoming) {
       const name = snapshot.stations?.find(s => s.id === row.station_id)?.name || row.station_id;
       const entry = make("div", "server-event"); entry.append(make("span", "", row.departure_time || row.arrival_time), make("b", "", row.train_number), make("span", "", `${name} · ${t(row.departure_time ? "Avgång" : "Ankomst")}`)); events.append(entry);
     }
-    if (!upcoming.length) events.append(make("p", "", t("Inga fler planerade händelser idag.")));
+    if (!upcoming.length) events.append(authored("p", "", "Inga fler planerade händelser idag."));
   };
   api.initDisplay = () => {
     document.body.classList.add("server-display");
@@ -242,17 +246,17 @@
   };
   api.us = (data, screen = false) => {
     const host = screen ? $("#territories-view") : $("#us-runtime-summary");
-    const signature = JSON.stringify(data || {});
+    const signature = globalThis.TrainMeetI18n.getLanguage() + JSON.stringify(data || {});
     if (host.dataset.signature === signature) return;
     host.dataset.signature = signature; host.replaceChildren();
-    if (!data) { host.append(make("p", "", t("Områdestavlan gäller en US-träff."))); return; }
+    if (!data) { host.append(authored("p", "", "Områdestavlan gäller en US-träff.")); return; }
     if (!screen) {
-      const intro = make("div", "server-actions"); intro.append(make("h2", "", t("US · Trafikledning")));
-      const link = make("a", "tm-btn tm-btn--primary", t("Öppna Dispatcher")); link.href = "/us/dispatcher"; intro.append(link); host.append(intro);
-      host.append(make("p", "", t("Körtillstånd utfärdas och bekräftas av Dispatcher. Inga tillstånd skapas automatiskt.")));
+      const intro = make("div", "server-actions"); intro.append(authored("h2", "", "US · Trafikledning"));
+      const link = authored("a", "tm-btn tm-btn--primary", "Öppna Dispatcher"); link.href = "/us/dispatcher"; intro.append(link); host.append(intro);
+      host.append(authored("p", "", "Körtillstånd utfärdas och bekräftas av Dispatcher. Inga tillstånd skapas automatiskt."));
     }
-    const infra = make("section", "server-us-infra"); infra.append(make("h3", "", t("Territorier")));
-    if (!data.active) infra.append(make("p", "", t("Ingen US-körning är aktiv. Starta körningen i Dispatcher.")));
+    const infra = make("section", "server-us-infra"); infra.append(authored("h3", "", "Territorier"));
+    if (!data.active) infra.append(authored("p", "", "Ingen US-körning är aktiv. Starta körningen i Dispatcher."));
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", `0 0 1500 ${Math.max(160, (data.territories || []).length * 170)}`); svg.setAttribute("role", "img"); svg.setAttribute("aria-label", t("Territoriediagram"));
     const draw = (tag, attrs, text) => { const n = document.createElementNS(svg.namespaceURI, tag); Object.entries(attrs).forEach(([k,v])=>n.setAttribute(k,v)); if (text != null) n.textContent = text; svg.append(n); return n; };
@@ -275,11 +279,11 @@
     infra.append(svg); host.append(infra);
     const sections = make("div", "server-grid-two"); host.append(sections);
     const table = (title, headings, rows) => {
-      const box = make("section", "server-us-card"); box.append(make("h3", "", t(title)));
+      const box = make("section", "server-us-card"); box.append(authored("h3", "", title));
       const tbl = make("table", "tm-table"), head = make("tr"); headings.forEach(h=>head.append(make("th","",t(h))));
       const thead = make("thead"); thead.append(head); tbl.append(thead); const body = make("tbody");
       rows.forEach(values=>{const tr=make("tr"); values.forEach(v=>tr.append(make("td","",String(v ?? "—")))); body.append(tr);}); tbl.append(body); box.append(tbl);
-      if (!rows.length) box.append(make("p", "", t("Inga aktuella poster."))); sections.append(box);
+      if (!rows.length) box.append(authored("p", "", "Inga aktuella poster.")); sections.append(box);
     };
     const symbol = id => (data.runs || []).find(r=>r.id===id)?.symbol || id;
     const warrants = (data.warrants || []).filter(w=>["active","release_requested"].includes(w.status));
