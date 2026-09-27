@@ -3114,7 +3114,7 @@ function renderGraph(snapshot) {
   const defs = svgElement("defs"), clip = svgElement("clipPath", {id: "screen-graph-clip"});
   clip.append(svgElement("rect", {x: left, y: top - 24, width: width - left, height: height - top - bottom + 48})); defs.append(clip); svg.append(defs);
   for (let minute = Math.ceil(min / 30) * 30; minute <= max; minute += 30) {
-    svg.append(svgElement("line", {x1:x(minute), x2:x(minute), y1:top - 24, y2:height - bottom, class:"graph-grid"}));
+    svg.append(svgElement("line", {x1:x(minute), x2:x(minute), y1:top - 24, y2:height - bottom, class:"graph-grid", "stroke-dasharray":minute%60?"6 8":"none"}));
     const normalized = (Math.floor(minute) % 1440 + 1440) % 1440;
     svg.append(svgElement("text", {x:x(minute), y:height - 12, "text-anchor":"middle", class:"sc-graph-label"}, `${String(Math.floor(normalized/60)).padStart(2,"0")}:${String(normalized%60).padStart(2,"0")}`));
   }
@@ -3124,7 +3124,7 @@ function renderGraph(snapshot) {
     svg.append(svgElement("text", {x:10, y:y(i)+24, class:"sc-graph-code"}, station.code || ""));
   });
   const trains = svgElement("g", {"clip-path":"url(#screen-graph-clip)"});
-  const active = new Set((snapshot.train_positions || []).map(p => String(p.train_number)));
+  const active = new Set((snapshot.train_positions || []).filter(p=>p.connection_id).map(p => String(p.train_number)));
   for (const service of graphServices(snapshot)) {
     const points = servicePoints({...service, stops:[...service.stops].sort((a,b)=>a.stop_order-b.stop_order)}, stationIndex);
     if (points.length < 2) continue;
@@ -3134,11 +3134,20 @@ function renderGraph(snapshot) {
     const shift = Math.round((now - centre) / 1440) * 1440;
     if (points.at(-1).minute + shift < min || points[0].minute + shift > max) continue;
     const colour = active.has(String(service.train_number)) ? "#7fa3ea" : "#737373";
-    trains.append(svgElement("polyline", {points:points.map(p=>`${x(p.minute+shift)},${y(p.station)}`).join(" "), fill:"none", stroke:colour, "stroke-width":3}));
+    const group = svgElement("g",{class:"graph-train-group",role:"button",tabindex:0,"aria-label":`Tåg ${service.train_number}`});
+    group.dataset.trainNumber=String(service.train_number);
+    const line = points.map(p=>`${x(p.minute+shift)},${y(p.station)}`).join(" ");
+    group.append(svgElement("polyline", {points:line, fill:"none", stroke:colour, "stroke-width":active.has(String(service.train_number))?6:3}));
+    group.append(svgElement("polyline",{points:line,fill:"none",stroke:"transparent","stroke-width":20}));
+    const select=()=>{state.displaySelectedTrainNumber=state.displaySelectedTrainNumber===String(service.train_number)?null:String(service.train_number); document.querySelector("#display-train-select").value=state.displaySelectedTrainNumber||"";updateDisplayGraphSelection();renderDisplaySelection(snapshot);};
+    group.addEventListener("click",select);group.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select();}});
     const visible = points.find(p=>p.minute+shift >= min && p.minute+shift <= max) || points[0];
-    trains.append(svgElement("text", {x:Math.max(left+8,x(visible.minute+shift)+8), y:y(visible.station)-10, fill:colour, "font-size":26}, service.train_number));
+    group.append(svgElement("text", {x:Math.max(left+8,x(visible.minute+shift)+8), y:y(visible.station)-10, fill:colour, "font-size":26}, service.train_number));
+    trains.append(group);
   }
   svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top-24, y2:height-bottom, stroke:"#f2c230", "stroke-width":3}));
+  svg.append(svgElement("text",{x:x(now),y:top-35,"text-anchor":"middle",fill:"#f2c230","font-size":28},currentClockTime(snapshot).slice(0,5)));
+  updateDisplayGraphSelection();
 }
 
 function renderScrollableGraph(snapshot) {

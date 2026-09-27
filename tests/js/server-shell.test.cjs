@@ -9,7 +9,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) });
   try {
-    const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+    const page = await browser.newPage({ locale: 'sv-SE', viewport: { width: 1200, height: 900 } });
     const errors = [];
     const calls = [];
     const screenshot = async name => {
