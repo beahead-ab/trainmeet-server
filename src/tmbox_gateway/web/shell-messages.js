@@ -2,6 +2,21 @@
  * never translation keys. Uses the existing TrainMeet localization runtime. */
 (() => {
   const rows = [
+    ['Äldre klienter med fast layout behåller Cloud-placeringen. Den nya TMBox-vyn använder ditt val.', 'Older fixed-layout clients retain the Cloud placement. The new TMBox view uses your choice.', 'Ældre klienter med fast layout beholder Cloud-placeringen. Den nye TMBox-visning bruger dit valg.', 'Eldre klienter med fast layout beholder Cloud-plasseringen. Den nye TMBox-visningen bruker valget ditt.', 'Ältere Clients mit festem Layout behalten die Cloud-Anordnung. Die neue TMBox-Ansicht verwendet Ihre Auswahl.'],
+    ['TMBox-placering', 'TMBox placement', 'TMBox-placering', 'TMBox-plassering', 'TMBox-Anordnung'],
+    ['Vänster', 'Left', 'Venstre', 'Venstre', 'Links'],
+    ['Höger', 'Right', 'Højre', 'Høyre', 'Rechts'],
+    ['Följ Cloud', 'Follow Cloud', 'Følg Cloud', 'Følg Cloud', 'Cloud folgen'],
+    ['Följ Cloud för alla sträckor', 'Follow Cloud for all lines', 'Følg Cloud for alle strækninger', 'Følg Cloud for alle strekninger', 'Cloud für alle Strecken folgen'],
+    ['Vänster och höger på stationens boxar. Lokala val behålls när Cloud uppdaterar träffen; tågens destinationer ändras inte.', 'Left and right on the station’s boxes. Local choices survive Cloud updates; train destinations do not change.', 'Venstre og højre på stationens bokse. Lokale valg bevares ved Cloud-opdateringer; togenes destinationer ændres ikke.', 'Venstre og høyre på stasjonens bokser. Lokale valg beholdes ved Cloud-oppdateringer; togenes destinasjoner endres ikke.', 'Links und rechts auf den Boxen des Bahnhofs. Lokale Einstellungen bleiben bei Cloud-Updates erhalten; Zugziele ändern sich nicht.'],
+    ['Tidtabellens kontrolluppgifter', 'Published timetable findings', 'Køreplanens kontroloplysninger', 'Ruteplanens kontrollopplysninger', 'Prüfergebnisse des Fahrplans'],
+    ['Uppgifter från den aktiva Cloud-versionen. Rättelser görs i Cloud; detta är inte en kontroll av pågående trafik.', 'Findings from the active Cloud version. Make corrections in Cloud; this does not check live traffic.', 'Oplysninger fra den aktive Cloud-version. Rettelser foretages i Cloud; dette kontrollerer ikke den igangværende trafik.', 'Opplysninger fra den aktive Cloud-versjonen. Rettelser gjøres i Cloud; dette kontrollerer ikke pågående trafikk.', 'Ergebnisse aus der aktiven Cloud-Version. Korrekturen erfolgen in Cloud; der laufende Verkehr wird hier nicht geprüft.'],
+    ['Den här Cloud-versionen innehåller inga kontrolluppgifter.', 'This Cloud version contains no findings metadata.', 'Denne Cloud-version indeholder ingen kontroloplysninger.', 'Denne Cloud-versjonen inneholder ingen kontrollopplysninger.', 'Diese Cloud-Version enthält keine Prüfergebnisse.'],
+    ['{count} noterade uppgifter', '{count} recorded findings', '{count} registrerede oplysninger', '{count} registrerte opplysninger', '{count} erfasste Ergebnisse'],
+    ['Inga konflikter eller observationer noterade.', 'No conflicts or observations recorded.', 'Ingen konflikter eller observationer registreret.', 'Ingen konflikter eller observasjoner registrert.', 'Keine Konflikte oder Beobachtungen erfasst.'],
+    ['Konflikt', 'Conflict', 'Konflikt', 'Konflikt', 'Konflikt'],
+    ['Observation', 'Observation', 'Observation', 'Observasjon', 'Beobachtung'],
+    ['Uppgift', 'Finding', 'Oplysning', 'Opplysning', 'Ergebnis'],
     ['Tilldela station', 'Assign station', 'Tildel station', 'Tildel stasjon', 'Bahnhof zuweisen'],
     ['Väntar på station', 'Awaiting station assignment', 'Afventer station', 'Venter på stasjon', 'Wartet auf Bahnhof'],
     ['Återanslut borttagen klient', 'Reconnect removed client', 'Tilslut fjernet klient igen', 'Koble til fjernet klient igjen', 'Entfernten Client erneut verbinden'],

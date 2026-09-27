@@ -31,6 +31,13 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     let releaseIdentity;
     let holdIdentity = false;
     let serverName = 'Demo server';
+    let placementSide = 'left';
+    let placementOverride = false;
+    let placementFails = true;
+    const presentation = () => ({supported: region === 'eu', publication_id: 'pub-1', config_version: 2,
+      findings: [{level: 'conflict', rule: 'A', message: '<img src=x onerror=alert(1)> Exempel'}],
+      stations: [{station_id: 'a', code: 'A', name: 'Alpha', connections: [
+        {connection_id: 'a-b', other_station_code: 'B', other_station_name: 'Beta', default_side: 'left', side: placementSide, overridden: placementOverride}]}]});
     const user = { user_id: 'u-1', username: 'admin', role: 'owner', invitation_pending: false };
     const runtime = { configured: true, linked: true, cloud_auto_sync: true, meet_name: 'Demo meet', active_day: 'Dagl', publication_id: 'pub-1', server_name: 'Demo server', central_url: 'https://cloud.trainmeet.app/config' };
     const clock = () => ({ configured: true, running, time: '06:00:00', speed: 4, source: clockSettings.source,
@@ -52,6 +59,15 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
             cloudAuto = JSON.parse(request.postData()).enabled;
             data = {enabled: cloudAuto}; break;
           case '/v1/runtime': data = runtime; break;
+          case '/v1/cloud/presentation': data = presentation(); break;
+          case '/v1/cloud/display-placement':
+            if (placementFails) return route.fulfill({status: 409, contentType: 'application/json', body: JSON.stringify({message: 'Test: konfigurationen ändrades'})});
+            const placementBody = JSON.parse(request.postData());
+            assert.equal(placementBody.publication_id, 'pub-1');
+            assert.equal(placementBody.station_id, 'a');
+            placementSide = placementBody.sides['a-b'] || 'left';
+            placementOverride = Boolean(placementBody.sides['a-b']);
+            data = presentation(); break;
           case '/v1/info': data = { gateway_id: serverName, server_name: serverName, traffic_session_name: 'Demo meet', runtime }; break;
           case '/v1/setup/server':
             if (holdIdentity) await new Promise(resolve => { releaseIdentity = resolve; });
@@ -208,7 +224,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     const userTable = await page.locator('#users-table').boundingBox();
     assert.ok(addUser.y + addUser.height <= userTable.y, 'Add user is above, not stuck against the bottom row');
     const modalIds = await page.locator('dialog.admin-modal').evaluateAll(nodes => nodes.map(node => node.id));
-    assert.equal(modalIds.length, 18);
+    assert.equal(modalIds.length, 19);
+    assert.ok(modalIds.includes('display-placement-modal'));
     assert.ok(modalIds.includes('simulation-start-modal'));
     assert.ok(modalIds.includes('simulation-confirm-modal'));
     assert.ok(modalIds.includes('tmbox-language-modal'));
@@ -378,7 +395,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.goto('http://127.0.0.1:9999/#settings');
     await page.locator('#users-rows button').waitFor();
     await page.locator('[data-language-picker]').selectOption('de');
-    const overflow = await page.evaluate(() => ({ body: document.documentElement.scrollWidth, width: innerWidth }));
+    const overflow = await page.evaluate(() => ({ body: document.documentElement.scrollWidth, width: innerWidth,
+      elements: [...document.querySelectorAll('body *')].filter(el => el.getBoundingClientRect().right > innerWidth + 1).slice(0, 12).map(el => el.id || el.className || el.tagName) }));
     assert.ok(overflow.body <= overflow.width + 1, JSON.stringify(overflow));
     await page.locator('.device-reconnect > summary').click();
     await page.locator('[data-open-modal="device-form-modal"]').click();
@@ -444,6 +462,33 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       await checkClientReadability(6);
     }
     await screenshot('mobile-connected-clients');
+    await page.locator('#display-placement-rows button').click();
+    const placementDialog = page.locator('#display-placement-modal');
+    await placementDialog.waitFor();
+    await screenshot('placement-mobile');
+    await page.setViewportSize({width: 1200, height: 900});
+    await screenshot('placement-desktop');
+    await page.setViewportSize({width: 360, height: 900});
+    const placementSelect = page.locator('#display-placement-fields select');
+    assert.equal(await placementSelect.inputValue(), '');
+    await placementSelect.selectOption('right');
+    await placementDialog.locator('[type="submit"]').click();
+    await placementDialog.locator('.form-message').filter({hasText: 'konfigurationen ändrades'}).waitFor();
+    assert.equal(await placementDialog.isVisible(), true);
+    assert.equal(await placementSelect.inputValue(), 'right');
+    placementFails = false;
+    await placementDialog.locator('[type="submit"]').click();
+    await placementDialog.waitFor({state: 'hidden'});
+    assert.equal(placementSide, 'right');
+    assert.equal(await page.locator('#display-placement-rows button').evaluate(el => el === document.activeElement), true);
+    await page.locator('#display-placement-rows button').click();
+    await page.locator('#display-placement-defaults').click();
+    assert.equal(placementSide, 'right', 'Reset is a draft until Save');
+    await placementDialog.locator('[type="submit"]').click();
+    await placementDialog.waitFor({state: 'hidden'});
+    assert.equal(placementSide, 'left');
+    assert.equal(await page.locator('#published-findings-list img').count(), 0);
+    assert.match(await page.locator('#published-findings-list').textContent(), /<img/);
     region = 'us';
     await page.goto('http://127.0.0.1:9999/#workspaces');
     await page.reload();

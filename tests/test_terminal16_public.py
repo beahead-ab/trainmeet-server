@@ -148,6 +148,23 @@ class PublicHTTPTests(unittest.TestCase):
         self.assertEqual(len(self.server.sessions.sessions), 1)
         self.assertEqual(len(self.state(cookie)["audit"]), 1)
 
+    def test_placement_is_session_local_and_requires_same_origin_and_cookie(self):
+        first, second = self.session(), self.session()
+        before = self.state(second)["placement"]
+        placement = self.state(first)["placement"]
+        body = {"epoch": placement["epoch"], "revision": placement["revision"],
+                "stations": {"mun": {}, "cda": {"west": "right"}, "va": {}}}
+        self.assertEqual(self.request("/api/display-placement", body=body)[0], 401)
+        self.assertEqual(self.request("/api/display-placement", cookie=first, body=body,
+                                      headers={"Origin": "https://elsewhere.example"})[0], 403)
+        self.assertEqual(self.request("/api/display-placement", cookie=first, body=body)[0], 200)
+        self.assertEqual(self.state(second)["placement"], before)
+        saved = self.state(first)["placement"]
+        cda = next(station for station in saved["stations"] if station["station_id"] == "cda")
+        self.assertEqual(cda["connections"][0]["side"], "right")
+        self.assertEqual(self.request(cookie=first)[0], 200)
+        self.assertEqual(self.state(first)["placement"], saved)
+
     def test_cookie_less_api_and_forged_cookie_are_rejected(self):
         for cookie in (None, f"{COOKIE}=unknown"):
             self.assertEqual(self.request("/api/state", cookie=cookie)[0], 401)

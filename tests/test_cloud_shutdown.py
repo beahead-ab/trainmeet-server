@@ -58,7 +58,8 @@ class CloudShutdownTests(CloudDeliveryFixture):
                 return CentralRuntimeManifest(result.publication_id, result.published_at, result.package_checksum, True)
             return result
 
-        def wait(*_args):
+        def wait(*_args, **heartbeat):
+            self.assertEqual(heartbeat['running_version'], 'cloud-first')
             started.set()
             self.assertTrue(release.wait(2))
             return CentralRuntimeManifest("cloud-first", "", "", True)

@@ -3,6 +3,19 @@ from .device_ui import LANGUAGES, text as legacy_text
 
 # Swedish | English | Danish | Norwegian | German. LCD hints <= 11 cells.
 COPY = """Nr# A:Kö|No# A:Q|Nr# A:Kø|Nr# A:Kø|Nr# A:Q
+B:Akt{count} C/D|B:Act{count} C/D|B:Akt{count} C/D|B:Akt{count} C/D|B:Akt{count} C/D
+A:K{count} B:Akt|A:Q{count} B:Act|A:K{count} B:Akt|A:K{count} B:Akt|A:Q{count} B:Akt
+#Avg C/D|#Dep C/D|#Afg C/D|#Avg C/D|#Ab C/D
+C/D B:Öv|C/D B:Home|C/D B:Over|C/D B:Over|C/D B:Alle
+#Avg|#Dep|#Afg|#Avg|#Ab
+#In|#In|#Ind|#Inn|#An
+INGA AKTIVA TÅG|NO ACTIVE TRAINS|INGEN AKTIVE TOG|INGEN AKTIVE TOG|KEINE AKTIVEN
+Visa aktiva tåg|Show active trains|Vis aktive tog|Vis aktive tog|Aktive Züge anzeigen
+Aktiva tåg ({count})|Active trains ({count})|Aktive tog ({count})|Aktive tog ({count})|Aktive Züge ({count})
+Föregående aktiva tåg|Previous active train|Forrige aktive tog|Forrige aktive tog|Vorheriger aktiver Zug
+Nästa aktiva tåg|Next active train|Næste aktive tog|Neste aktive tog|Nächster aktiver Zug
+Aktivt tåg {position}/{count}|Active train {position}/{count}|Aktivt tog {position}/{count}|Aktivt tog {position}/{count}|Aktiver Zug {position}/{count}
+Ingen vald aktiv rörelse. C/D väljer; B visar översikten.|No active movement selected. C/D selects; B shows overview.|Ingen aktiv bevægelse valgt. C/D vælger; B viser oversigt.|Ingen aktiv bevegelse valgt. C/D velger; B viser oversikt.|Keine aktive Fahrt gewählt. C/D wählt; B zeigt die Übersicht.
 A:Kö #Visa|A:Q #Show|A:Kø #Vis|A:Kø #Vis|A:Q #Zeig
 #OK *=Bak|#OK *=Back|#OK *=Ret|#OK *=Ret|#OK *=Zur
 #Ja *Nej|#Yes *No|#Ja *Nej|#Ja *Nei|#Ja *Nein
@@ -47,7 +60,8 @@ Visa väntande förfrågningar|Show pending requests|Vis forespørgsler|Vis fore
 Visa kommande tåg|Show upcoming trains|Vis kommende tog|Vis kommende tog|Kommende Züge
 Föregående tåg|Previous train|Forrige tog|Forrige tog|Vorheriger Zug
 Nästa tåg|Next train|Næste tog|Neste tog|Nächster Zug
-Nästa översiktssida|Next overview page|Næste oversigt|Neste oversikt|Nächste Übersicht
+B:Akt{count}|B:Act{count}|B:Akt{count}|B:Akt{count}|B:Akt{count}
+A{count} B:Akt|A{count} B:Act|A{count} B:Akt|A{count} B:Akt|A{count} B:Akt
 Översikt utan trafikändring|Overview without traffic change|Oversigt uden trafikændring|Oversikt uten trafikkendring|Übersicht ohne Änderung
 Föregående förfrågan|Previous request|Forrige forespørgsel|Forrige forespørsel|Vorherige Anfrage
 Nästa förfrågan|Next request|Næste forespørgsel|Neste forespørsel|Nächste Anfrage

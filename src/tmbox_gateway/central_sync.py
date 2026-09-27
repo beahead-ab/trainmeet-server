@@ -96,12 +96,15 @@ def fetch_linked_runtime(
     endpoint_url: str = DEFAULT_RUNTIME_PUBLICATION_URL,
     *,
     manifest_only: bool = False,
+    name: str | None = None,
+    running_version: str | None = None,
     timeout: float = 20,
 ) -> CentralRuntimeDownload | CentralRuntimeManifest:
     token = link_token.strip()
     if not token:
         raise CentralSyncError("Servern är inte kopplad till en central träff")
     query = {"token": token}
+    query.update(_heartbeat(name, running_version))
     if manifest_only:
         query["manifest"] = "1"
     endpoint_url = canonical_runtime_url(endpoint_url)
@@ -128,12 +131,13 @@ def fetch_linked_runtime(
 
 
 def wait_for_runtime_change(link_token: str, endpoint_url: str, publication_id: str,
-                            *, wait_seconds: int = 25) -> CentralRuntimeManifest:
+                            *, wait_seconds: int = 25, name: str | None = None,
+                            running_version: str | None = None) -> CentralRuntimeManifest:
     """An outbound, bounded notification request, compatible with old Cloud."""
     wait_seconds = min(25, max(0, wait_seconds))
     endpoint_url = canonical_runtime_url(endpoint_url)
     query = urlencode({"token": link_token, "manifest": "1", "after": publication_id,
-                       "wait": wait_seconds})
+                       "wait": wait_seconds, **_heartbeat(name, running_version)})
     separator = "&" if "?" in endpoint_url else "?"
     payload = _read_json(Request(f"{endpoint_url}{separator}{query}",
                         headers={"Accept": "application/json", "User-Agent": "TrainMeet-Server"}),
@@ -142,6 +146,12 @@ def wait_for_runtime_change(link_token: str, endpoint_url: str, publication_id: 
         raise CentralSyncError("Cloud skickade ingen publiceringsnotifiering")
     return CentralRuntimeManifest(str(payload["publication_id"]), str(payload.get("published_at", "")),
                                  str(payload.get("package_checksum", "")), payload.get("wait_supported") is True)
+
+
+def _heartbeat(name: str | None, running_version: str | None) -> dict[str, str]:
+    # The running publication ID is deliberately NOT the notification cursor,
+    # device config generation or software version. Cloud resolves its ordinal.
+    return {"name": (name or "").strip()[:80], "running_version": running_version or ""}
 
 
 def _read_json(request: Request, *, timeout: float) -> dict[str, Any]:

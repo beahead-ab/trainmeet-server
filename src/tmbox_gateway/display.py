@@ -74,12 +74,12 @@ def render_panel(
         other_code = config.stations[other_id].code[:3].upper()
         tokens[key] = _slot_token(key, panel.station_id, other_code, runtime, panel=panel)
 
-    positions = {panel.slot_position(key): token for key, token in tokens.items()}
-    line1 = fit_line(positions[(1, "left")], positions[(1, "right")])
+    positions = {panel.slot_position(key): token for key, token in tokens.items() if token}
+    line1 = fit_line(positions.get((1, "left"), ""), positions.get((1, "right"), ""))
     # The idle row shows meeting time, so the caller passes the live clock.
     # Without one the publication start time is the only honest fallback.
-    line2_right = positions[(2, "right")] or (clock_time or config.clock_time)[:5]
-    line2 = fit_line(positions[(2, "left")], line2_right)
+    line2_right = positions.get((2, "right")) or (clock_time or config.clock_time)[:5]
+    line2 = fit_line(positions.get((2, "left"), ""), line2_right)
     return line1, line2
 
 

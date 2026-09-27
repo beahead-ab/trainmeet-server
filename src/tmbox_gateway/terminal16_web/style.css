@@ -181,3 +181,27 @@ button:focus-visible { outline: 3px solid #ba744e; outline-offset: 3px; }
   .box-heading { flex-wrap: wrap; }
   .keypad { gap: 10px 8px; padding: 14px 10px; }
 }
+/* Test-harness controls only. The live terminal has no placement editor. */
+.placement-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; margin: 1rem 0; }
+.placement-controls .secondary { width: auto; margin: 0; }
+.placement-controls p { margin: 0; font-size: .9rem; }
+#placement-status:empty, #placement-error:empty { display: none; }
+#placement-dialog { width: min(36rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); box-sizing: border-box; overflow: auto; border: 1px solid #ddd9d2; border-radius: 1rem; padding: 1.25rem; color: #28332f; background: #fffefa; }
+#placement-dialog::backdrop { background: rgb(15 23 22 / 55%); }
+#placement-form header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+#placement-form h2 { margin: 0; font-size: 1.3rem; }
+#placement-form button, #placement-form select { font: inherit; min-height: 2.75rem; border-radius: .6rem; border: 1px solid #bdbbb5; padding: .45rem .75rem; background: #fff; color: inherit; }
+#placement-close { flex: 0 0 2.75rem; font-size: 1.5rem !important; }
+#placement-help { font-size: .9rem; line-height: 1.5; }
+#placement-fields fieldset { border: 1px solid #ddd9d2; border-radius: .6rem; margin: 1rem 0; padding: .7rem; min-width: 0; }
+#placement-fields legend { font-weight: 700; padding: 0 .3rem; }
+#placement-fields label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: .5rem; margin: .5rem 0; }
+#placement-fields select { width: 100%; }
+#placement-form footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; padding-top: .8rem; border-top: 1px solid #ddd9d2; }
+#placement-form button[type=submit] { color: #fff; background: #344a40; border-color: #344a40; }
+#placement-error { color: #a22525; }
+@media (max-width: 480px) {
+  #placement-fields label { grid-template-columns: minmax(0, 1fr); }
+  #placement-form footer { display: grid; grid-template-columns: 1fr 1fr; }
+  #placement-default { grid-column: 1 / -1; }
+}

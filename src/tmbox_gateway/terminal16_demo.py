@@ -15,6 +15,7 @@ from .engine import TrafficEngine
 from .models import ConnectionConfig, DispatchMode, SessionConfig, StationConfig, TrackConfig
 from .terminal16 import Terminal16Lab
 from .terminal16_glyphs import language_samples
+from .display_placement import default_side, station_connections, station_overrides
 
 
 def demo_lab(mode="clearance"):
@@ -37,7 +38,7 @@ def demo_lab(mode="clearance"):
     package = {"publication_id": "isolated-16x2", "meet": {"active_day": "Dagl", "default_dispatch_mode": mode},
                "stations": [{"id": s.id, "code": s.code, "name": s.name} for s in stations.values()],
                "connections": [{"id": c.id, "station_a_id": c.station_a_id, "station_b_id": c.station_b_id,
-                                "track_type": "single", "display_side_a": "right", "display_side_b": "left"}
+                                "track_type": "single"}
                                for c in connections.values()], "services": [], "trains": []}
     for number, origin, destination, departure, arrival in (
             ("17", "cda", "mun", "12:35", "12:42"),
@@ -61,6 +62,40 @@ class LabState:
         self.lab = demo_lab(mode)
         self.mode = mode
         self.changed = Condition()
+        self.placement_overrides = {}
+        self.placement_revision = 0
+
+    def placement(self):
+        config = self.lab.engine.config
+        return {"scope": "isolated-lab", "epoch": self.lab.epoch, "revision": self.placement_revision,
+                "stations": [{"station_id": station.id, "name": station.name,
+                    "connections": [{"connection_id": connection.id,
+                        "other_station_name": config.stations[connection.other_station(station.id)].name,
+                        "default_side": default_side(config, station.id, connection),
+                        "side": self.lab.display_sides[station.id][connection.id],
+                        "overridden": connection.id in self.placement_overrides.get(station.id, {})}
+                        for connection in station_connections(config, station.id)]}
+                    for station in config.stations.values()]}
+
+    def save_placement(self, body):
+        # Only this browser's disposable lab; no runtime store or real identities.
+        if set(body) != {"epoch", "revision", "stations"} or type(body["revision"]) is not int:
+            return 400, {"message": "Ogiltig testplacering."}
+        if body["epoch"] != self.lab.epoch or body["revision"] != self.placement_revision:
+            return 409, {"message": "Provbänken ändrades. Stäng och öppna placeringen igen."}
+        stations = body["stations"]
+        config = self.lab.engine.config
+        if not isinstance(stations, dict) or set(stations) != set(config.stations):
+            return 400, {"message": "Alla teststationer måste finnas med."}
+        try:
+            overrides = {station: station_overrides(config, station, sides) for station, sides in stations.items()}
+        except ValueError as error:
+            return 400, {"message": str(error)}
+        self.lab.update_display_placement(config, overrides)
+        self.placement_overrides = overrides
+        self.placement_revision += 1
+        self.changed.notify_all()
+        return 200, self.snapshot()
 
     def reset_devices(self):
         """Clear all disposable runtime state, retaining configuration and clock."""
@@ -71,6 +106,7 @@ class LabState:
                 engine.set_clock_source(previous.engine.clock_source)
                 assignments = {device: terminal.station for device, terminal in previous.terminals.items()}
                 self.lab = Terminal16Lab(engine, previous.publication, assignments)
+                self.lab.update_display_placement(engine.config, self.placement_overrides)
             self.changed.notify_all()
             return self.snapshot()
 
@@ -79,6 +115,7 @@ class LabState:
             lab = self.lab
             with lab.lock:
                 return {"frames": lab.frames(), "mode": self.mode,
+                        "placement": self.placement(),
                         "timetables": {device: lab.timetable(device) for device in lab.terminals},
                         "language_samples": language_samples(lab.engine.meeting_clock()["time"]),
                         "audit": lab.engine.audit[-10:], "arrivals": lab.arrivals,
@@ -178,6 +215,9 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeError):
             return self._send(400, {"message": "Ogiltigt meddelande"})
         with self.context.changed:
+            if self.path == "/api/display-placement":
+                status, response = self.context.save_placement(body)
+                return self._send(status, response)
             if self.path == "/api/reset-devices":
                 if body:
                     return self._send(400, {"message": "Nollställningen tar inga inställningar"})
@@ -187,6 +227,8 @@ class Handler(BaseHTTPRequestHandler):
                 if mode not in {"clearance", "direct"}:
                     return self._send(400, {"message": "Ogiltigt testläge"})
                 self.context.lab, self.context.mode = demo_lab(mode), mode
+                self.context.placement_overrides = {}
+                self.context.placement_revision = 0
                 self.context.changed.notify_all()
                 return self._send(200, self.context.snapshot())
             if self.path == "/api/key":

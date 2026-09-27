@@ -47,6 +47,26 @@ class CloudConfiguration:
             "notifications_supported": self.notifications_supported,
         }
 
+    def heartbeat(self):
+        """Only a completed, loaded selection may be reported as running."""
+        with self.app.lifecycle.lock:
+            selected = self.app.lifecycle.selected()
+            running = None
+            if selected and not self.app.lifecycle.transition() and not self.app.lifecycle_error:
+                if selected["region"] == "eu":
+                    active = self.store.active()
+                    if active and active.publication_id == selected["publication_id"] and self.app.engine.config.id == active.publication_id:
+                        running = active.publication_id
+                elif self.app.us_store:
+                    try:
+                        package = self.app.us_store.saved_package(selected["publication_id"])
+                        if us_meet_id(package) == selected["meet_id"]:
+                            running = selected["publication_id"]
+                    except USError:
+                        pass
+            return {"name": self.store.server_name() or self.app.config.gateway_id,
+                    "running_version": running}
+
     def wait_for_change(self):
         """Wake the background worker on publication; manual checks stay free."""
         if self._stopping.is_set():
@@ -59,7 +79,8 @@ class CloudConfiguration:
             return False
         after = self.store._setting("cloud_pending_id") or selected["publication_id"]
         started = time.monotonic()
-        result = wait_for_runtime_change(token, self.store.central_url() or self.app.config.central_runtime_url, after)
+        result = wait_for_runtime_change(token, self.store.central_url() or self.app.config.central_runtime_url,
+                                        after, **self.heartbeat())
         # A busy Cloud may release a wait immediately. Fall back to the normal
         # polling interval instead of spinning requests against it.
         return not self._stopping.is_set() and result.wait_supported and (result.publication_id != after or time.monotonic() - started >= 1)
@@ -232,7 +253,7 @@ class CloudConfiguration:
                 else:
                     app.operations_store.start_meet(publication)
             self.store.activate(publication_id, preserve_active_day=bool(old_publication and not switching))
-            app.engine.adopt_config(publication.session_config())
+            app.engine.adopt_config(self.store.session_config(publication))
             app.identities.reconcile_panels(set(app.engine.config.panels))
         else:
             if us_session and not switching:

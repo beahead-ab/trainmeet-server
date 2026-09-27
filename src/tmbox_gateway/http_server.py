@@ -307,7 +307,8 @@ class TrainMeetHTTPApplication:
         )
         self.linked_runtime_fetcher = linked_runtime_fetcher or (
             lambda token, url, manifest_only: fetch_linked_runtime(
-                token, url, manifest_only=manifest_only
+                token, url, manifest_only=manifest_only,
+                **(self.cloud_config.heartbeat() if self.cloud_config else {})
             )
         )
         self.web_root = files("tmbox_gateway").joinpath("web")
@@ -1852,7 +1853,7 @@ class TrainMeetHTTPApplication:
         if self.runtime_store is None:
             return False
         publication = self.runtime_store.active()
-        return publication is not None and publication.session_config() != self.engine.config
+        return publication is not None and self.runtime_store.session_config(publication) != self.engine.config
 
     def restart_server(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
@@ -2461,6 +2462,52 @@ class TrainMeetHTTPApplication:
             "message": "Automatisk Cloud-synk är aktiverad." if enabled else "Automatisk Cloud-synk är avstängd.",
         }
 
+    @runtime_view
+    def cloud_presentation(self, client: PairedClient) -> dict[str, Any]:
+        self._require_admin(client)
+        publication = self.runtime_store.active() if self.runtime_store else None
+        if not publication or self._eu_runtime_guard():
+            return {"supported": False, "stations": [], "findings": None}
+        findings = publication.payload.get("findings")
+        # Metadata from the immutable publication, not a second conflict engine.
+        if isinstance(findings, dict):
+            findings = [row for key in ("conflicts", "observations")
+                        for row in (findings.get(key) if isinstance(findings.get(key), list) else [])]
+        findings = [row for row in findings if isinstance(row, dict)] if isinstance(findings, list) else None
+        return {"supported": True, **self.runtime_store.display_placements(publication), "findings": findings}
+
+    @runtime_view
+    def save_display_placement(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_admin(client)
+        publication = self.runtime_store.active() if self.runtime_store else None
+        if not publication or self._eu_runtime_guard():
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "runtime_missing", "Välj en aktiv EU-träff först.")
+        if (payload.get("publication_id") != publication.publication_id or
+                type(payload.get("config_version")) is not int or
+                payload["config_version"] != self.runtime_store.config_version()):
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_config", "Konfigurationen har ändrats. Öppna dialogen igen.")
+        station_id = payload.get("station_id")
+        if not isinstance(station_id, str):
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_placement", "Välj en station.")
+        try:
+            self.runtime_store.save_display_placement(publication, station_id, payload.get("sides"))
+        except RuntimePublicationError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_placement", str(error)) from error
+        # Only positions change. Do NOT use adopt_config: it resets interactions
+        # and requires empty lines. Keep all traffic, receipts and selections.
+        from dataclasses import replace
+        effective = self.runtime_store.session_config(publication)
+        self.engine.config = replace(self.engine.config, panels=effective.panels)
+        self.engine.revision += 1
+        self.station_service.notify_changed()
+        if self.on_config_applied:
+            try:
+                self.on_config_applied()
+            except Exception:
+                # Config generation makes clients catch up after reconnect.
+                LOGGER.exception("Placeringen sparades men kunde inte skickas till alla klienter")
+        return self.cloud_presentation(client)
+
     def auto_sync_cloud_runtime(self) -> dict[str, Any]:
         """Same validated, guarded pipeline as a manual config check; no restart."""
         return self.cloud_config.check(automatic=True) if self.cloud_config else {"checked": False}
@@ -2527,7 +2574,7 @@ class TrainMeetHTTPApplication:
         return {
             "activated": True,
             "publication_id": publication.publication_id,
-            "restart_required": publication.session_config() != self.engine.config,
+            "restart_required": self.runtime_store.session_config(publication) != self.engine.config,
         }
 
     def build_local_configuration_from_stations(self, client: PairedClient) -> dict[str, Any]:
@@ -2596,7 +2643,7 @@ class TrainMeetHTTPApplication:
 
         if self.operations_store is not None:
             self.operations_store.ensure_publication(publication)
-        restart_required = publication.session_config() != self.engine.config
+        restart_required = self.runtime_store.session_config(publication) != self.engine.config
         return {
             **self.runtime_store.summary(),
             "source": "local",
@@ -2652,7 +2699,7 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_runtime", str(error)) from error
         if self.operations_store is not None:
             self.operations_store.ensure_publication(publication)
-        restart_required = publication.session_config() != self.engine.config
+        restart_required = self.runtime_store.session_config(publication) != self.engine.config
         return {
             **self.runtime_store.summary(),
             "restart_required": restart_required,
@@ -2968,7 +3015,7 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_runtime", str(error)) from error
         if self.operations_store is not None:
             self.operations_store.ensure_publication(publication)
-        restart_required = publication.session_config() != self.engine.config
+        restart_required = self.runtime_store.session_config(publication) != self.engine.config
         return {
             **self.runtime_store.summary(),
             "restart_required": restart_required,
@@ -3367,6 +3414,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.runtime_summary(client))
                 return
+            if path == "/v1/cloud/presentation":
+                self._send_json(HTTPStatus.OK, self.server.application.cloud_presentation(self._authenticated_client()))
+                return
             if path == "/v1/runtime/update":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.check_runtime_update(client))
@@ -3745,6 +3795,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     self.server.application.configure_cloud_auto_sync(client, payload),
                 )
+                return
+            if path == "/v1/cloud/display-placement":
+                self._send_json(HTTPStatus.OK, self.server.application.save_display_placement(self._authenticated_client(), payload))
                 return
             if path == "/v1/server/restart":
                 client = self._authenticated_client()
