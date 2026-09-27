@@ -1315,14 +1315,12 @@ class TrainMeetHTTPApplication:
         host = self.config.local_ip
         if (not host or _is_loopback_address(host)) and request_host:
             host = _hostname_without_port(request_host)
-        wifi = self.runtime_store.wifi_settings() if self.runtime_store is not None else {"name": "", "password": "", "show_password": False}
+        wifi = self.runtime_store.wifi_settings() if self.runtime_store is not None else {"name": "", "password": ""}
         wifi = {**wifi, "has_password": bool(wifi["password"])}
         if private:
             # Only an administrator may inspect the host's SSID. It is never
             # silently published as the meet's network.
             wifi["detected_name"] = detected_wifi_name()
-        elif not wifi["show_password"]:
-            wifi["password"] = ""
         return {
             "host": host,
             "port": self.config.http_port,
@@ -1368,16 +1366,14 @@ class TrainMeetHTTPApplication:
             except RuntimePublicationError as error:
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_validity", str(error)) from error
             changed_validity = hours != previous_hours
-        if any(key in payload for key in ("wifi_name", "wifi_password", "wifi_show_password")):
+        # A "wifi_show_password" from an older admin page is ignored: what is
+        # typed here is what the participant view and the screens' QR show.
+        if any(key in payload for key in ("wifi_name", "wifi_password")):
             current = self.runtime_store.wifi_settings()
-            show_password = payload.get("wifi_show_password", current["show_password"])
-            if not isinstance(show_password, bool):
-                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_wifi", "Ogiltigt val för visning av lösenord")
             try:
                 self.runtime_store.save_wifi_settings(
                     str(payload.get("wifi_name", current["name"]) or ""),
                     str(payload.get("wifi_password", current["password"]) or ""),
-                    show_password=show_password,
                 )
             except RuntimePublicationError as error:
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_wifi", str(error)) from error

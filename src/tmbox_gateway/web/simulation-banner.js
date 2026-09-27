@@ -5,7 +5,7 @@
   const banner = document.createElement("div");
   banner.setAttribute("role", "status");
   banner.hidden = true;
-  banner.style.cssText = "position:sticky;top:0;z-index:100;background:#6e3c10;color:#fff;padding:10px 16px;text-align:center;font:600 15px system-ui";
+  banner.style.cssText = "position:sticky;top:0;z-index:100;background:#6e3c10;color:#fff;padding:10px 16px;text-align:center;font:600 15px Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif";
   document.body.prepend(banner);
   let active = false;
   async function refresh() {

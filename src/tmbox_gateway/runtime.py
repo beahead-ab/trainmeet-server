@@ -809,12 +809,16 @@ class SQLiteRuntimeStore:
 
     # ------------------------------------------- deltagarvyn och skärmarna
     def wifi_settings(self) -> dict[str, Any]:
-        """The meet's Wi-Fi as typed under ⚙: shown on the participant view and
-        encoded in the Wi-Fi QR on the screens. Empty means: not shared."""
-        return {"name": self._setting("wifi_name") or "", "password": self._setting("wifi_password") or "",
-                "show_password": self._setting("wifi_show_password") == "1"}
+        """The meet's Wi-Fi as typed under ⚙: shown as text on the participant
+        view and encoded in the Wi-Fi QR on the screens. Empty means: not shared.
 
-    def save_wifi_settings(self, name: str, password: str, *, show_password: bool = False) -> dict[str, Any]:
+        There is deliberately no separate "show the password" choice: the QR on
+        the screens only works with the password in it, and whoever sets up a
+        TMBox has to be able to read it. Not sharing the network means leaving
+        the fields empty."""
+        return {"name": self._setting("wifi_name") or "", "password": self._setting("wifi_password") or ""}
+
+    def save_wifi_settings(self, name: str, password: str) -> dict[str, Any]:
         name = name.strip()
         if len(name) > 32:
             raise RuntimePublicationError("Nätverksnamnet får vara högst 32 tecken")
@@ -824,7 +828,6 @@ class SQLiteRuntimeStore:
             raise RuntimePublicationError("Ange nätverksnamnet också")
         self._save_setting("wifi_name", name)
         self._save_setting("wifi_password", password)
-        self._save_setting("wifi_show_password", "1" if show_password else "0")
         return self.wifi_settings()
 
     def web_client_ttl_minutes(self) -> int:

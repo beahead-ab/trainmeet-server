@@ -90,7 +90,7 @@
     $("#pv-stat-staffed").textContent = staffed == null ? String(stations) : `${staffed} / ${stations}`;
     label($("#pv-stat-staffed-label"), staffed == null ? "stationer" : "bemannade");
     const svg = $("#pv-topology");
-    renderTopology(snapshot, svg, { showBadge: false, selectedStationID: selectedStation,
+    renderTopology(snapshot, svg, { showBadge: false, refit: true, selectedStationID: selectedStation,
       onStationSelect: id => { selectedStation = selectedStation === id ? null : id; renderTrack(); renderTimetable(); },
       onClear: () => { selectedStation = null; renderTrack(); renderTimetable(); } });
     $("#pv-clear-station").hidden = !selectedStation;
@@ -99,13 +99,31 @@
     try {
       const box = svg.getBBox();
       if (box.width > 0 && box.height > 0) {
-        svg.setAttribute("viewBox", `${box.x - 24} ${box.y - 24} ${box.width + 48} ${box.height + 48}`);
-        // Height is fixed; the width follows the layout's shape. Wider than the
-        // phone means it scrolls sideways, as the hint under it says.
+        // Landscape layouts (the line runs sideways) are 220 px high and scroll
+        // sideways when wider than the card, as the hint under the map says.
+        // Portrait layouts (phones get the line top to bottom) fill the card's
+        // width and grow downwards instead. Either way a small layout is not
+        // blown up: at most 1.8 px per layout unit.
+        const maxZoom = 1.8, pad = 48;
         const host = svg.closest(".pv-map");
-        const width = Math.max(640, host?.clientWidth || 0, Math.round(((box.width + 48) / (box.height + 48)) * 220));
+        const available = Math.max(0, (host?.clientWidth || 0) - 14);
+        const boxWidth = box.width + pad, boxHeight = box.height + pad;
+        let zoom, width, height;
+        if (boxHeight > boxWidth) {
+          zoom = Math.min(maxZoom, available / boxWidth, 720 / boxHeight);
+          width = available;
+          height = Math.round(boxHeight * zoom);
+        } else {
+          height = 220;
+          zoom = Math.min(maxZoom, height / boxHeight);
+          width = Math.max(available, Math.round(boxWidth * zoom));
+        }
+        const viewWidth = width / zoom, viewHeight = height / zoom;
+        const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+        svg.setAttribute("viewBox", `${cx - viewWidth / 2} ${cy - viewHeight / 2} ${viewWidth} ${viewHeight}`);
         svg.style.width = `${Math.min(width, 1400)}px`;
-        svg.classList.toggle("is-wide", width > (host?.clientWidth || 0));
+        svg.style.height = `${height}px`;
+        svg.classList.toggle("is-wide", width > available + 1);
       }
     } catch {}
     const arrival = (position) => (snapshot.routes || []).find((route) => route.train_number === position.train_number && route.station_id === position.to_station_id)?.arrival_time;
@@ -166,17 +184,12 @@
     wifiHost.replaceChildren();
     if (name) {
       wifiHost.insertAdjacentHTML("beforeend", html`<span class="pv-value">${escapeHTML(name)}</span>${wifi.password ? html`<span class="pv-value">${escapeHTML(wifi.password)}</span>` : ""}`);
-      label($("#pv-wifi-note"), wifi.password ? "Skanna Wi-Fi-koden för att ansluta till träffens nätverk." : wifi.has_password ? "Fråga trafikledningen om lösenordet till träffens Wi-Fi." : "Öppet nätverk – inget lösenord behövs.");
+      // No QR here: whoever reads this page is already on the network, and a
+      // TMBox cannot scan. The Wi-Fi QR belongs on the screens.
+      label($("#pv-wifi-note"), wifi.password ? "Nätverk och lösenord, som boxen frågar efter." : wifi.has_password ? "Fråga trafikledningen om lösenordet till träffens Wi-Fi." : "Öppet nätverk – inget lösenord behövs.");
     } else {
       wifiHost.insertAdjacentHTML("beforeend", html`<span class="pv-value pv-value--muted">${t("Fråga trafikledningen om träffens Wi-Fi")}</span>`);
       label($("#pv-wifi-note"), "Nätverket är inte inskrivet på servern ännu.");
-    }
-    const qrHost = $("#pv-wifi-qr");
-    const qrPayload = serverUI.wifiQR(wifi);
-    qrHost.hidden = !qrPayload;
-    if (qrPayload && qrHost.dataset.payload !== qrPayload) {
-      qrHost.dataset.payload = qrPayload;
-      qrHost.innerHTML = serverUI.qrSVG(qrPayload);
     }
     const address = connection.host ? `${connection.host}` : "";
     $("#pv-address").replaceChildren();

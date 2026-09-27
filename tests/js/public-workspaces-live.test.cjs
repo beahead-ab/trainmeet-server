@@ -38,14 +38,16 @@ const root = path.resolve(__dirname, '../..');
     await screenshot('participant');
     const admin = await browser.newContext({locale:'sv-SE'});
     assert.equal((await admin.request.post(urls.eu+'/v1/auth/login',{data:{username:'smoke-admin',password:'isolated-browser-test'}})).status(),200);
-    // Public Wi-Fi text and both offline QR codes must follow explicit sharing.
-    const wifi = {screens: ['clock'], wifi_name: 'Träff; ÅÄÖ', wifi_password: 'test-only:secret', wifi_show_password: false};
+    // The participant view shows the typed Wi-Fi as text, never as a QR: the
+    // reader is already on the network and a TMBox cannot scan. The Wi-Fi QR,
+    // with the password in it, belongs on the screens.
+    const wifi = {screens: ['clock'], wifi_name: 'Träff; ÅÄÖ', wifi_password: 'test-only:secret'};
     assert.equal((await admin.request.post(urls.eu+'/v1/display/connection',{data:wifi})).status(),200);
     await page.reload();
     await page.locator('#pv-wifi').getByText(wifi.wifi_name, {exact:true}).waitFor();
-    assert.doesNotMatch(await page.locator('#pv-wifi').innerText(), /test-only/);
-    assert.match(await page.locator('#pv-wifi-note').innerText(), /Fråga trafikledningen/);
-    assert.equal(await page.locator('#pv-wifi-qr svg').count(), 1);
+    await page.locator('#pv-wifi').getByText(wifi.wifi_password, {exact:true}).waitFor();
+    assert.match(await page.locator('#pv-wifi-note').innerText(), /som boxen frågar efter/);
+    assert.equal(await page.locator('#pv-connect-card svg').count(), 0);
     const clockPage = await visitor.newPage();
     await clockPage.setViewportSize({width:1920,height:1080});
     await clockPage.goto(urls.eu+'/display/clock');
@@ -53,7 +55,7 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await clockPage.locator('#screen-qr svg').count(), 2);
     const signature = await clockPage.locator('#screen-qr').getAttribute('data-signature');
     assert.ok(signature.endsWith('|'+urls.eu+'/'), 'QR keeps the actual scheme, host and port');
-    assert.doesNotMatch(signature, /test-only/);
+    assert.ok(signature.startsWith('WIFI:T:WPA;S:Träff\\; ÅÄÖ;P:test-only\\:secret;;|'), 'The Wi-Fi QR carries the password, escaped');
     assert.ok(await clockPage.locator('.sc-stopped').evaluate(stopped => {
       const a = stopped.getBoundingClientRect(), b = document.querySelector('#screen-qr').getBoundingClientRect();
       return a.right <= b.left || a.bottom <= b.top || a.left >= b.right || a.top >= b.bottom;
@@ -61,10 +63,6 @@ const root = path.resolve(__dirname, '../..');
     await clockPage.locator('#display-clock-style').selectOption('digital');
     assert.equal((await (await page.request.get(urls.eu+'/v1/display')).json()).clock.style, 'swiss', 'A screen preference never changes the shared clock');
     await clockPage.close();
-    assert.equal((await admin.request.post(urls.eu+'/v1/display/connection',{data:{wifi_show_password:true}})).status(),200);
-    await page.reload();
-    await page.locator('#pv-wifi').getByText(wifi.wifi_password, {exact:true}).waitFor();
-    assert.match(await page.locator('#pv-wifi-qr').getAttribute('data-payload'), /P:test-only\\:secret/);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Participant page fits a phone');
     await page.locator('#pv-topology .topology-station').first().click();
     assert.equal(await page.locator('#pv-clear-station').isVisible(), true);
