@@ -147,7 +147,7 @@ def main() -> None:
         LOGGER.error("Trafik spärrad: %s", error)
         selected = None
     session_config = (
-        active_publication.session_config()
+        runtime_store.session_config(active_publication)
         if active_publication is not None and selected and selected["region"] == "eu"
             and selected["publication_id"] == active_publication.publication_id
         else unconfigured_session()

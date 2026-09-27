@@ -552,7 +552,7 @@ class Terminal16Tests(unittest.TestCase):
         self.lookup("39")
         self.assertIn("INGET TÅG", self.lab.frame("DEMO-CDA")["lines"][0])
 
-    def test_long_identities_page_instead_of_truncate(self):
+    def test_long_identities_use_active_navigation_instead_of_truncate(self):
         for old, new in (("17", "12345"), ("39", "67890")):
             for item in self.lab.publication["trains"] + self.lab.publication["services"]:
                 if item["train_number"] == old: item["train_number"] = new
@@ -561,6 +561,9 @@ class Terminal16Tests(unittest.TestCase):
         self.accept("DEMO-CDA", "B")
         self.assertIn("MUN?12345", self.lab.frame("DEMO-CDA")["lines"][0])
         self.accept("DEMO-CDA", "B")
+        self.assertIn("MUN?12345", self.lab.frame("DEMO-CDA")["lines"][0])
+        self.assertEqual(self.lab.frame("DEMO-CDA")["active"]["count"], 2)
+        self.accept("DEMO-CDA", "D")
         self.assertIn("67890?VA", self.lab.frame("DEMO-CDA")["lines"][0])
 
 
@@ -884,6 +887,64 @@ class Terminal16HTTPTests(unittest.TestCase):
             html = response.read()
             self.assertIn(b"ENBART TESTDATA", html)
             self.assertIn("Nollställ alla enheter".encode(), html)
+
+    def placement_body(self, stations=None):
+        state = self.server.snapshot()["placement"]
+        return {"epoch": state["epoch"], "revision": state["revision"],
+                "stations": stations or {"mun": {}, "cda": {"west": "right", "east": "left"}, "va": {}}}
+
+    def test_placement_preserves_live_lab_traffic_and_uses_shared_defaults(self):
+        self.command("DEMO-MUN", "#", train_number="93")
+        self.command("DEMO-MUN", "#")
+        before = self.server.lab.frame("DEMO-CDA")
+        engine = self.server.lab.engine
+        audit = deepcopy(engine.audit)
+        selected = self.server.lab.terminals["DEMO-CDA"].selected
+        state = self.post("/api/display-placement", self.placement_body())
+        after = next(f for f in state["frames"] if f["device_id"] == "DEMO-CDA")
+        self.assertEqual(state["placement"]["scope"], "isolated-lab")
+        self.assertIs(self.server.lab.engine, engine)
+        self.assertEqual(audit, engine.audit)
+        self.assertEqual(selected, self.server.lab.terminals["DEMO-CDA"].selected)
+        self.assertIn("MUN?93", before["lines"][0])
+        self.assertIn("93?MUN", after["lines"][0])
+        self.assertEqual(before["entry"]["context"], after["entry"]["context"])
+        self.assertGreater(after["view_revision"], before["view_revision"])
+        self.assertEqual(after["requests"], before["requests"])
+        self.command("DEMO-CDA", "#")
+        self.command("DEMO-MUN", "#")
+        self.command("DEMO-CDA", "#")
+        self.assertIn("MOTTAGET", self.server.lab.frame("DEMO-MUN")["lines"][0])
+        self.post("/api/reset-devices", {})
+        self.assertEqual(self.server.lab._side("cda", "mun", "west"), "right")
+        self.post("/api/display-placement", self.placement_body({"mun": {}, "cda": {}, "va": {}}))
+        self.assertEqual(self.server.lab._side("cda", "mun", "west"), "left")
+
+    def test_placement_rejects_invalid_or_stale_drafts_atomically(self):
+        before = self.server.snapshot()["placement"]
+        for stations in ({"mun": {}, "cda": {"west": "up"}, "va": {}},
+                         {"mun": {"east": "left"}, "cda": {}, "va": {}},
+                         {"cda": {}}, {"mun": {}, "cda": [], "va": {}}):
+            with self.assertRaises(HTTPError) as error:
+                self.post("/api/display-placement", self.placement_body(stations))
+            self.assertEqual(error.exception.code, 400)
+            self.assertEqual(self.server.snapshot()["placement"], before)
+        stale = self.placement_body()
+        self.post("/api/display-placement", stale)
+        with self.assertRaises(HTTPError) as error:
+            self.post("/api/display-placement", stale)
+        self.assertEqual(error.exception.code, 409)
+        stale = self.placement_body()
+        self.post("/api/reset", {"mode": "direct"})
+        with self.assertRaises(HTTPError) as error:
+            self.post("/api/display-placement", stale)
+        self.assertEqual(error.exception.code, 409)
+        self.assertEqual(self.server.lab._side("cda", "mun", "west"), "left")
+
+    def test_cross_origin_placement_is_rejected(self):
+        with self.assertRaises(HTTPError) as error:
+            self.post("/api/display-placement", self.placement_body(), Origin="https://unrelated.example")
+        self.assertEqual(error.exception.code, 403)
 
     def test_reset_all_devices_clears_every_traffic_phase(self):
         for phase in ("requested", "reserved", "occupied", "arrived"):

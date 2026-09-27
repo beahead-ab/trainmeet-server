@@ -3264,3 +3264,17 @@ body[data-signed-in="no"] #logout { display: none; }
 .simulation-table-scroll { overflow-x: auto; }
 .simulation-table { width: 100%; border-collapse: collapse; }
 .simulation-table th, .simulation-table td { text-align: left; padding: 12px 16px; border-bottom: 1px solid #ded8ce; }
+/* Server-local placement uses compact rows without changing the Cloud design. */
+#device-management, #display-placement-section { min-width: 0; }
+.placement-table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; }
+.placement-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.placement-table th, .placement-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.placement-table td:last-child { text-align: right; }
+.placement-table button { padding: 6px 12px; font-size: inherit; }
+.placement-legacy-note { display: block; margin-top: 4px; color: var(--muted); font-size: 0.85em; }
+#display-placement-fields { display: grid; gap: 14px; margin-bottom: 18px; }
+#display-placement-fields label { display: flex; flex-direction: column; gap: 6px; }
+#display-placement-fields select { width: 100%; min-height: 40px; }
+#published-findings { margin-top: 18px; }
+#published-findings-list { max-height: 24rem; overflow: auto; padding-left: 22px; }
+#published-findings-list li { padding: 6px 0; }

@@ -38,16 +38,6 @@ class RuntimeViews(Terminal16Lab):
         self.fingerprint = None
         self.refresh()
 
-    def _side(self, station, other, connection_id=None):
-        config = self.engine.config
-        connection = config.connections[connection_id]
-        sides = {p.slot_position(key)[1] for p in config.panels.values() if p.station_id == station
-                 for key, value in p.slots.items() if value == connection.id}
-        if len(sides) == 1:
-            return next(iter(sides))
-        # Unmapped links are still usable: stable presentation, no A-D routing.
-        return "right" if station == connection.station_a_id else "left"
-
     def _line(self, leg):
         case = self.cases.get(leg["from_movement_id"])
         if case is None:
@@ -62,6 +52,9 @@ class RuntimeViews(Terminal16Lab):
 
     def refresh(self):
         service = self.service
+        publication = service.publication()
+        self.update_display_placement(publication.session_config(),
+            service.runtime_store.display_placement_overrides(publication.meet_id))
         states = {station: service.operations_store.tkl_station_state(
             service.publication().publication_id, self.day, station)["movements"] for station in self.engine.config.stations}
         cases = {case["movement_id"]: case for case in service.open_cases(None)

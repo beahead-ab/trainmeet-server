@@ -642,6 +642,60 @@ class SQLiteRuntimeStore:
         except ValueError:
             return 1
 
+    def display_placement_overrides(self, meet_id: str) -> dict:
+        raw = self._setting("display_placement:" + meet_id)
+        return json.loads(raw) if raw else {}
+
+    def session_config(self, publication: RuntimePublication) -> SessionConfig:
+        from .display_placement import apply_placement
+        return apply_placement(publication.session_config(), self.display_placement_overrides(publication.meet_id))
+
+    def display_placements(self, publication: RuntimePublication) -> dict:
+        from .display_placement import default_side, effective_sides, station_connections
+        config = publication.session_config()
+        effective = self.session_config(publication)
+        overrides = self.display_placement_overrides(publication.meet_id)
+        stations = []
+        for station in config.stations.values():
+            sides = effective_sides(config, overrides, station.id)
+            rows = []
+            for connection in station_connections(config, station.id):
+                other = config.stations[connection.other_station(station.id)]
+                saved = overrides.get(station.id, {}).get(connection.id, {})
+                rows.append({"connection_id": connection.id, "other_station_id": other.id,
+                             "other_station_code": other.code, "other_station_name": other.name,
+                             "default_side": default_side(config, station.id, connection),
+                             "side": sides[connection.id], "overridden": saved.get("other_station_id") == other.id})
+            overridden_ids = {row["connection_id"] for row in rows if row["overridden"]}
+            legacy_limited = any(connection_id in overridden_ids and sides[connection_id] != panel.slot_position(key)[1]
+                                 for panel in effective.panels.values() if panel.station_id == station.id
+                                 for key, connection_id in panel.slots.items() if connection_id)
+            stations.append({"station_id": station.id, "code": station.code, "name": station.name,
+                             "connections": rows, "legacy_layout_limited": legacy_limited})
+        return {"publication_id": publication.publication_id, "meet_id": publication.meet_id,
+                "config_version": self.config_version(), "stations": stations}
+
+    def save_display_placement(self, publication: RuntimePublication, station_id: str, sides: dict) -> None:
+        from .display_placement import station_overrides
+        try:
+            saved = station_overrides(publication.session_config(), station_id, sides)
+        except ValueError as error:
+            raise RuntimePublicationError(str(error)) from error
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                overrides = self.display_placement_overrides(publication.meet_id)
+                if sides:
+                    overrides[station_id] = saved
+                else:
+                    overrides.pop(station_id, None)
+                self._save_setting("display_placement:" + publication.meet_id, json.dumps(overrides))
+                self.bump_config_version()
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+
     def bump_config_version(self) -> int:
         version = self.config_version() + 1
         self._save_setting("config_version", str(version))

@@ -103,6 +103,45 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#device-list').getByText('TBX-SMOKE', { exact: true }).waitFor();
     assert.equal(await page.locator('#device-management').isVisible(), true);
     assert.equal(await page.locator('#device-form').isVisible(), false);
+    // Real admin-only placement API + persistent SQLite, not mocked responses.
+    const initialPlacement = await (await page.request.get(urls.eu + '/v1/cloud/presentation')).json();
+    assert.equal(initialPlacement.supported, true);
+    const placementLaunch = page.locator('#display-placement-rows button').first();
+    const placementDialog = page.locator('#display-placement-modal');
+    const placementSelect = page.locator('#display-placement-fields select');
+    await placementLaunch.click();
+    await placementSelect.selectOption('right');
+    for (const width of [1280, 360]) {
+      await page.setViewportSize({width, height: 900});
+      const box = await placementDialog.boundingBox();
+      assert.ok(box.x >= 0 && box.x + box.width <= width + 1);
+      if (process.env.SERVER_SHELL_SCREENSHOTS) await page.screenshot({path: path.join(process.env.SERVER_SHELL_SCREENSHOTS, `placement-live-${width}.png`)});
+    }
+    await placementDialog.locator('[type="submit"]').click();
+    await placementDialog.waitFor({state: 'hidden'});
+    let placement = await (await page.request.get(urls.eu + '/v1/cloud/presentation')).json();
+    assert.equal(placement.stations.find(row => row.station_id === 'station-a').connections[0].side, 'right');
+    assert.ok(placement.config_version > initialPlacement.config_version);
+    const stale = await page.request.post(urls.eu + '/v1/cloud/display-placement', {data: {
+      publication_id: initialPlacement.publication_id, config_version: initialPlacement.config_version,
+      station_id: 'station-a', sides: {},
+    }});
+    assert.equal(stale.status(), 409);
+    await page.reload();
+    await placementLaunch.click();
+    assert.equal(await placementSelect.inputValue(), 'right');
+    await page.locator('#display-placement-defaults').click();
+    page.once('dialog', dialog => dialog.accept());
+    await placementDialog.locator('.modal-close').click();
+    placement = await (await page.request.get(urls.eu + '/v1/cloud/presentation')).json();
+    assert.equal(placement.stations.find(row => row.station_id === 'station-a').connections[0].side, 'right', 'Cancel must not reset saved placement');
+    await placementLaunch.click();
+    await page.locator('#display-placement-defaults').click();
+    await placementDialog.locator('[type="submit"]').click();
+    await placementDialog.waitFor({state: 'hidden'});
+    placement = await (await page.request.get(urls.eu + '/v1/cloud/presentation')).json();
+    assert.equal(placement.stations.find(row => row.station_id === 'station-a').connections[0].overridden, false);
+    await page.setViewportSize({width: 1280, height: 960});
     // The old inline grid placed submit and cancel in the same cell. Merely
     // asserting visibility misses a save button covered by the cancel button.
     async function checkDeviceDialog() {

@@ -624,6 +624,9 @@
 <h2>Cloud-koppling och config</h2><p>Träffens innehåll ändras i Cloud. Publicerade uppdateringar hämtas automatiskt och används när det är säkert för pågående trafik.</p>
 <div class="cloud-connection-summary"><div><b id="cloud-connection-meet">Ingen träff vald</b><span id="cloud-connection-meta"></span></div><span id="cloud-connection-state" class="revision-badge">Inte kopplad</span></div>
 <p id="cloud-auto-status"></p><p id="cloud-version-state" role="status"></p><div class="cloud-actions"><button id="runtime-check-update" class="secondary" type="button">Sök configuppdatering</button><button id="cloud-auto-edit" type="button" class="secondary" data-open-modal="cloud-auto-modal">Automatiska uppdateringar</button><button type="button" class="secondary" data-open-modal="runtime-sync-form-modal">Koppla eller byt träff</button></div><p id="cloud-update-message" class="form-message" role="status"></p>
+<details id="published-findings" hidden><summary><tm-text data-tm-text="Tidtabellens kontrolluppgifter">Tidtabellens kontrolluppgifter</tm-text></summary>
+<p><tm-text data-tm-text="Uppgifter från den aktiva Cloud-versionen. Rättelser görs i Cloud; detta är inte en kontroll av pågående trafik.">Uppgifter från den aktiva Cloud-versionen. Rättelser görs i Cloud; detta är inte en kontroll av pågående trafik.</tm-text></p>
+<p id="published-findings-summary"></p><ul id="published-findings-list"></ul></details>
 <dialog id="cloud-auto-modal" class="admin-modal" aria-labelledby="cloud-auto-title">
 <h2 id="cloud-auto-title">Automatiska uppdateringar</h2>
 <form id="cloud-auto-form">
@@ -660,6 +663,18 @@
                   <p><tm-text data-tm-text="Starta klienten och välj den i listan. Tilldela station och spara – ingen kod behöver skrivas av.">Starta klienten och välj den i listan. Tilldela station och spara – ingen kod behöver skrivas av.</tm-text></p>
                 </div>
               </div>
+<div id="display-placement-section" hidden>
+<h3><tm-text data-tm-text="TMBox-placering">TMBox-placering</tm-text></h3>
+<p><tm-text data-tm-text="Vänster och höger på stationens boxar. Lokala val behålls när Cloud uppdaterar träffen; tågens destinationer ändras inte.">Vänster och höger på stationens boxar. Lokala val behålls när Cloud uppdaterar träffen; tågens destinationer ändras inte.</tm-text></p>
+<div class="placement-table-scroll"><table class="placement-table"><thead><tr><th><tm-text data-tm-text="Station">Station</tm-text></th><th><tm-text data-tm-text="Vänster">Vänster</tm-text></th><th><tm-text data-tm-text="Höger">Höger</tm-text></th><th></th></tr></thead><tbody id="display-placement-rows"></tbody></table></div>
+</div>
+<dialog id="display-placement-modal" class="admin-modal" aria-labelledby="display-placement-title">
+<h2 id="display-placement-title">TMBox-placering</h2><form id="display-placement-form">
+<div id="display-placement-fields"></div>
+<button type="button" id="display-placement-defaults" class="secondary"><tm-text data-tm-text="Följ Cloud för alla sträckor">Följ Cloud för alla sträckor</tm-text></button>
+<p class="form-message" role="status"></p>
+<div class="modal-actions"><button type="button" class="secondary" data-close-modal><tm-text data-tm-text="Avbryt">Avbryt</tm-text></button><button type="submit" class="primary"><tm-text data-tm-text="Spara">Spara</tm-text></button></div>
+</form></dialog>
 <p id="device-awaiting" class="form-message" role="status" hidden></p>
 <details class="device-reconnect"><summary><tm-text data-tm-text="Återanslut borttagen klient">Återanslut borttagen klient</tm-text></summary>
 <button type="button" class="secondary modal-launch" data-open-modal="device-form-modal"><tm-text data-tm-text="Återanslut med enhetskod">Återanslut med enhetskod</tm-text></button>

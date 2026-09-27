@@ -94,7 +94,7 @@ class TMBoxStationService:
         self.operations_store = operations_store
         self.identities = identities
         self.clock_source = clock_source or operations_store.clock_status
-        self._cached_publication_id: str | None = None
+        self._cached_publication_id: tuple[str, int] | None = None
         self._cached_session_config: SessionConfig | None = None
         self.lifecycle = None
         self.simulation = None
@@ -195,9 +195,10 @@ class TMBoxStationService:
         publication = self.publication()
         if publication is None:
             return None
-        if publication.publication_id != self._cached_publication_id:
-            self._cached_session_config = publication.session_config()
-            self._cached_publication_id = publication.publication_id
+        cache_key = (publication.publication_id, self.config_version())
+        if cache_key != self._cached_publication_id:
+            self._cached_session_config = self.runtime_store.session_config(publication)
+            self._cached_publication_id = cache_key
         return self._cached_session_config
 
     def config_version(self) -> int:
@@ -285,10 +286,15 @@ class TMBoxStationService:
             key=lambda connection: (order_by_connection.get(connection.id, len(placements)), connection.id),
         )
         rows = []
+        publication = self.publication()
+        local = self.runtime_store.display_placement_overrides(publication.meet_id).get(station_id, {})
         for order, connection in enumerate(connections, start=1):
             other = config.stations.get(connection.other_station(station_id))
             ports = placements.get(connection.id, [])
             sides = {port["side"] for port in ports}
+            override = local.get(connection.id, {})
+            side = (override["side"] if override.get("other_station_id") == connection.other_station(station_id)
+                    else next(iter(sides)) if len(sides) == 1 else None)
             rows.append(
                 {
                     "connection_id": connection.id,
@@ -299,7 +305,7 @@ class TMBoxStationService:
                     ).value,
                     "display_row": order,
                     "panel_slots": ports,
-                    "display_side": next(iter(sides)) if len(sides) == 1 else None,
+                    "display_side": side,
                 }
             )
         return {

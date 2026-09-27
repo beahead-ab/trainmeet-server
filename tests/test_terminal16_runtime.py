@@ -1,8 +1,10 @@
 from unittest.mock import patch
+from copy import deepcopy
 from uuid import uuid4
 import unittest
 
 import test_shared_traffic
+from runtime_fixture import runtime_package_v3
 from tmbox_gateway.terminal16_runtime import Terminal16Service
 from tmbox_gateway.terminal16_mqtt import Terminal16Gateway
 from tmbox_gateway.device_ui import LANGUAGES
@@ -44,6 +46,82 @@ class RuntimeTerminalTests(unittest.TestCase):
         self.assertEqual(live["movements"]["movement-101-b"]["arrival"], "arrived")
         self.assertEqual(live["movements"]["movement-101-b"]["actualTrack"], "track-station-b-1")
         self.assertIn("MOTTAGET", self.terminals.frame("esp8266")["lines"][0])
+
+    def test_two_cleared_departures_active_navigation_survives_restart_without_retargeting(self):
+        package = runtime_package_v3(publication_id="two-active-departures")
+        package["display"]["graph_station_order"].append("station-c")
+        package["stations"].append({**package["stations"][1], "id": "station-c", "code": "MUN", "name": "Munkeröd", "diagram_order": 2})
+        package["tracks"].append({**package["tracks"][2], "id": "track-station-c-1", "station_id": "station-c"})
+        package["connections"].append({**package["connections"][0], "id": "connection-a-c", "station_b_id": "station-c"})
+        package["panels"][0]["slots"]["B"] = "connection-a-c"
+        package["panels"].append({"id": "panel-c", "station_id": "station-c", "name": "MUN", "slots": {"A": "connection-a-c", "B": None, "C": None, "D": None}})
+        service = deepcopy(package["services"][0])
+        service.update(id="service-303-Dagl", train_number="303")
+        service["stops"][1].update(station_id="station-c", station_name="MUN")
+        package["services"].append(service)
+        for collection in ("trains", "routes"):
+            for original in list(package[collection]):
+                if original["train_number"] != "101":
+                    continue
+                item = deepcopy(original)
+                item.update(id=item["id"].replace("101", "303"), train_number="303", service_id=service["id"])
+                if item["station_id"] == "station-b":
+                    item.update(id=item["id"][:-1] + "c", station_id="station-c")
+                if collection == "trains":
+                    item.update(track_id="track-station-a-2" if item["station_id"] == "station-a" else "track-station-c-1",
+                                station="CDA" if item["station_id"] == "station-a" else "MUN")
+                    if item["departure_to"]: item["departure_to"] = "MUN"
+                elif item["station_id"] == "station-c":
+                    item["station_name"] = "MUN"
+                package[collection].append(item)
+        self.fixture.install(package)
+        self.fixture.ids.record_discovery("third", "third", protocol_version=2)
+        self.fixture.ids.assign_discovered_device("third", station_id="station-c")
+        for number, receiver in (("101", "esp32"), ("303", "third")):
+            self.send("esp8266", "#", train_number=number)
+            self.send("esp8266", "#")
+            self.send(receiver, "#")
+        # Rebuilding views from durable cases must expose both, even after reconnect.
+        self.terminals = Terminal16Service(self.service)
+        self.assertEqual(self.terminals.frame("esp8266")["active"]["count"], 2)
+        self.assertEqual(self.send("esp8266", "B")["frame"]["active"]["movement_id"], "movement-101-a")
+        cases = deepcopy(self.service.open_cases(None))
+        self.assertEqual(self.send("esp8266", "D")["frame"]["active"]["movement_id"], "movement-303-a")
+        self.assertEqual(cases, self.service.open_cases(None))
+        frame = self.send("esp8266", "#")["frame"]
+        self.assertNotIn("#", frame["keys"])
+        self.assertEqual(frame["active"]["movement_id"], "movement-303-a")
+        self.assertEqual(self.terminals.command("esp8266", {"command_id": uuid4().hex, "view_token": frame["view_token"], "key": "#"})["status"], "rejected")
+        self.assertEqual(self.fixture.ops.positions()[0]["train_number"], "303")
+        self.terminals = Terminal16Service(self.service)
+        self.assertEqual(self.send("esp8266", "B")["frame"]["active"]["movement_id"], "movement-101-a")
+        self.send("esp8266", "#")
+        self.assertEqual({p["train_number"] for p in self.fixture.ops.positions()}, {"101", "303"})
+
+    def test_placement_updates_frame_without_resetting_traffic_selection_or_input_context(self):
+        self.send("esp8266", "#", train_number="101")
+        self.send("esp8266", "#")
+        before = self.terminals.frame("esp8266")
+        cases = self.service.open_cases(None)
+        views = self.terminals._views("esp8266")
+        selected = views.terminals["esp8266"].selected
+        old_side = views._side("station-a", "station-b", "connection-a-b")
+        new_side = "right" if old_side == "left" else "left"
+        self.fixture.runtime.save_display_placement(self.fixture.publication, "station-a", {"connection-a-b": new_side})
+        after = self.terminals.frame("esp8266")
+        self.assertIs(views, self.terminals._views("esp8266"))
+        self.assertEqual(selected, views.terminals["esp8266"].selected)
+        self.assertEqual(cases, self.service.open_cases(None))
+        self.assertEqual(before["entry"]["context"], after["entry"]["context"])
+        self.assertEqual(before["revision"], after["revision"])
+        self.assertGreater(after["view_revision"], before["view_revision"])
+        self.assertNotEqual(before["view_token"], after["view_token"])
+        self.assertNotEqual(before["lines"][0], after["lines"][0])
+        self.assertEqual(new_side, views._side("station-a", "station-b", "connection-a-b"))
+        self.assertEqual(after["view_revision"], self.terminals.frame("esp8266")["view_revision"])
+        result = self.terminals.command("esp8266", {"command_id": uuid4().hex, "key": "*", "view_token": before["view_token"]})
+        self.assertEqual(result["status"], "rejected")
+        self.assertEqual(cases, self.service.open_cases(None))
 
     def test_recreated_profile_restores_departed_train_without_replay(self):
         self.depart()

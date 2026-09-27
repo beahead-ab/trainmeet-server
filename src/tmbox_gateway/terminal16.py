@@ -21,6 +21,7 @@ from .train_routes import resolve_departure, RouteResolutionError
 from .terminal16_glyphs import text_cells, encode_lcd
 from .terminal16_i18n import text as translated, notice as translated_notice
 from .device_ui import LANGUAGES
+from .display_placement import effective_sides
 
 
 @dataclass
@@ -31,7 +32,6 @@ class Terminal:
     selected: str | None = None
     screen: str = "overview"
     track: int = 0
-    page: int = 0
     revision: int = 0
     notice: str = ""
     browse_filter: str = "all"
@@ -59,6 +59,7 @@ class Terminal16Lab:
         self.epoch = uuid4().hex
         self.lock = RLock()
         self.terminals = {key: Terminal(station) for key, station in assignments.items()}
+        self.display_sides = {station: effective_sides(engine.config, {}, station) for station in engine.config.stations}
         if any(t.station not in engine.config.stations for t in self.terminals.values()):
             raise ValueError("Unknown assigned station")
         self.legs = {}
@@ -157,6 +158,33 @@ class Terminal16Lab:
         terminal.selected = choices[index] if choices else None
         terminal.screen, terminal.notice = "requests", ""
 
+    def _active_trains(self, terminal):
+        """Ongoing traffic, not future timetable entries or unanswered arrivals."""
+        choices = []
+        for key in self.bindings.values():
+            leg = self.legs[key]
+            own = leg["from_station_id"] == terminal.station
+            if key in self.completed or not self._is_active(leg):
+                continue
+            if not own and leg["to_station_id"] != terminal.station:
+                continue
+            state = self._line(leg).state
+            if state == State.FREE or (not own and state == State.REQUESTED):
+                continue  # Unanswered incoming requests live under A.
+            priority = (0 if own and state == State.RESERVED else
+                        1 if not own and state == State.OCCUPIED else
+                        2 if state == State.REQUESTED else 3 if state == State.RESERVED else 4)
+            choices.append((priority, self._schedule(terminal, leg)["order"], key))
+        return [key for _, _, key in sorted(choices)]
+
+    def _open_active(self, terminal, direction=0):
+        choices = self._active_trains(terminal)
+        current = choices.index(terminal.selected) if terminal.screen == "active" and terminal.selected in choices else None
+        index = ((current + direction) % len(choices) if current is not None else
+                 len(choices) - 1 if direction < 0 else 0)
+        terminal.selected = choices[index] if choices else None
+        terminal.screen, terminal.notice = "active", ""
+
     def _notify_request(self, leg):
         for terminal in self.terminals.values():
             if (terminal.station == leg["to_station_id"] and not terminal.notice
@@ -206,10 +234,19 @@ class Terminal16Lab:
         return self.bindings.get(leg["connection_id"]) == leg["from_movement_id"]
 
     def _side(self, station, other, connection_id=None):
-        link = next(c for c in self.publication["connections"]
-                    if c["id"] == connection_id or (connection_id is None and
-                        {c["station_a_id"], c["station_b_id"]} == {station, other}))
-        return link["display_side_a" if link["station_a_id"] == station else "display_side_b"]
+        if connection_id is None:
+            connection_id = next(c.id for c in self.engine.config.connections.values()
+                                 if {c.station_a_id, c.station_b_id} == {station, other})
+        return self.display_sides[station][connection_id]
+
+    def update_display_placement(self, config, overrides):
+        """Refresh presentation only, retaining selection, queues and entry context."""
+        with self.lock:
+            sides = {station: effective_sides(config, overrides, station) for station in config.stations}
+            for terminal in self.terminals.values():
+                if sides.get(terminal.station) != self.display_sides.get(terminal.station):
+                    terminal.revision += 1
+            self.display_sides = sides
 
     def _label(self, station, leg):
         own = leg["from_station_id"] == station
@@ -238,12 +275,12 @@ class Terminal16Lab:
                 items.append(self._label(terminal.station, leg))
         left = [text for text, side in items if side == "left"]
         right = [text for text, side in items if side == "right"]
-        page = terminal.page
-        a = left[page % len(left)] if left else ""
-        b = right[page % len(right)] if right else ""
+        a = left[0] if left else ""
+        b = right[0] if right else ""
         if a and b and len(a) + len(b) >= 16:
-            # One full identity at a time; never silently clip a train number.
-            return row(a) if page % 2 == 0 else row("", b)
+            # Preserve full identities. B opens the counted active list; C/D
+            # reveals every train without the old unlabelled overview paging.
+            return row(a)
         return row(a, b)
 
     def _tracks(self, terminal):
@@ -267,8 +304,11 @@ class Terminal16Lab:
             return {"#": ("back", "OK"), "*": ("back", "Tillbaka")}
         if terminal.screen == "overview":
             primary = ("requests", "Visa väntande förfrågningar") if self._requests(terminal) else ("browse", "Visa kommande tåg")
-            return {"#": primary, "*": ("language", "Språk"), "C": ("previous", "Föregående tåg"),
-                    "D": ("next", "Nästa tåg"), "B": ("page", "Nästa översiktssida")}
+            active = self._active_trains(terminal)
+            return {"#": primary, "*": ("language", "Språk"),
+                    "C": ("previous_active", "Föregående aktiva tåg") if active else ("previous", "Föregående tåg"),
+                    "D": ("next_active", "Nästa aktiva tåg") if active else ("next", "Nästa tåg"),
+                    "B": ("active", "Visa aktiva tåg")}
         buttons = {"*": ("back", "Tillbaka")}
         if terminal.screen == "requests":
             buttons.update(B=("home", "Översikt utan trafikändring"))
@@ -283,6 +323,12 @@ class Terminal16Lab:
             if terminal.selected in self._candidates(terminal, filtered=True):
                 buttons["#"] = ("select", "Välj tåg")
             return buttons
+        active_view = terminal.screen == "active"
+        if active_view:
+            buttons.update(B=("home", "Översikt utan trafikändring"),
+                           C=("previous_active", "Föregående aktiva tåg"), D=("next_active", "Nästa aktiva tåg"))
+            if terminal.selected not in self._active_trains(terminal):
+                return buttons  # Never silently select/confirm another train.
         leg = self.legs.get(terminal.selected)
         if not leg or terminal.selected in self.completed:
             return buttons
@@ -304,7 +350,8 @@ class Terminal16Lab:
                 buttons.update({"#": ("arrive_track", "Ankommit på valt spår"),
                                 "C": ("previous_track", "Föregående spår"), "D": ("next_track", "Nästa spår")})
             return buttons
-        buttons.update(C=("previous", "Föregående tåg"), D=("next", "Nästa tåg"))
+        if not active_view:
+            buttons.update(C=("previous", "Föregående tåg"), D=("next", "Nästa tåg"))
         if own and line.state == State.FREE and self._departure_ready(leg):
             direct = (self.engine.config.connections[leg["connection_id"]].dispatch_mode_override
                       or self.engine.config.default_dispatch_mode) == DispatchMode.DIRECT
@@ -333,9 +380,18 @@ class Terminal16Lab:
         first = self._overview(terminal)
         selected = self.legs.get(terminal.selected)
         requests = self._requests(terminal)
+        active = self._active_trains(terminal)
+        active_position = active.index(terminal.selected) + 1 if terminal.selected in active else 0
+        compact = lambda count: str(count) if count < 100 else "99+"
+        if terminal.screen == "overview" and active:
+            hint = t("B:Akt{count} C/D", count=compact(len(active)))
+            if len(text_cells(hint)) > 11:
+                hint = t("B:Akt{count}", count=compact(len(active)))
         position = requests.index(terminal.selected) + 1 if terminal.selected in requests else 0
         if terminal.screen == "overview" and requests:
-            hint = "A:Kö #Visa"
+            hint = t("A:K{count} B:Akt", count=compact(len(requests))) if active else "A:Kö #Visa"
+            if len(text_cells(hint)) > 11:
+                hint = t("A{count} B:Akt", count=compact(len(requests)))
         if terminal.notice:
             first, hint = row(translated_notice(terminal.language, terminal.notice)), "#OK *=Bak"
         elif terminal.screen == "language":
@@ -375,7 +431,10 @@ class Terminal16Lab:
             tracks = self._tracks(terminal)
             label = tracks[terminal.track % len(tracks)].display_label
             first, hint = row(t("{number} SPÅR {track}", number=selected['train_number'], track=label)), "#In C/D:Sp"
-        elif terminal.screen == "detail" and selected:
+        elif terminal.screen == "active" and not active_position:
+            first = row(t("LÄGET ÄNDRAT" if active else "INGA AKTIVA TÅG"))
+            hint = "C/D B:Öv"
+        elif terminal.screen in {"detail", "active"} and selected:
             label, side = self._label(terminal.station, selected)
             first = row(label) if side == "left" else row("", label)
             action = buttons.get("#", ("", ""))[0]
@@ -384,6 +443,18 @@ class Terminal16Lab:
                                                "C/D A:Kö" if "C" in buttons else "A:Kö *=Bak")
             if action == "request" and buttons["#"][1] == "Reservera":
                 hint = "#Sändklar"
+            if terminal.screen == "active":
+                counter = f"{compact(active_position)}/{compact(len(active))}"
+                hint = {"depart": "#Avg C/D", "arrive": "#In B:Sp"}.get(action, "C/D B:Öv")
+                if len(text_cells(label)) + len(counter) < 16:
+                    first = row(label, counter) if side == "left" else row(counter, label)
+                else:
+                    # Long identities stay intact. Count moves beside the
+                    # action; exceptionally large lists show the total here.
+                    prefix = t({"depart": "#Avg", "arrive": "#In"}.get(action, "C/D"))
+                    hint = prefix + " " + counter
+                    if len(text_cells(hint)) > 11:
+                        hint = prefix + " " + compact(len(active))
         status = t("Skriv tågnummer direkt, eller bläddra med C/D")
         upcoming = None
         if selected and terminal.screen != "overview":
@@ -401,6 +472,9 @@ class Terminal16Lab:
         if terminal.screen == "requests":
             status = (t("Förfrågan {position}/{count} · ", position=requests.index(terminal.selected)+1, count=len(requests)) + status
                       if terminal.selected in requests else t("Ingen vald förfrågan. A öppnar kön; B visar översikten."))
+        if terminal.screen == "active":
+            status = (t("Aktivt tåg {position}/{count}", position=active_position, count=len(active)) + " · " + status
+                      if active_position else t("Ingen vald aktiv rörelse. C/D väljer; B visar översikten."))
         hint = t(hint)
         if terminal.receipt_until is not None:
             number, destination = terminal.receipts[0]
@@ -420,7 +494,8 @@ class Terminal16Lab:
             "revision": self.engine.revision, "view_revision": terminal.revision,
             "input_guard_ms": 500,
             "language": terminal.language,
-            "keys": {key: {"label": t("Förfrågningskö ({count} väntar)", count=len(requests)) if key == "A" else t(label)} for key, (_, label) in buttons.items()},
+            "keys": {key: {"label": t("Förfrågningskö ({count} väntar)", count=len(requests)) if key == "A" else
+                      t("Aktiva tåg ({count})", count=len(active)) if action == "active" else t(label)} for key, (action, label) in buttons.items()},
             "entry": {"context": f"{self.epoch}:{device}:{terminal.station}", "max_length": 5,
                       "lines": entry_lines, "lcd": encode_lcd(entry_lines),
                       "row": 0, "column": 5, "commit": "#", "cancel": "*", "erase": "B",
@@ -429,6 +504,8 @@ class Terminal16Lab:
                                  "A": t("Förfrågningskö (avbryt inmatning)")}},
             "requests": {"count": len(requests), "position": requests.index(terminal.selected) + 1 if terminal.selected in requests else 0,
                          "label": "A · " + t("Förfrågningskö ({count} väntar)", count=len(requests))},
+            "active": {"count": len(active), "position": active_position if terminal.screen == "active" else 0,
+                       "movement_id": terminal.selected if terminal.screen == "active" and active_position else None},
             "status": status, "upcoming": upcoming,
         }
 
@@ -501,8 +578,6 @@ class Terminal16Lab:
             terminal.screen = terminal.return_screen if terminal.screen in {"tracks", "cancel", "reject"} else "overview"
         elif action == "home":
             terminal.screen = "overview"
-        elif action == "page":
-            terminal.page += 1
         elif action == "language":
             terminal.language_index = [code for code, _ in LANGUAGES].index(terminal.language)
             terminal.screen = "language"
@@ -513,6 +588,8 @@ class Terminal16Lab:
             terminal.screen = "overview"
         elif action in {"requests", "next_request", "previous_request"}:
             self._open_requests(terminal, {"requests": 0, "next_request": 1, "previous_request": -1}[action])
+        elif action in {"active", "next_active", "previous_active"}:
+            self._open_active(terminal, {"active": 0, "next_active": 1, "previous_active": -1}[action])
         elif action in {"browse", "next", "previous"}:
             self._browse(terminal, {"browse": 0, "next": 1, "previous": -1}[action])
         elif action == "filter":

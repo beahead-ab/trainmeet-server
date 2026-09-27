@@ -9,7 +9,7 @@ import subprocess
 import tarfile
 
 MODULES = (
-    "__init__", "device_ui", "display", "engine", "models", "observability",
+    "__init__", "device_ui", "display", "display_placement", "engine", "models", "observability",
     "runtime", "storage", "terminal16", "terminal16_demo", "terminal16_glyphs",
     "terminal16_public", "terminal16_i18n", "train_routes",
 )

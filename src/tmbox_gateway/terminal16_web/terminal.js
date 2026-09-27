@@ -42,6 +42,8 @@
   const live = document.body.dataset.terminal === "live";
   let identity = null, pollVersion = 0;
   let connected = false, resetting = false, text = {};
+  let placement = null, placementDraft = null;
+  const placementDialog = document.querySelector("#placement-dialog");
   const keyOrder = "123A456B789C*0#D";
   function drawLCD(lcd, lines) {
     lcd.replaceChildren();
@@ -166,6 +168,7 @@
   }
   function update(state) {
     connected = true; text = state.text;
+    if (state.placement) placement = state.placement;
     resetButtons();
     document.querySelector("h1").textContent = text.title;
     document.querySelector("#subtitle").textContent = text.subtitle;
@@ -229,6 +232,62 @@
   }
   function resetButtons() {
     for (const id of ["reset-all", "reset-clearance", "reset-direct"]) document.getElementById(id).disabled = !connected || resetting;
+    const open = document.querySelector("#placement-open");
+    if (open) open.disabled = !connected || resetting || !placement;
+  }
+  if (placementDialog && !live) {
+    const form = document.querySelector("#placement-form");
+    const close = () => { if (!resetting) placementDialog.close(); };
+    document.querySelector("#placement-open").addEventListener("click", () => {
+      if (!placement || resetting) return;
+      placementDraft = structuredClone(placement);
+      const fields = document.querySelector("#placement-fields"); fields.replaceChildren();
+      document.querySelector("#placement-error").textContent = "";
+      for (const station of placementDraft.stations) {
+        const group = document.createElement("fieldset"), legend = document.createElement("legend");
+        legend.textContent = station.name; group.append(legend);
+        for (const connection of station.connections) {
+          const label = document.createElement("label"), title = document.createElement("span"), select = document.createElement("select");
+          title.textContent = connection.other_station_name;
+          select.dataset.station = station.station_id; select.dataset.connection = connection.connection_id;
+          for (const [value, name] of [["default", `Standard (${connection.default_side === "left" ? "vänster" : "höger"})`], ["left", "Vänster"], ["right", "Höger"]]) {
+            const option = document.createElement("option"); option.value = value; option.textContent = name; select.append(option);
+          }
+          select.value = connection.overridden ? connection.side : "default";
+          label.append(title, select); group.append(label);
+        }
+        fields.append(group);
+      }
+      placementDialog.showModal();
+    });
+    document.querySelector("#placement-close").addEventListener("click", close);
+    document.querySelector("#placement-cancel").addEventListener("click", close);
+    placementDialog.addEventListener("cancel", event => { if (resetting) event.preventDefault(); });
+    placementDialog.addEventListener("close", () => document.querySelector("#placement-open").focus());
+    document.querySelector("#placement-default").addEventListener("click", () => { for (const select of form.querySelectorAll("select")) select.value = "default"; });
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!connected || resetting || !placementDraft) return;
+      const body = {epoch: placementDraft.epoch, revision: placementDraft.revision,
+        stations: Object.fromEntries(placementDraft.stations.map(station => [station.station_id, {}]))};
+      for (const select of form.querySelectorAll("select")) if (select.value !== "default") body.stations[select.dataset.station][select.dataset.connection] = select.value;
+      resetting = true; resetButtons();
+      for (const control of form.querySelectorAll("button, select")) control.disabled = true;
+      const error = document.querySelector("#placement-error"); error.textContent = "";
+      try {
+        const response = await fetch("./api/display-placement", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body), signal: AbortSignal.timeout(5000)});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || "Placeringen kunde inte sparas.");
+        update(result); placementDialog.close();
+        document.querySelector("#placement-status").textContent = "Testplaceringen är sparad. Träffens inställningar är oförändrade.";
+      } catch (failure) { error.textContent = failure.message; }
+      finally {
+        resetting = false; resetButtons();
+        for (const control of form.querySelectorAll("button, select")) control.disabled = false;
+        for (const model of boxes.values()) render(model);
+        if (!placementDialog.open) document.querySelector("#placement-open").focus();
+      }
+    });
   }
   async function resetLab(path, body, success) {
     if (!connected || resetting) return;

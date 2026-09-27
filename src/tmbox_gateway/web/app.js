@@ -638,6 +638,7 @@ globalThis.TrainMeetI18n.subscribe(() => {
   renderWorkspaceMeetLabel();
   renderCloudStatus();
   renderUsers();
+  renderCloudPresentation();
   configureResetMode();
 });
 
@@ -1845,7 +1846,105 @@ async function refreshRuntime() {
   const input = document.querySelector("#runtime-central-url");
   if (state.runtime.central_url && !input.closest("dialog")?.open) input.value = state.runtime.central_url;
   renderCloudStatus();
+  await refreshCloudPresentation();
 }
+
+let cloudPresentation = null;
+let placementEdit = null;
+let presentationRequest = 0;
+async function refreshCloudPresentation() {
+  const request = ++presentationRequest;
+  try {
+    const response = await authorizedFetch("/v1/cloud/presentation", {cache: "no-store"});
+    if (request !== presentationRequest) return;
+    const data = response.ok ? await response.json() : null;
+    if (request !== presentationRequest) return;
+    cloudPresentation = data;
+    renderCloudPresentation();
+  } catch (_) { /* An offline refresh must not destroy an open editor. */ }
+}
+
+function renderCloudPresentation() {
+  const data = cloudPresentation;
+  document.querySelector("#display-placement-section").hidden = !data?.supported;
+  document.querySelector("#published-findings").hidden = !data?.supported;
+  const rows = document.querySelector("#display-placement-rows");
+  rows.replaceChildren();
+  for (const station of data?.stations || []) {
+    const tr = document.createElement("tr");
+    for (const value of [`${station.code} · ${station.name}`,
+      ...["left", "right"].map(side => station.connections.filter(c => c.side === side).map(c => c.other_station_code).join(", ") || "—")]) {
+      const td = document.createElement("td"); td.textContent = value; tr.append(td);
+    }
+    if (station.legacy_layout_limited) {
+      const note = document.createElement("small");
+      note.className = "placement-legacy-note";
+      note.textContent = t("Äldre klienter med fast layout behåller Cloud-placeringen. Den nya TMBox-vyn använder ditt val.");
+      tr.firstChild.append(note);
+    }
+    const action = document.createElement("td");
+    const button = document.createElement("button"); button.type = "button"; button.className = "secondary";
+    button.textContent = t("Redigera"); button.disabled = !station.connections.length;
+    button.setAttribute("aria-label", `${t("TMBox-placering")} · ${station.name}`);
+    button.addEventListener("click", () => editDisplayPlacement(station.station_id, button));
+    const dialog = document.querySelector("#display-placement-modal");
+    if (dialog.open && placementEdit?.station_id === station.station_id) modalOrigins.set(dialog, button);
+    action.append(button); tr.append(action); rows.append(tr);
+  }
+  const findings = data?.findings;
+  const summary = document.querySelector("#published-findings-summary");
+  summary.textContent = !Array.isArray(findings) ? t("Den här Cloud-versionen innehåller inga kontrolluppgifter.")
+    : findings.length ? t("{count} noterade uppgifter", {count: findings.length}) : t("Inga konflikter eller observationer noterade.");
+  const list = document.querySelector("#published-findings-list"); list.replaceChildren();
+  for (const finding of findings || []) {
+    const li = document.createElement("li");
+    const kind = finding.level === "conflict" ? t("Konflikt") : finding.level === "observation" ? t("Observation") : t("Uppgift");
+    li.textContent = `${kind}${finding.rule ? ` ${finding.rule}` : ""} · ${typeof finding.message === "string" ? finding.message : "—"}`;
+    list.append(li);
+  }
+}
+
+function editDisplayPlacement(stationId, origin) {
+  const data = cloudPresentation;
+  const station = data?.stations?.find(s => s.station_id === stationId);
+  if (!station) return;
+  placementEdit = {publication_id: data.publication_id, config_version: data.config_version, station_id: stationId};
+  document.querySelector("#display-placement-title").textContent = `${t("TMBox-placering")} · ${station.code}`;
+  const fields = document.querySelector("#display-placement-fields"); fields.replaceChildren();
+  for (const connection of station.connections) {
+    const label = document.createElement("label");
+    const title = document.createElement("span"); title.textContent = `${connection.other_station_code} · ${connection.other_station_name}`;
+    const select = document.createElement("select"); select.name = connection.connection_id;
+    for (const [value, text] of [["", `${t("Följ Cloud")} · ${t(connection.default_side === "left" ? "Vänster" : "Höger")}`], ["left", t("Vänster")], ["right", t("Höger")]]) {
+      const option = document.createElement("option"); option.value = value; option.textContent = text; select.append(option);
+    }
+    select.value = connection.overridden ? connection.side : "";
+    label.append(title, select); fields.append(label);
+  }
+  setMessage(document.querySelector("#display-placement-form .form-message"), "");
+  openModal("display-placement-modal", origin);
+}
+
+document.querySelector("#display-placement-defaults").addEventListener("click", () => {
+  for (const select of document.querySelectorAll("#display-placement-fields select")) {
+    select.value = ""; select.dispatchEvent(new Event("change", {bubbles: true}));
+  }
+});
+document.querySelector("#display-placement-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const sides = Object.fromEntries([...form.querySelectorAll("select")].filter(s => s.value).map(s => [s.name, s.value]));
+  if (!placementEdit || !beginModalAction(form)) return;
+  try {
+    const response = await authorizedFetch("/v1/cloud/display-placement", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({...placementEdit, sides})});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || t("Inställningen kunde inte sparas."));
+    ++presentationRequest;
+    cloudPresentation = data; renderCloudPresentation();
+    finishModal(form);
+  } catch (error) { setMessage(form.querySelector(".form-message"), error.message, "error"); }
+  finally { endModalAction(form); }
+});
 
 async function refreshLocalClock() {
   const response = await authorizedFetch("/v1/clock", { cache: "no-store" });

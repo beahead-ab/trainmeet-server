@@ -105,7 +105,10 @@ visas inte med stationskod eller streck och tar ingen plats, oavsett antal.
 Endast aktuella begäranden och tågrörelser visas till vänster/höger med
 motstationens kod. `?` betyder begärt, `<`/`>` klart, `◀`/`▶` faktiskt avgånget.
 När trafiken återtas, nekas eller tas emot försvinner den från översikten.
-För långa identiteter visas en i taget med `B` i översikten, aldrig ett avklippt tågnummer.
+Uppdatering 2026-09-27: `B` i översikten öppnar **aktiva tåg** med räknare.
+`C/D` växlar direkt mellan tågens åtgärdsvyer, utan nytt nummer eller extra val.
+Det ersätter tidigare B-sidbläddring. Långa identiteter kapas aldrig.
+Se [aktuell serverprofil](server-terminal16.md#aktiva-tåg-återfinn-båda-klarerade-utfarter).
 Detaljvyn fokuserar på det valda tåget. På andra raden finns aktuellt handgrepp
 till vänster och serverns klocka till höger, även under sifferinmatning.
 

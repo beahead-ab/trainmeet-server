@@ -180,7 +180,7 @@ class PublicHandler(Handler):
         self.path = "/" + path[len(self.server.prefix):]
         if self.path in {"/style.css", "/terminal.js", "/healthz"} and not mutation:
             return True
-        if self.path not in {"/", "/events", "/api/state", "/api/key", "/api/reset", "/api/reset-devices"}:
+        if self.path not in {"/", "/events", "/api/state", "/api/key", "/api/reset", "/api/reset-devices", "/api/display-placement"}:
             self._send(404, {"message": "Finns inte"})
             return False
         if self.headers.get("Sec-Fetch-Site") == "cross-site" and self.path != "/":

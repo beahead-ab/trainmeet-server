@@ -50,6 +50,9 @@ class PersistenceTests(unittest.TestCase):
                     for sequence, key in enumerate(['A', '3', '9', '#'], start=1):
                         press(engine, 'panel-a', key, sequence)
                     value = asdict(config)
+                    # Historical versions predate local display placement.
+                    for panel in value['panels'].values():
+                        panel.pop('display_positions')
                     if not explicit_defaults:
                         for panel in value['panels'].values():
                             panel.pop('slot_layout')

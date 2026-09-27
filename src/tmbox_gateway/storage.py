@@ -40,6 +40,9 @@ class CorruptStateError(StateStoreError):
 
 def session_config_fingerprint(config: SessionConfig, *, explicit_panel_layout_defaults: bool = False) -> str:
     value = asdict(config)
+    # Local screen placement cannot invalidate saved traffic or old fingerprints.
+    for panel in value["panels"].values():
+        panel.pop("display_positions", None)
     # Before 1.9 the default row layout was implicit. Adding a presentation
     # field must not invalidate every persisted run on a software upgrade.
     # Non-default layouts remain part of the identity, as do all route/slot
