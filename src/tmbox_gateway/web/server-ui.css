@@ -244,11 +244,21 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 #clock-view { width: 100%; height: 100%; padding: 0; display: flex; }
 /* The clock screen shows one clock: a face (analog, stationsur, swiss) or
    digits (digital), centred, with the running/stopped line under it. The
-   content area is 914 px tall: a running face uses nearly all of it and gives
-   way only when the stop box appears under it. */
+   clock screen has no top row or footer, so a running face uses nearly the
+   whole height and gives way only when the stop box appears under it. */
 .sc-clock-layout { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; width: 100%; height: 100%; min-height: 0; }
-.sc-clock-layout .clock-face { flex: 0 0 auto; width: 884px; height: 884px; max-width: none; max-height: none; filter: none; }
-.sc-clock-layout.is-stopped .clock-face { width: 620px; height: 620px; }
+.sc-clock-layout .clock-face { flex: 0 0 auto; width: 980px; height: 980px; max-width: none; max-height: none; filter: none; }
+.sc-clock-layout.is-stopped .clock-face { width: 700px; height: 700px; }
+/* The clock screen is the clock and the QR link, nothing else: no meet name,
+   no badge, no address line, no server name. 1020 px are left for the clock. */
+#display-stage[data-kind=clock] .sc-top, #display-stage[data-kind=clock] .sc-foot { display: none; }
+.sc-qr { position: absolute; right: 40px; bottom: 28px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.sc-qr[hidden] { display: none; }
+.sc-qr__code { background: #fff; padding: 12px; border-radius: 12px; line-height: 0; }
+.sc-qr__code svg { display: block; width: 150px; height: 150px; }
+.sc-qr__text { font-size: 22px; color: var(--display-muted); white-space: nowrap; }
+.light .sc-qr__code { border: 1px solid #e5e5e5; }
+#display-stage:not([data-kind=clock]) .sc-qr { display: none; }
 .sc-clock-layout .clock-face.stopped { opacity: .6; }
 .sc-clock-layout .clock-digital { font: 700 440px/1 var(--font-mono); letter-spacing: -.04em; color: var(--display-fg); white-space: nowrap; }
 .sc-clock-layout .clock-digital[data-seconds=true] { font-size: 330px; }

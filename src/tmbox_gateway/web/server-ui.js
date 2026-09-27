@@ -246,7 +246,12 @@
     const footer = make("footer", "sc-foot"); footer.id = "screen-footer";
     move("#display-connection", footer);
     const status = make("span", ""); status.id = "screen-status"; footer.append(status);
-    stage.append(header, content, footer);
+    // QR badge: the link to this server for anyone in the hall. Absolutely
+    // positioned in the corner so the clock face keeps the whole height.
+    const qr = make("div", "sc-qr"); qr.id = "screen-qr"; qr.hidden = true;
+    const code = make("div", "sc-qr__code"); code.id = "screen-qr-code";
+    qr.append(code, authored("span", "sc-qr__text", "Skanna – allt om träffen"));
+    stage.append(header, content, footer, qr);
     const resize = () => {
       const scale = Math.min(innerWidth / 1920, innerHeight / 1080);
       stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
@@ -264,6 +269,15 @@
     $("#screen-status").textContent = snapshot.server_name || "TrainMeet Server";
     $("#display-stage").dataset.kind = kind;
     api.lastDisplayContact = Date.now();
+  };
+  api.qr = (url, visible) => {
+    const host = $("#screen-qr"); if (!host) return;
+    host.hidden = !visible || !url || typeof globalThis.qrcode !== "function";
+    if (host.hidden || host.dataset.url === url) return;
+    host.dataset.url = url;
+    const code = globalThis.qrcode(0, "M"); code.addData(url); code.make();
+    $("#screen-qr-code").innerHTML = code.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+    host.title = url;
   };
   api.us = (data, screen = false) => {
     const host = screen ? $("#territories-view") : $("#us-runtime-summary");

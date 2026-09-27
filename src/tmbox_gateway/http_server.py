@@ -3158,6 +3158,7 @@ class TrainMeetHTTPApplication:
             "/assets/app.css": "app.css",
             "/assets/app.js": "app.js",
             "/assets/server-ui.js": "server-ui.js",
+            "/assets/qrcode.js": "qrcode.js",
             "/assets/server-ui.css": "server-ui.css",
             "/assets/server-design.css": "server-design.css",
             "/assets/simulation-banner.js": "simulation-banner.js",

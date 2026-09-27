@@ -3573,6 +3573,8 @@ function renderConnectionBadge(snapshot) {
   const address = connection.host ? `${connection.host}:${connection.port}` : "";
   const visible = Boolean(connection.code) && Boolean(address) && screens.includes(displayKind);
   badge.classList.toggle("hidden", !visible);
+  // The same setting (⚙ › Skärmar och klocka) also governs the QR link to this server.
+  serverUI.qr(address ? `http://${address}/` : "", visible);
   if (!visible) return;
   document.querySelector("#display-connection-address").textContent = `TMBox ${address}`;
   document.querySelector("#display-connection-code").textContent = connection.code;
