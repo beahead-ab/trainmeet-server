@@ -263,7 +263,8 @@
   api.display = (snapshot, kind, time) => {
     const meet = $("#screen-meet"); if (!meet) return;
     const us = snapshot.meet?.operating_region === "us";
-    meet.replaceChildren(make("span", "", snapshot.meet?.name || "TrainMeet"), make("span", `sc-badge sc-badge--${us ? "us" : "eu"}`, us ? "US" : "EU"));
+    // The meet's name only: EU or US is setup detail, not something the hall needs.
+    meet.replaceChildren(make("span", "", snapshot.meet?.name || "TrainMeet"));
     const labels = {clock:"Träffklocka", topology:"Banöversikt", graph:"Tågdiagram", dashboard:"Översikt", territories:"Områdestavla"};
     if (kind !== "clock") meet.append(make("span", "sc-subtitle", t(labels[kind])));
     const hour = Number(time.slice(0,2));

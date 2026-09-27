@@ -5,6 +5,19 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Inloggad hamnar man i Drift
+
+Deltagarvyn på `/` är till för gäster. Den som är inloggad kommer till Drift:
+`/`, loggan, skärmarnas tillbakalänk och gamla bokmärken till `/#workspaces`
+leder dit. Förut räckte ett klick på loggan för att hamna i deltagarvyn.
+Loggar man ut kommer man tillbaka till deltagarvyn.
+
+### Skärmarna visar inte EU eller US
+
+Skärmarnas rubrik visar träffens namn och vilken skärm det är, inte EU eller
+US. Det är en inställning för den som sätter upp träffen, inte något salen
+behöver se.
+
 ### Typsnitten är alltid Inter och JetBrains Mono
 
 Tider, tågnummer, stationskoder och versionsrader under Drift ritades i

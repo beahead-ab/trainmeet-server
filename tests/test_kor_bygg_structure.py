@@ -48,8 +48,9 @@ class ShellStructureTests(unittest.TestCase):
         self.assertNotIn('href="#workspaces"', self.html)
         self.assertNotIn('data-open-view="admin"', self.html)
 
-    def test_home_leads_to_the_participant_view(self):
-        self.assertIn('function workspaceHome() { return "/"; }', self.js)
+    def test_home_is_drift_when_signed_in_and_the_participant_view_otherwise(self):
+        self.assertIn('function workspaceHome() { return state.authStatus?.authenticated ? "/drift" : "/"; }', self.js)
+        self.assertIn('history.replaceState(null, "", "/drift");', self.js)
         self.assertIn('id="workspace-home"', self.html)
         self.assertIn('id="participant-view"', self.html)
         self.assertNotIn('id="workspace-picker"', self.html)

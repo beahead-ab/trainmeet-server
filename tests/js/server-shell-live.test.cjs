@@ -123,6 +123,7 @@ const root = path.resolve(__dirname, '../..');
       await clockScreen.locator('#display-loading').waitFor({state:'hidden'});
       assert.equal(await clockScreen.locator('#screen-header').isVisible(),true);
       assert.equal(await clockScreen.locator('#screen-footer').isVisible(),true);
+      assert.equal(await clockScreen.locator('#screen-meet .sc-badge').count(),0,'Screens show the meet name, not EU/US');
       if(path==='topology'){
         const bounds=await clockScreen.locator('#topology-svg .topology-name').evaluateAll(nodes=>nodes.map(n=>Number(n.getAttribute('x'))));
         assert.ok(Math.max(...bounds)-Math.min(...bounds)>1000,'Two-station TV layout uses the available width');
@@ -164,6 +165,16 @@ const root = path.resolve(__dirname, '../..');
     // Legacy bookmarks resolve to canonical routes.
     await page.goto(urls.eu+'/#settings');await page.waitForURL(urls.eu+'/installningar');
     await page.goto(urls.eu+'/#overview');await page.waitForURL(urls.eu+'/drift');
+    // Signed in, the guest page is out of reach: "/", the old picker address
+    // and the logo all lead to Drift.
+    for(const address of ['/','/#workspaces']){
+      await page.goto(urls.eu+address);await page.waitForURL(urls.eu+'/drift');
+      await page.locator('#overview-view').waitFor({state:'visible'});
+      assert.equal(await page.locator('#participant-view').isVisible(),false);
+    }
+    await page.goto(urls.eu+'/installningar');
+    await page.locator('#workspace-home').click();await page.waitForURL(urls.eu+'/drift');
+    assert.equal(await page.locator('#participant-view').isVisible(),false);
     await login(urls.us);
     assert.equal(await page.locator('#workspace-options').count(),0);
     await page.locator('#server-region').filter({hasText:'US'}).waitFor();

@@ -535,8 +535,10 @@ const WORKSPACES = {
 function currentMode() { return document.body.dataset.mode || "workspaces"; }
 function storedMode() { sessionStorage.removeItem(WORKSPACE_KEY); return "workspaces"; }
 
-// The logo always leads to the participant view; Drift is one click away from there.
-function workspaceHome() { return "/"; }
+// "/" is for guests. Signed in, home is Drift: the logo, the screens' back link
+// and "/" itself all lead there, so an administrator never lands on the
+// participant view by accident. Signing out leads back to it.
+function workspaceHome() { return state.authStatus?.authenticated ? "/drift" : "/"; }
 
 function availableWorkspaces() {
   // Fail closed: a stale browser choice must not grant a role or select EU/US.
@@ -614,6 +616,11 @@ function applyWorkspaceRoute() {
   if (legacy[route]) { history.replaceState(null, "", legacy[route]); route = location.hash.slice(1); }
   if (route === "workspaces") { history.replaceState(null, "", "/"); route = ""; }
   const path = location.pathname.replace(/\/$/, "") || "/";
+  if (state.authStatus?.authenticated && path === "/" && !route) {
+    history.replaceState(null, "", "/drift");
+    applyWorkspaceRoute();
+    return;
+  }
   const protectedMode = {"/drift": "kor", "/installningar": "installningar", "/hjalp": "help", "/login": "kor"}[path];
   if (protectedMode) {
     if (!state.authStatus?.authenticated) { showLogin(); return; }
@@ -652,7 +659,7 @@ window.addEventListener("hashchange", applyWorkspaceRoute);
 window.addEventListener("popstate", applyWorkspaceRoute);
 document.querySelector("#workspace-home").addEventListener("click", (event) => {
   event.preventDefault();
-  history.pushState(null, "", "/");
+  history.pushState(null, "", workspaceHome());
   applyWorkspaceRoute();
 });
 bindUsersSection();

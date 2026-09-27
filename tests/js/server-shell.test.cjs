@@ -34,6 +34,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     let placementSide = 'left';
     let placementOverride = false;
     let placementFails = true;
+    let signedIn = false;
     const presentation = () => ({supported: region === 'eu', publication_id: 'pub-1', config_version: 2,
       findings: [{level: 'conflict', rule: 'A', message: '<img src=x onerror=alert(1)> Exempel'}],
       stations: [{station_id: 'a', code: 'A', name: 'Alpha', connections: [
@@ -50,7 +51,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
         let data = {};
         switch (url.pathname) {
           case '/v1/setup': case '/v1/setup/status': data = { required: false, admin_configured: true, runtime }; break;
-          case '/v1/auth/status': data = { authenticated: true, at_the_machine: false, username: 'admin' }; break;
+          case '/v1/auth/status': data = signedIn ? { authenticated: true, at_the_machine: false, username: 'admin' } : { authenticated: false }; break;
+          case '/v1/workspaces': data = { selected_meet: { id: 'meet-1', name: runtime.meet_name, publication_id: runtime.publication_id, operating_region: region, generation: 7 }, operating_region: region, available_workspaces: ['administration', 'tmbox'], public_clients_enabled: true }; break;
           case '/v1/browser-clients': case '/v1/browser-clients/self': data = { client_id: 'browser-tmbox-test', workspace: 'tmbox', device_code: 'WEB-TEST', access_token: 'test-only' }; break;
           case '/v1/tmbox-v2/assignment': data = { status: 'unassigned' }; break;
           case '/v1/server-context': data = { selected_meet: { id: 'meet-1', name: runtime.meet_name, publication_id: runtime.publication_id, operating_region: region, generation: 7 }, operating_region: region, available_workspaces: region === 'eu' ? ['administration', 'tkl', 'tmbox'] : ['administration', 'dispatcher', 'conductor'], cloud_update: { linked: cloudLinked, auto_sync: cloudAuto, state: 'current', current_publication_id: 'pub-1' } }; break;
@@ -107,8 +109,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       return route.fulfill({ status: 200, contentType, body: fs.readFileSync(target) });
     });
 
-    // "/" is the participant view: the meet, the clock, how to connect a box –
-    // no picker. A signed-in administrator gets one link on to Drift.
+    // "/" is the participant view for guests: the meet, the clock, how to
+    // connect a box – no picker. Signed in, "/" is Drift.
     await page.goto('http://127.0.0.1:9999/');
     await page.locator('#participant-view').waitFor();
     assert.equal(await page.locator('#application-menu').isVisible(), false);
@@ -116,8 +118,11 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#workspace-options').count(), 0);
     await page.locator('#pv-code').getByText(/\d{3}-\d{3}|—/).waitFor();
     assert.equal(await page.locator('#participant-view a[href="/tmbox/"]').count(), 1, 'One button starts a virtual TMBox');
-    await page.locator('#pv-login').click();
+    assert.equal(await page.locator('#pv-login').getAttribute('href'), '/login');
+    signedIn = true;
+    await page.goto('http://127.0.0.1:9999/');
     await page.waitForURL('**/drift');
+    assert.equal(await page.locator('#participant-view').isVisible(), false);
     await page.locator('#device-list .status-row').waitFor();
     assert.equal(await page.locator('#application-menu').isVisible(), false);
     assert.equal(await page.locator('#overview-timetable').getAttribute('open'), null);
@@ -193,10 +198,10 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       await page.goto('http://127.0.0.1:9999/installningar');
       await page.locator('[data-language-picker]').selectOption(language);
       assert.equal(await page.locator('.server-settings-nav a[href="/installningar#farozon"]').textContent(),{sv:'Farozon',da:'Farezone',nb:'Faresone',en:'Danger zone',de:'Gefahrenbereich'}[language]);
-      // The old picker address lands on the participant view, whatever the language.
+      // Signed in, the old picker address lands on Drift, whatever the language.
       await page.goto('http://127.0.0.1:9999/#workspaces');
-      await page.locator('#participant-view').waitFor();
-      assert.equal(new URL(page.url()).hash, '');
+      await page.waitForURL('**/drift');
+      assert.equal(await page.locator('#participant-view').isVisible(), false);
     }
     await page.goto('http://127.0.0.1:9999/installningar');
     await page.locator('[data-language-picker]').selectOption('sv');
