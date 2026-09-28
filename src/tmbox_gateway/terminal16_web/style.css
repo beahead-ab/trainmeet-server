@@ -266,6 +266,8 @@ body[data-terminal="live"] .box-status, body[data-terminal="live"] .box-queue { 
   .tm-columns--lab { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 900px) {
+  /* The same 16 px gutter as the header and the rest of the server. */
+  main { padding: 16px 16px 32px; }
   .tm-top { padding: 10px 16px; }
   .tm-top__sub, .tm-top__status { display: none; }
   .tm-columns { grid-template-columns: minmax(0, 1fr); }
@@ -286,7 +288,16 @@ body[data-terminal="live"] .box-status, body[data-terminal="live"] .box-queue { 
   #placement-default { grid-column: 1 / -1; }
 }
 @media (max-width: 360px) {
-  main { padding: 20px 12px; }
   .box { padding: 16px; }
   .box-heading { flex-wrap: wrap; }
+}
+
+/* ---------- Telefon: fasta sidmarginaler ----------
+   The page never pans sideways: one fixed gutter, and anything wider scrolls
+   inside its own box. On touch screens fields use 16 px text; smaller text
+   makes iOS zoom the whole page in when a field is tapped, and then the page
+   floats from side to side. */
+html, body { overflow-x: clip; }
+@media (hover: none) and (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { font-size: 16px !important; }
 }

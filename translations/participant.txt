@@ -51,7 +51,6 @@ The address appears when the server is on the network|Adressen visas när server
 The code is valid for {n} hours from server startup. Operations sees the TMBox waiting for a station and assigns one.|Koden gäller {n} timmar från att servern startades. Boxen dyker upp hos trafikledningen som ”väntar på station” och får sin station därifrån.|Koden gælder i {n} timer fra serverstart. Trafikledelsen ser boksen som ”venter på station” og tildeler den en station.|Koden gjelder i {n} timer fra serverstart. Trafikkledelsen ser boksen som «venter på stasjon» og tildeler den en stasjon.|Der Code gilt {n} Stunden ab Serverstart. Die Betriebsleitung sieht die Box als „wartet auf Bahnhof“ und weist ihr einen Bahnhof zu.
 The code has no expiry. Operations sees the TMBox waiting for a station and assigns one.|Koden gäller tills vidare. Boxen dyker upp hos trafikledningen som ”väntar på station” och får sin station därifrån.|Koden gælder indtil videre. Trafikledelsen ser boksen som ”venter på station” og tildeler den en station.|Koden gjelder inntil videre. Trafikkledelsen ser boksen som «venter på stasjon» og tildeler den en stasjon.|Der Code gilt bis auf Weiteres. Die Betriebsleitung sieht die Box als „wartet auf Bahnhof“ und weist ihr einen Bahnhof zu.
 No pairing code has been issued.|Ingen parningskod är utfärdad just nu.|Der er ikke udstedt en parringskode.|Ingen paringskode er utstedt nå.|Derzeit ist kein Kopplungscode ausgestellt.
-The server's network: {name}. Enter it above if it is the meet's Wi-Fi.|Serverns nätverk: {name}. Skriv in det ovan om det är träffens Wi-Fi.|Serverens netværk: {name}. Indtast det ovenfor, hvis det er træffets Wi-Fi.|Serverens nettverk: {name}. Skriv det inn ovenfor hvis det er treffets Wi-Fi.|Netzwerk des Servers: {name}. Oben eintragen, wenn es das WLAN des Treffens ist.
 Name and password appear on the participant view and in the Wi-Fi code on the displays. Leave the fields blank if the network should not be shared.|Namn och lösenord står på deltagarvyn och finns i Wi-Fi-koden på skärmarna. Lämna fälten tomma om nätet inte ska delas.|Navn og adgangskode står i deltagervisningen og i Wi-Fi-koden på skærmene. Lad felterne være tomme, hvis netværket ikke skal deles.|Navn og passord står i deltakervisningen og i Wi-Fi-koden på skjermene. La feltene stå tomme hvis nettverket ikke skal deles.|Name und Passwort stehen in der Teilnehmeransicht und im WLAN-Code auf den Anzeigen. Felder leer lassen, wenn das Netzwerk nicht geteilt werden soll.
 Meet Wi-Fi – shown on the participant view and as a QR code on displays|Träffens Wi-Fi – visas på deltagarvyn och som QR-kod på skärmarna|Træffets Wi-Fi – vises i deltagervisningen og som QR-kode på skærmene|Treffets Wi-Fi – vises i deltakervisningen og som QR-kode på skjermene|WLAN des Treffens – in der Teilnehmeransicht und als QR-Code auf den Anzeigen
 Network name|Nätverksnamn|Netværksnavn|Nettverksnavn|Netzwerkname
@@ -60,18 +59,16 @@ Blank = open network|Tomt = öppet nät|Tomt = åbent netværk|Tomt = åpent net
 Could not save cleanup time|Städtiden kunde inte sparas|Oprydningstiden kunne ikke gemmes|Oppryddingstiden kunne ikke lagres|Bereinigungszeit konnte nicht gespeichert werden
 Virtual TMBoxes without a station are removed after|Virtuella TMBoxar utan station tas bort efter|Virtuelle TMBoxe uden station fjernes efter|Virtuelle TMBoxer uten stasjon fjernes etter|Virtuelle TMBoxen ohne Bahnhof werden entfernt nach
 minutes|minuter|minutter|minutter|Minuten
-Follows settings|Enligt inställningar|Ifølge indstillinger|Følger innstillingene|Gemäß Einstellungen
-Seconds follow settings|Sekunder enligt inställningar|Sekunder ifølge indstillinger|Sekunder følger innstillingene|Sekunden gemäß Einstellungen
-on|på|til|på|ein
-off|av|fra|av|aus
 With seconds|Med sekunder|Med sekunder|Med sekunder|Mit Sekunden
 Without seconds|Utan sekunder|Uden sekunder|Uten sekunder|Ohne Sekunden
 Clock style on this display|Klockstil på den här skärmen|Urstil på denne skærm|Klokkestil på denne skjermen|Uhrenstil auf dieser Anzeige
 Seconds on this display|Sekunder på den här skärmen|Sekunder på denne skærm|Sekunder på denne skjermen|Sekunden auf dieser Anzeige
-QR codes and connection code shown on|QR-koder och anslutningskod visas på|QR-koder og tilslutningskode vises på|QR-koder og tilkoblingskode vises på|QR-Codes und Verbindungscode anzeigen auf
 1 · Wi-Fi|1 · Wi-Fi|1 · Wi-Fi|1 · Wi-Fi|1 · WLAN
 2 · Meet|2 · Träffen|2 · Træffet|2 · Treffet|2 · Treffen
 Scan – meet information|Skanna – allt om träffen|Scan – alt om træffet|Skann – alt om treffet|Scannen – alles zum Treffen
 Authorities and territories are shown on the territory board.|Körtillstånd och trafikområden visas på områdestavlan.|Køretilladelser og trafikområder vises på områdetavlen.|Kjøretillatelser og trafikkområder vises på områdetavlen.|Fahrberechtigungen und Gebiete werden auf der Gebietsübersicht angezeigt.
 Open territory board ↗|Öppna områdestavlan ↗|Åbn områdetavlen ↗|Åpne områdetavlen ↗|Gebietsübersicht öffnen ↗
 The conductor opens their client here. The dispatcher assigns the train run.|Conductorn öppnar sin klient här. Dispatchern tilldelar tåglopp.|Conductoren åbner sin klient her. Dispatcheren tildeler togløb.|Conductoren åpner klienten sin her. Dispatcheren tildeler togløp.|Der Conductor öffnet hier seinen Client. Der Dispatcher weist den Zuglauf zu.
+As in settings|Som i inställningarna|Som i indstillingerne|Som i innstillingene|Wie in den Einstellungen
+with seconds|med sekunder|med sekunder|med sekunder|mit Sekunden
+without seconds|utan sekunder|uden sekunder|uten sekunder|ohne Sekunden

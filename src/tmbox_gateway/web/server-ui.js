@@ -38,6 +38,26 @@
   mark("#application-menu"); mark("#app-devices"); mark("#connection");
   $("#app-clock").className = "tm-clock";
 
+  // Drop-down menus (details.tm-dropdown) close the way people expect: a click
+  // or tap anywhere outside, Escape, choosing an item, or opening another menu.
+  const openMenus = () => document.querySelectorAll("details.tm-dropdown[open]");
+  const closeMenus = (except) => openMenus().forEach(menu => { if (menu !== except) menu.open = false; });
+  document.addEventListener("pointerdown", event => {
+    closeMenus(event.target.closest?.("details.tm-dropdown"));
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key !== "Escape") return;
+    const menu = event.target.closest?.("details.tm-dropdown[open]") || openMenus()[0];
+    closeMenus(); menu?.querySelector("summary")?.focus();
+  });
+  document.addEventListener("click", event => {
+    const item = event.target.closest?.("details.tm-dropdown nav a, details.tm-dropdown nav button");
+    if (item) item.closest("details").open = false;
+  });
+  document.addEventListener("toggle", event => {
+    if (event.target.matches?.("details.tm-dropdown") && event.target.open) closeMenus(event.target);
+  }, true);
+
   const overview = $("#overview-view");
   const row = make("section", "card tm-clockrow server-clockrow"); row.id = "drift-clock";
   overview.prepend(row);
@@ -106,7 +126,8 @@
   const back = authored("a", "tm-btn", "← Tillbaka till driften"); back.href = "/drift"; nav.append(back);
   $("#settings-heading").append(nav);
   const columns = make("div", "server-settings-columns"); const left = make("div"); const right = make("div"); columns.append(left, right); settings.append(columns);
-  const sections = [["#sync-and-devices", left, "traff"], ["#server-identity-settings", left, "server"], ["#server-system-settings", left, "farozon"], ["#admin-users-settings", right, "anvandare"], [".clock-control-card", right, "skarmar"], ["#language-settings", right, "sprak"], ["#software-update-settings", right, "uppdatering"]];
+  // Farozon comes last of all, under both columns, on a phone as on a computer.
+  const sections = [["#sync-and-devices", left, "traff"], ["#server-identity-settings", left, "server"], ["#admin-users-settings", right, "anvandare"], [".clock-control-card", right, "skarmar"], ["#language-settings", right, "sprak"], ["#software-update-settings", right, "uppdatering"], ["#server-system-settings", settings, "farozon"]];
   for (const [selector, column, anchor] of sections) {
     const section = move(selector, column); section.classList.add("server-card"); section.dataset.anchor = anchor;
     const link = make("span", "server-anchor"); link.id = anchor; section.prepend(link);
@@ -118,21 +139,24 @@
   const identity = $("#server-identity-settings");
   inlineForm("#server-identity-form", identity);
   mark('[data-open-modal="server-identity-form-modal"]');
-  inlineForm("#web-client-ttl-form", identity);
-  const networkSettings = make("p", "server-network"); networkSettings.id = "server-network"; identity.append(networkSettings);
   const danger = $("#server-system-settings"); danger.prepend(authored("h2", "", "Farozon"));
   const appearance = $(".clock-control-card");
   label(appearance.querySelector("h2"), "Skärmar och klocka");
   appearance.querySelectorAll(".eyebrow, .compact-heading p, .modal-launch").forEach(n => n.classList.add("legacy-internal"));
-  inlineForm("#clock-appearance-form", appearance);
+  // Four parts, each with its own heading and its own Spara.
+  const part = (title) => {
+    const node = make("div", `server-part${appearance.querySelector(".server-part") ? "" : " server-part--first"}`);
+    node.append(authored("h3", "server-part__title", title)); appearance.append(node); return node;
+  };
+  inlineForm("#clock-appearance-form", part("Klocka"));
   const styleField = make("div", "server-field");
   $('label[for="meet-clock-style"]').before(styleField);
   styleField.append($('label[for="meet-clock-style"]'), $("#meet-clock-style"));
-  inlineForm("#connection-badge-form", appearance);
-  const screensField = make("div", "server-field");
-  $("#connection-badge-screens").before(screensField);
-  screensField.append(authored("span", "server-field-label", "QR-koder och anslutningskod visas på"), $("#connection-badge-screens"));
-  const code = move("#connection-badge-code", appearance); code.classList.add("server-network");
+  inlineForm("#connection-badge-form", part("QR-koder på skärmarna"));
+  const codePart = part("Parningskod för TMBoxar");
+  const code = move("#connection-badge-code", codePart); code.classList.add("server-network");
+  inlineForm("#connection-code-form", codePart);
+  inlineForm("#connection-wifi-form", part("Träffens Wi-Fi"));
   label($("#users-invite-open"), "+ Bjud in");
 
   // Documentation is separate from the operator client. No legacy emulator is
@@ -195,7 +219,7 @@
   };
   api.network = connection => {
     const label = connection.host ? `${connection.host}:${connection.port}${connection.code ? ` · ${t("Kod")} ${connection.code}` : ""}` : t("Anslut klienten till denna server");
-    $("#client-network").textContent = label; $("#server-network").textContent = label;
+    $("#client-network").textContent = label;
   };
   api.mode = mode => {
     $("#help-view").classList.toggle("hidden", mode !== "help");

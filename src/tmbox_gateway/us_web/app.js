@@ -434,3 +434,13 @@ TrainMeetI18n.subscribe(() => {
 await refresh(true);
 // Serial polling: no overlapping fetches and no queued operational writes.
 async function poll(){await refresh();setTimeout(poll,2500);}setTimeout(poll,2500);
+
+// The menu closes on a click or tap outside it, on Escape and when an item is chosen.
+{
+  const menu = document.querySelector('#workspace-menu');
+  if (menu) {
+    document.addEventListener('pointerdown', (event) => { if (menu.open && !menu.contains(event.target)) menu.open = false; });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && menu.open) { menu.open = false; menu.querySelector('summary')?.focus(); } });
+    menu.addEventListener('click', (event) => { if (event.target.closest('nav a, nav button')) menu.open = false; });
+  }
+}

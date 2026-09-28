@@ -894,9 +894,27 @@ serverIdentityForm.addEventListener("submit", async (event) => {
   }
 });
 
+// ⚙ › Skärmar och klocka: each part saves only its own fields.
 document.querySelector("#connection-badge-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  saveConnectionBadgeSettings();
+  const screens = [...document.querySelectorAll("#connection-badge-screens input[type=checkbox]")]
+    .filter((input) => input.checked).map((input) => input.value);
+  saveConnectionPart(event.currentTarget, "#connection-badge-message", { screens },
+    () => screens.length ? "Sparat. QR-koderna visas på {n} skärmar." : "Sparat. Ingen skärm visar QR-koderna.", { n: screens.length });
+});
+document.querySelector("#connection-code-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveConnectionPart(event.currentTarget, "#connection-code-message", {
+    validity_hours: Number(document.querySelector("#connection-badge-validity").value),
+    web_client_ttl_minutes: Number(document.querySelector("#web-client-ttl").value),
+  }, (payload) => payload.restart_required ? "Sparat. Starta om servern för att ge koden den nya giltighetstiden." : "Sparat.");
+});
+document.querySelector("#connection-wifi-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveConnectionPart(event.currentTarget, "#connection-wifi-message", {
+    wifi_name: document.querySelector("#connection-wifi-name").value,
+    wifi_password: document.querySelector("#connection-wifi-password").value,
+  }, () => "Sparat.");
 });
 
 // The field offers whole numbers in a dropdown but accepts anything typed, so
@@ -2038,93 +2056,48 @@ function renderConnectionBadgeSettings(connection) {
   serverUI.network(connection);
   const container = document.querySelector("#connection-badge-screens");
   if (!container) return;
-  if (editorActive(container.closest("form"))) return;
-  const screens = connection.screens || [];
-  for (const input of container.querySelectorAll("input[type=checkbox]")) {
-    if (document.activeElement !== input) input.checked = screens.includes(input.value);
+  // Never rewrite a part someone is editing; each part is its own form.
+  const idle = (selector) => !editorActive(document.querySelector(selector));
+  if (idle("#connection-badge-form")) {
+    const screens = connection.screens || [];
+    for (const input of container.querySelectorAll("input[type=checkbox]")) input.checked = screens.includes(input.value);
   }
-  const validity = document.querySelector("#connection-badge-validity");
-  if (validity && document.activeElement !== validity) validity.value = String(connection.validity_hours ?? 0);
-  const wifi = connection.wifi || {};
-  const wifiName = document.querySelector("#connection-wifi-name");
-  const wifiPassword = document.querySelector("#connection-wifi-password");
-  if (wifiName && document.activeElement !== wifiName) wifiName.value = wifi.name || "";
-  if (wifiPassword && document.activeElement !== wifiPassword) wifiPassword.value = wifi.password || "";
-  const wifiNote = document.querySelector("#connection-wifi-note");
-  if (wifiNote) {
-    if (wifi.detected_name && wifi.detected_name !== wifi.name) {
-      wifiNote.dataset.tmText = "Serverns nätverk: {name}. Skriv in det ovan om det är träffens Wi-Fi.";
-      wifiNote.textContent = t(wifiNote.dataset.tmText, { name: wifi.detected_name });
-    } else setMessage(wifiNote, "Namn och lösenord står på deltagarvyn och finns i Wi-Fi-koden på skärmarna. Lämna fälten tomma om nätet inte ska delas.");
+  if (idle("#connection-code-form")) {
+    document.querySelector("#connection-badge-validity").value = String(connection.validity_hours ?? 0);
+    document.querySelector("#web-client-ttl").value = String(connection.web_client_ttl_minutes ?? 30);
   }
-  const ttl = document.querySelector("#web-client-ttl");
-  if (ttl && document.activeElement !== ttl && !editorActive(ttl.closest("form"))) ttl.value = String(connection.web_client_ttl_minutes ?? 30);
+  if (idle("#connection-wifi-form")) {
+    const wifi = connection.wifi || {};
+    document.querySelector("#connection-wifi-name").value = wifi.name || "";
+    document.querySelector("#connection-wifi-password").value = wifi.password || "";
+  }
   const badge = document.querySelector("#connection-badge-code");
   badge.textContent = connection.code
-    ? `${connection.host}:${connection.port} · ${connection.code}`
-    : "Ingen kod utfärdad";
+    ? `${connection.host}:${connection.port} · ${t("Kod")} ${connection.code}`
+    : t("Ingen kod utfärdad");
 }
 
-async function saveConnectionBadgeSettings() {
-  const container = document.querySelector("#connection-badge-screens");
-  const message = document.querySelector("#connection-badge-message");
-  const form = document.querySelector("#connection-badge-form");
+async function saveConnectionPart(form, messageSelector, body, success, parameters = {}) {
+  const message = document.querySelector(messageSelector);
   if (!beginModalAction(form)) return;
-  const screens = [...container.querySelectorAll("input[type=checkbox]")]
-    .filter((input) => input.checked)
-    .map((input) => input.value);
   try {
     const response = await authorizedFetch("/v1/display/connection", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        screens,
-        validity_hours: Number(document.querySelector("#connection-badge-validity").value),
-        wifi_name: document.querySelector("#connection-wifi-name")?.value ?? "",
-        wifi_password: document.querySelector("#connection-wifi-password")?.value ?? "",
-      }),
+      body: JSON.stringify(body),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Inställningen kunde inte sparas");
-    setMessage(
-      message,
-      payload.restart_required
-        ? "Sparat. Starta om servern för att ge koden den nya giltighetstiden."
-        : screens.length
-          ? `Sparat. Koden visas på ${screens.length} av 4 skärmar.`
-          : "Sparat. Koden visas inte på någon skärm.",
-      "success",
-    );
     finishModal(form);
+    setMessage(message, success(payload), "success");
+    if (Object.keys(parameters).length) message.textContent = t(message.dataset.tmText, parameters);
+    renderConnectionBadgeSettings(payload);
   } catch (error) {
     setMessage(message, error.message, "error");
   } finally {
     endModalAction(form);
   }
 }
-
-async function saveWebClientTTL(event) {
-  event.preventDefault();
-  const form = document.querySelector("#web-client-ttl-form");
-  const message = document.querySelector("#web-client-ttl-message");
-  if (!beginModalAction(form)) return;
-  try {
-    const response = await authorizedFetch("/v1/display/connection", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ web_client_ttl_minutes: Number(document.querySelector("#web-client-ttl").value) }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message || "Städtiden kunde inte sparas");
-    setMessage(message, "Sparat.", "success");
-    finishModal(form);
-  } catch (error) {
-    setMessage(message, error.message, "error");
-  } finally {
-    endModalAction(form);
-  }
-}
-document.querySelector("#web-client-ttl-form")?.addEventListener("submit", saveWebClientTTL);
 
 async function controlLocalClock(command) {
   if (!beginModalAction(clockControlForm)) return;
@@ -3552,10 +3525,10 @@ function renderClockToolbar(snapshot) {
   if (styleSelect.dataset.signature !== signature) {
     styleSelect.dataset.signature = signature;
     styleSelect.replaceChildren(
-      new Option(`${t("Enligt inställningar")} · ${serverStyle}`, ""),
+      new Option(`${t("Som i inställningarna")}: ${serverStyle}`, ""),
       ...styles.map(value => new Option(t(clockStyleLabels[value] || value), value)));
     secondsSelect.replaceChildren(
-      new Option(`${t("Sekunder enligt inställningar")} · ${serverSeconds ? t("på") : t("av")}`, ""),
+      new Option(`${t("Som i inställningarna")}: ${serverSeconds ? t("med sekunder") : t("utan sekunder")}`, ""),
       new Option(t("Med sekunder"), "on"),
       new Option(t("Utan sekunder"), "off"));
   }

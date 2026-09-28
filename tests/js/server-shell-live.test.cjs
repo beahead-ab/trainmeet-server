@@ -175,6 +175,38 @@ const root = path.resolve(__dirname, '../..');
     await page.goto(urls.eu+'/installningar');
     await page.locator('#workspace-home').click();await page.waitForURL(urls.eu+'/drift');
     assert.equal(await page.locator('#participant-view').isVisible(),false);
+    // Drop-down menus close on a click outside them and on Escape.
+    const screenMenu=page.locator('details.screen-menu');
+    await screenMenu.locator('summary').click();
+    assert.equal(await screenMenu.getAttribute('open'),'');
+    await page.mouse.click(4,600);
+    assert.equal(await screenMenu.getAttribute('open'),null,'A click outside closes the menu');
+    await screenMenu.locator('summary').click();
+    await page.keyboard.press('Escape');
+    assert.equal(await screenMenu.getAttribute('open'),null,'Escape closes the menu');
+    // ⚙ › Skärmar och klocka is four parts that each save only their own
+    // fields, and Farozon is the last card on the page.
+    await page.goto(urls.eu+'/installningar');
+    assert.deepEqual(await page.locator('.clock-control-card .server-part__title').allTextContents(),['Klocka','QR-koder på skärmarna','Parningskod för TMBoxar','Träffens Wi-Fi']);
+    assert.equal(await page.locator('#admin-view > .server-card').last().getAttribute('data-anchor'),'farozon');
+    await page.locator('#connection-wifi-name').fill('Test-Wifi');
+    await page.locator('#connection-wifi-password').fill('test-only-1234');
+    await page.locator('#connection-wifi-form [type=submit]').click();
+    await page.locator('#connection-wifi-message').getByText('Sparat.').waitFor();
+    await page.locator('#connection-badge-screens input[value="graph"]').uncheck();
+    await page.locator('#connection-badge-form [type=submit]').click();
+    await page.locator('#connection-badge-message').getByText(/Sparat/).waitFor();
+    const connection=await (await page.request.get(urls.eu+'/v1/display/connection')).json();
+    assert.equal(connection.wifi.name,'Test-Wifi','Saving the QR part leaves the Wi-Fi as it was');
+    assert.ok(!connection.screens.includes('graph'));
+    assert.equal(await page.locator('text=Serverns nätverk').count(),0);
+    await page.locator('#web-client-ttl').fill('45');
+    await page.locator('#connection-code-form [type=submit]').click();
+    await page.locator('#connection-code-message').getByText(/Sparat/).waitFor();
+    const afterCode=await (await page.request.get(urls.eu+'/v1/display/connection')).json();
+    assert.equal(afterCode.web_client_ttl_minutes,45);
+    assert.equal(afterCode.wifi.name,'Test-Wifi');
+    assert.ok(!afterCode.screens.includes('graph'),'Saving the code part leaves the screens as they were');
     await login(urls.us);
     assert.equal(await page.locator('#workspace-options').count(),0);
     await page.locator('#server-region').filter({hasText:'US'}).waitFor();

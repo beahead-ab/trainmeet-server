@@ -5,6 +5,39 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Inställningar: Skärmar och klocka i fyra delar
+
+Kortet blandade fyra saker med en gemensam Spara-knapp. Nu är det fyra delar
+med egen rubrik och egen Spara, som bara sparar sin del: **Klocka**,
+**QR-koder på skärmarna**, **Parningskod för TMBoxar** (adress och kod, hur
+länge koden gäller och hur länge en virtuell TMBox utan station finns kvar)
+och **Träffens Wi-Fi**. Farozon ligger sist på sidan, under båda kolumnerna.
+
+Wi-Fi fylls alltid i av administratören. Servern läser inte längre av vilket
+nät den själv sitter på, så sidan ser likadan ut på en Raspberry Pi och i en
+datorhall. Är fälten tomma blir det ingen Wi-Fi-kod på skärmarna.
+
+### Rullgardinsmenyer
+
+"Öppna på skärm" heter "Öppna skärm" och går att översätta. Menyerna stängs
+när man klickar eller trycker utanför dem, trycker Escape, väljer något eller
+öppnar en annan meny. Detsamma gäller menyn i US-klienten. Skärmens egna val
+säger "Som i inställningarna: …" i stället för "Enligt inställningar · …".
+
+### Fasta marginaler på mobilen
+
+Sidorna glider inte längre i sidled på en telefon. Alla sidor har samma
+marginal, 16 px, och det som är bredare rullar inuti sin egen ruta. Fält har
+16 px text på pekskärmar, så att iPhone inte zoomar in sidan när man trycker
+i ett fält.
+
+### Rester av den gamla färgen
+
+Primärknappar blev bruna när man höll över dem, och på iPhone låg färgen kvar
+efter ett tryck. Samma kopparfärg fanns kvar på Ägare-märket, länkknappar och
+inbjudningskoder. Allt följer nu UI-kitets blå. Hjälptexten i tomma
+Wi-Fi-fält står i Inter, inte i kodtypsnittet.
+
 ### Inloggad hamnar man i Drift
 
 Deltagarvyn på `/` är till för gäster. Den som är inloggad kommer till Drift:

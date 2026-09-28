@@ -6,8 +6,6 @@ import logging
 import mimetypes
 import re
 import secrets
-import shutil
-import subprocess
 import threading
 import time
 from dataclasses import dataclass, replace
@@ -1316,11 +1314,9 @@ class TrainMeetHTTPApplication:
         if (not host or _is_loopback_address(host)) and request_host:
             host = _hostname_without_port(request_host)
         wifi = self.runtime_store.wifi_settings() if self.runtime_store is not None else {"name": "", "password": ""}
+        # Only what the administrator typed under ⚙ – the same on a Raspberry Pi
+        # and in a datacentre. The server never guesses the meet's network.
         wifi = {**wifi, "has_password": bool(wifi["password"])}
-        if private:
-            # Only an administrator may inspect the host's SSID. It is never
-            # silently published as the meet's network.
-            wifi["detected_name"] = detected_wifi_name()
         return {
             "host": host,
             "port": self.config.http_port,
@@ -4205,33 +4201,6 @@ class TrainMeetHTTPServer(ThreadingHTTPServer):
     def request_operational_reset(self) -> None:
         self.operational_reset_requested = True
         self.request_restart()
-
-
-_WIFI_CACHE: dict[str, Any] = {"at": 0.0, "name": ""}
-
-
-def detected_wifi_name() -> str:
-    """The SSID this host is connected to, when it is on Wi-Fi and the usual
-    Linux tools can tell (iwgetid, then nmcli). Empty otherwise; cached a minute."""
-    now = time.monotonic()
-    if now - _WIFI_CACHE["at"] < 60:
-        return _WIFI_CACHE["name"]
-    name = ""
-    try:
-        if shutil.which("iwgetid"):
-            result = subprocess.run(["iwgetid", "-r"], capture_output=True, text=True, timeout=2)
-            name = result.stdout.strip() if result.returncode == 0 else ""
-        if not name and shutil.which("nmcli"):
-            result = subprocess.run(["nmcli", "-t", "-f", "active,ssid", "dev", "wifi"], capture_output=True, text=True, timeout=3)
-            for line in result.stdout.splitlines():
-                active, _, ssid = line.partition(":")
-                if active == "yes" and ssid:
-                    name = ssid.strip()
-                    break
-    except (OSError, subprocess.SubprocessError):
-        name = ""
-    _WIFI_CACHE.update(at=now, name=name[:32])
-    return _WIFI_CACHE["name"]
 
 
 def _is_loopback_address(host: str) -> bool:
