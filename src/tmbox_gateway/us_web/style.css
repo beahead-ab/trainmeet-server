@@ -39,3 +39,13 @@ tm-text { display: contents; }
 
 /* Fonts come from /assets/fonts/fonts.css (Inter 400–700, JetBrains Mono), linked in index.html. */
 b,strong{font-weight:700}pre,code,kbd{font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace}
+
+/* ---------- Telefon: fasta sidmarginaler ----------
+   The page never pans sideways: one fixed gutter, and anything wider scrolls
+   inside its own box. On touch screens fields use 16 px text; smaller text
+   makes iOS zoom the whole page in when a field is tapped, and then the page
+   floats from side to side. */
+html, body { overflow-x: clip; }
+@media (hover: none) and (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { font-size: 16px !important; }
+}

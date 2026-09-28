@@ -2,6 +2,11 @@
    Explicit component sizing, never browser zoom or a transform of admin UI. */
 :root { --accent: #2256c3; --accent-strong: #183f94; --accent-soft: #eef3fb; --ink: #0a0a0a; --paper: #fff; }
 :root { --trainmeet: #2256c3; --trainmeet-soft: #eef3fb; --accent-warm: #2256c3; --admin-text: 13px; --admin-supporting: 12px; }
+/* The last of the old copper palette follows the kit's blue: the hover colour of
+   primary buttons (it stayed brown after a tap on a phone), link buttons, the
+   owner chip, invitation codes and update steps. */
+:root { --trainmeet-dark: #183f94; --accent-warm-dark: #1f3f8a; --accent-tint: #eef3fb; --accent-tint-light: #f5f8fd; --accent-edge: #c9d7f2; }
+.traffic-chip.late { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
 #app-chrome #connection { display: none; }
 button.secondary, .server-step-card button.secondary { color: var(--text); background: white; border-color: #d9d9d9; }
 #overview-traffic-heading { font-size: 13px; }
@@ -27,7 +32,9 @@ body:not(.display-mode) .page-shell { max-width: none; width: 100%; margin: 0; p
 .screen-menu { position: relative; }
 .screen-menu summary { list-style: none; cursor: pointer; }
 .screen-menu summary::-webkit-details-marker { display: none; }
-.screen-menu nav { position: absolute; right: 0; top: 38px; width: 220px; border: 1px solid var(--border); border-radius: 8px; padding: 6px; background: #fff; box-shadow: var(--shadow-menu); }
+.screen-menu summary::after { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 0 3px 8px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.screen-menu[open] summary::after { transform: rotate(-135deg); margin-bottom: -1px; }
+.screen-menu nav { position: absolute; right: 0; top: 38px; z-index: 30; width: 220px; max-width: calc(100vw - 32px); border: 1px solid var(--border); border-radius: 8px; padding: 6px; background: #fff; box-shadow: var(--shadow-menu); }
 .screen-menu nav a { display: block; padding: 8px 12px; border-radius: 6px; }
 .screen-menu nav a:hover { background: var(--primary-soft); }
 #app-view { padding: 12px 24px 20px; max-width: 1920px; margin: auto; }
@@ -84,7 +91,16 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 .server-inline-form .modal-actions { border: 0; padding: 0; margin: 0; display: flex; gap: 6px; }
 .server-inline-form label { display: flex; flex-direction: column; }
 .server-inline-form label:has(input[type=checkbox]) { flex-direction: row; align-items: center; }
-#clock-appearance-form, #connection-badge-form { border-bottom: 1px solid var(--border-soft); padding-bottom: 10px; }
+/* ⚙ › Skärmar och klocka: four parts, each with its own heading and Spara. */
+.server-part { padding: 12px 0 4px; border-top: 1px solid var(--border-soft); }
+.server-part--first { border-top: 0; padding-top: 2px; }
+/* Spara on a line of its own under the part's fields, in every part. */
+.server-part .server-inline-form .modal-actions { flex-basis: 100%; }
+.server-part .form-message:empty { display: none; }
+.server-part__title { margin: 0 0 2px; font-size: 13.5px; font-weight: 700; }
+.server-part .server-inline-form { margin: 6px 0 8px; }
+.server-part .server-network { margin-top: 4px; }
+.server-part .pv-note { flex-basis: 100%; margin: 0; }
 #clock-appearance-form > p:first-child { display: none; }
 #connection-badge-form .connection-badge-screens { display: flex; flex-wrap: wrap; gap: 8px; }
 #cloud-auto-form { align-items: center; }
@@ -201,11 +217,13 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 .tm-clockrow__form > label, .tm-clockrow__form > .server-source { gap: 5px; }
 .server-divider { width: 1px; align-self: stretch; background: var(--border-soft); margin: 0 4px; }
 .server-field { display: flex; flex-direction: column; gap: 5px; }
-.server-wifi-fields { flex-basis: 100%; border-top: 1px solid var(--border-soft); padding-top: 10px; margin-top: 4px; }
 .server-wifi-row { display: flex; flex-wrap: wrap; gap: 10px; }
 .server-wifi-row label { display: flex; flex-direction: column; }
-#connection-wifi-name, #connection-wifi-password { width: 220px; font-family: var(--font-mono); }
-.web-client-ttl-form { align-items: end; }
+#connection-wifi-name, #connection-wifi-password { width: 220px; max-width: 100%; font-family: var(--font-mono); }
+/* The name and password are read aloud and typed into a box: code font. The
+   hint in an empty field is ordinary text. */
+#connection-wifi-name::placeholder, #connection-wifi-password::placeholder { font-family: var(--font); }
+.server-wifi-row { flex-basis: 100%; }
 .server-ttl-row { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text); }
 #web-client-ttl { width: 72px; font-family: var(--font-mono); }
 .server-field > label { margin: 0; }
@@ -434,4 +452,25 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
   #app-chrome .topbar-right { flex-wrap: wrap; }
   #header-cloud-status { max-width: 165px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .server-settings-nav .tm-seg { padding: 5px 8px; }
+}
+
+/* Farozon is the last card on the page, under both columns. */
+#admin-view > .server-card[data-anchor=farozon] { margin-top: 12px; }
+
+/* ---------- Telefon: fasta sidmarginaler ----------
+   The page never pans sideways: one fixed gutter, and anything wider scrolls
+   inside its own box. On touch screens fields use 16 px text; smaller text
+   makes iOS zoom the whole page in when a field is tapped, and then the page
+   floats from side to side. */
+html, body { overflow-x: clip; }
+@media (hover: none) and (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { font-size: 16px !important; }
+}
+@media (max-width: 900px) {
+  #app-view { padding: 12px 16px 24px; }
+  body[data-mode] .server-admin-shell { width: 100%; padding: 0 0 32px; }
+  #app-view .server-workspace { padding-left: 0; padding-right: 0; }
+  #login, #setup { width: auto; margin: 16px; }
+  /* Card headings stay left-aligned when their row stacks on a phone. */
+  #app-view .section-heading { align-items: flex-start; text-align: left; }
 }

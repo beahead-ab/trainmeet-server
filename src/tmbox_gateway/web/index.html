@@ -34,7 +34,7 @@
           <span id="app-clock" class="app-clock" aria-label="Träffklocka" data-tm-aria-label="Träffklocka">–&#8202;–:–&#8202;–</span>
           <span id="app-devices" class="app-devices"><i></i><tm-text data-tm-text="Inga boxar">Inga boxar</tm-text></span>
           <div id="connection" class="status offline"><span></span><b><tm-text data-tm-text="Ej ansluten">Ej ansluten</tm-text></b></div>
-          <details id="application-menu" class="application-menu">
+          <details id="application-menu" class="application-menu tm-dropdown">
             <summary aria-label="Öppna menyn">☰</summary>
             <nav aria-label="Servermeny">
               <a href="#settings" id="open-settings">Inställningar</a>
@@ -43,12 +43,12 @@
               <button id="logout" type="button">Logga ut</button>
             </nav>
           </details>
-          <details class="screen-menu"><summary class="tm-btn">Öppna på skärm ▾</summary><nav>
-            <a href="/display/clock" target="_blank" rel="noopener">Träffklocka</a>
-            <a href="/display/dashboard" target="_blank" rel="noopener" data-eu-only>Översikt</a>
-            <a href="/display/topology" target="_blank" rel="noopener" data-eu-only>Banöversikt</a>
-            <a href="/display/graph" target="_blank" rel="noopener" data-eu-only>Tågdiagram</a>
-            <a href="/display/territories" target="_blank" rel="noopener" data-us-only hidden>Områdestavla</a>
+          <details class="screen-menu tm-dropdown"><summary class="tm-btn"><tm-text data-tm-text="Öppna skärm">Öppna skärm</tm-text></summary><nav aria-label="Skärmar" data-tm-aria-label="Skärmar">
+            <a href="/display/clock" target="_blank" rel="noopener"><tm-text data-tm-text="Träffklocka">Träffklocka</tm-text></a>
+            <a href="/display/dashboard" target="_blank" rel="noopener" data-eu-only><tm-text data-tm-text="Översikt">Översikt</tm-text></a>
+            <a href="/display/topology" target="_blank" rel="noopener" data-eu-only><tm-text data-tm-text="Banöversikt">Banöversikt</tm-text></a>
+            <a href="/display/graph" target="_blank" rel="noopener" data-eu-only><tm-text data-tm-text="Tågdiagram">Tågdiagram</tm-text></a>
+            <a href="/display/territories" target="_blank" rel="noopener" data-us-only hidden><tm-text data-tm-text="Områdestavla">Områdestavla</tm-text></a>
           </nav></details>
           <a class="tm-icon-btn" href="/installningar" aria-label="Inställningar" title="Inställningar">⚙</a>
           <a class="tm-icon-btn" href="/hjalp" aria-label="Hjälp" title="Hjälp">?</a>
@@ -552,11 +552,6 @@
               <div><small><tm-text data-tm-text="CLOUD">CLOUD</tm-text></small><b id="system-cloud-state"><tm-text data-tm-text="Inte kopplad">Inte kopplad</tm-text></b></div>
             </div>
 <button type="button" class="secondary modal-launch" data-open-modal="server-identity-form-modal">Ändra servernamn</button>
-<form id="web-client-ttl-form" class="server-inline-form web-client-ttl-form">
-  <label><tm-text data-tm-text="Virtuella TMBoxar utan station tas bort efter">Virtuella TMBoxar utan station tas bort efter</tm-text><span class="server-ttl-row"><input id="web-client-ttl" type="number" min="5" max="240" step="5" value="30" required> <tm-text data-tm-text="minuter">minuter</tm-text></span></label>
-  <div class="modal-actions"><button type="submit" class="secondary">Spara</button></div>
-  <p id="web-client-ttl-message" class="form-message" role="status"></p>
-</form>
 <dialog id="server-identity-form-modal" class="admin-modal" aria-labelledby="server-identity-form-title"><h2 id="server-identity-form-title">Ändra servernamn</h2>
 <form id="server-identity-form" class="server-identity-form">
               <label for="admin-server-name"><tm-text data-tm-text="Servernamn">Servernamn</tm-text></label>
@@ -942,33 +937,36 @@
               <span id="connection-badge-code" class="revision-badge"><tm-text data-tm-text="Läser koden …">Läser koden …</tm-text></span>
             </div>
 <button type="button" class="secondary" data-open-modal="connection-badge-modal">Ändra visning av anslutningsuppgifter</button>
-<dialog id="connection-badge-modal" class="admin-modal" aria-labelledby="connection-badge-title"><h2 id="connection-badge-title">Anslutningsuppgifter på skärmar</h2><form id="connection-badge-form">
+<dialog id="connection-badge-modal" class="admin-modal" aria-labelledby="connection-badge-title"><h2 id="connection-badge-title">Anslutningsuppgifter på skärmar</h2>
+<form id="connection-badge-form">
+            <p class="pv-note"><tm-text data-tm-text="Skärmarna som visar Wi-Fi-koden och länken till deltagarvyn.">Skärmarna som visar Wi-Fi-koden och länken till deltagarvyn.</tm-text></p>
             <div id="connection-badge-screens" class="connection-badge-screens">
               <label><input type="checkbox" value="clock" checked><tm-text data-tm-text=" Träffklocka"> Träffklocka</tm-text></label>
               <label><input type="checkbox" value="topology" checked><tm-text data-tm-text=" Banöversikt"> Banöversikt</tm-text></label>
               <label><input type="checkbox" value="graph" checked><tm-text data-tm-text=" Tågdiagram"> Tågdiagram</tm-text></label>
               <label><input type="checkbox" value="dashboard" checked><tm-text data-tm-text=" Översikt"> Översikt</tm-text></label>
             </div>
-            <label class="connection-badge-validity"><tm-text data-tm-text="Koden gäller
-              ">Koden gäller
-              </tm-text><select id="connection-badge-validity">
+            <p id="connection-badge-message" class="form-message"></p>
+<div class="modal-actions"><button type="submit" class="primary">Spara</button></div></form>
+<form id="connection-code-form">
+            <label class="connection-badge-validity"><tm-text data-tm-text="Koden gäller">Koden gäller</tm-text><select id="connection-badge-validity">
                 <option value="0" data-tm-text="Tills vidare">Tills vidare</option>
                 <option value="12" data-tm-text="12 timmar">12 timmar</option>
                 <option value="24" data-tm-text="24 timmar">24 timmar</option>
                 <option value="72" data-tm-text="3 dygn">3 dygn</option>
                 <option value="168" data-tm-text="7 dygn">7 dygn</option>
-              </select>
-            </label>
-            <div class="server-field server-wifi-fields">
-              <span class="server-field-label"><tm-text data-tm-text="Träffens Wi-Fi – visas på deltagarvyn och som QR-kod på skärmarna">Träffens Wi-Fi – visas på deltagarvyn och som QR-kod på skärmarna</tm-text></span>
-              <div class="server-wifi-row">
-                <label><tm-text data-tm-text="Nätverksnamn">Nätverksnamn</tm-text><input id="connection-wifi-name" maxlength="32" autocomplete="off" placeholder="Lämna tomt om nätet inte ska delas" data-tm-placeholder="Lämna tomt om nätet inte ska delas"></label>
-                <label><tm-text data-tm-text="Lösenord">Lösenord</tm-text><input id="connection-wifi-password" type="password" maxlength="63" autocomplete="off" placeholder="Tomt = öppet nät" data-tm-placeholder="Tomt = öppet nät"></label>
-              </div>
-              <p id="connection-wifi-note" class="pv-note"></p>
+              </select></label>
+            <label class="web-client-ttl"><tm-text data-tm-text="Virtuella TMBoxar utan station tas bort efter">Virtuella TMBoxar utan station tas bort efter</tm-text><span class="server-ttl-row"><input id="web-client-ttl" type="number" min="5" max="240" step="5" value="30" required> <tm-text data-tm-text="minuter">minuter</tm-text></span></label>
+            <p id="connection-code-message" class="form-message"></p>
+<div class="modal-actions"><button type="submit" class="primary">Spara</button></div></form>
+<form id="connection-wifi-form">
+            <div class="server-wifi-row">
+              <label><tm-text data-tm-text="Nätverksnamn">Nätverksnamn</tm-text><input id="connection-wifi-name" maxlength="32" autocomplete="off" placeholder="Lämna tomt om nätet inte ska delas" data-tm-placeholder="Lämna tomt om nätet inte ska delas"></label>
+              <label><tm-text data-tm-text="Lösenord">Lösenord</tm-text><input id="connection-wifi-password" type="password" maxlength="63" autocomplete="off" placeholder="Tomt = öppet nät" data-tm-placeholder="Tomt = öppet nät"></label>
             </div>
-            <p id="connection-badge-message" class="form-message"></p>
-<div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara</button></div></form></dialog>
+            <p class="pv-note"><tm-text data-tm-text="Namn och lösenord står på deltagarvyn och finns i Wi-Fi-koden på skärmarna. Lämna fälten tomma om nätet inte ska delas.">Namn och lösenord står på deltagarvyn och finns i Wi-Fi-koden på skärmarna. Lämna fälten tomma om nätet inte ska delas.</tm-text></p>
+            <p id="connection-wifi-message" class="form-message"></p>
+<div class="modal-actions"><button type="submit" class="primary">Spara</button></div></form></dialog>
           </section>
         </section>
           </div>
