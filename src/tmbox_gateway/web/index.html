@@ -183,8 +183,23 @@
         <form id="redeem-form" class="hidden">
           <label for="redeem-username"><tm-text data-tm-text="Användarnamn">Användarnamn</tm-text></label>
           <input id="redeem-username" maxlength="64" autocomplete="username" required>
-          <label for="redeem-code"><tm-text data-tm-text="Inbjudningskod">Inbjudningskod</tm-text></label>
-          <input id="redeem-code" class="redeem-code" maxlength="9" autocomplete="off" placeholder="XXXX-XXXX" required data-tm-placeholder="XXXX-XXXX">
+          <label for="redeem-code-boxes"><tm-text data-tm-text="Inbjudningskod">Inbjudningskod</tm-text></label>
+          <!-- Samma rutor som träffkoden, men åtta tecken i stället för sex och
+               bokstäver tillåtna. Strecket står förtryckt: då syns både längden
+               och var koden delas, utan att någon behöver fråga om det ska
+               skrivas. Servern tar ändå emot koden hur den än skrivs. -->
+          <div class="code-boxes" id="redeem-code-boxes" role="group" data-code-alphabet="alnum" aria-label="Åttateckens inbjudningskod, ett tecken per fält" data-tm-aria-label="Åttateckens inbjudningskod, ett tecken per fält">
+            <input inputmode="text" maxlength="1" autocapitalize="characters" autocomplete="one-time-code" aria-label="Tecken 1 av 8" data-tm-aria-label="Tecken 1 av 8">
+            <input inputmode="text" maxlength="1" autocapitalize="characters" autocomplete="one-time-code" aria-label="Tecken 2 av 8" data-tm-aria-label="Tecken 2 av 8">
+            <input inputmode="text" maxlength="1" autocapitalize="characters" autocomplete="one-time-code" aria-label="Tecken 3 av 8" data-tm-aria-label="Tecken 3 av 8">
+            <input inputmode="text" maxlength="1" autocapitalize="characters" autocomplete="one-time-code" aria-label="Tecken 4 av 8" data-tm-aria-label="Tecken 4 av 8">
+            <span class="code-boxes-dash" aria-hidden="true">–</span>
+            <input inputmode="text" maxlength="1" autocapitalize="characters" autocomplete="one-time-code" aria-label="Tecken 5 av 8" data-tm-aria-label="Tecken 5 av 8">
+            <input inputmode="text" maxlength="1" autocapitalize="characters" autocomplete="one-time-code" aria-label="Tecken 6 av 8" data-tm-aria-label="Tecken 6 av 8">
+            <input inputmode="text" maxlength="1" autocapitalize="characters" autocomplete="one-time-code" aria-label="Tecken 7 av 8" data-tm-aria-label="Tecken 7 av 8">
+            <input inputmode="text" maxlength="1" autocapitalize="characters" autocomplete="one-time-code" aria-label="Tecken 8 av 8" data-tm-aria-label="Tecken 8 av 8">
+          </div>
+          <input id="redeem-code" type="hidden">
           <label for="redeem-password"><tm-text data-tm-text="Välj lösenord">Välj lösenord</tm-text></label>
           <input id="redeem-password" type="password" minlength="8" autocomplete="new-password" required>
           <button type="submit" class="primary"><tm-text data-tm-text="Sätt lösenord">Sätt lösenord</tm-text></button>
