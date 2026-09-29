@@ -5,6 +5,15 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### "Slutför och starta om" visade ett skriptfel
+
+Sista steget i installationsguiden visade "configMessage is not defined" och
+laddade aldrig om sidan när servern kommit tillbaka. Installationen var klar
+och servern startade om, men det såg ut som att något gått fel. Samma fel gjorde
+att "Starta om servern" under Programuppdatering inte gjorde någonting.
+Meddelanderaden de använde försvann i 119f8a4 men namnet blev kvar. Nu skriver
+de i sina egna meddelanderader. `tests/js/setup-finish.test.cjs` provar båda.
+
 ### Servern startar igen efter att en Cloud-config har aktiverats
 
 En server som hade aktiverat en ny config från Cloud kunde inte starta igen.

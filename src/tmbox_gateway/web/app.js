@@ -503,7 +503,7 @@ setupFinishForm.addEventListener("submit", async (event) => {
       const restartPayload = await restart.json();
       throw new Error(restartPayload.message || "Servern kunde inte startas om");
     }
-    await waitForServerReturn();
+    await waitForServerReturn(message);
   } catch (error) {
     state.restarting = false;
     setMessage(message, error.message, "error");
@@ -1649,7 +1649,7 @@ async function restartServer() {
   if (!window.confirm("Starta om TrainMeet Server och börja använda den aktiverade stationsplanen?")) return;
   state.restarting = true;
   setRestartButtonsDisabled(true);
-  setMessage(configMessage, "Startar om TrainMeet Server …", "notice");
+  setMessage(softwareUpdateMessage, "Startar om TrainMeet Server …", "notice");
   clearTimeout(state.snapshotTimer);
   clearTimeout(state.adminTimer);
   try {
@@ -1661,17 +1661,18 @@ async function restartServer() {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Servern kunde inte startas om");
     setConnection("waiting", "Startar om");
-    setMessage(configMessage, payload.message, "notice");
-    await waitForServerReturn();
+    setMessage(softwareUpdateMessage, payload.message, "notice");
+    await waitForServerReturn(softwareUpdateMessage);
   } catch (error) {
     state.restarting = false;
     setRestartButtonsDisabled(false);
-    setMessage(configMessage, error.message, "error");
+    setMessage(softwareUpdateMessage, error.message, "error");
     scheduleAdminRefresh();
   }
 }
 
-async function waitForServerReturn(message = configMessage) {
+// Every caller says where to report; there is no shared message line.
+async function waitForServerReturn(message) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     try {

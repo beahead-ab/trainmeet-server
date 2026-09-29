@@ -28,6 +28,7 @@ jobs:
       - name: Verify desktop/mobile dialogs and public client assignment
         run: |
           node tests/js/server-shell.test.cjs
+          node tests/js/setup-finish.test.cjs
           node tests/js/server-shell-live.test.cjs
           node tests/js/public-workspaces-live.test.cjs
           node tests/js/terminal16-placement-live.test.cjs
