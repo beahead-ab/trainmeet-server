@@ -1,6 +1,7 @@
 """Mixed-generation acceptance tests: no cloud, no client traffic authority."""
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -145,6 +146,32 @@ class SharedTrafficTests(unittest.TestCase):
         SharedPanelTraffic(engine, TMBoxStationService(self.runtime, self.ops, self.ids))
         self.assertEqual(engine.snapshot("panel-b")["slots"]["A"]["state"], "occupied")
         self.assertEqual(engine.snapshot("panel-b")["interaction"]["mode"], "idle")
+
+    def test_server_starts_again_after_cloud_activation(self):
+        # Benny's Raspberry Pi: the first Cloud config activated, the setup
+        # wizard restarted the server, and every start after that failed with
+        # "Persisted revision does not match its payload".
+        package = runtime_package_v3()
+        package["publication_id"] = "second-version"
+        self.install(package)
+        with self.store._lock:
+            revision, payload = self.store._connection.execute(
+                "SELECT revision, payload_json FROM engine_state WHERE session_id = ?",
+                (self.engine.config.id,)).fetchone()
+        self.assertEqual(json.loads(payload)["revision"], revision)
+        TrafficEngine(self.publication.session_config(), state_store=self.store)
+
+    def test_state_saved_by_versions_with_the_off_by_one_still_starts(self):
+        self.install(dict(runtime_package_v3(), publication_id="second-version"))
+        with self.store._lock:
+            self.store._connection.execute("UPDATE engine_state SET revision = revision - 1")
+        engine = TrafficEngine(self.publication.session_config(), state_store=self.store)
+        self.assertEqual(engine.revision, self.engine.revision)
+        with self.store._lock:
+            self.store._connection.execute("UPDATE engine_state SET revision = revision - 2")
+        from tmbox_gateway.storage import CorruptStateError
+        with self.assertRaises(CorruptStateError):
+            TrafficEngine(self.publication.session_config(), state_store=self.store)
 
     def test_request_receipt_and_traffic_change_roll_back_together(self):
         with patch.object(self.ops, "remember_device_command", side_effect=RuntimeError("disk failure")):

@@ -5,6 +5,20 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Servern startar igen efter att en Cloud-config har aktiverats
+
+En server som hade aktiverat en ny config från Cloud kunde inte starta igen.
+Vid nästa omstart, till exempel den som installationsguiden gör efter
+"Slutför", stoppade den med "Persisted revision does not match its payload",
+och på en Raspberry Pi startade systemd om den i en loop. Trafikläget sparades
+med ett revisionsnummer som lästes ett steg för tidigt, så numret och
+innehållet skilde sig åt med ett. Felet fanns sedan 1.10.0.
+
+Nu läses numret först när innehållet är klart. En databas som redan har felet
+startar ändå: servern känner igen just den skillnaden, skriver en varning i
+loggen och använder innehållet. En Pi som sitter fast blir frisk av
+`sudo systemctl start trainmeet-server-update.service`.
+
 ### Inställningar: Skärmar och klocka i fyra delar
 
 Kortet blandade fyra saker med en gemensam Spara-knapp. Nu är det fyra delar

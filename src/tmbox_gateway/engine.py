@@ -423,11 +423,16 @@ class TrafficEngine:
         try:
             save = (self.shared_traffic.service.operations_store.save_panel_cache
                     if self.shared_traffic is not None else self.state_store.save)
+            # export_state() may advance the revision (shared traffic refresh),
+            # so it must run before the revision is read. Reading it first
+            # stored revision N beside a payload saying N+1, and the next
+            # start refused the database as corrupt.
+            state = self.export_state()
             save(
                 self.config.id,
                 self.config_fingerprint,
                 self.revision,
-                self.export_state(),
+                state,
             )
         except Exception:
             (

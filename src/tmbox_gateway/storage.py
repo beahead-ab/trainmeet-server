@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import logging
 import threading
 from dataclasses import asdict
 from pathlib import Path
@@ -12,6 +13,9 @@ from .models import SessionConfig
 
 
 STATE_FORMAT_VERSION = 1
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class StateStore(Protocol):
@@ -113,8 +117,17 @@ class SQLiteStateStore:
             state = json.loads(payload_json)
         except json.JSONDecodeError as error:
             raise CorruptStateError("Persisted state is not valid JSON") from error
-        if not isinstance(state, dict) or state.get("revision") != revision:
+        if not isinstance(state, dict):
             raise CorruptStateError("Persisted revision does not match its payload")
+        if state.get("revision") != revision:
+            # Versions 1.10.0-1.16.3 read the revision before a shared-traffic
+            # refresh advanced it by one, so a server that activated a Cloud
+            # config could not start again. Exactly that off-by-one is the
+            # bug's signature; the payload itself is complete and is used.
+            if isinstance(state.get("revision"), int) and state["revision"] == revision + 1:
+                LOGGER.warning("Motorns sparade revision låg ett steg efter sitt innehåll; innehållet används")
+            else:
+                raise CorruptStateError("Persisted revision does not match its payload")
         return state
 
     def save(
