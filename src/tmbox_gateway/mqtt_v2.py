@@ -14,6 +14,7 @@ import logging
 from typing import Any, Callable
 
 from .identity import DisplayCapability, IdentityStore
+from . import mqtt_session
 from .protocol_v2 import PROTOCOL_VERSION, TMBoxStationService
 
 
@@ -233,7 +234,7 @@ class MQTTV2Adapter:
         gateway.publish = self._publish
 
     def connect(self) -> None:
-        self.client.connect(self.host, self.port, keepalive=10, clean_start=True)
+        mqtt_session.connect(self.client, self.host, self.port)
         self.client.loop_start()
 
     def disconnect(self) -> None:
@@ -244,7 +245,7 @@ class MQTTV2Adapter:
         self.client.publish(topic, _encode(payload), qos=1, retain=retain)
 
     def _on_connect(self, client: Any, userdata: Any, flags: Any, reason_code: Any, properties: Any) -> None:
-        del userdata, flags, properties
+        del userdata, properties
         if reason_code.is_failure:
             LOGGER.error("Broker avvisade v2-anslutningen: %s", reason_code)
             return
@@ -254,7 +255,13 @@ class MQTTV2Adapter:
             for subscription in self.terminal_gateway.SUBSCRIPTIONS:
                 client.subscribe(subscription, qos=1)
         self.gateway.announce_online()
-        LOGGER.info("TMBox-gateway v2 online")
+        # Om sessionen återupptogs syns det här. En rad som upprepas var
+        # halvminut är inte "servern startar" utan en anslutning som ramlar,
+        # och det ska gå att se i journalen utan att gissa.
+        LOGGER.info(
+            "TMBox-gateway v2 online (%s)",
+            "återupptagen session" if getattr(flags, "session_present", False) else "ny session",
+        )
 
     def _on_message(self, client: Any, userdata: Any, message: Any) -> None:
         del client, userdata

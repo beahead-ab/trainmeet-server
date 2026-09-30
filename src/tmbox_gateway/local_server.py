@@ -16,7 +16,7 @@ import time
 from datetime import timedelta
 from pathlib import Path
 
-from . import backup
+from . import backup, mqtt_session
 from .central_sync import DEFAULT_RUNTIME_PUBLICATION_URL
 from .engine import TrafficEngine
 from .http_server import HTTPServerConfig, TrainMeetHTTPApplication, TrainMeetHTTPServer
@@ -268,7 +268,7 @@ def main() -> None:
     v2_adapter.terminal_gateway = Terminal16Gateway(application.terminal16, v2_adapter._publish)
     application.on_terminal_tick = v2_adapter.terminal_gateway.tick
     station_service.subscribe(v2_adapter.terminal_gateway.tick)
-    gateway.client.connect(broker_host, args.mqtt_port, keepalive=10, clean_start=True)
+    mqtt_session.connect(gateway.client, broker_host, args.mqtt_port)
     gateway.client.loop_start()
     v2_adapter.connect()
     server = TrainMeetHTTPServer((args.bind, args.http_port), application)
