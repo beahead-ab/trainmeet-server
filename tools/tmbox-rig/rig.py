@@ -91,6 +91,14 @@ def main():
                      "max": round(answered[-1] * 1000, 1) if answered else None},
         "session_deaths": sum(len(b.deaths) for b in boxes),
         "frames": sum(b.frames for b in boxes),
+        "firmware": os.environ.get("FIRMWARE", "0.7.1"), "press_every": os.environ.get("PRESS_EVERY", "0"),
+        "commands_acked": sum(len(b.acks) for b in boxes),
+        "ack_s": {"p50": round(sorted(x for b in boxes for x in b.acks)[len([x for b in boxes for x in b.acks]) // 2], 2)
+                  if any(b.acks for b in boxes) else None,
+                  "max": round(max((x for b in boxes for x in b.acks), default=0), 2)},
+        "commands_given_up": sum(b.given_up for b in boxes),
+        "deaths_by_reason": {r: sum(1 for b in boxes for d in b.deaths if d[3] == r)
+                             for r in sorted({d[3] for b in boxes for d in b.deaths})},
         "late_answers": len([x for b in boxes for x in b.late]),
         "late_answer_s": {"min": round(min([x for b in boxes for x in b.late] or [0]), 1),
                           "max": round(max([x for b in boxes for x in b.late] or [0]), 1)},

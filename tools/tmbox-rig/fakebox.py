@@ -1,8 +1,16 @@
-"""Låtsasboxar som beter sig som firmware 0.7.1 (common/server_terminal.h).
+"""Låtsasboxar som beter sig som firmware/common/server_terminal.h.
 
 Samma klient-id, clean session, keepalive 10 s, MQTT 3.1.1. hello vid anslutning,
 presence var 5:e sekund, 15 s tålamod på alive/frame, ny boot vid återanslutning.
-Mäter tiden från varje presence till dess alive.
+
+FIRMWARE väljer hur ett obesvarat knapptryck hanteras:
+  0.7.1  fem sekunder utan kvitto fäller hela sessionen
+  0.7.2  kommandot väntar så länge servern svarar på presence; efter 30 s ges
+         kommandot upp, men sessionen behålls
+PRESS_EVERY (sekunder) får boxen att trycka på en knapp servern erbjuder.
+
+Mäter tiden från varje presence till dess alive, och från varje knapptryck
+till dess kvitto.
 """
 import json, os, random, sys, threading, time
 import paho.mqtt.client as mqtt
@@ -10,6 +18,10 @@ import paho.mqtt.client as mqtt
 HOST, PORT = "127.0.0.1", int(os.environ.get("MQTT_PORT", "18830"))
 PREFIX = "tmbox/terminal/device/"
 PATIENCE, PING = 15.0, 5.0
+FIRMWARE = os.environ.get("FIRMWARE", "0.7.1")
+PRESS_EVERY = float(os.environ.get("PRESS_EVERY", "0"))
+ACK_DROPS_SESSION = 5.0      # 0.7.1
+ACK_GIVE_UP = 30.0           # 0.7.2
 
 
 class Box:
@@ -23,16 +35,21 @@ class Box:
         self.lock = threading.Lock()
         self.pings = {}          # nonce -> sent time
         self.latencies = []      # (sent_at, latency or None)
-        self.deaths = []         # (time, boot, pings in session)
+        self.deaths = []         # (time, boot, pings in session, reason)
         self.frames = 0
         self.stale = {}          # nonce -> sent time, from sessions already given up
         self.late = []           # latency of answers that came after the box gave up
+        self.acks = []           # seconds from key press to its ack
+        self.given_up = 0        # commands 0.7.2 gave up on without dropping the session
+        self.frame = None
+        self.pending = None
         self.stop = False
 
     def _connect(self):
         self.connection += 1
         self.boot = f"{self.boot_id}-{self.connection}"
         self.session_pings = 0
+        self.frame, self.pending = None, None
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=self.id,
                              protocol=mqtt.MQTTv311, clean_session=True)
         client.on_message = self._on_message
@@ -43,8 +60,9 @@ class Box:
         self.client = client
         now = time.monotonic()
         self.seen = self.ping = now
+        self.next_press = now + PRESS_EVERY * (0.5 + random.random())
         self._publish("hello", {"device_code": self.code, "model": "NodeMCU ESP8266 16x2",
-                                "firmware_version": "0.7.1", "hardware_version": "server-16x2"})
+                                "firmware_version": FIRMWARE, "hardware_version": "server-16x2"})
 
     def _publish(self, leaf, body):
         body["boot"] = self.boot
@@ -71,9 +89,40 @@ class Box:
                 if sent is not None:
                     self.latencies.append((sent, now - sent))
                     self.seen = now
+            elif message.topic.endswith("/ack"):
+                if self.pending and doc.get("command_id") == self.pending[0]:
+                    self.acks.append(now - self.pending[1])
+                    self.pending = None
+                if isinstance(doc.get("frame"), dict):
+                    self.frame = doc["frame"]
+                self.seen = now
             elif message.topic.endswith("/frame"):
                 self.frames += 1
+                if isinstance(doc.get("frame"), dict):
+                    self.frame = doc["frame"]
                 self.seen = now
+
+    def _press(self, now):
+        keys = (self.frame or {}).get("keys") or {}
+        key = "C" if "C" in keys else next(iter(keys), None)
+        if key is None:
+            return
+        self.sequence += 1
+        command_id = f"{self.boot}-{self.sequence}"
+        self.pending = (command_id, now)
+        self._publish("command", {"command_id": command_id, "view_token": self.frame.get("view_token", ""), "key": key})
+
+    def _die(self, reason):
+        with self.lock:
+            for nonce, sent in self.pings.items():
+                self.latencies.append((sent, None))
+                self.stale[nonce] = sent
+            self.pings.clear()
+            self.deaths.append((time.time(), self.boot, self.session_pings, reason))
+        self.log(f"{self.id} DÖR  boot {self.boot} efter {self.session_pings} pingar ({reason})")
+        self.client.disconnect(); self.client.loop_stop()
+        time.sleep(1.0)       # firmware: nextConnection = current + 1000
+        self._connect()
 
     def run(self):
         self._connect()
@@ -81,19 +130,22 @@ class Box:
             time.sleep(0.05)
             now = time.monotonic()
             with self.lock:
-                dead = now - self.seen >= PATIENCE
-                if dead:
-                    for nonce, sent in self.pings.items():
-                        self.latencies.append((sent, None))
-                        self.stale[nonce] = sent
-                    self.pings.clear()
-                    self.deaths.append((time.time(), self.boot, self.session_pings))
-            if dead:
-                self.log(f"{self.id} DÖR  boot {self.boot} efter {self.session_pings} pingar")
-                self.client.disconnect(); self.client.loop_stop()
-                time.sleep(1.0)       # firmware: nextConnection = current + 1000
-                self._connect()
+                silent = now - self.seen >= PATIENCE
+                waited = now - self.pending[1] if self.pending else 0.0
+            if silent:
+                self._die("tystnad")
                 continue
+            if self.pending and FIRMWARE == "0.7.1" and waited >= ACK_DROPS_SESSION:
+                self._die("kvitto uteblev 5 s")
+                continue
+            if self.pending and FIRMWARE != "0.7.1" and waited >= ACK_GIVE_UP:
+                with self.lock:
+                    self.pending = None
+                    self.given_up += 1
+            if PRESS_EVERY and not self.pending and self.frame and now >= self.next_press:
+                self.next_press = now + PRESS_EVERY
+                with self.lock:
+                    self._press(now)
             if now - self.ping >= PING:
                 self.ping = now
                 self.sequence += 1
@@ -103,37 +155,3 @@ class Box:
                     self.session_pings += 1
                 self._publish("presence", {"nonce": nonce})
         self.client.disconnect(); self.client.loop_stop()
-
-
-def main():
-    count = int(sys.argv[1]) if len(sys.argv) > 1 else 5
-    duration = float(sys.argv[2]) if len(sys.argv) > 2 else 120
-    start = time.monotonic()
-    def log(text):
-        print(f"[{time.monotonic() - start:7.1f}s] {text}", flush=True)
-    boxes = [Box("308398b5%04x" % (0x5263 + i * 0x0111), log) for i in range(count)]
-    threads = [threading.Thread(target=b.run, daemon=True) for b in boxes]
-    for t in threads:
-        t.start(); time.sleep(0.2)
-    time.sleep(duration)
-    for b in boxes:
-        b.stop = True
-    for t in threads:
-        t.join(timeout=5)
-    answered = [lat for b in boxes for _, lat in b.latencies if lat is not None]
-    lost = sum(1 for b in boxes for _, lat in b.latencies if lat is None)
-    answered.sort()
-    def pct(p):
-        return answered[min(len(answered) - 1, int(p * len(answered)))] * 1000 if answered else float("nan")
-    print(json.dumps({
-        "boxes": count, "seconds": duration,
-        "pings_answered": len(answered), "pings_unanswered": lost,
-        "alive_ms": {"p50": round(pct(0.5), 1), "p95": round(pct(0.95), 1), "p99": round(pct(0.99), 1),
-                     "max": round(max(answered) * 1000, 1) if answered else None},
-        "session_deaths": sum(len(b.deaths) for b in boxes),
-        "frames": sum(b.frames for b in boxes),
-    }, indent=1))
-
-
-if __name__ == "__main__":
-    main()

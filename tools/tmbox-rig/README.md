@@ -7,7 +7,12 @@ var femte sekund, femton sekunders tålamod och ny `boot` vid återanslutning.
 Två låtsaswebbläsare frågar samma adresser i samma takt som i en verklig journal.
 
 Riggen mäter tiden från varje `presence` till dess `alive`, hur många
-sessioner som dör, och svarstiden per HTTP-adress.
+sessioner som dör och varför, tiden från knapptryck till kvitto, och
+svarstiden per HTTP-adress.
+
+`FIRMWARE=0.7.1` eller `0.7.2` väljer hur ett obesvarat knapptryck hanteras, och
+`PRESS_EVERY=8` får boxarna att trycka på en knapp servern erbjuder var åttonde
+sekund.
 
 ```
 export RIG_DIR=/tmp/rig
@@ -85,3 +90,22 @@ TMBox esp8266-308398b55263 ansluten (session e5419c4d028b9980-1)
 TMBox-kön ligger efter: 22.5 s väntetid (värst 22.5 s), 20 i kön, 1 inaktuella hoppades över
 TMBox-kön ligger efter: 3.2 s väntetid (värst 18.3 s), 2 i kön, 20 inaktuella hoppades över
 ```
+
+### Knapptryck: firmware 0.7.1 mot 0.7.2, server 1.17.1
+
+Samma spärr (`STALL_AT=40 STALL_SECONDS=17`), 5 boxar som trycker var åttonde
+sekund, 90 s:
+
+| ms per meddelande | Firmware | Döda sessioner | Kvitterade knapptryck |
+|---|---|---|---|
+| 0 | 0.7.1 / 0.7.2 | 0 / 0 | 55 / 56, 40 ms |
+| 400 | 0.7.1 | 5, alla för att kvittot uteblev i 5 s | 48 |
+| 400 | 0.7.2 | **0** | 52, högst 17 s (spärren) |
+| 1300 | 0.7.1 | **45**, alla för att kvittot uteblev i 5 s | 2 |
+| 1300 | 0.7.2 | **0** | 66, typvärde 6,4 s, högst 24 s |
+
+Med 0.7.1 besvarades varje ping, men knapptrycken fällde boxarna ändå: fem
+sekunder utan kvitto kopplade ner hela sessionen, och återanslutningarna lade
+mer arbete i kön. Servern 1.17.1 räcker alltså inte ensam mot en långsam server
+så länge någon trycker på knappar. Med 0.7.2 väntar kommandot så länge servern
+svarar på `presence`, och inget kommando behövde ges upp.
