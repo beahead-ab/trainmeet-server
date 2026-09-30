@@ -25,6 +25,8 @@ class Box:
         self.latencies = []      # (sent_at, latency or None)
         self.deaths = []         # (time, boot, pings in session)
         self.frames = 0
+        self.stale = {}          # nonce -> sent time, from sessions already given up
+        self.late = []           # latency of answers that came after the box gave up
         self.stop = False
 
     def _connect(self):
@@ -55,9 +57,14 @@ class Box:
             doc = json.loads(message.payload)
         except ValueError:
             return
-        if doc.get("boot") != self.boot:
-            return
         now = time.monotonic()
+        if doc.get("boot") != self.boot:
+            if message.topic.endswith("/alive"):
+                with self.lock:
+                    sent = self.stale.pop(doc.get("nonce"), None)
+                    if sent is not None:
+                        self.late.append(now - sent)
+            return
         with self.lock:
             if message.topic.endswith("/alive"):
                 sent = self.pings.pop(doc.get("nonce"), None)
@@ -78,6 +85,7 @@ class Box:
                 if dead:
                     for nonce, sent in self.pings.items():
                         self.latencies.append((sent, None))
+                        self.stale[nonce] = sent
                     self.pings.clear()
                     self.deaths.append((time.time(), self.boot, self.session_pings))
             if dead:

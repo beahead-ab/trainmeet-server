@@ -35,5 +35,13 @@ def stalling(self, topic, payload, **kwargs):
             LOG.write(json.dumps({"t": time.time(), "what": "STALL", "ms": STALL_SECONDS * 1000}) + "\n")
             time.sleep(STALL_SECONDS)
     return _inner(self, topic, payload, **kwargs)
-terminal16_mqtt.Terminal16Gateway.on_message = stalling
+SLOW_MS = float(os.environ.get("SLOW_MS", "0"))
+def slow(self, topic, payload, **kwargs):
+    # Ett långsamt meddelande med trafiklåset taget, som en långsam
+    # databasskrivning på ett SD-kort skulle vara.
+    if SLOW_MS:
+        with self.terminals.service.operations_store.command_lock:
+            time.sleep(SLOW_MS / 1000)
+    return stalling(self, topic, payload, **kwargs)
+terminal16_mqtt.Terminal16Gateway.on_message = slow
 local_server.main()

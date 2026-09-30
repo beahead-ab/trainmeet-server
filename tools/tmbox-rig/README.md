@@ -19,7 +19,11 @@ tools/tmbox-rig/stop.sh
 
 `STALL_AT=25 STALL_SECONDS=20 tools/tmbox-rig/start.sh timed` lägger in en
 konstgjord spärr på arbetstråden med trafiklåset taget, för att se att riggen
-känner igen felet.
+känner igen felet. `SLOW_MS=900` gör varje meddelande så mycket långsammare,
+som en långsam databasskrivning skulle göra.
+
+Låtsasboxarna sparar pingar från sessioner de redan gett upp. Kommer svaret
+ändå räknas det som ett sent svar - servern svarade, men för sent.
 
 ## Uppmätt 2026-09-30
 
@@ -36,3 +40,25 @@ Under spärren fryser `/v1/display` lika länge (19,9 s), eftersom den tar samma
 lås. Övriga adresser svarar som vanligt. En journal där `/v1/display` svarar
 utan avbrott medan boxarna tappar kontakten utesluter alltså att trafiklåset
 är orsaken.
+
+### Långsam server plus en enda störning
+
+Varje meddelande görs långsamt (`SLOW_MS`) och en enda 17 s spärr läggs in
+efter 40 s (`STALL_AT=40 STALL_SECONDS=17`). 5 boxar, 90 s.
+
+| ms per meddelande | Efter spärren | Sena svar |
+|---|---|---|
+| 150 | varje box dör en gång, sedan normalt | 15, 9-17 s sena |
+| 450 | varje box dör en gång, sedan normalt | 15, 12-19 s sena |
+| 900 | **fastnar: varje ny session dör efter exakt två pingar** | 30, 16-21 s sena |
+| 1300 | **fastnar på samma sätt** | 29, 28-41 s sena |
+
+Utan spärren klarade även 1300 ms sig utan en enda död session: svaren kom upp
+till 27 s sent, men de kom var femte sekund, och boxen mäter tiden mellan svar,
+inte hur gamla de är. Det ger långa knapptryck, inte avbrott.
+
+Över tröskeln håller boxarna själva igång kollapsen. Pingar från döda sessioner
+ligger kvar i kön och kostar lika mycket att hantera, och varje återanslutning
+lägger till en ny `hello`. Servern svarar hela tiden, loggar inga fel, och
+`/v1/display` svarar - långsamt, men utan att frysa. Det är samma bild som
+fältet gav 2026-09-30.

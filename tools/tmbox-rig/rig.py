@@ -91,6 +91,9 @@ def main():
                      "max": round(answered[-1] * 1000, 1) if answered else None},
         "session_deaths": sum(len(b.deaths) for b in boxes),
         "frames": sum(b.frames for b in boxes),
+        "late_answers": len([x for b in boxes for x in b.late]),
+        "late_answer_s": {"min": round(min([x for b in boxes for x in b.late] or [0]), 1),
+                          "max": round(max([x for b in boxes for x in b.late] or [0]), 1)},
         "http_ms": {p: {"n": len(v), "p50": pct(sorted(v), .5), "max": round(max(v) * 1000, 1)} for p, v in sorted(http.items())},
         "http_errors": {k: v for b in browsers for k, v in b.errors.items()},
     }
