@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from . import mqtt_session
 from .engine import TrafficEngine
 from .identity import DeviceKind, DisplayCapability, IdentityStore
 from .models import Command, CommandAck, unconfigured_session
@@ -61,7 +62,7 @@ class MQTTGatewayAdapter:
 
     def run_forever(self) -> None:
         LOGGER.info("Connecting to MQTT broker at %s:%s", self.host, self.port)
-        self.client.connect(self.host, self.port, keepalive=10, clean_start=True)
+        mqtt_session.connect(self.client, self.host, self.port)
         self.client.loop_forever(retry_first_connection=True)
 
     def _on_connect(self, client: Any, userdata: Any, flags: Any, reason_code: Any, properties: Any) -> None:

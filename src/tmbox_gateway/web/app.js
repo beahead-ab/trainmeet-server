@@ -209,18 +209,33 @@ const setupServerForm = document.querySelector("#setup-server-form");
 // exactly as it did with a plain input. Typing advances focus, backspace on
 // an empty box steps back, and pasting anywhere in the group (with or
 // without the "123-456" dash) spreads the digits across all six boxes.
+//: Kodrutorna. En ruta per tecken, med strecket förtryckt mellan grupperna:
+//: då syns både hur lång koden är och var den delas, utan att någon behöver
+//: fråga om strecket ska skrivas.
+//:
+//: Rutorna är strikta - de tar bara kodens egna tecken - medan servern tar emot
+//: vilken skrivning som helst. Det är samma regel från två håll: den som skriver
+//: av en kod ska se formen, den som har skrivit den på sitt eget vis ska ändå
+//: komma in.
+//:
+//: `data-code-alphabet="alnum"` på behållaren gör rutorna alfanumeriska.
+//: Träffkoderna är siffror, inbjudningarna bokstäver och siffror.
 function wireCodeBoxes(containerSelector, hiddenInputSelector) {
   const container = document.querySelector(containerSelector);
   const hidden = document.querySelector(hiddenInputSelector);
   if (!container || !hidden) return { reset() {} };
   const boxes = [...container.querySelectorAll("input")];
+  const alphanumeric = container.dataset.codeAlphabet === "alnum";
+  const strip = (raw) => (alphanumeric
+    ? raw.toUpperCase().replace(/[^0-9A-Z]/g, "")
+    : raw.replace(/\D/g, ""));
 
   const sync = () => {
     hidden.value = boxes.map((box) => box.value).join("");
   };
 
   const fillFrom = (raw, startIndex) => {
-    const digits = raw.replace(/\D/g, "").slice(0, boxes.length - startIndex);
+    const digits = strip(raw).slice(0, boxes.length - startIndex);
     for (let offset = 0; offset < digits.length; offset += 1) {
       boxes[startIndex + offset].value = digits[offset];
     }
@@ -232,7 +247,7 @@ function wireCodeBoxes(containerSelector, hiddenInputSelector) {
 
   boxes.forEach((box, index) => {
     box.addEventListener("input", () => {
-      const digits = box.value.replace(/\D/g, "");
+      const digits = strip(box.value);
       if (digits.length > 1) {
         fillFrom(digits, index);
         return;
@@ -270,6 +285,7 @@ function wireCodeBoxes(containerSelector, hiddenInputSelector) {
 
 const setupSyncCodeBoxes = wireCodeBoxes("#setup-sync-code-boxes", "#setup-sync-code");
 const runtimeSyncCodeBoxes = wireCodeBoxes("#runtime-sync-code-boxes", "#runtime-sync-code");
+const redeemCodeBoxes = wireCodeBoxes("#redeem-code-boxes", "#redeem-code");
 
 const setupCentralForm = document.querySelector("#setup-central-form");
 const setupFinishForm = document.querySelector("#setup-finish-form");
@@ -378,7 +394,7 @@ redeemForm?.addEventListener("submit", async (event) => {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.message || "Koden gick inte att lösa in");
     document.querySelector("#redeem-password").value = "";
-    document.querySelector("#redeem-code").value = "";
+    redeemCodeBoxes.reset();
     showRedeem(false);
     // The username field is left alone here too: the browser's own password
     // manager may offer the account, and that is the user's choice.

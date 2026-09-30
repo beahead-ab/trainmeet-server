@@ -1109,7 +1109,9 @@ class IdentityStore:
         if not 8 <= len(password) <= 256:
             raise AdminAccessError("Lösenordet måste vara 8–256 tecken")
         now = datetime.now(timezone.utc)
-        digest = _credential_digest(str(code).strip().upper())
+        # Koden digererades i sin skrivna form när den utfärdades, så indata
+        # förs tillbaka dit: streck, mellanslag eller ingenting blir samma kod.
+        digest = _credential_digest(_display_code(str(code)))
         salt = secrets.token_bytes(16)
         with self._lock:
             row = self._connection.execute(
@@ -1432,10 +1434,32 @@ def _discovered_device_from_row(
 
 
 def _normalize_code(code: str) -> str:
+    """Koden utan skiljetecken, i versaler.
+
+    Strikt där koden visas, tolerant där den tas emot. Den som läser upp en kod
+    i telefon säger inte "bindestreck", och den som skriver av den från en skärm
+    väljer själv mellan streck, mellanslag och ingenting alls. Alla tre är samma
+    kod, och servern ska inte låtsas något annat.
+
+    Bara skiljetecken och versaler normaliseras - aldrig tecknen själva. Ett O
+    blir inte en nolla här. Koderna lottas redan ur ett alfabet utan de paren
+    (inget O, inget I), och att gissa åt användaren skulle göra en felskriven kod
+    till en som ser rätt ut. Då slutar "Koden gäller inte" vara ett svar man kan
+    lita på.
+    """
+
     return "".join(character for character in code.upper() if character.isalnum())
 
 
 def _display_code(code: str) -> str:
+    """Kodens skrivna form: två lika stora grupper med ett streck emellan.
+
+    Samma form för sexsiffriga träffkoder (123-456) som för åttateckens
+    inbjudningar (ABCD-EFGH), så fälten kan visa formen utan att veta vilken
+    sorts kod de bär.
+    """
+
+    code = _normalize_code(code)
     midpoint = len(code) // 2
     return f"{code[:midpoint]}-{code[midpoint:]}"
 
