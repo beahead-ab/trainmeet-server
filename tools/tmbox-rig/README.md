@@ -62,3 +62,26 @@ ligger kvar i kön och kostar lika mycket att hantera, och varje återanslutning
 lägger till en ny `hello`. Servern svarar hela tiden, loggar inga fel, och
 `/v1/display` svarar - långsamt, men utan att frysa. Det är samma bild som
 fältet gav 2026-09-30.
+
+### Samma scenario efter att livstecknet flyttats till kanten
+
+`Terminal16Gateway` besvarar nu `presence` innan kön, och arbetaren hoppar över
+det som hunnit bli inaktuellt. Samma rigg, samma spärr, båda versionerna:
+
+| ms per meddelande | 1.17.0 | Efter |
+|---|---|---|
+| 900 | 15 döda sessioner, 10 av dem efter exakt två pingar; 25 svar 17-21 s för sent | **0 döda**, alive högst 50 ms |
+| 1300 | 15 döda sessioner, 10 av dem efter exakt två pingar; 26 svar 29-41 s för sent | **0 döda**, alive högst 51 ms |
+
+Det här tar bort kollapsen, inte långsamheten. Vid 1300 ms per meddelande
+väntar arbetet fortfarande 3-5 s i kön, och ett knapptryck väntar lika länge.
+Firmware 0.7.1 ger upp om ett kommando efter 5 s. Riggens boxar trycker inte på
+knappar, så den gränsen är inte uppmätt här.
+
+Journalen säger nu själv vad som händer:
+
+```
+TMBox esp8266-308398b55263 ansluten (session e5419c4d028b9980-1)
+TMBox-kön ligger efter: 22.5 s väntetid (värst 22.5 s), 20 i kön, 1 inaktuella hoppades över
+TMBox-kön ligger efter: 3.2 s väntetid (värst 18.3 s), 2 i kön, 20 inaktuella hoppades över
+```

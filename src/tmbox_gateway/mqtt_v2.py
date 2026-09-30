@@ -13,6 +13,7 @@ import json
 import logging
 import queue
 import threading
+import time
 from typing import Any, Callable
 
 from .identity import DisplayCapability, IdentityStore
@@ -21,6 +22,14 @@ from .protocol_v2 import PROTOCOL_VERSION, TMBoxStationService
 
 
 LOGGER = logging.getLogger("tmbox_gateway.mqtt_v2")
+
+# En box ger upp efter femton sekunder utan svar, och ett knapptryck känns segt
+# långt innan dess. Två sekunders väntan i kön är tidigt nog att se det komma.
+QUEUE_BEHIND_SECONDS = 2.0
+QUEUE_CAUGHT_UP_SECONDS = 0.5
+# Hellre en rad var tionde sekund som säger hur illa det är än en per meddelande
+# som dränker journalen när det väl händer.
+QUEUE_REPORT_INTERVAL_SECONDS = 10.0
 
 TOPIC_PREFIX = "tmbox/v2"
 
@@ -227,6 +236,11 @@ class MQTTV2Adapter:
         # minnet tar slut i stället.
         self._inbox: queue.Queue = queue.Queue(maxsize=2000)
         self._worker: threading.Thread | None = None
+        self._behind = False
+        self._last_report = float("-inf")
+        self._worst_wait = 0.0
+        self._skipped = 0
+        self.now = time.monotonic
         self.client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=f"tmbox-gateway-v2-{gateway.gateway_id}",
@@ -293,13 +307,27 @@ class MQTTV2Adapter:
         """
 
         del client, userdata
+        topic, payload, retained = message.topic, message.payload, bool(message.retain)
+        if self.terminal_gateway and topic.startswith(self.terminal_gateway.PREFIX):
+            # Terminalens livstecken besvaras här, innan kön - se
+            # Terminal16Gateway. Bara det arbete som återstår köas.
+            try:
+                item = self.terminal_gateway.receive(topic, payload, retained=retained)
+            except Exception:  # pragma: no cover - defensive transport boundary
+                LOGGER.exception("Ett terminalmeddelande kunde inte tas emot: %s", topic)
+                return
+            if item is None:
+                return
+            work = (self.terminal_gateway.handle, (item,), {})
+        else:
+            work = (self.gateway.on_message, (topic, payload), {"retained": retained})
         try:
-            self._inbox.put_nowait((message.topic, message.payload, bool(message.retain)))
+            self._inbox.put_nowait((self.now(), topic, work))
         except queue.Full:  # pragma: no cover - kräver en server som redan tappat greppet
             # Hellre säga ifrån än att blockera nätverkstråden: det vore att
             # återinföra precis det som lagades.
             LOGGER.error(
-                "Kön till TMBox-arbetet är full, meddelandet kastas: %s", message.topic
+                "Kön till TMBox-arbetet är full, meddelandet kastas: %s", topic
             )
 
     def _work(self) -> None:
@@ -314,14 +342,40 @@ class MQTTV2Adapter:
             item = self._inbox.get()
             if item is None:
                 return
-            topic, payload, retained = item
+            enqueued_at, topic, (handler, args, kwargs) = item
+            self._note_wait(self.now() - enqueued_at)
             try:
-                if self.terminal_gateway and topic.startswith(self.terminal_gateway.PREFIX):
-                    self.terminal_gateway.on_message(topic, payload, retained=retained)
-                else:
-                    self.gateway.on_message(topic, payload, retained=retained)
+                if handler(*args, **kwargs) is False:
+                    self._skipped += 1
             except Exception:  # pragma: no cover - defensive transport boundary
                 LOGGER.exception("Ett v2-meddelande kunde inte hanteras: %s", topic)
+
+    def _note_wait(self, waited: float) -> None:
+        """Säg till när kön ligger efter, och när den hämtat sig.
+
+        Utan det här syntes ingenting: servern svarade, bara för sent, och
+        journalen var ren medan varje box i hallen tappade kontakten. Det
+        fick räknas fram ur nonce-nummer i en MQTT-klient.
+        """
+
+        self._worst_wait = max(self._worst_wait, waited)
+        now = self.now()
+        if waited >= QUEUE_BEHIND_SECONDS:
+            if not self._behind or now - self._last_report >= QUEUE_REPORT_INTERVAL_SECONDS:
+                LOGGER.warning(
+                    "TMBox-kön ligger efter: %.1f s väntetid (värst %.1f s), %d i kön, "
+                    "%d inaktuella hoppades över",
+                    waited, self._worst_wait, self._inbox.qsize(), self._skipped,
+                )
+                self._behind, self._last_report = True, now
+                self._worst_wait, self._skipped = 0.0, 0
+        elif self._behind and waited < QUEUE_CAUGHT_UP_SECONDS:
+            LOGGER.info(
+                "TMBox-kön har hämtat sig (värst %.1f s sedan förra raden, %d inaktuella hoppades över)",
+                self._worst_wait, self._skipped,
+            )
+            self._behind, self._last_report = False, now
+            self._worst_wait, self._skipped = 0.0, 0
 
 
 def _encode(payload: dict[str, Any]) -> str:

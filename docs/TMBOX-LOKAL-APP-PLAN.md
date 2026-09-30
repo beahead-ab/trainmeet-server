@@ -2,6 +2,26 @@
 
 Status: förslag, ej beslutat. Skriven 2026-09-30.
 
+## Uppdatering 2026-09-30, kväll
+
+Fältfelet är återskapat och förstått, se `tools/tmbox-rig/README.md`. Boxens
+fråga "finns servern?" besvarades av samma kö som gjorde allt arbete. När
+servern var långsam per meddelande räckte en enda störning för att alla boxar
+skulle dö samtidigt och sedan fortsätta dö efter exakt två pingar per session.
+Servern svarade hela tiden, bara för sent, och journalen var ren.
+
+Byggt på servern, utan att boxarna behöver flashas om:
+
+- Livstecknet besvaras innan kön, utan trafiklås och utan databas.
+- Arbete från ersatta sessioner hoppas över, och bara den senaste pingen per
+  box arbetas.
+- Journalen säger när kön ligger efter och när en box kopplar upp igen - den
+  första halvan av steg 0.
+
+Kvar av steg 0 är raden per box i webbgränssnittet. Kvar av grundproblemet är
+att allt arbete fortfarande går genom en enda kö; en långsam server ger långa
+knapptryck även om den inte längre fäller boxarna.
+
 ## Problemet i en mening
 
 Servern målar skärmen och boxen är ett fönster med femton sekunders tålamod.
