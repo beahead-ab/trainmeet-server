@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
+import threading
 from typing import Any, Callable
 
 from .identity import DisplayCapability, IdentityStore
@@ -220,6 +222,11 @@ class MQTTV2Adapter:
         self.terminal_gateway = None
         self.host = host
         self.port = port
+        # Gränsen är satt för att märkas, inte för att räcka till allt: en kö
+        # som växer obegränsat döljer en server som inte hinner med, tills
+        # minnet tar slut i stället.
+        self._inbox: queue.Queue = queue.Queue(maxsize=2000)
+        self._worker: threading.Thread | None = None
         self.client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=f"tmbox-gateway-v2-{gateway.gateway_id}",
@@ -234,12 +241,18 @@ class MQTTV2Adapter:
         gateway.publish = self._publish
 
     def connect(self) -> None:
+        self._worker = threading.Thread(target=self._work, name="tmbox-v2-arbete", daemon=True)
+        self._worker.start()
         mqtt_session.connect(self.client, self.host, self.port)
         self.client.loop_start()
 
     def disconnect(self) -> None:
         self.client.disconnect()
         self.client.loop_stop()
+        if self._worker is not None:
+            self._inbox.put(None)
+            self._worker.join(timeout=5)
+            self._worker = None
 
     def _publish(self, topic: str, payload: dict[str, Any], retain: bool) -> None:
         self.client.publish(topic, _encode(payload), qos=1, retain=retain)
@@ -264,14 +277,51 @@ class MQTTV2Adapter:
         )
 
     def _on_message(self, client: Any, userdata: Any, message: Any) -> None:
+        """Ta emot och lämna vidare. Ingenting mer får hända här.
+
+        paho kör den här återanropet på sin nätverkstråd - samma tråd som
+        skickar keepalive och läser nästa meddelande. Låg arbetet kvar här
+        betalade rummet för det: ett kommando kunde leda till att varje stations
+        ögonblicksbild publicerades om, och under tiden kunde tråden varken pinga
+        eller läsa. Mäklaren släppte gatewayen, alla TMBoxar såg servern försvinna
+        samtidigt, och knapptryck som kom in under tiden fick vänta på sin tur.
+
+        Uppmätt på en träff: gatewayen tappade anslutningen med 50 sekunders till
+        fem minuters mellanrum, oregelbundet, och operatörerna beskrev det som att
+        det tog lång tid från knapptryck till att något hände. Två symptom, en
+        orsak.
+        """
+
         del client, userdata
         try:
-            if self.terminal_gateway and message.topic.startswith(self.terminal_gateway.PREFIX):
-                self.terminal_gateway.on_message(message.topic, message.payload, retained=bool(message.retain))
+            self._inbox.put_nowait((message.topic, message.payload, bool(message.retain)))
+        except queue.Full:  # pragma: no cover - kräver en server som redan tappat greppet
+            # Hellre säga ifrån än att blockera nätverkstråden: det vore att
+            # återinföra precis det som lagades.
+            LOGGER.error(
+                "Kön till TMBox-arbetet är full, meddelandet kastas: %s", message.topic
+            )
+
+    def _work(self) -> None:
+        """Allt riktigt arbete, på en egen tråd och i tur och ordning.
+
+        En tråd, inte flera: meddelanden från en box ska hanteras i den ordning
+        de skickades, och två trådar som publicerar ögonblicksbilder för samma
+        station skulle kunna skriva om varandra.
+        """
+
+        while True:
+            item = self._inbox.get()
+            if item is None:
                 return
-            self.gateway.on_message(message.topic, message.payload, retained=bool(message.retain))
-        except Exception:  # pragma: no cover - defensive transport boundary
-            LOGGER.exception("Ett v2-meddelande kunde inte hanteras: %s", message.topic)
+            topic, payload, retained = item
+            try:
+                if self.terminal_gateway and topic.startswith(self.terminal_gateway.PREFIX):
+                    self.terminal_gateway.on_message(topic, payload, retained=retained)
+                else:
+                    self.gateway.on_message(topic, payload, retained=retained)
+            except Exception:  # pragma: no cover - defensive transport boundary
+                LOGGER.exception("Ett v2-meddelande kunde inte hanteras: %s", topic)
 
 
 def _encode(payload: dict[str, Any]) -> str:
