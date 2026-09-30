@@ -99,16 +99,29 @@ class WorkLeavesTheNetworkThreadTests(unittest.TestCase):
         self.assertEqual(["tmbox/v2/nasta"], self.handled)
 
     def test_terminal_messages_take_their_own_road(self) -> None:
+        """Terminalen tas emot på nätverkstråden och arbetas i kön - och bara
+        det receive() lämnar vidare hamnar i kön."""
+
         terminal = MagicMock()
         terminal.PREFIX = "tmbox/terminal16/"
+        receiving_threads = []
+
+        def receive(topic, payload, retained):
+            receiving_threads.append(threading.current_thread())
+            return None if topic.endswith("klart") else ("arbete", topic)
+
+        terminal.receive.side_effect = receive
+        terminal.handle.side_effect = lambda item: self.handled.append(item[1])
         self.adapter.terminal_gateway = terminal
         self.gateway.on_message.side_effect = lambda topic, payload, retained: self.handled.append(topic)
 
+        self.adapter._on_message(None, None, _message("tmbox/terminal16/klart"))
         self.adapter._on_message(None, None, _message("tmbox/terminal16/knapp"))
         self.adapter._on_message(None, None, _message("tmbox/v2/annat"))
-        self._wait_for(1)
-        terminal.on_message.assert_called_once()
-        self.assertEqual(["tmbox/v2/annat"], self.handled)
+        self._wait_for(2)
+        self.assertEqual([threading.current_thread()] * 2, receiving_threads)
+        self.assertEqual(["tmbox/terminal16/knapp", "tmbox/v2/annat"], self.handled)
+        terminal.on_message.assert_not_called()
 
     def test_a_full_queue_is_said_out_loud_not_silently_blocking(self) -> None:
         """En kö som växer obegränsat döljer en server som inte hinner med,
