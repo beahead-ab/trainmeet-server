@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import secrets
@@ -16,7 +15,7 @@ import time
 from datetime import timedelta
 from pathlib import Path
 
-from . import backup, mqtt_session
+from . import backup
 from .central_sync import DEFAULT_RUNTIME_PUBLICATION_URL
 from .engine import TrafficEngine
 from .http_server import CONNECTION_CODE_LABEL, HTTPServerConfig, TrainMeetHTTPApplication, TrainMeetHTTPServer
@@ -25,8 +24,7 @@ from .lifecycle import SQLiteMeetLifecycle, MeetLifecycleError
 from .local_config import SQLiteLocalConfigurationStore
 from .models import unconfigured_session
 from .observability import configure_logging
-from .mqtt_adapter import MQTTGatewayAdapter
-from .mqtt_v2 import MQTTV2Adapter, TMBoxV2Gateway
+from .mqtt_transport import MQTTTransport
 from .operations import SQLiteOperationsStore
 from .us import USStore
 from .protocol_v2 import TMBoxStationService
@@ -38,34 +36,25 @@ from .storage import SQLiteStateStore
 LOGGER = logging.getLogger("tmbox_gateway.server")
 
 
-def publish_clock_to_devices(gateway, v2_gateway, identities):
-    """Clock updates are snapshots, never repeated assignments/config."""
-    gateway._publish_snapshots()
-    for station_id in {c.station_id for c in identities.enabled_clients() if c.station_id}:
-        v2_gateway.publish_station_snapshot(station_id)
+def attach_terminal_gateway(application, transport, station_service):
+    """Serve 16x2 boxes over MQTT; every message from a live session marks the box as seen.
 
-
-def publish_config_to_devices(gateway, v2_gateway, identities):
-    """Push an adopted publication to both physical protocols immediately."""
-    gateway._publish_snapshots()
-    for device in identities.discovered_devices():
-        if device.protocol_version == 2:
-            v2_gateway.publish_device_state(device.device_id)
-        else:
-            gateway._handle_device_hello(device.device_id, json.dumps({
-                "device_code": device.device_code, "model": device.model,
-                "firmware_version": device.firmware_version,
-                "protocol_version": device.protocol_version,
-                "display": device.display.to_dict(),
-            }).encode())
-
-
-def attach_terminal_gateway(application, v2_adapter, station_service):
-    """Serve 16x2 boxes over MQTT; every message from a live session marks the box as seen."""
+    A box learns its station, side and language only from its frame. When
+    one of them, the meet or the clock changes, every box is sent its new
+    frame at once instead of at its next sign of life.
+    """
     from .terminal16_mqtt import Terminal16Gateway
-    gateway = Terminal16Gateway(application.terminal16, v2_adapter._publish, on_seen=application.note_device_seen)
-    v2_adapter.terminal_gateway = gateway
+    gateway = Terminal16Gateway(application.terminal16, transport.publish, on_seen=application.note_device_seen)
+    transport.terminal_gateway = gateway
+
+    def nudge(*_device):
+        gateway.tick()
+
     application.on_terminal_tick = gateway.tick
+    application.on_config_applied = nudge
+    application.on_device_assignment_changed = nudge
+    application.on_device_language_changed = nudge
+    application.on_clock_changed = nudge
     station_service.subscribe(gateway.tick)
     return gateway
 
@@ -205,22 +194,10 @@ def main() -> None:
         )
         issued_code = pairing_code
 
-    gateway = MQTTGatewayAdapter(
-        engine,
-        host=broker_host,
-        port=args.mqtt_port,
-        gateway_id=args.gateway_id,
-        identities=identities,
-    )
-    # Different display/input protocols, one station service and traffic store.
+    # One station service and traffic store for the 16x2 boxes, the browser
+    # boxes and TKL.
     station_service = TMBoxStationService(runtime_store, operations_store, identities)
-    v2_gateway = TMBoxV2Gateway(
-        station_service,
-        identities,
-        gateway_id=args.gateway_id,
-        publish=lambda topic, payload, retain: None,
-    )
-    v2_adapter = MQTTV2Adapter(v2_gateway, host=broker_host, port=args.mqtt_port)
+    transport = MQTTTransport(gateway_id=args.gateway_id, host=broker_host, port=args.mqtt_port)
     discovery_advertiser = _start_discovery_advertiser(
         args.mqtt_port, server_id=runtime_store.discovery_server_id()
     )
@@ -251,33 +228,8 @@ def main() -> None:
         us_store=us_store,
         lifecycle=lifecycle,
     )
-    def publish_config():
-        publish_config_to_devices(gateway, v2_gateway, identities)
-    application.on_config_applied = publish_config
-    def publish_device_assignment(device_id):
-        device = identities.discovered_device(device_id)
-        if device.protocol_version == 2:
-            v2_gateway.publish_device_state(device_id)
-        else:
-            gateway.publish_device_assignment(device_id)
-    application.on_device_assignment_changed = publish_device_assignment
-    def publish_device_language(device_id):
-        device = identities.discovered_device(device_id)
-        if device.protocol_version == 2:
-            v2_gateway.publish_device_language(device_id)
-        else:
-            gateway.publish_device_language(device_id)
-    application.on_device_language_changed = publish_device_language
-    def publish_clock():
-        publish_clock_to_devices(gateway, v2_gateway, identities)
-    application.on_clock_changed = publish_clock
-    # Attach the common lifecycle gate before either transport accepts input.
-    # Bind the shared traffic authority before accepting the first command.
-    station_service.subscribe(gateway._publish_snapshots)
-    attach_terminal_gateway(application, v2_adapter, station_service)
-    mqtt_session.connect(gateway.client, broker_host, args.mqtt_port)
-    gateway.client.loop_start()
-    v2_adapter.connect()
+    attach_terminal_gateway(application, transport, station_service)
+    transport.connect()
     server = TrainMeetHTTPServer((args.bind, args.http_port), application)
     cloud_sync_stop = threading.Event()
     cloud_sync_thread = threading.Thread(
@@ -306,9 +258,7 @@ def main() -> None:
         application.changes.close()  # Open pages' event streams end now.
         server.shutdown()
         server.server_close()
-        gateway.client.disconnect()
-        gateway.client.loop_stop()
-        v2_adapter.disconnect()
+        transport.disconnect()
         _stop_process(discovery_advertiser)
         identities.close()
         state_store.close()
@@ -498,10 +448,9 @@ def _start_discovery_advertiser(
     """Announce this server on the meeting network as _tmbox._tcp.
 
     A box resolves the address from this record, so the service name has to be
-    the one the firmware looks for. The TXT record carries the highest protocol
-    this server serves and a server id, so a box on a network with several
-    servers can tell them apart. Both protocols share the broker this record
-    points at; they differ only in topic prefix.
+    the one the firmware looks for. The TXT record carries the protocol
+    generation (2: firmware 0.7 and later) and a server id, so a box on a
+    network with several servers can tell them apart.
     """
     records = [f"protocol={protocol_version}"]
     if server_id:

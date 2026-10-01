@@ -1,4 +1,4 @@
-"""Shared station operations behind v1 keypad, v2 MQTT and TKL HTTP.
+"""Shared station operations behind the 16x2 terminals, the v2 HTTP routes and TKL.
 
 The contract this implements lives in docs/protocol/v2. A box is assigned one
 station, caches that station's config and snapshot in RAM, and speaks only to
@@ -119,7 +119,7 @@ class TMBoxStationService:
     ) -> dict[str, Any]:
         """Trusted server adapters call here AFTER their own access checks.
 
-        Keypad v1, HTTP TKL and MQTT v2 use precisely the same decisions. No
+        The 16x2 terminals, TKL and the v2 HTTP routes use precisely the same decisions. No
         physical box owns a connection state or a separate clearance store.
         """
         config = self.session_config()

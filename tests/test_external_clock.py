@@ -120,17 +120,6 @@ class ProviderTests(unittest.TestCase):
                 provider_request(self.settings)
             self.assertNotIn("secret", str(error.exception))
 
-    def test_mqtt_clock_publish_never_resends_assignments_or_configs(self):
-        from tmbox_gateway.local_server import publish_clock_to_devices
-        from types import SimpleNamespace
-        gateway, v2, identities = MagicMock(), MagicMock(), MagicMock()
-        identities.enabled_clients.return_value = [SimpleNamespace(station_id=s) for s in ["a", "a", "b", None]]
-        publish_clock_to_devices(gateway, v2, identities)
-        gateway._publish_snapshots.assert_called_once()
-        self.assertEqual(sorted(c.args[0] for c in v2.publish_station_snapshot.call_args_list), ["a", "b"])
-        v2.publish_device_state.assert_not_called()
-        gateway.publish_device_assignment.assert_not_called()
-
     def test_start_stop_failure_is_not_retried_or_reported_as_success(self):
         self.clock.configure("eu:one", {**self.settings, "user": "Operator"})
         self.reply = FastClockError("No confirmation")

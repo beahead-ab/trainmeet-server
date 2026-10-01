@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import itertools
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,7 +7,6 @@ from unittest import mock
 
 from runtime_fixture import fictional_runtime_package
 from tmbox_gateway.identity import DisplayCapability, IdentityStore
-from tmbox_gateway.mqtt_v2 import TMBoxV2Gateway, device_topic
 from tmbox_gateway.operations import SQLiteOperationsStore
 from tmbox_gateway import protocol_v2
 from tmbox_gateway.protocol_v2 import find_track_conflict, TMBoxStationService
@@ -22,40 +19,13 @@ STATION = "st-cda"
 DEPARTURE = "movement-421-cda"
 
 
-class BoxCache:
-    """What a physical box keeps in RAM, replaced wholesale on every publish.
-
-    No delta logic and no merge: each payload replaces the previous one in its
-    entirety. That is exactly why the three retained topics may arrive in any
-    order.
-    """
-
-    def __init__(self):
-        self.assignment: dict | None = None
-        self.config: dict | None = None
-        self.snapshot: dict | None = None
-
-    def apply(self, topic: str, payload: dict) -> None:
-        if topic.endswith("/assignment"):
-            self.assignment = payload
-        elif topic.endswith("/config"):
-            self.config = payload
-        elif topic.endswith("/snapshot"):
-            self.snapshot = payload
-
-    @property
-    def ready(self) -> bool:
-        return all((self.assignment, self.config, self.snapshot))
-
-    def state(self) -> str:
-        return json.dumps(
-            {"assignment": self.assignment, "config": self.config, "snapshot": self.snapshot},
-            sort_keys=True,
-        )
-
-
 class ProtocolV2Base(unittest.TestCase):
-    """Shared fixture: one meet, one box at Charlottendal, no broker."""
+    """Shared fixture: one meet, one box at Charlottendal.
+
+    A box's command goes straight to the station service, the same way
+    /v1/tmbox-v2/command and the 16x2 terminals reach it. Until 2.0.0 these
+    tests went through the tmbox/v2 MQTT gateway, which is gone.
+    """
 
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -77,15 +47,10 @@ class ProtocolV2Base(unittest.TestCase):
         self.service = TMBoxStationService(
             self.runtime_store, self.operations_store, self.identities
         )
-        self.published: list[tuple[str, dict, bool]] = []
-        self.gateway = TMBoxV2Gateway(
-            self.service,
-            self.identities,
-            gateway_id="charlottendal",
-            publish=lambda topic, payload, retain: self.published.append(
-                (topic, payload, retain)
-            ),
-        )
+        self.acks: list[dict] = []
+        # Every committed change is announced; boxes and Drift redraw from it.
+        self.notified: list[bool] = []
+        self.service.subscribe(lambda: self.notified.append(True))
 
     def tearDown(self):
         self.identities.close()
@@ -94,15 +59,20 @@ class ProtocolV2Base(unittest.TestCase):
         self.directory.cleanup()
 
     def _send(self, leaf: str, body: dict) -> None:
-        self.gateway.on_message(
-            device_topic(DEVICE, leaf), json.dumps(body).encode("utf-8")
-        )
+        self._send_from(DEVICE, leaf, body)
+
+    def _send_from(self, device_id: str, leaf: str, body: dict) -> None:
+        """What a box's hello or command does on the server."""
+        if leaf == "hello":
+            self.identities.record_discovery(device_id, str(body.get("device_code") or device_id), protocol_version=2,
+                                             display=DisplayCapability.parse(body.get("display")))
+        elif leaf == "command":
+            self.acks.append(self.service.handle_command(device_id, body))
+        else:
+            raise AssertionError(f"no such message: {leaf}")
 
     def _acks(self) -> list[dict]:
-        return [payload for topic, payload, _ in self.published if topic.endswith("/ack")]
-
-    def _retained(self) -> list[tuple[str, dict]]:
-        return [(topic, payload) for topic, payload, retain in self.published if retain]
+        return self.acks
 
     def _grant_departure(self, movement_id=DEPARTURE):
         """Departure now has the same clearance prerequisite as v1/TKL."""
@@ -124,8 +94,7 @@ class ProtocolV2Tests(ProtocolV2Base):
         panel = next(item for item in package["panels"] if item["station_id"] == STATION)
         panel.update(slot_layout="columns", slots={"A": None, "B": connections[2], "C": connections[0], "D": connections[1]})
         self.runtime_store.install(package)
-        self.gateway.publish_device_state(DEVICE)
-        payload = next(body for topic, body in self._retained() if topic.endswith("/config"))
+        payload = self.service.config_payload(STATION, self.identities.discovered_device(DEVICE).display, device_id=DEVICE)
         self.assertEqual(payload["panels"][0]["slots"], panel["slots"])
         self.assertEqual([row["connection_id"] for row in payload["connections"]], [connections[2], connections[0], connections[1]])
         self.assertEqual([row["display_row"] for row in payload["connections"]], [1, 2, 3])
@@ -151,10 +120,7 @@ class ProtocolV2Tests(ProtocolV2Base):
         self.assertEqual(self._acks()[-1]["status"], "accepted")
         before = self.service.snapshot_payload(STATION)
         self.identities.remove_discovered_device(DEVICE)
-        self.published.clear()
-        self.gateway.publish_device_state(DEVICE)
-        self.assertEqual(len(self._retained()), 1)
-        self.assertEqual(self._retained()[0][1]["status"], "waiting_for_assignment")
+        self.assertEqual(self.service.assignment_payload(DEVICE)["status"], "waiting_for_assignment")
         for message_id in ("before-remove", "after-remove"):
             self._send("command", {**command, "message_id": message_id})
             self.assertEqual(self._acks()[-1]["reason"], "not_assigned")
@@ -164,23 +130,7 @@ class ProtocolV2Tests(ProtocolV2Base):
         # History survives; the old acknowledgement is retained for audit.
         self.assertIsNotNone(self.operations_store.device_command_response(DEVICE, "before-remove"))
 
-    # ------------------------------------------------------------ retained
-
-    def test_hello_answers_with_assignment_config_and_snapshot(self):
-        self._send("hello", {"device_code": DEVICE, "display": {"rows": 4, "cols": 20}})
-
-        topics = [topic for topic, _ in self._retained()]
-        self.assertEqual(
-            topics,
-            [
-                device_topic(DEVICE, "assignment"),
-                device_topic(DEVICE, "config"),
-                device_topic(DEVICE, "snapshot"),
-            ],
-        )
-        assignment = self._retained()[0][1]
-        self.assertEqual(assignment["status"], "assigned")
-        self.assertEqual(assignment["station_id"], STATION)
+    # ------------------------------------------------------------ state
 
     def test_config_carries_the_station_topology_and_track_catalogue(self):
         config = self.service.config_payload(
@@ -202,48 +152,13 @@ class ProtocolV2Tests(ProtocolV2Base):
 
     def test_a_box_without_a_station_is_told_to_wait(self):
         self.identities.record_discovery("TMBOX-NEW", "TMBOX-NEW")
-        self.gateway.on_message(
-            device_topic("TMBOX-NEW", "hello"),
-            json.dumps({"device_code": "TMBOX-NEW"}).encode("utf-8"),
-        )
-
-        published = [payload for topic, payload, _ in self.published if topic.endswith("/assignment")]
-        self.assertEqual(len(published), 1)
-        self.assertEqual(published[0]["status"], "waiting_for_assignment")
-        self.assertIsNone(published[0]["station_id"])
-
-    def test_retained_assignment_config_and_snapshot_may_arrive_in_any_order(self):
-        """The named reconnect case from docs/tmbox.md section 19.
-
-        A box that reconnects receives three retained topics with no ordering
-        guarantee whatsoever. Every order has to leave it in the same, correct
-        state - this is the situation a physical box meets at every restart.
-        """
-        self._send("hello", {"device_code": DEVICE})
-        retained = self._retained()
-        self.assertEqual(len(retained), 3)
-
-        states = set()
-        for order in itertools.permutations(retained):
-            cache = BoxCache()
-            for topic, payload in order:
-                cache.apply(topic, payload)
-            self.assertTrue(cache.ready)
-            states.add(cache.state())
-
-        self.assertEqual(len(states), 1, "olika ankomstordning gav olika slutläge")
-        settled = json.loads(states.pop())
-        self.assertEqual(settled["assignment"]["station_id"], STATION)
-        self.assertEqual(settled["snapshot"]["station_id"], STATION)
-        self.assertEqual(
-            settled["config"]["config_version"],
-            settled["snapshot"]["revision"]["config_version"],
-        )
+        assignment = self.service.assignment_payload("TMBOX-NEW")
+        self.assertEqual(assignment["status"], "waiting_for_assignment")
+        self.assertIsNone(assignment["station_id"])
 
     def test_there_is_no_event_replay_surface(self):
-        self._send("hello", {"device_code": DEVICE})
-
-        for _, payload in self._retained():
+        for payload in (self.service.assignment_payload(DEVICE), self.service.config_payload(STATION),
+                        self.service.snapshot_payload(STATION)):
             self.assertNotIn("last_event_id", payload)
             self.assertNotIn("events", payload)
 
@@ -274,8 +189,8 @@ class ProtocolV2Tests(ProtocolV2Base):
             if entry["id"] == DEPARTURE
         )
         self.assertEqual(movement["departure"], "positioned")
-        # Every box at the station sees the new state, not just the sender.
-        self.assertIn(device_topic(DEVICE, "snapshot"), [topic for topic, _ in self._retained()])
+        # Every box at the station is told, not just the sender.
+        self.assertTrue(self.notified)
 
     def test_a_stale_movement_revision_is_rejected(self):
         self._send(
@@ -369,17 +284,16 @@ class ProtocolV2Tests(ProtocolV2Base):
 
     def test_a_command_from_a_box_without_a_station_is_refused(self):
         self.identities.record_discovery("TMBOX-LOOSE", "TMBOX-LOOSE")
-        self.gateway.on_message(
-            device_topic("TMBOX-LOOSE", "command"),
-            json.dumps(
-                {
-                    "protocol_version": 2,
-                    "message_id": "loose-1",
-                    "device_id": "TMBOX-LOOSE",
-                    "action": "train.position.set",
-                    "payload": {"movement_id": DEPARTURE},
-                }
-            ).encode("utf-8"),
+        self._send_from(
+            "TMBOX-LOOSE",
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": "loose-1",
+                "device_id": "TMBOX-LOOSE",
+                "action": "train.position.set",
+                "payload": {"movement_id": DEPARTURE},
+            },
         )
 
         self.assertEqual(self._acks()[0]["reason"], "not_assigned")
@@ -488,11 +402,6 @@ class ClearanceTests(ProtocolV2Base):
         super().setUp()
         self.identities.record_discovery(NEIGHBOUR, NEIGHBOUR)
         self.identities.assign_discovered_device(NEIGHBOUR, station_id="st-vst")
-
-    def _send_from(self, device_id: str, leaf: str, body: dict) -> None:
-        self.gateway.on_message(
-            device_topic(device_id, leaf), json.dumps(body).encode("utf-8")
-        )
 
     def _request(self, device_id=DEVICE, movement=DEPARTURE, connection="connection-cda-vst",
                  message_id="req-1", clearance_id=None) -> dict:
@@ -860,17 +769,16 @@ class ReadinessAndLineTests(ProtocolV2Base):
 
         self.identities.record_discovery(NEIGHBOUR, NEIGHBOUR)
         self.identities.assign_discovered_device(NEIGHBOUR, station_id="st-vst")
-        self.gateway.on_message(
-            device_topic(NEIGHBOUR, "command"),
-            json.dumps(
-                {
-                    "protocol_version": 2,
-                    "message_id": "ack-1",
-                    "device_id": NEIGHBOUR,
-                    "action": "line.available.acknowledge",
-                    "payload": {"message_id": message_id},
-                }
-            ).encode("utf-8"),
+        self._send_from(
+            NEIGHBOUR,
+            "command",
+            {
+                "protocol_version": 2,
+                "message_id": "ack-1",
+                "device_id": NEIGHBOUR,
+                "action": "line.available.acknowledge",
+                "payload": {"message_id": message_id},
+            },
         )
 
         self.assertEqual(self._acks()[-1]["status"], "accepted")

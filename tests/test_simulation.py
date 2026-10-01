@@ -402,15 +402,16 @@ class SimulationTests(unittest.TestCase):
         self.advance(9 * 3600 + 24 * 60)
         self.assertEqual(self.ops.clearance(case["clearance_id"])["status"], "expired")
 
-    def test_retained_and_offline_presence_do_not_claim_station(self):
-        from tmbox_gateway.mqtt_v2 import TMBoxV2Gateway
+    def test_a_retained_message_does_not_claim_a_station_a_live_box_does(self):
+        from tmbox_gateway.terminal16_mqtt import Terminal16Gateway
+        from tmbox_gateway.terminal16_runtime import Terminal16Service
         box = self.register()
         self.start()
-        gateway = TMBoxV2Gateway(self.service, self.ids, gateway_id="sim-test", publish=lambda *args: None)
-        gateway.on_message(f"tmbox/v2/device/{box}/presence", b'{"status":"online"}', retained=True)
-        gateway.on_message(f"tmbox/v2/device/{box}/presence", b'{"status":"offline"}')
+        gateway = Terminal16Gateway(Terminal16Service(self.service), lambda *args: None)
+        hello = b'{"boot": "boot-1"}'
+        gateway.on_message(gateway.PREFIX + box + "/hello", hello, retained=True)
         self.assertFalse(self.sim.run["stations"])
-        gateway.on_message(f"tmbox/v2/device/{box}/presence", b'{"status":"online"}')
+        gateway.on_message(gateway.PREFIX + box + "/hello", hello)
         self.assertEqual(self.sim.run["stations"]["station-b"], box)
 
     def test_rolled_back_compound_command_cannot_advance_train(self):

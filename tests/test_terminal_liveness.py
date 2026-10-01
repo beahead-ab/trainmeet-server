@@ -22,8 +22,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import test_shared_traffic
-from tmbox_gateway import mqtt_v2
-from tmbox_gateway.mqtt_v2 import MQTTV2Adapter
+from tmbox_gateway import mqtt_transport
+from tmbox_gateway.mqtt_transport import MQTTTransport
 from tmbox_gateway.terminal16_mqtt import Terminal16Gateway
 from tmbox_gateway.terminal16_runtime import Terminal16Service
 
@@ -193,16 +193,13 @@ class TerminalLivenessTests(unittest.TestCase):
 
 
 class AdapterWithRealTerminalTests(unittest.TestCase):
-    """Hela vägen genom adaptern: arbetaren sitter fast, boxen får svar ändå."""
+    """Hela vägen genom transporten: arbetaren sitter fast, boxen får svar ändå."""
 
     def setUp(self):
         self.fixture = test_shared_traffic.SharedTrafficTests()
         self.fixture.setUp()
         self.addCleanup(self.fixture.tearDown)
-        gateway = MagicMock()
-        gateway.gateway_id = "test"
-        gateway.offline_will.return_value = ("status", {"status": "offline"})
-        self.adapter = MQTTV2Adapter(gateway, host="127.0.0.1", port=1883)
+        self.adapter = MQTTTransport(gateway_id="test", host="127.0.0.1", port=1883)
         self.adapter.client = MagicMock()
         self.published = []
         self.terminal = Terminal16Gateway(Terminal16Service(self.fixture.service),
@@ -254,15 +251,12 @@ class QueueWaitIsReportedTests(unittest.TestCase):
     journalen var ren."""
 
     def setUp(self):
-        gateway = MagicMock()
-        gateway.gateway_id = "test"
-        gateway.offline_will.return_value = ("status", {"status": "offline"})
-        self.adapter = MQTTV2Adapter(gateway, host="127.0.0.1", port=1883)
+        self.adapter = MQTTTransport(gateway_id="test", host="127.0.0.1", port=1883)
         self.clock = Clock()
         self.adapter.now = self.clock
 
     def test_a_long_wait_is_reported_and_so_is_the_recovery(self):
-        with self.assertLogs("tmbox_gateway.mqtt_v2", level="INFO") as logs:
+        with self.assertLogs("tmbox_gateway.mqtt_transport", level="INFO") as logs:
             self.adapter._note_wait(0.1)
             self.adapter._note_wait(16.4)
             self.adapter._note_wait(0.05)
@@ -271,7 +265,7 @@ class QueueWaitIsReportedTests(unittest.TestCase):
         self.assertIn("hämtat sig", logs.output[1])
 
     def test_a_long_backlog_is_reported_at_a_bounded_rate(self):
-        with self.assertLogs("tmbox_gateway.mqtt_v2", level="WARNING") as logs:
+        with self.assertLogs("tmbox_gateway.mqtt_transport", level="WARNING") as logs:
             for _ in range(50):
                 self.adapter._note_wait(20.0)
                 self.clock.value += 0.5
@@ -279,7 +273,7 @@ class QueueWaitIsReportedTests(unittest.TestCase):
         self.assertEqual(3, len(logs.output))
 
     def test_a_quiet_queue_says_nothing(self):
-        with patch.object(mqtt_v2.LOGGER, "info") as info, patch.object(mqtt_v2.LOGGER, "warning") as warning:
+        with patch.object(mqtt_transport.LOGGER, "info") as info, patch.object(mqtt_transport.LOGGER, "warning") as warning:
             for _ in range(20):
                 self.adapter._note_wait(0.3)
         info.assert_not_called()

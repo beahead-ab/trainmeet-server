@@ -1,21 +1,18 @@
 """Device-scoped copy, isolated from station/traffic authority."""
-import json
 import unittest
 from unittest.mock import MagicMock
-from test_protocol_v2 import DEVICE, STATION, ProtocolV2Base, device_topic
-import test_mqtt_commands as mqtt_fixture
-from tmbox_gateway.device_ui import LANGUAGES, MESSAGES, ui_payload, text
+from test_protocol_v2 import DEVICE, STATION, ProtocolV2Base
+from tmbox_gateway.device_ui import LANGUAGES, MESSAGES, text
 from tmbox_gateway.identity import IdentityStore, PairedClient, DeviceKind
 from tmbox_gateway.http_server import HTTPAPIError
 
 
 class CatalogueTests(unittest.TestCase):
-    def test_five_complete_catalogues_and_small_legacy_pack(self):
+    def test_five_complete_catalogues(self):
         self.assertEqual({"sv", "da", "nb", "en", "de"}, {c for c, _ in LANGUAGES})
         for code, _ in LANGUAGES:
             with self.subTest(code=code):
                 self.assertEqual(set(MESSAGES["sv"]), set(MESSAGES[code]))
-                self.assertLess(len(json.dumps(ui_payload(code, legacy=True)).encode()), 2032)
                 self.assertEqual("MUN", text(code, "MUN"))
                 self.assertEqual("93", text(code, "93"))
                 self.assertLessEqual(len(text(code, "C=TAG D=SPRAK")), 16)
@@ -30,12 +27,8 @@ class LanguageProtocolTests(ProtocolV2Base):
         self.identities.assign_discovered_device(other, station_id=STATION)
         before = self.service.snapshot_payload(STATION)
         original = self.service.assignment_payload(DEVICE)
-        self._send("preferences/set", {"request_id": "lang-1", "language": "de"})
-        topic, reply, retained = self.published[-1]
-        self.assertEqual(device_topic(DEVICE, "preferences"), topic)
-        self.assertFalse(retained)
-        self.assertEqual("accepted", reply["status"])
-        self.assertEqual("de", reply["ui"]["language"])
+        self.identities.set_device_language(DEVICE, "de")
+        self.assertEqual("de", self.service.device_ui(DEVICE)["language"])
         self.assertEqual(before, self.service.snapshot_payload(STATION))
         self.assertEqual(original["station_id"], self.service.assignment_payload(DEVICE)["station_id"])
         self.assertEqual(original["config_version"], self.service.assignment_payload(DEVICE)["config_version"])
@@ -46,36 +39,19 @@ class LanguageProtocolTests(ProtocolV2Base):
         finally:
             another_connection.close()
 
-    def test_invalid_removed_and_retained_requests_cannot_change_language(self):
+    def test_an_invalid_language_is_refused_and_changes_nothing(self):
         for language in ("xx", "", None, {}, ["en"]):
-            self._send("preferences/set", {"request_id": "bad", "language": language})
-            self.assertEqual("rejected", self.published[-1][1]["status"])
-        self.gateway.on_message(device_topic(DEVICE, "preferences/set"),
-                                json.dumps({"request_id": "old", "language": "en"}).encode(), retained=True)
+            with self.assertRaises(ValueError):
+                self.identities.set_device_language(DEVICE, language)
         self.assertEqual("sv", self.identities.device_language(DEVICE))
-        self.identities.remove_discovered_device(DEVICE)
-        self._send("preferences/set", {"request_id": "gone", "language": "en"})
-        self.assertEqual("rejected", self.published[-1][1]["status"])
 
-    def test_hello_resends_saved_catalogue_even_without_station(self):
+    def test_a_saved_language_reaches_a_box_without_a_station_and_the_config(self):
         self.identities.record_discovery("TMBOX-NEW", "TMBOX-NEW")
         self.identities.set_device_language("TMBOX-NEW", "nb")
-        self.gateway.publish_device_state("TMBOX-NEW")
-        reply = next(p for t, p, _ in self.published if t == device_topic("TMBOX-NEW", "preferences"))
-        self.assertEqual("nb", reply["ui"]["language"])
+        self.assertEqual("nb", self.service.device_ui("TMBOX-NEW")["language"])
         self.assertIsNone(self.identities.discovered_device("TMBOX-NEW").station_id)
         self.identities.set_device_language(DEVICE, "da")
         self.assertEqual("da", self.service.config_payload(STATION, device_id=DEVICE)["ui"]["language"])
-
-    def test_admin_push_contains_only_current_language_not_config_or_traffic(self):
-        self.identities.set_device_language(DEVICE, "de")
-        self.gateway.publish_device_language(DEVICE)
-        self.assertEqual(len(self.published), 1)
-        topic, body, retained = self.published[0]
-        self.assertEqual(topic, device_topic(DEVICE, "preferences"))
-        self.assertFalse(retained)
-        self.assertEqual(body["ui"], ui_payload("de"))
-        self.assertEqual(set(body["ui"]["languages"][0]), {"code", "name"})
 
     def test_us_default_is_english_until_operator_makes_a_choice(self):
         from types import SimpleNamespace
@@ -149,45 +125,3 @@ class LanguageHTTPTests(ProtocolV2Base):
         self.identities.remove_discovered_device(DEVICE)
         with self.assertRaises(HTTPAPIError):
             self.application.tmbox_preferences(self.box(), {"language": "de"})
-
-
-class LegacyLanguageTests(unittest.TestCase):
-    setUp = mqtt_fixture.DeviceHelloTests.setUp
-    tearDown = mqtt_fixture.DeviceHelloTests.tearDown
-    _hello = mqtt_fixture.DeviceHelloTests._hello
-    _assign = mqtt_fixture.DeviceHelloTests._assign
-    _presence = mqtt_fixture.DeviceHelloTests._presence
-    _publications = mqtt_fixture.DeviceHelloTests._publications
-    def _language(self, language, *, retained=False):
-        message = MagicMock(topic="tambox/v1/device/TMBOX-7A42F1/preferences/set",
-                            payload=json.dumps({"request_id": "lang-1", "language": language}).encode(),
-                            mid=2, qos=1, retain=retained)
-        self.adapter._on_message(self.adapter.client, None, message)
-
-    def test_language_has_separate_ack_and_preserves_interaction(self):
-        self._assign()
-        self.adapter.engine.press = MagicMock()
-        before = self.adapter.engine.snapshot("panel-a")
-        self._language("en")
-        self.adapter.engine.press.assert_not_called()
-        self.assertEqual(before, self.adapter.engine.snapshot("panel-a"))
-        publications = self._publications()
-        reply = next(p for t, p, _ in publications if t.endswith("/preferences"))
-        self.assertEqual("accepted", reply["status"])
-        self.assertEqual("en", reply["ui"]["language"])
-        self.assertTrue(any("/snapshot/" in t for t, _, _ in publications))
-        self.assertFalse(any(t.endswith("/ack") for t, _, _ in publications))
-
-    def test_localized_snapshot_token_prevents_repeated_traffic_frames(self):
-        self._assign()
-        self._language("de")
-        self.adapter.client.reset_mock()
-        from tmbox_gateway.mqtt_adapter import _snapshot_token
-        token = _snapshot_token(self.adapter.engine.snapshot("panel-a", language="de"))
-        self._presence(state_token=token)
-        self.assertFalse(any("/snapshot/" in t for t, _, _ in self._publications()))
-
-    def test_retained_preference_write_is_ignored(self):
-        self._assign()
-        self._language("en", retained=True)
-        self.assertEqual("sv", self.identities.device_language("TMBOX-7A42F1"))

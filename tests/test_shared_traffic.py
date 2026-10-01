@@ -12,7 +12,6 @@ from tmbox_gateway.engine import TrafficEngine
 from tmbox_gateway.http_server import HTTPAPIError, HTTPServerConfig, TrainMeetHTTPApplication
 from tmbox_gateway.identity import IdentityStore, PairingService
 from tmbox_gateway.models import Command
-from tmbox_gateway.mqtt_v2 import TMBoxV2Gateway
 from tmbox_gateway.operations import SQLiteOperationsStore
 from tmbox_gateway.protocol_v2 import CommandRejected, TMBoxStationService
 from tmbox_gateway.runtime import SQLiteRuntimeStore
@@ -38,9 +37,10 @@ class SharedTrafficTests(unittest.TestCase):
             HTTPServerConfig(local_development=True), runtime_store=self.runtime, operations_store=self.ops, station_service=self.service)
         self.admin = self.app.local_admin()
         self.seq = 0
-        self.messages = []
-        self.gateway = TMBoxV2Gateway(self.service, self.ids, gateway_id="test",
-            publish=lambda topic, body, retain: self.messages.append((topic, body)))
+        # Every committed traffic change is announced; the boxes and Drift
+        # redraw from it.
+        self.notified = []
+        self.service.subscribe(lambda: self.notified.append(True))
 
     def tearDown(self):
         self.store.close()
@@ -87,7 +87,8 @@ class SharedTrafficTests(unittest.TestCase):
 
     def test_8266_request_32_answer_8266_depart_tkl_arrival(self):
         case = self.request_v1()
-        self.assertTrue(any(topic == "tmbox/v2/device/esp32/snapshot" and body["active_clearances"] for topic, body in self.messages))
+        self.assertTrue(self.notified, "the other station is told")
+        self.assertTrue(self.service.snapshot_payload("station-b")["active_clearances"])
         self.approve(case)
         self.assertEqual(self.engine.snapshot("panel-a")["slots"]["A"]["state"], "reserved")
         self.depart_v1()
@@ -182,12 +183,12 @@ class SharedTrafficTests(unittest.TestCase):
     def test_8266_failed_disk_write_never_publishes_or_keeps_the_request(self):
         for key in "A101":
             self.key(key)
-        self.messages.clear()
+        self.notified.clear()
         with patch.object(self.ops, "save_panel_cache", side_effect=RuntimeError("disk failure")):
             with self.assertRaises(RuntimeError):
                 self.key("#")
         self.assertEqual(self.service.open_cases("station-a"), [])
-        self.assertEqual(self.messages, [])
+        self.assertEqual(self.notified, [])
         self.assertEqual(self.engine.panels["panel-a"].train_number, "101")
 
     def test_notification_happens_after_commit_visible_to_another_connection(self):

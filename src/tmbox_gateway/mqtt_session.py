@@ -1,6 +1,6 @@
 """Hur gatewayerna håller sin anslutning till mäklaren.
 
-Båda gatewayerna anslöt med tio sekunders keepalive och en ny session varje
+Gatewayerna anslöt med tio sekunders keepalive och en ny session varje
 gång. På en Raspberry Pi under last är tio sekunder för stramt: mäklaren
 kopplar bort en klient som inte hörts på ungefär femton sekunder, och ett enda
 segt varv i serverns loop räcker.

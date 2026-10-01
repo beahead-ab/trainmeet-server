@@ -87,10 +87,10 @@ class IdentityTests(unittest.TestCase):
         device_id = "esp8266-aabbccddeeff"
         self.store.record_discovery(device_id, "TBX-DDEEFF")
         self.store.assign_discovered_device("TBX-DDEEFF", station_id="station-a")
-        self.store.bind_legacy_station_panel(device_id, "station-a", "panel-a")
+        before = self.store.client(device_id)
         enrolled = self.store.enroll_physical_box(device_id)
         self.assertEqual(enrolled.station_id, "station-a")
-        self.assertEqual(enrolled.panel_ids, ("panel-a",))
+        self.assertEqual(enrolled.panel_ids, before.panel_ids)
         self.store.disable_client(device_id)
         with self.assertRaises(InvalidClientError):
             self.store.enroll_physical_box(device_id)

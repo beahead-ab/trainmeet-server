@@ -934,8 +934,8 @@ class TrainMeetHTTPApplication:
                 grant = self.identities.reserve_pairing_code(
                     str(payload.get("pairing_code") or ""), DeviceKind.ESP32_PANEL,
                 )
-                # Legacy name ESP32_PANEL is the existing physical-box kind,
-                # shared by MQTT v1 ESP8266 and ESP32 devices.
+                # ESP32_PANEL is the physical-box kind, for ESP8266 and ESP32
+                # boxes alike; the name is older than the 16x2 terminals.
                 client = self.identities.enroll_physical_box(client_id)
             except PairingError as error:
                 if grant is not None:
@@ -1081,11 +1081,10 @@ class TrainMeetHTTPApplication:
 
     # ------------------------------------------------------------- protocol v2
     #
-    # These four calls are the MQTT gateway's four operations over HTTP, and
-    # nothing more. A box reads three retained topics and publishes complete
-    # commands; the simulator does the same over request/response, so what it
-    # exercises is the wire contract itself rather than a parallel API shaped
-    # for a browser.
+    # These four calls were the tmbox/v2 MQTT gateway's four operations over
+    # HTTP; since 2.0.0 the MQTT side is gone and they remain for the browser
+    # boxes and the simulator. The payloads are the v2 contract
+    # (docs/protocol/v2), not a parallel API shaped for a browser.
 
     @property
     def station_service(self) -> TMBoxStationService:

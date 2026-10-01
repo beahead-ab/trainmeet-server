@@ -6,7 +6,7 @@ gränssnitt eller ändringsrätt. Byggläge/offline-editor har tagits bort. Clou
 är ensam configredaktör, Server representerar en träff och fortsätter köra
 lokalt utan internet. Historik och konton bevaras även vid träffbyte.
 
-Boxens sida av kedjan är [`docs/protocol/v2/`](protocol/v2/README.md). Det här
+Boxens sida av kedjan är [`docs/protocol/terminal16/`](protocol/terminal16/README.md), och innehållet i kommandon och lägen är [`docs/protocol/v2/`](protocol/v2/README.md). Det här
 dokumentet handlar om våningen ovanför: vem som får ändra en träffs
 konfiguration, och hur ändringen rör sig.
 

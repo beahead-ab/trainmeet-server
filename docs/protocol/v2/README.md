@@ -1,7 +1,19 @@
 # TMBox protokoll v2
 
-Normativt kontrakt mellan en fysisk TMBox och TrainMeet Server. Kontraktet
-äger topics, meddelandekuvert, revisionsregler och tillståndsmaskiner. När
+> **Sedan Server 2.0.0 finns v2 inte över MQTT.** `tmbox/v2/…` (och
+> `tambox/v1/…`) är borttagna. Fysiska boxar med firmware 0.7 eller senare
+> talar 16×2-protokollet `tmbox/terminal/…`, se
+> [`../terminal16/README.md`](../terminal16/README.md). En box med äldre
+> firmware behöver flashas om.
+>
+> Det här dokumentet gäller fortfarande för **innehållet**: kommandon,
+> kvittenser, `assignment`, `config`, `snapshot`, revisionsregler och
+> tillståndsmaskiner. Webbläsarboxarna och simulatorn använder dem över HTTP
+> (`/v1/tmbox-v2/*`, avsnitt 3), och 16×2-servern fattar samma beslut genom
+> samma stationstjänst.
+
+Normativt kontrakt mellan en TMBox-klient och TrainMeet Server. Kontraktet
+äger meddelandekuvert, revisionsregler och tillståndsmaskiner. När
 koden och det här dokumentet säger olika saker är det en bugg i koden.
 
 Produktbeskrivningen finns i
@@ -25,53 +37,39 @@ rundresa per tangenttryck, ingen rundresa för att slå upp ett tåg.
 hastighet och kan stoppas. Boxen har ingen egen klocka; tiden kommer i
 snapshoten.
 
-**Två gränssnitt, en trafiklogik.** Protokollen kör på skilda prefix
-(`tambox/v1/…` respektive `tmbox/v2/…`) så en äldre enhet aldrig råkar
-tolka v2-trafik. Servern översätter v1:s knapptryckningar till samma
-stationskommandon som v2 och TKL använder. Ingen MQTT-till-MQTT-bro
-och inga separata klareringslager. Blandad drift är ett krav.
+**Flera gränssnitt, en trafiklogik.** 16×2-boxarna, webbläsarboxarna och
+TKL når samma stationskommandon i samma stationstjänst. Inga separata
+klareringslager. Blandad drift är ett krav.
 
 **Ingen händelseuppspelning.** Det finns inget `last_event_id` och ingen
-uppspelning av missade händelser. Retained `assignment` + `config` +
-`snapshot` vid återanslutning **är** hela synkmekanismen. Snapshoten är
-sanningen; händelser är flyktiga.
+uppspelning av missade händelser. Att hämta `assignment`, `config` och
+`snapshot` på nytt **är** hela synkmekanismen. Snapshoten är sanningen;
+händelser är flyktiga.
 
 ## 2. Transport
 
-MQTT över träffens lokala Mosquitto. QoS 1 genomgående. Lösenordsfritt på
-träffens isolerade nät — ett medvetet val (beslut B3), inte ett förbiseende.
-Kuvertet reserverar `device_token` så TLS och enhetsautentisering kan läggas
-till som egen slice utan protokollbrott; fältet valideras inte idag.
+HTTP mot TrainMeet Server, med en enhetsnyckel (`Authorization: Bearer …`)
+som webbläsarboxen fått vid inskrivningen. Fram till 2.0.0 gick samma
+meddelanden över MQTT på `tmbox/v2/…`; det är borttaget.
 
-Serverupptäckt sker via mDNS. Servern annonserar `_tmbox._tcp` med TXT-posten
-`protocol=<version>` och `server_id=<gateway-id>`. Boxen slår upp IP direkt
-(`MDNS.IP`) i stället för ett värdnamn — ett mDNS-värdnamn går ofta inte att
-slå upp via vanlig DNS på ett isolerat träffnät.
+Serverupptäckt för fysiska boxar sker via mDNS. Servern annonserar
+`_tmbox._tcp` med TXT-posten `protocol=2` och `server_id=<gateway-id>`. Boxen
+slår upp IP direkt (`MDNS.IP`) i stället för ett värdnamn — ett mDNS-värdnamn
+går ofta inte att slå upp via vanlig DNS på ett isolerat träffnät.
 
-## 3. Topics
+## 3. Vägar
 
-`{id}` är enhetens permanenta id, härlett ur efuse-MAC och visat som en kort
-kod: `TMBOX-7A42F1`.
+| Anrop | Svar | Motsvarade på MQTT (borttaget) |
+|---|---|---|
+| `GET /v1/tmbox-v2/assignment?device_id=…` | `assignment` | `tmbox/v2/device/{id}/assignment` |
+| `GET /v1/tmbox-v2/config?station_id=…` | `config` (4.3) | `…/config` |
+| `GET /v1/tmbox-v2/snapshot?station_id=…` | `snapshot` (4.4) | `…/snapshot` |
+| `POST /v1/tmbox-v2/command` | kvittens (4.2) | `…/command` → `…/ack` |
+| `GET /v1/tmbox-v2/stations` | stationer att välja bland | – |
 
-| Riktning | Topic | QoS | Retain |
-|---|---|---|---|
-| box → server | `tmbox/v2/device/{id}/hello` | 1 | nej |
-| server → box | `tmbox/v2/device/{id}/assignment` | 1 | **ja** |
-| server → box | `tmbox/v2/device/{id}/config` | 1 | **ja** |
-| box → server | `tmbox/v2/device/{id}/config/ack` | 1 | nej |
-| box → server | `tmbox/v2/device/{id}/presence` | 1 | **ja** |
-| box → server | `tmbox/v2/device/{id}/command` | 1 | nej |
-| server → box | `tmbox/v2/device/{id}/ack` | 1 | nej |
-| server → box | `tmbox/v2/device/{id}/snapshot` | 1 | **ja** |
-| server → alla | `tmbox/v2/gateway/{gateway_id}/status` | 1 | **ja** |
-
-Snapshot-topicet är per **enhet**, inte per panel — enheten är stationsbunden,
-inte panelbunden. `config` skiljer statisk stationskonfiguration från dynamisk
-trafikstatus så de kan uppdateras oberoende av varandra.
-
-Boxen sätter last will på sitt `presence`-topic så en box som tappar strömmen
-annonseras som offline utan att någon behöver fråga. Gatewayn gör samma sak på
-sitt statustopic.
+`config` skiljer statisk stationskonfiguration från dynamisk trafikstatus så
+de kan hämtas oberoende av varandra. Ändringar meddelas via `GET /v1/events`
+(ämnet `traffic`), och klienten hämtar då `snapshot` på nytt.
 
 ## 4. Meddelandekuvert
 
@@ -98,7 +96,7 @@ v1. En box ska därför inte skicka tidsstämplar; gör den det ignoreras de.
 inte rör ett befintligt tillstånd — `device.hello`, `train.lookup` — utelämnar
 fältet.
 
-### 4.2 Kvittens (server → box, på `.../ack`)
+### 4.2 Kvittens (server → box, svaret på kommandot)
 
 ```json
 {
@@ -146,7 +144,7 @@ Den kommande gemensamma trafikprofilen måste kontrollera progression,
 beläggning, behörighet och aktuella revisioner vid varje skrivning. Se
 [godkänd målbild och implementationsstatus](../../TMBOX-TRAIN-FIRST-REVISION-2026-09-19.md).
 
-### 4.3 Retained `config` (server → box)
+### 4.3 `config` (server → box)
 
 Ändras bara vid ny driftpaket-aktivering. Ersätts i sin helhet vid varje
 mottagning — ingen delta-logik.
@@ -191,7 +189,7 @@ En publiceringsändring skickas till redan anslutna boxar vid säker aktivering.
 Det krävs inte en ny stationstilldelning. Se [synkrapporten](../../TMBOX-CLOUD-MAPPING-2026-09-19.md)
 för verifiering och skillnaden mot det planerade tågnummer-först-flödet.
 
-### 4.4 Retained `snapshot` (server → box)
+### 4.4 `snapshot` (server → box)
 
 Ändras vid varje operativ händelse som rör stationen. Ersätts i sin helhet.
 
@@ -236,8 +234,8 @@ Cloud-only Server skickar även `meet_generation` och `publication_id` i
 assignment, config och snapshot. Boxen ska använda den matchande uppsättning
 som operatören såg och kopiera omfattningen till skrivkommandot. Den får inte
 hämta en ny generation enbart för att märka om ett gammalt kommando.
-Vid byte rensas gamla val och väntande kommandon/svar. Blandade retained
-meddelanden från olika generationer får aldrig bilda ett körklart läge.
+Vid byte rensas gamla val och väntande kommandon/svar. Svar från olika
+generationer får aldrig bilda ett körklart läge.
 
 Servern avvisar felaktig omfattning med `stale_meet_context`. Efter uttryckligt
 träffbyte eller trafikdagsbyte krävs omfattning för alla operativa skrivningar.
@@ -368,8 +366,8 @@ boot → wifi_connecting → discovering → connecting → waiting_for_assignme
      → ready → reconnecting → state_resync → ready
 ```
 
-`state_resync` betyder konkret: vänta på retained `assignment`, `config` och
-`snapshot`. De får anlända i **valfri ordning**.
+`state_resync` betyder konkret: hämta `assignment`, `config` och `snapshot`
+på nytt. Var och en bär ett komplett läge, så ordningen spelar ingen roll.
 
 ## 8. Säkerhetsgrammatik
 
@@ -388,7 +386,7 @@ Swift, TKL-terminal. Ingen klient får implementera ett undantag på egen hand.
 
 Ett kommandos `message_id` är också dess korrelations-id. Loggrader,
 auditjournalen och trafikmotorns egen post bär samma id, så hela vägen från
-mottaget MQTT-meddelande till registrerad effekt går att hämta med en fråga.
+mottaget kommando till registrerad effekt går att hämta med en fråga.
 
 Loggen är strukturerad `nyckel=värde`. Hemligheter — parkopplingskoder,
 åtkomsttokens, lösenord, `device_token` — redigeras bort på fältnamn innan
@@ -409,19 +407,9 @@ kompletta payloads för de två referenskonfigurationerna enligt beslut B5:
 `tests/test_protocol_contract.py` validerar varje exempel mot sitt schema, så
 de två aldrig kan glida isär.
 
-## 10. Vad firmwaren ännu inte skickar
+## 10. Fysiska boxar
 
-Firmwaren i `trainmeet-tmbox` implementerar anslutningsdelen av v2 men inte
-hela kommandosidan. Servern ska vara tolerant mot det som saknas och aldrig
-avvisa ett i övrigt giltigt meddelande för fältens skull:
-
-- `hello` bär idag `device_code`, `model` och `firmware_version`, men ännu inte
-  `hardware_version`, `protocol_version` eller `display`. Utan `display` antas
-  16×2 och `ascii`.
-- Kommandon bär ännu inte `expected_revision`. Ett kommando utan fältet
-  behandlas som optimistiskt och accepteras om tillståndet tillåter det. Ett
-  kommando **med** fältet villkoras strikt, per scope och nyckel.
-- Boxen sätter ännu ingen last will på sitt `presence`-topic.
-
-Detta är en lista över kända luckor att stänga, inte en tillåten permanent
-avvikelse.
+Firmwaren i `trainmeet-tmbox` talar sedan 0.7.0 16×2-protokollet
+(`tmbox/terminal/…`), där servern ritar skärmen. Boxar med äldre firmware,
+som talade v2 eller v1 över MQTT, svarar inte längre mot Server 2.0.0 och
+behöver flashas om.
