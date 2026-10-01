@@ -221,8 +221,9 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     const syncBoxes=page.locator('#runtime-sync-code-boxes input');
     for(let index=0;index<6;index++) await syncBoxes.nth(index).fill(String(index+1));
     await page.locator('#runtime-sync-form [type=submit]').click();
-    await page.locator('#runtime-message').getByText('3/3 · Cloud-kopplingen är sparad på servern.',{exact:true}).waitFor();
-    assert.doesNotMatch(await page.locator('#runtime-message').textContent(),/undefined/);
+    // The dialog closes on success; its message is shown in #modal-result.
+    await page.locator('#modal-result').getByText('3/3 · Cloud-kopplingen är sparad på servern.',{exact:true}).waitFor();
+    assert.doesNotMatch(await page.locator('#modal-result').textContent(),/undefined/);
     await page.goto('http://127.0.0.1:9999/drift');
     await page.locator('#device-list .device-remove').click();
     const confirmation=page.locator('.device-inline-edit');
