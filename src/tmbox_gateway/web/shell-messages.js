@@ -216,6 +216,13 @@
     ['TMBoxarnas språk sätts per box på Drift', 'Each TMBox gets its language on Drift', 'TMBoxenes sprog sættes per boks under Drift', 'TMBoxenes språk settes per boks under Drift', 'Die Sprache jeder TMBox wird im Betrieb gesetzt'],
     ['En kopia tas automatiskt före varje programuppdatering.', 'A copy is taken automatically before every software update.', 'En kopi tages automatisk før hver programopdatering.', 'En kopi tas automatisk før hver programoppdatering.', 'Vor jedem Softwareupdate wird automatisch eine Kopie erstellt.'],
     ['varje åtgärd bekräftas i ett eget fönster', 'each action is confirmed in its own window', 'hver handling bekræftes i sit eget vindue', 'hver handling bekreftes i et eget vindu', 'jede Aktion wird in einem eigenen Fenster bestätigt'],
+    // Meet screens (TV): top row, footer legend and the Översikt clock tile.
+    ['1 tåg på linjen', '1 train on the line', '1 tog på strækningen', '1 tog på linjen', '1 Zug auf der Strecke'],
+    ['{n} tåg på linjen', '{n} trains on the line', '{n} tog på strækningen', '{n} tog på linjen', '{n} Züge auf der Strecke'],
+    ['Klockan är stoppad', 'Clock stopped', 'Uret er stoppet', 'Klokken er stoppet', 'Uhr angehalten'],
+    ['Fylld tågbricka = på linjen · pilen visar riktningen', 'Filled train tag = on the line · the arrow shows the direction', 'Udfyldt togmærke = på strækningen · pilen viser retningen', 'Fylt togmerke = på linjen · pilen viser retningen', 'Gefülltes Zugschild = auf der Strecke · der Pfeil zeigt die Richtung'],
+    ['på linjen nu', 'on the line now', 'på strækningen nu', 'på linjen nå', 'jetzt auf der Strecke'],
+    ['planerat', 'planned', 'planlagt', 'planlagt', 'geplant'],
   ];
   globalThis.TrainMeetMessages ||= {};
   for (const [sv, en, da, nb, de] of rows) globalThis.TrainMeetMessages[sv] = { sv, en, da, nb, de };
