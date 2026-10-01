@@ -48,9 +48,14 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       connection: { state: 'online', last_seen: null } }];
     const connection = () => ({ host: '192.168.1.20', port: 8787, code: connectionCode, code_state: codeState, screens: [],
       validity_hours: 0, wifi: { name: '', password: '' }, web_client_ttl_minutes: 30 });
+    // A larger meet for TMBox-placering: stations without lines, after Alpha.
+    let extraPlacementStations = 0;
+    // Set to a promise to keep /v1/train from answering until it resolves.
+    let holdTrain = null;
     const presentation = () => ({supported: region === 'eu', publication_id: 'pub-1', config_version: 2, findings,
       stations: [{station_id: 'a', code: 'A', name: 'Alpha', connections: [
-        {connection_id: 'a-b', other_station_code: 'B', other_station_name: 'Beta', default_side: 'left', side: placementSide, overridden: placementOverride}]}]});
+        {connection_id: 'a-b', other_station_code: 'B', other_station_name: 'Beta', default_side: 'left', side: placementSide, overridden: placementOverride}]},
+        ...Array.from({length: extraPlacementStations}, (_, i) => ({station_id: `x${i}`, code: `X${i}`, name: `Extra ${i}`, connections: []}))]});
     const user = { user_id: 'u-1', username: 'admin', role: 'owner', invitation_pending: false };
     const runtime = { configured: true, linked: true, cloud_auto_sync: true, meet_name: 'Demo meet', active_day: 'Dagl', publication_id: 'pub-1', server_name: 'Demo server', central_url: 'https://cloud.trainmeet.app/config' };
     const clock = () => ({ configured: true, running, time: '06:00:00', speed: 4, source: clockSettings.source,
@@ -117,6 +122,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
           case '/v1/events': return route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
           case '/v1/train':
             assert.equal(url.searchParams.get('number'), '421');
+            if (holdTrain) await holdTrain;
             data = { train_number: '421', active_day: 'Dagl', services: [{ service_id: 's-421', train_type: 'Godståg', delay_minutes: 3,
               now: { state: 'on_line', from_station_id: 'a', to_station_id: 'b', since: '06:05' },
               stops: [
@@ -167,7 +173,22 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal((await page.locator('#station-placement > h2').textContent()).trim(),'TMBox-placering');
     assert.equal(await page.locator('#station-placement #server-station-rows').count(),1);
     assert.ok(await page.locator('#device-management').evaluate(card=>card.querySelector('#device-list').compareDocumentPosition(card.querySelector('.device-reconnect'))&Node.DOCUMENT_POSITION_FOLLOWING),'Reconnect comes after the client list');
-    assert.equal(await page.locator('#overview-timetable').getAttribute('open'), null);
+    // Nothing on Drift folds away (1.23.0): every module and every part of it
+    // is open, the timetable and its search included.
+    assert.equal(await page.locator('#overview-view details').count(), 0);
+    assert.equal(await page.locator('#overview-route-search').isVisible(), true);
+    assert.equal(await page.locator('#device-management .device-reconnect button').isVisible(), true);
+    assert.equal(await page.locator('#traffic-timeline').isVisible(), true);
+    // TMBox-placering lists every station at once, however many there are.
+    extraPlacementStations = 6;
+    await page.evaluate(() => refreshCloudPresentation());
+    await page.locator('#server-station-rows tbody tr').nth(6).waitFor();
+    assert.equal(await page.locator('#server-station-rows tbody tr').count(), 7);
+    assert.equal(await page.locator('#server-station-rows tbody tr').nth(6).isVisible(), true);
+    assert.equal(await page.locator('#station-placement details').count(), 0);
+    extraPlacementStations = 0;
+    await page.evaluate(() => refreshCloudPresentation());
+    await page.locator('#server-station-rows tbody tr').nth(1).waitFor({ state: 'detached' });
     assert.equal(await page.locator('#traffic-only-deviations').isChecked(), true);
     assert.equal(await page.locator('#overview-graph').isVisible(), true);
     // Connecting a signal box (1.22.0): under Klienter, the address and the
@@ -218,20 +239,14 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#overview-route-list .route-number.active').count(), 0);
     assert.equal(await page.locator('#topology-head-meta').textContent(), '2 stationer · 1 sträcka');
     // One timetable card. Its head says what is inside; Cloud's check findings
-    // are a row of it, seen while it is folded, and Visa opens only them.
+    // are its last part, the count in their heading and the list below.
     assert.equal(await page.locator('#timetable-summary-meta').textContent(), '1 tåg · sök tåg · tågrutter · stationer');
     const findingsRow = page.locator('#drift-timetable > #published-findings');
     const findingsTag = findingsRow.locator('#published-findings-tag');
     await findingsTag.getByText('1 konflikt i version 8', {exact: true}).waitFor();
     assert.match(await findingsTag.getAttribute('class'), /tm-tag--warn/);
-    assert.equal(await findingsRow.locator('#published-findings-list').isVisible(), false);
-    assert.equal(await findingsRow.locator('summary').getByText('Dölj', {exact: true}).isVisible(), false);
-    await findingsRow.locator('summary').getByText('Visa', {exact: true}).click();
     assert.equal(await findingsRow.locator('#published-findings-list').isVisible(), true);
-    assert.equal(await findingsRow.locator('summary').getByText('Visa', {exact: true}).isVisible(), false);
-    await findingsRow.locator('summary').getByText('Dölj', {exact: true}).click();
-    assert.equal(await findingsRow.locator('#published-findings-list').isVisible(), false);
-    assert.equal(await page.locator('#overview-timetable').getAttribute('open'), null, 'Visa leaves the timetable folded');
+    assert.equal(await page.locator('#drift-timetable details').count(), 0);
     for (const [rows, text, kind] of [
       [[...imported, imported[0], {level: 'observation'}], '2 konflikter · 1 observation i version 8', 'warn'],
       [[{level: 'observation'}, {level: 'observation'}], '2 observationer i version 8', 'neutral'],
@@ -312,6 +327,10 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       assert.ok((g.arrow.x - g.number.x) * (g[to].x - g[from].x) > 0, `the triangle leads towards ${to}`);
       assert.ok(pointsTowards(g, from, to), `the triangle points at ${to}: ${JSON.stringify(g.points)}`);
       if (from === 'a') assert.equal(overlaps(g.box, g.ring), false, 'clear of the station it leaves');
+      // ...and of the ring drawn round it when its route is lit (radius 12 to
+      // the dot's 7): on a short line the tag sat on it (1.23.0).
+      const r = g.ring.width / 2 * 12 / 7, c = { x: g.ring.x + g.ring.width / 2, y: g.ring.y + g.ring.height / 2 };
+      if (from === 'a') assert.equal(overlaps(g.box, { x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r }), false, 'clear of the ring');
       await showTraffic([line('occupied', from, to)], [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: from, to_station_id: to }]);
       await page.locator('#overview-topology .topology-train.on-line[data-train-number="421"]').waitFor();
       g = await mapGeometry();
@@ -409,6 +428,34 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await trainPanel.locator('.route-stop.done').count(), 1);
     assert.equal(await trainPanel.locator('.train-detail-between').textContent(), 'På linjen');
     assert.equal(await page.locator('#drift-upcoming button.server-event[aria-pressed="true"]').first().getAttribute('data-train-number'), '421');
+    // Tågrutter (1.23.0) follows the same choice: the train is marked in the
+    // list, its route is lit on a small map, and its calls say where it is.
+    const routeDetail = page.locator('#overview-route-detail');
+    assert.equal(await page.locator('#overview-route-list .route-number.active').textContent(), '421');
+    await routeDetail.locator('.train-detail-now').waitFor();
+    assert.equal(await routeDetail.locator('.train-detail-now').textContent(), 'Nu: På linjen A → B · avgick 06:05 3 min sen');
+    assert.deepEqual(await routeDetail.locator('.route-stop b').allTextContents(), ['A · Alpha', 'B · Beta']);
+    assert.equal(await routeDetail.locator('.route-stop.done').count(), 1);
+    assert.equal(await routeDetail.locator('.train-detail-between').textContent(), 'På linjen');
+    assert.ok(await routeDetail.locator('#overview-route-map .topology-track.route-highlight').count() > 0, 'its route is lit');
+    // The small map has this train only; Banöversikten above has them all.
+    // It moves with the line at once, not when /v1/train next answers.
+    let releaseTrain; holdTrain = new Promise(resolve => { releaseTrain = resolve; });
+    await showTraffic([line('occupied')], parked(2));
+    await routeDetail.locator('#overview-route-map .topology-train.on-line.selected[data-train-number="421"]').waitFor({ timeout: 2000 });
+    assert.equal(await routeDetail.locator('#overview-route-map .topology-train').count(), 1);
+    assert.equal(await page.locator('#overview-topology .topology-train').count(), 3);
+    holdTrain = null; releaseTrain();
+    // A call is a button: its station is lit, the train stays chosen. So
+    // does a station on the small map.
+    await routeDetail.locator('.route-stop button[data-station-id="b"]').click();
+    await routeDetail.locator('.route-stop.selected button[data-station-id="b"]').waitFor();
+    assert.equal(await trainPanel.isVisible(), true);
+    await routeDetail.locator('#overview-route-map .topology-node[aria-label^="Alpha"]').dispatchEvent('click');
+    await routeDetail.locator('.route-stop.selected button[data-station-id="a"]').waitFor();
+    assert.equal(await page.locator('#overview-route-list .route-number.active').textContent(), '421');
+    assert.equal(await trainPanel.isVisible(), true);
+    await showTraffic([], []);
     // Without a stream (here a 503) Drift keeps its five seconds.
     assert.ok(calls.some(c => c[1] === '/v1/events'), 'the page asked for the stream');
     assert.equal(await page.evaluate(() => globalThis.TrainMeetLive.connected), false);
@@ -420,6 +467,29 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await trainPanel.getByRole('button', { name: 'Stäng' }).click();
     assert.equal(await trainPanel.isHidden(), true);
     assert.equal(await page.locator('#drift-upcoming button.server-event[aria-pressed="true"]').count(), 0);
+    // Closing it lets go of the train everywhere.
+    assert.equal(await page.locator('#overview-route-list .route-number.active').count(), 0);
+    assert.equal(await page.locator('#overview-route-map').count(), 0);
+    assert.equal(await page.locator('#overview-graph .overview-train-group.selected').count(), 0);
+    // Chosen in Tågrutter, the train opens the train panel at once and is lit
+    // in the diagram and in Kommande, as when chosen anywhere else.
+    await page.locator('#overview-route-list .route-number[data-train-number="421"]').click();
+    await trainPanel.locator('.train-detail-now').waitFor({ timeout: 1500 });
+    assert.equal(await page.locator('#overview-graph .overview-train-group.selected').getAttribute('data-train-number'), '421');
+    assert.equal(await page.locator('#drift-upcoming button.server-event[aria-pressed="true"]').first().getAttribute('data-train-number'), '421');
+    // A station picked under Stationer shows that station instead: the train
+    // is let go everywhere.
+    await page.locator('#overview-station-counts button[data-station-id="b"]').click();
+    await trainPanel.waitFor({ state: 'hidden', timeout: 1500 });
+    assert.equal(await page.locator('#overview-route-list .route-number.active').count(), 0);
+    // Chosen in the diagram, the same as in Tågrutter.
+    await page.locator('#overview-graph .overview-train-group[data-train-number="421"]').dispatchEvent('click');
+    await trainPanel.locator('.train-detail-now').waitFor({ timeout: 1500 });
+    assert.equal(await page.locator('#overview-route-list .route-number.active').textContent(), '421');
+    // A click on the map's open ground lets go of it, panel and all.
+    await page.locator('#overview-topology').dispatchEvent('click');
+    await trainPanel.waitFor({ state: 'hidden', timeout: 1500 });
+    assert.equal(await page.locator('#overview-graph .overview-train-group.selected').count(), 0);
     await page.locator('#overview-clock-start').click();
     await page.locator('#stop-local-clock').waitFor({state:'visible'});
     assert.equal(running, true);

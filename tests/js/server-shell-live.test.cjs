@@ -73,7 +73,7 @@ const root = path.resolve(__dirname, '../..');
     assert.doesNotMatch(await page.locator('#client-network').textContent(),/Kod/);
     assert.ok(await page.locator('#device-management').evaluate(card=>card.querySelector('#device-list').compareDocumentPosition(card.querySelector('.device-reconnect'))&Node.DOCUMENT_POSITION_FOLLOWING),'Reconnect comes after the client list');
     assert.equal(await page.locator('#overview-graph').isVisible(),true);
-    assert.equal(await page.locator('#overview-timetable').getAttribute('open'),null);
+    assert.equal(await page.locator('#overview-view details').count(),0,'Drift folds nothing away');
     await page.locator('#overview-clock-start').click();
     await page.locator('#stop-local-clock').waitFor({state:'visible'});
     assert.equal((await (await page.request.get(urls.eu+'/v1/clock')).json()).running,true);

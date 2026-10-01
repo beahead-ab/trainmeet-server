@@ -31,6 +31,11 @@
   function details(title, content) {
     const d = make("details", "server-details"); d.append(authored("summary", "", title), content); return d;
   }
+  // Drift folds nothing away (Casper, 2026-10-01): a module is a heading and
+  // what is in it, always shown.
+  function block(title, content) {
+    const section = make("section", "server-block"); section.append(authored("h3", "server-block__title", title), content); return section;
+  }
 
   // Persistent header, with no second navigation system hidden behind a burger.
   const logout = move("#logout", $(".topbar-right"));
@@ -93,7 +98,7 @@
   simulation.append(actions); move("#simulation-error", simulation); row.append(simulation);
   overview.prepend(row);
   mark(".meet-summary-card"); mark(".overview-actions");
-  const simDetails = details("Simulering · stationer och tåg", make("div")); simDetails.id = "drift-simulation-details"; simDetails.hidden = true;
+  const simDetails = block("Simulering · stationer och tåg", make("div")); simDetails.id = "drift-simulation-details"; simDetails.hidden = true;
   move("#simulation-stations-card", simDetails.lastChild); move("#simulation-trains-card", simDetails.lastChild);
   row.after(simDetails);
   move("#device-management", overview).classList.remove("admin-section-panel", "hidden");
@@ -148,9 +153,6 @@
   // A train picked in the list: its route and where it is now (app.js).
   const trainDetail = make("section", "drift-train-detail"); trainDetail.id = "drift-train-detail"; trainDetail.hidden = true;
   upcoming.after(trainDetail);
-  const stationSection = $("#traffic-stations").closest("section");
-  const stationParent = stationSection.parentElement;
-  stationParent.insertBefore(details("Inne på stationerna", stationSection), stationParent.querySelector(".traffic-history"));
   move(".overview-graph-card", overview);
   // Module heads as in the design (DriftEU): the name, then a short grey line.
   const headMeta = (selector, id) => {
@@ -159,17 +161,17 @@
   };
   headMeta("#overview-topology", "topology-head-meta");
   headMeta("#overview-graph").append(authored("span", "", "klicka på ett tåg för att tända rutten"));
-  // One card for the timetable. Cloud's check findings for the active version
-  // are a row of it, seen while the timetable is folded; Visa opens the list.
+  // One card for the timetable, with Cloud's check findings for the active
+  // version as its last part: the count in the heading, the list below it.
   const timetable = make("section", "card overview-section timetable-card"); timetable.id = "drift-timetable";
   overview.append(timetable);
   move("#overview-timetable", timetable);
   const timetableMeta = make("span", "server-head-meta"); timetableMeta.id = "timetable-summary-meta";
-  $("#overview-timetable > summary").append(timetableMeta);
+  $("#overview-timetable > .overview-timetable-head").append(timetableMeta);
   const findings = move("#published-findings", timetable);
   findings.classList.add("timetable-findings");
   const findingsTag = make("span", "tm-tag tm-tag--neutral"); findingsTag.id = "published-findings-tag";
-  findings.querySelector("summary").append(findingsTag, authored("span", "timetable-findings-show", "Visa"), authored("span", "timetable-findings-hide", "Dölj"));
+  findings.querySelector(".timetable-findings-head").append(findingsTag);
 
   // Settings are seven navigable sections in two stable columns.
   const settings = $("#admin-view");
@@ -305,7 +307,6 @@
   };
   api.stationRows = rows => {
     const host = $("#server-station-rows");
-    const expanded = host.querySelector("details")?.open;
     host.replaceChildren();
     const table = make("table", "tm-table");
     const head = make("thead"), heading = make("tr");
@@ -313,12 +314,8 @@
     heading.append(make("th"));
     head.append(heading); table.append(head);
     const body = make("tbody"); table.append(body);
-    const all = [...rows.children]; all.slice(0, 5).forEach(row => body.append(row)); host.append(table);
-    if (all.length > 5) {
-      const rest = make("table", "tm-table"), restBody = make("tbody"); rest.append(restBody);
-      all.slice(5).forEach(row => restBody.append(row));
-      const more = details(`${t("Visa alla stationer")} (${all.length})`, rest); more.open = expanded; host.append(more);
-    }
+    // Every station, as on the rest of Drift: nothing to unfold.
+    body.append(...rows.children); host.append(table);
   };
   api.traffic = (snapshot, station = "", selectedTrain = null) => {
     const positions = (snapshot.train_positions || []).filter(p => !station || [p.station_id, p.from_station_id, p.to_station_id].includes(station));

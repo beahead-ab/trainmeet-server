@@ -185,6 +185,8 @@ button.server-event[aria-pressed="true"] { background: var(--trainmeet-soft); co
 .train-detail-between { margin: -6px 0 6px 25px; color: var(--trainmeet); font-size: 11px; font-weight: 600; }
 .server-details { font-size: 12px; padding: 6px 0; }
 .server-details > summary { cursor: pointer; font-weight: 600; }
+/* A part of a Drift module: its name and what is in it, never folded. */
+.server-block__title { margin: 0; font-size: 12px; font-weight: 600; }
 .traffic-section { margin-top: 8px; }
 .traffic-online-grid, .traffic-station-grid { gap: 6px; }
 .traffic-card { padding: 8px; }
@@ -194,20 +196,19 @@ button.server-event[aria-pressed="true"] { background: var(--trainmeet-soft); co
 /* Module heads (DriftEU): name, then a short grey line. */
 .overview-section-heading > div { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .server-head-meta { font-size: 12px; font-weight: 500; color: var(--muted); }
-/* Tidtabell och tågrutter: one card, the folded timetable and the findings row. */
+/* Tidtabell och tågrutter: one card, the timetable and then Cloud's findings. */
 .timetable-card { padding: 0; }
 .timetable-card > .overview-timetable { padding: 0; border: 0; border-radius: 0; background: none; }
-.timetable-card summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; cursor: pointer; list-style: none; }
-.timetable-card summary::-webkit-details-marker { display: none; }
-.timetable-card summary::before { content: "▶"; font-size: 9px; transition: transform .15s ease; }
-.timetable-card details[open] > summary::before { transform: rotate(90deg); }
-.timetable-card > .overview-timetable > summary { padding: 10px 14px; font-size: 13px; font-weight: 600; margin: 0; }
-.timetable-card > .overview-timetable[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.timetable-card .overview-timetable-head, .timetable-findings-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.timetable-card > .overview-timetable > .overview-timetable-head { padding: 10px 14px; font-size: 13px; font-weight: 600; margin: 0 0 12px; border-bottom: 1px solid var(--border); }
 #published-findings.timetable-findings { margin: 0; padding: 8px 14px; border-top: 1px solid var(--border); font-size: 12.5px; }
-.timetable-findings > summary { font-weight: 600; }
-.timetable-findings-show, .timetable-findings-hide { margin-left: auto; color: var(--primary-text, #2256c3); }
-.timetable-findings[open] .timetable-findings-show, .timetable-findings:not([open]) .timetable-findings-hide { display: none; }
+.timetable-findings-head { margin: 0; font-size: 12.5px; font-weight: 600; }
 .timetable-findings > p { margin: 8px 0 4px; color: var(--muted); font-size: 12px; }
+/* Tågrutter: the chosen train on a small map above its calls. A call is a
+   plain row, its name over its times, not a framed button. */
+.route-stop-button { display: block; min-height: 0; padding: 3px 8px; border: 0; text-align: left; font-weight: 400; }
+#overview-route-detail .train-detail-between { margin: 0 0 6px 25px; }
+.route-map { display: block; width: 100%; height: 180px; margin: 0 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--row-alt); }
 #server-system-settings { border-color: #e6b8b8; }
 #server-system-settings h2 { color: var(--danger-text); }
 .admin-modal { padding: 24px; border: 1px solid var(--border); border-radius: 12px; width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; box-shadow: 0 24px 80px #0003; }
@@ -248,7 +249,7 @@ button.server-event[aria-pressed="true"] { background: var(--trainmeet-soft); co
 /* ---------- Småputs: en knapp, en etikett, ett fält (design/komponenter.html) ----------
    app.css is still loaded and its .app-view rules win over the kit's element
    selectors, so these id-anchored rules restate the kit sizes once, for all. */
-#app-view button:not(.key):not(.tm-icon-btn):not(.route-number):not(.station-count-row):not(.modal-close):not(.server-event):not(.train-detail-close),
+#app-view button:not(.key):not(.tm-icon-btn):not(.route-number):not(.station-count-row):not(.modal-close):not(.server-event):not(.train-detail-close):not(.route-stop-button),
 #app-chrome button:not(.tm-icon-btn), #app-view .tm-btn, .admin-modal button:not(.modal-close) {
   min-height: 30px; padding: 6px 12px; font: 600 12.5px/16px var(--font); border-radius: 6px; white-space: nowrap;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
