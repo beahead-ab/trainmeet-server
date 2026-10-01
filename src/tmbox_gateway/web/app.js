@@ -135,7 +135,17 @@ function bindSimulationUI() {
       finally { endModalAction(form); }
     });
   }
-  setInterval(refreshSimulation, 2000);
+  scheduleSimulationRefresh();
+}
+
+// Two seconds while there is no stream; with one, a change arrives at once.
+let simulationTimer = null;
+function scheduleSimulationRefresh() {
+  clearTimeout(simulationTimer);
+  simulationTimer = setTimeout(async () => {
+    await refreshSimulationSerially();
+    scheduleSimulationRefresh();
+  }, globalThis.TrainMeetLive?.connected ? 30000 : 2000);
 }
 
 function createWebClientID() {
@@ -1580,6 +1590,7 @@ async function openApplication() {
       "online",
       state.authStatus?.at_the_machine ? "Lokalt ansluten" : "Externt ansluten",
     );
+    bindAdminLive();
     scheduleAdminRefresh();
   } catch (error) {
     handleConnectionError(error);
@@ -1595,13 +1606,57 @@ function updateRuntimeNavigation(configured) {
 }
 
 
+// One run at a time, and one more if asked meanwhile: a change on the server
+// and the fallback timer must not draw an older answer over a newer one.
+function serially(refresh) {
+  let running = null, again = false;
+  return () => {
+    if (running) { again = true; return running; }
+    running = (async () => {
+      try { do { again = false; await refresh(); } while (again); }
+      finally { running = null; }
+    })();
+    return running;
+  };
+}
+const refreshLocalClockSerially = serially(() => refreshLocalClock());
+const refreshDevicesSerially = serially(() => refreshDevices());
+const refreshRuntimeSerially = serially(() => refreshRuntime());
+const refreshServerContextSerially = serially(() => refreshServerContext());
+const refreshSimulationSerially = serially(() => refreshSimulation());
+
+// What changed on the server (/v1/events) is fetched again at once. The timer
+// is then only a fallback; while the stream is down it keeps five seconds.
+const ADMIN_REFRESH_MS = 5000;
+const ADMIN_REFRESH_LIVE_MS = 30000;
+let adminLiveBound = false;
+function bindAdminLive() {
+  const live = globalThis.TrainMeetLive;
+  if (adminLiveBound || !live) return;
+  adminLiveBound = true;
+  live.subscribe((topics) => {
+    if (!state.authStatus?.authenticated) return;
+    const any = (...names) => names.some((name) => topics.has(name));
+    if (any("runtime", "simulation")) refreshServerContextSerially();
+    if (any("runtime")) refreshRuntimeSerially();
+    if (any("devices")) refreshDevicesSerially();
+    if (any("traffic", "clock", "runtime", "simulation")) refreshLocalClockSerially();
+    // The simulated trains move with the traffic.
+    if (any("simulation", "runtime", "clock", "traffic")) refreshSimulationSerially();
+  });
+  live.onStatus(() => {
+    scheduleSimulationRefresh();
+    if (state.authStatus?.authenticated) scheduleAdminRefresh();
+  });
+}
+
 function scheduleAdminRefresh() {
   clearTimeout(state.adminTimer);
   state.adminTimer = setTimeout(async () => {
     if (!state.authStatus?.authenticated) return;
-    await Promise.allSettled([refreshServerContext(), refreshInfo(), refreshDevices(), refreshRuntime(), refreshAdminAccess(), refreshLocalClock()]);
+    await Promise.allSettled([refreshServerContextSerially(), refreshInfo(), refreshDevicesSerially(), refreshRuntimeSerially(), refreshAdminAccess(), refreshLocalClockSerially()]);
     scheduleAdminRefresh();
-  }, 5000);
+  }, globalThis.TrainMeetLive?.connected ? ADMIN_REFRESH_LIVE_MS : ADMIN_REFRESH_MS);
 }
 
 
@@ -3984,6 +4039,12 @@ function renderDisplay(snapshot) {
   }
 }
 
+// The clock runs on locally; with the stream up a change arrives at once.
+function scheduleDisplayPoll() {
+  clearTimeout(displayPollTimer);
+  displayPollTimer = setTimeout(pollDisplay, globalThis.TrainMeetLive?.connected ? 5000 : 1000);
+}
+
 async function pollDisplay() {
   clearTimeout(displayPollTimer);
   displayRequest?.abort();
@@ -4013,7 +4074,7 @@ async function pollDisplay() {
     // neither replace the current clock nor schedule a second polling loop.
     if (displayRequest === request) {
       displayRequest = null;
-      displayPollTimer = setTimeout(pollDisplay, 1000);
+      scheduleDisplayPoll();
     }
   }
 }
@@ -4079,6 +4140,10 @@ async function initDisplay() {
   displayTickTimer = requestAnimationFrame(animateClock);
   window.addEventListener("online", pollDisplay);
   window.addEventListener("pageshow", pollDisplay);
+  globalThis.TrainMeetLive?.subscribe((topics) => {
+    if (["traffic", "clock", "runtime", "simulation"].some((name) => topics.has(name))) pollDisplay();
+  });
+  globalThis.TrainMeetLive?.onStatus(() => { if (!displayRequest) scheduleDisplayPoll(); });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") pollDisplay();
   });

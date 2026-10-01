@@ -226,8 +226,14 @@
       if (request === current) $("#pv-live").classList.add("is-offline");
     } finally {
       clearTimeout(deadline);
-      if (request === current) { request = null; if (active) pollTimer = setTimeout(poll, 5000); }
+      if (request === current) { request = null; schedulePoll(); }
     }
+  }
+
+  // With the stream up a change arrives at once; the timer is a fallback.
+  function schedulePoll() {
+    clearTimeout(pollTimer);
+    if (active) pollTimer = setTimeout(poll, globalThis.TrainMeetLive?.connected ? 30000 : 5000);
   }
 
   function tick() {
@@ -249,6 +255,11 @@
       $("#pv-timetable-toggle")?.addEventListener("click", () => { fullTimetable = !fullTimetable; if (snapshot) renderTimetable(); });
       $("#pv-clear-station")?.addEventListener("click", () => { selectedStation = null; if (snapshot) { renderTrack(); renderTimetable(); } });
       document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && active) poll(); });
+      globalThis.TrainMeetLive?.subscribe((topics) => {
+        if (active && ["traffic", "clock", "runtime", "simulation"].some((name) => topics.has(name))) poll();
+      });
+      // The stream came up or went down: the waiting timer takes the new pace.
+      globalThis.TrainMeetLive?.onStatus(() => { if (!request) schedulePoll(); });
     }
     poll();
     frameTimer = requestAnimationFrame(tick);

@@ -303,6 +303,7 @@ def main() -> None:
         clock_stop.set()
         clock_thread.join()  # Bounded provider timeout; no database access after close.
         _stop_cloud_sync(application, cloud_sync_thread, cloud_sync_stop)
+        application.changes.close()  # Open pages' event streams end now.
         server.shutdown()
         server.server_close()
         gateway.client.disconnect()
@@ -430,6 +431,7 @@ def _external_clock_loop(application, stop):
                 application.on_terminal_tick()
         except Exception:
             LOGGER.warning("Terminalerna kunde inte uppdateras; försöker igen")
+        application.check_device_liveness()
         stop.wait(0.5)
 
 

@@ -8,8 +8,8 @@ Start virtual TMBox|Starta virtuell TMBox|Start virtuel TMBox|Start virtuell TMB
 Try the test bench first|Prova först i provbänken|Prøv først i testbænken|Prøv først i testbenken|Zuerst am Teststand ausprobieren
 Three boxes with test data – completely separate from the meet.|Tre boxar med testdata – helt skilda från träffen.|Tre bokse med testdata – helt adskilt fra træffet.|Tre bokser med testdata – helt atskilt fra treffet.|Drei Boxen mit Testdaten – völlig getrennt vom Treffen.
 On the layout now|På banan just nu|På banen lige nu|På banen akkurat nå|Aktuell auf der Anlage
-updates every 5 seconds|uppdateras var 5:e sekund|opdateres hvert 5. sekund|oppdateres hvert 5. sekund|Aktualisierung alle 5 Sekunden
-Updates every 5 seconds|Uppdateras var 5:e sekund|Opdateres hvert 5. sekund|Oppdateres hvert 5. sekund|Aktualisierung alle 5 Sekunden
+updates live|uppdateras direkt|opdateres med det samme|oppdateres umiddelbart|Aktualisierung sofort
+Updates as soon as something changes|Uppdateras direkt när något ändras|Opdateres, så snart noget ændres|Oppdateres så snart noe endres|Aktualisiert, sobald sich etwas ändert
 trains on the line|tåg på linjen|tog på strækningen|tog på strekningen|Züge auf der Strecke
 at a station|inne på station|på station|på stasjon|im Bahnhof
 staffed|bemannade|bemandede|bemannede|besetzt

@@ -489,6 +489,8 @@ class TrafficSimulation:
                             since = self.run.setdefault("requests", {}).setdefault(case["clearance_id"], seconds)
                             if seconds - since >= 300:
                                 self.store.settle_clearance(case["clearance_id"], "expired", "simulator:" + self.run["id"])
+                                # Not a box command, so say so here: the request is gone.
+                                self.store.after_commit(self.service.notify_changed)
                     self.run["blocked"] = {}
                     for key, leg in sorted(self.legs.items(), key=lambda item: (item[1]["departure"], item[0])):
                         if key in self.run["arrived"]:
@@ -549,6 +551,7 @@ class TrafficSimulation:
         # Simulation-only yard work. Do not invent a departure/clearance on a
         # real line. The completed arrival remains in the run's event history.
         self.run["stabled"][key] = seconds
+        self.store.after_commit(self.service.notify_changed)
         self.store.record_audit_event(correlation_id=self.run["id"], source="simulation",
             actor="simulator:" + self.run["id"], action="simulation.stabled", outcome="accepted",
             station_id=self.legs[key]["to_station_id"], movement_id=self.legs[key]["to_movement_id"],

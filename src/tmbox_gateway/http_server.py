@@ -6,6 +6,8 @@ import logging
 import mimetypes
 import re
 import secrets
+import select
+import socket
 import threading
 import time
 from dataclasses import dataclass, replace
@@ -22,6 +24,7 @@ from uuid import uuid4
 
 from . import backup
 from .engine import TrafficEngine
+from .change_feed import ChangeFeed
 from .cloud_config import CloudConfiguration
 from .external_clock import ExternalClock, FastClockError, validate_settings as validate_clock_source
 from .lifecycle import SQLiteMeetLifecycle, MeetLifecycleError
@@ -85,6 +88,30 @@ ADMIN_COOKIE_MAX_AGE = 12 * 60 * 60
 # of an hour it is simply offline.
 DEVICE_ONLINE_SECONDS = 20
 DEVICE_OFFLINE_SECONDS = 15 * 60
+
+# GET /v1/events: a comment line keeps proxies and phones from closing an idle
+# stream; a stream ends after five minutes and the browser opens a new one, so
+# a phone that vanished without closing holds its worker thread no longer.
+EVENT_HEARTBEAT_SECONDS = 15
+EVENT_STREAM_SECONDS = 300
+EVENT_WRITE_TIMEOUT_SECONDS = 20
+
+
+def _device_state(age: float, heard: bool) -> str:
+    return ("online" if heard and age <= DEVICE_ONLINE_SECONDS else
+            "lost" if age <= DEVICE_OFFLINE_SECONDS else "offline")
+
+
+def announces(*topics):
+    """Once the change is done, tell open pages what changed (/v1/events)."""
+    def decorate(method):
+        @wraps(method)
+        def announced(self, *args, **kwargs):
+            result = method(self, *args, **kwargs)
+            self.changes.notify(*topics)
+            return result
+        return announced
+    return decorate
 
 
 def runtime_command(region=None):
@@ -264,7 +291,12 @@ class TrainMeetHTTPApplication:
         self.runtime_store = runtime_store
         self.local_configuration_store = local_configuration_store
         self.operations_store = operations_store
-        self._station_service = station_service
+        # Open pages hear here that something changed (/v1/events).
+        self.changes = ChangeFeed()
+        self._device_states: dict[str, str] = {}
+        self._station_service = None
+        if station_service is not None:
+            self._adopt_station_service(station_service)
         self._box_enrollment_lock = threading.Lock()
         self._box_enrollment_attempts: dict[str, list[float]] = {}
         self._browser_enrollment_attempts: dict[str, list[float]] = {}
@@ -370,6 +402,7 @@ class TrainMeetHTTPApplication:
                 "clock": self.clock_status(client),
                 "supported": bool(self.station_service.publication()) if self.simulation else False}
 
+    @announces("simulation", "runtime")
     @runtime_command("eu")
     def control_simulation(self, client, payload):
         self._require_admin(client)
@@ -412,6 +445,15 @@ class TrainMeetHTTPApplication:
     def note_device_seen(self, device_id: str) -> None:
         self.device_seen[device_id] = self.wall_clock()
 
+    def check_device_liveness(self) -> None:
+        """Pages hear at once when a box comes online or goes quiet. Memory
+        only: the clock thread calls this twice a second."""
+        now = self.wall_clock()
+        states = {device: _device_state(now - seen, True) for device, seen in list(self.device_seen.items())}
+        if states != self._device_states:
+            self._device_states = states
+            self.changes.notify("devices")
+
     def _device_connection(self, device) -> dict[str, Any]:
         """Online while it pings, then "lost" - you see at once that a box has
         gone quiet - and offline after a quarter of an hour. Before a box has
@@ -427,9 +469,7 @@ class TrainMeetHTTPApplication:
             heard = False
         else:
             heard = True
-        age = self.wall_clock() - seen
-        state = ("online" if heard and age <= DEVICE_ONLINE_SECONDS else
-                 "lost" if age <= DEVICE_OFFLINE_SECONDS else "offline")
+        state = _device_state(self.wall_clock() - seen, heard)
         # Only a box that has stopped answering needs a time; leaving it out
         # while online keeps the list from redrawing on every ping.
         last_seen = None if state == "online" else datetime.fromtimestamp(seen, timezone.utc).isoformat()
@@ -526,6 +566,7 @@ class TrainMeetHTTPApplication:
             "available_workspaces": ["administration"] + (["tkl", "tmbox"] if region == "eu" else ["dispatcher", "conductor"] if region == "us" else []),
         }
 
+    @announces("devices")
     @runtime_view
     def create_browser_client(self, payload: dict[str, Any], peer: str) -> dict[str, Any]:
         if self.lifecycle:
@@ -858,6 +899,7 @@ class TrainMeetHTTPApplication:
             response["access_token"] = result.access_token
         return response
 
+    @announces("devices")
     def enroll_tmbox(self, payload: dict[str, Any], peer: str) -> dict[str, Any]:
         """Redeem a local connection code, without picking a station for a box."""
         with self._box_enrollment_lock:
@@ -947,6 +989,7 @@ class TrainMeetHTTPApplication:
                                       expected_link=link if not code else None)
         return {'package': summary, 'staged': True, 'linked': bool(store.cloud_link()), 'restart_required': False}
 
+    @announces("traffic", "clock")
     @runtime_command("us")
     def us_command(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         store, actor, dispatcher = self.us_access(client)
@@ -1040,11 +1083,16 @@ class TrainMeetHTTPApplication:
                     "runtime_missing",
                     "Servern har ingen aktiv träff att simulera mot",
                 )
-            self._station_service = TMBoxStationService(
+            self._adopt_station_service(TMBoxStationService(
                 self.runtime_store, self.operations_store, self.identities
-            )
+            ))
         self._station_service.lifecycle = self.lifecycle
         return self._station_service
+
+    def _adopt_station_service(self, service: TMBoxStationService) -> None:
+        self._station_service = service
+        # Every committed traffic change: boxes, TKL, the simulator, placement.
+        service.subscribe(lambda: self.changes.notify("traffic"))
 
     def tmbox_v2_assignment(self, client: PairedClient, device_id: str) -> dict[str, Any]:
         self._require_box_access(client, device_id)
@@ -1106,6 +1154,7 @@ class TrainMeetHTTPApplication:
                 self.identities.set_device_language(client.client_id, payload["language"])
             except ValueError as error:
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_language", "Ogiltigt språk") from error
+            self.changes.notify("devices")
         return {"ui": self._device_ui(client.client_id)}
 
     def _device_ui(self, device_id: str) -> dict:
@@ -1206,6 +1255,7 @@ class TrainMeetHTTPApplication:
         client = self.identities.client(device_id)
         return client is None or client.kind == DeviceKind.ESP32_PANEL
 
+    @announces("devices")
     @runtime_view
     def set_device_language(self, client: PairedClient, payload: dict[str, Any]) -> dict:
         self._require_admin(client)
@@ -1885,6 +1935,7 @@ class TrainMeetHTTPApplication:
             return {"settings": self.clock_source_settings(client), "clock": self.clock_status(client)}
 
     def notify_clock_changed(self):
+        self.changes.notify("clock")
         if self.on_clock_changed:
             try:
                 self.on_clock_changed()
@@ -1913,6 +1964,7 @@ class TrainMeetHTTPApplication:
             return self._clock_display({**result["clock"], "configured": bool(result["session"]) or result["clock"].get("source") == "fastclock"})
         return self._clock_display(self.operations_store.clock_status() if self.operations_store else {"configured": False, "running": False})
 
+    @announces("clock")
     @runtime_command()
     def control_clock(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
@@ -2610,6 +2662,7 @@ class TrainMeetHTTPApplication:
                 HTTPStatus.BAD_REQUEST, "invalid_local_configuration", str(error)
             ) from error
 
+    @announces("runtime")
     def configure_cloud_auto_sync(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
         if self.runtime_store is None:
@@ -2661,6 +2714,7 @@ class TrainMeetHTTPApplication:
         self.engine.config = replace(self.engine.config, panels=effective.panels)
         self.engine.revision += 1
         self.station_service.notify_changed()
+        self.changes.notify("runtime")
         if self.on_config_applied:
             try:
                 self.on_config_applied()
@@ -3146,6 +3200,7 @@ class TrainMeetHTTPApplication:
         self.runtime_store._save_setting("require_scoped_commands", "true")
         self.engine.adopt_config(self.engine.config)
         updated = self.lifecycle.complete_transition(ticket)
+        self.changes.notify("runtime", "traffic")
         if self.on_config_applied:
             try:
                 self.on_config_applied()
@@ -3344,6 +3399,7 @@ class TrainMeetHTTPApplication:
         return {"device_id": device_id, "removed": True}
 
     def _notify_device_assignment(self, device_id: str) -> None:
+        self.changes.notify("devices")
         if self.on_device_assignment_changed:
             try:
                 self.on_device_assignment_changed(device_id)
@@ -3392,6 +3448,7 @@ class TrainMeetHTTPApplication:
             "/assets/server-ui.css": "server-ui.css",
             "/assets/server-design.css": "server-design.css",
             "/assets/simulation-banner.js": "simulation-banner.js",
+            "/assets/live-events.js": "live-events.js",
             "/assets/i18n.js": "i18n.js",
             "/assets/i18n-messages.js": "i18n-messages.js",
             "/assets/shell-messages.js": "shell-messages.js",
@@ -3530,6 +3587,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     self.server.application.display_snapshot(self.headers.get("Host", "")),
                 )
+                return
+            if path == "/v1/events":
+                self._serve_events()
                 return
             if path == "/v1/tkl/context":
                 client = self._authenticated_client()
@@ -4288,6 +4348,66 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
 
     def _send_api_error(self, error: HTTPAPIError) -> None:
         self._send_json(error.status, {"error": error.code, "message": str(error)})
+
+    def _serve_events(self) -> None:
+        """What changed, as it happens (Server-Sent Events). Topic names only,
+        so no sign-in: each page still reads what it shows from its own
+        endpoints. HTTP/1.0, so the stream ends when the connection does."""
+        feed = self.server.application.changes
+        address = self._event_stream_address()
+        if not feed.admit(address):
+            self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "too_many_streams",
+                "message": "För många öppna sidor. Sidan uppdateras med sitt vanliga intervall."},
+                headers={"Retry-After": "30"})
+            return
+        try:
+            self.connection.settimeout(EVENT_WRITE_TIMEOUT_SECONDS)
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Accel-Buffering", "no")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.end_headers()
+            seq = feed.seq
+            self.wfile.write(f"retry: 2000\nevent: hello\ndata: {json.dumps({'boot': feed.boot, 'seq': seq})}\n\n".encode())
+            started = last_write = time.monotonic()
+            while not feed.closed and time.monotonic() - started < EVENT_STREAM_SECONDS:
+                latest, topics = feed.wait(seq, min(1.0, EVENT_HEARTBEAT_SECONDS))
+                now = time.monotonic()
+                if topics:
+                    seq = latest
+                    self.wfile.write(f"event: change\ndata: {json.dumps({'seq': seq, 'topics': topics})}\n\n".encode())
+                    last_write = now
+                elif now - last_write >= EVENT_HEARTBEAT_SECONDS:
+                    self.wfile.write(b": ping\n\n")
+                    last_write = now
+                if self._event_client_gone():
+                    break
+        except OSError:
+            pass  # The page went away mid-write, or stopped reading.
+        finally:
+            feed.release(address)
+            self.close_connection = True
+
+    def _event_stream_address(self) -> str:
+        """Behind a proxy (Caddy on the same host, an ingress in a cluster)
+        every page comes from the proxy's address; the proxy appends the
+        page's own last to X-Forwarded-For. The cap per address is fairness
+        between pages, not access control: the total cap still holds."""
+        if self._client_address_is_private():
+            forwarded = self.headers.get("X-Forwarded-For", "").split(",")[-1].strip()
+            if forwarded:
+                return forwarded
+        return self.client_address[0]
+
+    def _event_client_gone(self) -> bool:
+        """A closed tab reads as end of file; nothing is consumed."""
+        try:
+            readable, _, _ = select.select([self.connection], [], [], 0)
+            return bool(readable) and not self.connection.recv(1, socket.MSG_PEEK)
+        except (OSError, ValueError):
+            return True
 
     def _send_json(
         self,

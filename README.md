@@ -873,6 +873,13 @@ analoga TrainMeet-klockor samt den digitala klockan kan användas. Färger,
 typografi, kort, fullskärmsuttryck och TMBoxens särskilda proportioner beskrivs
 i [den grafiska identiteten](docs/GRAPHIC_IDENTITY.md).
 
+Drift, skärmarna och deltagarvyn uppdateras direkt när något ändras.
+
+- Servern säger till via `GET /v1/events` (Server-Sent Events) att trafiken, klockan, boxarna, träffen eller simuleringen har ändrats. Sidan hämtar då om just det.
+- Strömmen bär bara ämnesnamn och kräver ingen inloggning.
+- Utan ström gäller sidornas vanliga intervall: fem sekunder i Drift och deltagarvyn, en sekund på skärmarna. Det händer bakom en proxy som inte släpper igenom strömmen, eller när servern redan har 48 öppna strömmar eller 6 från samma adress.
+- En proxy får inte buffra svaret. Servern skickar `X-Accel-Buffering: no` och en kommentarsrad var 15:e sekund, och avslutar varje ström efter fem minuter. Webbläsaren ansluter då igen.
+
 ## Utveckling och test
 
 ```sh

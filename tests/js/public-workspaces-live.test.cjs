@@ -158,13 +158,53 @@ const root = path.resolve(__dirname, '../..');
     assert.ok(distance(geometry.tag, geometry.cda) < distance(geometry.tag, geometry.lek), 'nearer the station it leaves');
     assert.ok((geometry.arrow.x - geometry.number.x) * (geometry.lek.x - geometry.cda.x) > 0, 'the triangle leads towards LEK');
     assert.equal(await mapTag('cleared').getAttribute('aria-label'), 'Tåg 101 · CDA → LEK · klart, inte avgått');
-    await press(page, '#');
-    await mapTag('on-line').waitFor();
-    assert.equal(await mapTag('on-line').getAttribute('aria-label'), 'Tåg 101 · CDA → LEK · på linjen');
-    // The same tag on the TV's map, in its size.
+    // Everything updates at once (1.21.0). With the stream up, Drift, the TV
+    // and the participant view hear the departure from the server and fetch
+    // again at once; their timers are only a slow fallback.
     const tv = await browser.newPage({viewport: {width: 1920, height: 1080}});
     await tv.goto(urls.eu + '/display/topology');
-    await tv.locator('#topology-svg.topology-tv .topology-train.on-line[data-train-number="101"] .topology-train-arrow').waitFor();
+    const guest = await (await browser.newContext({locale: 'sv-SE'})).newPage();
+    await guest.goto(urls.eu + '/');
+    await guest.locator('#pv-topology .topology-train.cleared[data-train-number="101"]').waitFor();
+    for (const viewer of [drift, tv, guest]) await viewer.waitForFunction(() => globalThis.TrainMeetLive?.connected === true);
+    await tv.locator('#topology-svg .topology-train.cleared[data-train-number="101"]').waitFor();
+    await drift.waitForTimeout(1500);  // let the first fetches settle
+    const fetched = new Map([[drift, []], [tv, []], [guest, []]]);
+    for (const [viewer, list] of fetched) viewer.on('request', request => {
+      const where = new URL(request.url()).pathname; if (where.startsWith('/v1/')) list.push(where);
+    });
+    await drift.waitForTimeout(11000);
+    // Drift asks nothing on its own; only the simulation banner looks every ten seconds.
+    assert.deepEqual(fetched.get(drift).filter(where => where !== '/v1/display'), [], 'with the stream up, Drift does not poll every five seconds');
+    assert.ok(fetched.get(drift).length <= 2, fetched.get(drift).join(' '));
+    // In eleven seconds: the TV's own five-second fetch and the banner's ten
+    // (not one and two); the guest only the banner's (not every five seconds).
+    assert.ok(fetched.get(tv).length <= 5, fetched.get(tv).join(' '));
+    assert.ok(fetched.get(guest).length <= 2, fetched.get(guest).join(' '));
+    await drift.waitForTimeout(600);
+    await page.locator('.keypad [data-key="#"]').click();  // LEK departs
+    const departed = Date.now();
+    const seen = async (viewer, selector) => { await viewer.locator(selector).waitFor({timeout: 5000}); return Date.now() - departed; };
+    const delays = await Promise.all([
+      seen(drift, '#overview-topology .topology-train.on-line[data-train-number="101"]'),
+      seen(tv, '#topology-svg.topology-tv .topology-train.on-line[data-train-number="101"] .topology-train-arrow'),
+      seen(guest, '#pv-topology .topology-train.on-line[data-train-number="101"]'),
+    ]);
+    for (const delay of delays) assert.ok(delay < 1500, `seen after ${delays.join(' / ')} ms`);
+    console.log(`Departure seen in Drift, on the TV and by a guest after ${delays.join(' / ')} ms`);
+    assert.equal(await mapTag('on-line').getAttribute('aria-label'), 'Tåg 101 · CDA → LEK · på linjen');
+    // A box given a side, and the clock stopped and started elsewhere, show at once too.
+    const within = async (selector, action) => {
+      const started = Date.now(); await action();
+      await drift.locator(selector).first().waitFor({state: 'visible', timeout: 5000});
+      assert.ok(Date.now() - started < 1500, `${selector} after ${Date.now() - started} ms`);
+    };
+    await within('#device-list .status-row span:text("· höger")', () =>
+      admin.request.post(urls.eu + '/v1/devices/assign', {data: {device_code: lekBox.device_code, station_id: 'station-b', side: 'right'}}));
+    await within('#overview-clock-start', () => admin.request.post(urls.eu + '/v1/clock', {data: {action: 'stop'}}));
+    await within('#stop-local-clock', () => admin.request.post(urls.eu + '/v1/clock', {data: {action: 'start'}}));
+    await guest.context().close();
+    // The same tag on the TV's map, in its size.
     // It rides on the line, clear of the large names under it.
     const ride = await tv.evaluate(() => {
       const tag = document.querySelector('#topology-svg .topology-train[data-train-number="101"] .topology-train-tag').getBoundingClientRect();
