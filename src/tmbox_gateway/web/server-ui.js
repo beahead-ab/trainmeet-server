@@ -568,7 +568,7 @@
     if (host.dataset.signature === signature) return;
     host.dataset.signature = signature;
     const item = (swatch, text) => { const span = make("span", "sc-legend__item"); span.append(make("i", `sc-legend__swatch sc-legend__swatch--${swatch}`), authored("span", "", text)); return span; };
-    if (kind === "topology") host.replaceChildren(authored("span", "", "Fylld tågbricka = på linjen · pilen visar riktningen"));
+    if (kind === "topology") host.replaceChildren(authored("span", "", "Blå ring = tåg på stationen · fylld bricka = på linjen"));
     else if (kind === "graph") host.replaceChildren(item("line", "på linjen nu"), item("plan", "planerat"), item("now", "nu"));
     else host.replaceChildren();
   };

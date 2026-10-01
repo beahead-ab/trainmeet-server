@@ -220,9 +220,20 @@
     ['1 tåg på linjen', '1 train on the line', '1 tog på strækningen', '1 tog på linjen', '1 Zug auf der Strecke'],
     ['{n} tåg på linjen', '{n} trains on the line', '{n} tog på strækningen', '{n} tog på linjen', '{n} Züge auf der Strecke'],
     ['Klockan är stoppad', 'Clock stopped', 'Uret er stoppet', 'Klokken er stoppet', 'Uhr angehalten'],
-    ['Fylld tågbricka = på linjen · pilen visar riktningen', 'Filled train tag = on the line · the arrow shows the direction', 'Udfyldt togmærke = på strækningen · pilen viser retningen', 'Fylt togmerke = på linjen · pilen viser retningen', 'Gefülltes Zugschild = auf der Strecke · der Pfeil zeigt die Richtung'],
+    ['Blå ring = tåg på stationen · fylld bricka = på linjen', 'Blue ring = train in the station · filled tag = on the line', 'Blå ring = tog på stationen · udfyldt mærke = på strækningen', 'Blå ring = tog på stasjonen · fylt merke = på linjen', 'Blauer Ring = Zug im Bahnhof · gefülltes Schild = auf der Strecke'],
     ['på linjen nu', 'on the line now', 'på strækningen nu', 'på linjen nå', 'jetzt auf der Strecke'],
     ['planerat', 'planned', 'planlagt', 'planlagt', 'geplant'],
+    ['avgår {station} mot {next}', 'leaves {station} for {next}', 'afgår {station} mod {next}', 'går fra {station} mot {next}', 'ab {station} nach {next}'],
+    ['ankommer {station} från {previous}', 'arrives {station} from {previous}', 'ankommer {station} fra {previous}', 'ankommer {station} fra {previous}', 'an {station} von {previous}'],
+    ['de fyra närmaste', 'the next four', 'de fire næste', 'de fire neste', 'die nächsten vier'],
+    ['tåg · sträcka · ankomst', 'train · section · arrival', 'tog · strækning · ankomst', 'tog · strekning · ankomst', 'Zug · Abschnitt · Ankunft'],
+    ['ank {time}', 'arr {time}', 'ank {time}', 'ank {time}', 'an {time}'],
+    ['och {n} till', 'and {n} more', 'og {n} mere', 'og {n} til', 'und {n} weitere'],
+    ['1 sen ankomst', '1 late arrival', '1 forsinket ankomst', '1 forsinket ankomst', '1 verspätete Ankunft'],
+    ['{n} sena ankomster', '{n} late arrivals', '{n} forsinkede ankomster', '{n} forsinkede ankomster', '{n} verspätete Ankünfte'],
+    ['Inga sena ankomster', 'No late arrivals', 'Ingen forsinkede ankomster', 'Ingen forsinkede ankomster', 'Keine verspäteten Ankünfte'],
+    ['trafiken följer tidtabellen', 'traffic keeps to the timetable', 'trafikken følger køreplanen', 'trafikken følger ruteplanen', 'der Verkehr folgt dem Fahrplan'],
+    ['Inget tåg är ute på linjen', 'No train is out on the line', 'Intet tog er ude på strækningen', 'Ingen tog er ute på linjen', 'Kein Zug ist auf der Strecke'],
   ];
   globalThis.TrainMeetMessages ||= {};
   for (const [sv, en, da, nb, de] of rows) globalThis.TrainMeetMessages[sv] = { sv, en, da, nb, de };
