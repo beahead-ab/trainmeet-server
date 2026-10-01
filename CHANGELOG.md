@@ -5,6 +5,39 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Designkorrektur: samma ram och samma kortrubrik på alla sidor
+
+En genomgång av server.trainmeet.app mot designen (UX-genomgången, DriftEU,
+ServerSida och Deltagare), inloggat och oinloggat, på dator och mobil.
+
+- Samma sidmarginal överallt: 24 px från kanten och 12 px under sidhuvudet.
+  Drift och Inställningar hade dubbel marginal (46 px) och ett glapp överst.
+- Sidhuvudet: TrainMeet-märket som det är (blått tåg) i stället för en
+  färgfiltrerad ikon, och samma märke på deltagarvyn som tidigare var orange.
+  ⚙, ? och Logga ut är ritade ikoner, och ikonen för sidan man står på är
+  markerad. Utloggad (inloggningssidan) visar sidhuvudet bara träffens namn –
+  inga knappar som inte går att använda. På mobil ryms kontrollerna på en rad;
+  statusbubblan syns där bara när den säger något (ny version, ingen kontakt).
+- Drift: varje modul har samma rubrikrad (namn, grå rad, kontroller,
+  "Öppna på skärm ↗"). Trafik just nu har filtren och skärmlänken i rubriken,
+  händelserna i kolumner med "om 4 min", och "Inne på stationerna" och
+  "Tidslinje" som två länkar på en rad. Banöversikten är kortets innehåll, inte
+  en ruta i rutan, och korten bredvid varandra är lika höga. Tågdiagrammet går
+  kant i kant, visar ungefär fem timmar i stället för nästan hela dagen och har
+  samma gula nu-linje som på TV:n. Klockraden har fälten i mitten, inte i
+  botten.
+- Klienter: antalet som väntar är en gul etikett vid rubriken, adressen en
+  bricka; en box som väntar är en ljusgul rad. TMBox-placering visar
+  stationens namn först och koden diskret bredvid, Redigera som länk till
+  höger.
+- Inställningar: samma kortrubrik som på Drift. Spara är den lugna knappen,
+  så sidan inte blir en kolumn av blått. Den här servern har fått sin rubrik,
+  och rutorna som upprepade Träff och Cloud är borta. "+ Bjud in" ligger i
+  rubriken på Användare. Knappen för avsnittet man läser är markerad, Farozon
+  är röd i menyn, och kortet är vitt med röd ram och röda knappar.
+- Deltagarvyn på mobil följer designens ordning: klockan, På banan just nu och
+  sedan tidtabellen. Raden om när en virtuell TMBox tas bort klipptes av.
+
 ### "Slutför och starta om" visade ett skriptfel
 
 Sista steget i installationsguiden visade "configMessage is not defined" och

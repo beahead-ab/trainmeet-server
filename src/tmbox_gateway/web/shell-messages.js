@@ -193,6 +193,8 @@
     ['Körningen finns lokalt på servern.', 'The operating session is available locally on the server.', 'Kørslen er tilgængelig lokalt på serveren.', 'Kjøringen er tilgjengelig lokalt på serveren.', 'Die Betriebssitzung ist lokal auf dem Server verfügbar.'],
     ['Träffen är hämtad. Starta klockan när körningen ska börja.', 'Meet downloaded. Start the clock when the operating session is ready to begin.', 'Træffet er hentet. Start uret, når kørslen skal begynde.', 'Treffet er hentet. Start klokken når kjøringen skal begynne.', 'Treffen geladen. Die Uhr starten, sobald die Betriebssitzung beginnen soll.'],
     ['Går · {speed}×', 'Running · {speed}×', 'Kører · {speed}×', 'Går · {speed}×', 'Läuft · {speed}×'],
+    ['Öppna på skärm ↗', 'Show on a display ↗', 'Vis på skærm ↗', 'Vis på skjerm ↗', 'Auf Anzeige zeigen ↗'],
+    ['Namnet syns i Cloud och längst ner på skärmarna.', 'The name is shown in Cloud and at the bottom of the displays.', 'Navnet vises i Cloud og nederst på skærmene.', 'Navnet vises i Cloud og nederst på skjermene.', 'Der Name erscheint in Cloud und unten auf den Anzeigen.'],
   ];
   globalThis.TrainMeetMessages ||= {};
   for (const [sv, en, da, nb, de] of rows) globalThis.TrainMeetMessages[sv] = { sv, en, da, nb, de };

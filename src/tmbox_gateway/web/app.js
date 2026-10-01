@@ -1871,7 +1871,7 @@ function renderDevices(payload) {
   }
   for (const device of [...payload.devices].sort((a, b) => Number(!!a.station_id) - Number(!!b.station_id))) {
     const row = document.createElement("div");
-    row.className = "status-row";
+    row.className = device.station_id ? "status-row" : "status-row is-waiting";
     const identity = document.createElement("div");
     const code = document.createElement("b");
     code.textContent = device.device_code;
@@ -2020,8 +2020,12 @@ function renderCloudPresentation() {
   rows.replaceChildren();
   for (const station of data?.stations || []) {
     const tr = document.createElement("tr");
-    for (const value of [`${station.code} · ${station.name}`,
-      ...["left", "right"].map(side => station.connections.filter(c => c.side === side).map(c => c.other_station_code).join(", ") || "—")]) {
+    // The station's name first, its code quiet beside it (as on every map).
+    const nameCell = document.createElement("td"); nameCell.className = "station-name-cell";
+    const stationName = document.createElement("b"); stationName.textContent = station.name;
+    const stationCode = document.createElement("span"); stationCode.className = "station-code"; stationCode.textContent = station.code;
+    nameCell.append(stationName, " ", stationCode); tr.append(nameCell);
+    for (const value of ["left", "right"].map(side => station.connections.filter(c => c.side === side).map(c => c.other_station_code).join(", ") || "—")) {
       const td = document.createElement("td"); td.textContent = value; tr.append(td);
     }
     if (station.legacy_layout_limited) {
@@ -3593,7 +3597,9 @@ function renderOverviewGraph(snapshot) {
   const left = 60, right = 16, top = 22, bottom = 28, stationStep = 26;
   // Never narrower than its card: a stretched drawing no longer meets the
   // station names beside it.
-  const width = Math.max(1200, document.querySelector("#overview-graph-scroll")?.clientWidth || 0, left + (maxMinute - minMinute) * 2.2 + right);
+  // 4 px a minute: about five hours across a computer screen, close to the
+  // TV graph, instead of most of the day squeezed into one card.
+  const width = Math.max(1200, document.querySelector("#overview-graph-scroll")?.clientWidth || 0, left + (maxMinute - minMinute) * 4 + right);
   const height = top + Math.max(stations.length - 1, 1) * stationStep + bottom;
   const x = (minute) => left + (minute - minMinute) / (maxMinute - minMinute) * (width - left - right);
   const y = (index) => top + index * stationStep;
@@ -3658,7 +3664,7 @@ function renderOverviewGraph(snapshot) {
   if (current !== null && current >= minMinute && current <= maxMinute) {
     const currentX = x(current);
     svg.append(svgElement("line", { x1: currentX, y1: top - 7, x2: currentX, y2: height - bottom + 3, class: "overview-graph-now" }));
-    svg.append(svgElement("circle", { cx: currentX, cy: top - 7, r: 4, fill: "#ef4444" }));
+    svg.append(svgElement("circle", { cx: currentX, cy: top - 7, r: 4, class: "overview-graph-now-dot" }));
     if (overviewGraphLastCenteredMinute === null || Math.abs(current - overviewGraphLastCenteredMinute) >= 5) {
       const scroller = document.querySelector("#overview-graph-scroll");
       scroller.scrollTo({ left: Math.max(0, currentX - scroller.clientWidth / 2), behavior: overviewGraphLastCenteredMinute === null ? "auto" : "smooth" });

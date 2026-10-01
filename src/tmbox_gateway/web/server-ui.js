@@ -39,7 +39,8 @@
 
   // Persistent header, with no second navigation system hidden behind a burger.
   const logout = move("#logout", $(".topbar-right"));
-  logout.className = "tm-icon-btn"; logout.title = t("Logga ut"); logout.setAttribute("aria-label", t("Logga ut")); logout.textContent = "⇥";
+  logout.className = "tm-icon-btn"; logout.title = t("Logga ut"); logout.setAttribute("aria-label", t("Logga ut"));
+  logout.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>';
   mark("#application-menu"); mark("#app-devices"); mark("#connection");
   $("#app-clock").className = "tm-clock";
 
@@ -108,7 +109,9 @@
   // made the station table read as part of the client list.
   label($("#device-management h2"), "Klienter");
   $("#device-management").querySelectorAll(".eyebrow, .compact-heading p").forEach(n => n.classList.add("legacy-internal"));
-  const network = make("p", "server-network"); network.id = "client-network";
+  const network = make("span", "server-network server-chip"); network.id = "client-network";
+  const awaiting = $("#device-awaiting"); awaiting.classList.add("tm-tag", "tm-tag--warn");
+  $("#device-management .section-heading h2").after(awaiting);
   $("#device-management .section-heading").append(network);
   // Reconnecting a removed client is rare: after the list, not above it.
   $("#device-removed-trying").after($("#device-management .device-reconnect"));
@@ -154,6 +157,17 @@
   const trainDetail = make("section", "drift-train-detail"); trainDetail.id = "drift-train-detail"; trainDetail.hidden = true;
   upcoming.after(trainDetail);
   move(".overview-graph-card", overview);
+  // "Öppna på skärm ↗" in every module head that has a TV screen.
+  const screenLink = (selector, href) => {
+    let link = selector && $(selector);
+    if (!link) { link = make("a"); link.href = href; link.target = "_blank"; link.rel = "noopener"; }
+    link.classList.add("server-screen-link"); label(link, "Öppna på skärm ↗"); return link;
+  };
+  screenLink('.topology-overview-card .overview-section-heading a[href="/display/topology"]');
+  screenLink('.overview-graph-card .overview-section-heading a[href="/display/graph"]');
+  const filters = $(".traffic-filters"); $('label[for="traffic-station"]').classList.add("tm-visually-hidden");
+  filters.append($("#traffic-station"));
+  $("#overview-traffic .overview-section-heading").append(filters, screenLink(null, "/display/dashboard"));
   // Module heads as in the design (DriftEU): the name, then a short grey line.
   const headMeta = (selector, id) => {
     const meta = make("span", "server-head-meta"); if (id) meta.id = id;
@@ -183,6 +197,23 @@
   for (const [id, label] of targets) { const a = authored("a", "tm-seg", label); a.href = `/installningar#${id}`; nav.append(a); }
   const back = authored("a", "tm-btn", "← Tillbaka till driften"); back.href = "/drift"; nav.append(back);
   $("#settings-heading").append(nav);
+  // The button of the section in view is marked: the section whose top has
+  // most recently passed under the header (two columns: the left one wins a
+  // tie). A button just pressed stays marked while the page scrolls to it.
+  let pickedUntil = 0;
+  const setActive = id => nav.querySelectorAll("a.tm-seg").forEach(a => a.classList.toggle("is-active", a.hash === `#${id}`));
+  const markSection = () => {
+    if (document.body.dataset.mode !== "installningar" || Date.now() < pickedUntil) return;
+    let current = targets[0][0], best = -Infinity;
+    for (const [id] of targets) {
+      const top = document.getElementById(id)?.getBoundingClientRect().top;
+      if (top !== undefined && top < 140 && top > best + 1) { best = top; current = id; }
+    }
+    if (scrollY > 0 && innerHeight + scrollY >= document.documentElement.scrollHeight - 4) current = targets[targets.length - 1][0];
+    setActive(current);
+  };
+  nav.addEventListener("click", event => { const a = event.target.closest?.("a.tm-seg"); if (a) { pickedUntil = Date.now() + 800; setActive(a.hash.slice(1)); } });
+  addEventListener("scroll", markSection, { passive: true });
   const columns = make("div", "server-settings-columns"); const left = make("div"); const right = make("div"); columns.append(left, right); settings.append(columns);
   // Farozon comes last of all, under both columns, on a phone as on a computer.
   const sections = [["#sync-and-devices", left, "traff"], ["#server-identity-settings", left, "server"], ["#connection-settings", left, "anslutning"], ["#admin-users-settings", right, "anvandare"], [".clock-control-card", right, "skarmar"], ["#language-settings", right, "sprak"], ["#software-update-settings", right, "uppdatering"], ["#server-system-settings", settings, "farozon"]];
@@ -195,9 +226,13 @@
   inlineForm("#cloud-auto-form", $("#sync-and-devices")); mark("#cloud-auto-edit");
   $("#cloud-auto-form > p").classList.add("legacy-internal");
   const identity = $("#server-identity-settings");
+  identity.querySelector(".server-anchor").after(authored("h2", "", "Den här servern"));
+  mark("#server-identity-settings .identity-status-grid");
   inlineForm("#server-identity-form", identity);
+  $("#server-identity-form").after(authored("p", "server-card__note", "Namnet syns i Cloud och längst ner på skärmarna."));
   mark('[data-open-modal="server-identity-form-modal"]');
   const danger = $("#server-system-settings"); danger.prepend(authored("h2", "", "Farozon"));
+  danger.querySelectorAll("button").forEach(button => button.classList.add("danger-action"));
   const appearance = $(".clock-control-card");
   label(appearance.querySelector("h2"), "Skärmar och klocka");
   appearance.querySelectorAll(".eyebrow, .compact-heading p, .modal-launch").forEach(n => n.classList.add("legacy-internal"));
@@ -216,6 +251,10 @@
   inlineForm("#connection-code-form", connection);
   inlineForm("#connection-wifi-form", part("Träffens Wi-Fi"));
   label($("#users-invite-open"), "+ Bjud in");
+  $("#admin-users-settings .section-heading").append($("#users-invite-open"));
+  for (const note of ["#admin-users-settings .access-explainer", "#software-update-settings .update-explainer"]) {
+    const node = $(note); if (!node) continue; node.classList.add("server-card__note"); node.closest(".section-heading").after(node);
+  }
 
   // Documentation is separate from the operator client. No legacy emulator is
   // started by merely visiting Help.
@@ -303,6 +342,10 @@
   };
   api.mode = mode => {
     $("#help-view").classList.toggle("hidden", mode !== "help");
+    for (const [id, page] of [["#header-settings", "installningar"], ["#header-help", "help"]]) {
+      if (mode === page) $(id)?.setAttribute("aria-current", "page"); else $(id)?.removeAttribute("aria-current");
+    }
+    requestAnimationFrame(markSection);
     if (mode === "installningar" && location.hash) requestAnimationFrame(() => document.getElementById(location.hash.slice(1))?.scrollIntoView({block: "start"}));
   };
   api.stationRows = rows => {
@@ -328,17 +371,23 @@
     for (const [count, label] of [[moving.length, "På linjen"], [positions.filter(p => !p.connection_id && p.station_id).length, "På station"], [delayed.length, "Sena ankomster"]]) {
       const stat = make("div"); stat.append(make("strong", "", String(count)), authored("span", "", label)); stats.append(stat);
     }
-    const events = $("#drift-upcoming"); events.replaceChildren(authored("strong", "", "Kommande enligt tidtabell"));
+    // Same small capitals as "På linjen just nu" under it; then one row per
+    // event in columns: time, train, where and what, and how long until.
+    const events = $("#drift-upcoming"); events.replaceChildren(authored("h3", "section-eyebrow", "Kommande enligt tidtabell"));
+    const minutesOf = value => { const [h, m] = String(value || "").split(":").map(Number); return h * 60 + m; };
     for (const row of upcoming) {
       const name = snapshot.stations?.find(s => s.id === row.station_id)?.name || row.station_id;
+      const when = row.departure_time || row.arrival_time, delta = minutesOf(when) - minutesOf(now);
       // Each train opens its route and position (api.onTrainSelect, app.js).
-      const entry = make("button", "server-event"); entry.type = "button"; entry.dataset.trainNumber = row.train_number;
+      const entry = make("button", "server-event drift-event"); entry.type = "button"; entry.dataset.trainNumber = row.train_number;
       entry.setAttribute("aria-pressed", String(String(row.train_number) === String(selectedTrain)));
-      entry.append(make("span", "", row.departure_time || row.arrival_time), make("b", "", row.train_number), make("span", "", `${name} · ${t(row.departure_time ? "Avgång" : "Ankomst")}`));
+      entry.append(make("span", "drift-event__time", when), make("b", "drift-event__train", row.train_number),
+        make("span", "drift-event__what", `${name} · ${t(row.departure_time ? "avgång" : "ankomst")}`),
+        make("span", "drift-event__in", Number.isFinite(delta) ? (delta <= 0 ? t("nu") : t("om {n} min", { n: delta })) : ""));
       entry.addEventListener("click", () => api.onTrainSelect?.(row.train_number));
       events.append(entry);
     }
-    if (!upcoming.length) events.append(authored("p", "", "Inga fler planerade händelser idag."));
+    if (!upcoming.length) events.append(authored("p", "drift-event__empty", "Inga fler planerade händelser idag."));
   };
   api.initDisplay = () => {
     document.body.classList.add("server-display");
