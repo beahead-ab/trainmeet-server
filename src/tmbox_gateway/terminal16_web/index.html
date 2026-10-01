@@ -14,7 +14,7 @@
     <span id="subtitle" class="tm-top__sub">Ansluter till den separata testservern…</span>
     <span class="tm-top__spacer"></span>
     <span id="connection-dot" class="tm-top__live is-offline" title="Ansluter…"></span>
-    <a class="tm-btn tm-btn--sm" href="/drift">Till driften</a>
+    <nav class="tm-top__nav" aria-label="Sidor"><a class="tm-btn tm-btn--sm" href="/tmbox/">Virtuell TMBox</a><a class="tm-btn tm-btn--sm" href="/">Träffens sida</a></nav>
   </header>
   <main>
     <h1 class="visually-hidden">TMBox · 16 × 2</h1>
@@ -60,8 +60,8 @@
         </details>
       </div>
       <div class="tm-side">
-        <section class="tm-card" aria-labelledby="keys-title">
-          <div class="tm-card__head"><span id="keys-title">Så fungerar knapparna</span><span class="c">servern bestämmer texter och funktioner</span></div>
+        <details id="key-help" class="tm-card tm-help">
+          <summary>Så fungerar knapparna <span class="c">servern bestämmer texter och funktioner</span></summary>
           <div class="tm-card__body tm-card__body--rows">
             <div class="krow"><b>0–9</b><span>Skriv tågnumret direkt. Siffrorna stannar i boxen tills du trycker #.</span></div>
             <div class="krow"><b>#</b><span>Bekräftar. Utför det visade tågets åtgärd: sök, begär klartecken, ge klart, rapportera avgång eller ankomst.</span></div>
@@ -70,7 +70,7 @@
             <div class="krow"><b>B</b><span>Aktiva tåg från översikten. Under inmatning suddar B sista siffran.</span></div>
             <div class="krow"><b>C / D</b><span>Bläddrar: mellan aktiva tåg, i kön eller i tidtabellen.</span></div>
           </div>
-        </section>
+        </details>
         <details class="tm-card tm-help">
           <summary>Alla regler i detalj</summary>
           <div class="tm-card__body">
@@ -90,7 +90,7 @@
         </details>
       </div>
     </div>
-    <footer class="tm-foot tm-foot--lab"><span>Isolerat test av serverstyrd 16×2-profil. Ingen firmware flashas; testdata sparas inte i träffens databas.</span><span>Testdata per webbläsarsession</span></footer>
+    <footer class="tm-foot tm-foot--lab"><span><span id="server-version">TrainMeet Server</span> · Provbänk med testdata – sparas aldrig i träffens databas. Boxarna beter sig som riktiga TMBoxar.</span><span>Testdata per webbläsarsession</span></footer>
   </main>
 </body>
 </html>

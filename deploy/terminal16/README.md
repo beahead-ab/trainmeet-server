@@ -1,5 +1,29 @@
 # Fristående TMBox-provbank på testservern
 
+> **Ersatt från TrainMeet Server 1.17.3.** Servern serverar `/tmbox-lab/`
+> själv, med samma kod som allt annat, så provbänken följer med varje
+> serveruppdatering. Den fristående tjänsten körde en fast commit och drev
+> isär: gammal sida och gammal knappsats.
+>
+> Avveckla den så här, som root på testvärden, efter att Servern är 1.17.3
+> eller senare:
+>
+> ```sh
+> python3 retire.py
+> ```
+>
+> Skriptet kontrollerar att Servern själv svarar på `/tmbox-lab/healthz`
+> (`"served_by": "server"`), säkerhetskopierar Caddyfile, återställer blocket
+> för server.trainmeet.app till exakt det `deploy.py` hittade, validerar och
+> laddar om Caddy och kontrollerar via HTTPS att Servern svarar. Först därefter
+> stoppas och avaktiveras `trainmeet-tmbox-lab`. Vid fel återställs Caddyfile
+> och den gamla tjänsten fortsätter. Server och Cloud startas aldrig om.
+> Pågående provsessioner nollställs. Katalogen `/opt/trainmeet-tmbox-lab` och
+> säkerhetskopiorna lämnas kvar. Att köra skriptet igen gör bara att tjänsten
+> säkert är avstängd.
+>
+> Resten av den här filen beskriver den gamla tjänsten.
+
 Adress: `https://server.trainmeet.app/tmbox-lab/`.
 Detta är **inte** en Cloud-funktion och ansluter inte till Serverns riktiga träff.
 

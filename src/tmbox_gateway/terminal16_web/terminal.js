@@ -211,9 +211,20 @@
       ? "Boxen arbetar mot träffens riktiga trafik. Trafikledningen kan flytta den till en annan station eller ta bort den under Inställningar → TMBoxar. Språket byter du med * på boxen."
       : "Visa koden för trafikledningen, som tilldelar din station under Inställningar → TMBoxar. Boxen börjar arbeta direkt när den är tilldelad – du behöver inte ladda om sidan.";
   }
-  async function loadLiveChrome() {
+  // Page chrome for both pages: key help, how often the browser asks and which
+  // server version answers. The test bench asks its own health check, so the
+  // footer always names the code its boxes actually run.
+  async function loadChrome() {
     const help = document.querySelector("#key-help");
     if (help && matchMedia("(min-width: 901px)").matches) help.open = true;
+    const rate = document.querySelector("#connection-rate");
+    if (rate) rate.textContent = ` · uppdateras ${1000 / POLL_MS} gånger i sekunden`;
+    try {
+      const response = await fetch(live ? "/healthz" : "./healthz", {credentials: "omit", cache: "no-store", signal: AbortSignal.timeout(5000)});
+      const health = response.ok ? await response.json() : null;
+      if (health?.version) document.querySelector("#server-version").textContent = `TrainMeet Server ${health.version}`;
+    } catch {}
+    if (!live) return;
     try {
       const response = await fetch("/v1/workspaces", {credentials: "omit", cache: "no-store", signal: AbortSignal.timeout(5000)});
       const meet = response.ok ? (await response.json()).selected_meet : null;
@@ -224,11 +235,6 @@
         region.className = `tm-badge tm-badge--${meet.operating_region === "us" ? "us" : "eu"}`;
         region.hidden = false;
       }
-    } catch {}
-    try {
-      const response = await fetch("/healthz", {credentials: "omit", cache: "no-store", signal: AbortSignal.timeout(5000)});
-      const health = response.ok ? await response.json() : null;
-      if (health?.version) document.querySelector("#server-version").textContent = `TrainMeet Server ${health.version}`;
     } catch {}
   }
   function update(state) {
@@ -267,9 +273,18 @@
   // No answer is not a lost server: like the box, give up only after 15 s
   // without one. A refusal is an answer and counts at once.
   function silent() { if (performance.now() - lastContact >= SILENCE_MS) lost(); }
+  // The test bench is pushed every change, like the box. A dropped stream
+  // reconnects by itself; only 15 s without it - or a stream the server has
+  // closed for good, such as an expired test - counts as a lost server.
   const events = live ? {} : new EventSource("./events");
-  events.onmessage = event => update(JSON.parse(event.data));
-  events.onerror = lost;
+  let silence = null;
+  const heard = () => { clearTimeout(silence); silence = null; };
+  events.onopen = heard;
+  events.onmessage = event => { heard(); update(JSON.parse(event.data)); };
+  events.onerror = () => {
+    if (events.readyState === EventSource.CLOSED) { heard(); lost(); }
+    else silence ??= setTimeout(() => { silence = null; lost(); }, SILENCE_MS);
+  };
   async function startLive() {
     document.querySelector("#start-client").hidden = true;
     try {
@@ -308,9 +323,9 @@
   if (live) {
     document.querySelector("#start-client").addEventListener("click",()=>{localStorage.removeItem("trainmeet.browser-tmbox");startLive();});
     document.addEventListener("visibilitychange",()=>{if(document.hidden){++pollVersion;lost();}});
-    loadLiveChrome();
     startLive().then(pollLive);
   }
+  loadChrome();
   function resetButtons() {
     for (const id of ["reset-all", "reset-clearance", "reset-direct"]) document.getElementById(id).disabled = !connected || resetting;
     const open = document.querySelector("#placement-open");

@@ -12,6 +12,14 @@ versionsnummer. En större fysisk display visar tills vidare 16×2-profilen.
   `tmbox/terminal/device/<id>/...`. Ingen lokal trafik- eller språklogik.
 - `/tmbox-lab/`: isolerad provbänk med demodata per webbläsarsession. Samma
   skärm- och tangentlogik, men ingen åtkomst till träffens trafik eller databas.
+  Från 1.17.3 serverar Servern den själv även på server.trainmeet.app, så den
+  följer med varje serveruppdatering; den fristående tjänsten avvecklas med
+  `deploy/terminal16/retire.py`. Foten visar vilken serverversion som svarar.
+
+Hitta dit: i adminhuvudet under **Öppna → TMBox** (Virtuell TMBox och
+Provbänk med testdata), på träffens sida under **Kör en station i
+webbläsaren**, och från varandra: `/tmbox/` har knappen Provbänk och
+provbänken har Virtuell TMBox och Träffens sida.
 
 Båda webbsidorna använder Serverns UI-kit (`web/server-design.css`) runt boxen.
 Boxen själv – skal, display och knappsats – är låst i blocket `FRUSET` i
@@ -131,7 +139,10 @@ i webben: ett tryck som inte kan göra något gör ingenting, precis som på box
 Webben väntar som boxen (firmware 0.7.3): `VANTAR PA SVAR` på rad två efter
 1,5 s, `INGET SVAR` efter 30 s med siffrorna kvar, och kontakten räknas som
 bruten först efter 15 s utan svar. `/tmbox/` hämtar bilden var halv sekund,
-lika ofta som servern skickar ändringar till boxarna.
+lika ofta som servern skickar ändringar till boxarna. Provbänken får varje
+ändring direkt; en bruten ström räknas som tappad kontakt först efter 15 s,
+en ström som servern stängt (till exempel ett utgånget test) direkt. Gränsen
+mot skript är 100 tryck per 10 s och session – ingen människa når den.
 
 903 Python-tester och 59 JavaScript-/webbläsartester passerade inför release.
 Firmware måste även kontrolleras på fysisk hårdvara; mjukvarutester ersätter

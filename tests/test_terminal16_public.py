@@ -5,7 +5,7 @@ import unittest
 from uuid import uuid4
 
 from tmbox_gateway.models import ConnectionState
-from tmbox_gateway.terminal16_public import COOKIE, MAX_AGE, IDLE_TTL, PublicLabServer, SessionStore
+from tmbox_gateway.terminal16_public import COMMANDS_PER_WINDOW, COOKIE, MAX_AGE, IDLE_TTL, PublicLabServer, SessionStore
 
 
 class PublicSessionTests(unittest.TestCase):
@@ -43,7 +43,7 @@ class PublicSessionTests(unittest.TestCase):
         tick = [0]
         store = SessionStore(now=lambda: tick[0])
         _, session, _ = store.acquire(None, create=True)
-        self.assertTrue(all(store.allow_command(session) for _ in range(30)))
+        self.assertTrue(all(store.allow_command(session) for _ in range(COMMANDS_PER_WINDOW)))
         self.assertFalse(store.allow_command(session))
         tick[0] = 10
         self.assertTrue(store.allow_command(session))
@@ -179,9 +179,23 @@ class PublicHTTPTests(unittest.TestCase):
             self.assertEqual(self.request("/api/reset-devices", cookie=cookie, body={}, headers=headers)[0], 403)
         self.assertEqual(self.state(cookie)["frames"][0]["entry"]["context"], before)
 
+    def test_a_person_browsing_fast_never_meets_the_limit(self):
+        """Bläddring svarar direkt sedan 1.17.2. Sex tryck i sekunden i tio
+        sekunder - snabbare än någon bläddrar - ska aldrig nekas, precis som
+        på en riktig box. Förut var gränsen 30."""
+
+        tick = [0.0]
+        store = SessionStore(now=lambda: tick[0])
+        _, session, _ = store.acquire(None, create=True)
+        for press in range(60 * 3):
+            tick[0] = press / 6
+            self.assertTrue(store.allow_command(session), f"tryck {press} nekades")
+
     def test_static_and_health_do_not_allocate_sessions(self):
         for path in ("/healthz", "/style.css", "/terminal.js"):
             self.assertEqual(self.request(path)[0], 200)
+        # The stand-alone service never claims to be Server.
+        self.assertNotIn("served_by", json.loads(self.request("/healthz")[2]))
         self.assertEqual(len(self.server.sessions.sessions), 0)
         self.assertEqual(self.request("/api/users")[0], 404)
         self.assertEqual(self.request("/../api/state")[0], 404)

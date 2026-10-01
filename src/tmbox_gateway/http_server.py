@@ -3298,6 +3298,15 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path == "/tmbox-lab":
+                # The proxy in front of the retired stand-alone test bench did
+                # this; the page loads its script and events relative to the
+                # trailing slash.
+                self.send_response(HTTPStatus.PERMANENT_REDIRECT)
+                self.send_header("Location", "/tmbox-lab/")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             if path.startswith("/tmbox-lab/"):
                 from .terminal16_embedded import serve
                 return serve(self, "GET")

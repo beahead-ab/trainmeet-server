@@ -18,6 +18,10 @@ from .terminal16_demo import Handler, LabState
 COOKIE = "trainmeet_tmbox_lab"
 MAX_AGE = 4 * 60 * 60
 IDLE_TTL = 30 * 60
+# Per session and ten seconds. A guard against scripts, not against people:
+# since browsing answers at once (1.17.2) someone flicking through trains with
+# C and D could reach the old 30, and a real box has no such limit at all.
+COMMANDS_PER_WINDOW = 100
 
 
 class TestSession(LabState):
@@ -81,7 +85,7 @@ class SessionStore:
             now = self.now()
             while session.requests and now - session.requests[0] >= 10:
                 session.requests.popleft()
-            if len(session.requests) >= 30:
+            if len(session.requests) >= COMMANDS_PER_WINDOW:
                 return False
             session.requests.append(now)
             return True
@@ -210,6 +214,9 @@ class PublicHandler(Handler):
             return False
         return True
 
+    def health(self):
+        return {"status": "ok", "service": "tmbox-lab", "profile": "server-16x2-pilot"}
+
     def stream_active(self):
         return self.server.sessions.touch(self.session_token, self.session)
 
@@ -217,7 +224,7 @@ class PublicHandler(Handler):
         if not self._prepare():
             return
         if self.path == "/healthz":
-            return self._send(200, {"status": "ok", "service": "tmbox-lab", "profile": "server-16x2-pilot"})
+            return self._send(200, self.health())
         stream = self.path == "/events"
         if stream and not self.server.sessions.open_stream(self.session):
             return self._send(429, {"message": "Stäng en annan provbänksflik och försök igen."})

@@ -156,6 +156,9 @@ button, input, select { font: inherit; }
 .tm-top__status { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .tm-top__live { width: 8px; height: 8px; border-radius: 50%; background: var(--ok-text); flex-shrink: 0; }
 .tm-top__live.is-offline { background: var(--warn-dot); }
+/* The page links keep their full names. Where the row is too narrow they move
+   to a second row, right-aligned, instead of squeezing the page name away. */
+.tm-top__nav { display: flex; gap: 8px; margin-left: auto; flex-shrink: 0; }
 
 /* Sidans yta. Måtten är desamma som tidigare, så att boxen får exakt samma storlek. */
 main { max-width: 1320px; margin: auto; padding: 36px 28px 40px; }
@@ -282,7 +285,7 @@ body[data-terminal="live"] .box-status, body[data-terminal="live"] .box-queue { 
   body[data-terminal="lab"] .tm-top__live, .tm-top__prefix { display: none; }
   body[data-terminal="lab"] .tm-top .tm-tag { font-size: 10px; padding: 1px 5px; }
   .tm-top .tm-btn--sm { padding: 4px 8px; }
-  .tm-top { gap: 8px; }
+  .tm-top { gap: 8px; flex-wrap: wrap; row-gap: 8px; }
   #placement-fields label { grid-template-columns: minmax(0, 1fr); }
   #placement-form footer { display: grid; grid-template-columns: 1fr 1fr; }
   #placement-default { grid-column: 1 / -1; }

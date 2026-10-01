@@ -5,6 +5,8 @@ Show all stations|Visa alla stationer|Vis alle stationer|Vis alle stasjoner|Alle
 ← Meet information|← Till träffens sida|← Til træffets side|← Til treffets side|← Zur Treffenseite
 Go to operations →|Till driften →|Til driften →|Til driften →|Zum Betrieb →
 Start virtual TMBox|Starta virtuell TMBox|Start virtuel TMBox|Start virtuell TMBox|Virtuelle TMBox starten
+Try the test bench first|Prova först i provbänken|Prøv først i testbænken|Prøv først i testbenken|Zuerst am Teststand ausprobieren
+Three boxes with test data – completely separate from the meet.|Tre boxar med testdata – helt skilda från träffen.|Tre bokse med testdata – helt adskilt fra træffet.|Tre bokser med testdata – helt atskilt fra treffet.|Drei Boxen mit Testdaten – völlig getrennt vom Treffen.
 On the layout now|På banan just nu|På banen lige nu|På banen akkurat nå|Aktuell auf der Anlage
 updates every 5 seconds|uppdateras var 5:e sekund|opdateres hvert 5. sekund|oppdateres hvert 5. sekund|Aktualisierung alle 5 Sekunden
 Updates every 5 seconds|Uppdateras var 5:e sekund|Opdateres hvert 5. sekund|Oppdateres hvert 5. sekund|Aktualisierung alle 5 Sekunden
@@ -72,3 +74,5 @@ The conductor opens their client here. The dispatcher assigns the train run.|Con
 As in settings|Som i inställningarna|Som i indstillingerne|Som i innstillingene|Wie in den Einstellungen
 with seconds|med sekunder|med sekunder|med sekunder|mit Sekunden
 without seconds|utan sekunder|uden sekunder|uten sekunder|ohne Sekunden
+Virtual TMBox|Virtuell TMBox|Virtuel TMBox|Virtuell TMBox|Virtuelle TMBox
+Test bench with test data|Provbänk med testdata|Testbænk med testdata|Testbenk med testdata|Teststand mit Testdaten
