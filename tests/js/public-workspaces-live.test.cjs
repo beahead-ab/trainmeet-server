@@ -170,10 +170,8 @@ const root = path.resolve(__dirname, '../..');
     await tv.locator('#topology-svg .topology-train.cleared[data-train-number="101"]').waitFor();
     await drift.waitForTimeout(1500);  // let the first fetches settle
     const fetched = new Map([[drift, []], [tv, []], [guest, []]]);
-    const watchStart = Date.now();
     for (const [viewer, list] of fetched) viewer.on('request', request => {
       const where = new URL(request.url()).pathname; if (where.startsWith('/v1/')) list.push(where);
-      if (process.env.DEBUG_LIVE) console.log([drift, tv, guest].indexOf(viewer), Date.now() - watchStart, where, request.headers()['referer'] || '');
     });
     await drift.waitForTimeout(11000);
     // Drift asks nothing on its own; only the simulation banner looks every ten seconds.
