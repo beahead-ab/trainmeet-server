@@ -1824,8 +1824,10 @@ function renderDevices(payload) {
     identity.append(code, model);
     const station = (payload.stations || []).find((entry) => entry.id === device.station_id);
     const assignment = document.createElement("span");
+    // A station can have one box per side; "both" is the default and not shown.
+    const side = {left: t("vänster"), right: t("höger")}[device.station_side];
     assignment.textContent = station
-      ? `${station.code} · ${station.name}`
+      ? `${station.code} · ${station.name}${side ? ` · ${side}` : ""}`
       : t("Väntar på station");
     row.append(identity, assignment, deviceConnectionStatus(device.connection));
     const edit = document.createElement("button");
@@ -1837,24 +1839,28 @@ function renderDevices(payload) {
     edit.addEventListener("click", () => {
       const meetGeneration = state.serverContext?.selected_meet?.generation;
       const form = document.createElement("form"); form.className = "device-inline-edit server-actions";
-      const select = document.createElement("select"); select.required = true; select.setAttribute("aria-label", t("Station"));
+      const select = document.createElement("select"); select.required = true; select.className = "device-station"; select.setAttribute("aria-label", t("Station"));
       select.append(new Option(t("Välj station"), ""));
       (payload.stations || []).forEach(s => select.append(new Option(`${s.code} · ${s.name}`, s.id)));
       select.value = device.station_id || "";
+      // Left and right as on the station's TMBox placement.
+      const sideSelect = document.createElement("select"); sideSelect.className = "device-side"; sideSelect.setAttribute("aria-label", t("Sida"));
+      sideSelect.append(new Option(t("Båda sidor"), "both"), new Option(t("Vänster"), "left"), new Option(t("Höger"), "right"));
+      sideSelect.value = device.station_side || "both";
       const save = document.createElement("button"); save.type = "submit"; save.textContent = t("Spara");
       const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = t("Avbryt");
       const message = document.createElement("span"); message.setAttribute("role", "status");
       const close = () => { form.remove(); delete list.dataset.signature; renderDevices({devices: state.devices, stations: state.stations}); };
       cancel.addEventListener("click", close);
-      form.append(select, save, cancel, message); actions.replaceChildren(form); select.focus();
+      form.append(select, sideSelect, save, cancel, message); actions.replaceChildren(form); select.focus();
       form.addEventListener("submit", async event => {
-        event.preventDefault(); if (save.disabled) return; save.disabled = cancel.disabled = select.disabled = true;
+        event.preventDefault(); if (save.disabled) return; save.disabled = cancel.disabled = select.disabled = sideSelect.disabled = true;
         try {
-          const response = await authorizedFetch("/v1/devices/assign", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({device_code: device.device_code, station_id: select.value, meet_generation: meetGeneration})});
+          const response = await authorizedFetch("/v1/devices/assign", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({device_code: device.device_code, station_id: select.value, side: sideSelect.value, meet_generation: meetGeneration})});
           const result = await response.json(); if (!response.ok) throw new Error(result.message || t("Kunde inte tilldela station"));
           close(); await refreshDevices();
         } catch (error) { message.textContent = error.message; }
-        finally { save.disabled = cancel.disabled = select.disabled = false; }
+        finally { save.disabled = cancel.disabled = select.disabled = sideSelect.disabled = false; }
       });
     });
     const remove = document.createElement("button");

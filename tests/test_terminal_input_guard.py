@@ -15,7 +15,7 @@ import random
 import unittest
 from uuid import uuid4
 
-from tmbox_gateway.terminal16 import NAVIGATION_ACTIONS
+from tmbox_gateway.terminal16 import NAVIGATION_ACTIONS, Terminal
 from tmbox_gateway.terminal16_demo import demo_lab
 
 
@@ -35,7 +35,7 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
         original = self.lab._traffic
 
         def traffic(device, terminal, action):
-            self.traffic.append(action)
+            self.traffic.append((device, action))
             return original(device, terminal, action)
 
         self.lab._traffic = traffic
@@ -71,7 +71,15 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
         erbjuden tangent trycks någon gång; den som är märkt som navigering
         får aldrig nå trafiken, den som är märkt som åtgärd ska alltid göra det."""
 
-        walk = random.Random(20261001)
+        seen = self.walk(20261001)
+        self.assertLessEqual(seen, NAVIGATION_ACTIONS | TRAFFIC_ACTIONS, seen - NAVIGATION_ACTIONS - TRAFFIC_ACTIONS)
+        # Vandringen ska ha sett allt utom det som provas skriptat nedan,
+        # annars bevisar den för lite.
+        self.assertEqual(TRAFFIC_ACTIONS - {"reject"}, seen & TRAFFIC_ACTIONS - {"reject"})
+        self.assertLessEqual(NAVIGATION_ACTIONS - seen, SCRIPTED)
+
+    def walk(self, seed, after_each=lambda: None):
+        walk = random.Random(seed)
         numbers = sorted({leg["train_number"] for leg in self.lab.legs.values()})
         devices = sorted(self.lab.terminals)
         seen = set()
@@ -80,17 +88,37 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
             if walk.random() < 0.08:
                 frame = self.lab.frame(device)
                 self.send(device, "#", train_number=walk.choice(numbers), entry_context=frame["entry"]["context"])
+                after_each()
                 continue
             if walk.random() < 0.05:
                 self.clock += 4  # låter kvitton och meddelanden gå ut
             keys = sorted(self.lab.frame(device)["keys"])
             # '#' oftare: annars händer nästan ingen trafik.
             seen.add(self.press(device, "#" if "#" in keys and walk.random() < 0.5 else walk.choice(keys)))
-        self.assertLessEqual(seen, NAVIGATION_ACTIONS | TRAFFIC_ACTIONS, seen - NAVIGATION_ACTIONS - TRAFFIC_ACTIONS)
-        # Vandringen ska ha sett allt utom det som provas skriptat nedan,
-        # annars bevisar den för lite.
-        self.assertEqual(TRAFFIC_ACTIONS - {"reject"}, seen & TRAFFIC_ACTIONS - {"reject"})
-        self.assertLessEqual(NAVIGATION_ACTIONS - seen, SCRIPTED)
+            after_each()
+        return seen
+
+    def test_boxes_on_one_side_keep_to_their_side(self):
+        """Samma vandring med två extra boxar på CDA, en för varje sida.
+        Märkningen ska hålla, trafiken ska ändå gå runt, och en box på ena
+        sidan får aldrig ha ett tåg från andra sidan valt."""
+
+        lab = self.lab
+        lab.terminals["CDA-L"] = Terminal("cda", side="left")
+        lab.terminals["CDA-R"] = Terminal("cda", side="right")
+        sides = {lab._side("cda", other) for other in ("mun", "va")}
+        self.assertEqual({"left", "right"}, sides, "CDA needs a neighbour on each side")
+
+        def keeps_to_its_side():
+            for name in ("CDA-L", "CDA-R"):
+                terminal = lab.terminals[name]
+                if terminal.selected is not None and terminal.screen != "overview":
+                    self.assertTrue(lab._on_side(terminal, lab.legs[terminal.selected]), (name, terminal.selected))
+
+        self.walk(20261002, keeps_to_its_side)
+        for name in ("CDA-L", "CDA-R"):
+            done = {action for device, action in self.traffic if device == name}
+            self.assertLessEqual({"request", "depart", "arrive"}, done, f"{name} ska köra trafik på sin sida")
 
     def test_reject_and_withdraw_paths_are_marked(self):
         self.lookup("DEMO-CDA", "39")

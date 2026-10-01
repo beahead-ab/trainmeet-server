@@ -104,13 +104,13 @@ const root = path.resolve(__dirname, '../..');
       const row=page.locator('#device-list .status-row').filter({hasText:'TBX-SMOKE'});
       await row.getByRole('button',{name:width===1280?'Tilldela station':'Ändra station',exact:true}).click();
       const form=row.locator('.device-inline-edit');
-      await form.locator('select').selectOption(station);
+      await form.locator('select.device-station').selectOption(station);
       await form.locator('[type=submit]').click();
       await form.waitFor({state:'hidden'});
       assert.equal((await (await page.request.get(urls.eu+'/v1/devices')).json()).devices[0].station_id,station);
       await page.reload();
       await row.getByRole('button',{name:'Ändra station',exact:true}).click();
-      assert.equal(await form.locator('select').inputValue(),station);
+      assert.equal(await form.locator('select.device-station').inputValue(),station);
       await form.getByRole('button',{name:'Avbryt',exact:true}).click();
     }
     // Clock settings propagate to a separate unauthenticated TV context.
@@ -188,6 +188,19 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#device-list .status-row').filter({hasText:'TBX-SMOKE'}).waitFor();
     assert.equal(await trying.isHidden(),true);
     assert.equal((await (await page.request.get(urls.eu+'/v1/devices')).json()).devices[0].station_id,'station-a');
+    // One box per side at a station: the side is chosen with the station, and shown unless it is both.
+    const smokeRow=page.locator('#device-list .status-row').filter({hasText:'TBX-SMOKE'});
+    await smokeRow.getByRole('button',{name:'Ändra station',exact:true}).click();
+    const sideSelect=page.locator('#device-list .device-inline-edit select.device-side');
+    assert.equal(await sideSelect.inputValue(),'both');
+    assert.deepEqual(await sideSelect.locator('option').allTextContents(),['Båda sidor','Vänster','Höger']);
+    await sideSelect.selectOption('left');
+    await page.locator('#device-list .device-inline-edit [type=submit]').click();
+    await page.locator('#device-list .status-row').filter({hasText:'· vänster'}).waitFor();
+    assert.equal((await (await page.request.get(urls.eu+'/v1/devices')).json()).devices[0].station_side,'left');
+    await smokeRow.getByRole('button',{name:'Ändra station',exact:true}).click();
+    assert.equal(await sideSelect.inputValue(),'left','the form opens on the side the box has');
+    await page.locator('#device-list .device-inline-edit').getByRole('button',{name:'Avbryt',exact:true}).click();
     await page.locator('#device-list .device-remove').click();
     await page.locator('.device-inline-edit').getByRole('button',{name:'Ta bort',exact:true}).click();
     await page.locator('#device-list .empty-status').waitFor();

@@ -42,6 +42,7 @@ from .identity import (
     PairingError,
     PairingService,
     PairedClient,
+    STATION_SIDES,
 )
 from .local_config import (
     ConfigurationRevisionConflict,
@@ -1175,6 +1176,7 @@ class TrainMeetHTTPApplication:
                     "last_seen_at": device.last_seen_at,
                     "assigned_panel_ids": list(device.panel_ids),
                     "station_id": device.station_id,
+                    "station_side": device.station_side,
                     "hardware_version": device.hardware_version,
                     "protocol_version": device.protocol_version,
                     "display": device.display.to_dict(),
@@ -3207,11 +3209,16 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "unknown_panel", "Panelen finns inte")
         if panel_id and not station_id:
             station_id = self.engine.config.panels[panel_id].station_id
+        # Several boxes can share a station; each handles both sides or one.
+        side = str(payload.get("side") or "both").strip()
+        if side not in STATION_SIDES:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_side", "Sidan måste vara båda, vänster eller höger")
         try:
             assigned = self.identities.assign_discovered_device(
                 str(payload.get("device_code", "")),
                 (panel_id,) if panel_id else (),
                 station_id=station_id or None,
+                station_side=side,
             )
         except PairingError as error:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, error.code, str(error)) from error
@@ -3219,6 +3226,7 @@ class TrainMeetHTTPApplication:
         return {
             "device_id": assigned.client_id,
             "station_id": assigned.station_id,
+            "side": self.identities.station_side_for_client(assigned.client_id),
             "assigned_panel_ids": list(assigned.panel_ids),
         }
 

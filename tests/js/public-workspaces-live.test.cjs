@@ -75,7 +75,9 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#participant-view').waitFor({state: 'visible'});
     // Guests find the test bench next to the virtual box, and the two pages
     // link to each other.
-    assert.equal(await page.locator('#pv-virtual-card a[href="/tmbox-lab/"]').isVisible(), true);
+    // The card appears once the participant view has loaded its data:
+    // wait for it rather than asking straight after the navigation.
+    await page.locator('#pv-virtual-card a[href="/tmbox-lab/"]').waitFor();
     await page.locator('#pv-virtual-card a[href="/tmbox/"]').click();
     await page.locator('.box-code').getByText(/^WEB/).waitFor();
     assert.equal(await page.locator('.tm-top a[href="/tmbox-lab/"]').textContent(), 'Provbänk');

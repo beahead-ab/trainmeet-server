@@ -209,8 +209,22 @@ class MQTTIntegrationTests(unittest.TestCase):
             port=self.port,
             identities=identities,
         )
+        # The box's hello is not retained. If it reaches the broker before the
+        # gateway has subscribed, it is gone and the box is never discovered -
+        # which is what happened now and then when the full suite kept the
+        # machine busy. Wait for the gateway's four subscriptions first.
+        subscriptions = []
+        subscribed = threading.Event()
+
+        def on_subscribe(*args):
+            subscriptions.append(args)
+            if len(subscriptions) >= 4:
+                subscribed.set()
+
+        gateway.client.on_subscribe = on_subscribe
         gateway.client.connect("127.0.0.1", self.port, keepalive=10, clean_start=True)
         gateway.client.loop_start()
+        self.assertTrue(subscribed.wait(MESSAGE_TIMEOUT), "the gateway did not subscribe")
 
         device_id = "esp8266-aabbcc123456" if nodemcu else "esp32-integration-box"
         device_code = "TBX-123456" if nodemcu else "TBX-A7K2"
