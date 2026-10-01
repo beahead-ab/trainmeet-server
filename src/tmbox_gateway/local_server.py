@@ -60,6 +60,16 @@ def publish_config_to_devices(gateway, v2_gateway, identities):
             }).encode())
 
 
+def attach_terminal_gateway(application, v2_adapter, station_service):
+    """Serve 16x2 boxes over MQTT; every message from a live session marks the box as seen."""
+    from .terminal16_mqtt import Terminal16Gateway
+    gateway = Terminal16Gateway(application.terminal16, v2_adapter._publish, on_seen=application.note_device_seen)
+    v2_adapter.terminal_gateway = gateway
+    application.on_terminal_tick = gateway.tick
+    station_service.subscribe(gateway.tick)
+    return gateway
+
+
 def _raise_keyboard_interrupt(_signum: int, _frame: object) -> None:
     raise KeyboardInterrupt
 
@@ -264,10 +274,7 @@ def main() -> None:
     # Attach the common lifecycle gate before either transport accepts input.
     # Bind the shared traffic authority before accepting the first command.
     station_service.subscribe(gateway._publish_snapshots)
-    from .terminal16_mqtt import Terminal16Gateway
-    v2_adapter.terminal_gateway = Terminal16Gateway(application.terminal16, v2_adapter._publish)
-    application.on_terminal_tick = v2_adapter.terminal_gateway.tick
-    station_service.subscribe(v2_adapter.terminal_gateway.tick)
+    attach_terminal_gateway(application, v2_adapter, station_service)
     mqtt_session.connect(gateway.client, broker_host, args.mqtt_port)
     gateway.client.loop_start()
     v2_adapter.connect()

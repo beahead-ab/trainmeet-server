@@ -191,17 +191,6 @@
       wifiHost.insertAdjacentHTML("beforeend", html`<span class="pv-value pv-value--muted">${t("Fråga trafikledningen om träffens Wi-Fi")}</span>`);
       label($("#pv-wifi-note"), "Nätverket är inte inskrivet på servern ännu.");
     }
-    const address = connection.host ? `${connection.host}` : "";
-    $("#pv-address").replaceChildren();
-    $("#pv-address").insertAdjacentHTML("beforeend", address
-      ? html`<span class="pv-value">${escapeHTML(address)}</span><span class="pv-value">${t("port")} ${escapeHTML(String(connection.port || ""))}</span>`
-      : html`<span class="pv-value pv-value--muted">${t("Adressen visas när servern är på nätverket")}</span>`);
-    const code = $("#pv-code");
-    code.textContent = connection.code || "—";
-    label($("#pv-code-note"), connection.code
-      ? (connection.validity_hours ? "Koden gäller {n} timmar från att servern startades. Boxen dyker upp hos trafikledningen som ”väntar på station” och får sin station därifrån." : "Koden gäller tills vidare. Boxen dyker upp hos trafikledningen som ”väntar på station” och får sin station därifrån.")
-      : "Ingen parningskod är utfärdad just nu.");
-    if (connection.code && connection.validity_hours) $("#pv-code-note").textContent = t($("#pv-code-note").dataset.tmText, { n: connection.validity_hours });
     const ttl = Number(connection.web_client_ttl_minutes || 30);
     label($("#pv-virtual-ttl"), "En inaktiv virtuell TMBox utan station tas bort efter {n} minuter.");
     $("#pv-virtual-ttl").textContent = t("En inaktiv virtuell TMBox utan station tas bort efter {n} minuter.", { n: ttl });

@@ -63,6 +63,17 @@ class CloudOnlyDeliveryTests(unittest.TestCase):
         self.assertIsNone(self.app._eu_runtime_guard())
         self.assertTrue(self.app.config.connection_code)
 
+    def test_every_link_answer_says_what_happened(self):
+        """Linking again to the meet already running answered without a
+        message, and the admin page printed "3/3 · undefined Cloud-kopplingen
+        är sparad på servern." (Casper, 2026-10-01)."""
+
+        first = self.connect()
+        self.assertTrue(first.get("message"), first)
+        again = self.connect()
+        self.assertEqual("Den valda configen används redan.", again["message"])
+        self.assertTrue(again["linked"])
+
     def test_tmbox_workspace_requires_eu_meet_and_admin(self):
         self.assertEqual(["administration"], self.app.server_context(self.admin)["available_workspaces"])
         self.connect()

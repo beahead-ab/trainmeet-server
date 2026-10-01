@@ -20,6 +20,9 @@ from tmbox_gateway.terminal16_demo import demo_lab
 
 
 TRAFFIC_ACTIONS = {"request", "accept", "reject", "cancel", "depart", "arrive", "arrive_track"}
+# Reached only through a few exact paths, so they are pressed on purpose in
+# the scripted tests below rather than hoped for in the random walk.
+SCRIPTED = {"reject_view", "next_request", "previous_request", "next_track", "previous_track"}
 
 
 class KeysSayWhetherTheyActTests(unittest.TestCase):
@@ -84,10 +87,10 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
             # '#' oftare: annars händer nästan ingen trafik.
             seen.add(self.press(device, "#" if "#" in keys and walk.random() < 0.5 else walk.choice(keys)))
         self.assertLessEqual(seen, NAVIGATION_ACTIONS | TRAFFIC_ACTIONS, seen - NAVIGATION_ACTIONS - TRAFFIC_ACTIONS)
-        # Vandringen ska ha sett nästan allt, annars bevisar den för lite.
-        # Att neka kräver tre särskilda tryck i rad och provas för sig nedan.
+        # Vandringen ska ha sett allt utom det som provas skriptat nedan,
+        # annars bevisar den för lite.
         self.assertEqual(TRAFFIC_ACTIONS - {"reject"}, seen & TRAFFIC_ACTIONS - {"reject"})
-        self.assertGreaterEqual(len(seen & NAVIGATION_ACTIONS), len(NAVIGATION_ACTIONS) - 2, NAVIGATION_ACTIONS - seen)
+        self.assertLessEqual(NAVIGATION_ACTIONS - seen, SCRIPTED)
 
     def test_reject_and_withdraw_paths_are_marked(self):
         self.lookup("DEMO-CDA", "39")
@@ -102,6 +105,23 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
         self.assertEqual("request", self.press("DEMO-CDA", "#"))
         self.assertEqual("cancel_view", self.press("DEMO-CDA", "*"))
         self.assertEqual("cancel", self.press("DEMO-CDA", "#"))
+
+    def test_queue_and_track_paths_are_marked(self):
+        self.lookup("DEMO-MUN", "93")
+        self.assertEqual("request", self.press("DEMO-MUN", "#"))
+        self.lookup("DEMO-VA", "94")
+        self.assertEqual("request", self.press("DEMO-VA", "#"))
+        self.assertEqual("requests", self.press("DEMO-CDA", "A"))
+        self.assertEqual("next_request", self.press("DEMO-CDA", "D"))
+        self.assertEqual("previous_request", self.press("DEMO-CDA", "C"))
+        self.assertEqual("accept", self.press("DEMO-CDA", "#"))
+        self.assertEqual("depart", self.press("DEMO-MUN", "#"))
+        # CDA still shows 93 after giving clearance; once it has departed,
+        # B picks another arrival track.
+        self.assertEqual("tracks", self.press("DEMO-CDA", "B"))
+        self.assertEqual("next_track", self.press("DEMO-CDA", "D"))
+        self.assertEqual("previous_track", self.press("DEMO-CDA", "C"))
+        self.assertEqual("arrive_track", self.press("DEMO-CDA", "#"))
 
     def test_no_traffic_action_is_called_navigation(self):
         self.assertFalse(NAVIGATION_ACTIONS & TRAFFIC_ACTIONS)

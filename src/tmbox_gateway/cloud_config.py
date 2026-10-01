@@ -211,7 +211,8 @@ class CloudConfiguration:
             TrafficEngine(self.store.publication(publication_id).session_config())
         if previous and previous["publication_id"] == publication_id and not switching:
             self.state, self.message = "current", "Den valda configen används redan."
-            return {"pending": False, "publication_id": publication_id, "operating_region": region}
+            # Every answer carries its message: the admin page prints it.
+            return {"pending": False, "publication_id": publication_id, "operating_region": region, "message": self.message}
         blockers = self._engine_blockers() if not previous or previous["region"] == "eu" else []
         if getattr(app, "simulation", None) and app.simulation.active:
             blockers.append("Avsluta simuleringen innan ny config eller annan träff aktiveras.")

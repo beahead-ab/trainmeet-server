@@ -178,13 +178,20 @@ class RuntimeTerminalTests(unittest.TestCase):
                 self.send("esp32", "#")
                 self.assertEqual(self.service.open_cases(None), [])
 
-    def test_operator_language_menu_persists_and_admin_can_replace_it(self):
-        self.send("esp8266", "*")
-        for _ in range(3): self.send("esp8266", "D")
-        self.send("esp8266", "#")
-        self.assertEqual(self.fixture.ids.device_language("esp8266"), "en")
+    def test_language_is_set_by_the_administrator_not_on_the_box(self):
+        """The box has no language menu: the start screen shows only what an
+        operator needs. The administrator sets each box's language in Server."""
+
         frame = self.terminals.frame("esp8266")
+        self.assertNotIn("*", frame["keys"])
+        self.assertTrue(frame["lines"][1].startswith("Nr# A:Kö"))
+        refused = self.terminals.command("esp8266", {"command_id": uuid4().hex, "view_token": frame["view_token"], "key": "*"})
+        self.assertEqual("rejected", refused["status"])
+        self.fixture.ids.set_device_language("esp8266", "en")
+        frame = self.terminals.frame("esp8266")
+        self.assertEqual("en", frame["language"])
         self.assertEqual(frame["keys"]["#"]["label"], "Show upcoming trains")
+        self.assertTrue(frame["lines"][1].startswith("No# A:Q"))
         before = frame["view_token"]
         self.fixture.ids.set_device_language("esp8266", "de")
         self.assertNotEqual(self.terminals.frame("esp8266")["view_token"], before)
@@ -239,3 +246,34 @@ class RuntimeTerminalTests(unittest.TestCase):
         self.assertEqual(len(messages), 2)
         gateway.on_message(base + "command", json.dumps(body).encode())
         self.assertTrue(any(item[0].endswith("/ack") and item[1]["status"]=="accepted" for item in messages))
+
+    def test_a_request_travels_from_one_box_to_the_other_over_mqtt(self):
+        """Benny begärde klartecken från en box och såg inget på den andra
+        (2026-10-01). Hela vägen box → server → box: avsändarens två tryck på
+        # ska ge mottagaren en ny bild med förfrågan, utan att den trycker."""
+
+        messages = []
+        gateway = Terminal16Gateway(self.terminals, lambda *args: messages.append(args))
+        for device in ("esp8266", "esp32"):
+            gateway.on_message(gateway.PREFIX + device + "/hello",
+                               json.dumps({"boot": device + "-1", "device_code": device}).encode())
+        frames = lambda device: [m[1]["frame"] for m in messages if m[0] == gateway.PREFIX + device + "/frame"]
+        self.assertEqual(0, frames("esp32")[-1]["requests"]["count"])
+        pushed_before = len(frames("esp32"))
+
+        def press(body, command_id):
+            gateway.on_message(gateway.PREFIX + "esp8266/command",
+                               json.dumps({"boot": "esp8266-1", "command_id": command_id, **body}).encode())
+            ack = [m[1] for m in messages if m[0] == gateway.PREFIX + "esp8266/ack"][-1]
+            self.assertEqual("accepted", ack["status"], ack)
+            return ack["frame"]
+
+        sender = frames("esp8266")[-1]
+        sender = press({"key": "#", "train_number": "101", "entry_context": sender["entry"]["context"],
+                        "view_token": sender["view_token"]}, "search")
+        press({"key": "#", "view_token": sender["view_token"]}, "request")
+        pushed = frames("esp32")
+        self.assertGreater(len(pushed), pushed_before, "the receiving box got no new frame")
+        self.assertEqual(1, pushed[-1]["requests"]["count"])
+        self.assertTrue(pushed[-1]["lines"][0].startswith("CDA?101"), pushed[-1]["lines"])
+        self.assertTrue(pushed[-1]["lines"][1].startswith("#Ja *Nej"), pushed[-1]["lines"])

@@ -19,12 +19,6 @@ from .terminal16_i18n import text
 
 
 class RuntimeViews(Terminal16Lab):
-    def set_language(self, device, language):
-        # Identity preferences use their own connection. Write after the traffic
-        # transaction releases SQLite; language selection never changes traffic.
-        self.service.operations_store.after_commit(lambda: self.service.identities.set_device_language(device, language))
-        super().set_language(device, language)
-
     def __init__(self, service, *, now=monotonic):
         self.service = service
         publication = deepcopy(service.publication().payload)

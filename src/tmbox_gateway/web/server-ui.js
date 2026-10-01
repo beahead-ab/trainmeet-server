@@ -106,7 +106,7 @@
   const network = make("p", "server-network"); network.id = "client-network";
   $("#device-management .section-heading").append(network);
   // Reconnecting a removed client is rare: after the list, not above it.
-  $("#device-list").after($("#device-management .device-reconnect"));
+  $("#device-removed-trying").after($("#device-management .device-reconnect"));
   const placement = card("TMBox-placering", "station-placement");
   placement.append(authored("p", "server-placement-note", "Vänster och höger på stationens boxar. Lokala val behålls när Cloud uppdaterar träffen; tågens destinationer ändras inte."));
   const stationRows = make("div", "server-station-rows"); stationRows.id = "server-station-rows";
@@ -161,7 +161,7 @@
   $('label[for="meet-clock-style"]').before(styleField);
   styleField.append($('label[for="meet-clock-style"]'), $("#meet-clock-style"));
   inlineForm("#connection-badge-form", part("QR-koder på skärmarna"));
-  const codePart = part("Parningskod för TMBoxar");
+  const codePart = part("Kod för appar och TKL");
   const code = move("#connection-badge-code", codePart); code.classList.add("server-network");
   inlineForm("#connection-code-form", codePart);
   inlineForm("#connection-wifi-form", part("Träffens Wi-Fi"));
@@ -227,7 +227,9 @@
     for (const id of ["#local-clock-time", "#local-clock-speed", '#clock-control-form button[type="submit"]']) $(id).disabled = clock.source === "fastclock";
   };
   api.network = connection => {
-    const label = connection.host ? `${connection.host}:${connection.port}${connection.code ? ` · ${t("Kod")} ${connection.code}` : ""}` : t("Anslut klienten till denna server");
+    // Boxes find the server themselves and never use the pairing code; that
+    // code is for the apps and TKL and lives under Settings.
+    const label = connection.host ? `${connection.host}:${connection.port}` : t("Anslut klienten till denna server");
     $("#client-network").textContent = label;
   };
   api.mode = mode => {

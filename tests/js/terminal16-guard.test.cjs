@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {screenChanged, guarded, overlay, times} = require('../../src/tmbox_gateway/terminal16_web/terminal.js');
 
-const frame = {view_token: 'a', lines: ['                ', '*Språk A:Kö12:34'], keys: {
+const frame = {view_token: 'a', lines: ['                ', 'Nr# A:Kö   12:34'], keys: {
   '#': {label: 'Begär klartecken', acts: true}, 'C': {label: 'Föregående tåg', acts: false},
   'D': {label: 'Nästa tåg', acts: false}, 'A': {label: 'Förfrågningskö (0 väntar)', acts: false},
 }};
@@ -12,7 +12,7 @@ const frame = {view_token: 'a', lines: ['                ', '*Språk A:Kö12:34'
 test('a new view or new key meanings is a screen change; the clock ticking is not', () => {
   assert.equal(screenChanged(null, frame), true);
   assert.equal(screenChanged(frame, {...frame}), false);
-  assert.equal(screenChanged(frame, {...frame, lines: ['                ', '*Språk A:Kö12:35']}), false);
+  assert.equal(screenChanged(frame, {...frame, lines: ['                ', 'Nr# A:Kö   12:35']}), false);
   assert.equal(screenChanged(frame, {...frame, view_token: 'b'}), true, 'C to the next train keeps the labels');
   assert.equal(screenChanged(frame, {...frame, keys: {...frame.keys, '#': {label: 'Ge klart', acts: true}}}), true);
   assert.equal(screenChanged(frame, {...frame, keys: {...frame.keys, 'A': {label: 'Förfrågningskö (1 väntar)', acts: false}}}), true);

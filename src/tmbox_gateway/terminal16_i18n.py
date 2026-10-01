@@ -49,8 +49,6 @@ INGET TÅG|NO TRAIN|INTET TOG|INGEN TOG|KEIN ZUG
 FLERA TÅG - ADMIN|MULTIPLE - ADMIN|FLERE - ADMIN|FLERE - ADMIN|MEHRERE - ADMIN
 TÅG: _____|NO.: _____|TOG: _____|TOG: _____|ZUG: _____
 #Sök B:Del|#Find B:Del|#Søg B:Del|#Søk B:Del|#Such B:Del
-*Språk A:Kö|*Lang A:Q|*Sprog A:Kø|*Språk A:Kø|*Spr. A:Q
-#OK C/D *Bak|#OK C/D *Bk|#OK C/D *Ret|#OK C/D *Ret|#OK C/D *Zur
 VÄNTAR PÅ ADMIN|WAITING ADMIN|VENTER PÅ ADMIN|VENTER PÅ ADMIN|WARTE AUF ADMIN
 ANSLUTER|CONNECTING|FORBINDER|KOBLER TIL|VERBINDE
 Förfrågningskö ({count} väntar)|Request queue ({count} waiting)|Forespørgsler ({count} venter)|Forespørsler ({count} venter)|Anfragen ({count} warten)
@@ -89,10 +87,6 @@ Sök tåg|Find train|Søg tog|Søk tog|Zug suchen
 Avbryt inmatning|Cancel input|Annuller indtastning|Avbryt inntasting|Eingabe abbrechen
 Sudda siffra|Erase digit|Slet ciffer|Slett siffer|Ziffer löschen
 Förfrågningskö (avbryt inmatning)|Requests (cancel input)|Forespørgsler (annuller input)|Forespørsler (avbryt input)|Anfragen (Eingabe abbrechen)
-Språk|Language|Sprog|Språk|Sprache
-Spara språk|Save language|Gem sprog|Lagre språk|Sprache speichern
-Föregående språk|Previous language|Forrige sprog|Forrige språk|Vorherige Sprache
-Nästa språk|Next language|Næste sprog|Neste språk|Nächste Sprache
 Skriv tågnummer direkt, eller bläddra med C/D|Type a train number, or browse with C/D|Skriv tognummer, eller blad med C/D|Skriv tognummer, eller bla med C/D|Zugnummer eingeben oder mit C/D blättern
 Tåg {number} · {direction} {station} · planerat {time}|Train {number} · {direction} {station} · scheduled {time}|Tog {number} · {direction} {station} · planlagt {time}|Tog {number} · {direction} {station} · planlagt {time}|Zug {number} · {direction} {station} · geplant {time}
 Avgång till|Departure to|Afgang til|Avgang til|Abfahrt nach

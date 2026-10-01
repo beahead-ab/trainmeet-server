@@ -20,7 +20,6 @@ from .models import ConnectionState as State, DispatchMode
 from .train_routes import resolve_departure, RouteResolutionError
 from .terminal16_glyphs import text_cells, encode_lcd
 from .terminal16_i18n import text as translated, notice as translated_notice
-from .device_ui import LANGUAGES
 from .display_placement import effective_sides
 
 
@@ -30,7 +29,7 @@ from .display_placement import effective_sides
 # avsett för förra bilden inte utför något på den nya - medan bläddring svarar
 # direkt.
 NAVIGATION_ACTIONS = frozenset({
-    "back", "home", "language", "next_language", "previous_language", "save_language",
+    "back", "home",
     "requests", "next_request", "previous_request", "active", "next_active", "previous_active",
     "browse", "next", "previous", "filter", "select", "cancel_view", "reject_view",
     "tracks", "next_track", "previous_track",
@@ -41,7 +40,6 @@ NAVIGATION_ACTIONS = frozenset({
 class Terminal:
     station: str
     language: str = "sv"
-    language_index: int = 0
     selected: str | None = None
     screen: str = "overview"
     track: int = 0
@@ -308,9 +306,6 @@ class Terminal16Lab:
         return buttons
 
     def _view_buttons(self, terminal):
-        if terminal.screen == "language":
-            return {"#": ("save_language", "Spara språk"), "*": ("home", "Tillbaka"),
-                    "C": ("previous_language", "Föregående språk"), "D": ("next_language", "Nästa språk")}
         if terminal.receipt_until is not None:
             return {"#": ("home", "Stäng meddelande"), "*": ("home", "Tillbaka")}
         if terminal.notice:
@@ -318,7 +313,9 @@ class Terminal16Lab:
         if terminal.screen == "overview":
             primary = ("requests", "Visa väntande förfrågningar") if self._requests(terminal) else ("browse", "Visa kommande tåg")
             active = self._active_trains(terminal)
-            return {"#": primary, "*": ("language", "Språk"),
+            # No language menu on the box: the administrator sets each box's
+            # language in Server, so the start screen stays simple.
+            return {"#": primary,
                     "C": ("previous_active", "Föregående aktiva tåg") if active else ("previous", "Föregående tåg"),
                     "D": ("next_active", "Nästa aktiva tåg") if active else ("next", "Nästa tåg"),
                     "B": ("active", "Visa aktiva tåg")}
@@ -389,7 +386,7 @@ class Terminal16Lab:
         buttons = self._buttons(terminal)
         clock = self.engine.meeting_clock()["time"]
         clock = clock if re.fullmatch(r"\d{2}:\d{2}", clock) else "--:--"
-        hint = "*Språk A:Kö"
+        hint = t("Nr# A:Kö")
         first = self._overview(terminal)
         selected = self.legs.get(terminal.selected)
         requests = self._requests(terminal)
@@ -407,9 +404,6 @@ class Terminal16Lab:
                 hint = t("A{count} B:Akt", count=compact(len(requests)))
         if terminal.notice:
             first, hint = row(translated_notice(terminal.language, terminal.notice)), "#OK *=Bak"
-        elif terminal.screen == "language":
-            first = row(LANGUAGES[terminal.language_index][1])
-            hint = "#OK C/D *"
         elif terminal.screen == "requests":
             if position:
                 label, side = self._label(terminal.station, selected)
@@ -592,14 +586,6 @@ class Terminal16Lab:
             terminal.screen = terminal.return_screen if terminal.screen in {"tracks", "cancel", "reject"} else "overview"
         elif action == "home":
             terminal.screen = "overview"
-        elif action == "language":
-            terminal.language_index = [code for code, _ in LANGUAGES].index(terminal.language)
-            terminal.screen = "language"
-        elif action in {"next_language", "previous_language"}:
-            terminal.language_index = (terminal.language_index + (1 if action == "next_language" else -1)) % len(LANGUAGES)
-        elif action == "save_language":
-            self.set_language(device, LANGUAGES[terminal.language_index][0])
-            terminal.screen = "overview"
         elif action in {"requests", "next_request", "previous_request"}:
             self._open_requests(terminal, {"requests": 0, "next_request": 1, "previous_request": -1}[action])
         elif action in {"active", "next_active", "previous_active"}:
@@ -629,9 +615,6 @@ class Terminal16Lab:
                 return self._answer(device, False, message)
         terminal.revision += 1
         return self._answer(device, True)
-
-    def set_language(self, device, language):
-        self.terminals[device].language = language
 
     def _traffic(self, device, terminal, action):
         key = terminal.selected
