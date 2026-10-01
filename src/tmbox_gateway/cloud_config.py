@@ -272,6 +272,7 @@ class CloudConfiguration:
         app.lifecycle.complete_transition(ticket)
         app.refresh_clock_source()
         app.lifecycle_error = ""
+        app.changes.notify("runtime", "traffic", "clock")
         if app.on_config_applied:
             try:
                 app.on_config_applied()

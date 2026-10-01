@@ -102,6 +102,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
             break;
           case '/v1/display': data = { clock: clock(), meet: { id: 'meet-1', name: 'Demo meet' }, active_day: 'Dagl', publication_id: 'pub-1', stations, connections: [{ id: 'a-b', station_a_id: 'a', station_b_id: 'b', track_type: 'single' }], routes: [{ train_number: '421', station_id: 'a', departure_time: '06:05' }, { train_number: '421', station_id: 'b', arrival_time: '06:20' }], services: [{ id: 's-421', train_number: '421', days: 'Dagl', stops: [{ station_id: 'a', stop_order: 0, departure_time: '06:05' }, { station_id: 'b', stop_order: 1, arrival_time: '06:20' }] }], train_positions: positions, connection_states: [{ id: 'a-b', state: lineChannels.length ? 'occupied' : 'free', channels: lineChannels }], connection: { screens: [] } }; break;
           case '/v1/config/check': data = { message: 'Senaste config används.' }; break;
+          // An older server, or one that is full: no stream; pages keep their timers.
+          case '/v1/events': return route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
           case '/v1/train':
             assert.equal(url.searchParams.get('number'), '421');
             data = { train_number: '421', active_day: 'Dagl', services: [{ service_id: 's-421', train_type: 'Godståg', delay_minutes: 3,
@@ -137,6 +139,10 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#pv-connect-card').getByText(/parningskod/i).count(), 0);
     assert.equal(await page.locator('#participant-view a[href="/tmbox/"]').count(), 1, 'One button starts a virtual TMBox');
     assert.equal(await page.locator('#pv-login').getAttribute('href'), '/login');
+    // No stream here (503): the participant view keeps asking every five seconds.
+    positions = [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: 'a', to_station_id: 'b' }];
+    await page.locator('#pv-topology .topology-train.on-line[data-train-number="421"]').waitFor({ timeout: 6500 });
+    positions = [];
     signedIn = true;
     await page.goto('http://127.0.0.1:9999/');
     await page.waitForURL('**/drift');
@@ -352,6 +358,9 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await trainPanel.locator('.route-stop.done').count(), 1);
     assert.equal(await trainPanel.locator('.train-detail-between').textContent(), 'På linjen');
     assert.equal(await page.locator('#drift-upcoming button.server-event[aria-pressed="true"]').first().getAttribute('data-train-number'), '421');
+    // Without a stream (here a 503) Drift keeps its five seconds.
+    assert.ok(calls.some(c => c[1] === '/v1/events'), 'the page asked for the stream');
+    assert.equal(await page.evaluate(() => globalThis.TrainMeetLive.connected), false);
     // The choice survives the five-second refresh, then × closes it.
     const trainCalls = calls.filter(c => c[1] === '/v1/train').length;
     await page.waitForTimeout(5600);

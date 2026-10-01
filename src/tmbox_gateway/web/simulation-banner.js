@@ -7,8 +7,9 @@
   banner.hidden = true;
   banner.style.cssText = "position:sticky;top:0;z-index:100;background:#6e3c10;color:#fff;padding:10px 16px;text-align:center;font:600 15px Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif";
   document.body.prepend(banner);
-  let active = false;
+  let active = false, timer = null;
   async function refresh() {
+    clearTimeout(timer);
     try {
       const response = await fetch("/v1/display", {cache: "no-store", credentials: "same-origin"});
       if (!response.ok) throw new Error("offline");
@@ -19,7 +20,16 @@
     } catch {
       // Never silently remove the warning on a dropped connection.
       if (active) banner.textContent = "SIMULERING · Kontakt med servern saknas";
-    } finally { setTimeout(refresh, 2000); }
+    } finally { clearTimeout(timer); timer = setTimeout(refresh, globalThis.TrainMeetLive?.connected ? 10000 : 2000); }
   }
+  // Listens when the page has a stream open anyway; opens none of its own, so
+  // a virtual TMBox keeps its two-second check.
+  globalThis.TrainMeetLive?.subscribe((topics) => {
+    if (["simulation", "runtime", "clock"].some((name) => topics.has(name))) refresh();
+  }, {passive: true});
+  globalThis.TrainMeetLive?.onStatus?.((connected) => {
+    clearTimeout(timer);
+    timer = setTimeout(refresh, connected ? 10000 : 2000);
+  });
   refresh();
 })();
