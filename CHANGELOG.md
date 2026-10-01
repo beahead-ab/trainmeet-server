@@ -18,6 +18,7 @@ Resten av granskningen av TV-skärmarna mot designen (SkarmBana, SkarmOversikt).
   rad och rader i kolumner – tid, tåg, "avgår Alvesta C mot Lekby" och
   "3 min"; på linjen tåg, sträcka och ankomsttid. Under tågen står om
   trafiken följer tidtabellen eller hur många som är sena.
+- Statusraden ryms även när tåglistan är full eller visar "och N till".
 
 ### Helskärmsvyerna: QR-koderna i ramen, inte i innehållet
 

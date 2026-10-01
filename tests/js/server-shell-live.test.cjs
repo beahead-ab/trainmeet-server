@@ -167,6 +167,24 @@ const root = path.resolve(__dirname, '../..');
           return events.length===4 && events.every(row=>row.getBoundingClientRect().bottom<=card.getBoundingClientRect().bottom-8);
         },snapshot);
         assert.ok(eventsFit,'All four upcoming events fit inside the TV card');
+        // Three train rows, or two plus "and N more", must leave room for
+        // the late-arrival status instead of clipping it at the card edge.
+        for(const count of [3,6]){
+          const result=await clockScreen.evaluate(({snapshot,count})=>{
+            const [from,to]=snapshot.stations;
+            const sample={...snapshot,clock:{...snapshot.clock,time:'14:26:00',running:false},
+              train_positions:Array.from({length:count},(_,i)=>({train_number:String(900+i),status:'connection',connection_id:snapshot.connections[0].id,from_station_id:from.id,to_station_id:to.id})),
+              routes:Array.from({length:count},(_,i)=>({train_number:String(900+i),station_id:to.id,arrival_time:i===0?'14:20':'14:30'}))};
+            syncDisplayClock(sample);
+            renderDashboard(sample);
+            const card=document.querySelector('.server-dashboard-bottom .dash-card:last-child');
+            const status=card.querySelector('.dash-status');
+            return {rows:card.querySelectorAll('.dash-row').length,more:card.querySelectorAll('.dash-row--more').length,
+              late:status.classList.contains('is-late'),
+              fit:[...card.children].every(child=>child.getBoundingClientRect().bottom<=card.getBoundingClientRect().bottom-1)};
+          },{snapshot,count});
+          assert.deepEqual(result,{rows:3,more:count>3?1:0,late:true,fit:true},'Train rows and late-arrival status fit inside the TV card');
+        }
       }
     }
     await screenContext.close();

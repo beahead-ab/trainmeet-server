@@ -592,7 +592,7 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .server-dashboard-bottom .dash-in { text-align: right; color: var(--display-muted); white-space: nowrap; }
 .server-dashboard-bottom .dash-in.is-late { color: #f2c230; }
 .dash-empty { margin: 0; padding: 14px 24px; font-size: 24px; color: var(--display-muted); }
-.dash-status { display: flex; align-items: center; gap: 12px; margin: auto 0 0; padding: 10px 24px; border-top: 1px solid #262626; font-size: 22px; color: var(--display-muted); }
+.server-dashboard-bottom .dash-status { display: flex; align-items: center; gap: 12px; margin: auto 0 0; padding: 10px 24px; border-top: 1px solid #262626; font-size: 22px; line-height: 1.3; color: var(--display-muted); }
 .dash-status::before { content: ""; flex-shrink: 0; width: 12px; height: 12px; border-radius: 50%; background: #5fcf8a; }
 .dash-status.is-late::before { background: #f2c230; }
 .light .dash-head, .light .server-dashboard-bottom .dash-row, .light .dash-status { border-color: #e5e5e5; }
