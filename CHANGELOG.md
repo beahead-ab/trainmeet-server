@@ -20,11 +20,11 @@ ServerSida och Deltagare), inloggat och oinloggat, på dator och mobil.
   statusbubblan syns där bara när den säger något (ny version, ingen kontakt).
 - Drift: varje modul har samma rubrikrad (namn, grå rad, kontroller,
   "Öppna på skärm ↗"). Trafik just nu har filtren och skärmlänken i rubriken,
-  händelserna i kolumner med "om 4 min", och "Inne på stationerna" och
-  "Tidslinje" som två länkar på en rad. Banöversikten är kortets innehåll, inte
+  händelserna i kolumner med "om 4 min". "Inne på stationerna" och
+  "Tidslinje" är fortsatt öppna block enligt 1.23.0. Banöversikten är kortets innehåll, inte
   en ruta i rutan, och korten bredvid varandra är lika höga. Tågdiagrammet går
   kant i kant, visar ungefär fem timmar i stället för nästan hela dagen och har
-  samma gula nu-linje som på TV:n. Klockraden har fälten i mitten, inte i
+  en röd streckad nu-linje enligt Drift-designen. Klockraden har fälten i mitten, inte i
   botten.
 - Klienter: antalet som väntar är en gul etikett vid rubriken, adressen en
   bricka; en box som väntar är en ljusgul rad. TMBox-placering visar

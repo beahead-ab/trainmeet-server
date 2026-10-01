@@ -179,6 +179,9 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#overview-route-search').isVisible(), true);
     assert.equal(await page.locator('#device-management .device-reconnect button').isVisible(), true);
     assert.equal(await page.locator('#traffic-timeline').isVisible(), true);
+    // The design correction keeps 1.23.0's open blocks and updates their
+    // real heading, not the removed disclosure summary.
+    assert.equal(await page.locator('#traffic-stations-heading').textContent(), 'Inne på stationerna (2)');
     // TMBox-placering lists every station at once, however many there are.
     extraPlacementStations = 6;
     await page.evaluate(() => refreshCloudPresentation());
@@ -507,6 +510,12 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await connectionSettings.locator('#connection-code-form').count(), 1);
     assert.equal(await page.locator('.clock-control-card #connection-badge-code, .clock-control-card #connection-code-form').count(), 0);
     await page.locator('#server-identity-form').waitFor({state:'visible'});
+    // The settings kit moves existing controls into rows and card feet;
+    // their handlers and the separate TKL connection section stay intact.
+    assert.equal(await page.locator('#sync-and-devices .tm-lines > .tm-line').count(), 4);
+    assert.equal(await page.locator('#sync-and-devices .tm-card__foot [data-open-modal="runtime-sync-form-modal"]').isVisible(), true);
+    assert.equal(await page.locator('#admin-users-settings .section-heading #users-invite-open').isVisible(), true);
+    assert.equal(await page.locator('#software-update-settings .update-actions #software-version').count(), 1);
     await page.locator('#admin-server-name').fill('Verified server');
     await page.evaluate(()=>refreshInfo());
     assert.equal(await page.locator('#admin-server-name').inputValue(),'Verified server');

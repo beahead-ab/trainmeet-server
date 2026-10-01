@@ -482,7 +482,7 @@
       const stat = make("div", tone ? `server-stat--${tone}` : ""); stat.append(make("strong", "", String(count)), authored("span", "", label)); stats.append(stat);
     }
     const online = $("#traffic-online")?.closest("section"); if (online) online.hidden = !moving.length;
-    const atStations = $("#overview-traffic .drift-more > details:first-child > summary");
+    const atStations = $("#traffic-stations-heading");
     if (atStations) atStations.textContent = `${t("Inne på stationerna")} (${(snapshot.stations || []).length})`;
     // Same small capitals as "På linjen just nu" under it; then one row per
     // event in columns: time, train, where and what, and how long until.
