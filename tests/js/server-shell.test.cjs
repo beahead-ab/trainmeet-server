@@ -380,6 +380,27 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     for (const heading of await page.locator('.overview-section-heading a').all()) {
       if (await heading.isVisible()) assert.ok((await heading.boundingBox()).height < 22, 'a heading link stays on one line');
     }
+    // The chosen train's badge sits under the map: upright on a phone, the
+    // line ends at the bottom, where the badge used to cover the last station.
+    await page.evaluate(() => selectOverviewTrain('421'));
+    const badge = await page.locator('#overview-route-badge').boundingBox();
+    const map = await page.locator('#overview-topology').boundingBox();
+    assert.ok(badge.y >= map.y + map.height, `the badge (${badge.y}) is below the map (${map.y + map.height})`);
+    await page.evaluate(() => selectOverviewTrain(null));
+    // A long address wraps inside the connect card instead of running out of it.
+    const spill = await page.evaluate(() => {
+      renderConnectCard({ host: 'trainmeet-server-grimslov-2027.example.org', port: 8787, code: '123-456', code_state: 'valid' });
+      const card = document.querySelector('#connect-terminals');
+      const inner = card.getBoundingClientRect().right - parseFloat(getComputedStyle(card).paddingRight);
+      // The text itself, not just its box: overflowing text leaves the box as it was.
+      const right = element => { const range = document.createRange(); range.selectNodeContents(element); return Math.max(element.getBoundingClientRect().right, range.getBoundingClientRect().right); };
+      return [...card.querySelectorAll('.connect-fact, .connect-fact > *')].filter(element => right(element) > inner + 0.5).map(element => element.id || element.className);
+    });
+    assert.deepEqual(spill, [], 'nothing in the connect card runs past its edge');
+    // A usual address stays whole on one line; Kopiera moves below it instead.
+    await page.evaluate(() => renderConnectCard({ host: '192.168.100.200', port: 8787, code: '123-456', code_state: 'valid' }));
+    assert.ok((await page.locator('#connect-address').boundingBox()).height < 30, 'the address is not broken');
+    await page.evaluate(() => refreshLocalClock());
     await page.setViewportSize({ width: 1200, height: 900 });
     // Older paths record only the line position; that is on the line too.
     await showTraffic([], [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: 'a', to_station_id: 'b' }]);

@@ -719,7 +719,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .station-inspector-trains > li { color: var(--muted); font-size: 11px; }
 .station-inspector-trains button { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 34px; padding: 0 9px; color: var(--ink); background: var(--secondary); font-size: 11px; }
 .station-inspector-trains button:hover { color: var(--trainmeet); background: var(--trainmeet-soft); }
-.overview-route-badge { position: relative; z-index: 4; width: fit-content; min-width: 180px; margin: -47px auto 13px; padding: 7px 18px; border-radius: 999px; color: var(--primary-foreground); background: var(--trainmeet); text-align: center; font-size: 11px; font-weight: 600; box-shadow: 0 5px 16px rgba(35, 89, 185, .22); }
+/* Under the map, never over it: on a phone the line stands upright and its
+   last station is at the bottom, where the badge used to sit. */
+.overview-route-badge { position: relative; z-index: 4; width: fit-content; min-width: 180px; margin: 10px auto 13px; padding: 7px 18px; border-radius: 999px; color: var(--primary-foreground); background: var(--trainmeet); text-align: center; font-size: 11px; font-weight: 600; box-shadow: 0 5px 16px rgba(35, 89, 185, .22); }
 .overview-routes-section { display: grid; gap: 8px; }
 .overview-routes-heading { align-items: center; padding: 0 2px; }
 .route-explorer { display: grid; grid-template-columns: 145px minmax(310px, 1fr) 210px; min-height: 390px; overflow: hidden; }

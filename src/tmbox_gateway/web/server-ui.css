@@ -182,7 +182,7 @@ button.server-event[aria-pressed="true"] { background: var(--trainmeet-soft); co
 .train-detail-stops .route-stop.done > i { border-color: var(--muted); background: var(--muted); }
 .train-detail-stops .route-stop.current > i { border-color: var(--trainmeet); background: var(--trainmeet); box-shadow: 0 0 0 3px var(--trainmeet-soft); }
 .train-detail-stops .route-stop.current b { color: var(--trainmeet); }
-.train-detail-between { margin: -6px 0 6px 25px; color: var(--trainmeet); font-size: 11px; font-weight: 600; }
+.train-detail-between { margin: 0 0 6px 25px; color: var(--trainmeet); font-size: 11px; font-weight: 600; }
 .server-details { font-size: 12px; padding: 6px 0; }
 .server-details > summary { cursor: pointer; font-weight: 600; }
 /* A part of a Drift module: its name and what is in it, never folded. */
@@ -207,7 +207,6 @@ button.server-event[aria-pressed="true"] { background: var(--trainmeet-soft); co
 /* Tågrutter: the chosen train on a small map above its calls. A call is a
    plain row, its name over its times, not a framed button. */
 .route-stop-button { display: block; min-height: 0; padding: 3px 8px; border: 0; text-align: left; font-weight: 400; }
-#overview-route-detail .train-detail-between { margin: 0 0 6px 25px; }
 .route-map { display: block; width: 100%; height: 180px; margin: 0 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--row-alt); }
 #server-system-settings { border-color: #e6b8b8; }
 #server-system-settings h2 { color: var(--danger-text); }
@@ -547,9 +546,14 @@ html, body { overflow-x: clip; }
 }
 /* Drift › Anslut ställverk och appar: the address and the code, large, with what to type where. */
 #connect-terminals .connect-facts { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 6px 0 4px; }
-#connect-terminals .connect-fact { display: grid; grid-template-columns: auto auto; align-items: center; gap: 2px 10px; }
-#connect-terminals .connect-fact .server-field-label { grid-column: 1 / -1; }
-#connect-terminals .connect-value { font: 700 20px/1.2 var(--font-mono); letter-spacing: .02em; }
+/* The label, then the value and Kopiera; on a phone Kopiera goes to its own
+   line rather than breaking the address. */
+#connect-terminals .connect-fact { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; max-width: 100%; }
+#connect-terminals .connect-fact .server-field-label { flex-basis: 100%; }
+/* An address longer than the card (a long host name) wraps inside it. */
+#connect-terminals .connect-value { min-width: 0; overflow-wrap: anywhere; font: 700 20px/1.2 var(--font-mono); letter-spacing: .02em; }
+/* A full IPv4 address with its port fits one line on a phone. */
+@media (max-width: 480px) { #connect-terminals .connect-value { font-size: 17px; } }
 #connect-terminals #connect-code { font-size: 26px; letter-spacing: .08em; }
 #connect-terminals .connect-copy { font-size: 11.5px; padding: 3px 8px; min-height: 24px; }
 #connect-terminals .connect-note:empty { display: none; }
