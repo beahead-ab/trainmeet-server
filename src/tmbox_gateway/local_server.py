@@ -19,7 +19,7 @@ from pathlib import Path
 from . import backup, mqtt_session
 from .central_sync import DEFAULT_RUNTIME_PUBLICATION_URL
 from .engine import TrafficEngine
-from .http_server import HTTPServerConfig, TrainMeetHTTPApplication, TrainMeetHTTPServer
+from .http_server import CONNECTION_CODE_LABEL, HTTPServerConfig, TrainMeetHTTPApplication, TrainMeetHTTPServer
 from .identity import DeviceKind, IdentityStore, PairingService
 from .lifecycle import SQLiteMeetLifecycle, MeetLifecycleError
 from .local_config import SQLiteLocalConfigurationStore
@@ -176,7 +176,7 @@ def main() -> None:
         set(engine.config.panels),
     )
     connection_code = args.pairing_code or _load_or_create_connection_code(state_directory)
-    identities.revoke_pairing_codes(label="Lokal enkel parkoppling")
+    identities.revoke_pairing_codes(label=CONNECTION_CODE_LABEL)
     pairing_code = connection_code
     # Only a code that was actually issued may reach the screens; without panels
     # there is nothing to pair with and the code would not work.
@@ -200,7 +200,7 @@ def main() -> None:
             ],
             ttl=timedelta(hours=validity_hours) if validity_hours else None,
             max_uses=50,
-            label="Lokal enkel parkoppling",
+            label=CONNECTION_CODE_LABEL,
             code=connection_code,
         )
         issued_code = pairing_code

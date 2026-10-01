@@ -107,11 +107,37 @@
   $("#device-management .section-heading").append(network);
   // Reconnecting a removed client is rare: after the list, not above it.
   $("#device-removed-trying").after($("#device-management .device-reconnect"));
+  // Signal boxes (TKL) and apps pair with one code. It belongs where the
+  // clients are, not in the display settings, with what to type where.
+  const connect = card("Anslut ställverk och appar", "connect-terminals");
+  const connectFacts = make("div", "connect-facts");
+  for (const [label, id] of [["Serverns adress", "connect-address"], ["Anslutningskod", "connect-code"]]) {
+    const fact = make("div", "connect-fact");
+    const value = make("b", "connect-value"); value.id = id;
+    const copy = authored("button", "secondary connect-copy", "Kopiera"); copy.type = "button"; copy.dataset.copy = id;
+    copy.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(value.textContent); copy.textContent = t("Kopierat"); }
+      catch { copy.textContent = t("Kopiera inte möjligt"); }
+      setTimeout(() => { copy.textContent = t(copy.dataset.tmText); }, 2000);
+    });
+    fact.append(authored("span", "server-field-label", label), value, copy);
+    connectFacts.append(fact);
+  }
+  const connectNote = make("p", "connect-note"); connectNote.id = "connect-code-note"; connectNote.setAttribute("role", "status");
+  const steps = make("ol", "connect-steps");
+  for (const step of ["Starta TKL och skriv adressen under TrainMeet Server. Tryck Anslut.",
+    "Skriv koden i rutorna under Anslutningskod. Tryck Fortsätt.", "Välj station och bekräfta. Ställverket syns sedan under Klienter."]) {
+    steps.append(authored("li", "", step));
+  }
+  const renew = authored("button", "secondary", "Ny kod"); renew.type = "button"; renew.id = "connect-new-code";
+  const renewNote = authored("p", "connect-renew-note", "En ny kod gäller för nya ställverk och appar. De som redan är anslutna fortsätter.");
+  connect.append(connectFacts, connectNote, steps, renew, renewNote);
+  $("#device-management").after(connect);
   const placement = card("TMBox-placering", "station-placement");
   placement.append(authored("p", "server-placement-note", "Vänster och höger på stationens boxar. Lokala val behålls när Cloud uppdaterar träffen; tågens destinationer ändras inte."));
   const stationRows = make("div", "server-station-rows"); stationRows.id = "server-station-rows";
   placement.append(stationRows);
-  $("#device-management").after(placement);
+  connect.after(placement);
   mark("#display-placement-section");
   const two = make("div", "server-grid-two"); two.id = "drift-traffic-grid"; overview.append(two);
   move(".topology-overview-card", two); move("#overview-traffic", two);
@@ -149,13 +175,15 @@
   const settings = $("#admin-view");
   $("#settings-heading p").textContent = "";
   const nav = make("nav", "server-settings-nav"); nav.setAttribute("aria-label", t("Inställningar"));
-  const targets = [["traff", "Träff och Cloud"], ["server", "Den här servern"], ["anvandare", "Användare"], ["skarmar", "Skärmar och klocka"], ["sprak", "Språk"], ["uppdatering", "Programuppdatering"], ["farozon", "Farozon"]];
+  const targets = [["traff", "Träff och Cloud"], ["server", "Den här servern"], ["anslutning", "Anslutning"], ["anvandare", "Användare"], ["skarmar", "Skärmar och klocka"], ["sprak", "Språk"], ["uppdatering", "Programuppdatering"], ["farozon", "Farozon"]];
+  // The code for apps and TKL and how long it holds: its own section.
+  const connection = card("Anslutning", "connection-settings"); settings.append(connection);
   for (const [id, label] of targets) { const a = authored("a", "tm-seg", label); a.href = `/installningar#${id}`; nav.append(a); }
   const back = authored("a", "tm-btn", "← Tillbaka till driften"); back.href = "/drift"; nav.append(back);
   $("#settings-heading").append(nav);
   const columns = make("div", "server-settings-columns"); const left = make("div"); const right = make("div"); columns.append(left, right); settings.append(columns);
   // Farozon comes last of all, under both columns, on a phone as on a computer.
-  const sections = [["#sync-and-devices", left, "traff"], ["#server-identity-settings", left, "server"], ["#admin-users-settings", right, "anvandare"], [".clock-control-card", right, "skarmar"], ["#language-settings", right, "sprak"], ["#software-update-settings", right, "uppdatering"], ["#server-system-settings", settings, "farozon"]];
+  const sections = [["#sync-and-devices", left, "traff"], ["#server-identity-settings", left, "server"], ["#connection-settings", left, "anslutning"], ["#admin-users-settings", right, "anvandare"], [".clock-control-card", right, "skarmar"], ["#language-settings", right, "sprak"], ["#software-update-settings", right, "uppdatering"], ["#server-system-settings", settings, "farozon"]];
   for (const [selector, column, anchor] of sections) {
     const section = move(selector, column); section.classList.add("server-card"); section.dataset.anchor = anchor;
     const link = make("span", "server-anchor"); link.id = anchor; section.prepend(link);
@@ -181,9 +209,9 @@
   $('label[for="meet-clock-style"]').before(styleField);
   styleField.append($('label[for="meet-clock-style"]'), $("#meet-clock-style"));
   inlineForm("#connection-badge-form", part("QR-koder på skärmarna"));
-  const codePart = part("Kod för appar och TKL");
-  const code = move("#connection-badge-code", codePart); code.classList.add("server-network");
-  inlineForm("#connection-code-form", codePart);
+  connection.append(authored("p", "server-placement-note", "Ställverk (TKL) och appar ansluter med serverns adress och den här koden. Samma uppgifter finns i Drift under Klienter."));
+  const code = move("#connection-badge-code", connection); code.classList.add("server-network");
+  inlineForm("#connection-code-form", connection);
   inlineForm("#connection-wifi-form", part("Träffens Wi-Fi"));
   label($("#users-invite-open"), "+ Bjud in");
 
@@ -232,6 +260,7 @@
     $("#drift-simulation").hidden = us;
     $("#device-management").hidden = us;
     $("#station-placement").hidden = us;
+    $("#connect-terminals").hidden = us;
     $("#drift-traffic-grid").hidden = us;
     $(".overview-graph-card").hidden = us;
     $("#header-cloud-status").hidden = !meet;

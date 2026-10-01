@@ -86,6 +86,8 @@ ADMIN_COOKIE_MAX_AGE = 12 * 60 * 60
 # A box pings every five seconds and gives up its own session after fifteen.
 # Twenty seconds of silence is therefore a box with a problem; after a quarter
 # of an hour it is simply offline.
+# The one code for apps, TKL and boxes, in Settings and on Drift.
+CONNECTION_CODE_LABEL = "Lokal enkel parkoppling"
 DEVICE_ONLINE_SECONDS = 20
 DEVICE_OFFLINE_SECONDS = 15 * 60
 
@@ -306,6 +308,8 @@ class TrainMeetHTTPApplication:
         # Written from the MQTT network thread and HTTP threads, one key at a
         # time; read with .get().
         self.device_seen: dict[str, float] = {}
+        # TKL signal boxes: the station each last asked for, in memory.
+        self.terminal_stations: dict[str, str] = {}
         self.wall_clock = time.time
         self._last_browser_prune: datetime | None = None
         self.us_store = us_store
@@ -503,9 +507,13 @@ class TrainMeetHTTPApplication:
         return self.terminal16.command(client.client_id, payload)
 
     def refresh_connection_grants(self, *, new_meet=False):
-        """Refresh allowed panels after hot activation; keep admin sessions intact."""
+        """Refresh allowed panels after hot activation; keep admin sessions intact.
+
+        A new meet gets a new code: grants from the last meet must not let a
+        terminal into this one. The code is saved where the console and the
+        installer read it, so all of them show the code that works."""
         panels = sorted(self.engine.config.panels)
-        self.identities.revoke_pairing_codes(label="Lokal enkel parkoppling")
+        self.identities.revoke_pairing_codes(label=CONNECTION_CODE_LABEL)
         code = ""
         if panels:
             code = self.config.connection_code if not new_meet else ""
@@ -515,7 +523,11 @@ class TrainMeetHTTPApplication:
                 allowed_kinds=[DeviceKind.SWIFT_PANEL, DeviceKind.SWIFT_ADMIN, DeviceKind.WEB_ADMIN,
                                DeviceKind.TKL_TERMINAL, DeviceKind.ESP32_PANEL],
                 ttl=timedelta(hours=hours) if hours else None, max_uses=50,
-                label="Lokal enkel parkoppling", code=code)
+                label=CONNECTION_CODE_LABEL, code=code)
+            if self.config.state_dir and Path(self.config.state_dir).is_dir():
+                path = Path(self.config.state_dir) / "connection-code.txt"
+                path.write_text(code.replace("-", "") + "\n", encoding="utf-8")
+                path.chmod(0o640)
         self.config = replace(self.config, connection_code=code)
 
     def server_context(self, client: PairedClient) -> dict[str, Any]:
@@ -860,6 +872,7 @@ class TrainMeetHTTPApplication:
             "message": "Grundinstallationen är klar. Servern använder den valda träffen.",
         }
 
+    @announces("devices")  # a signal box or an app has joined: Klienter shows it
     def pair(self, payload: dict[str, Any], request_host: str) -> dict[str, Any]:
         try:
             kind = DeviceKind(str(payload.get("device_kind", DeviceKind.SWIFT_PANEL.value)))
@@ -1245,11 +1258,46 @@ class TrainMeetHTTPApplication:
                 for device in self.identities.removed_devices()
                 if (connection := self._device_connection(device))["state"] != "offline"
             ],
+            "terminals": self._terminals(),
             "stations": [
                 {"id": station.id, "code": station.code, "name": station.name}
                 for station in self.engine.config.stations.values()
             ],
         }
+
+    def _terminals(self) -> list[dict[str, Any]]:
+        """Paired TKL signal boxes: name, station, whether it is heard."""
+        now = self.wall_clock()
+        stations = self.engine.config.stations
+        terminals = []
+        for terminal in self.identities.enabled_clients():
+            if terminal.kind != DeviceKind.TKL_TERMINAL:
+                continue
+            seen = self.device_seen.get(terminal.client_id)
+            station = stations.get(self.terminal_stations.get(terminal.client_id, ""))
+            terminals.append({
+                "client_id": terminal.client_id,
+                "name": terminal.display_name,
+                "station": {"id": station.id, "code": station.code, "name": station.name} if station else None,
+                # After a new meet it has no station until it pairs again with the new code.
+                "has_access": bool(terminal.panel_ids),
+                "connection": {"state": "offline" if seen is None else _device_state(now - seen, True),
+                               "last_seen": None if seen is None else datetime.fromtimestamp(seen, timezone.utc).isoformat()},
+            })
+        return sorted(terminals, key=lambda item: item["name"].casefold())
+
+    @announces("devices")
+    def remove_terminal(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Its key stops working at once; it can pair again with the code."""
+        self._require_admin(client)
+        client_id = str(payload.get("client_id") or "")
+        terminal = self.identities.client(client_id)
+        if terminal is None or terminal.kind != DeviceKind.TKL_TERMINAL:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "terminal_not_found", "Ställverket finns inte")
+        self.identities.disable_client(client_id)
+        self.device_seen.pop(client_id, None)
+        self.terminal_stations.pop(client_id, None)
+        return {"removed": True, "client_id": client_id}
 
     def _device_supports_language(self, device_id: str) -> bool:
         client = self.identities.client(device_id)
@@ -1422,7 +1470,11 @@ class TrainMeetHTTPApplication:
         return {
             "host": host,
             "port": self.config.http_port,
-            "code": self.config.connection_code,
+            # The code lets a TKL terminal or a box in. /v1/display is public
+            # (and on the Internet for server.trainmeet.app), and no screen
+            # shows the code any more, so only an administrator is given it.
+            "code": self.config.connection_code if private else "",
+            "code_state": self._connection_code_state() if private else None,
             "screens": screens,
             "validity_hours": (
                 self.runtime_store.connection_code_validity_hours()
@@ -1438,6 +1490,31 @@ class TrainMeetHTTPApplication:
                 else DEFAULT_WEB_CLIENT_TTL_MINUTES
             ),
         }
+
+    def _connection_code_state(self) -> str:
+        """Why a TKL terminal can or cannot pair with the code right now."""
+        if self.lifecycle and (self.lifecycle.selected() or {}).get("region") == "us":
+            return "us"
+        if not self.config.connection_code:
+            return "no_meet" if not self.runtime_store or self.runtime_store.active() is None else "no_panels"
+        state = self.identities.pairing_code_state(label=CONNECTION_CODE_LABEL)
+        if state is None:
+            return "no_panels"
+        if state["uses"] >= state["max_uses"]:
+            return "used_up"
+        if datetime.fromisoformat(state["expires_at"]) < datetime.now(timezone.utc):
+            return "expired"
+        return "valid"
+
+    @announces("devices")
+    def renew_connection_code(self, client: PairedClient) -> dict[str, Any]:
+        """A new code for new terminals and boxes. Those already paired keep their keys."""
+        self._require_admin(client)
+        if not self.engine.config.panels:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "no_panels",
+                "Träffen i Cloud har inga stationspaneler, så ingen kod kan ges. Lägg till TMBox-paneler i Cloud och publicera.")
+        self.refresh_connection_grants(new_meet=True)
+        return self.connection_details(private=True)
 
     def configure_connection_badge(
         self,
@@ -1856,6 +1933,11 @@ class TrainMeetHTTPApplication:
     def _require_station_access(self, client: PairedClient, station_id: str) -> None:
         if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
             return
+        if client.kind == DeviceKind.TKL_TERMINAL:
+            # A signal box asks for its station every few seconds: that is its
+            # sign of life in Klienter, and the station it works.
+            self.note_device_seen(client.client_id)
+            self.terminal_stations[client.client_id] = station_id
         current = self.identities.client(client.client_id)
         if current is None and client.kind in {DeviceKind.ESP32_PANEL, DeviceKind.TKL_TERMINAL}:
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "station_not_assigned", "Terminalen har inte tillgång till stationen")
@@ -3998,6 +4080,12 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/devices/remove":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.remove_device(client, payload))
+                return
+            if path == "/v1/terminals/remove":
+                self._send_json(HTTPStatus.OK, self.server.application.remove_terminal(self._authenticated_client(), payload))
+                return
+            if path == "/v1/display/connection/code":
+                self._send_json(HTTPStatus.OK, self.server.application.renew_connection_code(self._authenticated_client()))
                 return
             if path == "/v1/devices/language":
                 client = self._authenticated_client()

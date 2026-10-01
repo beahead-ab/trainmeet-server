@@ -42,6 +42,12 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     // recorded positions, set by each step of the test.
     let lineChannels = [];
     let positions = [];
+    // Connecting a signal box (TKL): the code, why it is missing, and the paired ones.
+    let connectionCode = '262-617', codeState = 'valid', renewals = 0;
+    let terminals = [{ client_id: 'tkl-cda', name: 'CDA TKL 1', station: { id: 'a', code: 'A', name: 'Alpha' }, has_access: true,
+      connection: { state: 'online', last_seen: null } }];
+    const connection = () => ({ host: '192.168.1.20', port: 8787, code: connectionCode, code_state: codeState, screens: [],
+      validity_hours: 0, wifi: { name: '', password: '' }, web_client_ttl_minutes: 30 });
     const presentation = () => ({supported: region === 'eu', publication_id: 'pub-1', config_version: 2, findings,
       stations: [{station_id: 'a', code: 'A', name: 'Alpha', connections: [
         {connection_id: 'a-b', other_station_code: 'B', other_station_name: 'Beta', default_side: 'left', side: placementSide, overridden: placementOverride}]}]});
@@ -83,7 +89,12 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
             serverName = JSON.parse(request.postData()).server_name;
             data = { server_name: serverName }; break;
           case '/v1/admin/access': data = { username: 'admin', password_configured: true }; break;
-          case '/v1/devices': data = { devices, stations: [{ id: 'a', code: 'A', name: 'Alpha' }] }; break;
+          case '/v1/devices': data = { devices, terminals, stations: [{ id: 'a', code: 'A', name: 'Alpha' }] }; break;
+          case '/v1/display/connection': data = connection(); break;
+          case '/v1/display/connection/code': renewals += 1; connectionCode = '777-111'; codeState = 'valid'; data = connection(); break;
+          case '/v1/terminals/remove':
+            terminals = terminals.filter(terminal => terminal.client_id !== JSON.parse(request.postData()).client_id);
+            data = { removed: true }; break;
           case '/v1/devices/remove':
             if (removeFails) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Tillfälligt fel' }) });
             devices = devices.filter(device => device.device_id !== JSON.parse(request.postData()).device_id);
@@ -159,6 +170,46 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#overview-timetable').getAttribute('open'), null);
     assert.equal(await page.locator('#traffic-only-deviations').isChecked(), true);
     assert.equal(await page.locator('#overview-graph').isVisible(), true);
+    // Connecting a signal box (1.22.0): under Klienter, the address and the
+    // code to type into TKL, and each paired signal box with its station.
+    const connect = page.locator('#connect-terminals');
+    assert.equal(await page.locator('#device-management').evaluate(card => card.nextElementSibling.id), 'connect-terminals');
+    assert.equal(await connect.locator('h2').textContent(), 'Anslut ställverk och appar');
+    await connect.locator('#connect-code').getByText('262-617', { exact: true }).waitFor();
+    assert.equal(await connect.locator('#connect-address').textContent(), 'http://192.168.1.20:8787');
+    // Behind Caddy on server.trainmeet.app the box comes in where this page did.
+    assert.equal(await page.evaluate(() => connectAddress({host: '10.0.0.5', port: 8787}, 'https://server.trainmeet.app')), 'https://server.trainmeet.app');
+    assert.equal(await connect.locator('.connect-steps li').count(), 3);
+    assert.equal(await connect.locator('#connect-code-note').isVisible(), false);
+    const terminalRow = page.locator('#terminal-list .terminal-row[data-client-id="tkl-cda"]');
+    assert.equal(await page.locator('#terminal-list h3').textContent(), 'Ställverk (TKL)');
+    assert.match(await terminalRow.textContent(), /CDA TKL 1.*A · Alpha.*Online/);
+    for (const [state, note, renew] of [
+      ['used_up', /använts 50 gånger/, true], ['expired', /gått ut/, true],
+      ['no_panels', /inga stationspaneler/, false], ['no_meet', /ingen aktiv träff/, false]]) {
+      codeState = state;
+      await page.evaluate(() => refreshLocalClock());
+      await connect.locator('#connect-code-note').getByText(note).waitFor();
+      assert.equal(await connect.locator('#connect-code').textContent(), '–', state);
+      assert.equal(await connect.locator('#connect-new-code').isVisible(), renew, state);
+    }
+    codeState = 'used_up';
+    await page.evaluate(() => refreshLocalClock());
+    await connect.locator('#connect-new-code').click();
+    // At once, from the answer: not on Drift's next refresh.
+    await connect.locator('#connect-code').getByText('777-111', { exact: true }).waitFor({ timeout: 1500 });
+    assert.equal(renewals, 1);
+    assert.equal(await connect.locator('#connect-code-note').isVisible(), false);
+    terminals[0] = { ...terminals[0], has_access: false };
+    await page.evaluate(() => refreshDevices());
+    await terminalRow.getByText('Ny träff: ange den nya koden i ställverket').waitFor();
+    await terminalRow.locator('.terminal-remove').click();
+    await terminalRow.getByText(/kopplas bort direkt/).waitFor();
+    await terminalRow.getByRole('button', { name: 'Ta bort', exact: true }).click();
+    await page.locator('#terminal-list').waitFor({ state: 'hidden', timeout: 1500 });
+    assert.deepEqual(terminals, []);
+    assert.equal(JSON.parse(calls.find(c => c[1] === '/v1/terminals/remove')[2]).client_id, 'tkl-cda');
+
     // Drift as one whole (1.20.0). The train diagram is drawn without opening
     // the timetable, and nothing is lit until someone picks a train.
     await page.locator('#overview-graph .overview-train-group[data-train-number="421"]').waitFor();
@@ -379,6 +430,12 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
 
     // Drafts stay intact when the live state refreshes or a save fails.
     await page.getByRole('link',{name:'Inställningar',exact:true}).click();
+    // Settings › Anslutning: the code and how long it holds, out of Skärmar och klocka.
+    const connectionSettings = page.locator('#connection-settings');
+    assert.equal(await page.locator('.server-settings-nav a[href="/installningar#anslutning"]').textContent(), 'Anslutning');
+    assert.equal(await connectionSettings.locator('#connection-badge-code').count(), 1);
+    assert.equal(await connectionSettings.locator('#connection-code-form').count(), 1);
+    assert.equal(await page.locator('.clock-control-card #connection-badge-code, .clock-control-card #connection-code-form').count(), 0);
     await page.locator('#server-identity-form').waitFor({state:'visible'});
     await page.locator('#admin-server-name').fill('Verified server');
     await page.evaluate(()=>refreshInfo());
@@ -487,6 +544,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#drift-simulation').isVisible(),false);
     assert.equal(await page.locator('#device-management').isVisible(),false);
     assert.equal(await page.locator('#station-placement').isVisible(),false);
+    assert.equal(await page.locator('#connect-terminals').isVisible(),false);
     assert.equal(await page.locator('#overview-traffic').isVisible(),false);
     assert.equal(await page.locator('#drift-timetable').isVisible(),false);
     assert.equal(calls.some(c=>c[1].includes('local-configuration')||c[1]==='/v1/operating-mode'),false);

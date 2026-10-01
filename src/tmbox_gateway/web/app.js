@@ -1786,7 +1786,9 @@ async function refreshDevices() {
   state.deviceLanguages = payload.languages || [];
   state.stations = payload.stations || [];
   state.removedTrying = payload.removed_trying || [];
+  state.terminals = payload.terminals || [];
   renderDevices({ devices: state.devices, stations: state.stations });
+  renderTerminals(state.terminals);
   renderRemovedTrying(state.removedTrying, state.stations);
 }
 
@@ -2215,6 +2217,92 @@ function renderConnectionBadgeSettings(connection) {
   badge.textContent = connection.code
     ? `${connection.host}:${connection.port} · ${t("Kod")} ${connection.code}`
     : t("Ingen kod utfärdad");
+  renderConnectCard(connection);
+}
+
+// Drift › Anslut ställverk och appar: what to type into TKL, and why it
+// cannot be done when it cannot.
+const CONNECT_CODE_NOTES = {
+  valid: "",
+  no_panels: "Ingen kod: träffen i Cloud har inga stationspaneler. Lägg till TMBox-paneler i Cloud och publicera.",
+  no_meet: "Ingen kod: servern har ingen aktiv träff ännu. Koppla servern till en träff under Inställningar.",
+  used_up: "Koden har använts 50 gånger och tar inte emot fler. Ta en ny kod.",
+  expired: "Koden har gått ut. Ta en ny kod, eller ändra hur länge koden gäller under Inställningar → Anslutning.",
+};
+// Behind a TLS proxy (server.trainmeet.app) the signal box reaches the Server
+// where this page came from, not on the port the Server itself listens on.
+function connectAddress(connection, origin) {
+  if (origin.startsWith("https:")) return origin;
+  return connection.host ? `http://${connection.host}:${connection.port}` : "–";
+}
+
+function renderConnectCard(connection) {
+  const card = document.querySelector("#connect-terminals");
+  if (!card) return;
+  const state = connection.code_state || "no_meet";
+  card.dataset.state = state;
+  document.querySelector("#connect-address").textContent = connectAddress(connection, location.origin);
+  document.querySelector("#connect-code").textContent = state === "valid" ? connection.code : "–";
+  document.querySelector("#connect-code-note").textContent = t(CONNECT_CODE_NOTES[state] || "");
+  document.querySelector("#connect-new-code").hidden = !["valid", "used_up", "expired"].includes(state);
+}
+
+document.querySelector("#connect-new-code")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const note = document.querySelector("#connect-code-note");
+  button.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/display/connection/code", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || t("Kunde inte ta en ny kod"));
+    renderConnectionBadgeSettings(result);
+  } catch (error) { note.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
+// Klienter › Ställverk (TKL): each paired signal box, its station, whether it
+// is heard, and Ta bort. A removed one can pair again with the code.
+function renderTerminals(terminals) {
+  const host = document.querySelector("#terminal-list");
+  if (!host || host.querySelector(".device-inline-edit")) return;
+  host.replaceChildren();
+  host.hidden = !terminals.length;
+  if (!terminals.length) return;
+  const heading = document.createElement("h3"); heading.textContent = t("Ställverk (TKL)");
+  host.append(heading);
+  for (const terminal of terminals) {
+    const row = document.createElement("div"); row.className = "status-row terminal-row";
+    row.dataset.clientId = terminal.client_id;
+    const identity = document.createElement("div");
+    const name = document.createElement("b"); name.textContent = terminal.name;
+    const kind = document.createElement("small"); kind.textContent = "TKL";
+    identity.append(name, kind);
+    const station = document.createElement("span");
+    station.textContent = !terminal.has_access ? t("Ny träff: ange den nya koden i ställverket")
+      : terminal.station ? `${terminal.station.code} · ${terminal.station.name}` : t("Ingen station vald ännu");
+    const actions = document.createElement("div"); actions.className = "device-actions";
+    const remove = document.createElement("button"); remove.type = "button"; remove.className = "secondary terminal-remove";
+    remove.textContent = t("Ta bort");
+    remove.addEventListener("click", () => {
+      const confirm = document.createElement("div"); confirm.className = "device-inline-edit server-actions";
+      const question = document.createElement("span"); question.textContent = t("Ställverket kopplas bort direkt. Det kan anslutas igen med koden. Trafik och historik behålls.");
+      const yes = document.createElement("button"); yes.type = "button"; yes.textContent = t("Ta bort");
+      const no = document.createElement("button"); no.type = "button"; no.textContent = t("Avbryt");
+      no.addEventListener("click", () => { confirm.remove(); renderTerminals(state.terminals || []); });
+      yes.addEventListener("click", async () => {
+        yes.disabled = no.disabled = true;
+        try {
+          const response = await authorizedFetch("/v1/terminals/remove", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({client_id: terminal.client_id})});
+          const result = await response.json(); if (!response.ok) throw new Error(result.message || t("Kunde inte ta bort ställverket"));
+          confirm.remove(); await refreshDevices();
+        } catch (error) { question.textContent = error.message; yes.disabled = no.disabled = false; }
+      });
+      confirm.append(question, yes, no); actions.replaceChildren(confirm); no.focus();
+    });
+    actions.append(remove);
+    row.append(identity, station, deviceConnectionStatus(terminal.connection), actions);
+    host.append(row);
+  }
 }
 
 async function saveConnectionPart(form, messageSelector, body, success, parameters = {}) {
