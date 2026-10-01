@@ -141,8 +141,10 @@ const root = path.resolve(__dirname, '../..');
     for(const path of ['topology','graph','dashboard']){
       await clockScreen.goto(urls.eu+'/display/'+path);
       await clockScreen.locator('#display-loading').waitFor({state:'hidden'});
-      assert.equal(await clockScreen.locator('#screen-header').isVisible(),true);
+      // Översikt has no top row, as in the design: its first tile is the clock with the meet.
+      assert.equal(await clockScreen.locator('#screen-header').isVisible(),path!=='dashboard');
       assert.equal(await clockScreen.locator('#screen-footer').isVisible(),true);
+      if(path==='dashboard') assert.equal(await clockScreen.locator('.dashboard-clock-card .dashboard-clock-meta b').isVisible(),true);
       assert.equal(await clockScreen.locator('#screen-meet .sc-badge').count(),0,'Screens show the meet name, not EU/US');
       if(path==='topology'){
         const bounds=await clockScreen.locator('#topology-svg .topology-name').evaluateAll(nodes=>nodes.map(n=>Number(n.getAttribute('x'))));

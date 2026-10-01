@@ -60,6 +60,24 @@ const root = path.resolve(__dirname, '../..');
       const a = stopped.getBoundingClientRect(), b = document.querySelector('#screen-qr').getBoundingClientRect();
       return a.right <= b.left || a.bottom <= b.top || a.left >= b.right || a.top >= b.bottom;
     }), 'Two QR codes do not overlap the stopped-clock message');
+    // On the other screens the codes sit in the frame, never in the content:
+    // in the top row beside the clock, and on Översikt as the last tile.
+    assert.equal((await admin.request.post(urls.eu+'/v1/display/connection',{data:{screens:['clock','graph','dashboard']}})).status(),200);
+    const tvPage = await visitor.newPage();
+    await tvPage.setViewportSize({width:1920,height:1080});
+    await tvPage.goto(urls.eu+'/display/graph');
+    await tvPage.locator('#screen-top-right #screen-qr svg').first().waitFor();
+    assert.ok(await tvPage.evaluate(() => document.querySelector('.sc-content').getBoundingClientRect().height >= 800), 'The diagram keeps its height with the QR codes on');
+    await tvPage.goto(urls.eu+'/display/dashboard');
+    await tvPage.locator('#screen-qr svg').first().waitFor();
+    assert.ok(await tvPage.evaluate(() => {
+      const qr = document.querySelector('#screen-qr').getBoundingClientRect();
+      return [...document.querySelectorAll('#dashboard-view .display-card, #dashboard-view .dashboard-stat')].every(card => {
+        const box = card.getBoundingClientRect();
+        return box.right <= qr.left || box.bottom <= qr.top || box.left >= qr.right || box.top >= qr.bottom;
+      });
+    }), 'On Översikt the QR codes are a tile of their own');
+    await tvPage.close();
     await clockPage.locator('#display-clock-style').selectOption('digital');
     assert.equal((await (await page.request.get(urls.eu+'/v1/display')).json()).clock.style, 'swiss', 'A screen preference never changes the shared clock');
     await clockPage.close();

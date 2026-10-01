@@ -385,7 +385,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.evaluate(() => selectOverviewTrain('421'));
     const badge = await page.locator('#overview-route-badge').boundingBox();
     const map = await page.locator('#overview-topology').boundingBox();
-    assert.ok(badge.y >= map.y + map.height, `the badge (${badge.y}) is below the map (${map.y + map.height})`);
+    assert.ok(badge.y >= map.y + map.height + 8, `the badge (${badge.y}) leaves a gap below the map (${map.y + map.height})`);
     await page.evaluate(() => selectOverviewTrain(null));
     // A long address wraps inside the connect card instead of running out of it.
     const spill = await page.evaluate(() => {

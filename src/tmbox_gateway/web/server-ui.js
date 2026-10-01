@@ -510,16 +510,24 @@
     stage.append(content);
     const header = make("header", "sc-top"); header.id = "screen-header";
     const meet = make("div", "sc-top__meet"); meet.id = "screen-meet";
+    // Right in the top row: the QR codes when this screen shows them, then
+    // the meet clock and whether it runs (● 4×) or stands still.
+    const right = make("div", "sc-top__right"); right.id = "screen-top-right";
     const clock = make("div", "sc-top__clock"); clock.id = "screen-time";
-    header.append(meet, clock);
+    const run = make("span", "sc-top__run"); run.id = "screen-run";
+    right.append(clock, run);
+    header.append(meet, right);
     const footer = make("footer", "sc-foot"); footer.id = "screen-footer";
     move("#display-connection", footer);
     const status = make("span", ""); status.id = "screen-status"; footer.append(status);
+    const legend = make("span", "sc-legend"); legend.id = "screen-legend"; footer.append(legend);
     // QR codes for anyone in the hall: first the Wi-Fi, then the link to the
     // participant view (a local address, so the Wi-Fi has to come first).
-    // They live in the footer; on the clock screen the footer is the corner.
+    // They never take room from the map, the diagram or the lists: they sit
+    // in the top row beside the clock, in the tile row on Översikt and in
+    // the corner of the clock screen. api.display puts them there.
     const qr = make("div", "sc-qr"); qr.id = "screen-qr"; qr.hidden = true;
-    footer.append(qr);
+    right.prepend(qr);
     stage.append(header, content, footer);
     const resize = () => {
       const scale = Math.min(innerWidth / 1920, innerHeight / 1080);
@@ -533,12 +541,36 @@
     // The meet's name only: EU or US is setup detail, not something the hall needs.
     meet.replaceChildren(make("span", "", snapshot.meet?.name || "TrainMeet"));
     const labels = {clock:"Träffklocka", topology:"Banöversikt", graph:"Tågdiagram", dashboard:"Översikt", territories:"Områdestavla"};
-    if (kind !== "clock") meet.append(make("span", "sc-subtitle", t(labels[kind])));
+    // The name of the screen, and on the map and the diagram what the hall
+    // looks for first: how many trains are out on the line right now.
+    const out = (snapshot.train_positions || []).filter(p => p.connection_id).length;
+    const live = ["topology", "graph"].includes(kind) ? ` · ${t(out === 1 ? "1 tåg på linjen" : "{n} tåg på linjen", { n: out })}` : "";
+    if (kind !== "clock") meet.append(make("span", "sc-subtitle", t(labels[kind]) + live));
     const hour = Number(time.slice(0,2));
     $("#screen-time").textContent = kind === "clock" ? "" : us ? `${hour%12||12}${time.slice(2,5)} ${hour>=12?"PM":"AM"}` : time.slice(0, 5);
+    const run = $("#screen-run"), running = Boolean(snapshot.clock?.running);
+    run.textContent = running ? `${Number(snapshot.clock?.speed || 1)}×` : t("Stoppad");
+    run.classList.toggle("is-stopped", !running);
     $("#screen-status").textContent = snapshot.server_name || "TrainMeet Server";
-    $("#display-stage").dataset.kind = kind;
+    const stage = $("#display-stage");
+    stage.dataset.kind = kind;
+    // The clock screen has no top row: there, and on Översikt where the
+    // codes are the last tile of the tile row, they stay in the footer.
+    const qr = $("#screen-qr"), home = ["clock", "dashboard"].includes(kind) ? $("#screen-footer") : $("#screen-top-right");
+    if (qr && qr.parentElement !== home) { if (home.id === "screen-footer") home.append(qr); else home.prepend(qr); }
+    api.legend(kind);
     api.lastDisplayContact = Date.now();
+  };
+  // What the colours mean, in the footer where the address line used to be.
+  api.legend = (kind) => {
+    const host = $("#screen-legend"); if (!host) return;
+    const signature = `${kind}|${globalThis.TrainMeetI18n?.getLanguage?.() || ""}`;
+    if (host.dataset.signature === signature) return;
+    host.dataset.signature = signature;
+    const item = (swatch, text) => { const span = make("span", "sc-legend__item"); span.append(make("i", `sc-legend__swatch sc-legend__swatch--${swatch}`), authored("span", "", text)); return span; };
+    if (kind === "topology") host.replaceChildren(authored("span", "", "Fylld tågbricka = på linjen · pilen visar riktningen"));
+    else if (kind === "graph") host.replaceChildren(item("line", "på linjen nu"), item("plan", "planerat"), item("now", "nu"));
+    else host.replaceChildren();
   };
   api.wifiQR = (wifi) => {
     if (!wifi?.name) return "";
