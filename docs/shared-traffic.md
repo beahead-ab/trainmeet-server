@@ -3,15 +3,20 @@
 ## Ansvar
 
 - TrainMeet Server äger klareringar, tågläge, spår och tillåtna trafikåtgärder.
-- ESP8266 visar 16×2-displayen och skickar tangenter. Servern håller dess
-  A–D-meny och tillfälliga inmatning, men menyn äger inte trafikärendet.
-- ESP32 visar sin rikare vy och skickar kompletta kommandon. Cache,
-  knappetiketter, ljud och ljus är klientfunktioner, inte egna trafikbeslut.
+- ESP8266- och ESP32-boxar (firmware 0.7 eller senare) talar 16×2-profilen
+  över MQTT ([protocol/terminal16](protocol/terminal16/README.md)): servern
+  ritar varje bild och boxen skickar tangenter. Bilden äger inte
+  trafikärendet.
+- Webbläsarboxarna och simulatorn skickar kompletta kommandon över HTTP
+  (`/v1/tmbox-v2/*`, [protocol/v2](protocol/v2/README.md)).
+- Sedan Server 2.0.0 tar servern inte emot `tambox/v1` eller `tmbox/v2` över
+  MQTT. En box med firmware äldre än 0.7.0 behöver flashas om.
 - TKL skickar samma trafikåtgärder via HTTP, efter behörighets- och passkontroll.
 - Cloud behövs inte när träffen körs.
 
 `TMBoxStationService` är stationsservicen för alla tre, trots det historiska
-modulnamnet `protocol_v2.py`. `SharedPanelTraffic` är v1:s serveradapter.
+modulnamnet `protocol_v2.py`. `SharedPanelTraffic` kopplar den äldre
+A–D-motorn till samma lager.
 `TrafficEngine.connections` är då en läsvy av det gemensamma lagret, aldrig
 ett parallellt tillstånd att fatta beslut mot. Engine utan runtime-lager
 finns kvar för fristående kontrakts-/16×2-tester; normal serverstart kopplar
@@ -52,10 +57,10 @@ python -m unittest discover -s tests -v
 
 `test_shared_traffic.py` provar blandad riktning, HTTP TKL, återstart,
 dubbletter, samtidiga anrop, fel vid lagring, tvetydiga tågnummer och att
-publicering sker efter databasens commit. `test_mixed_mqtt.py` skickar
-v1/8266-tangenter över MQTT 3.1.1 och v2/ESP32-kommandon via en riktig,
-tillfällig lokal Mosquitto-broker. Mosquitto och Python-paketet paho-mqtt
-behövs för brokertestet.
+publicering sker efter databasens commit. `test_mqtt_transport.py` kör
+16×2-transporten mot en riktig, tillfällig lokal Mosquitto-broker och visar
+att gamla sparade `tambox/v1`- och `tmbox/v2`-meddelanden rensas. Mosquitto
+och Python-paketet paho-mqtt behövs för brokertestet.
 
 Det ersätter inte fysisk verifiering. Före skarp blanddrift behöver vi
 prova en NodeMCU med PCF8574/16×2 och en ESP32 med sin riktiga profil:

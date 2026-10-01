@@ -5,7 +5,7 @@ TrainMeet Server, från firmware 0.7.0 och Server 1.10.0. Säger koden och den
 här texten olika saker är det en bugg i koden. `tests/test_terminal16_protocol_doc.py`
 jämför tabellen *Värden* nedan med konstanterna i Servern.
 
-Den äldre v2-profilen beskrivs i [`../v2/README.md`](../v2/README.md).
+Sedan Server 2.0.0 är 16×2-profilen det enda protokollet över MQTT; `tambox/v1` och `tmbox/v2` är borttagna. Innehållet i v2 (kommandon, lägen, revisionsregler) gäller webbläsarboxarna över HTTP och beskrivs i [`../v2/README.md`](../v2/README.md).
 
 ## 1. Grundprinciper
 

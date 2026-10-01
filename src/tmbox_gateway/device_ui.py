@@ -142,19 +142,9 @@ def language_code(value: object) -> str:
     return value
 
 
-def ui_payload(language: str, *, legacy: bool = False) -> dict:
+def ui_payload(language: str) -> dict:
     code = language_code(language)
     messages = dict(MESSAGES[code])
-    if legacy:
-        # ESP8266 renders traffic on the server. Only local lifecycle/input
-        # copy is needed in its small RAM, not the ESP32 screen catalogue.
-        needed = {"C=NEXT *=BACK", "SAVING...", "NOT SAVED #=TRY", "NAT SAKNAS", "FORSOKER IGEN", "INSTALLERA WIFI", "SOKER SERVER",
-                  "ANSLUTER SERVER", "SERVER BORTA", "KOPPLA BOXEN", "BOX KOPPLAD",
-                  "HAMTAR PANEL...", "KOMMANDO NEKAT", "HAMTAR NYTT LAGE",
-                  "V1-PANEL SAKNAS", "KOLLA SERVERN", "INGET SERVER-SVAR", "KONTROLLERA LAGE",
-                  "DISPLAY SAKNAS", "KNAPPSATS SAKNAS", "KONTROLLERA I2C",
-                  "UPPDATERA SERVER", "LOKAL INMATNING", "Tag: ", "*=Avb"}
-        messages = {key: value for key, value in messages.items() if key in needed}
     return {"version": 1, "language": code,
             "languages": [{"code": c, "name": n} for c, n in LANGUAGES],
             "messages": messages}

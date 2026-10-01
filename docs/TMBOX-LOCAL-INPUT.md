@@ -1,5 +1,9 @@
 # Bekräftad lokal tågnummerinmatning (MQTT v1)
 
+> **Borttaget i Server 2.0.0.** MQTT v1 (`tambox/v1/…`) finns inte längre.
+> Dokumentet beskriver hur det fungerade och sparas som historik. 16×2-boxarna
+> matar in tågnummer enligt [protocol/terminal16](protocol/terminal16/README.md).
+
 ESP8266-klienten får hålla redigering av tågnumret lokalt. Servern äger fortsatt
 stationstilldelning, ägande av panelinteraktionen och alla trafikbeslut.
 

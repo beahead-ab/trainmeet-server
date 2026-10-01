@@ -7,7 +7,8 @@ Här finns den publika dokumentationen för TrainMeet Server.
 - [Versionshantering](VERSIONING.md)
 - [Samspelet mellan Cloud och Server](cloud-server.md)
 - [FastClock: anslut extern träffklocka på servern](FASTCLOCK.md)
-- [TMBox-protokoll v2](protocol/v2/README.md)
+- [TMBox 16×2-protokollet](protocol/terminal16/README.md) – det boxarna talar över MQTT
+- [TMBox-protokoll v2](protocol/v2/README.md) – kommandon och lägen, för webbläsarboxar över HTTP
 - [TMBox: funktionsinventering och plattformsskillnader](TMBOX-FUNCTION-AUDIT-2026-09-19.md)
 - [TMBox: tågnummer först, beslutad målbild och implementationsstatus](TMBOX-TRAIN-FIRST-REVISION-2026-09-19.md) – tåguppslag infört; gemensam trafikprofil återstår
 - [TMBox: Cloud-mappning och stationskoder på displayen](TMBOX-CLOUD-MAPPING-2026-09-19.md) – synkfix och fortsatt gränssnittsrevidering

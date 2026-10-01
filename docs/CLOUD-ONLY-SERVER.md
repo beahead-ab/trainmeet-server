@@ -83,19 +83,11 @@ operatören faktiskt såg. Ett avvisat gammalt kommando läser om läget men ski
 inte automatiskt igen. US använder dessutom körnings-ID, revision och
 idempotenta kommando-ID:n.
 
-Äldre TMBox v2-firmware saknar tillräcklig träffomfattning i sina kommandon.
-Efter ett uttryckligt träffbyte eller byte av trafikdag måste sådana oskopade
-skrivningar därför spärras tills klienten stöder det nya kontraktet. Att boxen är ansluten är inte bevis på
-att gamla kommandon säkert kan återanvändas. Den här serverändringen innehåller
-ingen verifiering på fysisk ESP8266/ESP32 eller en pågående riktig träff.
-
-Den tillhörande ESP32-anpassningen i `trainmeet-tmbox` låter assignment,
-config och snapshot bekräfta samma generation innan knapparna kan skicka
-skrivkommandon. Den rensar gamla val/svar och återförsöker inte gamla beslut
-med en ny generationsmärkning. ESP32-S3-bygget och värddatorns tester är
-verifierade; firmware behöver levereras tillsammans med denna Server-ändring
-innan äldre ESP32-boxar ska användas efter ett träff- eller trafikdagsbyte.
-ESP8266:s v1-protokoll använder sin befintliga sessions- och revisionskontroll.
+Att en box är ansluten är inte bevis på att gamla kommandon säkert kan
+återanvändas efter ett träffbyte eller byte av trafikdag. Sedan Server 2.0.0
+ansluter bara firmware 0.7 eller senare. Den talar 16×2-profilen, och servern
+ritar varje bild för den träff och trafikdag som gäller just då. Äldre
+firmware, med v1- eller v2-protokollet över MQTT, får inget svar alls.
 
 ## Programvara är separat
 

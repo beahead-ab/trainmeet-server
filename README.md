@@ -251,8 +251,8 @@ pio run -e esp32-benny -t upload
 5. Vid första start visar displayen boxkoden. Om Wi-Fi saknas skapas nätverket
    `TrainMeet-XXXX`. Anslut telefonen, välj träffens Wi-Fi och ange vid behov
    serverns lokala IP-adress.
-6. Tilldela boxkoden till rätt station och panel A–D i serverns webbadmin.
-   TMBoxen behöver inget eget lösenord.
+6. Tilldela boxkoden till rätt station, och vid behov sida, under Klienter i
+   Drift. TMBoxen behöver inget eget lösenord.
 7. Uppdatera firmware med `git pull` och kör sedan samma upload-kommando igen.
    Boxens permanenta hårdvaru-id ändras inte.
 
@@ -482,7 +482,7 @@ listan och förlorar sina stations- och panelbehörigheter direkt. Pågående
 trafik, klareringar, stationer och historik raderas inte. En uppkopplad box
 läggs inte tillbaka av automatisk upptäckt eller omstart; använd **Koppla eller
 ändra TMBox** och boxens kod för att tilldela den på nytt. Gäller både
-ESP8266/V1 och ESP32/V2, utan ny firmware.
+ESP8266- och ESP32-boxar med firmware 0.7 eller senare.
 
 ## Två tydligt separerade webbdelar
 
@@ -733,7 +733,14 @@ Raspberry Pi: TrainMeet Server + SQLite + Mosquitto
   fysisk ESP32    Swift-klient   webbsimulering   TKL-terminal/webb
 ```
 
-Raspberry Pi:n är alltid auktoritativ. MQTT används som transport med QoS 1, retained snapshots och idempotenta kommandon. En klient som tappar nätet återansluter, presenterar sig igen och får hela det aktuella läget. Klienterna avgör aldrig själva om ett tåg får skickas.
+Raspberry Pi:n är alltid auktoritativ. Boxarna talar 16×2-protokollet
+`tmbox/terminal/…` över MQTT ([docs/protocol/terminal16](docs/protocol/terminal16/README.md)):
+servern ritar varje skärm och skickar den som en bild, och en box skickar bara
+knapptryck. En box som tappar nätet återansluter, presenterar sig igen och får
+den aktuella bilden. Klienterna avgör aldrig själva om ett tåg får skickas.
+Sedan Server 2.0.0 talar servern inga andra protokoll över MQTT: `tambox/v1`
+(iPhone-appen) och `tmbox/v2` (boxar äldre än 0.7.0) är borttagna, och det de
+lämnat sparat hos mäklaren rensas när servern startar.
 
 Ett operativt beslut lämnas alltid på `A` eller `B`, aldrig på `#`. `KLART`,
 `EJ KLART`, `AVGÅTT` och `ANKOMMIT` följer den regeln i trafikmotorn, så
@@ -762,15 +769,14 @@ vad, och hur en ändring rör sig — är fastslagen i
 Cloud publicerar, servern hämtar och kör. Inga lokala configändringar görs.
 
 Protokollet mellan en fysisk TMBox och servern är specificerat i
-[docs/protocol/v2/](docs/protocol/v2/README.md): topics, meddelandekuvert,
-revisionsregler och tillståndsmaskiner, med JSON-scheman och kompletta
-exempel för både Charlottendal och den fiktiva testtopologin. Kontraktet är
-normativt — säger koden och dokumentet olika saker är det en bugg i koden.
-Servern tar emot både v1 (bland annat NodeMCU/ESP8266) och v2 (ESP32).
-Båda är passiva klienter till samma trafiklogik och SQLite-driftlager som
-TKL. v1:s A–D-meny tolkas på servern; v2 skickar kompletta kommandon.
-Skillnaden är gränssnitt och hårdvarufunktioner, inte trafikregler.
-Se [gemensam trafik och blandtest](docs/shared-traffic.md) före uppgradering.
+[docs/protocol/terminal16/](docs/protocol/terminal16/README.md). Kommandonas
+och tillståndets innehåll — meddelandekuvert, revisionsregler och
+tillståndsmaskiner, med JSON-scheman och exempel — finns i
+[docs/protocol/v2/](docs/protocol/v2/README.md) och gäller webbläsarboxarna och
+simulatorn över HTTP (`/v1/tmbox-v2/*`). Kontraktet är normativt — säger koden
+och dokumentet olika saker är det en bugg i koden. Boxarna, webbläsarboxarna
+och TKL är passiva klienter till samma trafiklogik och SQLite-driftlager.
+Se [gemensam trafik](docs/shared-traffic.md).
 
 ## Publicerad config och tidtabell
 

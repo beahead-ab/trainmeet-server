@@ -54,9 +54,10 @@ class DeviceConnectionTests(unittest.TestCase):
         self.clock = 1_800_000_000.0
         self.app.wall_clock = lambda: self.clock
         # The same wiring as the running server.
-        adapter = SimpleNamespace(_publish=lambda *args: None)
-        self.gateway = attach_terminal_gateway(self.app, adapter, SimpleNamespace(subscribe=lambda callback: None))
-        self.assertIs(self.gateway, adapter.terminal_gateway)
+        self.published = []
+        transport = SimpleNamespace(publish=lambda topic, body, retain: self.published.append((topic, body)))
+        self.gateway = attach_terminal_gateway(self.app, transport, SimpleNamespace(subscribe=lambda callback: None))
+        self.assertIs(self.gateway, transport.terminal_gateway)
 
     def message(self, leaf, **body):
         self.gateway.receive(self.gateway.PREFIX + BOX + "/" + leaf,
@@ -119,6 +120,29 @@ class DeviceConnectionTests(unittest.TestCase):
         devices = self.app.devices(self.admin)
         self.assertIn(BOX, [d["device_id"] for d in devices["devices"]])
         self.assertEqual([], devices["removed_trying"])
+
+    def frames(self):
+        return [body["frame"] for topic, body in self.published if topic == self.gateway.PREFIX + BOX + "/frame"]
+
+    def test_a_box_is_sent_its_new_station_and_language_at_once(self):
+        """A 16x2 box learns its station, side and language only from its
+        frame (2.0.0: no tmbox/v2 assignment any more). Set in Klienter, the
+        new frame goes out at once, not at the box's next ping."""
+        hello = self.gateway.receive(self.gateway.PREFIX + BOX + "/hello",
+                                     json.dumps({"boot": "boot-1", "device_code": "TBX-A1B2C3"}).encode())
+        self.gateway.handle(hello)
+        self.assertEqual(1, len(self.frames()), "the box is shown a frame when it connects")
+        station = next(iter(self.app.engine.config.stations.values()))
+        self.app.assign_device(self.admin, {"device_code": "TBX-A1B2C3", "station_id": station.id})
+        self.assertEqual(2, len(self.frames()))
+        self.assertEqual(station.code, self.frames()[-1]["station_code"])
+        self.app.set_device_language(self.admin, {"device_id": BOX, "language": "en"})
+        self.assertEqual(3, len(self.frames()))
+        self.assertEqual("en", self.frames()[-1]["language"])
+        # Nothing changed, nothing sent: the nudge is not a flood.
+        self.app.on_clock_changed()
+        self.app.on_config_applied()
+        self.assertEqual(3, len(self.frames()))
 
 
 if __name__ == "__main__":

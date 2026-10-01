@@ -121,7 +121,7 @@ Allt som behös för samspel görs i TrainMeet Server. Boxarna i fält (firmware
    - Då kan en mqttTamBox 2.0.x vara granne till en TrainMeet-station på samma träff.
 3. **Konfigurationsserver för Bennys boxar:** Servern kan svara på `/?id=<box>` med grannar per utfart. De finns redan i Cloud-topologin och i TMBox-placeringen.
 4. **Riktningsbyte på dubbelspår** (`desired: in`) saknas i vår modell och tas upp som eget arbete om Bennys boxar ska köra dubbelspår mot oss.
-5. **Liten rättelse i firmware vid nästa version:** ESP8266 sparar fortfarande ett LWT (retained) på det gamla ämnet `tambox/v1/client/<id>/presence`. Det ska bort.
+5. **Liten rättelse i firmware vid nästa version:** ESP8266 sparar fortfarande ett LWT (retained) på det gamla ämnet `tambox/v1/client/<id>/presence`. Det ska bort. *(Görs i firmware 0.7.4. Server 2.0.0 rensar sparade `tambox/v1`- och `tmbox/v2`-meddelanden hos mäklaren vid start.)*
 
 ## Vad som behöver ändras hos dem
 

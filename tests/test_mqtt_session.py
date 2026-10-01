@@ -45,14 +45,16 @@ class ConnectionSettingTests(unittest.TestCase):
 
     def test_every_gateway_connects_through_the_same_door(self) -> None:
         """Tre anslutningar fanns, alla med sina egna siffror. En ändring på ett
-        ställe ska gälla allihop."""
+        ställe ska gälla allihop - också för den som läggs till senare."""
 
         from pathlib import Path
 
         source = Path(__file__).resolve().parent.parent / "src" / "tmbox_gateway"
-        for module in ("mqtt_v2.py", "mqtt_adapter.py", "local_server.py"):
-            text = (source / module).read_text(encoding="utf-8")
-            with self.subTest(module=module):
+        clients = [path for path in sorted(source.glob("*.py")) if "mqtt.Client(" in path.read_text(encoding="utf-8")]
+        self.assertEqual(["mqtt_transport.py"], [path.name for path in clients])
+        for path in clients:
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(module=path.name):
                 self.assertIn("mqtt_session.connect(", text)
                 self.assertNotIn("keepalive=", text)
                 self.assertNotIn("clean_start=", text)

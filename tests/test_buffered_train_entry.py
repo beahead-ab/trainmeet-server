@@ -4,9 +4,7 @@ from datetime import datetime, timedelta, timezone
 import unittest
 
 from test_engine import EngineDriver
-from test_mqtt_commands import command_payload
 from tmbox_gateway.models import Command, ConnectionState, DispatchMode
-from tmbox_gateway.mqtt_adapter import _decode_command
 
 
 class BufferedTrainEntryTests(unittest.TestCase):
@@ -19,11 +17,6 @@ class BufferedTrainEntryTests(unittest.TestCase):
         now = datetime.now(timezone.utc)
         return replace(Command("submit-1", "client-panel-a", "test-session", "panel-a",
                                self.engine.revision, "#", now, now + timedelta(seconds=5), number), **changes)
-
-    def test_mqtt_decoder_preserves_complete_input(self):
-        payload = {**command_payload(), "key": "#", "train_number": "00421"}
-        self.assertEqual(_decode_command(payload, use_gateway_clock=True).train_number, "00421")
-        self.assertIsNone(_decode_command(command_payload(), use_gateway_clock=True).train_number)
 
     def test_no_server_digits_until_one_confirmed_request(self):
         snapshot = self.engine.snapshot("panel-a")
