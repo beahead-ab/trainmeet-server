@@ -5,6 +5,34 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Helskärmsvyerna: QR-koderna i ramen, inte i innehållet
+
+En granskning av TV-skärmarna mot designen (artboard 9–20), gjord i Claude
+Design. QR-koderna tog plats från det skärmarna är till för: 150 px av
+Tågdiagrammets höjd och 280 px av Översiktens bredd.
+
+- QR-koderna (1 · Wi-Fi, 2 · Träffen) ligger i ramen som redan finns: i
+  översta raden bredvid klockan på Banöversikt och Tågdiagram, som sista ruta
+  i rutraden på Översikt och i hörnet på Träffklockan som förut. Tågdiagrammet
+  får 852 px höjd med koderna påslagna (755 px förut). Är koderna avslagna för
+  en skärm reserveras ingen plats alls.
+- Översta raden följer designen: träffens namn i 36 px, skärmens namn och hur
+  många tåg som är ute på linjen, klockan med ● och hastigheten, eller
+  Stoppad i gult.
+- Sidfoten förklarar färgerna: "Fylld tågbricka = på linjen" på Banöversikt,
+  på linjen nu · planerat · nu på Tågdiagrammet.
+- Översikt har ingen översta rad, som i designen. Rutraden börjar med klockan,
+  träffens namn, om klockan går och trafikdagen.
+- Tågdiagrammet: stationens namn och kod på samma rad, tågnummer med mörk kant
+  så att linjerna inte skär dem och aldrig två nummer ovanpå varandra. Tåg ute
+  på linjen har en blå bricka vid nu-linjen, och tiden står i en gul bricka
+  överst. Diagrammet ritas för den höjd det faktiskt har.
+- Banöversikt och Översikt: tågen inne på en station läggs inte över ett tåg
+  på linjen eller över stationens namn (4142 och 421 vid Alvesta C, 8282 vid
+  Elisabethstad).
+- Drift: valt tågs sammanfattning har ett mellanrum under kartan även när
+  den kant-till-kant-ritade kartan visas på en telefon.
+
 ### Designkorrektur: samma ram och samma kortrubrik på alla sidor
 
 En genomgång av server.trainmeet.app mot designen (UX-genomgången, DriftEU,

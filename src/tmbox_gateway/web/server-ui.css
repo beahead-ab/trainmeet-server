@@ -387,11 +387,29 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .sc-top { transition: opacity .25s; }
 .sc-content { flex: 1; min-height: 0; position: relative; display: flex; }
 .sc-content > .display-visual { width: 100%; height: 100%; min-height: 0; }
-.sc-top__meet { font-size: 26px; }
-.sc-subtitle { color: var(--display-muted); font-weight: 500; }
+/* Top row as in the design (SkarmBana, SkarmDiagram): the meet's name in
+   36 px, the screen and the trains out on the line beside it, and to the
+   right the QR codes, the clock and its state (● 4× or Stoppad). */
+.sc-top { min-height: 72px; gap: 28px; }
+.sc-top__meet { font-size: 36px; align-items: baseline; gap: 20px; min-width: 0; white-space: nowrap; }
+.sc-top__meet > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.sc-subtitle { color: var(--display-muted); font-size: 28px; font-weight: 500; }
+.sc-top__right { display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
 .sc-top__clock { color: var(--display-fg); }
-.sc-foot { min-height: 40px; font-size: 26px; gap: 20px; }
-#screen-status { margin-left: auto; color: var(--display-muted); }
+.sc-top__run { display: inline-flex; align-items: center; gap: 10px; font-size: 26px; font-weight: 600; color: #5fcf8a; white-space: nowrap; }
+.sc-top__run::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: currentColor; }
+.sc-top__run.is-stopped { color: #f2c230; }
+.light .sc-top__run { color: #1f6b3d; }
+.light .sc-top__run.is-stopped { color: #8a6400; }
+.sc-foot { min-height: 32px; font-size: 22px; gap: 20px; align-items: center; }
+#screen-status { color: var(--display-muted); }
+.sc-legend { margin-left: auto; display: flex; align-items: center; gap: 28px; color: var(--display-muted); white-space: nowrap; }
+.sc-legend:empty { display: none; }
+.sc-legend__item { display: inline-flex; align-items: center; gap: 10px; }
+.sc-legend__swatch { display: inline-block; border-radius: 3px; }
+.sc-legend__swatch--line { width: 36px; height: 6px; background: #7fa3ea; }
+.sc-legend__swatch--plan { width: 36px; height: 3px; background: #737373; }
+.sc-legend__swatch--now { width: 4px; height: 24px; background: #f2c230; border-radius: 0; }
 #display-connection { position: static; color: var(--display-muted); padding: 0; background: none; font-size: 26px; border: 0; }
 #display-connection-code { font: 700 30px var(--font-mono); color: var(--display-fg); }
 #clock-view { width: 100%; height: 100%; padding: 0; display: flex; }
@@ -407,8 +425,11 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 #display-stage[data-kind=clock] .sc-top { display: none; }
 #display-stage[data-kind=clock] .sc-foot { position: absolute; right: 40px; bottom: 28px; min-height: 0; padding: 0; }
 #display-stage[data-kind=clock] #screen-status, #display-stage[data-kind=clock] #display-connection { display: none; }
-/* The QR pair (1 · Wi-Fi, 2 · Träffen) sits at the footer's right on every
-   screen, the server name at its left; on the clock screen the footer is the corner. */
+/* The QR pair (1 · Wi-Fi, 2 · Träffen) never takes room from the content.
+   On the clock screen it is the corner (130 px, captions under the codes);
+   on Banöversikt and Tågdiagram it sits in the top row before the clock
+   (88 px, captions to the left), which grows from 72 to 104 px and no more;
+   on Översikt it is the last tile of the tile row. Off: nothing is reserved. */
 .sc-qr { display: flex; align-items: flex-end; gap: 20px; margin-left: auto; }
 .sc-qr[hidden] { display: none; }
 .sc-qr__item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -416,11 +437,12 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .sc-qr__code svg { display: block; width: 130px; height: 130px; }
 .sc-qr__text { font-size: 22px; color: var(--display-muted); white-space: nowrap; }
 .light .sc-qr__code { border: 1px solid #e5e5e5; }
-#display-stage:not([data-kind=clock]) .sc-qr__code svg { width: 110px; height: 110px; }
-#display-stage:not([data-kind=clock]) .sc-qr__text { font-size: 20px; }
-#display-stage:not([data-kind=clock]) #screen-status { margin-left: 0; }
-#display-stage:not([data-kind=clock]) .sc-foot { align-items: flex-end; }
-#dashboard-view { grid-template-rows: 160px minmax(0,1fr) 245px; }
+.sc-top .sc-qr { align-items: center; gap: 28px; margin: 0 10px 0 0; padding-right: 28px; border-right: 1px solid #333331; }
+.light .sc-top .sc-qr { border-right-color: #e5e5e5; }
+.sc-top .sc-qr__item { flex-direction: row-reverse; gap: 12px; }
+.sc-top .sc-qr__code { padding: 8px; border-radius: 10px; }
+.sc-top .sc-qr__code svg { width: 88px; height: 88px; }
+.sc-top .sc-qr__text { font-size: 20px; }
 .sc-clock-layout .clock-face.stopped { opacity: .6; }
 .sc-clock-layout .clock-digital { font: 700 440px/1 var(--font-mono); letter-spacing: -.04em; color: var(--display-fg); white-space: nowrap; }
 .sc-clock-layout .clock-digital[data-seconds=true] { font-size: 330px; }
@@ -443,14 +465,44 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 #graph-station-overlay, #graph-time-overlay { display: none; }
 .sc-graph-label { font: 28px var(--font); fill: var(--display-fg); }
 .sc-graph-code { font: 22px var(--font-mono); fill: var(--display-muted); }
-#dashboard-view { grid-template-columns: 1fr; grid-template-rows: 130px 1fr; height: 100%; gap: 16px; }
-#dashboard-view .dashboard-column { display: block; }
-#dashboard-view .dashboard-column > .display-card:first-child { display: none; }
-#dashboard-view .dashboard-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; padding: 0; background: none; border: 0; }
-#dashboard-view .dashboard-stat { padding: 18px 28px; border: 1px solid #262626; border-radius: 14px; background: var(--display-card); }
-#dashboard-view .dashboard-stat b { font-size: 80px; line-height: 1; }
-#dashboard-view .dashboard-stat span { font-size: 25px; }
+/* Train numbers in the diagram (renderGraph): a dark edge so a line under
+   the number never cuts it; a blue tag on the now line for a train out on
+   the line; the time as a yellow tag on top of the now line. */
+.sc-graph-train { font: 600 26px var(--font); paint-order: stroke; stroke: var(--display-bg); stroke-width: 7px; stroke-linejoin: round; }
+.sc-graph-tag { fill: #7fa3ea; }
+.sc-graph-tag-text { font: 700 24px var(--font-mono); fill: #0b0b0b; }
+.sc-graph-now-tag { fill: #f2c230; }
+.sc-graph-now-text { font: 700 24px var(--font-mono); fill: #0b0b0b; }
+.light .sc-graph-tag { fill: #2256c3; }
+.light .sc-graph-tag-text { fill: #fff; }
+/* Översikt as in the design (SkarmOversikt): no top row. The tile row
+   starts with the clock and the meet, then the four figures, and when this
+   screen shows the QR codes they are its last tile. */
+#display-stage[data-kind=dashboard] .sc-top { display: none; }
+#dashboard-view { grid-template-columns: 1fr; grid-template-rows: 160px minmax(0,1fr) 245px; height: 100%; gap: 16px; }
+#dashboard-view .dashboard-column { display: flex; gap: 16px; min-width: 0; }
+#display-stage[data-kind=dashboard]:has(#screen-qr:not([hidden])) .dashboard-column { padding-right: 274px; }
+#dashboard-view .dashboard-clock-card { display: flex; align-items: center; gap: 24px; flex: 0 0 auto; margin: 0; padding: 16px 28px; }
+#dashboard-view .dashboard-clock { font: 700 112px/1 var(--font-mono); letter-spacing: -.02em; color: var(--display-fg); }
+#dashboard-view .dashboard-clock-meta { display: flex; flex-direction: column; gap: 8px; white-space: nowrap; }
+#dashboard-view .dashboard-clock-meta b { font-size: 28px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+#dashboard-view .dashboard-run { display: inline-flex; align-items: center; gap: 10px; font-size: 24px; font-weight: 600; color: #5fcf8a; }
+#dashboard-view .dashboard-run::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: currentColor; }
+#dashboard-view .dashboard-run.is-stopped { color: #f2c230; }
+.light #dashboard-view .dashboard-run { color: #1f6b3d; }
+.light #dashboard-view .dashboard-run.is-stopped { color: #8a6400; }
+#dashboard-view .dashboard-day { font-size: 22px; color: var(--display-muted); }
+#dashboard-view .dashboard-stats { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; background: none; border: 0; }
+#dashboard-view .dashboard-stat { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0; padding: 18px 22px; border: 1px solid #262626; border-radius: 14px; background: var(--display-card); }
+#dashboard-view .dashboard-stat b { font-size: 72px; line-height: 1; }
+#dashboard-view .dashboard-stat span { font-size: 23px; line-height: 1.2; }
 #dashboard-view .display-card { border-radius: 14px; }
+#display-stage[data-kind=dashboard] .sc-qr { position: absolute; top: 32px; right: 40px; width: 258px; height: 160px; box-sizing: border-box; margin: 0; padding: 12px 18px; gap: 16px; align-items: center; justify-content: center; background: var(--display-card); border: 1px solid #262626; border-radius: 14px; }
+.light #display-stage[data-kind=dashboard] .sc-qr, .light #dashboard-view .dashboard-stat { border-color: #e5e5e5; }
+#display-stage[data-kind=dashboard] .sc-qr__item { gap: 6px; }
+#display-stage[data-kind=dashboard] .sc-qr__code { padding: 8px; border-radius: 10px; }
+#display-stage[data-kind=dashboard] .sc-qr__code svg { width: 84px; height: 84px; }
+#display-stage[data-kind=dashboard] .sc-qr__text { font-size: 19px; white-space: normal; text-align: center; max-width: 220px; }
 #dashboard-topology { width: 100%; height: 100%; min-height: 0; }
 .topology-tv .topology-name { font: 30px var(--font); fill: var(--display-fg); text-anchor: middle; }
 .topology-tv .topology-code { font: 22px var(--font-mono); fill: var(--display-muted); text-anchor: middle; }
@@ -511,11 +563,6 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .server-dashboard-bottom p { font-size: 24px; }
 .server-dashboard-bottom .server-event { font-size: 24px; line-height: 28px; padding: 4px 0; }
 .server-dashboard-bottom .server-event > :last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#dashboard-view { grid-template-rows: 160px minmax(0,1fr) 245px; }
-#display-stage[data-kind=dashboard] .server-dashboard-bottom { grid-template-columns: 1fr 1fr 240px; }
-#display-stage[data-kind=dashboard]:has(.sc-qr__item + .sc-qr__item) .server-dashboard-bottom { grid-template-columns: 1fr 1fr 280px; }
-#display-stage[data-kind=dashboard]:has(.sc-qr[hidden]) .server-dashboard-bottom { grid-template-columns: 1fr 1fr; }
-#display-stage[data-kind=dashboard] .sc-qr { position: absolute; right: 40px; bottom: 125px; }
 @media (max-width: 600px) {
   .tm-clockrow__time { flex-basis: 100%; border-bottom: 1px solid var(--border); }
   .tm-clockrow__form { flex-basis: 100%; flex-wrap: wrap; min-width: 0; }
@@ -629,9 +676,9 @@ body[data-signed-in="no"] #app-chrome :is(#header-cloud-status, .topbar-right, #
 #drift-traffic-grid { align-items: stretch; }
 .topology-overview-card { display: flex; flex-direction: column; }
 .topology-overview-card .topology-preview { flex: 1 0 auto; margin: 0 -14px -12px; border: 0; border-radius: 0; background: none; }
-/* The map reaches the card's edges (its -12px bottom margin); the chosen
-   train's badge still sits below it, not over its last station. */
-.topology-overview-card .overview-route-badge { margin-top: 22px; }
+/* When a train is selected, the badge follows the map instead of the card
+   edge. Do not let the edge-to-edge map margin eat the gap above it. */
+.topology-overview-card:has(#overview-route-badge:not(.hidden)) .topology-preview { margin-bottom: 0; }
 
 /* Trafik just nu: tiles, the events in columns, the two folded lists in a row. */
 #overview-traffic .traffic-section { margin: 12px 0 0; }

@@ -3451,6 +3451,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   // come only from an older recorded position; the second then stacks beside
   // the first instead of hiding it.
   const sameWay = new Map();
+  const taken = []; // tags already drawn: a station's row never covers one
   for (const train of trains.onLine) {
     const from = positions.get(train.from), to = positions.get(train.to);
     if (!from || !to) continue;
@@ -3471,7 +3472,9 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     // On a TV the names under the line are large: the tag rides on the line
     // rather than over them.
     const lift = options.tv && Math.abs(along.y) < 0.5 ? 12 : 0;
-    appendTopologyTrain(target, { x: from.x + along.x * distance + side.x * across, y: from.y + along.y * distance + side.y * across - lift }, {
+    const at = { x: from.x + along.x * distance + side.x * across, y: from.y + along.y * distance + side.y * across - lift };
+    taken.push({ x1: at.x - size.width / 2, y1: at.y - size.height / 2, x2: at.x + size.width / 2, y2: at.y + size.height / 2 });
+    appendTopologyTrain(target, at, {
       ...train, heading: along,
       label: train.departed ? t("Tåg {number} · {route} · på linjen", { number: train.trainNumber, route })
         : t("Tåg {number} · {route} · klart, inte avgått", { number: train.trainNumber, route }),
@@ -3485,7 +3488,8 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     // A map not on screen has no measured text (and some browsers throw).
     try { const box = text.getBBox(); return [{ x1: box.x, y1: box.y, x2: box.x + box.width, y2: box.y + box.height }]; } catch { return []; }
   });
-  const free = (box) => !names.some((name) => box.x1 < name.x2 && name.x1 < box.x2 && box.y1 < name.y2 && name.y1 < box.y2)
+  const overlaps = (box, list, margin = 0) => list.some((o) => box.x1 < o.x2 + margin && o.x1 - margin < box.x2 && box.y1 < o.y2 + margin && o.y1 - margin < box.y2);
+  const free = (box) => !overlaps(box, names) && !overlaps(box, taken, 4)
     && !segments.some((segment) => topologyCrosses(box, segment));
   const byStation = new Map();
   for (const train of trains.atStation) byStation.set(train.station, [...(byStation.get(train.station) || []), train]);
@@ -3498,9 +3502,16 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const widths = items.map((item) => topologyTrainSize(item, false, options.tv).width);
     const height = topologyTrainSize("", false, options.tv).height;
     const width = widths.reduce((sum, value) => sum + value, 0) + gap * (items.length - 1);
-    const sides = [[0, -off - height / 2], [0, off + height / 2], [-off - width / 2, 0], [off + width / 2, 0]]
+    // Above, below, left, right; then the four corners, which miss both the
+    // line through the station and its name when all four sides are taken.
+    const across = off + width / 2, up = off + height / 2;
+    const sides = [[0, -up], [0, up], [-across, 0], [across, 0], [across, -up], [-across, -up], [across, up], [-across, up]]
       .map(([dx, dy]) => ({ x: point.x + dx, y: point.y + dy }));
-    const centre = sides.find((side) => free({ x1: side.x - width / 2, y1: side.y - height / 2, x2: side.x + width / 2, y2: side.y + height / 2 })) || sides[0];
+    const boxes = sides.map((side) => ({ x1: side.x - width / 2, y1: side.y - height / 2, x2: side.x + width / 2, y2: side.y + height / 2 }));
+    // No side free of lines: rather over a line than over a name or a tag.
+    const pick = boxes.findIndex(free), fallback = boxes.findIndex((box) => !overlaps(box, names) && !overlaps(box, taken, 4));
+    const centre = sides[pick >= 0 ? pick : fallback >= 0 ? fallback : 0];
+    taken.push(boxes[sides.indexOf(centre)]);
     let left = centre.x - width / 2;
     items.forEach((item, index) => {
       const at = { x: left + widths[index] / 2, y: centre.y };
@@ -3704,7 +3715,11 @@ function renderDisplaySelection(snapshot) {
 
 function renderGraph(snapshot) {
   const svg = document.querySelector("#graph-svg");
-  const width = 1840, height = 850, left = 270, top = 65, bottom = 50;
+  // Draw for the box the diagram really has, so 28 px text stays 28 px
+  // whether or not the QR codes and the top row take part of the screen.
+  const box = svg.getBoundingClientRect();
+  const width = 1840, left = 270, top = 65, bottom = 50;
+  const height = box.width > 0 && box.height > 0 ? Math.max(600, Math.round(width * box.height / box.width)) : 850;
   const now = currentClockSeconds(snapshot) / 60;
   const min = now - 60, max = now + 120;
   const stations = orderedStations(snapshot);
@@ -3721,11 +3736,15 @@ function renderGraph(snapshot) {
   }
   stations.forEach((station, i) => {
     svg.append(svgElement("line", {x1:left, x2:width, y1:y(i), y2:y(i), class:"graph-grid"}));
-    svg.append(svgElement("text", {x:10, y:y(i)-7, class:"sc-graph-label"}, station.name));
-    svg.append(svgElement("text", {x:10, y:y(i)+24, class:"sc-graph-code"}, station.code || ""));
+    // Name and code on the station's own line, as in the design; a name too
+    // long to leave room for the code keeps the code on a row of its own.
+    const long = String(station.name || "").length > 14;
+    svg.append(svgElement("text", {x:10, y:long ? y(i)-7 : y(i)+10, class:"sc-graph-label"}, station.name));
+    svg.append(svgElement("text", long ? {x:10, y:y(i)+24, class:"sc-graph-code"} : {x:left-16, y:y(i)+9, "text-anchor":"end", class:"sc-graph-code"}, station.code || ""));
   });
   const trains = svgElement("g", {"clip-path":"url(#screen-graph-clip)"});
   const active = new Set((snapshot.train_positions || []).filter(p=>p.connection_id).map(p => String(p.train_number)));
+  const drawn = [];
   for (const service of graphServices(snapshot)) {
     const points = servicePoints({...service, stops:[...service.stops].sort((a,b)=>a.stop_order-b.stop_order)}, stationIndex);
     if (points.length < 2) continue;
@@ -3742,12 +3761,58 @@ function renderGraph(snapshot) {
     group.append(svgElement("polyline",{points:line,fill:"none",stroke:"transparent","stroke-width":20}));
     const select=()=>{state.displaySelectedTrainNumber=state.displaySelectedTrainNumber===String(service.train_number)?null:String(service.train_number); document.querySelector("#display-train-select").value=state.displaySelectedTrainNumber||"";updateDisplayGraphSelection();renderDisplaySelection(snapshot);};
     group.addEventListener("click",select);group.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select();}});
-    const visible = points.find(p=>p.minute+shift >= min && p.minute+shift <= max) || points[0];
-    group.append(svgElement("text", {x:Math.max(left+8,x(visible.minute+shift)+8), y:y(visible.station)+(visible.station===0?32:-10), fill:colour, "font-size":26}, service.train_number));
+    drawn.push({group, service, points, shift, colour, select, out: active.has(String(service.train_number))});
     trains.append(group);
   }
-  svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top-24, y2:height-bottom, stroke:"#f2c230", "stroke-width":3}));
-  svg.append(svgElement("text",{x:x(now),y:top-35,"text-anchor":"middle",fill:"#f2c230","font-size":28},currentClockTime(snapshot).slice(0,5)));
+  // Train numbers: never on top of each other. A train out on the line gets
+  // a blue tag where it is now, on the now line; the others a number with a
+  // dark edge at the first free spot along their own line, or none at all.
+  const labels = svgElement("g", {"clip-path":"url(#screen-graph-clip)"});
+  const layer = (entry) => {
+    const g = svgElement("g", {class: "graph-train-group"});
+    g.dataset.trainNumber = String(entry.service.train_number);
+    g.addEventListener("click", entry.select);
+    labels.append(g);
+    return g;
+  };
+  const placed = [];
+  const free = (b) => b.x1 >= left + 4 && b.x2 <= width - 6 && b.y1 >= top - 30 && b.y2 <= height - bottom + 4
+    && placed.every(o => b.x2 + 6 < o.x1 || b.x1 - 6 > o.x2 || b.y2 + 4 < o.y1 || b.y1 - 4 > o.y2);
+  const label = (entry) => {
+    const text = String(entry.service.train_number), w = text.length * 17;
+    for (const p of entry.points.filter(p => p.minute + entry.shift >= min && p.minute + entry.shift <= max)) {
+      const px = Math.max(left + 8, x(p.minute + entry.shift) + 8), py = y(p.station);
+      for (const ty of p.station === 0 ? [py + 32, py - 10] : [py - 10, py + 32]) {
+        const b = {x1: px, x2: px + w, y1: ty - 22, y2: ty + 4};
+        if (!free(b)) continue;
+        placed.push(b);
+        layer(entry).append(svgElement("text", {x: px, y: ty, fill: entry.colour, class: "sc-graph-train"}, text));
+        return;
+      }
+    }
+  };
+  const tag = (entry) => {
+    const pts = entry.points.map(p => ({m: p.minute + entry.shift, y: y(p.station)}));
+    const i = pts.findIndex((p, k) => k < pts.length - 1 && p.m <= now && now <= pts[k + 1].m);
+    if (i < 0) return label(entry);
+    const a = pts[i], b = pts[i + 1], yNow = b.m > a.m ? a.y + (b.y - a.y) * (now - a.m) / (b.m - a.m) : a.y;
+    const text = String(entry.service.train_number), w = text.length * 14.4 + 24, h = 38;
+    for (const [bx, by] of [[x(now) - 14 - w, yNow - h / 2], [x(now) + 14, yNow - h / 2], [x(now) - 14 - w, yNow - h / 2 - 44], [x(now) - 14 - w, yNow - h / 2 + 44]]) {
+      const box = {x1: bx, x2: bx + w, y1: by, y2: by + h};
+      if (!free(box)) continue;
+      placed.push(box);
+      layer(entry).append(svgElement("rect", {x: bx, y: by, width: w, height: h, rx: 10, class: "sc-graph-tag"}),
+        svgElement("text", {x: bx + w / 2, y: by + 27, "text-anchor": "middle", class: "sc-graph-tag-text"}, text));
+      return;
+    }
+    label(entry);
+  };
+  drawn.filter(entry => entry.out).forEach(tag);
+  drawn.filter(entry => !entry.out).forEach(label);
+  svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top-24, y2:height-bottom, stroke:"#f2c230", "stroke-width":3}), labels);
+  // The time on the now line, as a yellow tag like the design's.
+  svg.append(svgElement("rect", {x:x(now)-48, y:top-60, width:96, height:36, rx:8, class:"sc-graph-now-tag"}),
+    svgElement("text",{x:x(now),y:top-33,"text-anchor":"middle",class:"sc-graph-now-text"},currentClockTime(snapshot).slice(0,5)));
   updateDisplayGraphSelection();
 }
 
@@ -4120,7 +4185,7 @@ function renderDashboard(snapshot) {
   const stationName = id => snapshot.stations?.find(s=>s.id===id)?.name || id || "—";
   const staffed = snapshot.staffed_station_count;
   target.innerHTML = html`<div class="dashboard-column">
-    <section class="display-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><p class="clock-meta">${Number(snapshot.clock?.speed || 1)}× · ${snapshot.clock?.running ? "Klockan går" : "Klockan är stoppad"}</p></section>
+    <section class="display-card dashboard-clock-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><div class="dashboard-clock-meta"><b>${escapeHTML(snapshot.meet?.name || "TrainMeet")}</b><span class="dashboard-run${snapshot.clock?.running ? "" : " is-stopped"}">${snapshot.clock?.running ? `${escapeHTML(t("Klockan går"))} · ${Number(snapshot.clock?.speed || 1)}×` : escapeHTML(t("Klockan är stoppad"))}</span><span class="dashboard-day">${escapeHTML(snapshot.active_day || "")}</span></div></section>
     <section class="display-card dashboard-stats">
       <div class="dashboard-stat"><b>${moving.length}</b><span>tåg på linjen</span></div>
       <div class="dashboard-stat"><b>${positions.filter(p=>p.station_id && !p.connection_id).length}</b><span>inne på stationerna</span></div>
