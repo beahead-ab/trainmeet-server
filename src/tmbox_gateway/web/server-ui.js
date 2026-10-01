@@ -39,7 +39,8 @@
 
   // Persistent header, with no second navigation system hidden behind a burger.
   const logout = move("#logout", $(".topbar-right"));
-  logout.className = "tm-icon-btn"; logout.title = t("Logga ut"); logout.setAttribute("aria-label", t("Logga ut")); logout.textContent = "⇥";
+  logout.className = "tm-icon-btn"; logout.title = t("Logga ut"); logout.setAttribute("aria-label", t("Logga ut"));
+  logout.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>';
   mark("#application-menu"); mark("#app-devices"); mark("#connection");
   $("#app-clock").className = "tm-clock";
 
@@ -69,13 +70,30 @@
   const time = make("div", "tm-clockrow__time");
   time.append(authored("span", "tm-eyebrow", "Träffklocka"));
   move("#overview-clock", time).className = "tm-clockrow__big";
-  move("#clock-state", time); move("#clock-source-status", time);
+  const clockState = make("div", "tm-clockrow__state");
+  clockState.append($("#clock-state"), $("#clock-source-status")); time.append(clockState);
   row.append(time);
   const clockForm = inlineForm("#clock-control-form", row);
   clockForm.classList.add("tm-clockrow__form");
   const source = make("div", "server-source");
   source.append(authored("span", "server-field-label", "Klockkälla"));
-  move('[data-open-modal="clock-source-modal"]', source);
+  // Intern | FastClock…: the source in use is marked; the other opens the
+  // FastClock dialog with that choice made (app.js keeps the dialog).
+  const sourceLauncher = move('[data-open-modal="clock-source-modal"]', source); sourceLauncher.classList.add("legacy-internal");
+  const toggle = make("div", "tm-toggle"); toggle.id = "clock-source-toggle"; toggle.setAttribute("role", "group");
+  for (const [value, text] of [["internal", "Intern"], ["fastclock", "FastClock…"]]) {
+    const button = authored("button", "", text); button.type = "button"; button.dataset.source = value;
+    button.addEventListener("click", () => {
+      if (button.classList.contains("is-active") && value === "internal") return;
+      const select = $("#clock-source"); if (select) { select.value = value; globalThis.renderClockSourceFields?.(); }
+      globalThis.openModal?.("clock-source-modal", button);
+    });
+    toggle.append(button);
+  }
+  source.append(toggle);
+  label($("#local-clock-speed").closest("label").querySelector("tm-text"), "Hastighet");
+  label($("#local-clock-reason").closest("label").querySelector("tm-text"), "Orsak vid stopp (valfritt)");
+  label($("#stop-local-clock"), "Stoppa klockan");
   const reasonField = $("#local-clock-reason").closest("label");
   clockForm.insertBefore(source, reasonField);
   // Kit order (SPEC A5): time · speed · source · Spara │ reason · Stoppa/Starta.
@@ -93,8 +111,8 @@
   const actions = make("div", "server-actions");
   for (const id of ["simulation-start-open", "simulation-pause", "simulation-reset-open", "simulation-finish-open"]) move(`#${id}`, actions);
   actions.querySelector("#simulation-start-open").className = "secondary";
-  const virtualBox = authored("a", "secondary", "Starta virtuell TMBox"); virtualBox.href = "/tmbox/"; virtualBox.target = "_blank"; virtualBox.rel = "noopener";
-  virtualBox.id = "simulation-virtual-tmbox"; actions.append(virtualBox);
+  label(actions.querySelector("#simulation-start-open"), "Starta simulering…");
+  // A virtual TMBox is under Öppna in the header; the side panel is the simulation's.
   simulation.append(actions); move("#simulation-error", simulation); row.append(simulation);
   overview.prepend(row);
   mark(".meet-summary-card"); mark(".overview-actions");
@@ -108,7 +126,9 @@
   // made the station table read as part of the client list.
   label($("#device-management h2"), "Klienter");
   $("#device-management").querySelectorAll(".eyebrow, .compact-heading p").forEach(n => n.classList.add("legacy-internal"));
-  const network = make("p", "server-network"); network.id = "client-network";
+  const network = make("span", "server-network server-chip"); network.id = "client-network";
+  const awaiting = $("#device-awaiting"); awaiting.classList.add("tm-tag", "tm-tag--warn");
+  $("#device-management .section-heading h2").after(awaiting);
   $("#device-management .section-heading").append(network);
   // Reconnecting a removed client is rare: after the list, not above it.
   $("#device-removed-trying").after($("#device-management .device-reconnect"));
@@ -154,6 +174,17 @@
   const trainDetail = make("section", "drift-train-detail"); trainDetail.id = "drift-train-detail"; trainDetail.hidden = true;
   upcoming.after(trainDetail);
   move(".overview-graph-card", overview);
+  // "Öppna på skärm ↗" in every module head that has a TV screen.
+  const screenLink = (selector, href) => {
+    let link = selector && $(selector);
+    if (!link) { link = make("a"); link.href = href; link.target = "_blank"; link.rel = "noopener"; }
+    link.classList.add("server-screen-link"); label(link, "Öppna på skärm ↗"); return link;
+  };
+  screenLink('.topology-overview-card .overview-section-heading a[href="/display/topology"]');
+  screenLink('.overview-graph-card .overview-section-heading a[href="/display/graph"]');
+  const filters = $(".traffic-filters"); $('label[for="traffic-station"]').classList.add("tm-visually-hidden");
+  filters.append($("#traffic-station"));
+  $("#overview-traffic .overview-section-heading").append(filters, screenLink(null, "/display/dashboard"));
   // Module heads as in the design (DriftEU): the name, then a short grey line.
   const headMeta = (selector, id) => {
     const meta = make("span", "server-head-meta"); if (id) meta.id = id;
@@ -183,6 +214,23 @@
   for (const [id, label] of targets) { const a = authored("a", "tm-seg", label); a.href = `/installningar#${id}`; nav.append(a); }
   const back = authored("a", "tm-btn", "← Tillbaka till driften"); back.href = "/drift"; nav.append(back);
   $("#settings-heading").append(nav);
+  // The button of the section in view is marked: the section whose top has
+  // most recently passed under the header (two columns: the left one wins a
+  // tie). A button just pressed stays marked while the page scrolls to it.
+  let pickedUntil = 0;
+  const setActive = id => nav.querySelectorAll("a.tm-seg").forEach(a => a.classList.toggle("is-active", a.hash === `#${id}`));
+  const markSection = () => {
+    if (document.body.dataset.mode !== "installningar" || Date.now() < pickedUntil) return;
+    let current = targets[0][0], best = -Infinity;
+    for (const [id] of targets) {
+      const top = document.getElementById(id)?.getBoundingClientRect().top;
+      if (top !== undefined && top < 140 && top > best + 1) { best = top; current = id; }
+    }
+    if (scrollY > 0 && innerHeight + scrollY >= document.documentElement.scrollHeight - 4) current = targets[targets.length - 1][0];
+    setActive(current);
+  };
+  nav.addEventListener("click", event => { const a = event.target.closest?.("a.tm-seg"); if (a) { pickedUntil = Date.now() + 800; setActive(a.hash.slice(1)); } });
+  addEventListener("scroll", markSection, { passive: true });
   const columns = make("div", "server-settings-columns"); const left = make("div"); const right = make("div"); columns.append(left, right); settings.append(columns);
   // Farozon comes last of all, under both columns, on a phone as on a computer.
   const sections = [["#sync-and-devices", left, "traff"], ["#server-identity-settings", left, "server"], ["#connection-settings", left, "anslutning"], ["#admin-users-settings", right, "anvandare"], [".clock-control-card", right, "skarmar"], ["#language-settings", right, "sprak"], ["#software-update-settings", right, "uppdatering"], ["#server-system-settings", settings, "farozon"]];
@@ -195,9 +243,12 @@
   inlineForm("#cloud-auto-form", $("#sync-and-devices")); mark("#cloud-auto-edit");
   $("#cloud-auto-form > p").classList.add("legacy-internal");
   const identity = $("#server-identity-settings");
+  identity.querySelector(".server-anchor").after(authored("h2", "", "Den här servern"));
+  mark("#server-identity-settings .identity-status-grid");
   inlineForm("#server-identity-form", identity);
   mark('[data-open-modal="server-identity-form-modal"]');
   const danger = $("#server-system-settings"); danger.prepend(authored("h2", "", "Farozon"));
+  danger.querySelectorAll("button").forEach(button => button.classList.add("danger-action"));
   const appearance = $(".clock-control-card");
   label(appearance.querySelector("h2"), "Skärmar och klocka");
   appearance.querySelectorAll(".eyebrow, .compact-heading p, .modal-launch").forEach(n => n.classList.add("legacy-internal"));
@@ -216,6 +267,94 @@
   inlineForm("#connection-code-form", connection);
   inlineForm("#connection-wifi-form", part("Träffens Wi-Fi"));
   label($("#users-invite-open"), "+ Bjud in");
+  $("#admin-users-settings .section-heading").append($("#users-invite-open"));
+
+  // ---- Inställningar in the design's form (ServerSida): every card is a head
+  // (name and a short grey line), short rows of key and value with the action
+  // at the end of its row, and a foot for the small print. The controls are
+  // the same elements as before, moved; only their places change.
+  const spacer = () => make("span", "tm-spacer");
+  const muted = (source) => authored("span", "tm-line__muted", source);
+  // The value side is its own box, so a row that wraps stays in its column.
+  const settingRow = (key, ...nodes) => {
+    const line = make("div", "tm-line");
+    if (key) line.append(typeof key === "string" ? authored("span", "tm-line__key", key) : key);
+    const value = make("div", "tm-line__value"); value.append(...nodes.filter(Boolean)); line.append(value); return line;
+  };
+  const settingRows = (...lines) => { const box = make("div", "tm-lines"); box.append(...lines); return box; };
+  const head = (card, note) => {
+    let bar = card.querySelector(":scope > .section-heading");
+    if (!bar) {
+      const h2 = card.querySelector(":scope > h2");
+      bar = make("div", "section-heading server-card__head"); h2.before(bar); bar.append(h2);
+    }
+    if (note) bar.querySelector("h2").after(authored("span", "server-card__note-inline", note));
+    return bar;
+  };
+  const foot = (card, ...nodes) => { const node = make("div", "tm-card__foot"); node.append(...nodes); card.append(node); return node; };
+
+  // Träff och Cloud: Träff · Kör version · Cloud, the automatic fetch, and
+  // Byt träff in the foot.
+  const cloudCard = $("#sync-and-devices");
+  head(cloudCard, "träffens innehåll ändras i Cloud och hämtas hit");
+  cloudCard.querySelector(":scope > p:not([id])")?.classList.add("legacy-internal");
+  const meetRegion = make("span", "tm-badge"); meetRegion.id = "cloud-meet-region";
+  const meetMeta = make("span", "tm-line__muted"); meetMeta.id = "cloud-meet-meta";
+  const runningVersion = $("#cloud-connection-meta"); runningVersion.classList.add("tm-badge", "tm-badge--version");
+  const publishedAt = make("span", "tm-line__muted"); publishedAt.id = "cloud-published-at";
+  const searchUpdate = $("#runtime-check-update"); searchUpdate.classList.add("tm-linkbtn");
+  cloudCard.querySelector(".cloud-connection-summary").replaceWith(settingRows(
+    settingRow("Träff", $("#cloud-connection-meet"), meetRegion, meetMeta),
+    settingRow("Kör version", runningVersion, publishedAt, $("#cloud-version-state")),
+    settingRow("Cloud", $("#cloud-connection-state"), $("#cloud-auto-status"), spacer(), searchUpdate),
+    settingRow(null, $("#cloud-auto-form"))));
+  const changeMeet = cloudCard.querySelector('[data-open-modal="runtime-sync-form-modal"]');
+  label(changeMeet, "Byt träff…"); changeMeet.classList.add("tm-btn--sm");
+  foot(cloudCard, changeMeet, muted("Träffkod från Cloud · användare och nätverk behålls, stationstilldelningarna följer inte med"));
+  cloudCard.querySelector(".cloud-actions").classList.add("legacy-internal");
+
+  // Den här servern: Namn [fält] [Spara] and the address on the meet's network.
+  head(identity, "namnet syns i Cloud och längst ner på skärmarna");
+  const identityForm = $("#server-identity-form"); identityForm.classList.add("tm-line");
+  identityForm.querySelector('label[for="admin-server-name"]').classList.add("tm-line__key");
+  label(identityForm.querySelector('[type="submit"]'), "Spara");
+  const serverAddress = make("span", "tm-line__mono"); serverAddress.id = "server-network-line";
+  identityForm.after(settingRows(settingRow("Nätverk", serverAddress, muted("adressen på träffens nätverk"))));
+
+  // Användare: "+ Bjud in" in the head, the rule about owners in the foot.
+  label($("#users-invite-open"), "+ Bjud in");
+  const usersHead = $("#admin-users-settings .section-heading");
+  usersHead.append(spacer(), $("#users-invite-open"));
+  const usersNote = $("#admin-users-settings .access-explainer"); if (usersNote) foot($("#admin-users-settings"), usersNote);
+
+  // Skärmar och klocka: the four parts stay, each one row with its Spara last.
+  appearance.querySelector(".section-heading h2").after(authored("span", "server-card__note-inline", "gäller träffens skärmar på alla datorer"));
+  $('label[for="meet-clock-style"]').classList.add("tm-visually-hidden");
+
+  // Språk: one row.
+  const language = $("#language-settings"); head(language, "gäller den här webbläsaren");
+  language.querySelector(":scope > p")?.classList.add("legacy-internal");
+  const languageChoice = language.querySelector(".settings-language-choice");
+  languageChoice.classList.add("tm-line"); languageChoice.querySelector("span").classList.add("tm-line__key");
+  languageChoice.append(muted("TMBoxarnas språk sätts per box på Drift"));
+
+  // Programuppdatering: version, state and the button on one row; what the
+  // update does in the foot.
+  const update = $("#software-update-settings");
+  const updateNote = update.querySelector(".update-explainer");
+  const updateRow = update.querySelector(".update-actions"); updateRow.classList.add("tm-line");
+  updateRow.prepend($("#software-version"));
+  if (updateNote) foot(update, updateNote);
+
+  // Farozon: each action on its row with what it does beside it.
+  head(danger, "varje åtgärd bekräftas i ett eget fönster");
+  const restoreButton = danger.querySelector('[data-open-modal="restore-modal"]');
+  const resetButton = $("#reset-mode-summary");
+  const resetWhat = make("span", "tm-line__muted");
+  const mirror = () => { resetWhat.textContent = $("#reset-mode-description")?.textContent || ""; };
+  new MutationObserver(mirror).observe($("#reset-mode-description"), { childList: true, characterData: true, subtree: true }); mirror();
+  const dangerRows = settingRows(settingRow(null, restoreButton, muted("En kopia tas automatiskt före varje programuppdatering.")), settingRow(null, resetButton, resetWhat));
+  danger.querySelector(":scope > .section-heading").after(dangerRows);
 
   // Documentation is separate from the operator client. No legacy emulator is
   // started by merely visiting Help.
@@ -259,6 +398,13 @@
       : (hasVersion ? version : t("Publicerad")) + (conflicts ? ` · ${conflicts} ${t("konflikter")}` : "");
     status.className = `tm-status tm-status--${newer ? "newer" : offline ? "offline" : "published"}`;
     $("#cloud-connection-meta").textContent = version;
+    const region = $("#cloud-meet-region");
+    if (region) { region.textContent = meet ? (us ? "US" : "EU") : ""; region.className = `tm-badge tm-badge--${us ? "us" : "eu"}`; region.hidden = !meet; }
+    const runtime = api.info?.runtime || {};
+    if ($("#cloud-meet-meta")) $("#cloud-meet-meta").textContent = runtime.station_count ? t("{stations} stationer · {day}", { stations: runtime.station_count, day: runtime.active_day || "" }) : "";
+    const published = runtime.published_at ? new Date(runtime.published_at) : null;
+    if ($("#cloud-published-at")) $("#cloud-published-at").textContent = published && !Number.isNaN(published.getTime())
+      ? t("publicerad {date}", { date: `${published.toLocaleDateString("sv-SE")} ${published.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}` }) : "";
     $("#drift-simulation").hidden = us;
     $("#device-management").hidden = us;
     $("#station-placement").hidden = us;
@@ -285,6 +431,8 @@
     tag.textContent = parts.join(" · ") + (ordinal === null ? "" : ` ${t("i version {version}", {version: ordinal})}`);
   };
   api.refreshClock = clock => {
+    $("#clock-source-toggle")?.querySelectorAll("button").forEach(button =>
+      button.classList.toggle("is-active", button.dataset.source === (clock.source === "fastclock" ? "fastclock" : "internal")));
     const us = api.context?.operating_region === "us";
     const value = String(clock.time || "--:--").slice(0, 5);
     const [h, m] = value.split(":");
@@ -300,9 +448,14 @@
     // code is for the apps and TKL and lives under Settings.
     const label = connection.host ? `${connection.host}:${connection.port}` : t("Anslut klienten till denna server");
     $("#client-network").textContent = label;
+    if ($("#server-network-line")) $("#server-network-line").textContent = connection.host ? `${connection.host}:${connection.port}` : "—";
   };
   api.mode = mode => {
     $("#help-view").classList.toggle("hidden", mode !== "help");
+    for (const [id, page] of [["#header-settings", "installningar"], ["#header-help", "help"]]) {
+      if (mode === page) $(id)?.setAttribute("aria-current", "page"); else $(id)?.removeAttribute("aria-current");
+    }
+    requestAnimationFrame(markSection);
     if (mode === "installningar" && location.hash) requestAnimationFrame(() => document.getElementById(location.hash.slice(1))?.scrollIntoView({block: "start"}));
   };
   api.stationRows = rows => {
@@ -325,20 +478,29 @@
       .sort((a, b) => (a.departure_time || a.arrival_time).localeCompare(b.departure_time || b.arrival_time)).slice(0, 4);
     const delayed = moving.filter(p => (snapshot.routes || []).some(r => r.train_number === p.train_number && r.station_id === p.to_station_id && r.arrival_time && r.arrival_time < now));
     const stats = $("#drift-traffic-stats"); stats.replaceChildren();
-    for (const [count, label] of [[moving.length, "På linjen"], [positions.filter(p => !p.connection_id && p.station_id).length, "På station"], [delayed.length, "Sena ankomster"]]) {
-      const stat = make("div"); stat.append(make("strong", "", String(count)), authored("span", "", label)); stats.append(stat);
+    for (const [count, label, tone] of [[moving.length, "tåg på linjen", ""], [positions.filter(p => !p.connection_id && p.station_id).length, "inne på stationerna", ""], [delayed.length, "avvikelser", delayed.length ? "warn" : "ok"]]) {
+      const stat = make("div", tone ? `server-stat--${tone}` : ""); stat.append(make("strong", "", String(count)), authored("span", "", label)); stats.append(stat);
     }
-    const events = $("#drift-upcoming"); events.replaceChildren(authored("strong", "", "Kommande enligt tidtabell"));
+    const online = $("#traffic-online")?.closest("section"); if (online) online.hidden = !moving.length;
+    const atStations = $("#traffic-stations-heading");
+    if (atStations) atStations.textContent = `${t("Inne på stationerna")} (${(snapshot.stations || []).length})`;
+    // Same small capitals as "På linjen just nu" under it; then one row per
+    // event in columns: time, train, where and what, and how long until.
+    const events = $("#drift-upcoming"); events.replaceChildren(authored("h3", "section-eyebrow", "Nästa händelser"));
+    const minutesOf = value => { const [h, m] = String(value || "").split(":").map(Number); return h * 60 + m; };
     for (const row of upcoming) {
       const name = snapshot.stations?.find(s => s.id === row.station_id)?.name || row.station_id;
+      const when = row.departure_time || row.arrival_time, delta = minutesOf(when) - minutesOf(now);
       // Each train opens its route and position (api.onTrainSelect, app.js).
-      const entry = make("button", "server-event"); entry.type = "button"; entry.dataset.trainNumber = row.train_number;
+      const entry = make("button", "server-event drift-event"); entry.type = "button"; entry.dataset.trainNumber = row.train_number;
       entry.setAttribute("aria-pressed", String(String(row.train_number) === String(selectedTrain)));
-      entry.append(make("span", "", row.departure_time || row.arrival_time), make("b", "", row.train_number), make("span", "", `${name} · ${t(row.departure_time ? "Avgång" : "Ankomst")}`));
+      entry.append(make("span", "drift-event__time", when), make("b", "drift-event__train", row.train_number),
+        make("span", "drift-event__what", t(row.departure_time ? "avgår {station}" : "ankommer {station}", { station: name })),
+        make("span", "drift-event__in", Number.isFinite(delta) ? (delta <= 0 ? t("nu") : t("{n} min", { n: delta })) : ""));
       entry.addEventListener("click", () => api.onTrainSelect?.(row.train_number));
       events.append(entry);
     }
-    if (!upcoming.length) events.append(authored("p", "", "Inga fler planerade händelser idag."));
+    if (!upcoming.length) events.append(authored("p", "drift-event__empty", "Inga fler planerade händelser idag."));
   };
   api.initDisplay = () => {
     document.body.classList.add("server-display");
