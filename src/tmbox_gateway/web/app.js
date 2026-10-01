@@ -18,7 +18,7 @@ function renderSimulation(data) {
   const clock = data.clock || {};
   document.querySelector("#simulation-summary").textContent = data.active
     ? `${clock.running ? t("Går") : t("Pausad")} · ${clock.time} · ${clock.speed}× · ${t("Trafikdag")} ${data.day} · ${t("Scenario")} ${data.seed}${data.notice ? " · " + data.notice : ""}`
-    : t(data.supported ? "Ingen simulering är aktiv. När du startar pausas det vanliga spelet och dess trafikläge sparas." : "Koppla en EU-träff från Cloud för att simulera stationsarbetet.");
+    : t(data.supported ? "Ingen simulering igång. Starten pausar spelet och sparar trafikläget." : "Koppla en EU-träff från Cloud för att simulera stationsarbetet.");
   document.querySelector("#simulation-start-open").hidden = data.active;
   document.querySelector("#simulation-start-open").disabled = !data.supported;
   for (const id of ["simulation-pause", "simulation-reset-open", "simulation-finish-open", "simulation-stations-card", "simulation-trains-card"]) document.getElementById(id).hidden = !data.active;
@@ -1871,12 +1871,13 @@ function renderDevices(payload) {
   }
   for (const device of [...payload.devices].sort((a, b) => Number(!!a.station_id) - Number(!!b.station_id))) {
     const row = document.createElement("div");
-    row.className = "status-row";
+    row.className = device.station_id ? "status-row" : "status-row is-waiting";
     const identity = document.createElement("div");
     const code = document.createElement("b");
     code.textContent = device.device_code;
     const model = document.createElement("small");
-    model.textContent = `${device.model} · ${device.device_id}`;
+    // What the box is, as on Drift in the design; its long id on hover.
+    model.textContent = device.model; model.title = device.device_id;
     identity.append(code, model);
     const station = (payload.stations || []).find((entry) => entry.id === device.station_id);
     const assignment = document.createElement("span");
@@ -2020,8 +2021,12 @@ function renderCloudPresentation() {
   rows.replaceChildren();
   for (const station of data?.stations || []) {
     const tr = document.createElement("tr");
-    for (const value of [`${station.code} · ${station.name}`,
-      ...["left", "right"].map(side => station.connections.filter(c => c.side === side).map(c => c.other_station_code).join(", ") || "—")]) {
+    // The station's name first, its code quiet beside it (as on every map).
+    const nameCell = document.createElement("td"); nameCell.className = "station-name-cell";
+    const stationName = document.createElement("b"); stationName.textContent = station.name;
+    const stationCode = document.createElement("span"); stationCode.className = "station-code"; stationCode.textContent = station.code;
+    nameCell.append(stationName, " ", stationCode); tr.append(nameCell);
+    for (const value of ["left", "right"].map(side => station.connections.filter(c => c.side === side).map(c => c.other_station_code).join(", ") || "—")) {
       const td = document.createElement("td"); td.textContent = value; tr.append(td);
     }
     if (station.legacy_layout_limited) {
@@ -2145,7 +2150,8 @@ async function refreshLocalClock() {
   const connection = await authorizedFetch("/v1/display/connection", {cache: "no-store"});
   if (connection.ok) renderConnectionBadgeSettings(await connection.json());
   const timeInput = document.querySelector("#local-clock-time");
-  if (!editorActive(clockControlForm)) timeInput.value = clock.time || "12:00:00";
+  // Hours and minutes, as on every clock in the design; seconds are not set by hand.
+  if (!editorActive(clockControlForm)) timeInput.value = String(clock.time || "12:00").slice(0, 5);
   const speedInput = document.querySelector("#local-clock-speed");
   if (!editorActive(clockControlForm)) speedInput.value = Number(clock.speed || 1);
   const stateLabel = document.querySelector("#clock-state");
@@ -3590,10 +3596,13 @@ function renderOverviewGraph(snapshot) {
   const minutes = lines.flatMap((line) => line.points.map((point) => point.minute));
   const minMinute = minutes.length ? Math.floor(Math.min(...minutes) / 60) * 60 : 0;
   const maxMinute = minutes.length ? Math.max(minMinute + 60, Math.ceil(Math.max(...minutes) / 60) * 60) : 24 * 60;
-  const left = 60, right = 16, top = 22, bottom = 28, stationStep = 26;
+  // 20 px per station: the whole line in a low band, as in the design.
+  const left = 60, right = 16, top = 22, bottom = 28, stationStep = 20;
   // Never narrower than its card: a stretched drawing no longer meets the
   // station names beside it.
-  const width = Math.max(1200, document.querySelector("#overview-graph-scroll")?.clientWidth || 0, left + (maxMinute - minMinute) * 2.2 + right);
+  // 4 px a minute: about five hours across a computer screen, close to the
+  // TV graph, instead of most of the day squeezed into one card.
+  const width = Math.max(1200, document.querySelector("#overview-graph-scroll")?.clientWidth || 0, left + (maxMinute - minMinute) * 4 + right);
   const height = top + Math.max(stations.length - 1, 1) * stationStep + bottom;
   const x = (minute) => left + (minute - minMinute) / (maxMinute - minMinute) * (width - left - right);
   const y = (index) => top + index * stationStep;
@@ -3658,7 +3667,7 @@ function renderOverviewGraph(snapshot) {
   if (current !== null && current >= minMinute && current <= maxMinute) {
     const currentX = x(current);
     svg.append(svgElement("line", { x1: currentX, y1: top - 7, x2: currentX, y2: height - bottom + 3, class: "overview-graph-now" }));
-    svg.append(svgElement("circle", { cx: currentX, cy: top - 7, r: 4, fill: "#ef4444" }));
+    svg.append(svgElement("circle", { cx: currentX, cy: top - 7, r: 4, class: "overview-graph-now-dot" }));
     if (overviewGraphLastCenteredMinute === null || Math.abs(current - overviewGraphLastCenteredMinute) >= 5) {
       const scroller = document.querySelector("#overview-graph-scroll");
       scroller.scrollTo({ left: Math.max(0, currentX - scroller.clientWidth / 2), behavior: overviewGraphLastCenteredMinute === null ? "auto" : "smooth" });
