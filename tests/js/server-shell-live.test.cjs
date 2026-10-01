@@ -211,6 +211,12 @@ const root = path.resolve(__dirname, '../..');
     await page.getByRole('link',{name:'Hjälp',exact:true}).click();
     await page.locator('#help-view').waitFor({state:'visible'});
     assert.equal(await page.locator('#help-view a[href="/tmbox-lab/"]').isVisible(),true);
+    // Help leads to the flows the 16x2 engine draws; the ESP32/V1 panes it
+    // used to fold in described boxes nobody runs any more.
+    assert.equal(await page.locator('#help-view a[href="/tmbox-lab/floden"]').isVisible(),true);
+    assert.equal(await page.locator('#help-view details').count(),0);
+    assert.equal(await page.locator('#tmbox-flow-list > *').count(),0,'The V1/ESP32 flows are not built for Help');
+    assert.equal(await page.locator('.screen-menu nav a[href="/tmbox-lab/floden"]').count(),1);
     // Legacy bookmarks resolve to canonical routes.
     await page.goto(urls.eu+'/#settings');await page.waitForURL(urls.eu+'/installningar');
     await page.goto(urls.eu+'/#overview');await page.waitForURL(urls.eu+'/drift');

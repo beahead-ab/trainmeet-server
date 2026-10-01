@@ -623,7 +623,6 @@ function setMode(mode) {
   else if (next === "simulation") refreshSimulation();
   else if (next === "kor" && state.serverContext?.operating_region === "eu") renderOverview(state.overviewSnapshot);
   if (next === "kor") refreshSimulation();
-  if (next === "help") { buildTMBoxGuide(); buildScreenCatalog(); buildFlowList(); }
   serverUI.mode(next);
   window.scrollTo({ top: 0, behavior: "auto" });
 }

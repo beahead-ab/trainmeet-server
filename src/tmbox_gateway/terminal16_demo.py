@@ -133,6 +133,17 @@ class LabServer(ThreadingHTTPServer, LabState):
         ThreadingHTTPServer.__init__(self, address, Handler)
 
 
+# Served to anyone who may open the lab, without a test session: the page of
+# flows is the same for everybody and never touches a lab.
+STATIC = {"/terminal.js": ("terminal.js", "text/javascript; charset=utf-8"),
+          "/lcd.js": ("lcd.js", "text/javascript; charset=utf-8"),
+          "/style.css": ("style.css", "text/css; charset=utf-8"),
+          "/floden": ("floden.html", "text/html; charset=utf-8"),
+          "/flows.js": ("flows.js", "text/javascript; charset=utf-8"),
+          "/flows-page.js": ("flows-page.js", "text/javascript; charset=utf-8"),
+          "/flows.css": ("flows.css", "text/css; charset=utf-8")}
+
+
 class Handler(BaseHTTPRequestHandler):
     @property
     def context(self):
@@ -194,9 +205,7 @@ class Handler(BaseHTTPRequestHandler):
                         self.context.changed.wait(timeout=1)
             except (BrokenPipeError, ConnectionResetError, TimeoutError):
                 return
-        files = {"/": ("index.html", "text/html; charset=utf-8"),
-                 "/terminal.js": ("terminal.js", "text/javascript; charset=utf-8"),
-                 "/style.css": ("style.css", "text/css; charset=utf-8")}
+        files = {"/": ("index.html", "text/html; charset=utf-8"), **STATIC}
         if path in files:
             filename, content_type = files[path]
             return self._send(200, (Path(__file__).parent / "terminal16_web" / filename).read_bytes(), content_type)

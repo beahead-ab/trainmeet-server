@@ -280,8 +280,34 @@ const root = path.resolve(__dirname, '../..');
     await page.unrouteAll({behavior: 'wait'});
     await page.waitForFunction(() => document.querySelector('#connection').textContent === 'Ansluten till servern');
     await noneDisabled();
+
+    // The flows page: every picture from the 16x2 engine, drawn by the same
+    // lcd.js as the boxes, readable on a desktop and on a phone.
+    await page.goto(labURL);
+    await page.locator('.tm-top a[href="./floden"]').click();
+    await page.waitForURL(/\/tmbox-lab\/floden$/);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({width, height: 900});
+      await page.locator('.flow').nth(10).waitFor();
+      assert.equal(await page.locator('.flow').count(), 11);
+      assert.equal(await page.locator('#flow-index a').count(), 11);
+      const drawn = await page.evaluate(() => [...document.querySelectorAll('.flow .lcd')].map(lcd =>
+        [...lcd.querySelectorAll('.lcd-row')].map(row => row.querySelectorAll('.lcd-cell').length)));
+      assert.ok(drawn.length > 100, `${drawn.length} displays`);
+      assert.ok(drawn.every(rows => rows.length === 2 && rows[0] === 16 && rows[1] === 16), 'Every display is 16 x 2');
+      const shipped = await page.evaluate(() => TMBoxFlows.flows[0].steps[0].screens[0].lines.join(''));
+      assert.equal(await page.locator('#flow-klarera .flow-step').nth(1).locator('.lcd').first().textContent(), shipped);
+      assert.match(shipped, /^TÅG: 39___/);
+      // What the step changed stands out; the other box is drawn dimmed.
+      assert.deepEqual(await page.locator('#flow-klarera .flow-step').nth(1).locator('.flow-screen')
+        .evaluateAll(figures => figures.map(f => f.classList.contains('is-changed'))), [true, false]);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `No sideways scroll at ${width} px`);
+      const cell = await page.locator('#flow-klarera .lcd-cell').first().boundingBox();
+      assert.ok(cell.width >= 10, `LCD cells readable at ${width} px (${cell.width})`);
+      await screenshot(`flows-${width}`);
+    }
     assert.deepEqual(errors, []);
-    console.log('TMBox browser tests passed: placement, local digits, isolation, real-client frames, two active departures, B/C/D navigation, counters and disabled duplicate departure, desktop/mobile.');
+    console.log('TMBox browser tests passed: placement, local digits, isolation, real-client frames, two active departures, B/C/D navigation, counters and disabled duplicate departure, desktop/mobile, flows page.');
   } finally {
     if (browser) await browser.close();
     fixture.stdin.end();

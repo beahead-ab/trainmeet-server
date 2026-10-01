@@ -13,7 +13,7 @@ from threading import BoundedSemaphore, RLock
 import time
 from urllib.parse import urlsplit
 
-from .terminal16_demo import Handler, LabState
+from .terminal16_demo import Handler, LabState, STATIC
 
 COOKIE = "trainmeet_tmbox_lab"
 MAX_AGE = 4 * 60 * 60
@@ -182,7 +182,7 @@ class PublicHandler(Handler):
             self._send(404, {"message": "Finns inte"})
             return False
         self.path = "/" + path[len(self.server.prefix):]
-        if self.path in {"/style.css", "/terminal.js", "/healthz"} and not mutation:
+        if (self.path in STATIC or self.path == "/healthz") and not mutation:
             return True
         if self.path not in {"/", "/events", "/api/state", "/api/key", "/api/reset", "/api/reset-devices", "/api/display-placement"}:
             self._send(404, {"message": "Finns inte"})

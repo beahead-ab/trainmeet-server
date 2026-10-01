@@ -284,6 +284,24 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual({"service": "tmbox-lab", "served_by": "server", "version": installed_version()},
                          {key: health[key] for key in ("service", "served_by", "version")})
 
+    def test_the_flows_page_is_static_and_opens_no_lab_session(self):
+        page = urlopen(self.base_url + "/tmbox-lab/floden", timeout=2)
+        self.assertEqual("text/html; charset=utf-8", page.headers["Content-Type"])
+        self.assertIsNone(page.headers["Set-Cookie"])
+        html = page.read().decode()
+        for asset, kind in (("lcd.js", "text/javascript"), ("flows.js", "text/javascript"),
+                            ("flows-page.js", "text/javascript"), ("flows.css", "text/css"), ("style.css", "text/css")):
+            self.assertIn(f'"./{asset}"', html)
+            with urlopen(self.base_url + "/tmbox-lab/" + asset, timeout=2) as response:
+                self.assertTrue(response.headers["Content-Type"].startswith(kind), asset)
+                self.assertIsNone(response.headers["Set-Cookie"])
+        self.assertIn(b"globalThis.TMBoxFlows", urlopen(self.base_url + "/tmbox-lab/flows.js", timeout=2).read())
+        self.assertEqual(0, len(self.application.lab_sessions.sessions))
+        # The virtual box draws its display with the same file.
+        self.assertIn(b"TMBoxLCD", urlopen(self.base_url + "/tmbox/lcd.js", timeout=2).read())
+        live = urlopen(self.base_url + "/tmbox/", timeout=2).read().decode()
+        self.assertLess(live.index("/tmbox/lcd.js"), live.index("/tmbox/terminal.js"))
+
     def test_public_client_origin_is_explicit_and_does_not_unlock_admin(self):
         from dataclasses import replace
         self.identities.configure_admin_access("admin", "test-password")

@@ -65,15 +65,7 @@
   let placement = null, placementDraft = null;
   const placementDialog = document.querySelector("#placement-dialog");
   const keyOrder = "123A456B789C*0#D";
-  function drawLCD(lcd, lines) {
-    lcd.replaceChildren();
-    lcd.setAttribute("aria-label", lines.join(". "));
-    for (const line of lines) {
-      const row = document.createElement("div"); row.className = "lcd-row";
-      for (const character of line.normalize("NFC")) { const cell = document.createElement("span"); cell.className = "lcd-cell"; cell.textContent = character; row.append(cell); }
-      lcd.append(row);
-    }
-  }
+  const {drawLCD} = root.TMBoxLCD;  // lcd.js, loaded first
   function makeBox(frame) {
     const card = document.createElement("article"); card.className = "box"; card.tabIndex = 0; card.dataset.device = frame.device_id;
     card.innerHTML = '<div class="box-heading"><h2></h2><span class="box-code"></span></div><div class="box-status"></div><div class="box-queue" role="status"></div><div class="tmbox-case"><div class="lcd-frame"><div class="lcd" role="img"></div></div><div class="keypad"></div></div><div class="key-hints"></div><p class="box-message" role="status"></p><div class="box-timetable"></div>';

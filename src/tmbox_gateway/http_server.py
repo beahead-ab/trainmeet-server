@@ -3509,7 +3509,7 @@ class TrainMeetHTTPApplication:
                 return self.web_root.joinpath("fonts", name).read_bytes(), mimetypes.guess_type(name)[0] or "font/woff2"
             except FileNotFoundError:
                 return None
-        terminal_asset = {"/tmbox/": "live.html", "/tmbox": "live.html", "/tmbox/terminal.js": "terminal.js", "/tmbox/style.css": "style.css"}.get(path)
+        terminal_asset = {"/tmbox/": "live.html", "/tmbox": "live.html", "/tmbox/terminal.js": "terminal.js", "/tmbox/lcd.js": "lcd.js", "/tmbox/style.css": "style.css"}.get(path)
         if terminal_asset:
             return files("tmbox_gateway").joinpath("terminal16_web", terminal_asset).read_bytes(), mimetypes.guess_type(terminal_asset)[0] or "text/plain"
         if path in {"/us", "/us/", "/us/dispatcher", "/us/conductor", "/us/app.js", "/us/style.css", "/us/workspace-messages.js"}:

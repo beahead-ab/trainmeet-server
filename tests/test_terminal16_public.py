@@ -118,6 +118,7 @@ class PublicHTTPTests(unittest.TestCase):
             self.assertIn(attribute, headers["Set-Cookie"])
         self.assertIn(b'./style.css', data)
         self.assertIn(b'./terminal.js', data)
+        self.assertLess(data.index(b'./lcd.js'), data.index(b'./terminal.js'))
         self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
         self.assertEqual(headers["Cache-Control"], "no-store")
 
@@ -192,8 +193,9 @@ class PublicHTTPTests(unittest.TestCase):
             self.assertTrue(store.allow_command(session), f"tryck {press} nekades")
 
     def test_static_and_health_do_not_allocate_sessions(self):
-        for path in ("/healthz", "/style.css", "/terminal.js"):
-            self.assertEqual(self.request(path)[0], 200)
+        for path in ("/healthz", "/style.css", "/terminal.js", "/lcd.js",
+                     "/floden", "/flows.js", "/flows-page.js", "/flows.css"):
+            self.assertEqual(self.request(path)[0], 200, path)
         # The stand-alone service never claims to be Server.
         self.assertNotIn("served_by", json.loads(self.request("/healthz")[2]))
         self.assertEqual(len(self.server.sessions.sessions), 0)
