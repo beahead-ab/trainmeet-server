@@ -373,6 +373,9 @@ boot → wifi_connecting → discovering → connecting → waiting_for_assignme
 
 ## 8. Säkerhetsgrammatik
 
+Gäller v2-profilen. I 16×2-profilen verkställer `#` den åtgärd bilden visar;
+se [`../terminal16/README.md`](../terminal16/README.md) §1.
+
 `#` får aldrig lämna ett operativt beslut. `KLART`, `EJ KLART`, `AVGÅTT` och
 `ANKOMMIT` bekräftas alltid via `A` eller `B`. `#` betyder välj, OK, bekräfta
 data, kvittera visning.

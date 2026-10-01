@@ -13,6 +13,8 @@ LOGGER = logging.getLogger("tmbox_gateway.terminal16")
 # kunna fylla minnet genom att hitta på enhets-id:n.
 MAX_SESSIONS = 256
 SESSION_IDLE_SECONDS = 45
+# Störst tillåtna meddelande från en box. Ett riktigt kommando är ett par hundra byte.
+MAX_PAYLOAD_BYTES = 4096
 
 
 class Terminal16Gateway:
@@ -67,7 +69,7 @@ class Terminal16Gateway:
         eller None om ingenting återstår.
         """
 
-        if retained or not topic.startswith(self.PREFIX) or len(payload) > 4096:
+        if retained or not topic.startswith(self.PREFIX) or len(payload) > MAX_PAYLOAD_BYTES:
             return None
         parts = topic[len(self.PREFIX):].split("/")
         if len(parts) != 2 or not CLIENT_ID_PATTERN.fullmatch(parts[0]):
