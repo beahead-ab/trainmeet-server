@@ -164,6 +164,25 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 .server-stats span { font-size: 11px; color: var(--muted); }
 .server-events { font-size: 12px; margin: 8px 0; }
 .server-event { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--border-soft); }
+/* Drift: each upcoming train is a button that opens its route (#drift-train-detail). */
+button.server-event { width: 100%; margin: 0; padding: 5px 4px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: 0; background: transparent; color: inherit; font: inherit; line-height: inherit; text-align: left; justify-content: flex-start; align-items: baseline; cursor: pointer; min-height: 0; transition: none; }
+button.server-event:hover { background: var(--trainmeet-soft); }
+button.server-event[aria-pressed="true"] { background: var(--trainmeet-soft); color: var(--trainmeet); }
+#drift-train-detail { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+#drift-train-detail[hidden] { display: none; }
+.train-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.train-detail-head h3 { margin: 0; font-size: 15px; }
+.train-detail-close { min-width: 32px; min-height: 32px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
+.train-detail-now { margin: 6px 0 10px; font-size: 13px; }
+.train-detail-delay { color: var(--warn-text); font-weight: 600; }
+.train-detail-error { color: var(--danger); font-size: 12px; }
+.train-detail-loading { color: var(--muted); font-size: 12px; }
+.train-detail-stops .route-stop { min-height: 40px; }
+.train-detail-stops .route-stop > div { padding: 2px 8px; }
+.train-detail-stops .route-stop.done > i { border-color: var(--muted); background: var(--muted); }
+.train-detail-stops .route-stop.current > i { border-color: var(--trainmeet); background: var(--trainmeet); box-shadow: 0 0 0 3px var(--trainmeet-soft); }
+.train-detail-stops .route-stop.current b { color: var(--trainmeet); }
+.train-detail-between { margin: -6px 0 6px 25px; color: var(--trainmeet); font-size: 11px; font-weight: 600; }
 .server-details { font-size: 12px; padding: 6px 0; }
 .server-details > summary { cursor: pointer; font-weight: 600; }
 .traffic-section { margin-top: 8px; }
@@ -213,7 +232,7 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 /* ---------- Småputs: en knapp, en etikett, ett fält (design/komponenter.html) ----------
    app.css is still loaded and its .app-view rules win over the kit's element
    selectors, so these id-anchored rules restate the kit sizes once, for all. */
-#app-view button:not(.key):not(.tm-icon-btn):not(.route-number):not(.station-count-row):not(.modal-close),
+#app-view button:not(.key):not(.tm-icon-btn):not(.route-number):not(.station-count-row):not(.modal-close):not(.server-event):not(.train-detail-close),
 #app-chrome button:not(.tm-icon-btn), #app-view .tm-btn, .admin-modal button:not(.modal-close) {
   min-height: 30px; padding: 6px 12px; font: 600 12.5px/16px var(--font); border-radius: 6px; white-space: nowrap;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;

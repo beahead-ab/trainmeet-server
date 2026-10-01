@@ -95,3 +95,21 @@ Side|Sida|Side|Side|Seite
 Both sides|Båda sidor|Begge sider|Begge sider|Beide Seiten
 left|vänster|venstre|venstre|links
 right|höger|højre|høyre|rechts
+Could not load the train|Kunde inte hämta tåget|Kunne ikke hente toget|Kunne ikke hente toget|Zug konnte nicht geladen werden
+track {track}|spår {track}|spor {track}|spor {track}|Gleis {track}
+Waiting for clearance {route}|Väntar på klartecken {route}|Venter på klarmelding {route}|Venter på klarsignal {route}|Wartet auf Zustimmung {route}
+Clear to depart {route}|Klart att avgå {route}|Klar til afgang {route}|Klar for avgang {route}|Abfahrt frei {route}
+On the line {route} · departed {time}|På linjen {route} · avgick {time}|På strækningen {route} · afgik {time}|På strekningen {route} · gikk {time}|Auf der Strecke {route} · abgefahren {time}
+On the line {route}|På linjen {route}|På strækningen {route}|På strekningen {route}|Auf der Strecke {route}
+At {station} · departs {time}|Vid {station} · avgår {time}|Ved {station} · afgår {time}|Ved {station} · går {time}|In {station} · fährt ab {time}
+At {station}|Vid {station}|Ved {station}|Ved {station}|In {station}
+Arrived {station}|Ankommit {station}|Ankommet {station}|Ankommet {station}|Angekommen {station}
+Not departed · {station} · departs {time}|Inte avgått · {station} · avgår {time}|Ikke afgået · {station} · afgår {time}|Ikke gått · {station} · går {time}|Nicht abgefahren · {station} · fährt ab {time}
+Not departed · {station}|Inte avgått · {station}|Ikke afgået · {station}|Ikke gått · {station}|Nicht abgefahren · {station}
+Train {number}|Tåg {number}|Tog {number}|Tog {number}|Zug {number}
+Loading the train …|Hämtar tåget …|Henter toget …|Henter toget …|Zug wird geladen …
+Now:|Nu:|Nu:|Nå:|Jetzt:
+{minutes} min late|{minutes} min sen|{minutes} min forsinket|{minutes} min forsinket|{minutes} Min. verspätet
+arr {time}|ank {time}|ank {time}|ank {time}|an {time}
+dep {time}|avg {time}|afg {time}|avg {time}|ab {time}
+in on track {track}|inne på spår {track}|inde på spor {track}|inne på spor {track}|eingefahren auf Gleis {track}

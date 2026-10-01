@@ -2237,6 +2237,126 @@ function serviceForTrain(snapshot, trainNumber) {
   return uniqueOverviewServices(snapshot).find((service) => String(service.train_number) === String(trainNumber)) || null;
 }
 
+// ── Tågpanelen i Drift ────────────────────────────────────────────────
+//
+// Klick på ett tåg i "Kommande enligt tidtabell" visar hela sträckningen och
+// var tåget är nu (/v1/train). Tåget markeras samtidigt i Banöversikten och
+// Tågdiagrammet. Panelen hämtas om med Drift var femte sekund medan den är öppen.
+const trainDetail = { number: null, data: null, error: "", loading: false };
+serverUI.onTrainSelect = (number) => openTrainDetail(number);
+
+function openTrainDetail(number) {
+  trainDetail.number = String(number);
+  trainDetail.data = null;
+  trainDetail.error = "";
+  selectOverviewTrain(number);
+  if (state.overviewSnapshot) serverUI.traffic(state.overviewSnapshot, trafficState.station, trainDetail.number);
+  renderTrainDetail();
+  refreshTrainDetail();
+}
+
+function closeTrainDetail() {
+  trainDetail.number = null;
+  trainDetail.data = null;
+  selectOverviewTrain(null);
+  if (state.overviewSnapshot) serverUI.traffic(state.overviewSnapshot, trafficState.station, null);
+  renderTrainDetail();
+}
+
+async function refreshTrainDetail() {
+  const number = trainDetail.number;
+  if (!number || trainDetail.loading) return;
+  trainDetail.loading = true;
+  try {
+    const response = await authorizedFetch(`/v1/train?number=${encodeURIComponent(number)}`, { cache: "no-store" });
+    const payload = await response.json();
+    if (trainDetail.number !== number) return;
+    if (!response.ok) throw new Error(payload.message || t("Kunde inte hämta tåget"));
+    trainDetail.data = payload;
+    trainDetail.error = "";
+  } catch (error) {
+    if (trainDetail.number === number) trainDetail.error = error.message;
+  } finally {
+    trainDetail.loading = false;
+    renderTrainDetail();
+  }
+}
+
+function trainNowText(now, stops) {
+  const code = (id) => stops.find((stop) => stop.station_id === id)?.station_code || id || "";
+  const route = `${code(now.from_station_id)} → ${code(now.to_station_id)}`;
+  const at = [code(now.station_id), now.track ? t("spår {track}", { track: now.track }) : ""].filter(Boolean).join(" ");
+  switch (now.state) {
+    case "waiting": return t("Väntar på klartecken {route}", { route });
+    case "cleared": return t("Klart att avgå {route}", { route });
+    case "on_line": return now.since ? t("På linjen {route} · avgick {time}", { route, time: now.since }) : t("På linjen {route}", { route });
+    case "at_station": return now.time ? t("Vid {station} · avgår {time}", { station: at, time: now.time }) : t("Vid {station}", { station: at });
+    case "arrived": return t("Ankommit {station}", { station: at });
+    default: return now.time ? t("Inte avgått · {station} · avgår {time}", { station: at, time: now.time }) : t("Inte avgått · {station}", { station: at });
+  }
+}
+
+function renderTrainDetail() {
+  const host = document.querySelector("#drift-train-detail");
+  if (!host) return;
+  host.hidden = !trainDetail.number;
+  if (!trainDetail.number) { host.replaceChildren(); return; }
+  const head = document.createElement("div"); head.className = "train-detail-head";
+  const title = document.createElement("h3"); title.textContent = t("Tåg {number}", { number: trainDetail.number });
+  const close = document.createElement("button"); close.type = "button"; close.className = "train-detail-close";
+  close.setAttribute("aria-label", t("Stäng")); close.textContent = "×";
+  close.addEventListener("click", closeTrainDetail);
+  head.append(title, close);
+  const parts = [head];
+  if (trainDetail.error) {
+    const message = document.createElement("p"); message.className = "train-detail-error"; message.textContent = trainDetail.error;
+    parts.push(message);
+  } else if (!trainDetail.data) {
+    const message = document.createElement("p"); message.className = "train-detail-loading"; message.textContent = t("Hämtar tåget …");
+    parts.push(message);
+  }
+  for (const service of trainDetail.data?.services || []) {
+    const stops = service.stops || [];
+    const now = service.now || {};
+    const status = document.createElement("p"); status.className = `train-detail-now train-detail-now--${now.state || "unknown"}`;
+    const label = document.createElement("b"); label.textContent = t("Nu:");
+    status.append(label, " ", trainNowText(now, stops));
+    if (service.delay_minutes) {
+      const delay = document.createElement("span"); delay.className = "train-detail-delay";
+      delay.textContent = t("{minutes} min sen", { minutes: service.delay_minutes });
+      status.append(" ", delay);
+    }
+    const list = document.createElement("ol"); list.className = "route-stops train-detail-stops";
+    stops.forEach((stop, index) => {
+      const item = document.createElement("li");
+      const reached = stop.departure === "departed" || stop.arrival === "arrived";
+      const here = ["not_departed", "at_station", "arrived"].includes(now.state) && now.station_id === stop.station_id
+        && (now.state !== "not_departed" || index === 0);
+      const leaving = ["waiting", "cleared"].includes(now.state) && now.from_station_id === stop.station_id;
+      item.className = ["route-stop", index === 0 ? "first" : "", index === stops.length - 1 ? "last" : "",
+        reached ? "done" : "", here || leaving ? "current" : ""].filter(Boolean).join(" ");
+      const marker = document.createElement("i");
+      const text = document.createElement("div");
+      const name = document.createElement("b"); name.textContent = `${stop.station_code} · ${stop.station_name}`;
+      const times = [stop.arrival_time ? t("ank {time}", { time: stop.arrival_time }) : "", stop.departure_time ? t("avg {time}", { time: stop.departure_time }) : ""];
+      const tracks = [stop.planned_track ? t("spår {track}", { track: stop.planned_track }) : "",
+        stop.actual_track && stop.actual_track !== stop.planned_track ? t("inne på spår {track}", { track: stop.actual_track }) : ""];
+      const detail = document.createElement("span"); detail.textContent = [...times, ...tracks].filter(Boolean).join(" · ");
+      text.append(name, detail);
+      item.append(marker, text);
+      list.append(item);
+      // Between two calls: where a train on the line is.
+      if (now.state === "on_line" && now.from_station_id === stop.station_id && stops[index + 1]?.station_id === now.to_station_id) {
+        const between = document.createElement("li"); between.className = "train-detail-between";
+        between.textContent = t("På linjen");
+        list.append(between);
+      }
+    });
+    parts.push(status, list);
+  }
+  host.replaceChildren(...parts);
+}
+
 function selectOverviewTrain(trainNumber) {
   state.selectedTrainNumber = trainNumber ? String(trainNumber) : null;
   state.selectedStationID = null;
@@ -4841,7 +4961,8 @@ document.querySelector("#traffic-only-deviations")?.addEventListener("change", (
 
 function renderTraffic(snapshot) {
   if (!snapshot) return;
-  serverUI.traffic(snapshot, trafficState.station);
+  serverUI.traffic(snapshot, trafficState.station, trainDetail.number);
+  if (trainDetail.number) refreshTrainDetail();
 
   fillTrafficStationFilter(snapshot);
   renderTrafficOnline(snapshot);

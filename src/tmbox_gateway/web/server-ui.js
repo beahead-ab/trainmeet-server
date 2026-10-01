@@ -119,6 +119,9 @@
   const trafficStats = make("div", "server-stats"); trafficStats.id = "drift-traffic-stats";
   $(".traffic-filters").after(trafficStats);
   const upcoming = make("div", "server-events"); upcoming.id = "drift-upcoming"; trafficStats.after(upcoming);
+  // A train picked in the list: its route and where it is now (app.js).
+  const trainDetail = make("section", "drift-train-detail"); trainDetail.id = "drift-train-detail"; trainDetail.hidden = true;
+  upcoming.after(trainDetail);
   const stationSection = $("#traffic-stations").closest("section");
   const stationParent = stationSection.parentElement;
   stationParent.insertBefore(details("Inne på stationerna", stationSection), stationParent.querySelector(".traffic-history"));
@@ -253,7 +256,7 @@
       const more = details(`${t("Visa alla stationer")} (${all.length})`, rest); more.open = expanded; host.append(more);
     }
   };
-  api.traffic = (snapshot, station = "") => {
+  api.traffic = (snapshot, station = "", selectedTrain = null) => {
     const positions = (snapshot.train_positions || []).filter(p => !station || [p.station_id, p.from_station_id, p.to_station_id].includes(station));
     const moving = positions.filter(p => p.connection_id);
     const now = String(snapshot.clock?.time || "00:00").slice(0, 5);
@@ -267,7 +270,12 @@
     const events = $("#drift-upcoming"); events.replaceChildren(authored("strong", "", "Kommande enligt tidtabell"));
     for (const row of upcoming) {
       const name = snapshot.stations?.find(s => s.id === row.station_id)?.name || row.station_id;
-      const entry = make("div", "server-event"); entry.append(make("span", "", row.departure_time || row.arrival_time), make("b", "", row.train_number), make("span", "", `${name} · ${t(row.departure_time ? "Avgång" : "Ankomst")}`)); events.append(entry);
+      // Each train opens its route and position (api.onTrainSelect, app.js).
+      const entry = make("button", "server-event"); entry.type = "button"; entry.dataset.trainNumber = row.train_number;
+      entry.setAttribute("aria-pressed", String(String(row.train_number) === String(selectedTrain)));
+      entry.append(make("span", "", row.departure_time || row.arrival_time), make("b", "", row.train_number), make("span", "", `${name} · ${t(row.departure_time ? "Avgång" : "Ankomst")}`));
+      entry.addEventListener("click", () => api.onTrainSelect?.(row.train_number));
+      events.append(entry);
     }
     if (!upcoming.length) events.append(authored("p", "", "Inga fler planerade händelser idag."));
   };
