@@ -136,10 +136,11 @@ class Terminal16Service:
         if station not in views.engine.config.stations:
             views.terminals.pop(device, None)
             return None
+        side = self.service.identities.station_side_for_client(device)
         terminal = views.terminals.get(device)
-        new_assignment = terminal is None or terminal.station != station
+        new_assignment = terminal is None or terminal.station != station or terminal.side != side
         if new_assignment:
-            views.terminals[device] = Terminal(station)
+            views.terminals[device] = Terminal(station, side=side)
             # A fresh assignment cannot accept a command from the old station.
             views.terminals[device].revision = (terminal.revision + 1) if terminal else 0
         views.refresh()

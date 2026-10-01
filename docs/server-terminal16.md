@@ -96,6 +96,23 @@ Ingen ny Cloud-API, firmwaregren eller klientägd trafiklogik behövs.
 
 ## Drift och kompatibilitet
 
+### Flera boxar på samma station
+
+Från 1.18.0 kan en station ha flera boxar, var och en för sin sida. Vid
+tilldelningen under Drift → Klienter väljer man station och **Sida: Båda
+sidor** (förval), **Vänster** eller **Höger**. Vänster och höger betyder samma
+sak som i kortet TMBox-placering och följer placeringen om den ändras.
+
+En box på en sida ser och hanterar bara tågen på sträckorna åt sitt håll:
+översikt, förfrågningskö (A), aktiva tåg (B), tidtabell (C/D), kvitton
+(MOTTAGET) och sökning på tågnummer. Söker man ett tåg som går åt andra hållet
+står det `ANNAN SIDA`. En förfrågan visas bara på boxarna för sin sida, och
+på boxar med Båda sidor. Båda sidor ger samma bilder som före 1.18.0.
+
+Byter man sida startar boxen om sin vy: ett tryck avsett för den gamla sidan
+gör ingenting. Klienter visar sidan efter stationen när den inte är Båda,
+till exempel `VA · Vagnsta · vänster`. Ingen ny firmware behövs.
+
 ### Testa placering utan att ändra träffen
 
 I `/tmbox-lab/` öppnar **Testa vänster/höger** en dialog med ett val per

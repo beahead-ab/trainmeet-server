@@ -91,3 +91,7 @@ The box finds the server by itself|Boxen hittar servern själv|Boksen finder ser
 No address or code is needed. The box shows its own code, for example TBX-1A2B3C, on its display.|Ingen adress eller kod behövs. Boxen visar sin egen kod, till exempel TBX-1A2B3C, på displayen.|Ingen adresse eller kode er nødvendig. Boksen viser sin egen kode, for eksempel TBX-1A2B3C, på displayet.|Ingen adresse eller kode trengs. Boksen viser sin egen kode, for eksempel TBX-1A2B3C, på skjermen.|Keine Adresse und kein Code nötig. Die Box zeigt ihren eigenen Code, zum Beispiel TBX-1A2B3C, im Display.
 Operations assigns the station|Trafikledningen tilldelar station|Trafikledelsen tildeler station|Trafikkledelsen tildeler stasjon|Die Fahrdienstleitung weist die Betriebsstelle zu
 The box shows up for operations as “waiting for station” and starts working as soon as it has its station.|Boxen dyker upp hos trafikledningen som ”väntar på station” och börjar arbeta direkt när den fått sin station.|Boksen dukker op hos trafikledelsen som ”venter på station” og begynder at arbejde, så snart den har fået sin station.|Boksen dukker opp hos trafikkledelsen som «venter på stasjon» og begynner å jobbe så snart den har fått stasjonen sin.|Die Box erscheint bei der Fahrdienstleitung als „wartet auf Betriebsstelle“ und arbeitet, sobald sie ihre Betriebsstelle hat.
+Side|Sida|Side|Side|Seite
+Both sides|Båda sidor|Begge sider|Begge sider|Beide Seiten
+left|vänster|venstre|venstre|links
+right|höger|højre|høyre|rechts

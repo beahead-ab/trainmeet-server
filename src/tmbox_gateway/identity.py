@@ -90,6 +90,12 @@ class DisplayCapability:
         return {"rows": self.rows, "cols": self.cols, "charset": self.charset}
 
 
+#: Which lines a box at a station handles. Several boxes can share a
+#: station: one for traffic to the left and one to the right, as at Vagnsta.
+#: Left and right mean the same as on the station's TMBox placement.
+STATION_SIDES = ("both", "left", "right")
+
+
 @dataclass(frozen=True)
 class PairedClient:
     client_id: str
@@ -117,6 +123,7 @@ class DiscoveredDevice:
     hardware_version: str = ""
     protocol_version: int = 1
     display: DisplayCapability = DisplayCapability()
+    station_side: str = "both"
 
 
 @dataclass(frozen=True)
@@ -241,7 +248,8 @@ class IdentityStore:
         )
         # A device is assigned one station. Panels stay for the v1 clients
         # that still speak the panel protocol.
-        self._add_missing_columns("clients", {"station_id": "TEXT", "browser_workspace": "TEXT"})
+        self._add_missing_columns("clients", {"station_id": "TEXT", "browser_workspace": "TEXT",
+                                              "station_side": "TEXT NOT NULL DEFAULT 'both'"})
         self._add_missing_columns(
             "discovered_devices",
             {
@@ -461,6 +469,7 @@ class IdentityStore:
         panel_ids: tuple[str, ...],
         *,
         station_id: str | None = None,
+        station_side: str = "both",
         now: datetime | None = None,
         reactivate_device: bool = False,
         preserve_credential: bool = False,
@@ -468,6 +477,8 @@ class IdentityStore:
     ) -> PairedClient:
         now = now or datetime.now(timezone.utc)
         digest = _credential_digest(credential)
+        if station_side not in STATION_SIDES:
+            raise InvalidClientError("Sidan måste vara båda, vänster eller höger")
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
@@ -487,15 +498,17 @@ class IdentityStore:
                     """
                     INSERT INTO clients (
                         client_id, display_name, kind, credential_digest,
-                        enabled, created_at, last_paired_at, station_id, browser_workspace
-                    ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+                        enabled, created_at, last_paired_at, station_id, browser_workspace,
+                        station_side
+                    ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
                     ON CONFLICT(client_id) DO UPDATE SET
                         display_name = excluded.display_name,
                         kind = excluded.kind,
                         credential_digest = excluded.credential_digest,
                         enabled = 1,
                         last_paired_at = excluded.last_paired_at,
-                        station_id = excluded.station_id
+                        station_id = excluded.station_id,
+                        station_side = excluded.station_side
                     """,
                     (
                         client_id,
@@ -506,6 +519,7 @@ class IdentityStore:
                         now.isoformat(),
                         station_id,
                         browser_workspace,
+                        station_side,
                     ),
                 )
                 self._connection.execute(
@@ -608,6 +622,11 @@ class IdentityStore:
         """
         client = self.client(client_id)
         return client.station_id if client else None
+
+    def station_side_for_client(self, client_id: str) -> str:
+        """Both, left or right: the lines this box handles at its station."""
+        with self._lock:
+            return self._station_side_locked(client_id)
 
     def bind_legacy_station_panel(self, client_id: str, station_id: str, panel_id: str) -> None:
         """Fill a v1 station's missing panel without changing its authorization.
@@ -781,7 +800,8 @@ class IdentityStore:
                 raise InvalidClientError("TMBox-enheten har ännu inte hittats")
             panels = self._panel_ids_locked(device_id)
             station_id = self._station_id_locked(device_id)
-        return _discovered_device_from_row(row, panels, station_id)
+            side = self._station_side_locked(device_id)
+        return _discovered_device_from_row(row, panels, station_id, side)
 
     def discovered_device_or_none(self, device_id: str) -> DiscoveredDevice | None:
         try:
@@ -802,6 +822,7 @@ class IdentityStore:
                     row,
                     self._panel_ids_locked(row[0]),
                     self._station_id_locked(row[0]),
+                    self._station_side_locked(row[0]),
                 )
                 for row in rows
             )
@@ -824,6 +845,7 @@ class IdentityStore:
         panel_ids: tuple[str, ...] = (),
         *,
         station_id: str | None = None,
+        station_side: str = "both",
         now: datetime | None = None,
     ) -> PairedClient:
         normalized = _normalize_device_code(device_code)
@@ -846,6 +868,7 @@ class IdentityStore:
                 secrets.token_urlsafe(32),
                 panel_ids,
                 station_id=station_id,
+                station_side=station_side,
                 now=now,
                 reactivate_device=True,
                 preserve_credential=True,
@@ -1365,6 +1388,15 @@ class IdentityStore:
         ).fetchone()
         return row[0] if row else None
 
+    def _station_side_locked(self, client_id: str) -> str:
+        row = self._connection.execute(
+            "SELECT station_side FROM clients WHERE client_id = ? AND enabled = 1 AND station_id IS NOT NULL",
+            (client_id,),
+        ).fetchone()
+        # Only read with a station: every assignment writes its side, so a side
+        # left behind by a removal or a new meet is never used.
+        return row[0] if row and row[0] in STATION_SIDES else "both"
+
     def _panel_ids_locked(self, client_id: str) -> tuple[str, ...]:
         rows = self._connection.execute(
             "SELECT panel_id FROM client_panels WHERE client_id = ? ORDER BY panel_id",
@@ -1428,6 +1460,7 @@ def _discovered_device_from_row(
     row: tuple[Any, ...],
     panel_ids: tuple[str, ...],
     station_id: str | None,
+    station_side: str = "both",
 ) -> DiscoveredDevice:
     return DiscoveredDevice(
         device_id=row[0],
@@ -1442,6 +1475,7 @@ def _discovered_device_from_row(
         display=DisplayCapability(
             rows=int(row[7] or 2), cols=int(row[8] or 16), charset=row[9] or "ascii"
         ),
+        station_side=station_side,
     )
 
 

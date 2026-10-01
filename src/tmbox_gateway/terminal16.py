@@ -39,6 +39,8 @@ NAVIGATION_ACTIONS = frozenset({
 @dataclass
 class Terminal:
     station: str
+    # both, left or right: which lines this box handles at its station.
+    side: str = "both"
     language: str = "sv"
     selected: str | None = None
     screen: str = "overview"
@@ -119,7 +121,7 @@ class Terminal16Lab:
             # A departed train is no longer an upcoming departure at its sender.
             if own and active and self._line(leg).state == State.OCCUPIED:
                 continue
-            if own or incoming:
+            if (own or incoming) and self._on_side(terminal, leg):
                 if filtered and terminal.browse_filter not in {"all", self._schedule(terminal, leg)["kind"]}:
                     continue
                 result.append(key)
@@ -132,7 +134,7 @@ class Terminal16Lab:
             terminal = self.terminals[device]
             entries = []
             for key, leg in self.legs.items():
-                if terminal.station not in {leg["from_station_id"], leg["to_station_id"]}:
+                if terminal.station not in {leg["from_station_id"], leg["to_station_id"]} or not self._on_side(terminal, leg):
                     continue
                 schedule = self._schedule(terminal, leg)
                 outgoing = schedule["kind"] == "departure"
@@ -160,6 +162,7 @@ class Terminal16Lab:
         # Bindings retain request order. Only exact, still-unanswered incoming legs.
         return [key for key in self.bindings.values()
                 if self.legs[key]["to_station_id"] == terminal.station
+                and self._on_side(terminal, self.legs[key])
                 and self._line(self.legs[key]).state == State.REQUESTED]
 
     def _open_requests(self, terminal, direction=0):
@@ -178,6 +181,8 @@ class Terminal16Lab:
             if key in self.completed or not self._is_active(leg):
                 continue
             if not own and leg["to_station_id"] != terminal.station:
+                continue
+            if not self._on_side(terminal, leg):
                 continue
             state = self._line(leg).state
             if state == State.FREE or (not own and state == State.REQUESTED):
@@ -198,7 +203,7 @@ class Terminal16Lab:
 
     def _notify_request(self, leg):
         for terminal in self.terminals.values():
-            if (terminal.station == leg["to_station_id"] and not terminal.notice
+            if (terminal.station == leg["to_station_id"] and self._on_side(terminal, leg) and not terminal.notice
                     and (terminal.screen == "overview"
                          or (terminal.screen == "requests" and terminal.selected is None))):
                 self._open_requests(terminal)
@@ -206,7 +211,7 @@ class Terminal16Lab:
 
     def _notify_arrival(self, leg):
         for terminal in self.terminals.values():
-            if terminal.station != leg["from_station_id"]:
+            if terminal.station != leg["from_station_id"] or not self._on_side(terminal, leg):
                 continue
             # Clear the exact completed leg, never a different train being handled.
             if terminal.selected == leg["from_movement_id"]:
@@ -243,6 +248,14 @@ class Terminal16Lab:
 
     def _is_active(self, leg):
         return self.bindings.get(leg["connection_id"]) == leg["from_movement_id"]
+
+    def _on_side(self, terminal, leg):
+        """A box set to one side handles only the trains on lines to that side."""
+        if terminal.side == "both":
+            return True
+        own = leg["from_station_id"] == terminal.station
+        other = leg["to_station_id"] if own else leg["from_station_id"]
+        return self._side(terminal.station, other, leg["connection_id"]) == terminal.side
 
     def _side(self, station, other, connection_id=None):
         if connection_id is None:
@@ -282,7 +295,7 @@ class Terminal16Lab:
         items = []
         for key in self.bindings.values():
             leg = self.legs[key]
-            if terminal.station in {leg["from_station_id"], leg["to_station_id"]}:
+            if terminal.station in {leg["from_station_id"], leg["to_station_id"]} and self._on_side(terminal, leg):
                 items.append(self._label(terminal.station, leg))
         left = [text for text, side in items if side == "left"]
         right = [text for text, side in items if side == "right"]
@@ -565,9 +578,13 @@ class Terminal16Lab:
             self._dismiss_receipt(terminal)
             matches = [key for key in self._candidates(terminal) if self.legs[key]["train_number"] == number]
             if len(matches) != 1:
-                future_arrival = any(leg["train_number"] == number and leg["to_station_id"] == terminal.station
-                                     and key not in self.completed for key, leg in self.legs.items())
-                terminal.notice = ("EJ BEGÄRT ÄN" if future_arrival else "INGET TÅG") if not matches else "FLERA TÅG - ADMIN"
+                here = [leg for key, leg in self.legs.items() if leg["train_number"] == number and key not in self.completed
+                        and terminal.station in {leg["from_station_id"], leg["to_station_id"]}]
+                future_arrival = any(leg["to_station_id"] == terminal.station for leg in here)
+                # The train is here, but on the lines the station's other box handles.
+                other_side = here and not any(self._on_side(terminal, leg) for leg in here)
+                terminal.notice = (("ANNAN SIDA" if other_side else "EJ BEGÄRT ÄN" if future_arrival else "INGET TÅG")
+                                   if not matches else "FLERA TÅG - ADMIN")
             else:
                 terminal.selected, terminal.screen, terminal.notice = matches[0], "detail", ""
                 terminal.browse_filter = "all"
