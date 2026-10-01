@@ -113,3 +113,19 @@ Now:|Nu:|Nu:|Nå:|Jetzt:
 arr {time}|ank {time}|ank {time}|ank {time}|an {time}
 dep {time}|avg {time}|afg {time}|avg {time}|ab {time}
 in on track {track}|inne på spår {track}|inde på spor {track}|inne på spor {track}|eingefahren auf Gleis {track}
+Train {number} · {route} · on the line|Tåg {number} · {route} · på linjen|Tog {number} · {route} · på strækningen|Tog {number} · {route} · på strekningen|Zug {number} · {route} · auf der Strecke
+Train {number} · {route} · clear, not departed|Tåg {number} · {route} · klart, inte avgått|Tog {number} · {route} · klar, ikke afgået|Tog {number} · {route} · klar, ikke gått|Zug {number} · {route} · frei, nicht abgefahren
+Train {number} at {station}|Tåg {number} vid {station}|Tog {number} ved {station}|Tog {number} ved {station}|Zug {number} in {station}
+{count} trains · search train · train routes · stations|{count} tåg · sök tåg · tågrutter · stationer|{count} tog · søg tog · togruter · stationer|{count} tog · søk tog · togruter · stasjoner|{count} Züge · Zug suchen · Zugläufe · Bahnhöfe
+{count} station|{count} station|{count} station|{count} stasjon|{count} Bahnhof
+{count} stations|{count} stationer|{count} stationer|{count} stasjoner|{count} Bahnhöfe
+{count} line|{count} sträcka|{count} strækning|{count} strekning|{count} Strecke
+{count} lines|{count} sträckor|{count} strækninger|{count} strekninger|{count} Strecken
+click a train to light up its route|klicka på ett tåg för att tända rutten|klik på et tog for at fremhæve ruten|klikk på et tog for å fremheve ruten|Zug anklicken, um seinen Laufweg hervorzuheben
+{count} conflict|{count} konflikt|{count} konflikt|{count} konflikt|{count} Konflikt
+{count} conflicts|{count} konflikter|{count} konflikter|{count} konflikter|{count} Konflikte
+{count} observation|{count} observation|{count} observation|{count} observasjon|{count} Beobachtung
+{count} observations|{count} observationer|{count} observationer|{count} observasjoner|{count} Beobachtungen
+No conflicts|Inga konflikter|Ingen konflikter|Ingen konflikter|Keine Konflikte
+No check findings|Inga kontrolluppgifter|Ingen kontroloplysninger|Ingen kontrollopplysninger|Keine Prüfergebnisse
+in version {version}|i version {version}|i version {version}|i versjon {version}|in Version {version}

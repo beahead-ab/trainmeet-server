@@ -7,7 +7,7 @@
   };
   const move = (selector, parent) => { const node = $(selector); if (node) parent.append(node); return node; };
   const mark = selector => $(selector)?.classList.add("legacy-internal");
-  const t = text => globalThis.TrainMeetI18n.t(text);
+  const t = (text, values) => globalThis.TrainMeetI18n.t(text, values);
   const authored = (tag, className, source) => {
     const node = make(tag, className, t(source)); node.dataset.tmText = source; return node;
   };
@@ -125,8 +125,25 @@
   const stationSection = $("#traffic-stations").closest("section");
   const stationParent = stationSection.parentElement;
   stationParent.insertBefore(details("Inne på stationerna", stationSection), stationParent.querySelector(".traffic-history"));
-  move(".overview-graph-card", overview); move("#overview-timetable", overview);
-  move("#published-findings", $("#overview-timetable"));
+  move(".overview-graph-card", overview);
+  // Module heads as in the design (DriftEU): the name, then a short grey line.
+  const headMeta = (selector, id) => {
+    const meta = make("span", "server-head-meta"); if (id) meta.id = id;
+    $(selector).closest(".overview-section").querySelector(".overview-section-heading h3").after(meta); return meta;
+  };
+  headMeta("#overview-topology", "topology-head-meta");
+  headMeta("#overview-graph").append(authored("span", "", "klicka på ett tåg för att tända rutten"));
+  // One card for the timetable. Cloud's check findings for the active version
+  // are a row of it, seen while the timetable is folded; Visa opens the list.
+  const timetable = make("section", "card overview-section timetable-card"); timetable.id = "drift-timetable";
+  overview.append(timetable);
+  move("#overview-timetable", timetable);
+  const timetableMeta = make("span", "server-head-meta"); timetableMeta.id = "timetable-summary-meta";
+  $("#overview-timetable > summary").append(timetableMeta);
+  const findings = move("#published-findings", timetable);
+  findings.classList.add("timetable-findings");
+  const findingsTag = make("span", "tm-tag tm-tag--neutral"); findingsTag.id = "published-findings-tag";
+  findings.querySelector("summary").append(findingsTag, authored("span", "timetable-findings-show", "Visa"), authored("span", "timetable-findings-hide", "Dölj"));
 
   // Settings are seven navigable sections in two stable columns.
   const settings = $("#admin-view");
@@ -203,6 +220,7 @@
     // so "Publicerad träff" is never written twice side by side.
     $("#header-server-meta").textContent = [hasVersion || !meet ? version : "", api.info?.runtime?.server_name].filter(Boolean).join(" · ");
     const conflicts = !us && api.presentation?.findings?.filter(f => f.level === "conflict").length;
+    api.findingsTag(hasVersion ? ordinal : null);
     const newer = Boolean(update.pending_publication_id || update.available_publication_id);
     const status = $("#header-cloud-status");
     const offline = update.linked && update.state === "error" && (!update.last_checked_at || Date.now() - Date.parse(update.last_checked_at) > 600000);
@@ -217,6 +235,23 @@
     $("#drift-traffic-grid").hidden = us;
     $(".overview-graph-card").hidden = us;
     $("#header-cloud-status").hidden = !meet;
+  };
+  // "3 konflikter i version 8" on the timetable card's findings row.
+  api.findingsTag = ordinal => {
+    const findings = api.presentation?.findings, tag = $("#published-findings-tag");
+    const count = level => findings.filter(f => f.level === level).length;
+    const parts = [];
+    if (Array.isArray(findings)) {
+      const conflicts = count("conflict"), observations = count("observation");
+      if (conflicts) parts.push(t(conflicts === 1 ? "{count} konflikt" : "{count} konflikter", {count: conflicts}));
+      if (observations) parts.push(t(observations === 1 ? "{count} observation" : "{count} observationer", {count: observations}));
+      if (!parts.length) parts.push(t("Inga konflikter"));
+      tag.className = `tm-tag ${conflicts ? "tm-tag--warn" : observations ? "tm-tag--neutral" : "tm-tag--ok"}`;
+    } else {
+      parts.push(t("Inga kontrolluppgifter"));
+      tag.className = "tm-tag tm-tag--neutral";
+    }
+    tag.textContent = parts.join(" · ") + (ordinal === null ? "" : ` ${t("i version {version}", {version: ordinal})}`);
   };
   api.refreshClock = clock => {
     const us = api.context?.operating_region === "us";
