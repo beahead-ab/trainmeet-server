@@ -417,14 +417,14 @@
               <h3 id="traffic-stations-heading" class="section-eyebrow"><tm-text data-tm-text="Inne på stationerna">Inne på stationerna</tm-text></h3>
               <div id="traffic-stations" class="traffic-station-grid"></div>
             </section>
-            <details class="traffic-section traffic-history">
-              <summary id="traffic-timeline-heading" class="section-eyebrow"><tm-text data-tm-text="Tidslinje">Tidslinje</tm-text></summary>
+            <section class="traffic-section traffic-history" aria-labelledby="traffic-timeline-heading">
+              <h3 id="traffic-timeline-heading" class="section-eyebrow"><tm-text data-tm-text="Tidslinje">Tidslinje</tm-text></h3>
               <ol id="traffic-timeline" class="traffic-timeline"></ol>
-            </details>
+            </section>
           </section>
 
-          <details id="overview-timetable" class="overview-timetable">
-            <summary>Tidtabell och tågrutter</summary>
+          <section id="overview-timetable" class="overview-timetable" aria-labelledby="overview-timetable-title">
+            <h3 id="overview-timetable-title" class="overview-timetable-head"><tm-text data-tm-text="Tidtabell och tågrutter">Tidtabell och tågrutter</tm-text></h3>
           <section class="overview-routes-section">
             <header class="overview-routes-heading">
               <p class="overview-kicker"><tm-text data-tm-text="TÅGRUTTER (">TÅGRUTTER (</tm-text><span id="overview-route-count">0</span><tm-text data-tm-text=" TÅG)"> TÅG)</tm-text></p>
@@ -461,7 +461,7 @@
               </div>
             </div>
           </section>
-          </details>
+          </section>
         </section>
 
         <section id="admin-view" class="view-panel hidden">
@@ -732,9 +732,9 @@
 <h2>Cloud-koppling och config</h2><p>Träffens innehåll ändras i Cloud. Publicerade uppdateringar hämtas automatiskt och används när det är säkert för pågående trafik.</p>
 <div class="cloud-connection-summary"><div><b id="cloud-connection-meet">Ingen träff vald</b><span id="cloud-connection-meta"></span></div><span id="cloud-connection-state" class="revision-badge">Inte kopplad</span></div>
 <p id="cloud-auto-status"></p><p id="cloud-version-state" role="status"></p><div class="cloud-actions"><button id="runtime-check-update" class="secondary" type="button">Sök configuppdatering</button><button id="cloud-auto-edit" type="button" class="secondary" data-open-modal="cloud-auto-modal">Automatiska uppdateringar</button><button type="button" class="secondary" data-open-modal="runtime-sync-form-modal">Koppla eller byt träff</button></div><p id="cloud-update-message" class="form-message" role="status"></p>
-<details id="published-findings" hidden><summary><tm-text data-tm-text="Tidtabellens kontrolluppgifter">Tidtabellens kontrolluppgifter</tm-text></summary>
+<section id="published-findings" hidden aria-labelledby="published-findings-title"><h3 id="published-findings-title" class="timetable-findings-head"><tm-text data-tm-text="Tidtabellens kontrolluppgifter">Tidtabellens kontrolluppgifter</tm-text></h3>
 <p><tm-text data-tm-text="Uppgifter från den aktiva Cloud-versionen. Rättelser görs i Cloud; detta är inte en kontroll av pågående trafik.">Uppgifter från den aktiva Cloud-versionen. Rättelser görs i Cloud; detta är inte en kontroll av pågående trafik.</tm-text></p>
-<p id="published-findings-summary"></p><ul id="published-findings-list"></ul></details>
+<p id="published-findings-summary"></p><ul id="published-findings-list"></ul></section>
 <dialog id="cloud-auto-modal" class="admin-modal" aria-labelledby="cloud-auto-title">
 <h2 id="cloud-auto-title">Automatiska uppdateringar</h2>
 <form id="cloud-auto-form">
@@ -784,9 +784,9 @@
 <div class="modal-actions"><button type="button" class="secondary" data-close-modal><tm-text data-tm-text="Avbryt">Avbryt</tm-text></button><button type="submit" class="primary"><tm-text data-tm-text="Spara">Spara</tm-text></button></div>
 </form></dialog>
 <p id="device-awaiting" class="form-message" role="status" hidden></p>
-<details class="device-reconnect"><summary><tm-text data-tm-text="Återanslut borttagen klient">Återanslut borttagen klient</tm-text></summary>
+<p class="device-reconnect"><tm-text data-tm-text="Återanslut borttagen klient">Återanslut borttagen klient</tm-text>
 <button type="button" class="secondary modal-launch" data-open-modal="device-form-modal"><tm-text data-tm-text="Återanslut med enhetskod">Återanslut med enhetskod</tm-text></button>
-</details>
+</p>
 <dialog id="device-form-modal" class="admin-modal" aria-labelledby="device-form-title"><h2 id="device-form-title">Tilldela eller ändra station</h2>
 <form id="device-form" class="device-form">
                 <label for="device-code"><tm-text data-tm-text="Enhetskod">Enhetskod</tm-text>

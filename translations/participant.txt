@@ -152,3 +152,6 @@ New meet: enter the new code in the signal box|Ny träff: ange den nya koden i s
 No station chosen yet|Ingen station vald ännu|Ingen station valgt endnu|Ingen stasjon valgt ennå|Noch kein Bahnhof gewählt
 The signal box is disconnected at once. It can connect again with the code. Traffic and history are kept.|Ställverket kopplas bort direkt. Det kan anslutas igen med koden. Trafik och historik behålls.|Stillerværket afbrydes med det samme. Det kan tilsluttes igen med koden. Trafik og historik bevares.|Stillverket kobles fra med en gang. Det kan kobles til igjen med koden. Trafikk og historikk beholdes.|Das Stellwerk wird sofort getrennt. Es kann sich mit dem Code wieder verbinden. Verkehr und Verlauf bleiben erhalten.
 Could not remove the signal box|Kunde inte ta bort ställverket|Kunne ikke fjerne stillerværket|Kunne ikke fjerne stillverket|Stellwerk konnte nicht entfernt werden
+{count} stops|{count} stopp|{count} stop|{count} stopp|{count} Halte
+no time given|tid saknas|tid mangler|tid mangler|keine Zeit angegeben
+Train {number} on the line|Tåg {number} på banan|Tog {number} på banen|Tog {number} på banen|Zug {number} auf der Strecke

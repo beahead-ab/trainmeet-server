@@ -1009,9 +1009,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 /* Connected clients are primary settings content, not tiny status metadata.
    Keep the same readable type for one or many devices; let the page scroll. */
 #device-list { gap: 12px; margin-top: 16px; max-height: none; overflow: visible; }
-.device-reconnect { margin-block: 16px; }
-.device-reconnect > summary { cursor: pointer; }
-.device-reconnect .modal-launch { margin-top: 12px; }
+.device-reconnect { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-block: 16px; }
 #device-form input[readonly] { background: var(--paper, #f8f7f4); color: var(--muted); }
 #device-list .status-row { gap: 16px 24px; padding: 16px 20px; font-size: 16px; line-height: 1.5; }
 #device-list .status-row > div:first-child { flex: 1 1 260px; }
@@ -3122,15 +3120,13 @@ body[data-mode="tmbox"] .server-admin-shell {
 }
 body[data-mode="skarmar"] .server-admin-shell { display: block; width: min(100%, 1400px); margin: 0 auto; padding: 22px 22px 48px; }
 .overview-timetable { min-width: 0; border: 1px solid var(--line-card); border-radius: var(--radius); background: var(--surface-raised); }
-.overview-timetable > summary { padding: 20px; cursor: pointer; font-weight: 600; font-size: 16px; }
-.overview-timetable > summary:focus-visible { outline: 3px solid var(--accent-warm-dark); outline-offset: 2px; border-radius: var(--radius); }
-.overview-timetable[open] > summary { border-bottom: 1px solid var(--line-card); margin-bottom: 20px; }
+.overview-timetable-head { margin: 0 0 20px; padding: 20px; border-bottom: 1px solid var(--line-card); font-weight: 600; font-size: 16px; }
 .overview-timetable .overview-routes-section { padding-inline: 20px; margin-bottom: 20px; }
 .overview-timetable .overview-graph-card { border: 0; box-shadow: none; }
 #overview-traffic { scroll-margin-top: 100px; }
 #overview-traffic-heading { margin: 0 0 8px; font-size: 20px; }
-.traffic-history > summary { cursor: pointer; padding-block: 10px; }
-.traffic-history > summary:focus-visible { outline: 2px solid var(--accent-warm-dark); outline-offset: 3px; }
+/* Always shown: a long day scrolls inside the card. */
+#traffic-timeline { max-height: 20rem; overflow-y: auto; }
 .server-admin-shell { min-width: 0; }
 .server-workspace { max-width: 1600px; margin-inline: auto; }
 .topbar .brand-lockup { color: inherit; text-decoration: none; }
@@ -3243,5 +3239,5 @@ body[data-signed-in="no"] #logout { display: none; }
 #display-placement-fields label { display: flex; flex-direction: column; gap: 6px; }
 #display-placement-fields select { width: 100%; min-height: 40px; }
 #published-findings { margin-top: 18px; }
-#published-findings-list { max-height: 24rem; overflow: auto; padding-left: 22px; }
+#published-findings-list { max-height: 16rem; overflow: auto; padding-left: 22px; }
 #published-findings-list li { padding: 6px 0; }

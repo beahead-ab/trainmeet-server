@@ -2388,21 +2388,11 @@ const trainDetail = { number: null, data: null, error: "", loading: false };
 serverUI.onTrainSelect = (number) => openTrainDetail(number);
 
 function openTrainDetail(number) {
-  trainDetail.number = String(number);
-  trainDetail.data = null;
-  trainDetail.error = "";
   selectOverviewTrain(number);
-  if (state.overviewSnapshot) serverUI.traffic(state.overviewSnapshot, trafficState.station, trainDetail.number);
-  renderTrainDetail();
-  refreshTrainDetail();
 }
 
 function closeTrainDetail() {
-  trainDetail.number = null;
-  trainDetail.data = null;
   selectOverviewTrain(null);
-  if (state.overviewSnapshot) serverUI.traffic(state.overviewSnapshot, trafficState.station, null);
-  renderTrainDetail();
 }
 
 async function refreshTrainDetail() {
@@ -2421,6 +2411,7 @@ async function refreshTrainDetail() {
   } finally {
     trainDetail.loading = false;
     renderTrainDetail();
+    renderRouteDetail();
   }
 }
 
@@ -2458,71 +2449,104 @@ function renderTrainDetail() {
     parts.push(message);
   }
   for (const service of trainDetail.data?.services || []) {
-    const stops = service.stops || [];
-    const now = service.now || {};
-    const status = document.createElement("p"); status.className = `train-detail-now train-detail-now--${now.state || "unknown"}`;
-    const label = document.createElement("b"); label.textContent = t("Nu:");
-    status.append(label, " ", trainNowText(now, stops));
-    if (service.delay_minutes) {
-      const delay = document.createElement("span"); delay.className = "train-detail-delay";
-      delay.textContent = t("{minutes} min sen", { minutes: service.delay_minutes });
-      status.append(" ", delay);
-    }
+    const status = trainNowLine(service);
     const list = document.createElement("ol"); list.className = "route-stops train-detail-stops";
-    stops.forEach((stop, index) => {
-      const item = document.createElement("li");
-      const reached = stop.departure === "departed" || stop.arrival === "arrived";
-      const here = ["not_departed", "at_station", "arrived"].includes(now.state) && now.station_id === stop.station_id
-        && (now.state !== "not_departed" || index === 0);
-      const leaving = ["waiting", "cleared"].includes(now.state) && now.from_station_id === stop.station_id;
-      item.className = ["route-stop", index === 0 ? "first" : "", index === stops.length - 1 ? "last" : "",
-        reached ? "done" : "", here || leaving ? "current" : ""].filter(Boolean).join(" ");
-      const marker = document.createElement("i");
-      const text = document.createElement("div");
-      const name = document.createElement("b"); name.textContent = `${stop.station_code} · ${stop.station_name}`;
-      const times = [stop.arrival_time ? t("ank {time}", { time: stop.arrival_time }) : "", stop.departure_time ? t("avg {time}", { time: stop.departure_time }) : ""];
-      const tracks = [stop.planned_track ? t("spår {track}", { track: stop.planned_track }) : "",
-        stop.actual_track && stop.actual_track !== stop.planned_track ? t("inne på spår {track}", { track: stop.actual_track }) : ""];
-      const detail = document.createElement("span"); detail.textContent = [...times, ...tracks].filter(Boolean).join(" · ");
-      text.append(name, detail);
-      item.append(marker, text);
-      list.append(item);
-      // Between two calls: where a train on the line is.
-      if (now.state === "on_line" && now.from_station_id === stop.station_id && stops[index + 1]?.station_id === now.to_station_id) {
-        const between = document.createElement("li"); between.className = "train-detail-between";
-        between.textContent = t("På linjen");
-        list.append(between);
-      }
-    });
+    list.append(...trainStopItems(service));
     parts.push(status, list);
   }
   host.replaceChildren(...parts);
 }
 
-function selectOverviewTrain(trainNumber) {
-  state.selectedTrainNumber = trainNumber ? String(trainNumber) : null;
-  state.selectedStationID = null;
+// "Nu: På linjen A → B · avgick 06:05", with the delay.
+function trainNowLine(service) {
+  const now = service.now || {};
+  const status = document.createElement("p"); status.className = `train-detail-now train-detail-now--${now.state || "unknown"}`;
+  const label = document.createElement("b"); label.textContent = t("Nu:");
+  status.append(label, " ", trainNowText(now, service.stops || []));
+  if (service.delay_minutes) {
+    const delay = document.createElement("span"); delay.className = "train-detail-delay";
+    delay.textContent = t("{minutes} min sen", { minutes: service.delay_minutes });
+    status.append(" ", delay);
+  }
+  return status;
+}
+
+// Each call of a train from /v1/train, passed, here or ahead, and "På linjen"
+// between two. The train panel and Tågrutter mark where it is the same way;
+// in Tågrutter a call is a button that lights its station.
+function trainStopItems(service, { stationButtons = false } = {}) {
+  const stops = service.stops || [];
+  const now = service.now || {};
+  const items = [];
+  stops.forEach((stop, index) => {
+    const item = document.createElement("li");
+    const reached = stop.departure === "departed" || stop.arrival === "arrived";
+    const here = ["not_departed", "at_station", "arrived"].includes(now.state) && now.station_id === stop.station_id
+      && (now.state !== "not_departed" || index === 0);
+    const leaving = ["waiting", "cleared"].includes(now.state) && now.from_station_id === stop.station_id;
+    item.className = ["route-stop", index === 0 ? "first" : "", index === stops.length - 1 ? "last" : "",
+      reached ? "done" : "", here || leaving ? "current" : "",
+      stationButtons && stop.station_id === state.selectedStationID ? "selected" : ""].filter(Boolean).join(" ");
+    const marker = document.createElement("i");
+    const text = document.createElement(stationButtons ? "button" : "div");
+    if (stationButtons) { text.type = "button"; text.className = "route-stop-button"; text.dataset.stationId = stop.station_id; }
+    const name = document.createElement("b"); name.textContent = `${stop.station_code} · ${stop.station_name}`;
+    const times = [stop.arrival_time ? t("ank {time}", { time: stop.arrival_time }) : "", stop.departure_time ? t("avg {time}", { time: stop.departure_time }) : ""];
+    const tracks = [stop.planned_track ? t("spår {track}", { track: stop.planned_track }) : "",
+      stop.actual_track && stop.actual_track !== stop.planned_track ? t("inne på spår {track}", { track: stop.actual_track }) : ""];
+    const detail = document.createElement("span"); detail.textContent = [...times, ...tracks].filter(Boolean).join(" · ");
+    text.append(name, detail);
+    item.append(marker, text);
+    items.push(item);
+    // Between two calls: where a train on the line is.
+    if (now.state === "on_line" && now.from_station_id === stop.station_id && stops[index + 1]?.station_id === now.to_station_id) {
+      const between = document.createElement("li"); between.className = "train-detail-between";
+      between.textContent = t("På linjen");
+      items.push(between);
+    }
+  });
+  return items;
+}
+
+// One train chosen for all of Drift. Picked in Tågrutter, on the map, in the
+// train diagram or in Kommande, it is lit in all of them, and the train panel
+// and Tågrutter show where it is now (/v1/train).
+function selectTrain(trainNumber) {
+  const number = trainNumber ? String(trainNumber) : null;
+  state.selectedTrainNumber = number;
+  if (trainDetail.number !== number) {
+    trainDetail.number = number;
+    trainDetail.data = null;
+    trainDetail.error = "";
+  }
+}
+
+function renderSelection() {
   renderRouteExplorer();
   renderOverviewTopology();
   renderOverviewGraph(state.overviewSnapshot);
+  if (state.overviewSnapshot) serverUI.traffic(state.overviewSnapshot, trafficState.station, trainDetail.number);
+  renderTrainDetail();
+  renderStationInspector();
+  if (trainDetail.number) refreshTrainDetail();
+}
+
+function selectOverviewTrain(trainNumber) {
+  selectTrain(trainNumber);
+  state.selectedStationID = null;
+  renderSelection();
 }
 
 function selectOverviewStation(stationID, preserveTrain = false) {
   state.selectedStationID = stationID || null;
-  if (!preserveTrain && stationID) state.selectedTrainNumber = null;
-  renderRouteExplorer();
-  renderOverviewTopology();
-  renderOverviewGraph(state.overviewSnapshot);
-  renderStationInspector();
+  if (!preserveTrain && stationID) selectTrain(null);
+  renderSelection();
 }
 
 function clearOverviewSelection() {
-  state.selectedTrainNumber = null;
+  selectTrain(null);
   state.selectedStationID = null;
-  renderRouteExplorer();
-  renderOverviewTopology();
-  renderOverviewGraph(state.overviewSnapshot);
-  renderStationInspector();
+  renderSelection();
 }
 
 function renderOverviewTopology() {
@@ -2624,6 +2648,7 @@ function renderOverview(snapshot) {
     renderRouteExplorer();
   }
   renderOverviewTopology();
+  renderRouteMap();
   renderStationInspector();
   renderTraffic(snapshot);
   // The train diagram is its own card on Drift and follows the clock, open
@@ -2660,32 +2685,7 @@ function renderRouteExplorer() {
     : html`<p class="route-empty">Inga tåg hittades.</p>`;
 
   const selected = services.find((service) => String(service.train_number) === state.selectedTrainNumber);
-  const detail = document.querySelector("#overview-route-detail");
-  if (!selected) {
-    detail.innerHTML = services.length
-      ? html`<div class="route-detail-empty">Välj ett tåg i listan, banöversikten eller tågdiagrammet.</div>`
-      : html`<div class="route-detail-empty">Tidtabellen saknar tågrutter.</div>`;
-  } else {
-    const stops = [...(selected.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
-    detail.innerHTML = html`
-      <div class="route-detail-heading">
-        <h3>${escapeHTML(selected.train_number)}</h3>
-        <span>${stops.length} stopp</span>
-      </div>
-      <ol class="route-stops">
-        ${stops.map((stop, index) => {
-          const station = stationByID.get(stop.station_id);
-          const arrival = stop.arrival_time ? `ank ${String(stop.arrival_time).slice(0, 5)}` : "";
-          const departure = stop.departure_time ? `avg ${String(stop.departure_time).slice(0, 5)}` : "";
-          const times = [arrival, departure].filter(Boolean).join(" · ") || "tid saknas";
-          const positionClass = index === 0 ? " first" : (index === stops.length - 1 ? " last" : "");
-          return html`<li class="route-stop${positionClass}${stop.station_id === state.selectedStationID ? " selected" : ""}">
-            <i></i>
-            <button type="button" data-station-id="${escapeHTML(stop.station_id)}"><b>${escapeHTML(station?.name || stop.station_name || t("Okänd station"))}</b><span>${escapeHTML(times)}</span></button>
-          </li>`;
-        }).join("")}
-      </ol>`;
-  }
+  renderRouteDetail();
 
   const counts = new Map((snapshot.stations || []).map((station) => [station.id, 0]));
   for (const service of services) {
@@ -2729,6 +2729,83 @@ function renderRouteExplorer() {
   const badge = document.querySelector("#overview-route-badge");
   badge.classList.toggle("hidden", !selected);
   if (selected) badge.textContent = `Tåg ${selected.train_number} · ${(selected.stops || []).length} stopp`;
+}
+
+// Tågrutter's middle column: the chosen train on a small map of the line, its
+// own sections lit and the rest stepped back, where it is now, and its calls.
+function renderRouteDetail() {
+  const snapshot = state.overviewSnapshot;
+  const detail = document.querySelector("#overview-route-detail");
+  if (!snapshot || !detail) return;
+  const services = uniqueOverviewServices(snapshot);
+  const selected = services.find((service) => String(service.train_number) === state.selectedTrainNumber);
+  if (!selected) {
+    const empty = document.createElement("div"); empty.className = "route-detail-empty";
+    empty.textContent = t(services.length ? "Välj ett tåg i listan, banöversikten eller tågdiagrammet." : "Tidtabellen saknar tågrutter.");
+    detail.replaceChildren(empty);
+    return;
+  }
+  const stops = [...(selected.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
+  const heading = document.createElement("div"); heading.className = "route-detail-heading";
+  const title = document.createElement("h3"); title.textContent = selected.train_number;
+  const count = document.createElement("span"); count.textContent = t("{count} stopp", { count: stops.length });
+  heading.append(title, count);
+  const map = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  map.id = "overview-route-map"; map.classList.add("route-map");
+  map.setAttribute("role", "img"); map.setAttribute("aria-label", t("Tåg {number} på banan", { number: selected.train_number }));
+  const parts = [heading, map];
+  // Where it is comes from /v1/train; until that answers, the timetable.
+  const live = trainDetail.number === String(selected.train_number)
+    ? (trainDetail.data?.services || []).find((service) => (service.stops || []).length) : null;
+  const list = document.createElement("ol"); list.className = "route-stops";
+  if (live) {
+    list.classList.add("train-detail-stops");
+    parts.push(trainNowLine(live));
+    list.append(...trainStopItems(live, { stationButtons: true }));
+  } else {
+    const stationByID = new Map((snapshot.stations || []).map((station) => [station.id, station]));
+    list.append(...stops.map((stop, index) => {
+      const station = stationByID.get(stop.station_id);
+      const item = document.createElement("li");
+      item.className = ["route-stop", index === 0 ? "first" : "", index === stops.length - 1 ? "last" : "",
+        stop.station_id === state.selectedStationID ? "selected" : ""].filter(Boolean).join(" ");
+      const button = document.createElement("button"); button.type = "button"; button.className = "route-stop-button"; button.dataset.stationId = stop.station_id;
+      const name = document.createElement("b"); name.textContent = station?.name || stop.station_name || t("Okänd station");
+      const times = document.createElement("span");
+      times.textContent = [stop.arrival_time ? t("ank {time}", { time: String(stop.arrival_time).slice(0, 5) }) : "",
+        stop.departure_time ? t("avg {time}", { time: String(stop.departure_time).slice(0, 5) }) : ""].filter(Boolean).join(" · ") || t("tid saknas");
+      button.append(name, times);
+      item.append(document.createElement("i"), button);
+      return item;
+    }));
+  }
+  parts.push(list);
+  detail.replaceChildren(...parts);
+  renderRouteMap();
+}
+
+function renderRouteMap() {
+  const map = document.querySelector("#overview-route-map");
+  if (!map || !state.overviewSnapshot) return;
+  renderTopology(state.overviewSnapshot, map, {
+    selectedTrainNumber: state.selectedTrainNumber,
+    selectedStationID: state.selectedStationID,
+    showBadge: false,
+    // Only this train: the others are on Banöversikten above.
+    onlySelectedTrain: true,
+    onStationSelect: (stationID) => selectOverviewStation(stationID, true),
+  });
+  // Cropped to the drawing: a line is mostly long and low, and the whole
+  // canvas left the route a thin stroke in an empty box.
+  try {
+    const box = map.getBBox();
+    if (box.width && box.height) map.setAttribute("viewBox", `${box.x - 16} ${box.y - 16} ${box.width + 32} ${box.height + 32}`);
+  } catch { /* not on screen yet */ }
+  // Low beside the calls on a computer; on a phone the line stands upright
+  // and may take the height it needs to be read.
+  const [, , width, height] = String(map.getAttribute("viewBox")).split(" ").map(Number);
+  const tallest = height > width ? 560 : 260;
+  if (width && height && map.clientWidth) map.style.height = `${Math.round(Math.min(tallest, Math.max(120, map.clientWidth * height / width)))}px`;
 }
 
 function authorizedFetch(path, options = {}) {
@@ -3350,6 +3427,11 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   }
   placeTopologyLabels(labels, edges.map((edge) => [positions.get(edge.from), positions.get(edge.to)]).filter(([from, to]) => from && to), viewBox, options);
   const trains = topologyTrains(snapshot);
+  if (options.onlySelectedTrain) {
+    const chosen = (train) => train.trainNumber === String(options.selectedTrainNumber);
+    trains.onLine = trains.onLine.filter(chosen);
+    trains.atStation = trains.atStation.filter(chosen);
+  }
   const code = (id) => (snapshot.stations || []).find((station) => station.id === id)?.code || "?";
   const trainOptions = (trainNumber) => ({
     tv: Boolean(options.tv),
@@ -3370,7 +3452,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const along = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
     const size = topologyTrainSize(train.trainNumber, true, options.tv);
     const reach = Math.abs(along.x) * size.width / 2 + Math.abs(along.y) * size.height / 2;
-    const clear = (options.tv ? 22 : 10) + reach; // off the station's ring
+    const clear = (options.tv ? 22 : 14) + reach; // off the station's ring (radius 12)
     const distance = Math.min(Math.max(length * 0.25, clear), length / 2);
     const key = `${train.from}>${train.to}`;
     const order = sameWay.get(key) || 0;

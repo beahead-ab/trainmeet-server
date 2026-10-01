@@ -29,10 +29,19 @@ Samma märke i Drift, på skärmarna och i deltagarvyn, större på en TV:
 - **Fylld** när tåget har avgått och är ute på linjen, **ofylld** (vit med blå
   kant) när det har klart men inte har avgått. En begäran utan klart ritas inte.
 - Märket ligger en fjärdedel in från stationen tåget lämnar, aldrig på
-  stationen. På en TV ligger det på linjen, ovanför de stora namnen.
+  stationen eller på ringen runt den. På en TV ligger det på linjen, ovanför
+  de stora namnen.
 - Tåg inne på en station är bleka märken utan triangel, på den sida av
   stationen som är fri från namn och linjer. Högst tre syns, annars två och +N.
 - Klick på ett tåg i Drift tänder dess rutt och öppnar tågpanelen.
+
+## Drift
+
+- Ingenting på Drift fälls ihop. Varje modul visar allt den har; långa listor
+  (tidslinjen, kontrolluppgifterna) rullar inom sitt kort.
+- Ett tåg valt i Tågrutter, Banöversikten, Tågdiagrammet eller Kommande är
+  valt överallt: rutten tänds, tågpanelen öppnas, och Tågrutter visar tåget på
+  en liten karta (bara det tåget) med hållplatserna och var det är nu.
 
 ## Typografi
 
