@@ -57,6 +57,7 @@ from .operations import SQLiteOperationsStore
 from .us import USStore, USError
 from .us_clock import clock_settings as validate_us_clock_settings
 from .protocol_v2 import TMBoxStationService, find_track_conflict
+from .train_routes import _visits
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
     DEFAULT_WEB_CLIENT_TTL_MINUTES,
@@ -2838,6 +2839,103 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "unknown_station", "Stationen finns inte")
         return publication.timetable(active_day=active_day, station_id=station_id)
 
+    def train_detail(self, client: PairedClient, number: str) -> dict[str, Any]:
+        """One train today: every call with times and tracks, and where it is now.
+
+        Drift opens this from "Kommande enligt tidtabell". Read-only; it joins
+        what already exists - the timetable, each station's movement states,
+        open clearances and the line positions - and decides nothing.
+        """
+        del client
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        publication = self.runtime_store.active() if self.runtime_store is not None else None
+        active_day = self.runtime_store.active_day() if self.runtime_store is not None else None
+        if (selected and selected["region"] == "us") or publication is None or active_day is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "runtime_not_configured", "Ingen tidtabell är publicerad")
+        number = str(number or "").strip()
+        timetable = publication.timetable(active_day=active_day)
+        services = [service for service in timetable["services"] if str(service.get("train_number")) == number]
+        if not services:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "unknown_train", "Tåget finns inte i dagens tidtabell")
+        stations = {str(station["id"]): station for station in timetable["stations"]}
+        labels = {str(track["id"]): str(track["display_label"]) for track in timetable["tracks"]}
+        states: dict[str, dict[str, Any]] = {}
+
+        def movement_state(station_id: str, movement_id: str) -> dict[str, Any]:
+            if self.operations_store is None:
+                return {}
+            if station_id not in states:
+                states[station_id] = self.operations_store.tkl_station_state(
+                    publication.publication_id, active_day, station_id)["movements"]
+            return states[station_id].get(movement_id, {})
+
+        cases = ({case["movement_id"]: case for case in self.station_service.open_cases(None)}
+                 if self.station_service is not None else {})
+        position = next((item for item in (self.operations_store.positions() if self.operations_store else [])
+                         if str(item["train_number"]) == number), None)
+        simulated = (self.simulation.status() if self.simulation is not None else {"active": False})
+        result = []
+        for service in services:
+            ordered = sorted(service.get("stops", []), key=lambda stop: int(stop.get("stop_order") or 0))
+            rows = [row for row in timetable["trains"] if row.get("service_id") == service.get("id")]
+            stops = []
+            for index, stop in enumerate(ordered):
+                row = next((row for row in rows if _visits(ordered, row) == [index]), None)
+                live = movement_state(str(stop["station_id"]), str(row["id"])) if row else {}
+                station = stations.get(str(stop["station_id"]), {})
+                stops.append({
+                    "station_id": stop["station_id"], "station_code": station.get("code", ""),
+                    "station_name": station.get("name") or stop.get("station_name", ""),
+                    "arrival_time": stop.get("arrival_time"), "departure_time": stop.get("departure_time"),
+                    "movement_id": row["id"] if row else None,
+                    "planned_track": row.get("track") if row else None,
+                    "actual_track": labels.get(str(live.get("actualTrack"))) if live.get("actualTrack") else None,
+                    "arrival": live.get("arrival", "none"), "departure": live.get("departure", "none"),
+                })
+            result.append({
+                "service_id": service.get("id"), "train_type": service.get("train_type", ""), "stops": stops,
+                "now": self._train_now(stops, cases, position),
+                "delay_minutes": self._train_delay(simulated, {stop["movement_id"] for stop in stops}),
+            })
+        return {"train_number": number, "active_day": active_day, "services": result}
+
+    def _train_now(self, stops: list[dict[str, Any]], cases: dict[str, dict[str, Any]],
+                   position: dict[str, Any] | None) -> dict[str, Any]:
+        """Where the train is: the latest thing that happened to it, in order."""
+        for index, stop in enumerate(stops):
+            case = cases.get(stop["movement_id"]) if stop["movement_id"] else None
+            if case is None:
+                continue
+            onward = {"from_station_id": case["from_station_id"], "to_station_id": case["to_station_id"]}
+            if case["status"] == "waiting":
+                return {"state": "waiting", **onward}
+            if self.station_service.case_departed(case):
+                return {"state": "on_line", **onward, "since": stop.get("departure_time")}
+            return {"state": "cleared", **onward, "track": stop["actual_track"] or stop["planned_track"],
+                    "time": stop.get("departure_time")}
+        if position and position.get("status") == "connection":
+            return {"state": "on_line", "from_station_id": position.get("from_station_id"),
+                    "to_station_id": position.get("to_station_id")}
+        # A departed train always has its clearance open until it is in, or a
+        # line position, so what is left is the last call it has reached.
+        for index in range(len(stops) - 1, -1, -1):
+            stop = stops[index]
+            if stop["arrival"] == "arrived":
+                last = index == len(stops) - 1
+                return {"state": "arrived" if last else "at_station", "station_id": stop["station_id"],
+                        "track": stop["actual_track"] or stop["planned_track"],
+                        "time": stop.get("arrival_time") if last else stop.get("departure_time")}
+        first = stops[0] if stops else {}
+        return {"state": "not_departed", "station_id": first.get("station_id"),
+                "track": first.get("planned_track"), "time": first.get("departure_time")}
+
+    @staticmethod
+    def _train_delay(simulated: dict[str, Any], movement_ids: set[Any]) -> int | None:
+        """Only the simulator has real times in meet time; a stopped one lists no trains."""
+        delays = [item.get("delay_seconds") or 0 for item in simulated.get("trains", [])
+                  if item.get("movement_id") in movement_ids and item.get("status") in {"waiting", "in_transit"}]
+        return round(max(delays) / 60) if delays else None
+
     def install_runtime(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
         if self.runtime_store is None:
@@ -3620,6 +3718,11 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/build/topology":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.build_topology(client))
+                return
+            if path == "/v1/train":
+                client = self._authenticated_client()
+                number = parse_qs(parsed.query).get("number", [""])[0]
+                self._send_json(HTTPStatus.OK, self.server.application.train_detail(client, number))
                 return
             if path == "/v1/timetable":
                 client = self._authenticated_client()

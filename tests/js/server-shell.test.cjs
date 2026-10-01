@@ -96,6 +96,14 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
             break;
           case '/v1/display': data = { clock: clock(), meet: { id: 'meet-1', name: 'Demo meet' }, active_day: 'Dagl', publication_id: 'pub-1', stations, connections: [], routes: [{ train_number: '421', station_id: 'a', departure_time: '06:05' }, { train_number: '421', station_id: 'b', arrival_time: '06:20' }], train_positions: [], connection_states: [], connection: { screens: [] } }; break;
           case '/v1/config/check': data = { message: 'Senaste config används.' }; break;
+          case '/v1/train':
+            assert.equal(url.searchParams.get('number'), '421');
+            data = { train_number: '421', active_day: 'Dagl', services: [{ service_id: 's-421', train_type: 'Godståg', delay_minutes: 3,
+              now: { state: 'on_line', from_station_id: 'a', to_station_id: 'b', since: '06:05' },
+              stops: [
+                { station_id: 'a', station_code: 'A', station_name: 'Alpha', arrival_time: null, departure_time: '06:05', movement_id: 'm-a', planned_track: '1', actual_track: null, arrival: 'none', departure: 'departed' },
+                { station_id: 'b', station_code: 'B', station_name: 'Beta', arrival_time: '06:20', departure_time: null, movement_id: 'm-b', planned_track: '2', actual_track: null, arrival: 'none', departure: 'none' }] }] };
+            break;
           // An older server answered a link to the same meet without a message.
           case '/v1/runtime/sync': return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ linked: true, restart_required: false }) });
           case '/v1/software/update': case '/v1/software': data = { installed_version: '1.6.2', installed_build: 'test', steps: [] }; break;
@@ -139,6 +147,26 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#overview-timetable').getAttribute('open'), null);
     assert.equal(await page.locator('#traffic-only-deviations').isChecked(), true);
     assert.equal(await page.locator('#overview-graph').isVisible(), true);
+    // A train in "Kommande enligt tidtabell" opens its route and where it is now.
+    const upcomingTrain = page.locator('#drift-upcoming button.server-event[data-train-number="421"]').first();
+    await upcomingTrain.click();
+    const trainPanel = page.locator('#drift-train-detail');
+    await trainPanel.locator('.train-detail-now').waitFor();
+    assert.equal(await trainPanel.locator('h3').textContent(), 'Tåg 421');
+    assert.equal(await trainPanel.locator('.train-detail-now').textContent(), 'Nu: På linjen A → B · avgick 06:05 3 min sen');
+    assert.deepEqual(await trainPanel.locator('.route-stop b').allTextContents(), ['A · Alpha', 'B · Beta']);
+    assert.deepEqual(await trainPanel.locator('.route-stop span').allTextContents(), ['avg 06:05 · spår 1', 'ank 06:20 · spår 2']);
+    assert.equal(await trainPanel.locator('.route-stop.done').count(), 1);
+    assert.equal(await trainPanel.locator('.train-detail-between').textContent(), 'På linjen');
+    assert.equal(await page.locator('#drift-upcoming button.server-event[aria-pressed="true"]').first().getAttribute('data-train-number'), '421');
+    // The choice survives the five-second refresh, then × closes it.
+    const trainCalls = calls.filter(c => c[1] === '/v1/train').length;
+    await page.waitForTimeout(5600);
+    assert.ok(calls.filter(c => c[1] === '/v1/train').length > trainCalls, 'the open panel refreshes with Drift');
+    assert.equal(await trainPanel.isVisible(), true);
+    await trainPanel.getByRole('button', { name: 'Stäng' }).click();
+    assert.equal(await trainPanel.isHidden(), true);
+    assert.equal(await page.locator('#drift-upcoming button.server-event[aria-pressed="true"]').count(), 0);
     await page.locator('#overview-clock-start').click();
     await page.locator('#stop-local-clock').waitFor({state:'visible'});
     assert.equal(running, true);

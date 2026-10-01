@@ -123,6 +123,36 @@ const root = path.resolve(__dirname, '../..');
     assert.equal((await admin.request.post(urls.eu+'/v1/devices/language',{data:{device_id:box.client_id,language:'sv'}})).status(),200);
     await page.waitForFunction(()=>document.querySelector('.lcd').textContent.includes('Nr# A:Kö'));
     assert.equal((await page.request.get(urls.eu+'/v1/admin/users',{headers:{Authorization:`Bearer ${box.access_token}`}})).status(),403);
+    // Traffic with two virtual boxes, then Drift: clicking the train in
+    // "Kommande enligt tidtabell" shows its route and that it is on the line.
+    const lekContext = await browser.newContext({locale:'sv-SE'});
+    const lek = await lekContext.newPage();
+    lek.setDefaultTimeout(15000);
+    await lek.goto(urls.eu + '/tmbox/');
+    await lek.locator('.box-code').getByText(/^WEB/).waitFor();
+    const lekBox = await lek.evaluate(() => JSON.parse(localStorage.getItem('trainmeet.browser-tmbox')));
+    assert.equal((await admin.request.post(urls.eu+'/v1/devices/assign',{data:{device_code:lekBox.device_code,station_id:'station-b'}})).status(),200);
+    await lek.locator('.box h2').getByText('Lekeberg',{exact:true}).waitFor();
+    const lcd = (target, text) => target.waitForFunction(value => document.querySelector('.lcd').textContent.includes(value), text);
+    const press = async (target, key) => { await target.waitForTimeout(600); await target.locator(`.keypad [data-key="${key}"]`).click(); };
+    for (const key of ['1', '0', '1', '#']) await page.locator(`.keypad [data-key="${key}"]`).click();
+    await lcd(page, '#Beg');
+    await press(page, '#');
+    await lcd(lek, '#Ja *Nej');
+    await press(lek, '#');
+    await lcd(page, '#Avg');
+    await press(page, '#');
+    const drift = await admin.newPage();
+    await drift.goto(urls.eu + '/drift');
+    await drift.locator('#drift-upcoming button.server-event[data-train-number="101"]').first().click();
+    const trainPanel = drift.locator('#drift-train-detail');
+    await trainPanel.locator('.train-detail-now').getByText('Nu: På linjen CDA → LEK', {exact: false}).waitFor();
+    assert.deepEqual(await trainPanel.locator('.route-stop b').allTextContents(), ['CDA · Charlottendahl', 'LEK · Lekeberg']);
+    assert.equal(await trainPanel.locator('.train-detail-between').count(), 1);
+    assert.ok(await drift.locator('#overview-topology .route-highlight').count() > 0, 'Banöversikten marks the train');
+    assert.ok(await drift.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await drift.close();
+    await lekContext.close();
     await page.getByRole('link',{name:'Träffens sida',exact:true}).click();
     await page.locator('#participant-view').waitFor({state:'visible'});
     // TKL is a separately hosted application. Its backend contract stays,
