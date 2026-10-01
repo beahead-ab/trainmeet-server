@@ -30,6 +30,8 @@ Tågdiagrammets höjd och 280 px av Översiktens bredd.
 - Banöversikt och Översikt: tågen inne på en station läggs inte över ett tåg
   på linjen eller över stationens namn (4142 och 421 vid Alvesta C, 8282 vid
   Elisabethstad).
+- Drift: valt tågs sammanfattning har ett mellanrum under kartan även när
+  den kant-till-kant-ritade kartan visas på en telefon.
 
 ### Designkorrektur: samma ram och samma kortrubrik på alla sidor
 

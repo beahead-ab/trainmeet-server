@@ -676,6 +676,9 @@ body[data-signed-in="no"] #app-chrome :is(#header-cloud-status, .topbar-right, #
 #drift-traffic-grid { align-items: stretch; }
 .topology-overview-card { display: flex; flex-direction: column; }
 .topology-overview-card .topology-preview { flex: 1 0 auto; margin: 0 -14px -12px; border: 0; border-radius: 0; background: none; }
+/* When a train is selected, the badge follows the map instead of the card
+   edge. Do not let the edge-to-edge map margin eat the gap above it. */
+.topology-overview-card:has(#overview-route-badge:not(.hidden)) .topology-preview { margin-bottom: 0; }
 
 /* Trafik just nu: tiles, the events in columns, the two folded lists in a row. */
 #overview-traffic .traffic-section { margin: 12px 0 0; }
