@@ -806,6 +806,18 @@ class IdentityStore:
                 for row in rows
             )
 
+    def removed_devices(self) -> tuple[DiscoveredDevice, ...]:
+        """Boxes an administrator removed. They stay out until reconnected
+        by their code; the caller decides which are worth showing."""
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT device_id, device_code, model, firmware_version, last_seen_at, hardware_version, protocol_version, display_rows, display_cols, charset
+                FROM discovered_devices WHERE removed_at IS NOT NULL ORDER BY last_seen_at DESC
+                """
+            ).fetchall()
+            return tuple(_discovered_device_from_row(row, (), None) for row in rows)
+
     def assign_discovered_device(
         self,
         device_code: str,

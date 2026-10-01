@@ -208,7 +208,7 @@
     code.hidden = false; code.classList.toggle("is-big", !assigned);
     document.querySelector("#box-identity-code").textContent = identity.device_code || "";
     document.querySelector("#box-note").textContent = assigned
-      ? "Boxen arbetar mot träffens riktiga trafik. Trafikledningen kan flytta den till en annan station eller ta bort den under Inställningar → TMBoxar. Språket byter du med * på boxen."
+      ? "Boxen arbetar mot träffens riktiga trafik. Trafikledningen kan flytta den till en annan station eller ta bort den under Inställningar → TMBoxar. Språket väljer trafikledningen i TrainMeet Server."
       : "Visa koden för trafikledningen, som tilldelar din station under Inställningar → TMBoxar. Boxen börjar arbeta direkt när den är tilldelad – du behöver inte ladda om sidan.";
   }
   // Page chrome for both pages: key help, how often the browser asks and which

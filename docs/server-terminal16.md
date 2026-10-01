@@ -50,8 +50,9 @@ MQTT-brokern oskyddad mot internet; använd webbklienten där.
    Avslutat tåg lämnar översikten. Inga extra kvitteringar behövs.
 
 Förfrågningar avbryter inte pågående sifferinmatning. Klockan ligger till
-höger på rad två. En ledig översta rad är tom. På översikten öppnar `*`
-språkval, `C`/`D` väljer och `#` sparar. Admin kan också ändra boxens språk.
+höger på rad två. En ledig översta rad är tom. Boxen har ingen egen språkmeny
+(från 1.17.5): administratören väljer varje box språk under Drift → Klienter →
+**Språk**, och startbilden visar `Nr# A:Kö`.
 Endast aktuella texter och nödvändiga LCD-specialtecken skickas till enheten.
 
 ## Aktiva tåg: återfinn båda klarerade utfarter

@@ -99,6 +99,9 @@ const root = path.resolve(__dirname, '../..');
     assert.equal((await admin.request.post(urls.eu+'/v1/devices/assign',{data:{device_code:box.device_code,station_id:'station-a'}})).status(),200);
     await page.locator('.box h2').getByText('Charlottendahl',{exact:true}).waitFor();
     await screenshot('box-assigned');
+    // A polling browser box is online in the admin's client list.
+    const listed=(await (await admin.request.get(urls.eu+'/v1/devices')).json()).devices.find(d=>d.device_id===box.client_id);
+    assert.deepEqual(listed.connection,{state:'online',last_seen:null});
     const beforeDigits = posts.filter(path=>path==='/v1/tmbox/terminal').length;
     await page.locator('.keypad [data-key="1"]').click();
     await page.locator('.keypad [data-key="2"]').click();
@@ -109,12 +112,14 @@ const root = path.resolve(__dirname, '../..');
     assert.match(await page.locator('.lcd').textContent(),/12___/,'Admin language preserves unsent digits');
     await page.locator('.keypad [data-key="*"]').click();
     assert.equal(posts.filter(path=>path==='/v1/tmbox/terminal').length,beforeDigits);
+    // No language menu on the box: * on the start screen does nothing, and
+    // only the administrator changes the language.
+    await page.waitForFunction(()=>document.querySelector('.lcd').textContent.includes('Nr# A:Q'));
     await page.locator('.keypad [data-key="*"]').click();
-    await page.waitForFunction(()=>document.querySelector('.lcd').textContent.includes('Deutsch'));
-    await page.locator('.keypad [data-key="D"]').click();
-    await page.waitForFunction(()=>document.querySelector('.lcd').textContent.includes('Svenska'));
-    await page.locator('.keypad [data-key="#"]').click();
-    await page.waitForFunction(()=>document.querySelector('.lcd').textContent.includes('Språk'));
+    await page.waitForTimeout(300);
+    assert.equal(posts.filter(path=>path==='/v1/tmbox/terminal').length,beforeDigits,'* sends nothing on the start screen');
+    assert.equal((await admin.request.post(urls.eu+'/v1/devices/language',{data:{device_id:box.client_id,language:'sv'}})).status(),200);
+    await page.waitForFunction(()=>document.querySelector('.lcd').textContent.includes('Nr# A:Kö'));
     assert.equal((await page.request.get(urls.eu+'/v1/admin/users',{headers:{Authorization:`Bearer ${box.access_token}`}})).status(),403);
     await page.getByRole('link',{name:'Träffens sida',exact:true}).click();
     await page.locator('#participant-view').waitFor({state:'visible'});

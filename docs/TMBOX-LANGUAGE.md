@@ -1,6 +1,11 @@
 # Språk på TMBox
 Uppdaterat 2026-09-20.
 
+> **Från TrainMeet Server 1.17.5:** boxar med firmware 0.7.x (profilen
+> server-16x2) har ingen egen språkmeny. Administratören väljer varje box
+> språk under Drift → Klienter → **Språk**; startbilden visar `Nr# A:Kö`.
+> Resten av dokumentet beskriver de äldre protokollen.
+
 ## Användning
 - ESP32: tryck D från översikten (eller när boxen väntar på station).
 - ESP8266: tryck # från viloläget. A–D behåller den äldre trafikfunktionen.

@@ -78,6 +78,11 @@ LOGGER = logging.getLogger("tmbox_gateway.http")
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
 ADMIN_COOKIE_NAME = "trainmeet_admin"
 ADMIN_COOKIE_MAX_AGE = 12 * 60 * 60
+# A box pings every five seconds and gives up its own session after fifteen.
+# Twenty seconds of silence is therefore a box with a problem; after a quarter
+# of an hour it is simply offline.
+DEVICE_ONLINE_SECONDS = 20
+DEVICE_OFFLINE_SECONDS = 15 * 60
 
 
 def runtime_command(region=None):
@@ -262,6 +267,12 @@ class TrainMeetHTTPApplication:
         self._box_enrollment_attempts: dict[str, list[float]] = {}
         self._browser_enrollment_attempts: dict[str, list[float]] = {}
         self._browser_touch_at: dict[str, float] = {}
+        # When each box was last heard, in memory only: a ping every five
+        # seconds from every box must not become a database write on the Pi.
+        # Written from the MQTT network thread and HTTP threads, one key at a
+        # time; read with .get().
+        self.device_seen: dict[str, float] = {}
+        self.wall_clock = time.time
         self._last_browser_prune: datetime | None = None
         self.us_store = us_store
         self.lifecycle = lifecycle or (SQLiteMeetLifecycle(runtime_store.path) if runtime_store else None)
@@ -396,8 +407,35 @@ class TrainMeetHTTPApplication:
             self._terminal16 = Terminal16Service(self.station_service)
         return self._terminal16
 
+    def note_device_seen(self, device_id: str) -> None:
+        self.device_seen[device_id] = self.wall_clock()
+
+    def _device_connection(self, device) -> dict[str, Any]:
+        """Online while it pings, then "lost" - you see at once that a box has
+        gone quiet - and offline after a quarter of an hour. Before a box has
+        been heard since this server started, its stored last connect counts."""
+
+        seen = self.device_seen.get(device.device_id)
+        if seen is None:
+            try:
+                stored = datetime.fromisoformat(device.last_seen_at)
+                seen = (stored if stored.tzinfo else stored.replace(tzinfo=timezone.utc)).timestamp()
+            except (TypeError, ValueError):
+                return {"state": "offline", "last_seen": None}
+            heard = False
+        else:
+            heard = True
+        age = self.wall_clock() - seen
+        state = ("online" if heard and age <= DEVICE_ONLINE_SECONDS else
+                 "lost" if age <= DEVICE_OFFLINE_SECONDS else "offline")
+        # Only a box that has stopped answering needs a time; leaving it out
+        # while online keeps the list from redrawing on every ping.
+        last_seen = None if state == "online" else datetime.fromtimestamp(seen, timezone.utc).isoformat()
+        return {"state": state, "last_seen": last_seen}
+
     @runtime_view
     def terminal16_frame(self, client):
+        self.note_device_seen(client.client_id)
         self.station_service.observe_operator(client.client_id)
         self._require_box_access(client, client.client_id)
         self._touch_browser_client(client.client_id)
@@ -417,6 +455,7 @@ class TrainMeetHTTPApplication:
 
     @runtime_view
     def terminal16_command(self, client, payload):
+        self.note_device_seen(client.client_id)
         self.station_service.observe_operator(client.client_id)
         self._require_box_access(client, client.client_id)
         return self.terminal16.command(client.client_id, payload)
@@ -1141,8 +1180,18 @@ class TrainMeetHTTPApplication:
                     "display": device.display.to_dict(),
                     "language": (self._device_ui(device.device_id)["language"]
                                  if self._device_supports_language(device.device_id) else None),
+                    "connection": self._device_connection(device),
                 }
                 for device in self.identities.discovered_devices()
+            ],
+            # A removed box is kept out until it is reconnected by its code.
+            # The ones still trying to connect are listed, so that is one
+            # click instead of copying the code from the box.
+            "removed_trying": [
+                {"device_id": device.device_id, "device_code": device.device_code, "model": device.model,
+                 "connection": connection}
+                for device in self.identities.removed_devices()
+                if (connection := self._device_connection(device))["state"] != "offline"
             ],
             "stations": [
                 {"id": station.id, "code": station.code, "name": station.name}

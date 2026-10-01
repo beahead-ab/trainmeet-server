@@ -58,6 +58,19 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('#device-management #server-station-rows').count(),0);
     assert.equal((await page.locator('#station-placement > h2').textContent()).trim(),'TMBox-placering');
     assert.equal(await page.locator('#station-placement #server-station-rows').count(),1);
+    // The fixture box connected once and has not pinged since this server
+    // started: no contact, with the time it was last seen, just before the
+    // buttons. The pairing code is not shown here; boxes never use it.
+    const smokeStatus=page.locator('#device-list .status-row').filter({hasText:'TBX-SMOKE'}).locator('.device-connection');
+    assert.match(await smokeStatus.textContent(),/^Ingen kontakt · sist sedd \d{2}[:.]\d{2}$/);
+    assert.equal(await smokeStatus.getAttribute('class'),'device-connection device-connection--lost');
+    assert.ok(await smokeStatus.evaluate(status=>status.nextElementSibling.classList.contains('device-actions')),'Status sits just before the buttons');
+    // Warning colour, not the station column's ink (app.css styled every span in the row as the station).
+    const [statusColor,stationColor,statusWeight]=await smokeStatus.evaluate(status=>{const station=status.previousElementSibling;
+      return [getComputedStyle(status).color,getComputedStyle(station).color,getComputedStyle(status).fontWeight];});
+    assert.notEqual(statusColor,stationColor);
+    assert.equal(statusWeight,'600');
+    assert.doesNotMatch(await page.locator('#client-network').textContent(),/Kod/);
     assert.ok(await page.locator('#device-management').evaluate(card=>card.querySelector('#device-list').compareDocumentPosition(card.querySelector('.device-reconnect'))&Node.DOCUMENT_POSITION_FOLLOWING),'Reconnect comes after the client list');
     assert.equal(await page.locator('#overview-graph').isVisible(),true);
     assert.equal(await page.locator('#overview-timetable').getAttribute('open'),null);
@@ -162,6 +175,20 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('.device-inline-edit').getByRole('button',{name:'Avbryt',exact:true}).click();
     assert.equal((await (await page.request.get(urls.eu+'/v1/devices')).json()).devices.length,1);
     await page.locator('#device-list .device-remove').click();
+    assert.match(await page.locator('.device-inline-edit').textContent(),/spärras och kommer inte tillbaka av sig själv/);
+    await page.locator('.device-inline-edit').getByRole('button',{name:'Ta bort',exact:true}).click();
+    await page.locator('#device-list .empty-status').waitFor();
+    // Removed, but it was here a moment ago: it is offered back with one
+    // click instead of copying its code from the box.
+    const trying=page.locator('#device-removed-trying');
+    await trying.getByText('Borttagna boxar som försöker ansluta').waitFor();
+    await trying.locator('.status-row').filter({hasText:'TBX-SMOKE'}).getByRole('button',{name:'Återanslut',exact:true}).click();
+    await trying.locator('select').selectOption('station-a');
+    await trying.locator('[type=submit]').click();
+    await page.locator('#device-list .status-row').filter({hasText:'TBX-SMOKE'}).waitFor();
+    assert.equal(await trying.isHidden(),true);
+    assert.equal((await (await page.request.get(urls.eu+'/v1/devices')).json()).devices[0].station_id,'station-a');
+    await page.locator('#device-list .device-remove').click();
     await page.locator('.device-inline-edit').getByRole('button',{name:'Ta bort',exact:true}).click();
     await page.locator('#device-list .empty-status').waitFor();
     const after=await (await page.request.get(urls.eu+'/v1/display')).json();
@@ -204,7 +231,7 @@ const root = path.resolve(__dirname, '../..');
     // ⚙ › Skärmar och klocka is four parts that each save only their own
     // fields, and Farozon is the last card on the page.
     await page.goto(urls.eu+'/installningar');
-    assert.deepEqual(await page.locator('.clock-control-card .server-part__title').allTextContents(),['Klocka','QR-koder på skärmarna','Parningskod för TMBoxar','Träffens Wi-Fi']);
+    assert.deepEqual(await page.locator('.clock-control-card .server-part__title').allTextContents(),['Klocka','QR-koder på skärmarna','Kod för appar och TKL','Träffens Wi-Fi']);
     assert.equal(await page.locator('#admin-view > .server-card').last().getAttribute('data-anchor'),'farozon');
     await page.locator('#connection-wifi-name').fill('Test-Wifi');
     await page.locator('#connection-wifi-password').fill('test-only-1234');

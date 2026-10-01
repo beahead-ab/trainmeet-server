@@ -1108,7 +1108,8 @@ runtimeForm.addEventListener("submit", async (event) => {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
-    setMessage(runtimeMessage, `3/3 · ${payload.message} Cloud-kopplingen är sparad på servern.`, payload.restart_required ? "notice" : "success");
+    // Never print "undefined": an answer without a message still saved the link.
+    setMessage(runtimeMessage, `3/3 · ${payload.message ? `${payload.message} ` : ""}Cloud-kopplingen är sparad på servern.`, payload.restart_required ? "notice" : "success");
     runtimeSyncCodeBoxes.reset();
     await Promise.all([refreshServerContext(), refreshRuntime(), refreshInfo()]);
     finishModal(runtimeForm);
@@ -1730,7 +1731,69 @@ async function refreshDevices() {
   state.devices = payload.devices || [];
   state.deviceLanguages = payload.languages || [];
   state.stations = payload.stations || [];
+  state.removedTrying = payload.removed_trying || [];
   renderDevices({ devices: state.devices, stations: state.stations });
+  renderRemovedTrying(state.removedTrying, state.stations);
+}
+
+// Online while a box pings; "no contact" as soon as it goes quiet, so a
+// problem shows at once; offline after a quarter of an hour.
+function deviceConnectionStatus(connection) {
+  const status = document.createElement("span");
+  const current = connection?.state || "offline";
+  status.className = `device-connection device-connection--${current}`;
+  const time = connection?.last_seen
+    ? new Date(connection.last_seen).toLocaleTimeString(document.documentElement.lang || "sv", {hour: "2-digit", minute: "2-digit"}) : "";
+  status.textContent = current === "online" ? t("Online")
+    : current === "lost" ? t("Ingen kontakt · sist sedd {time}", {time})
+    : time ? t("Offline sedan {time}", {time}) : t("Offline");
+  return status;
+}
+
+// A removed box stays out until it is let back in by its code. The ones that
+// keep trying are listed here, so reconnecting is a station and one click.
+function renderRemovedTrying(boxes, stations) {
+  const host = document.querySelector("#device-removed-trying");
+  if (!host || host.querySelector("form")) return;
+  host.replaceChildren();
+  host.hidden = !boxes.length;
+  if (!boxes.length) return;
+  const heading = document.createElement("h3"); heading.textContent = t("Borttagna boxar som försöker ansluta");
+  host.append(heading);
+  for (const box of boxes) {
+    const row = document.createElement("div"); row.className = "status-row device-removed-row";
+    const identity = document.createElement("div");
+    const code = document.createElement("b"); code.textContent = box.device_code;
+    const model = document.createElement("small"); model.textContent = `${box.model} · ${box.device_id}`;
+    identity.append(code, model);
+    const note = document.createElement("span"); note.textContent = t("Borttagen");
+    const actions = document.createElement("div"); actions.className = "device-actions";
+    const reconnect = document.createElement("button"); reconnect.type = "button"; reconnect.className = "secondary";
+    reconnect.textContent = t("Återanslut");
+    reconnect.addEventListener("click", () => {
+      const form = document.createElement("form"); form.className = "device-inline-edit server-actions";
+      const select = document.createElement("select"); select.required = true; select.setAttribute("aria-label", t("Station"));
+      select.append(new Option(t("Välj station"), ""));
+      stations.forEach(s => select.append(new Option(`${s.code} · ${s.name}`, s.id)));
+      const save = document.createElement("button"); save.type = "submit"; save.textContent = t("Återanslut");
+      const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = t("Avbryt");
+      const message = document.createElement("span"); message.setAttribute("role", "status");
+      cancel.addEventListener("click", () => { form.remove(); renderRemovedTrying(state.removedTrying || [], state.stations || []); });
+      form.append(select, save, cancel, message); actions.replaceChildren(form); select.focus();
+      form.addEventListener("submit", async event => {
+        event.preventDefault(); if (save.disabled) return; save.disabled = cancel.disabled = select.disabled = true;
+        try {
+          const response = await authorizedFetch("/v1/devices/assign", {method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({device_code: box.device_code, station_id: select.value, meet_generation: state.serverContext?.selected_meet?.generation})});
+          const result = await response.json(); if (!response.ok) throw new Error(result.message || t("Kunde inte tilldela station"));
+          form.remove(); await refreshDevices();
+        } catch (error) { message.textContent = error.message; save.disabled = cancel.disabled = select.disabled = false; }
+      });
+    });
+    actions.append(reconnect);
+    row.append(identity, note, deviceConnectionStatus(box.connection), actions);
+    host.append(row);
+  }
 }
 
 function renderDevices(payload) {
@@ -1764,7 +1827,7 @@ function renderDevices(payload) {
     assignment.textContent = station
       ? `${station.code} · ${station.name}`
       : t("Väntar på station");
-    row.append(identity, assignment);
+    row.append(identity, assignment, deviceConnectionStatus(device.connection));
     const edit = document.createElement("button");
     edit.type = "button";
     edit.className = "secondary";
@@ -1802,7 +1865,7 @@ function renderDevices(payload) {
     remove.addEventListener("click", () => {
       const meetGeneration = state.serverContext?.selected_meet?.generation;
       const confirm = document.createElement("div"); confirm.className = "device-inline-edit server-actions";
-      const question = document.createElement("span"); question.textContent = t("Koppla bort klienten? Trafik och historik behålls.");
+      const question = document.createElement("span"); question.textContent = t("Boxen spärras och kommer inte tillbaka av sig själv – återanslut den här eller med dess kod. Trafik och historik behålls.");
       const yes = document.createElement("button"); yes.type = "button"; yes.textContent = t("Ta bort");
       const no = document.createElement("button"); no.type = "button"; no.textContent = t("Avbryt");
       no.addEventListener("click", () => { confirm.remove(); delete list.dataset.signature; renderDevices(payload); });

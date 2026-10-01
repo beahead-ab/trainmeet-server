@@ -11,9 +11,9 @@
 button.secondary, .server-step-card button.secondary { color: var(--text); background: white; border-color: #d9d9d9; }
 #overview-traffic-heading { font-size: 13px; }
 #app-view input, #app-view select { border-radius: 6px; }
-#device-list .status-row > div:first-child { min-width: 0; }
-#device-list .status-row b { white-space: nowrap; }
-#device-list .status-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:is(#device-list, #device-removed-trying) .status-row > div:first-child { min-width: 0; }
+:is(#device-list, #device-removed-trying) .status-row b { white-space: nowrap; }
+:is(#device-list, #device-removed-trying) .status-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [hidden], .hidden, .legacy-internal { display: none !important; }
 body { font-family: var(--font); font-size: 13px; line-height: 1.45; }
 /* Typography guard rails: only the two shipped families, only shipped weights.
@@ -125,13 +125,26 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 #device-management h2, #station-placement h2 { font-size: 13px; margin: 0; }
 #station-placement > h2 { padding: 9px 12px; border-bottom: 1px solid var(--border-soft); }
 #station-placement > .server-placement-note { margin: 8px 12px; font-size: 12px; color: var(--muted); }
-#device-list { display: block; margin: 0; }
-#device-list .status-row { display: grid; grid-template-columns: minmax(170px,1fr) minmax(140px,1fr) minmax(260px,2fr); gap: 10px; padding: 7px 12px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: 0; }
-#device-list .status-row > div:first-child { display: flex; align-items: baseline; gap: 8px; }
-#device-list .status-row b, #device-list .status-row span { font-size: 12.5px; }
-#device-list .status-row small { font-size: 11px; }
-#device-list .device-actions { justify-content: flex-end; gap: 6px; }
-#device-list .device-actions button { font-size: 11.5px; padding: 4px 8px; min-height: 26px; }
+#device-list, #device-removed-trying { display: block; margin: 0; }
+/* Code · station · status · actions. The status sits just before the buttons,
+   in the same place on every row whatever the station's name. */
+:is(#device-list, #device-removed-trying) .status-row { display: grid; grid-template-columns: minmax(170px,1fr) minmax(140px,1fr) auto minmax(260px,2fr); align-items: center; gap: 10px; padding: 7px 12px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: 0; }
+:is(#device-list, #device-removed-trying) .status-row > div:first-child { display: flex; align-items: baseline; gap: 8px; }
+:is(#device-list, #device-removed-trying) .status-row b, :is(#device-list, #device-removed-trying) .status-row span { font-size: 12.5px; }
+:is(#device-list, #device-removed-trying) .status-row small { font-size: 11px; }
+:is(#device-list, #device-removed-trying) .device-actions { justify-content: flex-end; gap: 6px; }
+:is(#device-list, #device-removed-trying) .device-actions button { font-size: 11.5px; padding: 4px 8px; min-height: 26px; }
+/* .status-row > outranks app.css "#device-list .status-row > span" (the station column). */
+:is(#device-list, #device-removed-trying) .status-row > .device-connection { justify-self: end; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+:is(#device-list, #device-removed-trying) .device-connection::before { content: ""; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+:is(#device-list, #device-removed-trying) .status-row > .device-connection--online { color: var(--ok-text); }
+:is(#device-list, #device-removed-trying) .status-row > .device-connection--online::before { background: var(--ok-text); }
+:is(#device-list, #device-removed-trying) .status-row > .device-connection--lost { color: var(--warn-text); font-weight: 600; }
+:is(#device-list, #device-removed-trying) .status-row > .device-connection--lost::before { background: var(--warn-dot); }
+:is(#device-list, #device-removed-trying) .status-row > .device-connection--offline { color: var(--muted); }
+:is(#device-list, #device-removed-trying) .status-row > .device-connection--offline::before { border: 1.5px solid var(--muted); box-sizing: border-box; }
+#device-removed-trying .status-row > span { text-align: left; }
+#device-removed-trying h3 { margin: 10px 12px 2px; font-size: 12px; color: var(--muted); font-weight: 600; }
 #device-management .device-reconnect { margin: 6px 12px; font-size: 12px; }
 #device-management > .form-message { margin: 6px 12px; }
 .server-station-rows { overflow-x: auto; }
@@ -190,8 +203,9 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
   .tm-clockrow__aside { flex: 1 1 100%; width: auto; border: 0; border-top: 1px solid var(--border); }
   #settings-heading { display: block; }
   #settings-heading h2 { margin-bottom: 10px; }
-  #device-list .status-row { grid-template-columns: 1fr; }
-  #device-list .device-actions { justify-content: flex-start; flex-wrap: wrap; }
+  :is(#device-list, #device-removed-trying) .status-row { grid-template-columns: 1fr; }
+  :is(#device-list, #device-removed-trying) .status-row > .device-connection { justify-self: start; }
+  :is(#device-list, #device-removed-trying) .device-actions { justify-content: flex-start; flex-wrap: wrap; }
   #device-management > .section-heading { flex-wrap: wrap; }
   #drift-simulation-details > div { grid-template-columns: 1fr; }
 }

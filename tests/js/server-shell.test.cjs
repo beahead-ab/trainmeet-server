@@ -96,6 +96,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
             break;
           case '/v1/display': data = { clock: clock(), meet: { id: 'meet-1', name: 'Demo meet' }, active_day: 'Dagl', publication_id: 'pub-1', stations, connections: [], routes: [{ train_number: '421', station_id: 'a', departure_time: '06:05' }, { train_number: '421', station_id: 'b', arrival_time: '06:20' }], train_positions: [], connection_states: [], connection: { screens: [] } }; break;
           case '/v1/config/check': data = { message: 'Senaste config används.' }; break;
+          // An older server answered a link to the same meet without a message.
+          case '/v1/runtime/sync': return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ linked: true, restart_required: false }) });
           case '/v1/software/update': case '/v1/software': data = { installed_version: '1.6.2', installed_build: 'test', steps: [] }; break;
           default: data = { backups: [], panels: [], message: 'Sparat' };
         }
@@ -116,7 +118,9 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#application-menu').isVisible(), false);
     assert.equal(await page.locator('#pv-meet-name').textContent(), 'Demo meet');
     assert.equal(await page.locator('#workspace-options').count(), 0);
-    await page.locator('#pv-code').getByText(/\d{3}-\d{3}|—/).waitFor();
+    // A box finds the server and needs no address or code; the card says so.
+    await page.locator('#pv-connect-card').getByText('Boxen hittar servern själv').waitFor();
+    assert.equal(await page.locator('#pv-connect-card').getByText(/parningskod/i).count(), 0);
     assert.equal(await page.locator('#participant-view a[href="/tmbox/"]').count(), 1, 'One button starts a virtual TMBox');
     assert.equal(await page.locator('#pv-login').getAttribute('href'), '/login');
     signedIn = true;
@@ -212,6 +216,14 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     }
     await page.goto('http://127.0.0.1:9999/installningar');
     await page.locator('[data-language-picker]').selectOption('sv');
+    // Linking to Cloud never reports "undefined", even without a message.
+    await page.locator('[data-open-modal="runtime-sync-form-modal"]').click();
+    const syncBoxes=page.locator('#runtime-sync-code-boxes input');
+    for(let index=0;index<6;index++) await syncBoxes.nth(index).fill(String(index+1));
+    await page.locator('#runtime-sync-form [type=submit]').click();
+    // The dialog closes on success; its message is shown in #modal-result.
+    await page.locator('#modal-result').getByText('3/3 · Cloud-kopplingen är sparad på servern.',{exact:true}).waitFor();
+    assert.doesNotMatch(await page.locator('#modal-result').textContent(),/undefined/);
     await page.goto('http://127.0.0.1:9999/drift');
     await page.locator('#device-list .device-remove').click();
     const confirmation=page.locator('.device-inline-edit');

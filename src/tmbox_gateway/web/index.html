@@ -273,14 +273,12 @@
                     <p id="pv-wifi-note" class="pv-note"></p>
                   </div></div>
                   <div class="pv-step"><div class="n">2</div><div>
-                    <div class="h">Ange serverns adress i boxen</div>
-                    <div id="pv-address" class="pv-values"></div>
-                    <p class="pv-note">Adressen till TrainMeet Server på träffens nätverk.</p>
+                    <div class="h">Boxen hittar servern själv</div>
+                    <p class="pv-note">Ingen adress eller kod behövs. Boxen visar sin egen kod, till exempel TBX-1A2B3C, på displayen.</p>
                   </div></div>
                   <div class="pv-step"><div class="n">3</div><div>
-                    <div class="h">Skriv in parningskoden</div>
-                    <div class="pv-values"><span id="pv-code" class="pv-value pv-value--big">—</span></div>
-                    <p id="pv-code-note" class="pv-note"></p>
+                    <div class="h">Trafikledningen tilldelar station</div>
+                    <p class="pv-note">Boxen dyker upp hos trafikledningen som ”väntar på station” och börjar arbeta direkt när den fått sin station.</p>
                   </div></div>
                 </div>
               </section>
@@ -821,13 +819,14 @@
   <form id="device-language-form">
     <label for="device-language">Språk / Language</label>
     <select id="device-language" name="language" required></select>
-    <p>Bara det valda språket skickas till denna box. Är den frånkopplad får den språket vid nästa anslutning. Operatören kan byta språk igen.</p>
+    <p>Bara det valda språket skickas till denna box. Är den frånkopplad får den språket vid nästa anslutning. Boxen har ingen egen språkmeny.</p>
     <p id="device-language-message" class="form-message" role="status"></p>
     <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara och skicka</button></div>
   </form>
 </dialog>
               <p id="device-list-message" class="form-message" role="status"></p>
               <div id="device-list" class="status-list"></div>
+              <div id="device-removed-trying" class="status-list" hidden></div>
           </section>
         </section>
 

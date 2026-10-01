@@ -36,8 +36,11 @@ class Terminal16Gateway:
     PREFIX = "tmbox/terminal/device/"
     SUBSCRIPTIONS = tuple("tmbox/terminal/device/+/" + leaf for leaf in ("hello", "presence", "command"))
 
-    def __init__(self, terminals, publish, *, now=monotonic):
+    def __init__(self, terminals, publish, *, now=monotonic, on_seen=None):
         self.terminals, self.publish, self.now = terminals, publish, now
+        # Told about every message from a session the server knows - a cheap
+        # in-memory note, so the admin can see which boxes are alive.
+        self.on_seen = on_seen
         self.connections = {}
         # Kanten: den senaste sessionen per box, som nätverkstråden ser den.
         # Eget lås, aldrig trafiklåset - det är hela poängen.
@@ -99,6 +102,8 @@ class Terminal16Gateway:
             sequence = self._sequence
             if leaf == "presence":
                 session["presence"] = sequence
+        if self.on_seen:
+            self.on_seen(device)
         if leaf == "hello":
             if replaced is None:
                 LOGGER.info("TMBox %s ansluten (session %s)", device, boot)
