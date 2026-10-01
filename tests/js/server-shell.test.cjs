@@ -125,6 +125,13 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#participant-view').isVisible(), false);
     await page.locator('#device-list .status-row').waitFor();
     assert.equal(await page.locator('#application-menu').isVisible(), false);
+    // Clients and the left/right setting are two cards: operations and a
+    // setting used to share one, and the station table read as client rows.
+    assert.equal((await page.locator('#device-management > .section-heading h2').textContent()).trim(),'Klienter');
+    assert.equal(await page.locator('#device-management #server-station-rows').count(),0);
+    assert.equal((await page.locator('#station-placement > h2').textContent()).trim(),'TMBox-placering');
+    assert.equal(await page.locator('#station-placement #server-station-rows').count(),1);
+    assert.ok(await page.locator('#device-management').evaluate(card=>card.querySelector('#device-list').compareDocumentPosition(card.querySelector('.device-reconnect'))&Node.DOCUMENT_POSITION_FOLLOWING),'Reconnect comes after the client list');
     assert.equal(await page.locator('#overview-timetable').getAttribute('open'), null);
     assert.equal(await page.locator('#traffic-only-deviations').isChecked(), true);
     assert.equal(await page.locator('#overview-graph').isVisible(), true);
@@ -237,6 +244,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.locator('#server-region').filter({hasText:'US'}).waitFor();
     assert.equal(await page.locator('#drift-simulation').isVisible(),false);
     assert.equal(await page.locator('#device-management').isVisible(),false);
+    assert.equal(await page.locator('#station-placement').isVisible(),false);
     assert.equal(await page.locator('#overview-traffic').isVisible(),false);
     assert.equal(calls.some(c=>c[1].includes('local-configuration')||c[1]==='/v1/operating-mode'),false);
     assert.deepEqual(errors,[]);

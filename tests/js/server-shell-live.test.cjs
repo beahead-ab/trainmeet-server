@@ -52,6 +52,13 @@ const root = path.resolve(__dirname, '../..');
     await login(urls.eu);
     await page.locator('#device-list .status-row').waitFor();
     assert.equal(await page.locator('#overview-traffic').isVisible(),true);
+    // Clients and the left/right setting are two cards: operations and a
+    // setting used to share one, and the station table read as client rows.
+    assert.equal((await page.locator('#device-management > .section-heading h2').textContent()).trim(),'Klienter');
+    assert.equal(await page.locator('#device-management #server-station-rows').count(),0);
+    assert.equal((await page.locator('#station-placement > h2').textContent()).trim(),'TMBox-placering');
+    assert.equal(await page.locator('#station-placement #server-station-rows').count(),1);
+    assert.ok(await page.locator('#device-management').evaluate(card=>card.querySelector('#device-list').compareDocumentPosition(card.querySelector('.device-reconnect'))&Node.DOCUMENT_POSITION_FOLLOWING),'Reconnect comes after the client list');
     assert.equal(await page.locator('#overview-graph').isVisible(),true);
     assert.equal(await page.locator('#overview-timetable').getAttribute('open'),null);
     await page.locator('#overview-clock-start').click();
@@ -222,6 +229,7 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#server-region').filter({hasText:'US'}).waitFor();
     assert.equal(await page.locator('#drift-simulation').isVisible(),false);
     assert.equal(await page.locator('#device-management').isVisible(),false);
+    assert.equal(await page.locator('#station-placement').isVisible(),false);
     await page.locator('#overview-clock-start').click();
     await page.locator('#stop-local-clock').waitFor({state:'visible'});
     await page.locator('#stop-local-clock').click();

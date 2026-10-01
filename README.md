@@ -521,7 +521,7 @@ Se [Cloud förbereder, Server kör](docs/CLOUD-ONLY-SERVER.md).
 
 - **Starta virtuell TMBox** på deltagarvyn eller i simuleringen öppnar `/tmbox` och skapar en egen
   webbläsaridentitet och visar en boxkod. Precis som en fysisk box väntar den
-  på att admin tilldelar station under **Drift → Stationer och klienter**. Först då
+  på att admin tilldelar station under **Drift → Klienter**. Först då
   kan den påverka trafikspelet. Den kan inte välja station, styra andra boxar
   eller ändra serverinställningar. Identiteten återanvänds vid omladdning.
   Borttagning av boxen spärrar också dess webbläsarnyckel.

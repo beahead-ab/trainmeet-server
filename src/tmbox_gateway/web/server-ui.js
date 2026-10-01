@@ -98,12 +98,20 @@
   row.after(simDetails);
   move("#device-management", overview).classList.remove("admin-section-panel", "hidden");
   simDetails.after($("#device-management"));
-  label($("#device-management h2"), "Stationer och klienter");
+  // Two modules, two cards. Clients are operations, followed all meet long;
+  // left/right per station is a setting changed now and then. Sharing one card
+  // made the station table read as part of the client list.
+  label($("#device-management h2"), "Klienter");
   $("#device-management").querySelectorAll(".eyebrow, .compact-heading p").forEach(n => n.classList.add("legacy-internal"));
   const network = make("p", "server-network"); network.id = "client-network";
   $("#device-management .section-heading").append(network);
+  // Reconnecting a removed client is rare: after the list, not above it.
+  $("#device-list").after($("#device-management .device-reconnect"));
+  const placement = card("TMBox-placering", "station-placement");
+  placement.append(authored("p", "server-placement-note", "Vänster och höger på stationens boxar. Lokala val behålls när Cloud uppdaterar träffen; tågens destinationer ändras inte."));
   const stationRows = make("div", "server-station-rows"); stationRows.id = "server-station-rows";
-  $("#device-management").append(stationRows);
+  placement.append(stationRows);
+  $("#device-management").after(placement);
   mark("#display-placement-section");
   const two = make("div", "server-grid-two"); two.id = "drift-traffic-grid"; overview.append(two);
   move(".topology-overview-card", two); move("#overview-traffic", two);
@@ -202,6 +210,7 @@
     $("#cloud-connection-meta").textContent = version;
     $("#drift-simulation").hidden = us;
     $("#device-management").hidden = us;
+    $("#station-placement").hidden = us;
     $("#drift-traffic-grid").hidden = us;
     $(".overview-graph-card").hidden = us;
     $("#header-cloud-status").hidden = !meet;
@@ -231,7 +240,8 @@
     host.replaceChildren();
     const table = make("table", "tm-table");
     const head = make("thead"), heading = make("tr");
-    for (const label of ["Station", "Vänster", "Höger", "TMBox-visning"]) heading.append(authored("th", "", label));
+    for (const label of ["Station", "Vänster", "Höger"]) heading.append(authored("th", "", label));
+    heading.append(make("th"));
     head.append(heading); table.append(head);
     const body = make("tbody"); table.append(body);
     const all = [...rows.children]; all.slice(0, 5).forEach(row => body.append(row)); host.append(table);
