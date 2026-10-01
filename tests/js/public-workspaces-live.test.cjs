@@ -73,8 +73,13 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#login-form').waitFor({state: 'visible'});
     await page.locator('#login a[href="/"]').click();
     await page.locator('#participant-view').waitFor({state: 'visible'});
+    // Guests find the test bench next to the virtual box, and the two pages
+    // link to each other.
+    assert.equal(await page.locator('#pv-virtual-card a[href="/tmbox-lab/"]').isVisible(), true);
     await page.locator('#pv-virtual-card a[href="/tmbox/"]').click();
     await page.locator('.box-code').getByText(/^WEB/).waitFor();
+    assert.equal(await page.locator('.tm-top a[href="/tmbox-lab/"]').textContent(), 'Provbänk');
+    await page.waitForFunction(() => document.querySelector('#connection-rate').textContent === ' · uppdateras 2 gånger i sekunden');
     const box = await page.evaluate(() => JSON.parse(localStorage.getItem('trainmeet.browser-tmbox')));
     assert.equal(await page.locator('input, select').count(), 0, 'No station or address controls');
     assert.equal(await page.locator('.keypad button').count(), 16);

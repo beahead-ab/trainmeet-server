@@ -1,9 +1,16 @@
 """Reuse the isolated, bounded lab without exposing any live runtime data."""
 from types import SimpleNamespace
+from .software_update import installed_version
 from .terminal16_public import PublicHandler
 
 
 class EmbeddedHandler(PublicHandler):
+    def health(self):
+        # Says that Server itself answered, not the retired stand-alone test
+        # bench service, and which version - so retire.py can tell before it
+        # points the proxy here, and the page footer names the code it runs.
+        return {**super().health(), "served_by": "server", "version": installed_version()}
+
     def _local(self, *, mutation=False):
         return self.parent._public_clients_allowed() and super()._local(mutation=mutation)
 

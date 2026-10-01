@@ -22,6 +22,16 @@ const root = path.resolve(__dirname, '../..');
     browser = await chromium.launch({headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel: process.env.PLAYWRIGHT_CHANNEL} : {})});
     const context = await browser.newContext({viewport: {width: 1280, height: 1000}});
     page = await context.newPage();
+    // Lets the test break the test bench's event stream the way a network
+    // drop does (the browser then reconnects by itself), or close it for
+    // good. Everything else is the real EventSource.
+    await page.addInitScript(() => {
+      const Real = window.EventSource;
+      window.EventSource = class extends Real {
+        constructor(...args) { super(...args); window.labStream = this; }
+        get readyState() { return this.simulated ?? super.readyState; }
+      };
+    });
     const errors = [], posts = [];
     page.on('pageerror', error => errors.push(error.message));
     let inflight = 0;
@@ -50,6 +60,13 @@ const root = path.resolve(__dirname, '../..');
     const presentation = async () => (await admin.request.get(urls.eu + '/v1/cloud/presentation')).json();
     const realBefore = await presentation();
     await page.goto(labURL);
+    // Same page frame as /tmbox/: the way back is the meet's page, not the
+    // administrators' /drift, and the footer names the server version.
+    assert.equal(await page.locator('.tm-top a[href="/drift"]').count(), 0);
+    assert.equal(await page.locator('.tm-top a[href="/tmbox/"]').textContent(), 'Virtuell TMBox');
+    assert.equal(await page.locator('.tm-top a[href="/"]').textContent(), 'Träffens sida');
+    await page.waitForFunction(() => /^TrainMeet Server \d+\.\d+\.\d+/.test(document.querySelector('#server-version').textContent));
+    assert.equal(await page.locator('#key-help').evaluate(d => d.tagName === 'DETAILS' && d.open), true, 'Key help open on a desktop');
     await page.locator('.box').nth(2).waitFor();
     await open();
     await select('cda', 'west').selectOption('right');
@@ -83,6 +100,13 @@ const root = path.resolve(__dirname, '../..');
     await page.getByText('Alla enheter är nollställda. Inga pågående tågrörelser.', {exact: true}).waitFor();
     const mun = (await state()).placement.stations.find(s => s.station_id === 'mun');
     assert.equal(mun.connections[0].side, 'left', 'Clear traffic keeps test placement');
+    await page.setViewportSize({width: 390, height: 844});
+    for (const width of [390, 320]) {
+      await page.setViewportSize({width, height: 844});
+      const fit = await page.evaluate(() => ({name: document.querySelector('.tm-top__name').getBoundingClientRect().width,
+        links: [...document.querySelectorAll('.tm-top a')].map(a => a.getBoundingClientRect().right), inner: innerWidth}));
+      assert.ok(fit.name > 40 && fit.links.every(right => right <= fit.inner), `Header fits ${width} px: ${JSON.stringify(fit)}`);
+    }
     await page.setViewportSize({width: 390, height: 844});
     await open();
     await screenshot('mobile');
@@ -164,6 +188,40 @@ const root = path.resolve(__dirname, '../..');
     await press('CDA', 'D');
     await press('CDA', '#');
     await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('39▶VA'));
+
+    // A person flicking through trains as fast as anyone does - seven presses
+    // a second - is never refused. The old limit (30 per 10 s) refused the 31st.
+    await settle();
+    const refused = [];
+    const onResponse = response => { if (response.status() === 429) refused.push(response.url()); };
+    page.on('response', onResponse);
+    const flicked = posts.length;
+    await page.evaluate(() => new Promise(resolve => {
+      const key = document.querySelector('[data-device="DEMO-CDA"] [data-key="D"]');
+      let count = 0;
+      const timer = setInterval(() => { key.click(); if (++count === 42) { clearInterval(timer); resolve(); } }, 1000 / 7);
+    }));
+    await settle();
+    page.off('response', onResponse);
+    assert.deepEqual(refused, [], 'No press refused');
+    assert.ok(posts.length - flicked >= 40, `${posts.length - flicked} of 42 presses sent`);
+
+    // A dropped stream is not a lost server until 15 s have passed, as on the
+    // box; a stream the server closed for good is lost at once.
+    const labConnection = () => page.locator('#connection').textContent();
+    const ready = await labConnection();
+    const droppedAt = Date.now();
+    await page.evaluate(() => { labStream.simulated = 0; labStream.close(); labStream.onerror(new Event('error')); });
+    await page.waitForTimeout(5000);
+    assert.equal(await labConnection(), ready, 'Five seconds without the stream are not a lost server');
+    await page.waitForFunction(text => document.querySelector('#connection').textContent !== text, ready, {timeout: 20000});
+    const droppedFor = Date.now() - droppedAt;
+    assert.ok(droppedFor >= 14500 && droppedFor < 18000, `Lost after ${droppedFor} ms`);
+    await page.reload();
+    await page.waitForFunction(text => document.querySelector('#connection').textContent === text, ready);
+    await page.evaluate(() => { labStream.simulated = 2; labStream.close(); labStream.onerror(new Event('error')); });
+    assert.notEqual(await labConnection(), ready, 'A closed stream is lost at once');
+    await noneDisabled();
 
     // The operational browser client has no simulator configuration controls.
     await page.goto(urls.eu + '/tmbox/');

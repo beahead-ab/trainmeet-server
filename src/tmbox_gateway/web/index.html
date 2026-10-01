@@ -43,12 +43,16 @@
               <button id="logout" type="button">Logga ut</button>
             </nav>
           </details>
-          <details class="screen-menu tm-dropdown"><summary class="tm-btn"><tm-text data-tm-text="Öppna skärm">Öppna skärm</tm-text></summary><nav aria-label="Skärmar" data-tm-aria-label="Skärmar">
+          <details class="screen-menu tm-dropdown"><summary class="tm-btn"><tm-text data-tm-text="Öppna">Öppna</tm-text></summary><nav aria-label="Öppna" data-tm-aria-label="Öppna">
+            <span class="tm-eyebrow"><tm-text data-tm-text="Skärmar">Skärmar</tm-text></span>
             <a href="/display/clock" target="_blank" rel="noopener"><tm-text data-tm-text="Träffklocka">Träffklocka</tm-text></a>
             <a href="/display/dashboard" target="_blank" rel="noopener" data-eu-only><tm-text data-tm-text="Översikt">Översikt</tm-text></a>
             <a href="/display/topology" target="_blank" rel="noopener" data-eu-only><tm-text data-tm-text="Banöversikt">Banöversikt</tm-text></a>
             <a href="/display/graph" target="_blank" rel="noopener" data-eu-only><tm-text data-tm-text="Tågdiagram">Tågdiagram</tm-text></a>
             <a href="/display/territories" target="_blank" rel="noopener" data-us-only hidden><tm-text data-tm-text="Områdestavla">Områdestavla</tm-text></a>
+            <span class="tm-eyebrow screen-menu__group" data-eu-only>TMBox</span>
+            <a href="/tmbox/" target="_blank" rel="noopener" data-eu-only><tm-text data-tm-text="Virtuell TMBox">Virtuell TMBox</tm-text></a>
+            <a href="/tmbox-lab/" target="_blank" rel="noopener" data-eu-only><tm-text data-tm-text="Provbänk med testdata">Provbänk med testdata</tm-text></a>
           </nav></details>
           <a class="tm-icon-btn" href="/installningar" aria-label="Inställningar" title="Inställningar">⚙</a>
           <a class="tm-icon-btn" href="/hjalp" aria-label="Hjälp" title="Hjälp">?</a>
@@ -286,6 +290,8 @@
                   <p class="pv-note">Ingen box till hands? Starta en virtuell TMBox här på mobilen, iPaden eller datorn. Den fungerar som en riktig box: trafikledningen ser den som ”väntar på station” och tilldelar den en station. Innan dess visar den bara – den kan inte påverka spelet. Kör servern en simulering tar du över en station som simulatorn annars sköter själv.</p>
                   <a class="tm-btn tm-btn--primary pv-btn-wide pv-btn-lg" href="/tmbox/">Starta virtuell TMBox</a>
                   <p id="pv-virtual-ttl" class="pv-note pv-muted"></p>
+                  <a class="tm-btn pv-btn-wide" href="/tmbox-lab/">Prova först i provbänken</a>
+                  <p class="pv-note">Tre boxar med testdata – helt skilda från träffen.</p>
                 </div>
               </section>
             </aside>

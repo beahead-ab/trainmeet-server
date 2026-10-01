@@ -268,6 +268,21 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(self.application.engine.export_state(), before)
         self.assertEqual(len(self.application.lab_sessions.sessions), 2)
         self._public_refused("/tmbox-lab/api/reset-devices", {}, headers={"Origin":"https://evil.example"})
+        # /tmbox-lab without the slash still finds the page, as it did through
+        # the proxy of the retired stand-alone service.
+        import http.client
+        from urllib.parse import urlsplit
+        connection = http.client.HTTPConnection(urlsplit(self.base_url).netloc, timeout=2)
+        connection.request("GET", "/tmbox-lab")
+        response = connection.getresponse()
+        self.assertEqual((308, "/tmbox-lab/"), (response.status, response.getheader("Location")))
+        connection.close()
+        # retire.py and the page footer rely on this: Server itself answers,
+        # with its own version.
+        from tmbox_gateway.software_update import installed_version
+        health = json.load(urlopen(self.base_url + "/tmbox-lab/healthz", timeout=2))
+        self.assertEqual({"service": "tmbox-lab", "served_by": "server", "version": installed_version()},
+                         {key: health[key] for key in ("service", "served_by", "version")})
 
     def test_public_client_origin_is_explicit_and_does_not_unlock_admin(self):
         from dataclasses import replace

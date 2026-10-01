@@ -179,6 +179,16 @@ const root = path.resolve(__dirname, '../..');
     const screenMenu=page.locator('details.screen-menu');
     await screenMenu.locator('summary').click();
     assert.equal(await screenMenu.getAttribute('open'),'');
+    // The Open menu has the screens and, as its own group, both TMBox pages:
+    // the test bench used to be reachable only from Help.
+    assert.equal((await screenMenu.locator('summary').textContent()).trim(),'Öppna');
+    assert.deepEqual(await screenMenu.locator('nav .tm-eyebrow:visible').allTextContents(),['Skärmar','TMBox']);
+    for(const [href,text] of [['/tmbox/','Virtuell TMBox'],['/tmbox-lab/','Provbänk med testdata']]){
+      const link=screenMenu.locator(`nav a[href="${href}"]`);
+      assert.equal(await link.isVisible(),true,href);
+      assert.equal((await link.textContent()).trim(),text);
+      assert.equal(await link.getAttribute('target'),'_blank');
+    }
     await page.mouse.click(4,600);
     assert.equal(await screenMenu.getAttribute('open'),null,'A click outside closes the menu');
     await screenMenu.locator('summary').click();
