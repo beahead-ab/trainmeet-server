@@ -3330,6 +3330,9 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   if (!target) return;
   let { positions, edges, viewBox } = topologyLayout(snapshot);
   target.classList.toggle("topology-tv", Boolean(options.tv));
+  // On a TV a station is a ring, as in the design (SkarmBana): 22 px on the
+  // Banöversikt screen, 16 px on the lower map of Översikt.
+  const ring = options.tv ? ((options.height || 680) < 600 ? 16 : 22) : 7;
   if (options.tv) {
     // Fit the actual nodes, not the editor's padded canvas. Small layouts
     // otherwise collapse to an unreadable cluster in the middle of a TV.
@@ -3340,7 +3343,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     // The line always uses the full width. A low map (the Översikt card) is
     // squeezed vertically rather than shrunk as a whole, which would crowd the
     // names on the main line; the drawing is never stretched upwards.
-    const fitDepth = depth ? (height-180)/depth : Infinity;
+    const fitDepth = depth ? (height-220)/depth : Infinity; // room for the rings and their names
     const scaleX = points.length > 1 ? (width ? 1480/width : fitDepth) : 1;
     const safeX = Number.isFinite(scaleX) ? scaleX : 1;
     const safeY = Math.min(safeX, fitDepth);
@@ -3395,7 +3398,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const point = positions.get(station.id);
     if (!point) continue;
     const autonomous = Boolean(station.is_autonomous);
-    const radius = autonomous ? 5 : 7;
+    const radius = options.tv ? (autonomous ? Math.round(ring * 0.75) : ring) : autonomous ? 5 : 7;
     const onRoute = routeStationIDs.has(station.id);
     const inNeighborhood = stationNeighborIDs.has(station.id);
     const selected = station.id === options.selectedStationID;
@@ -3410,12 +3413,12 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     if (onRoute || selected) group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + 5, class: "topology-station-ring" }));
     group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + 1, class: "topology-mask" }));
     group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius, class: `topology-station${autonomous ? " autonomous" : ""}${activeStationIDs.has(station.id) ? " active" : ""}${onRoute || selected ? " highlighted" : ""}` }));
-    const name = svgElement("text", { x: point.x, y: point.y + (options.tv ? 40 : autonomous ? 16 : 20), class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name);
+    const name = svgElement("text", { x: point.x, y: point.y + (options.tv ? radius + 34 : autonomous ? 16 : 20), class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name);
     group.append(name);
     let code = null;
     if (options.tv) {
       const count = (snapshot.train_positions || []).filter(p=>p.station_id===station.id && !p.connection_id).length;
-      code = svgElement("text", {x:point.x,y:point.y+70,class:"topology-code"}, `${station.code || ""} · ${count} ${t("tåg")}`);
+      code = svgElement("text", {x:point.x,y:point.y+radius+64,class:"topology-code"}, `${station.code || ""} · ${count} ${t("tåg")}`);
       group.append(code);
     }
     labels.push({ point, radius, name, code });
@@ -3459,7 +3462,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const along = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
     const size = topologyTrainSize(train.trainNumber, true, options.tv);
     const reach = Math.abs(along.x) * size.width / 2 + Math.abs(along.y) * size.height / 2;
-    const clear = (options.tv ? 22 : 14) + reach; // off the station's ring (radius 12)
+    const clear = (options.tv ? ring + 14 : 14) + reach; // off the station's ring
     const distance = Math.min(Math.max(length * 0.25, clear), length / 2);
     const key = `${train.from}>${train.to}`;
     const order = sameWay.get(key) || 0;
@@ -3498,7 +3501,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     if (!point) continue;
     const shown = here.length > 3 ? here.slice(0, 2) : here;
     const items = [...shown.map((train) => train.trainNumber), ...(here.length > shown.length ? [`+${here.length - shown.length}`] : [])];
-    const gap = options.tv ? 10 : 4, off = 7 + gap;
+    const gap = options.tv ? 10 : 4, off = (options.tv ? ring + 4 : 7) + gap;
     const widths = items.map((item) => topologyTrainSize(item, false, options.tv).width);
     const height = topologyTrainSize("", false, options.tv).height;
     const width = widths.reduce((sum, value) => sum + value, 0) + gap * (items.length - 1);
@@ -4180,10 +4183,29 @@ function renderDashboard(snapshot) {
   const positions = snapshot.train_positions || [];
   const moving = positions.filter(p => p.connection_id);
   const now = currentClockTime(snapshot).slice(0, 5);
-  const late = moving.filter(p => (snapshot.routes || []).some(r => r.train_number === p.train_number && r.station_id === p.to_station_id && r.arrival_time && r.arrival_time < now));
+  const onLine = screenOnLine(snapshot);
+  const late = onLine.filter((train) => train.late);
   const upcoming = (snapshot.routes || []).filter(r => (r.departure_time || r.arrival_time || "") >= now).sort((a,b)=>(a.departure_time||a.arrival_time).localeCompare(b.departure_time||b.arrival_time)).slice(0,4);
   const stationName = id => snapshot.stations?.find(s=>s.id===id)?.name || id || "—";
   const staffed = snapshot.staffed_station_count;
+  // The lists as in the design (SkarmOversikt): time, train, what happens
+  // and in how long; the trains out on the line with when they are due.
+  const routes = snapshot.routes || [];
+  const nowMinute = minuteValue(now) ?? 0;
+  const eventRow = (route) => {
+    const time = route.departure_time || route.arrival_time;
+    const sibling = (step) => route.service_id ? routes.find((other) => other.service_id === route.service_id && Number(other.stop_order) === Number(route.stop_order) + step) : null;
+    const next = sibling(1), previous = sibling(-1), station = stationName(route.station_id);
+    const what = route.departure_time
+      ? (next ? t("avgår {station} mot {next}", { station, next: stationName(next.station_id) }) : t("avgår {station}", { station }))
+      : (previous ? t("ankommer {station} från {previous}", { station, previous: stationName(previous.station_id) }) : t("ankommer {station}", { station }));
+    const delta = ((minuteValue(time) ?? nowMinute) - nowMinute + 1440) % 1440;
+    return html`<div class="server-event dash-row"><span class="dash-time">${escapeHTML(time)}</span><b>${escapeHTML(route.train_number)}</b><span class="dash-what">${escapeHTML(what)}</span><span class="dash-in">${escapeHTML(delta === 0 ? t("nu") : t("{n} min", { n: delta }))}</span></div>`;
+  };
+  const shownOnLine = onLine.length > 3 ? onLine.slice(0, 2) : onLine;
+  const lineRows = shownOnLine.map((train) => html`<div class="server-event dash-row dash-row--line"><b>${escapeHTML(train.train)}</b><span class="dash-what">${escapeHTML(train.from)} → ${escapeHTML(train.to)}</span><span class="dash-in${train.late ? " is-late" : ""}">${train.due ? escapeHTML(t("ank {time}", { time: train.due })) : ""}</span></div>`).join("")
+    + (onLine.length > shownOnLine.length ? html`<div class="server-event dash-row dash-row--more">${escapeHTML(t("och {n} till", { n: onLine.length - shownOnLine.length }))}</div>` : "");
+  const status = late.length ? (late.length === 1 ? t("1 sen ankomst") : t("{n} sena ankomster", { n: late.length })) : `${t("Inga sena ankomster")} · ${t("trafiken följer tidtabellen")}`;
   target.innerHTML = html`<div class="dashboard-column">
     <section class="display-card dashboard-clock-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><div class="dashboard-clock-meta"><b>${escapeHTML(snapshot.meet?.name || "TrainMeet")}</b><span class="dashboard-run${snapshot.clock?.running ? "" : " is-stopped"}">${snapshot.clock?.running ? `${escapeHTML(t("Klockan går"))} · ${Number(snapshot.clock?.speed || 1)}×` : escapeHTML(t("Klockan är stoppad"))}</span><span class="dashboard-day">${escapeHTML(snapshot.active_day || "")}</span></div></section>
     <section class="display-card dashboard-stats">
@@ -4193,16 +4215,61 @@ function renderDashboard(snapshot) {
       <div class="dashboard-stat"><b>${late.length}</b><span>sena ankomster</span></div>
     </section>
   </div><section class="display-card"><svg id="dashboard-topology" class="display-visual" role="img" aria-label="Banöversikt"></svg></section>
-  <div class="server-dashboard-bottom"><section class="display-card"><h3>Nästa händelser</h3>${upcoming.map(r=>html`<div class="server-event"><span>${escapeHTML(r.departure_time||r.arrival_time)}</span><b>${escapeHTML(r.train_number)}</b><span>${escapeHTML(stationName(r.station_id))} · ${r.departure_time?t("Avgång"):t("Ankomst")}</span></div>`).join("") || html`<p>Inga fler planerade händelser idag.</p>`}</section>
-  <section class="display-card"><h3>På linjen just nu</h3>${moving.slice(0,4).map(p=>html`<div class="server-event"><b>${escapeHTML(p.train_number)}</b><span>${escapeHTML(stationName(p.from_station_id))} → ${escapeHTML(stationName(p.to_station_id))}</span></div>`).join("") || html`<p>Inget tåg är ute på linjen</p>`}</section></div>`;
+  <div class="server-dashboard-bottom"><section class="display-card dash-card"><div class="dash-head"><h3>Nästa händelser</h3><span>de fyra närmaste</span></div>${upcoming.map(eventRow).join("") || html`<p class="dash-empty">Inga fler planerade händelser idag.</p>`}</section>
+  <section class="display-card dash-card"><div class="dash-head"><h3>På linjen just nu</h3><span>tåg · sträcka · ankomst</span></div>${lineRows || html`<p class="dash-empty">Inget tåg är ute på linjen</p>`}<p class="dash-status${late.length ? " is-late" : ""}">${escapeHTML(status)}</p></section></div>`;
   // Draw for the height the card really has, so station names stay at their 30 px.
   const dashboardMap = document.querySelector("#dashboard-topology");
   renderTopology(snapshot, dashboardMap, {tv:true, height: Math.max(300, Math.round(dashboardMap.clientHeight || 450))});
 }
 
+// Trains out on the line, where they run and when they are due: the strip
+// under Banöversikt and Översikt's "På linjen just nu" on the TV screens.
+function screenOnLine(snapshot) {
+  const now = minuteValue(currentClockTime(snapshot)) ?? 0;
+  const name = (id) => (snapshot.stations || []).find((station) => station.id === id)?.name || id || "—";
+  return (snapshot.train_positions || []).filter((position) => position.connection_id).map((position) => {
+    const due = (snapshot.routes || []).find((route) => String(route.train_number) === String(position.train_number) && route.station_id === position.to_station_id)?.arrival_time || null;
+    const minute = minuteValue(due);
+    return { train: String(position.train_number), from: name(position.from_station_id), to: name(position.to_station_id), due,
+      late: minute != null && minute !== now && (minute - now + 1440) % 1440 > 720 };
+  });
+}
+
+function renderDisplayOnLine(snapshot) {
+  const svg = document.querySelector("#topology-svg");
+  let strip = document.querySelector("#topology-online");
+  if (!strip) { strip = document.createElement("div"); strip.id = "topology-online"; strip.className = "sc-online"; svg.after(strip); }
+  const out = screenOnLine(snapshot);
+  const shown = out.length > 4 ? out.slice(0, 3) : out;
+  const cell = (child) => { const item = document.createElement("div"); item.className = "sc-online__item"; item.append(child); return item; };
+  const cells = shown.map((train) => {
+    // "PÅ LINJEN" and when it is due on one row, the train and its section
+    // on the next, so a long section never pushes the time out of sight.
+    const head = document.createElement("span"); head.className = "sc-online__head";
+    head.append(Object.assign(document.createElement("span"), { className: "sc-online__kicker", textContent: t("På linjen") }));
+    if (train.due) head.append(Object.assign(document.createElement("span"), { className: `sc-online__due${train.late ? " is-late" : ""}`, textContent: t("ank {time}", { time: train.due }) }));
+    const item = cell(head);
+    const line = document.createElement("span"); line.className = "sc-online__line";
+    const number = document.createElement("b"); number.textContent = train.train;
+    line.append(number, `${train.from} → ${train.to}`);
+    item.append(line);
+    return item;
+  });
+  if (out.length > shown.length) cells.push(cell(Object.assign(document.createElement("span"), { className: "sc-online__more", textContent: t("och {n} till", { n: out.length - shown.length }) })));
+  if (!cells.length) cells.push(cell(Object.assign(document.createElement("span"), { className: "sc-online__empty", textContent: t("Inget tåg är ute på linjen") })));
+  // "och N till" takes only the room it needs; the trains share the rest.
+  strip.classList.toggle("has-more", out.length > shown.length);
+  strip.style.setProperty("--count", String(Math.max(shown.length, 1)));
+  strip.replaceChildren(...cells);
+}
+
 function renderDisplayTopology(snapshot) {
+  renderDisplayOnLine(snapshot);
+  // Draw for the box the map really has, between the top row and the strip.
+  const box = document.querySelector("#topology-svg").getBoundingClientRect();
   renderTopology(snapshot, document.querySelector("#topology-svg"), {
     tv: true,
+    height: box.width > 0 && box.height > 0 ? Math.max(500, Math.round(1840 * box.height / box.width)) : 680,
     selectedTrainNumber: state.displaySelectedTrainNumber,
     selectedStationID: state.displaySelectedStationID,
     onTrainSelect: (trainNumber) => {

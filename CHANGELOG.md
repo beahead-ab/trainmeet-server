@@ -5,6 +5,20 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Helskärmsvyerna i designens form: ringar, På linjen och händelsetabell
+
+Resten av granskningen av TV-skärmarna mot designen (SkarmBana, SkarmOversikt).
+
+- Stationerna på TV-kartorna är ringar, som i designen: ljusa på kortet och
+  blå när ett tåg står inne, namnen i halvfet stil. Sidfoten förklarar det.
+- Banöversikt ligger på ett kort som i designen, och under kartan står tågen
+  som är ute på linjen: tåg, sträcka och när det ska vara framme (gult när
+  det är sent). Fler än fyra tåg: de tre första och "och N till".
+- Översikt: Nästa händelser och På linjen just nu har en rubrikrad med grå
+  rad och rader i kolumner – tid, tåg, "avgår Alvesta C mot Lekby" och
+  "3 min"; på linjen tåg, sträcka och ankomsttid. Under tågen står om
+  trafiken följer tidtabellen eller hur många som är sena.
+
 ### Helskärmsvyerna: QR-koderna i ramen, inte i innehållet
 
 En granskning av TV-skärmarna mot designen (artboard 9–20), gjord i Claude

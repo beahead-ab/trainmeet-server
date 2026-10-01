@@ -149,8 +149,12 @@ const root = path.resolve(__dirname, '../..');
       if(path==='topology'){
         const bounds=await clockScreen.locator('#topology-svg .topology-name').evaluateAll(nodes=>nodes.map(n=>Number(n.getAttribute('x'))));
         assert.ok(Math.max(...bounds)-Math.min(...bounds)>1000,'Two-station TV layout uses the available width');
+        // As in the design: stations are rings, and the trains on the line are listed under the map.
+        assert.ok(Number(await clockScreen.locator('#topology-svg .topology-station').first().getAttribute('r'))>=16,'TV stations are rings');
+        assert.equal(await clockScreen.locator('#topology-online').isVisible(),true,'Banöversikt lists the trains on the line under the map');
       }
       if(path==='dashboard'){
+        assert.equal(await clockScreen.locator('.dash-status').isVisible(),true,'På linjen just nu says whether traffic keeps to the timetable');
         const cards=await clockScreen.locator('#dashboard-view > *').evaluateAll(nodes=>nodes.map(n=>({top:n.getBoundingClientRect().top,bottom:n.getBoundingClientRect().bottom})));
         assert.ok(cards[0].bottom<=cards[1].top,'Dashboard statistics do not overlap the map');
         // Stress the presentation with four future events. Render an isolated
