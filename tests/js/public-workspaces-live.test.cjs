@@ -78,7 +78,13 @@ const root = path.resolve(__dirname, '../..');
     const box = await page.evaluate(() => JSON.parse(localStorage.getItem('trainmeet.browser-tmbox')));
     assert.equal(await page.locator('input, select').count(), 0, 'No station or address controls');
     assert.equal(await page.locator('.keypad button').count(), 16);
-    assert.equal(await page.locator('.keypad button:not(:disabled)').count(), 0);
+    // As on the physical box, every key can be pressed; without a station
+    // none of them does anything.
+    assert.equal(await page.locator('.keypad button:disabled').count(), 0);
+    const unassigned = posts.length;
+    for (const value of ['#', '1', 'A', 'D']) await page.locator(`.keypad [data-key="${value}"]`).click();
+    await page.waitForTimeout(300);
+    assert.equal(posts.length, unassigned, 'An unassigned box sends nothing');
     assert.equal((await page.request.get(urls.eu + '/v1/devices')).status(), 401);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await screenshot('box-awaiting-admin');
@@ -118,7 +124,10 @@ const root = path.resolve(__dirname, '../..');
     await admin.request.post(urls.eu + '/v1/devices/remove', {data: {device_id: box.client_id}});
     await page.waitForFunction(()=>document.querySelector('#connection').textContent.includes('inte ansluten'));
     assert.equal(posts.filter(path => path === '/v1/browser-clients').length, 1, 'Revoked box does not recreate itself automatically');
-    assert.equal(await page.locator('.keypad button:not(:disabled)').count(), 0);
+    const revoked = posts.length;
+    for (const value of ['#', '1', '*']) await page.locator(`.keypad [data-key="${value}"]`).click();
+    await page.waitForTimeout(300);
+    assert.equal(posts.length, revoked, 'A revoked box sends nothing');
     assert.deepEqual(errors, []);
     console.log('Participant tests passed: guest page, protected admin, TMBox assignment/revocation, local input and retired TKL pages.');
   } catch (error) {

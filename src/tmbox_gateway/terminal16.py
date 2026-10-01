@@ -24,6 +24,19 @@ from .device_ui import LANGUAGES
 from .display_placement import effective_sides
 
 
+# Det command() hanterar utan _traffic: de ändrar vad boxen visar, aldrig
+# trafiken. Varje annan åtgärd utför något och märks "acts" i bilden. Efter ett
+# skärmbyte spärrar klienten bara de märkta en kort stund, så att ett tryck
+# avsett för förra bilden inte utför något på den nya - medan bläddring svarar
+# direkt.
+NAVIGATION_ACTIONS = frozenset({
+    "back", "home", "language", "next_language", "previous_language", "save_language",
+    "requests", "next_request", "previous_request", "active", "next_active", "previous_active",
+    "browse", "next", "previous", "filter", "select", "cancel_view", "reject_view",
+    "tracks", "next_track", "previous_track",
+})
+
+
 @dataclass
 class Terminal:
     station: str
@@ -495,7 +508,8 @@ class Terminal16Lab:
             "input_guard_ms": 500,
             "language": terminal.language,
             "keys": {key: {"label": t("Förfrågningskö ({count} väntar)", count=len(requests)) if key == "A" else
-                      t("Aktiva tåg ({count})", count=len(active)) if action == "active" else t(label)} for key, (action, label) in buttons.items()},
+                      t("Aktiva tåg ({count})", count=len(active)) if action == "active" else t(label),
+                      "acts": action not in NAVIGATION_ACTIONS} for key, (action, label) in buttons.items()},
             "entry": {"context": f"{self.epoch}:{device}:{terminal.station}", "max_length": 5,
                       "lines": entry_lines, "lcd": encode_lcd(entry_lines),
                       "row": 0, "column": 5, "commit": "#", "cancel": "*", "erase": "B",

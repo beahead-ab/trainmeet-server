@@ -24,19 +24,25 @@ const root = path.resolve(__dirname, '../..');
     page = await context.newPage();
     const errors = [], posts = [];
     page.on('pageerror', error => errors.push(error.message));
-    page.on('request', req => {if (req.method() === 'POST') posts.push(new URL(req.url()).pathname);});
+    let inflight = 0;
+    page.on('request', req => {if (req.method() === 'POST') {posts.push(new URL(req.url()).pathname); inflight++;}});
+    for (const event of ['requestfinished', 'requestfailed']) page.on(event, req => {if (req.method() === 'POST') inflight--;});
     page.setDefaultTimeout(15000);
     const labURL = urls.eu + '/tmbox-lab/';
     const state = async () => (await page.request.get(labURL + 'api/state')).json();
     const select = (station, connection) => page.locator(`#placement-fields select[data-station="${station}"][data-connection="${connection}"]`);
     const key = (station, value) => page.locator(`[data-device="DEMO-${station}"] [data-key="${value}"]`);
+    // Like the physical box, no key is ever disabled: a press that cannot do
+    // anything does nothing. So the test presses like a person - reads the
+    // new screen first - instead of leaning on a button waiting to be enabled.
+    const settle = async () => { while (inflight) await page.waitForTimeout(20); await page.waitForTimeout(600); };
+    const press = async (station, value) => { await settle(); await key(station, value).click(); };
+    const noneDisabled = async () => assert.equal(await page.locator('.keypad button:disabled').count(), 0, 'No key is ever disabled');
     const lcd = station => page.locator(`[data-device="DEMO-${station}"] .lcd`);
     const save = () => page.locator('#placement-form button[type=submit]').click();
     const open = () => page.locator('#placement-open').click();
     const screenshot = async suffix => {
-      if (suffix.startsWith('active-')) {
-        await page.waitForFunction(() => !document.querySelector('[data-device="DEMO-CDA"] [data-key="D"]').disabled);
-      }
+      if (suffix.startsWith('active-')) await settle();
       if (process.env.SERVER_SHELL_SCREENSHOTS) await page.screenshot({path: path.join(process.env.SERVER_SHELL_SCREENSHOTS, `placement-${suffix}.png`)});
     };
     const admin = await browser.newContext();
@@ -60,8 +66,9 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#placement-dialog').waitFor({state: 'hidden'});
     assert.match(await lcd('MUN').textContent(), /93___/, 'Placement preserves unsent digits');
     assert.equal(posts.filter(p => p.endsWith('/api/key')).length, 0);
-    await key('MUN', '#').click(); await key('MUN', '#').click();
+    await press('MUN', '#'); await press('MUN', '#');
     await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('93?MUN'));
+    await noneDisabled();
     const before = await state();
     const beforeTops = await page.locator('.tmbox-case').evaluateAll(elements => elements.map(e => e.getBoundingClientRect().top));
     assert.ok(Math.max(...beforeTops) - Math.min(...beforeTops) < 1, 'Cases remain aligned');
@@ -70,7 +77,7 @@ const root = path.resolve(__dirname, '../..');
     await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('MUN?93'));
     assert.deepEqual((await state()).audit, before.audit, 'Placement never mutates traffic');
     assert.deepEqual(await presentation(), realBefore, 'Lab never changes real Server placement');
-    await key('CDA', '#').click(); await key('MUN', '#').click(); await key('CDA', '#').click();
+    await press('CDA', '#'); await press('MUN', '#'); await press('CDA', '#');
     await page.waitForFunction(() => document.querySelector('[data-device="DEMO-MUN"] .lcd').textContent.includes('MOTTAGET'));
     await page.locator('#reset-all').click();
     await page.getByText('Alla enheter är nollställda. Inga pågående tågrörelser.', {exact: true}).waitFor();
@@ -98,32 +105,64 @@ const root = path.resolve(__dirname, '../..');
     await page.setViewportSize({width: 1600, height: 1100});
     for (const [number, receiver] of [['17', 'MUN'], ['39', 'VA']]) {
       for (const digit of number) await key('CDA', digit).click();
-      await key('CDA', '#').click(); await key('CDA', '#').click();
+      await press('CDA', '#'); await press('CDA', '#');
       await page.waitForFunction(s => document.querySelector(`[data-device="DEMO-${s}"] .lcd`).textContent.includes('?'), receiver);
-      await key(receiver, '#').click();
+      await press(receiver, '#');
     }
-    await key('CDA', 'B').click();
+    await press('CDA', 'B');
     await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('B:Akt2'));
     assert.match(await lcd('CDA').textContent(), /MUN<17\s+39>VA/);
     await screenshot('active-overview');
     const activeAudit = (await state()).audit;
-    await key('CDA', 'B').click();
+    await press('CDA', 'B');
     await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('1/2'));
     assert.match(await lcd('CDA').textContent(), /MUN<17/);
+    // Browsing answers as soon as the server has: D straight after D, with no
+    // half-second wait after each screen change. This was most of what felt slow.
+    await settle();
+    const browsing = posts.length;
     await key('CDA', 'D').click();
     await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('2/2'));
+    await key('CDA', 'D').click();
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('1/2'));
+    await key('CDA', 'D').click();
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('2/2'));
+    assert.equal(posts.length, browsing + 3, 'Every browse press was sent');
     assert.match(await lcd('CDA').textContent(), /39>VA/);
-    await key('CDA', 'C').click();
+    await press('CDA', 'C');
     assert.deepEqual((await state()).audit, activeAudit, 'B/C/D does not alter traffic');
     await screenshot('active-selected');
     await page.setViewportSize({width: 390, height: 844});
     await key('CDA', 'B').scrollIntoViewIfNeeded();
     await screenshot('active-mobile');
-    await key('CDA', '#').click();
-    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('MUN◀17'));
-    assert.equal(await key('CDA', '#').isDisabled(), true, 'No automatic next departure on doublepress');
+    // A departure offered on a new screen waits; pressed at once it does nothing.
+    // Pressed from inside the page the moment the new screen is drawn, so the
+    // check does not depend on how fast the test itself gets there.
+    await settle();
     await key('CDA', 'D').click();
-    await key('CDA', '#').click();
+    const guardedPosts = posts.length;
+    await page.evaluate(() => new Promise(resolve => {
+      const box = document.querySelector('[data-device="DEMO-CDA"]');
+      const check = () => box.querySelector('.lcd').textContent.includes('2/2')
+        ? (box.querySelector('[data-key="#"]').click(), resolve()) : requestAnimationFrame(check);
+      check();
+    }));
+    await page.waitForTimeout(150);
+    assert.equal(posts.length, guardedPosts, 'An acting key right after a screen change is not sent');
+    await press('CDA', 'C');
+    await press('CDA', '#');
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('MUN◀17'));
+    // The departed train stays selected without '#'. Pressing it anyway, even
+    // twice and after the guard, sends nothing - no automatic next departure.
+    await settle();
+    const departed = posts.length, departedScreen = await lcd('CDA').textContent();
+    await key('CDA', '#').click(); await key('CDA', '#').click();
+    await page.waitForTimeout(300);
+    assert.equal(posts.length, departed, 'No automatic next departure on doublepress');
+    assert.equal(await lcd('CDA').textContent(), departedScreen);
+    await noneDisabled();
+    await press('CDA', 'D');
+    await press('CDA', '#');
     await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('39▶VA'));
 
     // The operational browser client has no simulator configuration controls.
@@ -147,6 +186,42 @@ const root = path.resolve(__dirname, '../..');
     const frameAfter = await (await page.request.get(urls.eu + '/v1/tmbox/terminal', {headers: auth})).json();
     assert.equal(frameAfter.entry.context, frameBefore.entry.context);
     assert.ok(frameAfter.view_revision > frameBefore.view_revision);
+
+    // A slow answer and no answer look as on the box: the second row says so
+    // after 1.5 s, and a command that fails keeps the digits for another try.
+    const row2 = async () => (await page.locator('.lcd .lcd-row').nth(1).textContent());
+    await page.route('**/v1/tmbox/terminal', async route => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      await new Promise(resolve => setTimeout(resolve, 2500)); await route.fallback();
+    });
+    await page.locator('.keypad [data-key="#"]').click();
+    await page.waitForTimeout(800);
+    assert.doesNotMatch(await row2(), /VANTAR PA SVAR/, 'A quick answer shows nothing');
+    await page.waitForFunction(() => document.querySelectorAll('.lcd .lcd-row')[1].textContent.startsWith('VANTAR PA SVAR'));
+    await page.waitForFunction(() => !document.querySelectorAll('.lcd .lcd-row')[1].textContent.startsWith('VANTAR PA SVAR'));
+    await page.unrouteAll({behavior: 'wait'});
+    await settle();
+    await page.locator('.keypad [data-key="*"]').click();  // stänger "INGET TÅG"
+    await settle();
+    await page.locator('.keypad [data-key="1"]').click(); await page.locator('.keypad [data-key="2"]').click();
+    await page.route('**/v1/tmbox/terminal', route => route.request().method() === 'POST' ? route.abort() : route.fallback());
+    await page.locator('.keypad [data-key="#"]').click();
+    await page.waitForFunction(() => document.querySelectorAll('.lcd .lcd-row')[1].textContent.startsWith('INGET SVAR'));
+    assert.match(await page.locator('.lcd').textContent(), /12___/, 'Digits stay after no answer');
+    await page.waitForFunction(() => !document.querySelectorAll('.lcd .lcd-row')[1].textContent.startsWith('INGET SVAR'), null, {timeout: 5000});
+    await page.unrouteAll({behavior: 'wait'});
+
+    // Silence is not a lost server until it has lasted 15 s, as on the box.
+    await page.route('**/v1/tmbox/terminal', route => route.request().method() === 'GET' ? route.abort() : route.fallback());
+    const silentSince = Date.now();
+    await page.waitForTimeout(5000);
+    assert.equal(await page.locator('#connection').textContent(), 'Ansluten till servern', 'Five silent seconds are not a lost server');
+    await page.waitForFunction(() => document.querySelector('#connection').textContent.includes('inte ansluten'), null, {timeout: 20000});
+    const silentFor = Date.now() - silentSince;
+    assert.ok(silentFor >= 14500 && silentFor < 18000, `Lost after ${silentFor} ms`);
+    await page.unrouteAll({behavior: 'wait'});
+    await page.waitForFunction(() => document.querySelector('#connection').textContent === 'Ansluten till servern');
+    await noneDisabled();
     assert.deepEqual(errors, []);
     console.log('TMBox browser tests passed: placement, local digits, isolation, real-client frames, two active departures, B/C/D navigation, counters and disabled duplicate departure, desktop/mobile.');
   } finally {
