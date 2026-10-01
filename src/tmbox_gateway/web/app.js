@@ -18,7 +18,7 @@ function renderSimulation(data) {
   const clock = data.clock || {};
   document.querySelector("#simulation-summary").textContent = data.active
     ? `${clock.running ? t("Går") : t("Pausad")} · ${clock.time} · ${clock.speed}× · ${t("Trafikdag")} ${data.day} · ${t("Scenario")} ${data.seed}${data.notice ? " · " + data.notice : ""}`
-    : t(data.supported ? "Ingen simulering är aktiv. När du startar pausas det vanliga spelet och dess trafikläge sparas." : "Koppla en EU-träff från Cloud för att simulera stationsarbetet.");
+    : t(data.supported ? "Ingen simulering igång. Starten pausar spelet och sparar trafikläget." : "Koppla en EU-träff från Cloud för att simulera stationsarbetet.");
   document.querySelector("#simulation-start-open").hidden = data.active;
   document.querySelector("#simulation-start-open").disabled = !data.supported;
   for (const id of ["simulation-pause", "simulation-reset-open", "simulation-finish-open", "simulation-stations-card", "simulation-trains-card"]) document.getElementById(id).hidden = !data.active;
@@ -1876,7 +1876,8 @@ function renderDevices(payload) {
     const code = document.createElement("b");
     code.textContent = device.device_code;
     const model = document.createElement("small");
-    model.textContent = `${device.model} · ${device.device_id}`;
+    // What the box is, as on Drift in the design; its long id on hover.
+    model.textContent = device.model; model.title = device.device_id;
     identity.append(code, model);
     const station = (payload.stations || []).find((entry) => entry.id === device.station_id);
     const assignment = document.createElement("span");
@@ -2149,7 +2150,8 @@ async function refreshLocalClock() {
   const connection = await authorizedFetch("/v1/display/connection", {cache: "no-store"});
   if (connection.ok) renderConnectionBadgeSettings(await connection.json());
   const timeInput = document.querySelector("#local-clock-time");
-  if (!editorActive(clockControlForm)) timeInput.value = clock.time || "12:00:00";
+  // Hours and minutes, as on every clock in the design; seconds are not set by hand.
+  if (!editorActive(clockControlForm)) timeInput.value = String(clock.time || "12:00").slice(0, 5);
   const speedInput = document.querySelector("#local-clock-speed");
   if (!editorActive(clockControlForm)) speedInput.value = Number(clock.speed || 1);
   const stateLabel = document.querySelector("#clock-state");
@@ -3594,7 +3596,8 @@ function renderOverviewGraph(snapshot) {
   const minutes = lines.flatMap((line) => line.points.map((point) => point.minute));
   const minMinute = minutes.length ? Math.floor(Math.min(...minutes) / 60) * 60 : 0;
   const maxMinute = minutes.length ? Math.max(minMinute + 60, Math.ceil(Math.max(...minutes) / 60) * 60) : 24 * 60;
-  const left = 60, right = 16, top = 22, bottom = 28, stationStep = 26;
+  // 20 px per station: the whole line in a low band, as in the design.
+  const left = 60, right = 16, top = 22, bottom = 28, stationStep = 20;
   // Never narrower than its card: a stretched drawing no longer meets the
   // station names beside it.
   // 4 px a minute: about five hours across a computer screen, close to the

@@ -38,6 +38,26 @@ ServerSida och Deltagare), inloggat och oinloggat, på dator och mobil.
 - Deltagarvyn på mobil följer designens ordning: klockan, På banan just nu och
   sedan tidtabellen. Raden om när en virtuell TMBox tas bort klipptes av.
 
+Andra varvet, efter jämförelse sida vid sida med designen i samma typsnitt:
+
+- Inställningar har designens form: varje kort har en rubrik med en grå rad,
+  korta rader med etikett och värde (Träff · Kör version · Cloud, Namn med
+  fält och Spara på samma rad, Nätverk) och en fot för det finstilta. Byt
+  träff ligger i foten på Träff och Cloud. Skärmar och klocka behåller fyra
+  delar med var sin Spara, men varje del är en rad med Spara sist. Användare
+  har roll som pill och Redigera som länk; Programuppdatering version, läge
+  och knapp på en rad; Farozon varje åtgärd med vad den gör bredvid.
+- Drift: klockraden säger "Går · 4× · Intern serverklocka" på en grå rad,
+  klockkällan är växeln Intern | FastClock…, fälten heter Hastighet och Orsak
+  vid stopp (valfritt), knappen Stoppa klockan, klockslaget visar timmar och
+  minuter. Simuleringen har en knapp (virtuell TMBox finns under Öppna).
+  Klienter: Tilldela är radens blå knapp, Ta bort en grå länk, och raderna har
+  samma kolumner. Trafik just nu har designens brickor (tåg på linjen, inne på
+  stationerna, avvikelser – grön när inget avviker), "avgår Vagnsta · 2 min",
+  och På linjen just nu syns bara när ett tåg är ute. Tågdiagrammet är lägre
+  och har röd streckad nu-linje som i designen. Kartorna på Drift och i
+  deltagarvyn har blå ringar på grå spår.
+
 ### "Slutför och starta om" visade ett skriptfel
 
 Sista steget i installationsguiden visade "configMessage is not defined" och

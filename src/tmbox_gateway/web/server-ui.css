@@ -645,11 +645,11 @@ button.server-event[aria-pressed="true"] .drift-event__what { color: inherit; }
 #overview-traffic .drift-more > details { margin: 0; padding: 0; }
 .drift-more > details[open] { flex-basis: 100%; }
 
-/* Tågdiagram: the dark band runs edge to edge in its card; "now" is the same
-   yellow line as on the TV graph. */
-.overview-graph-card .overview-graph-scroll { width: auto; margin: 0 -14px -12px; border: 0; border-radius: 0; }
-.overview-graph-now { stroke: #f2c230; stroke-width: 1.5; }
-.overview-graph-now-dot { fill: #f2c230; }
+/* Tågdiagram: the dark band runs edge to edge in its card; "now" is a red
+   dashed line with a dot, as in the Drift design (the TV graph has its own). */
+.overview-graph-card .overview-graph-scroll { width: auto; margin: 0 -14px -12px; border: 0; border-radius: 0; background: #141413; }
+.overview-graph-now { stroke: #ef4444; stroke-width: 1.5; stroke-dasharray: 4 4; }
+.overview-graph-now-dot { fill: #ef4444; }
 
 /* Inställningar: the same card head as Drift; Spara is the quiet button, so
    the page is not a column of blue; Farozon is white with red. */
@@ -698,3 +698,143 @@ button.server-event[aria-pressed="true"] .drift-event__what { color: inherit; }
   #overview-traffic .overview-section-heading .traffic-filters { flex-wrap: wrap; justify-content: flex-start; }
   .overview-graph-card .server-head-meta { display: none; }
 }
+
+/* ---------- Inställningar i designens form (ServerSida) ----------
+   Each card: a head (name + grey line), rows of key and value with the action
+   last in its row, a foot for the small print. Kit sizes: 13 px heads,
+   12.5 px rows, 140 px keys, 11.5 px foot. */
+#admin-view .server-card > .section-heading { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: -12px -14px 10px; padding: 9px 12px; border-bottom: 1px solid #eee; text-align: left; }
+#admin-view .server-card > .section-heading > div:first-child { display: contents; }
+#admin-view .server-card > .section-heading h2 { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.4; }
+.server-card__note-inline { font-size: 12px; font-weight: 500; color: var(--muted); }
+.tm-spacer { flex-grow: 1; }
+.tm-lines { display: flex; flex-direction: column; }
+#admin-view .tm-line { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px 12px; min-height: 30px; padding: 4px 0; margin: 0; border-bottom: 1px solid var(--border-soft); font: 400 12.5px/1.4 var(--font); color: var(--text); }
+#admin-view .tm-lines > .tm-line:last-child { border-bottom: 0; }
+#admin-view .tm-line > .tm-line__key { flex: 0 0 140px; width: 140px; margin: 0; font: 600 12.5px/1.4 var(--font); color: var(--text); }
+#admin-view .tm-line > p { margin: 0; font-size: 12.5px; }
+#admin-view .tm-line > p.form-message:empty { display: none; }
+.tm-line__muted, #cloud-auto-status, #cloud-version-state { color: var(--muted); }
+.tm-line__mono { font-family: var(--font-mono); }
+#app-view button.tm-linkbtn { min-height: 0; padding: 0; border: 0; background: none; color: var(--primary); font: 600 12px/1.4 var(--font); }
+#app-view button.tm-linkbtn:hover { color: var(--primary-hover); background: none; }
+#admin-view .server-card > .tm-card__foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 10px -14px -12px; padding: 8px 12px; border-top: 1px solid var(--border-soft); font-size: 11.5px; color: var(--muted); }
+#admin-view .server-card > .tm-card__foot p { margin: 0; font-size: 11.5px; color: var(--muted); }
+#admin-view .tm-card__foot button, #admin-view .tm-line button:not(.tm-linkbtn) { min-height: 26px; padding: 4px 10px; }
+
+/* Träff och Cloud */
+#cloud-connection-meet { font-weight: 600; }
+#cloud-connection-meta.tm-badge { font-size: 10.5px; padding: 2px 6px; }
+#cloud-connection-state { padding: 1px 7px; border: 0; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--neutral-bg); color: var(--neutral-text); }
+#cloud-connection-state.active { background: var(--ok-bg); color: var(--ok-text); }
+#sync-and-devices #cloud-auto-form { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin: 0; padding: 0; }
+#sync-and-devices #cloud-auto-form label { display: flex; flex-direction: row; align-items: center; gap: 8px; font: 500 12.5px/1.4 var(--font); color: var(--text); }
+#sync-and-devices #cloud-auto-form .modal-actions { margin: 0; padding: 0; border: 0; }
+#cloud-update-message:empty { display: none; }
+
+/* Den här servern */
+#admin-view #server-identity-form.tm-line { display: flex; flex-wrap: wrap; align-items: center; margin: 0; }
+#admin-view #server-identity-form > label { display: block; }
+#admin-view #admin-server-name { width: 290px; max-width: 100%; }
+#server-identity-form .modal-actions { margin: 0; padding: 0; border: 0; }
+#server-identity-form #server-identity-message { flex-basis: 100%; margin: 0; }
+
+/* Användare: role as a pill, Redigera as a link, the rule in the foot. */
+#admin-users-settings .users-toolbar { display: none; }
+#admin-users-settings .table-scroll { margin: -10px -14px 0; }
+#users-table th { padding: 6px 10px; font-size: 11.5px; font-weight: 600; color: var(--text-3); background: var(--row-alt); border-bottom: 1px solid var(--border); text-transform: none; letter-spacing: 0; }
+#users-table td { padding: 5px 10px; font-size: 12.5px; line-height: 18px; border-bottom: 1px solid var(--border-soft); }
+#users-table .users-name { font-weight: 600; }
+#users-table .role-chip { display: inline-block; padding: 2px 8px; border: 1px solid #d9d9d9; border-radius: 999px; background: #fff; font-size: 11.5px; font-weight: 600; color: var(--text); }
+#users-table .role-chip.is-owner { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-text); }
+#users-table td:last-child { text-align: right; }
+#app-view #users-table td:last-child button { min-height: 0; padding: 0; border: 0; background: none; color: var(--primary); font: 600 12px/1.4 var(--font); }
+#users-role-chip { padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--neutral-bg); color: var(--neutral-text); border: 0; }
+
+/* Skärmar och klocka: four parts, each one row – the part's name as the key,
+   the fields, Spara last; notes under the row. */
+.clock-control-card .server-part { display: grid; grid-template-columns: 160px minmax(0, 1fr); column-gap: 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border-soft); }
+.clock-control-card .server-part--first { border-top: 0; padding-top: 0; }
+.clock-control-card .server-part > .server-part__title { grid-column: 1; grid-row: 1 / span 3; align-self: start; margin: 0; padding-top: 6px; font: 600 12.5px/1.4 var(--font); }
+.clock-control-card .server-part > :not(.server-part__title) { grid-column: 2; }
+#admin-view .clock-control-card .server-part form { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin: 0; padding: 0; }
+#admin-view .clock-control-card .server-part form label:not(:has(> input[type=checkbox])) { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; font: 500 12.5px/1.4 var(--font); color: var(--text-3); }
+.clock-control-card .server-part form .server-field, .clock-control-card .server-part .server-wifi-row { display: contents; }
+.clock-control-card .server-part .modal-actions { order: 10; flex-basis: auto; margin: 0; padding: 0; border: 0; }
+.clock-control-card .server-part .pv-note { order: 20; flex-basis: 100%; margin: 0; font-size: 11.5px; color: var(--muted); }
+.clock-control-card .server-part .form-message { order: 21; flex-basis: 100%; margin: 0; }
+.clock-control-card .server-part #connection-badge-code { justify-self: start; margin: 2px 0; }
+#admin-view #meet-clock-style { width: 190px; }
+#admin-view #connection-badge-validity { width: 130px; }
+#admin-view #connection-wifi-name, #admin-view #connection-wifi-password { width: 180px; }
+
+/* Språk and Programuppdatering: one row each. */
+#admin-view .settings-language-choice.tm-line { display: flex; flex-direction: row; max-width: none; border-bottom: 0; }
+#admin-view .settings-language-choice select { width: 190px; }
+#admin-view .update-actions.tm-line { border-bottom: 0; }
+.update-actions #software-version { order: 0; font-family: var(--font-mono); font-size: 12.5px; }
+.update-actions #software-update-message { order: 1; flex: 1 1 auto; margin: 0; }
+.update-actions button { order: 2; }
+
+/* Farozon: each action with what it does beside it. */
+#server-system-settings > .section-heading h2 { color: var(--danger-text); }
+#server-system-settings > .section-heading { border-bottom-color: #f5e0e0; }
+
+@media (max-width: 600px) {
+  #admin-view .tm-line > .tm-line__key { flex-basis: 100%; width: auto; }
+  .clock-control-card .server-part { grid-template-columns: minmax(0, 1fr); }
+  .clock-control-card .server-part > .server-part__title { grid-row: auto; padding-top: 4px; }
+  .clock-control-card .server-part > :not(.server-part__title) { grid-column: 1; }
+}
+
+/* Cards stack their parts without the old grid gaps; a wrapped value stays in
+   its column; the QR choices and Spara flow on one line. */
+#admin-view .server-settings-columns .server-card, #admin-view > .server-card { display: flex; flex-direction: column; gap: 0; }
+#admin-view .tm-line__value { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; flex: 1 1 0; min-width: 0; }
+#admin-view .tm-line__value > p { margin: 0; font-size: 12.5px; }
+#admin-view .tm-line__value > p.form-message:empty { display: none; }
+.clock-control-card #connection-badge-screens { display: contents; }
+#admin-view #connection-badge-form .connection-badge-screens label { gap: 6px; }
+#admin-users-settings #users-role-chip { align-self: center; margin: 0; }
+#admin-users-settings .table-scroll { overflow-x: auto; }
+#users-table { width: 100%; margin: 0; border-collapse: collapse; }
+
+/* ---------- Drift i designens form (DriftEU) ---------- */
+/* Klockraden: one grey line under the time; the source as Intern | FastClock…. */
+.tm-clockrow__state { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; font-size: 12px; color: var(--text-3); }
+.tm-clockrow__state #clock-state { padding: 0; border: 0; background: none; font-size: 12px; font-weight: 500; color: var(--text-3); }
+.tm-clockrow__state #clock-source-status { margin: 0; font-size: 12px; color: var(--text-3); }
+.tm-clockrow__state #clock-source-status::before { content: "· "; }
+.tm-clockrow__state #clock-source-status.error { color: var(--danger-text); }
+#app-view #clock-source-toggle button { min-height: 32px; padding: 6px 12px; border: 0; border-radius: 0; background: #fff; color: var(--text-3); font: 600 12.5px/1.3 var(--font); }
+#app-view #clock-source-toggle button + button { border-left: 1px solid #d9d9d9; }
+#app-view #clock-source-toggle button.is-active { background: var(--primary); color: #fff; }
+.tm-clockrow__aside { flex-basis: 250px; width: 250px; }
+
+/* Klienter: Tilldela is the row's one blue button, Ta bort a grey link. */
+#app-view #device-list .status-row.is-waiting .device-actions > button:first-child { color: #fff; background: var(--primary); border-color: var(--primary); }
+#app-view #device-list .device-actions > button.device-remove { min-height: 0; padding: 2px 4px; border: 0; background: none; color: var(--muted); font-weight: 500; }
+#app-view #device-list .device-actions > button.device-remove:hover { color: var(--danger-text); }
+#device-list .status-row > div:first-child b { font-family: var(--font-mono); font-weight: 700; }
+
+/* Trafik just nu: the third tile is green while nothing deviates, yellow when something does. */
+.server-stats > .server-stat--ok { background: var(--ok-bg); border-color: #cfe8d8; }
+.server-stats > .server-stat--ok strong, .server-stats > .server-stat--ok span { color: var(--ok-text); }
+.server-stats > .server-stat--warn { background: var(--warn-bg); border-color: var(--warn-border); }
+.server-stats > .server-stat--warn strong, .server-stats > .server-stat--warn span { color: var(--warn-text); }
+
+/* Maps on Drift and the participant view: blue rings on grey 4 px track, as in the design. */
+:is(#overview-topology, #pv-topology) .topology-station:not(.active):not(.highlighted) { fill: #eef3fb; stroke: #2256c3; stroke-width: 2; }
+:is(#overview-topology, #pv-topology) .topology-track:not(.double-shadow):not(.active):not(.route-highlight):not(.station-highlight) { stroke: #c8c8c6; stroke-width: 4; }
+:is(#overview-topology, #pv-topology) .topology-name { fill: #0a0a0a; font-weight: 400; }
+.server-clockrow .tm-clockrow__time { flex: 0 0 200px; padding: 12px 18px; }
+#app-view #local-clock-time { width: 124px; }
+@media (max-width: 1200px) { .server-clockrow .tm-clockrow__time { flex-basis: 180px; } }
+.server-clockrow .tm-clockrow__time { flex-basis: 230px; }
+/* One set of columns for every client row, so tags and states line up. */
+@media (min-width: 901px) {
+  :is(#device-list, #device-removed-trying) .status-row { grid-template-columns: minmax(220px, 280px) 150px minmax(0, 1fr) auto; }
+}
+@media (max-width: 600px) { .server-clockrow .tm-clockrow__time { flex-basis: 100%; } }
+/* No clients yet: a quiet row in the card, not a dashed box. */
+#device-list .empty-status { margin: 0; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: 0; background: none; font-size: 12.5px; color: var(--muted); }
