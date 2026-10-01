@@ -35,8 +35,14 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     let placementOverride = false;
     let placementFails = true;
     let signedIn = false;
-    const presentation = () => ({supported: region === 'eu', publication_id: 'pub-1', config_version: 2,
-      findings: [{level: 'conflict', rule: 'A', message: '<img src=x onerror=alert(1)> Exempel'}],
+    const imported = [{level: 'conflict', rule: 'A', message: '<img src=x onerror=alert(1)> Exempel'}];
+    let findings = imported;
+    let version = 8;
+    // The line A–B as /v1/display has it: its directed channels and the
+    // recorded positions, set by each step of the test.
+    let lineChannels = [];
+    let positions = [];
+    const presentation = () => ({supported: region === 'eu', publication_id: 'pub-1', config_version: 2, findings,
       stations: [{station_id: 'a', code: 'A', name: 'Alpha', connections: [
         {connection_id: 'a-b', other_station_code: 'B', other_station_name: 'Beta', default_side: 'left', side: placementSide, overridden: placementOverride}]}]});
     const user = { user_id: 'u-1', username: 'admin', role: 'owner', invitation_pending: false };
@@ -55,7 +61,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
           case '/v1/workspaces': data = { selected_meet: { id: 'meet-1', name: runtime.meet_name, publication_id: runtime.publication_id, operating_region: region, generation: 7 }, operating_region: region, available_workspaces: ['administration', 'tmbox'], public_clients_enabled: true }; break;
           case '/v1/browser-clients': case '/v1/browser-clients/self': data = { client_id: 'browser-tmbox-test', workspace: 'tmbox', device_code: 'WEB-TEST', access_token: 'test-only' }; break;
           case '/v1/tmbox-v2/assignment': data = { status: 'unassigned' }; break;
-          case '/v1/server-context': data = { selected_meet: { id: 'meet-1', name: runtime.meet_name, publication_id: runtime.publication_id, operating_region: region, generation: 7 }, operating_region: region, available_workspaces: region === 'eu' ? ['administration', 'tkl', 'tmbox'] : ['administration', 'dispatcher', 'conductor'], cloud_update: { linked: cloudLinked, auto_sync: cloudAuto, state: 'current', current_publication_id: 'pub-1' } }; break;
+          case '/v1/server-context': data = { selected_meet: { id: 'meet-1', name: runtime.meet_name, publication_id: runtime.publication_id, operating_region: region, generation: 7, version_number: version }, operating_region: region, available_workspaces: region === 'eu' ? ['administration', 'tkl', 'tmbox'] : ['administration', 'dispatcher', 'conductor'], cloud_update: { linked: cloudLinked, auto_sync: cloudAuto, state: 'current', current_publication_id: 'pub-1' } }; break;
           case '/v1/cloud/auto-sync':
             if (cloudAutoFails) return route.fulfill({status: 503, contentType: 'application/json', body: JSON.stringify({message: 'Kunde inte spara testinställningen'})});
             cloudAuto = JSON.parse(request.postData()).enabled;
@@ -94,7 +100,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
               data = {settings: clockSettings, clock: clock()};
             } else data = clockSettings;
             break;
-          case '/v1/display': data = { clock: clock(), meet: { id: 'meet-1', name: 'Demo meet' }, active_day: 'Dagl', publication_id: 'pub-1', stations, connections: [], routes: [{ train_number: '421', station_id: 'a', departure_time: '06:05' }, { train_number: '421', station_id: 'b', arrival_time: '06:20' }], train_positions: [], connection_states: [], connection: { screens: [] } }; break;
+          case '/v1/display': data = { clock: clock(), meet: { id: 'meet-1', name: 'Demo meet' }, active_day: 'Dagl', publication_id: 'pub-1', stations, connections: [{ id: 'a-b', station_a_id: 'a', station_b_id: 'b', track_type: 'single' }], routes: [{ train_number: '421', station_id: 'a', departure_time: '06:05' }, { train_number: '421', station_id: 'b', arrival_time: '06:20' }], services: [{ id: 's-421', train_number: '421', days: 'Dagl', stops: [{ station_id: 'a', stop_order: 0, departure_time: '06:05' }, { station_id: 'b', stop_order: 1, arrival_time: '06:20' }] }], train_positions: positions, connection_states: [{ id: 'a-b', state: lineChannels.length ? 'occupied' : 'free', channels: lineChannels }], connection: { screens: [] } }; break;
           case '/v1/config/check': data = { message: 'Senaste config används.' }; break;
           case '/v1/train':
             assert.equal(url.searchParams.get('number'), '421');
@@ -147,6 +153,193 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#overview-timetable').getAttribute('open'), null);
     assert.equal(await page.locator('#traffic-only-deviations').isChecked(), true);
     assert.equal(await page.locator('#overview-graph').isVisible(), true);
+    // Drift as one whole (1.20.0). The train diagram is drawn without opening
+    // the timetable, and nothing is lit until someone picks a train.
+    await page.locator('#overview-graph .overview-train-group[data-train-number="421"]').waitFor();
+    assert.equal(await page.locator('#overview-graph .overview-train-group.dimmed, #overview-graph .overview-train-group.selected').count(), 0);
+    assert.equal(await page.locator('#overview-topology .route-highlight, #overview-topology .dimmed').count(), 0);
+    assert.equal(await page.locator('#overview-route-list .route-number.active').count(), 0);
+    assert.equal(await page.locator('#topology-head-meta').textContent(), '2 stationer · 1 sträcka');
+    // One timetable card. Its head says what is inside; Cloud's check findings
+    // are a row of it, seen while it is folded, and Visa opens only them.
+    assert.equal(await page.locator('#timetable-summary-meta').textContent(), '1 tåg · sök tåg · tågrutter · stationer');
+    const findingsRow = page.locator('#drift-timetable > #published-findings');
+    const findingsTag = findingsRow.locator('#published-findings-tag');
+    await findingsTag.getByText('1 konflikt i version 8', {exact: true}).waitFor();
+    assert.match(await findingsTag.getAttribute('class'), /tm-tag--warn/);
+    assert.equal(await findingsRow.locator('#published-findings-list').isVisible(), false);
+    assert.equal(await findingsRow.locator('summary').getByText('Dölj', {exact: true}).isVisible(), false);
+    await findingsRow.locator('summary').getByText('Visa', {exact: true}).click();
+    assert.equal(await findingsRow.locator('#published-findings-list').isVisible(), true);
+    assert.equal(await findingsRow.locator('summary').getByText('Visa', {exact: true}).isVisible(), false);
+    await findingsRow.locator('summary').getByText('Dölj', {exact: true}).click();
+    assert.equal(await findingsRow.locator('#published-findings-list').isVisible(), false);
+    assert.equal(await page.locator('#overview-timetable').getAttribute('open'), null, 'Visa leaves the timetable folded');
+    for (const [rows, text, kind] of [
+      [[...imported, imported[0], {level: 'observation'}], '2 konflikter · 1 observation i version 8', 'warn'],
+      [[{level: 'observation'}, {level: 'observation'}], '2 observationer i version 8', 'neutral'],
+      [[], 'Inga konflikter i version 8', 'ok'],
+      [null, 'Inga kontrolluppgifter i version 8', 'neutral']]) {
+      findings = rows;
+      await page.evaluate(() => refreshCloudPresentation());
+      await findingsTag.getByText(text, {exact: true}).waitFor();
+      assert.match(await findingsTag.getAttribute('class'), new RegExp(`tm-tag--${kind}$`));
+    }
+    findings = imported;
+    await page.evaluate(() => refreshCloudPresentation());
+    // Without a version number from Cloud the tag says no version.
+    version = undefined;
+    await page.evaluate(() => refreshServerContext());
+    await findingsTag.getByText('1 konflikt', {exact: true}).waitFor();
+    version = 8;
+    await page.evaluate(() => refreshServerContext());
+    await findingsTag.getByText('1 konflikt i version 8', {exact: true}).waitFor();
+    // The diagram is as tall as its stations and meets their names: never
+    // stretched on a wide screen, the first hour readable beside the names.
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.evaluate(() => refreshLocalClock());
+    const diagram = await page.evaluate(() => {
+      const scroller = document.querySelector('#overview-graph-scroll').getBoundingClientRect();
+      const axes = [...document.querySelectorAll('#overview-graph .overview-graph-axis')].map(line => line.getBoundingClientRect().y);
+      const names = [...document.querySelectorAll('#overview-graph-station-labels .overview-graph-station')].map(text => { const r = text.getBoundingClientRect(); return r.y + r.height / 2; });
+      const firstHour = document.querySelector('#overview-graph .overview-graph-time').getBoundingClientRect();
+      return { axes, names, firstHourLeft: firstHour.x - scroller.x, height: scroller.height, canvas: document.querySelector('#overview-graph').getBoundingClientRect().height };
+    });
+    assert.equal(diagram.axes.length, 2);
+    diagram.axes.forEach((y, index) => assert.ok(Math.abs(y - diagram.names[index]) < 4, `station ${index}: line ${y}, name ${diagram.names[index]}`));
+    assert.ok(diagram.firstHourLeft >= 60, `first hour at ${diagram.firstHourLeft}`);
+    assert.ok(diagram.height <= diagram.canvas + 20, `no empty diagram: ${diagram.height} for ${diagram.canvas}`);
+    await page.setViewportSize({ width: 1200, height: 900 });
+
+    // Trains on the map. A clear given is an outlined tag a quarter along from
+    // the station the train leaves, its triangle towards where it goes; once
+    // departed the tag is filled. A request alone draws nothing.
+    const mapTrain = page.locator('#overview-topology .topology-train[data-train-number="421"]');
+    const showTraffic = async (channels, recorded) => {
+      lineChannels = channels; positions = recorded;
+      await page.evaluate(() => refreshLocalClock());
+    };
+    const line = (state, from = 'a', to = 'b') => ({ state, from_station_id: from, to_station_id: to, train_number: '421' });
+    const parked = count => Array.from({ length: count }, (_, i) => ({ train_number: String(901 + i), status: 'station', station_id: 'a' }));
+    const mapGeometry = () => page.evaluate(() => {
+      const centre = element => { const r = element.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
+      const station = name => centre(document.querySelector(`#overview-topology .topology-node[aria-label^="${name}"] .topology-station`));
+      const train = document.querySelector('#overview-topology .topology-train[data-train-number="421"]');
+      const tag = train.querySelector('.topology-train-tag'), arrow = train.querySelector('.topology-train-arrow');
+      // The triangle's tip and the middle of its base, on screen.
+      const matrix = arrow?.getScreenCTM(), tip = arrow && new DOMPoint(10, 6).matrixTransform(matrix), base = arrow && new DOMPoint(2, 6).matrixTransform(matrix);
+      const ring = document.querySelector('#overview-topology .topology-node[aria-label^="Alpha"] .topology-station').getBoundingClientRect();
+      return { a: station('Alpha'), b: station('Beta'), tag: centre(tag), number: centre(train.querySelector('.train-number')),
+        arrow: arrow && centre(arrow), points: arrow && { x: tip.x - base.x, y: tip.y - base.y }, box: tag.getBoundingClientRect().toJSON(), ring: ring.toJSON(),
+        tagFill: getComputedStyle(tag).fill, arrowFill: arrow && getComputedStyle(arrow).fill };
+    });
+    const pointsTowards = (g, from, to) => {
+      const dx = g[to].x - g[from].x, dy = g[to].y - g[from].y;
+      return (g.points.x * dx + g.points.y * dy) / Math.hypot(g.points.x, g.points.y) / Math.hypot(dx, dy) > 0.95;
+    };
+    const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    const along = (g, point, from, to) => ((point.x - g[from].x) * (g[to].x - g[from].x) + (point.y - g[from].y) * (g[to].y - g[from].y))
+      / ((g[to].x - g[from].x) ** 2 + (g[to].y - g[from].y) ** 2);
+    await showTraffic([line('requested')], []);
+    assert.equal(await mapTrain.count(), 0, 'a request is not a train on the line');
+    for (const [from, to] of [['a', 'b'], ['b', 'a']]) {
+      await showTraffic([line('reserved', from, to)], []);
+      await page.locator('#overview-topology .topology-train.cleared[data-train-number="421"]').waitFor();
+      let g = await mapGeometry();
+      const route = `${from.toUpperCase()} → ${to.toUpperCase()}`;
+      assert.equal(await mapTrain.getAttribute('aria-label'), `Tåg 421 · ${route} · klart, inte avgått`);
+      assert.equal(g.tagFill, 'rgb(255, 255, 255)', 'outlined');
+      assert.equal(g.arrowFill, 'none');
+      const at = along(g, g.tag, from, to);
+      assert.ok(at > 0.15 && at < 0.4, `near the station it leaves: ${at}`);
+      assert.ok((g.arrow.x - g.number.x) * (g[to].x - g[from].x) > 0, `the triangle leads towards ${to}`);
+      assert.ok(pointsTowards(g, from, to), `the triangle points at ${to}: ${JSON.stringify(g.points)}`);
+      if (from === 'a') assert.equal(overlaps(g.box, g.ring), false, 'clear of the station it leaves');
+      await showTraffic([line('occupied', from, to)], [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: from, to_station_id: to }]);
+      await page.locator('#overview-topology .topology-train.on-line[data-train-number="421"]').waitFor();
+      g = await mapGeometry();
+      assert.equal(await mapTrain.count(), 1, 'one tag, not one per source');
+      assert.equal(await mapTrain.getAttribute('aria-label'), `Tåg 421 · ${route} · på linjen`);
+      assert.equal(g.tagFill, 'rgb(34, 86, 195)', 'filled');
+      assert.equal(g.arrowFill, 'rgb(255, 255, 255)');
+    }
+    // Two trains the same way on one line: both between the stations, apart.
+    await showTraffic([line('occupied'), { ...line('occupied'), train_number: '4221' }], []);
+    await page.locator('#overview-topology .topology-train.on-line[data-train-number="4221"]').waitFor();
+    const pair = await page.evaluate(() => {
+      const box = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
+      return { first: box('#overview-topology .topology-train[data-train-number="421"] .topology-train-tag'),
+        second: box('#overview-topology .topology-train[data-train-number="4221"] .topology-train-tag'),
+        a: box('#overview-topology .topology-node[aria-label^="Alpha"] .topology-station'), b: box('#overview-topology .topology-node[aria-label^="Beta"] .topology-station') };
+    });
+    assert.equal(overlaps(pair.first, pair.second), false, 'two trains apart');
+    for (const tag of [pair.first, pair.second]) for (const ring of [pair.a, pair.b]) assert.equal(overlaps(tag, ring), false, 'both clear of the stations');
+    // On a phone the line runs top to bottom, and the triangle with it.
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const [from, to] of [['a', 'b'], ['b', 'a']]) {
+      await showTraffic([line('occupied', from, to)], []);
+      await page.waitForFunction(([from]) => document.querySelector('#overview-topology .topology-train[data-train-number="421"]')?.getAttribute('aria-label').includes(`${from.toUpperCase()} →`), [from]);
+      const g = await mapGeometry();
+      assert.ok(Math.abs(g.b.y - g.a.y) > Math.abs(g.b.x - g.a.x), 'portrait: the line is upright');
+      assert.ok(pointsTowards(g, from, to), `upright, the triangle points at ${to}: ${JSON.stringify(g.points)}`);
+    }
+    // Trains inside a station take a side free of names and lines.
+    for (const station of ['a', 'b']) {
+      await showTraffic([], parked(4).map(train => ({ ...train, station_id: station })));
+      await page.locator('#overview-topology .topology-train[data-train-number="+2"]').waitFor();
+      const clash = await page.evaluate(() => {
+        const rects = selector => [...document.querySelectorAll(selector)].map(element => element.getBoundingClientRect());
+        const hit = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+        const tags = rects('#overview-topology .topology-train.at-station .topology-train-tag');
+        return tags.some(tag => rects('#overview-topology .topology-name, #overview-topology .topology-track').some(other => hit(tag, other)));
+      });
+      assert.equal(clash, false, `station ${station}: the row covers a name or a line`);
+    }
+    // Readable on a phone: the map's box grows with the upright line.
+    const smallest = await page.locator('#overview-topology .topology-name, #overview-topology .train-number').evaluateAll(texts => Math.min(...texts.map(text => text.getBoundingClientRect().height)));
+    assert.ok(smallest >= 7, `map text ${smallest} px high`);
+    for (const heading of await page.locator('.overview-section-heading a').all()) {
+      if (await heading.isVisible()) assert.ok((await heading.boundingBox()).height < 22, 'a heading link stays on one line');
+    }
+    await page.setViewportSize({ width: 1200, height: 900 });
+    // Older paths record only the line position; that is on the line too.
+    await showTraffic([], [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: 'a', to_station_id: 'b' }]);
+    await page.locator('#overview-topology .topology-train.on-line[data-train-number="421"]').waitFor();
+    // Inside a station: a pale tag above it, no triangle. With a clear for the
+    // next line it is that outlined tag instead, not both.
+    await showTraffic([], [{ train_number: '421', status: 'station', station_id: 'b' }]);
+    await page.locator('#overview-topology .topology-train.at-station[data-train-number="421"]').waitFor();
+    let g = await mapGeometry();
+    assert.equal(g.arrow, null);
+    assert.equal(await mapTrain.getAttribute('aria-label'), 'Tåg 421 vid B');
+    assert.ok(g.tag.y < g.b.y && Math.abs(g.tag.x - g.b.x) < 2, 'above its station');
+    await showTraffic([line('reserved', 'b', 'a')], [{ train_number: '421', status: 'station', station_id: 'b' }]);
+    await page.locator('#overview-topology .topology-train.cleared[data-train-number="421"]').waitFor();
+    assert.equal(await mapTrain.count(), 1);
+    // Three trains fit above a station; more show two and +N.
+    await showTraffic([], parked(3));
+    await page.locator('#overview-topology .topology-train.at-station[data-train-number="903"]').waitFor();
+    await showTraffic([], parked(4));
+    await page.locator('#overview-topology .topology-train[data-train-number="+2"]').waitFor();
+    assert.deepEqual(await page.locator('#overview-topology .topology-train.at-station').evaluateAll(tags => tags.map(tag => tag.dataset.trainNumber)), ['901', '902', '+2']);
+    const row = await page.locator('#overview-topology .topology-train.at-station .topology-train-tag').evaluateAll(tags => tags.map(tag => tag.getBoundingClientRect().toJSON()));
+    assert.equal(overlaps(row[0], row[1]) || overlaps(row[1], row[2]), false, 'side by side');
+    // Clicking a train on the map lights its route and opens the train panel.
+    await showTraffic([line('occupied')], [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: 'a', to_station_id: 'b' }]);
+    await page.locator('#overview-topology .topology-train.on-line[data-train-number="421"]').click();
+    await page.locator('#drift-train-detail .train-detail-now').waitFor();
+    assert.equal(await page.locator('#drift-train-detail h3').textContent(), 'Tåg 421');
+    await page.locator('#overview-topology .topology-train.selected[data-train-number="421"]').waitFor();
+    assert.ok(await page.locator('#overview-topology .route-highlight').count() > 0);
+    assert.equal(await page.locator('#overview-graph .overview-train-group.selected').getAttribute('data-train-number'), '421');
+    // The other trains step back, the parked ones and their +N too.
+    await showTraffic([line('occupied')], parked(4));
+    await page.locator('#overview-topology .topology-train.dimmed[data-train-number="+2"]').waitFor();
+    assert.equal(await page.locator('#overview-topology .topology-train.dimmed[data-train-number="901"]').count(), 1);
+    assert.equal(await page.locator('#overview-topology .topology-train.dimmed[data-train-number="421"]').count(), 0);
+    await page.locator('#drift-train-detail').getByRole('button', { name: 'Stäng' }).click();
+    await showTraffic([], []);
+
     // A train in "Kommande enligt tidtabell" opens its route and where it is now.
     const upcomingTrain = page.locator('#drift-upcoming button.server-event[data-train-number="421"]').first();
     await upcomingTrain.click();
@@ -286,6 +479,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#device-management').isVisible(),false);
     assert.equal(await page.locator('#station-placement').isVisible(),false);
     assert.equal(await page.locator('#overview-traffic').isVisible(),false);
+    assert.equal(await page.locator('#drift-timetable').isVisible(),false);
     assert.equal(calls.some(c=>c[1].includes('local-configuration')||c[1]==='/v1/operating-mode'),false);
     assert.deepEqual(errors,[]);
     await screenshot('server-design');

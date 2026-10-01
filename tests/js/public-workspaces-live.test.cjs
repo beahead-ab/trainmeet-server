@@ -141,9 +141,38 @@ const root = path.resolve(__dirname, '../..');
     await lcd(lek, '#Ja *Nej');
     await press(lek, '#');
     await lcd(page, '#Avg');
-    await press(page, '#');
+    // Drift's map, from the real traffic: LEK's clear is an outlined tag on
+    // CDA–LEK, nearer CDA, its triangle towards LEK; departed, it is filled.
     const drift = await admin.newPage();
     await drift.goto(urls.eu + '/drift');
+    const mapTag = state => drift.locator(`#overview-topology .topology-train.${state}[data-train-number="101"]`);
+    await mapTag('cleared').waitFor();
+    const geometry = await drift.evaluate(() => {
+      const centre = element => { const r = element.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
+      const station = name => centre(document.querySelector(`#overview-topology .topology-node[aria-label^="${name}"] .topology-station`));
+      const train = document.querySelector('#overview-topology .topology-train[data-train-number="101"]');
+      return { cda: station('Charlottendahl'), lek: station('Lekeberg'), tag: centre(train.querySelector('.topology-train-tag')),
+        arrow: centre(train.querySelector('.topology-train-arrow')), number: centre(train.querySelector('.train-number')) };
+    });
+    const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    assert.ok(distance(geometry.tag, geometry.cda) < distance(geometry.tag, geometry.lek), 'nearer the station it leaves');
+    assert.ok((geometry.arrow.x - geometry.number.x) * (geometry.lek.x - geometry.cda.x) > 0, 'the triangle leads towards LEK');
+    assert.equal(await mapTag('cleared').getAttribute('aria-label'), 'Tåg 101 · CDA → LEK · klart, inte avgått');
+    await press(page, '#');
+    await mapTag('on-line').waitFor();
+    assert.equal(await mapTag('on-line').getAttribute('aria-label'), 'Tåg 101 · CDA → LEK · på linjen');
+    // The same tag on the TV's map, in its size.
+    const tv = await browser.newPage({viewport: {width: 1920, height: 1080}});
+    await tv.goto(urls.eu + '/display/topology');
+    await tv.locator('#topology-svg.topology-tv .topology-train.on-line[data-train-number="101"] .topology-train-arrow').waitFor();
+    // It rides on the line, clear of the large names under it.
+    const ride = await tv.evaluate(() => {
+      const tag = document.querySelector('#topology-svg .topology-train[data-train-number="101"] .topology-train-tag').getBoundingClientRect();
+      const node = document.querySelector('#topology-svg .topology-node[aria-label^="Charlottendahl"] .topology-station').getBoundingClientRect();
+      return { top: tag.y, bottom: tag.y + tag.height, middle: tag.y + tag.height / 2, line: node.y + node.height / 2 };
+    });
+    assert.ok(ride.top < ride.line && ride.line < ride.bottom && ride.middle < ride.line - 5, JSON.stringify(ride));
+    await tv.close();
     await drift.locator('#drift-upcoming button.server-event[data-train-number="101"]').first().click();
     const trainPanel = drift.locator('#drift-train-detail');
     await trainPanel.locator('.train-detail-now').getByText('Nu: På linjen CDA → LEK', {exact: false}).waitFor();

@@ -20,6 +20,20 @@ fullskärmskomponenterna är grafisk källa.
   och beteende när de körs lokalt från Raspberry Pi:n.
 - Alla elva analoga klockdesigner samt den digitala designen finns lokalt.
 
+## Tåg i banöversikten
+
+Samma märke i Drift, på skärmarna och i deltagarvyn, större på en TV:
+
+- Tågnumret i ett litet blått märke med en liten triangel åt färdriktningen
+  (som linjeblocket i TrainMeet Cloud).
+- **Fylld** när tåget har avgått och är ute på linjen, **ofylld** (vit med blå
+  kant) när det har klart men inte har avgått. En begäran utan klart ritas inte.
+- Märket ligger en fjärdedel in från stationen tåget lämnar, aldrig på
+  stationen. På en TV ligger det på linjen, ovanför de stora namnen.
+- Tåg inne på en station är bleka märken utan triangel, på den sida av
+  stationen som är fri från namn och linjer. Högst tre syns, annars två och +N.
+- Klick på ett tåg i Drift tänder dess rutt och öppnar tågpanelen.
+
 ## Typografi
 
 - Inter är serverns gränssnittstypsnitt. Endast vikterna 400, 500, 600 och 700

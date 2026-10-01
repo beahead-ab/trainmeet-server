@@ -187,7 +187,6 @@ const state = {
   selectedStationID: null,
   hoveredOverviewTrainNumber: null,
   overviewDataSignature: null,
-  overviewSelectionInitialized: false,
   displaySelectedTrainNumber: null,
   displaySelectedStationID: null,
   displayHoveredTrainNumber: null,
@@ -581,7 +580,7 @@ async function refreshServerContext() {
   document.querySelector("#us-runtime-summary").classList.toggle("hidden", !us);
   document.querySelectorAll('.display-launch-card[href="/display/topology"], .display-launch-card[href="/display/graph"], .display-launch-card[href="/display/dashboard"], .connection-badge-card')
     .forEach((node) => node.classList.toggle("hidden", us));
-  document.querySelectorAll("#overview-view .topology-overview-card, #overview-traffic, #overview-timetable")
+  document.querySelectorAll("#overview-view .topology-overview-card, #overview-traffic, #drift-timetable")
     .forEach((node) => node.classList.toggle("hidden", us));
   document.querySelector("#workspace-home").href = workspaceHome();
   serverUI.refreshHeader();
@@ -2385,14 +2384,21 @@ function clearOverviewSelection() {
 
 function renderOverviewTopology() {
   if (!state.overviewSnapshot) return;
-  renderTopology(state.overviewSnapshot, document.querySelector("#overview-topology"), {
+  const map = document.querySelector("#overview-topology");
+  renderTopology(state.overviewSnapshot, map, {
     selectedTrainNumber: state.selectedTrainNumber,
     selectedStationID: state.selectedStationID,
     showBadge: false,
-    onTrainSelect: (trainNumber) => selectOverviewTrain(trainNumber),
+    // A train on the map opens its route and where it is now, as in Kommande.
+    onTrainSelect: (trainNumber) => openTrainDetail(trainNumber),
     onStationSelect: (stationID) => selectOverviewStation(stationID, Boolean(state.selectedTrainNumber)),
     onClear: clearOverviewSelection,
   });
+  // As tall as the drawing needs at the card's width, within reason: a phone
+  // gets the line upright, and a low box shrank it past reading.
+  const [, , width, height] = String(map.getAttribute("viewBox")).split(" ").map(Number);
+  const preview = map.closest(".topology-preview");
+  if (preview && width && height) preview.style.height = `${Math.round(Math.min(640, Math.max(225, preview.clientWidth * height / width)))}px`;
 }
 
 function stationTrafficRows(snapshot, stationID) {
@@ -2477,12 +2483,16 @@ function renderOverview(snapshot) {
   renderOverviewTopology();
   renderStationInspector();
   renderTraffic(snapshot);
-  if (document.querySelector("#overview-timetable").open) renderOverviewGraph(snapshot);
+  // The train diagram is its own card on Drift and follows the clock, open
+  // timetable or not.
+  renderOverviewGraph(snapshot);
+  const timetableMeta = document.querySelector("#timetable-summary-meta");
+  if (timetableMeta) timetableMeta.textContent = t("{count} tåg · sök tåg · tågrutter · stationer", { count: services.length });
+  const topologyMeta = document.querySelector("#topology-head-meta");
+  const lines = (snapshot.connections || []).length;
+  if (topologyMeta) topologyMeta.textContent = [t(stations.length === 1 ? "{count} station" : "{count} stationer", { count: stations.length }),
+    t(lines === 1 ? "{count} sträcka" : "{count} sträckor", { count: lines })].join(" · ");
 }
-
-document.querySelector("#overview-timetable").addEventListener("toggle", (event) => {
-  if (event.target.open) renderOverviewGraph(state.overviewSnapshot);
-});
 
 function renderRouteExplorer() {
   const snapshot = state.overviewSnapshot;
@@ -2493,11 +2503,10 @@ function renderRouteExplorer() {
   const visibleServices = services.filter((service) =>
     String(service.train_number).toLocaleLowerCase("sv").includes(query)
   );
-  if (!state.overviewSelectionInitialized && services.length) {
-    state.selectedTrainNumber = String(services[0].train_number);
-    state.overviewSelectionInitialized = true;
-  } else if (state.selectedTrainNumber !== null && !services.some((service) => String(service.train_number) === state.selectedTrainNumber)) {
-    state.selectedTrainNumber = services[0] ? String(services[0].train_number) : null;
+  // Nothing is lit until someone picks a train: a first train chosen for them
+  // dimmed every other train on the map and in the diagram.
+  if (state.selectedTrainNumber !== null && !services.some((service) => String(service.train_number) === state.selectedTrainNumber)) {
+    state.selectedTrainNumber = null;
   }
 
   overviewRouteList.innerHTML = visibleServices.length
@@ -2907,43 +2916,73 @@ function topologyBounds(sourcePositions, edges) {
   };
 }
 
-// A train on the map is a blue tag whose nose points the way the train is
-// going, so the direction reads without an arrow character or a legend.
-// Size follows the surface: small on Drift, large on a TV.
-function trainBadgePath(width, height, nose, radius) {
-  const left = -width / 2, right = width / 2, top = -height / 2, bottom = height / 2;
-  return `M${left + radius},${top} H${right - nose} L${right},0 L${right - nose},${bottom} H${left + radius} A${radius},${radius} 0 0 1 ${left},${bottom - radius} V${top + radius} A${radius},${radius} 0 0 1 ${left + radius},${top} Z`;
+// A train on the map: its number in a small tag with a small triangle the way
+// it runs (as the line block in TrainMeet Cloud). The tag is filled once
+// the train is out on the line, and only outlined while it has a clear but has
+// not left. Inside a station it is a pale tag without a triangle.
+const TOPOLOGY_TRAIN_ARROW = "M2 1 L10 6 L2 11 Z";
+
+// Where the trains are, from what /v1/display already has: each directed
+// channel of a line (reserved = clear given, occupied = departed), then the
+// recorded positions for trains not on a channel. Older paths record only a
+// line position, which still counts as on the line.
+function topologyTrains(snapshot) {
+  const onLine = [], atStation = [], seen = new Set();
+  for (const connection of snapshot.connection_states || []) {
+    for (const channel of connection.channels || []) {
+      if (!channel.train_number || !["reserved", "occupied"].includes(channel.state)) continue;
+      seen.add(String(channel.train_number));
+      onLine.push({ trainNumber: String(channel.train_number), from: channel.from_station_id, to: channel.to_station_id, departed: channel.state === "occupied" });
+    }
+  }
+  for (const position of snapshot.train_positions || []) {
+    const trainNumber = String(position.train_number);
+    if (seen.has(trainNumber)) continue;
+    if (position.status === "connection") onLine.push({ trainNumber, from: position.from_station_id, to: position.to_station_id, departed: true });
+    else if (position.station_id) atStation.push({ trainNumber, station: position.station_id });
+  }
+  return { onLine, atStation };
 }
 
-// Same tag with the nose at the bottom (mirrored for up), for track that runs
-// top to bottom – the phone gets the line in portrait.
-function trainBadgePathVertical(width, height, nose, radius) {
-  const left = -width / 2, right = width / 2, top = -height / 2, bottom = height / 2;
-  return `M${left + radius},${top} H${right - radius} A${radius},${radius} 0 0 1 ${right},${top + radius} V${bottom - radius} A${radius},${radius} 0 0 1 ${right - radius},${bottom} H${nose} L0,${bottom + nose} L${-nose},${bottom} H${left + radius} A${radius},${radius} 0 0 1 ${left},${bottom - radius} V${top + radius} A${radius},${radius} 0 0 1 ${left + radius},${top} Z`;
+function topologyTrainSize(trainNumber, withArrow, tv) {
+  const font = tv ? 26 : 11, arrow = tv ? 18 : 8, pad = tv ? 10 : 4, gap = tv ? 6 : 2.5;
+  const textWidth = String(trainNumber).length * font * 0.62;
+  return { font, arrow, pad, textWidth, height: tv ? 40 : 16, width: textWidth + pad * 2 + (withArrow ? arrow + gap : 0) };
 }
 
-function appendTrainBadge(target, point, trainNumber, direction = 1, options = {}) {
-  const label = String(trainNumber);
+function appendTopologyTrain(target, point, train, options = {}) {
   const tv = Boolean(options.tv);
-  const fontSize = tv ? 28 : 9, nose = tv ? 16 : 6, height = tv ? 44 : 16, radius = tv ? 8 : 4;
-  const vertical = options.vertical || 0; // 1 = down, -1 = up, 0 = sideways
-  const width = Math.max(tv ? 96 : 30, label.length * fontSize * 0.62 + (tv ? 36 : 14)) + (vertical ? 0 : nose);
+  const label = String(train.trainNumber);
+  const heading = train.heading; // the way it runs from the station it leaves; none inside a station
+  const { font, arrow, pad, textWidth, height, width } = topologyTrainSize(label, Boolean(heading), tv);
+  const kind = !heading ? "at-station" : train.departed ? "on-line" : "cleared";
   const group = svgElement("g", {
     transform: `translate(${point.x},${point.y})`,
-    class: `topology-train${tv ? " topology-train-badge" : ""}${options.selected ? " selected" : ""}${options.dimmed ? " dimmed" : ""}${options.clickable ? " clickable" : ""}`,
+    class: `topology-train ${kind}${options.selected ? " selected" : ""}${options.dimmed ? " dimmed" : ""}${options.clickable ? " clickable" : ""}`,
     role: options.clickable ? "button" : "img",
     tabindex: options.clickable ? "0" : "-1",
-    "aria-label": `Tåg ${label} ${vertical ? (vertical > 0 ? "↓" : "↑") : direction > 0 ? "→" : "←"}`,
+    "aria-label": train.label,
   });
-  if (options.selected) group.append(svgElement("rect", { x: -width / 2 - 3, y: -height / 2 - 3, width: width + 6, height: height + 6, rx: radius + 3, class: "topology-train-ring" }));
-  group.append(vertical
-    ? svgElement("path", { d: trainBadgePathVertical(width, height, nose, radius), transform: `scale(1,${vertical})`, class: "topology-train-tag" })
-    : svgElement("path", { d: trainBadgePath(width, height, nose, radius), transform: `scale(${direction},1)`, class: "topology-train-tag" }));
-  group.append(svgElement("text", { x: vertical ? 0 : -direction * nose / 2, y: tv ? 10 : 3.2, "text-anchor": "middle", class: "train-number" }, label));
+  group.dataset.trainNumber = label;
+  if (options.selected) group.append(svgElement("rect", { x: -width / 2 - 3, y: -height / 2 - 3, width: width + 6, height: height + 6, rx: tv ? 11 : 6, class: "topology-train-ring" }));
+  group.append(svgElement("rect", { x: -width / 2, y: -height / 2, width, height, rx: tv ? 8 : 3, class: "topology-train-tag" }));
+  let textX = 0;
+  if (heading) {
+    // Sideways the triangle leads: after the number going right, before it
+    // going left. On a line that runs up or down it follows the number.
+    const vertical = Math.abs(heading.y) > Math.abs(heading.x) * 1.2;
+    const left = !vertical && heading.x < 0;
+    const angle = vertical ? (heading.y > 0 ? 90 : -90) : left ? 180 : 0;
+    const arrowX = left ? -width / 2 + pad + arrow / 2 : width / 2 - pad - arrow / 2;
+    textX = left ? width / 2 - pad - textWidth / 2 : -width / 2 + pad + textWidth / 2;
+    group.append(svgElement("path", { d: TOPOLOGY_TRAIN_ARROW, class: "topology-train-arrow",
+      transform: `translate(${arrowX},0) rotate(${angle}) scale(${arrow / 12}) translate(-6,-6)` }));
+  }
+  group.append(svgElement("text", { x: textX, y: font * 0.36, "text-anchor": "middle", class: "train-number" }, label));
   if (options.clickable) {
     const activate = (event) => {
       event.stopPropagation();
-      options.onSelect?.(String(trainNumber));
+      options.onSelect?.(label);
     };
     group.addEventListener("click", activate);
     group.addEventListener("keydown", (event) => {
@@ -2969,6 +3008,18 @@ const TOPOLOGY_LABEL_SIDES = {
   below: [0, 1, 0], above: [0, -1, 3], right: [1, 0, 4], left: [-1, 0, 5],
   "below-right": [1, 1, 6], "above-right": [1, -1, 7], "below-left": [-1, 1, 8], "above-left": [-1, -1, 9],
 };
+
+// Whether the line from a to b touches the box {x1, y1, x2, y2}.
+function topologyCrosses(box, [a, b]) {
+  const inside = (p) => p.x >= box.x1 && p.x <= box.x2 && p.y >= box.y1 && p.y <= box.y2;
+  if (inside(a) || inside(b)) return true;
+  const side = (p, q, r) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+  const corners = [{ x: box.x1, y: box.y1 }, { x: box.x2, y: box.y1 }, { x: box.x2, y: box.y2 }, { x: box.x1, y: box.y2 }];
+  return corners.some((c, i) => {
+    const d = corners[(i + 1) % 4];
+    return side(a, b, c) !== side(a, b, d) && side(c, d, a) !== side(c, d, b);
+  });
+}
 
 function placeTopologyLabels(items, segments, viewBox, options = {}) {
   if (!items.length) return;
@@ -3006,16 +3057,7 @@ function placeTopologyLabels(items, segments, viewBox, options = {}) {
   };
   const overlap = (a, b, margin = 0) => Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) + margin) * Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1) + margin);
   const clearance = tv ? 10 : 6; // two names never closer than this
-  const inside = (box, p) => p.x >= box.x1 && p.x <= box.x2 && p.y >= box.y1 && p.y <= box.y2;
-  const crosses = (box, [a, b]) => {
-    if (inside(box, a) || inside(box, b)) return true;
-    const side = (p, q, r) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
-    const corners = [{ x: box.x1, y: box.y1 }, { x: box.x2, y: box.y1 }, { x: box.x2, y: box.y2 }, { x: box.x1, y: box.y2 }];
-    return corners.some((c, i) => {
-      const d = corners[(i + 1) % 4];
-      return side(a, b, c) !== side(a, b, d) && side(c, d, a) !== side(c, d, b);
-    });
-  };
+  const crosses = topologyCrosses;
   const [viewX, viewY, viewWidth, viewHeight] = String(viewBox).split(" ").map(Number);
   const placed = new Map(items.map((item) => [item, layout(item, "below")]));
   const penalty = (item, spot) => {
@@ -3164,25 +3206,79 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     target.append(group);
   }
   placeTopologyLabels(labels, edges.map((edge) => [positions.get(edge.from), positions.get(edge.to)]).filter(([from, to]) => from && to), viewBox, options);
-  for (const position of snapshot.train_positions || []) {
-    let point = null;
-    if (position.status === "station") point = positions.get(position.station_id);
-    else {
-      const from = positions.get(position.from_station_id), to = positions.get(position.to_station_id);
-      if (from && to) point = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-    }
+  const trains = topologyTrains(snapshot);
+  const code = (id) => (snapshot.stations || []).find((station) => station.id === id)?.code || "?";
+  const trainOptions = (trainNumber) => ({
+    tv: Boolean(options.tv),
+    selected: trainNumber === String(options.selectedTrainNumber),
+    dimmed: Boolean(selectedService && trainNumber !== String(options.selectedTrainNumber)),
+    clickable: Boolean(options.onTrainSelect),
+    onSelect: options.onTrainSelect,
+  });
+  // A quarter of the way from the station the train leaves, and never on the
+  // station itself. A channel holds one train, so two the same way on a line
+  // come only from an older recorded position; the second then stacks beside
+  // the first instead of hiding it.
+  const sameWay = new Map();
+  for (const train of trains.onLine) {
+    const from = positions.get(train.from), to = positions.get(train.to);
+    if (!from || !to) continue;
+    const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+    const along = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
+    const size = topologyTrainSize(train.trainNumber, true, options.tv);
+    const reach = Math.abs(along.x) * size.width / 2 + Math.abs(along.y) * size.height / 2;
+    const clear = (options.tv ? 22 : 10) + reach; // off the station's ring
+    const distance = Math.min(Math.max(length * 0.25, clear), length / 2);
+    const key = `${train.from}>${train.to}`;
+    const order = sameWay.get(key) || 0;
+    sameWay.set(key, order + 1);
+    // Up from a sideways line, to the right of an upright one.
+    let side = { x: along.y, y: -along.x };
+    if (side.y > 0 || (side.y === 0 && side.x < 0)) side = { x: -side.x, y: -side.y };
+    const across = order * (Math.abs(side.y) * size.height + Math.abs(side.x) * size.width + (options.tv ? 6 : 3));
+    const route = `${code(train.from)} → ${code(train.to)}`;
+    // On a TV the names under the line are large: the tag rides on the line
+    // rather than over them.
+    const lift = options.tv && Math.abs(along.y) < 0.5 ? 12 : 0;
+    appendTopologyTrain(target, { x: from.x + along.x * distance + side.x * across, y: from.y + along.y * distance + side.y * across - lift }, {
+      ...train, heading: along,
+      label: train.departed ? t("Tåg {number} · {route} · på linjen", { number: train.trainNumber, route })
+        : t("Tåg {number} · {route} · klart, inte avgått", { number: train.trainNumber, route }),
+    }, trainOptions(train.trainNumber));
+  }
+  // Inside a station: a row of tags beside it, at most three and then +N, on
+  // the first side that covers neither a name nor a line: above, below, left,
+  // right.
+  const segments = edges.map((edge) => [positions.get(edge.from), positions.get(edge.to)]).filter(([from, to]) => from && to);
+  const names = labels.flatMap((label) => [label.name, label.code].filter(Boolean)).flatMap((text) => {
+    // A map not on screen has no measured text (and some browsers throw).
+    try { const box = text.getBBox(); return [{ x1: box.x, y1: box.y, x2: box.x + box.width, y2: box.y + box.height }]; } catch { return []; }
+  });
+  const free = (box) => !names.some((name) => box.x1 < name.x2 && name.x1 < box.x2 && box.y1 < name.y2 && name.y1 < box.y2)
+    && !segments.some((segment) => topologyCrosses(box, segment));
+  const byStation = new Map();
+  for (const train of trains.atStation) byStation.set(train.station, [...(byStation.get(train.station) || []), train]);
+  for (const [stationID, here] of byStation) {
+    const point = positions.get(stationID);
     if (!point) continue;
-    const fromPoint = positions.get(position.from_station_id), toPoint = positions.get(position.to_station_id);
-    const dx = (toPoint?.x || 0) - (fromPoint?.x || 0), dy = (toPoint?.y || 0) - (fromPoint?.y || 0);
-    const vertical = fromPoint && toPoint && Math.abs(dy) > Math.abs(dx) * 1.2 ? Math.sign(dy) : 0;
-    const direction = fromPoint && toPoint ? (dx >= 0 ? 1 : -1) : 1;
-    appendTrainBadge(target, { x: point.x + (vertical ? (options.tv ? 0 : 0) : 0), y: point.y - (vertical ? 0 : options.tv ? 28 : 15) }, position.train_number, direction, {
-      tv: Boolean(options.tv),
-      vertical,
-      selected: String(position.train_number) === String(options.selectedTrainNumber),
-      dimmed: Boolean(selectedService && String(position.train_number) !== String(options.selectedTrainNumber)),
-      clickable: Boolean(options.onTrainSelect),
-      onSelect: options.onTrainSelect,
+    const shown = here.length > 3 ? here.slice(0, 2) : here;
+    const items = [...shown.map((train) => train.trainNumber), ...(here.length > shown.length ? [`+${here.length - shown.length}`] : [])];
+    const gap = options.tv ? 10 : 4, off = 7 + gap;
+    const widths = items.map((item) => topologyTrainSize(item, false, options.tv).width);
+    const height = topologyTrainSize("", false, options.tv).height;
+    const width = widths.reduce((sum, value) => sum + value, 0) + gap * (items.length - 1);
+    const sides = [[0, -off - height / 2], [0, off + height / 2], [-off - width / 2, 0], [off + width / 2, 0]]
+      .map(([dx, dy]) => ({ x: point.x + dx, y: point.y + dy }));
+    const centre = sides.find((side) => free({ x1: side.x - width / 2, y1: side.y - height / 2, x2: side.x + width / 2, y2: side.y + height / 2 })) || sides[0];
+    let left = centre.x - width / 2;
+    items.forEach((item, index) => {
+      const at = { x: left + widths[index] / 2, y: centre.y };
+      left += widths[index] + gap;
+      if (item.startsWith("+")) {
+        appendTopologyTrain(target, at, { trainNumber: item, label: item }, { tv: Boolean(options.tv), dimmed: Boolean(selectedService) });
+        return;
+      }
+      appendTopologyTrain(target, at, { trainNumber: item, label: t("Tåg {number} vid {station}", { number: item, station: code(stationID) }) }, trainOptions(item));
     });
   }
   if (selectedService && options.showBadge !== false) {
@@ -3270,7 +3366,9 @@ function renderOverviewGraph(snapshot) {
   const minMinute = minutes.length ? Math.floor(Math.min(...minutes) / 60) * 60 : 0;
   const maxMinute = minutes.length ? Math.max(minMinute + 60, Math.ceil(Math.max(...minutes) / 60) * 60) : 24 * 60;
   const left = 60, right = 16, top = 22, bottom = 28, stationStep = 26;
-  const width = Math.max(1200, left + (maxMinute - minMinute) * 2.2 + right);
+  // Never narrower than its card: a stretched drawing no longer meets the
+  // station names beside it.
+  const width = Math.max(1200, document.querySelector("#overview-graph-scroll")?.clientWidth || 0, left + (maxMinute - minMinute) * 2.2 + right);
   const height = top + Math.max(stations.length - 1, 1) * stationStep + bottom;
   const x = (minute) => left + (minute - minMinute) / (maxMinute - minMinute) * (width - left - right);
   const y = (index) => top + index * stationStep;
@@ -3292,7 +3390,8 @@ function renderOverviewGraph(snapshot) {
   stationLabels.append(svgElement("rect", { x: 0, y: 0, width: left, height, class: "overview-graph-label-bg" }));
   for (let minute = minMinute; minute <= maxMinute; minute += 60) {
     svg.append(svgElement("line", { x1: x(minute), y1: top - 5, x2: x(minute), y2: height - bottom + 3, class: "overview-graph-grid" }));
-    svg.append(svgElement("text", { x: x(minute), y: height - 6, "text-anchor": "middle", class: "overview-graph-time" }, `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:00`));
+    // The first hour starts at the station column, so it reads from there.
+    svg.append(svgElement("text", { x: x(minute) + (minute === minMinute ? 3 : 0), y: height - 6, "text-anchor": minute === minMinute ? "start" : "middle", class: "overview-graph-time" }, `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:00`));
   }
   stations.forEach((station, index) => {
     svg.append(svgElement("line", { x1: left, y1: y(index), x2: width - right, y2: y(index), class: "overview-graph-axis" }));
