@@ -629,6 +629,9 @@ body[data-signed-in="no"] #app-chrome :is(#header-cloud-status, .topbar-right, #
 #drift-traffic-grid { align-items: stretch; }
 .topology-overview-card { display: flex; flex-direction: column; }
 .topology-overview-card .topology-preview { flex: 1 0 auto; margin: 0 -14px -12px; border: 0; border-radius: 0; background: none; }
+/* The map reaches the card's edges (its -12px bottom margin); the chosen
+   train's badge still sits below it, not over its last station. */
+.topology-overview-card .overview-route-badge { margin-top: 22px; }
 
 /* Trafik just nu: tiles, the events in columns, the two folded lists in a row. */
 #overview-traffic .traffic-section { margin: 12px 0 0; }
