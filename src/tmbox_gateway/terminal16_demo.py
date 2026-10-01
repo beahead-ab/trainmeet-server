@@ -121,8 +121,8 @@ class LabState:
                         "audit": lab.engine.audit[-10:], "arrivals": lab.arrivals,
                         "text": {"title": "TMBox · 16 × 2", "subtitle": "Isolerad provkörning · ingen koppling till er träff",
                                  "entry": "Siffrorna stannar här tills du trycker #.",
-                                 "offline": "Testservern är frånkopplad. Trafikknapparna är spärrade.",
-                                 "ready": "Serverstyrd display och knappar", "sending": "Inväntar servern…"}}
+                                 "offline": "Testservern är frånkopplad. Knapparna gör ingenting.",
+                                 "ready": "Serverstyrd display och knappar"}}
 
 
 class LabServer(ThreadingHTTPServer, LabState):

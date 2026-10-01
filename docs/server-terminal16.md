@@ -118,6 +118,21 @@ Kommandon är bundna till enhet, station, träff, skärmversion och unikt ID.
 MQTT skickar nya bilder vid förändring; liveness-kvitton är inte upprepade
 stationstilldelningar. Webben hämtar bildstatus utan att skicka varje siffra.
 
+### Knappsatsen: samma i webben som på boxen
+
+Varje tangent i bilden har `acts`: sant om den utför en trafikåtgärd (begär,
+ge klart, neka, återta, avgå, ankomst), falskt om den bara byter vad som visas.
+Efter ett skärmbyte (ny `view_token` eller ändrade tangenter) väntar bara
+tangenter med `acts` i `input_guard_ms`, så ett tryck avsett för förra bilden
+inte utför något på den nya. Bläddring, siffror och tågsökning svarar direkt.
+En tangent utan fältet räknas som handlande. Inga tangenter tänds eller släcks
+i webben: ett tryck som inte kan göra något gör ingenting, precis som på boxen.
+
+Webben väntar som boxen (firmware 0.7.3): `VANTAR PA SVAR` på rad två efter
+1,5 s, `INGET SVAR` efter 30 s med siffrorna kvar, och kontakten räknas som
+bruten först efter 15 s utan svar. `/tmbox/` hämtar bilden var halv sekund,
+lika ofta som servern skickar ändringar till boxarna.
+
 903 Python-tester och 59 JavaScript-/webbläsartester passerade inför release.
 Firmware måste även kontrolleras på fysisk hårdvara; mjukvarutester ersätter
 inte prov av display, kabeldragning, specialtecken och knappsats.

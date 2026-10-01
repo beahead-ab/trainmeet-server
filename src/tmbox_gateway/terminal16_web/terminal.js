@@ -35,13 +35,33 @@
       return lines;
     }
   }
-  if (typeof module !== "undefined") module.exports = {EntryBuffer};
+  // Same rule and the same times as the physical box (server_terminal.h), so
+  // the browser keypad behaves like the real one. After a screen change only
+  // keys that act on traffic wait input_guard_ms, so a press meant for the
+  // previous screen cannot act on the new one. Browsing, digits and train
+  // search answer at once; a key without the flag counts as acting.
+  const WAITING_SHOWN_MS = 1500, COMMAND_GIVE_UP_MS = 30000, UNANSWERED_SHOWN_MS = 3000, SILENCE_MS = 15000, POLL_MS = 500;
+  const WAITING_TEXT = "VANTAR PA SVAR", UNANSWERED_TEXT = "INGET SVAR";
+  function screenChanged(before, after) {
+    return !before || before.view_token !== after.view_token || JSON.stringify(before.keys) !== JSON.stringify(after.keys);
+  }
+  function guarded(frame, key, digits, now, until) {
+    if (now >= until || digits || /^[0-9]$/.test(key)) return false;
+    return frame.keys?.[key]?.acts !== false;
+  }
+  function overlay(model, now) {
+    if (model.busy && now - model.sentAt >= WAITING_SHOWN_MS) return WAITING_TEXT;
+    if (model.unansweredAt && now - model.unansweredAt < UNANSWERED_SHOWN_MS) return UNANSWERED_TEXT;
+    return "";
+  }
+  if (typeof module !== "undefined") module.exports = {EntryBuffer, screenChanged, guarded, overlay,
+    times: {WAITING_SHOWN_MS, COMMAND_GIVE_UP_MS, UNANSWERED_SHOWN_MS, SILENCE_MS, POLL_MS}};
   if (typeof document === "undefined") return;
 
   const boxes = new Map();
   const live = document.body.dataset.terminal === "live";
   let identity = null, pollVersion = 0;
-  let connected = false, resetting = false, text = {};
+  let connected = false, resetting = false, text = {}, lastContact = 0;
   let placement = null, placementDraft = null;
   const placementDialog = document.querySelector("#placement-dialog");
   const keyOrder = "123A456B789C*0#D";
@@ -57,7 +77,8 @@
   function makeBox(frame) {
     const card = document.createElement("article"); card.className = "box"; card.tabIndex = 0; card.dataset.device = frame.device_id;
     card.innerHTML = '<div class="box-heading"><h2></h2><span class="box-code"></span></div><div class="box-status"></div><div class="box-queue" role="status"></div><div class="tmbox-case"><div class="lcd-frame"><div class="lcd" role="img"></div></div><div class="keypad"></div></div><div class="key-hints"></div><p class="box-message" role="status"></p><div class="box-timetable"></div>';
-    const model = {card, frame, entry: new EntryBuffer(), busy: false, until: 0, uiMessage: "", uiError: false};
+    const model = {card, frame, entry: new EntryBuffer(), busy: false, sentAt: 0, unansweredAt: 0,
+      until: performance.now() + (frame.input_guard_ms ?? 0), uiMessage: "", uiError: false};
     card.querySelector("h2").textContent = frame.station;
     card.querySelector(".box-code").textContent = frame.device_id;
     for (const key of keyOrder) {
@@ -105,7 +126,9 @@
   }
   function render(model) {
     const {card, frame, entry} = model;
-    const lines = entry.lines(frame);
+    const lines = [...entry.lines(frame)];
+    const shown = overlay(model, performance.now());
+    if (shown) lines[1] = shown.padEnd(16);
     drawLCD(card.querySelector(".lcd"), lines);
     card.querySelector("h2").textContent = frame.station || "Väntar på station";
     card.querySelector(".box-code").textContent = live ? identity?.device_code || frame.device_id : frame.device_id;
@@ -116,9 +139,10 @@
     const hints = card.querySelector(".key-hints"); hints.replaceChildren();
     const labels = entry.digits ? frame.entry.labels : Object.fromEntries(Object.entries(frame.keys).map(([key, info]) => [key, info.label]));
     for (const [key, label] of Object.entries(labels)) { const hint = document.createElement("span"); const strong = document.createElement("b"); strong.textContent = key; hint.append(strong, label); hints.append(hint); }
+    // Every key can always be pressed, as on the box. One that cannot do
+    // anything right now simply does nothing; nothing lights up or dims.
     for (const button of card.querySelectorAll(".key")) {
       const key = button.dataset.key;
-      button.disabled = !connected || resetting || model.busy || performance.now() < model.until || (/^[0-9]$/.test(key) ? !frame.entry : !(key in labels));
       button.setAttribute("aria-label", labels[key] ? `${key} · ${labels[key]}` : key);
     }
     const status = card.querySelector(".box-message");
@@ -130,12 +154,7 @@
     if (model.frame.entry?.context === frame.entry?.context &&
         (frame.revision < model.frame.revision || (frame.revision === model.frame.revision && frame.view_revision < model.frame.view_revision))) return;
     if (model.frame.entry?.context !== frame.entry?.context) message(model, "");
-    // A newly offered primary action must be readable before accepting a key.
-    // This is a generic display/input guard, not client-side traffic logic.
-    if (!model.entry.digits && model.frame.keys['#']?.label !== frame.keys['#']?.label) {
-      model.until = Math.max(model.until, performance.now() + frame.input_guard_ms);
-      setTimeout(() => render(model), frame.input_guard_ms + 10);
-    }
+    if (screenChanged(model.frame, frame)) model.until = Math.max(model.until, performance.now() + (frame.input_guard_ms ?? 0));
     model.frame = frame; render(model);
   }
   function message(model, value, error=false) {
@@ -143,7 +162,8 @@
     const element = model.card.querySelector(".box-message"); element.textContent = value || ""; element.classList.toggle("error", error);
   }
   async function press(model, key) {
-    if (!connected || resetting || model.busy || performance.now() < model.until) return;
+    if (!connected || resetting || model.busy) return;
+    if (guarded(model.frame, key, model.entry.digits, performance.now(), model.until)) return;
     const entry = model.entry.press(key, model.frame);
     if (entry.local) { message(model, ""); render(model); return; }
     if (!entry.train_number && !(key in model.frame.keys)) return;
@@ -151,20 +171,24 @@
     if (entry.train_number) Object.assign(body, {train_number: entry.train_number, entry_context: entry.entry_context});
     const context = model.frame.entry?.context;
     ++pollVersion;
-    model.busy = true; message(model, text.sending); render(model);
+    // As on the box: nothing is shown for a quick answer, the second row says
+    // so after 1.5 s, and the command is given up only after 30 s. Digits stay.
+    model.busy = true; model.sentAt = performance.now(); model.unansweredAt = 0; message(model, ""); render(model);
+    const waiting = setTimeout(() => render(model), WAITING_SHOWN_MS);
     try {
       if (live) delete body.device_id;
-      const response = await fetch(live ? "/v1/tmbox/terminal" : "./api/key", {method:"POST", credentials: live ? "omit" : "same-origin", headers:{"Content-Type":"application/json", ...(live ? {Authorization: `Bearer ${identity.access_token}`} : {})}, body:JSON.stringify(body), signal:AbortSignal.timeout(5000)});
+      const response = await fetch(live ? "/v1/tmbox/terminal" : "./api/key", {method:"POST", credentials: live ? "omit" : "same-origin", headers:{"Content-Type":"application/json", ...(live ? {Authorization: `Bearer ${identity.access_token}`} : {})}, body:JSON.stringify(body), signal:AbortSignal.timeout(COMMAND_GIVE_UP_MS)});
       const result = await response.json();
+      lastContact = performance.now();
       if (model.frame.entry?.context !== context) return;
       if (result.status === "accepted" || result.status === "duplicate") model.entry.clear();
       if (result.frame) apply(result.frame);
       message(model, result.message, !response.ok);
-    } catch { message(model, "Serversvar saknas. Kontrollera det aktuella läget innan nytt försök.", true); }
-    finally {
-      model.busy = false; model.until = performance.now() + model.frame.input_guard_ms;
-      render(model); setTimeout(() => render(model), model.frame.input_guard_ms + 10);
+    } catch {
+      model.unansweredAt = performance.now();
+      setTimeout(() => render(model), UNANSWERED_SHOWN_MS + 10);
     }
+    finally { clearTimeout(waiting); model.busy = false; render(model); }
   }
   // Page chrome only: the dot in the header and the "Din TMBox" card. Nothing here
   // reads or changes traffic; it mirrors the same frame the box itself renders.
@@ -235,9 +259,17 @@
     const events = document.querySelector("#events"); events.replaceChildren();
     for (const event of state.audit) { const li = document.createElement("li"); li.textContent = `${event.revision}. ${event.station_id.toUpperCase()} · ${event.action} · ${event.connection_id}`; events.append(li); }
   }
+  function lost() {
+    // As when the box's session ends: typed digits go with it.
+    connected = false; resetButtons(); document.querySelector("#connection").textContent = text.offline || (live ? "Servern är inte ansluten." : "Testservern är inte ansluten."); showConnection(false);
+    for (const model of boxes.values()) { model.entry.clear(); render(model); }
+  }
+  // No answer is not a lost server: like the box, give up only after 15 s
+  // without one. A refusal is an answer and counts at once.
+  function silent() { if (performance.now() - lastContact >= SILENCE_MS) lost(); }
   const events = live ? {} : new EventSource("./events");
   events.onmessage = event => update(JSON.parse(event.data));
-  events.onerror = () => { connected = false; resetButtons(); document.querySelector("#connection").textContent = text.offline || (live ? "Servern är inte ansluten." : "Testservern är inte ansluten."); showConnection(false); for (const model of boxes.values()) render(model); };
+  events.onerror = lost;
   async function startLive() {
     document.querySelector("#start-client").hidden = true;
     try {
@@ -255,22 +287,27 @@
       document.querySelector("#start-client").hidden = false;
     }
   }
+  // The box is sent every change; the browser fetches as often as the server
+  // checks for them, and keeps doing so while a command waits.
   async function pollLive() {
-    if (identity && !document.hidden && ![...boxes.values()].some(m=>m.busy)) {
+    if (identity && !document.hidden) {
       const version = pollVersion;
+      let response;
       try {
-        const response = await fetch("/v1/tmbox/terminal", {credentials:"omit",cache:"no-store",headers:{Authorization:`Bearer ${identity.access_token}`},signal:AbortSignal.timeout(5000)});
+        response = await fetch("/v1/tmbox/terminal", {credentials:"omit",cache:"no-store",headers:{Authorization:`Bearer ${identity.access_token}`},signal:AbortSignal.timeout(5000)});
+        if (response.status >= 500) throw Error();
         const frame = await response.json();
-        if (!response.ok) throw Error(frame.message || "Anslutningen bröts.");
-        if (version === pollVersion) update({frames:[frame],audit:[],text:{title:"TMBox",subtitle:location.host,
-          session:`Enhetskod: ${identity.device_code} · Station tilldelas av administratören`,ready:"Ansluten till servern",offline:"Servern är inte ansluten.",entry:"Siffrorna stannar här tills du trycker #.",sending:"Inväntar servern…"}});
-      } catch { events.onerror(); }
+        lastContact = performance.now();
+        if (!response.ok) lost();
+        else if (version === pollVersion) update({frames:[frame],audit:[],text:{title:"TMBox",subtitle:location.host,
+          session:`Enhetskod: ${identity.device_code} · Station tilldelas av administratören`,ready:"Ansluten till servern",offline:"Servern är inte ansluten.",entry:"Siffrorna stannar här tills du trycker #."}});
+      } catch { if (response && response.status < 500) lost(); else silent(); }
     }
-    setTimeout(pollLive,1000);
+    setTimeout(pollLive,POLL_MS);
   }
   if (live) {
     document.querySelector("#start-client").addEventListener("click",()=>{localStorage.removeItem("trainmeet.browser-tmbox");startLive();});
-    document.addEventListener("visibilitychange",()=>{if(document.hidden){++pollVersion;for(const model of boxes.values())model.entry.clear();events.onerror();}});
+    document.addEventListener("visibilitychange",()=>{if(document.hidden){++pollVersion;lost();}});
     loadLiveChrome();
     startLive().then(pollLive);
   }
