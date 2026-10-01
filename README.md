@@ -854,8 +854,22 @@ Viktiga API:er:
 - `POST /v1/tkl/clearance`
 - `POST /v1/tkl/line-available`
 
-Den separat installerade TKL-terminalen kopplas med en lokal kod. Före varje körning tar
-en namngiven operatör stationen i tjänst. Pågående trafikärenden överlever
+Den separat installerade TKL-terminalen kopplas med en lokal kod:
+
+- Adressen och koden står i Drift, i kortet **Anslut ställverk och appar** under
+  Klienter, och under **Inställningar → Anslutning**. Där står också varför
+  koden saknas eller inte längre gäller. **Ny kod** ger en ny kod för nya
+  ställverk; de som redan är anslutna fortsätter.
+- Koden finns bara när den aktiva träffen i Cloud har stationspaneler. Den
+  visas bara för administratören, aldrig i den publika `/v1/display`.
+- En ny träff ger en ny kod, så att ett ställverk från förra träffen inte kommer
+  in i den nya. Koden sparas i `connection-code.txt`, som konsolen och
+  installationen läser.
+- Varje anslutet ställverk syns i Klienter under **Ställverk (TKL)** med station
+  och onlineläge. **Ta bort** stänger ute det direkt, och terminalen ber då om
+  koden igen.
+
+Före varje körning tar en namngiven operatör stationen i tjänst. Pågående trafikärenden överlever
 överlämning, terminalbyte och serveromstart. Tågklarering, avgång och ankomst går
 via samma auktoritativa trafikmotor som de fysiska TMBoxarna.
 

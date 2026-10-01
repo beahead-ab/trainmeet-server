@@ -429,6 +429,17 @@ class IdentityStore:
                 (pairing_id,),
             )
 
+    def pairing_code_state(self, *, label: str) -> dict[str, Any] | None:
+        """How far the code with this label has been used, and until when.
+
+        There is one at a time: a new one is issued after revoke_pairing_codes."""
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT uses, max_uses, expires_at FROM pairing_codes WHERE label = ?",
+                (label,),
+            ).fetchone()
+        return None if row is None else {"uses": row[0], "max_uses": row[1], "expires_at": row[2]}
+
     def revoke_pairing_codes(self, *, label: str) -> None:
         with self._lock:
             self._connection.execute(

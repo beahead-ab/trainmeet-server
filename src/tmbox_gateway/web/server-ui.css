@@ -11,9 +11,9 @@
 button.secondary, .server-step-card button.secondary { color: var(--text); background: white; border-color: #d9d9d9; }
 #overview-traffic-heading { font-size: 13px; }
 #app-view input, #app-view select { border-radius: 6px; }
-:is(#device-list, #device-removed-trying) .status-row > div:first-child { min-width: 0; }
-:is(#device-list, #device-removed-trying) .status-row b { white-space: nowrap; }
-:is(#device-list, #device-removed-trying) .status-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row > div:first-child { min-width: 0; }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row b { white-space: nowrap; }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [hidden], .hidden, .legacy-internal { display: none !important; }
 body { font-family: var(--font); font-size: 13px; line-height: 1.45; }
 /* Typography guard rails: only the two shipped families, only shipped weights.
@@ -125,24 +125,24 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 #device-management h2, #station-placement h2 { font-size: 13px; margin: 0; }
 #station-placement > h2 { padding: 9px 12px; border-bottom: 1px solid var(--border-soft); }
 #station-placement > .server-placement-note { margin: 8px 12px; font-size: 12px; color: var(--muted); }
-#device-list, #device-removed-trying { display: block; margin: 0; }
+#device-list, #terminal-list, #device-removed-trying { display: block; margin: 0; }
 /* Code · station · status · actions. The status sits just before the buttons,
    in the same place on every row whatever the station's name. */
-:is(#device-list, #device-removed-trying) .status-row { display: grid; grid-template-columns: minmax(170px,1fr) minmax(140px,1fr) auto minmax(260px,2fr); align-items: center; gap: 10px; padding: 7px 12px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: 0; }
-:is(#device-list, #device-removed-trying) .status-row > div:first-child { display: flex; align-items: baseline; gap: 8px; }
-:is(#device-list, #device-removed-trying) .status-row b, :is(#device-list, #device-removed-trying) .status-row span { font-size: 12.5px; }
-:is(#device-list, #device-removed-trying) .status-row small { font-size: 11px; }
-:is(#device-list, #device-removed-trying) .device-actions { justify-content: flex-end; gap: 6px; }
-:is(#device-list, #device-removed-trying) .device-actions button { font-size: 11.5px; padding: 4px 8px; min-height: 26px; }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row { display: grid; grid-template-columns: minmax(170px,1fr) minmax(140px,1fr) auto minmax(260px,2fr); align-items: center; gap: 10px; padding: 7px 12px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: 0; }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row > div:first-child { display: flex; align-items: baseline; gap: 8px; }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row b, :is(#device-list, #terminal-list, #device-removed-trying) .status-row span { font-size: 12.5px; }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row small { font-size: 11px; }
+:is(#device-list, #terminal-list, #device-removed-trying) .device-actions { justify-content: flex-end; gap: 6px; }
+:is(#device-list, #terminal-list, #device-removed-trying) .device-actions button { font-size: 11.5px; padding: 4px 8px; min-height: 26px; }
 /* .status-row > outranks app.css "#device-list .status-row > span" (the station column). */
-:is(#device-list, #device-removed-trying) .status-row > .device-connection { justify-self: end; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
-:is(#device-list, #device-removed-trying) .device-connection::before { content: ""; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-:is(#device-list, #device-removed-trying) .status-row > .device-connection--online { color: var(--ok-text); }
-:is(#device-list, #device-removed-trying) .status-row > .device-connection--online::before { background: var(--ok-text); }
-:is(#device-list, #device-removed-trying) .status-row > .device-connection--lost { color: var(--warn-text); font-weight: 600; }
-:is(#device-list, #device-removed-trying) .status-row > .device-connection--lost::before { background: var(--warn-dot); }
-:is(#device-list, #device-removed-trying) .status-row > .device-connection--offline { color: var(--muted); }
-:is(#device-list, #device-removed-trying) .status-row > .device-connection--offline::before { border: 1.5px solid var(--muted); box-sizing: border-box; }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row > .device-connection { justify-self: end; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+:is(#device-list, #terminal-list, #device-removed-trying) .device-connection::before { content: ""; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row > .device-connection--online { color: var(--ok-text); }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row > .device-connection--online::before { background: var(--ok-text); }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row > .device-connection--lost { color: var(--warn-text); font-weight: 600; }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row > .device-connection--lost::before { background: var(--warn-dot); }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row > .device-connection--offline { color: var(--muted); }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row > .device-connection--offline::before { border: 1.5px solid var(--muted); box-sizing: border-box; }
 #device-removed-trying .status-row > span { text-align: left; }
 #device-removed-trying h3 { margin: 10px 12px 2px; font-size: 12px; color: var(--muted); font-weight: 600; }
 #device-management .device-reconnect { margin: 6px 12px; font-size: 12px; }
@@ -238,9 +238,9 @@ button.server-event[aria-pressed="true"] { background: var(--trainmeet-soft); co
   .tm-clockrow__aside { flex: 1 1 100%; width: auto; border: 0; border-top: 1px solid var(--border); }
   #settings-heading { display: block; }
   #settings-heading h2 { margin-bottom: 10px; }
-  :is(#device-list, #device-removed-trying) .status-row { grid-template-columns: 1fr; }
-  :is(#device-list, #device-removed-trying) .status-row > .device-connection { justify-self: start; }
-  :is(#device-list, #device-removed-trying) .device-actions { justify-content: flex-start; flex-wrap: wrap; }
+  :is(#device-list, #terminal-list, #device-removed-trying) .status-row { grid-template-columns: 1fr; }
+  :is(#device-list, #terminal-list, #device-removed-trying) .status-row > .device-connection { justify-self: start; }
+  :is(#device-list, #terminal-list, #device-removed-trying) .device-actions { justify-content: flex-start; flex-wrap: wrap; }
   #device-management > .section-heading { flex-wrap: wrap; }
   #drift-simulation-details > div { grid-template-columns: 1fr; }
 }
@@ -544,3 +544,17 @@ html, body { overflow-x: clip; }
   /* Card headings stay left-aligned when their row stacks on a phone. */
   #app-view .section-heading { align-items: flex-start; text-align: left; }
 }
+/* Drift › Anslut ställverk och appar: the address and the code, large, with what to type where. */
+#connect-terminals .connect-facts { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 6px 0 4px; }
+#connect-terminals .connect-fact { display: grid; grid-template-columns: auto auto; align-items: center; gap: 2px 10px; }
+#connect-terminals .connect-fact .server-field-label { grid-column: 1 / -1; }
+#connect-terminals .connect-value { font: 700 20px/1.2 var(--font-mono); letter-spacing: .02em; }
+#connect-terminals #connect-code { font-size: 26px; letter-spacing: .08em; }
+#connect-terminals .connect-copy { font-size: 11.5px; padding: 3px 8px; min-height: 24px; }
+#connect-terminals .connect-note:empty { display: none; }
+#connect-terminals .connect-note { margin: 6px 0; padding: 6px 10px; border-radius: 6px; background: var(--warn-bg); color: var(--warn-text); font-size: 12.5px; }
+#connect-terminals .connect-steps { margin: 8px 0 10px; padding-left: 20px; font-size: 12.5px; color: var(--text-2); }
+#connect-terminals .connect-steps li { margin: 2px 0; }
+#connect-terminals .connect-renew-note { font-size: 11.5px; color: var(--muted); margin: 4px 0 0; }
+#terminal-list h3 { margin: 10px 12px 2px; font-size: 12px; color: var(--muted); font-weight: 600; }
+#terminal-list .status-row > span { text-align: left; }

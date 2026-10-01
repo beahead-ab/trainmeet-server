@@ -1363,7 +1363,9 @@ class ConnectionBadgeTests(unittest.TestCase):
         connection = self._connection(host_header="192.0.2.10:8787")
 
         self.assertEqual(connection["host"], "192.0.2.10")
-        self.assertEqual(connection["code"], "042-137")
+        # /v1/display is public; the code that lets a terminal in is not in it.
+        self.assertEqual(connection["code"], "")
+        self.assertEqual(self.application.connection_details("192.0.2.10:8787", private=True)["code"], "042-137")
 
     def test_a_real_lan_address_is_not_overridden_by_the_request_host(self):
         self.application.config = HTTPServerConfig(

@@ -241,10 +241,12 @@ const root = path.resolve(__dirname, '../..');
     await screenMenu.locator('summary').click();
     await page.keyboard.press('Escape');
     assert.equal(await screenMenu.getAttribute('open'),null,'Escape closes the menu');
-    // ⚙ › Skärmar och klocka is four parts that each save only their own
-    // fields, and Farozon is the last card on the page.
+    // ⚙ › Skärmar och klocka is three parts that each save only their own
+    // fields; the code for apps and TKL has its own category, Anslutning
+    // (1.22.0). Farozon is the last card on the page.
     await page.goto(urls.eu+'/installningar');
-    assert.deepEqual(await page.locator('.clock-control-card .server-part__title').allTextContents(),['Klocka','QR-koder på skärmarna','Kod för appar och TKL','Träffens Wi-Fi']);
+    assert.deepEqual(await page.locator('.clock-control-card .server-part__title').allTextContents(),['Klocka','QR-koder på skärmarna','Träffens Wi-Fi']);
+    assert.equal(await page.locator('#connection-settings #connection-code-form').count(),1);
     assert.equal(await page.locator('#admin-view > .server-card').last().getAttribute('data-anchor'),'farozon');
     await page.locator('#connection-wifi-name').fill('Test-Wifi');
     await page.locator('#connection-wifi-password').fill('test-only-1234');
