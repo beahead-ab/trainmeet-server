@@ -28,9 +28,6 @@
     const node = make("section", "card section-card server-card"); node.id = id;
     node.append(authored("h2", "", title)); return node;
   }
-  function details(title, content) {
-    const d = make("details", "server-details"); d.append(authored("summary", "", title), content); return d;
-  }
   // Drift folds nothing away (Casper, 2026-10-01): a module is a heading and
   // what is in it, always shown.
   function block(title, content) {
@@ -360,13 +357,14 @@
   // started by merely visiting Help.
   const help = card("Hjälp", "help-view"); help.classList.add("view-panel", "hidden");
   const helpLinks = make("div", "server-actions");
-  for (const [path, label] of [["/tmbox/", "Öppna TMBox"], ["/tmbox-lab/", "TMBox-provbänk"], ["/drift", "Tillbaka till driften"]]) {
+  for (const [path, label] of [["/tmbox/", "Öppna TMBox"], ["/tmbox-lab/floden", "TMBox-flöden"], ["/tmbox-lab/", "TMBox-provbänk"], ["/drift", "Tillbaka till driften"]]) {
     const a = authored("a", "tm-btn", label); a.href = path; helpLinks.append(a);
   }
   help.append(helpLinks);
-  for (const [id, label] of [["#tmbox-pane-floden", "Flöden"], ["#tmbox-pane-skarmar", "Skärmkatalog"], ["#tmbox-pane-referens", "Referens"]]) {
-    const content = $(id); content.classList.remove("hidden"); help.append(details(label, content));
-  }
+  // The flows, screens and reference that used to follow here were drawn by
+  // the ESP32 and V1 engines, which the boxes no longer run. /tmbox-lab/floden
+  // is drawn by the 16x2 engine they do run.
+  help.append(authored("p", "tm-meta", "TMBox-flöden visar varje bild en box med 16 × 2-display får, steg för steg, direkt ur servern."));
   $(".server-workspace").append(help);
 
   const api = { make, move, t, context: null, info: null, presentation: null };

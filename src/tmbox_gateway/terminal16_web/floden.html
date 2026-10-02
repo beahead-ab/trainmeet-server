@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TMBox · Flöden</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/ikon/trainmeet-ikon.svg">
+  <link rel="stylesheet" href="/assets/server-design.css"><link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./flows.css">
+  <script src="./lcd.js" defer></script><script src="./flows.js" defer></script><script src="./flows-page.js" defer></script>
+</head>
+<body data-terminal="flows">
+  <header class="tm-top">
+    <img class="tm-top__mark" src="/assets/ikon/trainmeet-ikon.svg" alt="" width="26" height="26">
+    <b class="tm-top__name"><span class="tm-top__prefix">TMBox · </span>Flöden</b>
+    <span class="tm-top__sub">Så arbetar en box med 16 × 2-display</span>
+    <span class="tm-top__spacer"></span>
+    <nav class="tm-top__nav" aria-label="Sidor"><a class="tm-btn tm-btn--sm" href="./">Provbänk</a><a class="tm-btn tm-btn--sm" href="/tmbox/">Virtuell TMBox</a><a class="tm-btn tm-btn--sm" href="/">Träffens sida</a></nav>
+  </header>
+  <main class="flows-main">
+    <section class="tm-card" aria-labelledby="flows-title">
+      <div class="tm-card__head"><h1 id="flows-title">Flöden på TMBox</h1><span class="c">bilderna kommer direkt ur servern</span></div>
+      <div class="tm-card__body">
+        <p class="tm-prose">Varje bild här är en bild som servern har skickat till en box, steg för steg, i den här versionen av TrainMeet Server. Ändras det boxen visar, ändras sidan med den. Exemplen använder provbänkens testdata: <strong>Munkeröd (MUN) – Charlottendal (CDA) – Vagnsta (VA)</strong>, med klockan stilla på 12:34.</p>
+        <p class="tm-prose">Övre raden visar tågen: tågnummer och motstation, med ett tecken emellan. <b>-</b> inget begärt, <b>?</b> begärt, <b>&gt;</b> eller <b>&lt;</b> klartecken, <b>▶</b> eller <b>◀</b> avgånget. Spetsen pekar åt det håll tåget går. Nedre raden säger vad tangenterna gör just nu, och visar träffklockan.</p>
+        <p class="tm-prose"><b>0–9</b> skriver tågnummer. <b>#</b> bekräftar. <b>*</b> går tillbaka eller avbryter. <b>A</b> öppnar förfrågningskön. <b>B</b> visar aktiva tåg. <b>C/D</b> bläddrar.</p>
+        <nav id="flow-index" class="flow-index" aria-label="Flöden"></nav>
+      </div>
+    </section>
+    <div id="flows" class="flows"></div>
+    <footer class="tm-foot tm-foot--lab"><span>Prova själv i <a href="./">provbänken</a>, med samma testdata. Träffen på er TrainMeet Server påverkas aldrig.</span></footer>
+  </main>
+</body>
+</html>
