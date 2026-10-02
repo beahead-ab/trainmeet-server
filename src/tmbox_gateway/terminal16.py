@@ -128,6 +128,25 @@ class Terminal16Lab:
         return sorted(result, key=lambda key: (self._schedule(terminal, self.legs[key])["order"],
                                               self.legs[key]["train_number"], key))
 
+    def _lookup(self, terminal, number):
+        """The legs a typed number means here, one wherever it can be told.
+
+        A through train has two at its station: in from MUN and on to MUN.
+        The one with a case wins (a request to answer, a train to receive or
+        an own request); with both under way the arrival comes first, and
+        the departure is under B. Until 2.0.2 such a number matched twice and
+        the box got no answer at all.
+        """
+        matches = [key for key in self._candidates(terminal) if self.legs[key]["train_number"] == number]
+        if len(matches) > 1:
+            active = [key for key in matches if self._is_active(self.legs[key])]
+            if len(active) == 1:
+                return active
+            arriving = {self.legs[key]["to_movement_id"] for key in matches
+                        if self.legs[key]["to_station_id"] == terminal.station}
+            matches = [key for key in matches if self.legs[key]["from_movement_id"] not in arriving]
+        return matches
+
     def timetable(self, device):
         """Read-only test aid: keep the full schedule, including completed trains."""
         with self.lock:
@@ -375,7 +394,9 @@ class Terminal16Lab:
             return buttons
         if not active_view:
             buttons.update(C=("previous", "Föregående tåg"), D=("next", "Nästa tåg"))
-        if own and line.state == State.FREE and self._departure_ready(leg):
+        # A through train's next leg can be requested while it is still on
+        # its way in (Casper, 2026-10-02); it departs only once it has come.
+        if own and line.state == State.FREE:
             direct = (self.engine.config.connections[leg["connection_id"]].dispatch_mode_override
                       or self.engine.config.default_dispatch_mode) == DispatchMode.DIRECT
             buttons["#"] = ("request", "Reservera" if direct else "Begär klartecken")
@@ -386,8 +407,9 @@ class Terminal16Lab:
             else:
                 buttons.update({"#": ("accept", "Ge klart"), "*": ("reject_view", "Neka begäran…")})
         elif active and line.state == State.RESERVED and own:
-            buttons.update({"#": ("depart", "Rapportera avgång"), "*": ("cancel_view", "Återta klartecken…"),
-                            "B": ("home", "Översikt utan trafikändring")})
+            buttons.update({"*": ("cancel_view", "Återta klartecken…"), "B": ("home", "Översikt utan trafikändring")})
+            if self._departure_ready(leg):
+                buttons["#"] = ("depart", "Rapportera avgång")
         elif active and line.state == State.OCCUPIED and not own:
             buttons.update({"#": ("arrive", "Rapportera ankomst"), "B": ("tracks", "Annat ankomstspår")})
         return buttons
@@ -463,9 +485,16 @@ class Terminal16Lab:
                                                "C/D A:Kö" if "C" in buttons else "A:Kö *=Bak")
             if action == "request" and buttons["#"][1] == "Reservera":
                 hint = "#Sändklar"
+            # Cleared, but the train has not come in yet: no #Avg, and why.
+            waiting = (selected["from_station_id"] == terminal.station and self._is_active(selected)
+                       and self._line(selected).state == State.RESERVED and not self._departure_ready(selected))
+            if waiting and terminal.screen != "active":
+                note = t("EJ ANK")
+                if len(text_cells(label)) + len(text_cells(note)) < 16:
+                    first = row(label, note) if side == "left" else row(note, label)
             if terminal.screen == "active":
                 counter = f"{compact(active_position)}/{compact(len(active))}"
-                hint = {"depart": "#Avg C/D", "arrive": "#In B:Sp"}.get(action, "C/D B:Öv")
+                hint = {"depart": "#Avg C/D", "arrive": "#In B:Sp"}.get(action, "EJ ANK C/D" if waiting else "C/D B:Öv")
                 if len(text_cells(label)) + len(counter) < 16:
                     first = row(label, counter) if side == "left" else row(counter, label)
                 else:
@@ -576,7 +605,7 @@ class Terminal16Lab:
                     or not isinstance(number, str) or not re.fullmatch(r"[0-9]{1,5}", number)):
                 return self._answer(device, False, "Ogiltig eller gammal inmatning")
             self._dismiss_receipt(terminal)
-            matches = [key for key in self._candidates(terminal) if self.legs[key]["train_number"] == number]
+            matches = self._lookup(terminal, number)
             if len(matches) != 1:
                 here = [leg for key, leg in self.legs.items() if leg["train_number"] == number and key not in self.completed
                         and terminal.station in {leg["from_station_id"], leg["to_station_id"]}]
@@ -584,7 +613,7 @@ class Terminal16Lab:
                 # The train is here, but on the lines the station's other box handles.
                 other_side = here and not any(self._on_side(terminal, leg) for leg in here)
                 terminal.notice = (("ANNAN SIDA" if other_side else "EJ BEGÄRT ÄN" if future_arrival else "INGET TÅG")
-                                   if not matches else "FLERA TÅG - ADMIN")
+                                   if not matches else "FLERA TÅG ADMIN")
             else:
                 terminal.selected, terminal.screen, terminal.notice = matches[0], "detail", ""
                 terminal.browse_filter = "all"

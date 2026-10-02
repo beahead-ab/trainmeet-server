@@ -48,7 +48,7 @@ class TMBoxFlowsTest(unittest.TestCase):
 
     def test_the_flows_say_what_casper_asked_for(self):
         """Klarera, ta emot, hitta ett klarerat tåg - and the ways a box says no."""
-        self.assertEqual(11, len(self.data["flows"]))
+        self.assertEqual(12, len(self.data["flows"]))
         self.assertEqual("TÅG: 39___      ", self.lines("klarera", 0, "CDA")[0])
         self.assertEqual("CDA?39       1/1", self.lines("klarera", 2, "VA")[0])
         self.assertEqual("39 MOTTAGET     ", self.lines("klarera", 5, "CDA")[0])
@@ -62,6 +62,15 @@ class TMBoxFlowsTest(unittest.TestCase):
         self.assertEqual("INGA ANKOMSTER  ", self.lines("tidtabell", 2, "CDA")[0])
         self.assertEqual("EJ BEGÄRT ÄN    ", self.lines("nej", 0, "CDA")[0])
         self.assertEqual("INGET TÅG       ", self.lines("nej", 2, "CDA")[0])
+        # A through train: the departure is requested before the train has come,
+        # and departs once it has.
+        self.assertEqual(["MUN-55          ", "#Beg A:Kö  12:34"], self.lines("genomgaende", 0, "CDA"))
+        self.assertEqual("1/1       55?CDA", self.lines("genomgaende", 1, "MUN")[0])
+        self.assertEqual(["MUN<55    EJ ANK", "*Åter B:Öv 12:34"], self.lines("genomgaende", 2, "CDA"))
+        self.assertEqual("1/1        55?VA", self.lines("genomgaende", 5, "CDA")[0])
+        self.assertEqual("55 ANK SP2      ", self.lines("genomgaende", 8, "CDA")[0])
+        self.assertEqual(["MUN<55          ", "#Avg *Åter 12:34"], self.lines("genomgaende", 10, "CDA"))
+        self.assertEqual(["          55◀CDA", "#In B:Sp   12:34"], self.lines("genomgaende", -1, "MUN"))
         self.assertEqual("ANNAN SIDA      ", self.lines("tva-boxar", 0, "CDA-V")[0])
         self.assertEqual(" " * 16, self.lines("tva-boxar", -1, "CDA-V")[0])
 

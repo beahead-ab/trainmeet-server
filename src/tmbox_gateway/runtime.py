@@ -446,6 +446,8 @@ class SQLiteRuntimeStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        # The active publication, parsed once: (publication_id, checksum, parsed).
+        self._parsed: tuple[str, str, RuntimePublication] | None = None
         self._connection = sqlite3.connect(
             self.path,
             timeout=10,
@@ -536,17 +538,34 @@ class SQLiteRuntimeStore:
         return publication
 
     def active(self) -> RuntimePublication | None:
+        """The active publication, parsed once while it stays active.
+
+        Until 2.0.2 every call read and parsed the whole publication again,
+        and the 16x2 boxes call this dozens of times per key press and per
+        station on every redraw: on a Pi with a real meet a press took four
+        seconds to answer. The checksum is the sha256 of the content, and an
+        id is never installed with another checksum, so (id, checksum) says
+        when to parse again. Callers share the result and must not change it.
+        """
         with self._lock:
             row = self._connection.execute(
-                "SELECT payload_json FROM runtime_publications WHERE active = 1"
+                "SELECT publication_id, checksum FROM runtime_publications WHERE active = 1"
             ).fetchone()
-        if row is None:
-            return None
+            if row is None:
+                return None
+            if self._parsed is not None and self._parsed[:2] == (row[0], row[1]):
+                return self._parsed[2]
+            text = self._connection.execute(
+                "SELECT payload_json FROM runtime_publications WHERE publication_id = ?", (row[0],)
+            ).fetchone()[0]
         try:
-            payload = json.loads(row[0])
+            payload = json.loads(text)
         except json.JSONDecodeError as error:
             raise RuntimePublicationError("Det aktiva driftpaketet är skadat") from error
-        return RuntimePublication.parse(payload)
+        publication = RuntimePublication.parse(payload)
+        with self._lock:
+            self._parsed = (row[0], row[1], publication)
+        return publication
 
     def quarantine_active(self, error: str) -> None:
         """Keep an invalid publication, but prevent it from blocking server startup."""
