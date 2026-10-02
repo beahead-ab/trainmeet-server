@@ -199,7 +199,7 @@ def main() -> None:
     station_service = TMBoxStationService(runtime_store, operations_store, identities)
     transport = MQTTTransport(gateway_id=args.gateway_id, host=broker_host, port=args.mqtt_port)
     discovery_advertiser = _start_discovery_advertiser(
-        args.mqtt_port, server_id=runtime_store.discovery_server_id()
+        args.mqtt_port, server_id=runtime_store.discovery_server_id(), http_port=args.http_port
     )
 
     local_ip = args.advertised_host.strip() or _local_ip()
@@ -444,17 +444,22 @@ def _start_discovery_advertiser(
     *,
     server_id: str = "",
     protocol_version: int = 2,
+    http_port: int | None = None,
 ) -> subprocess.Popen[bytes] | None:
     """Announce this server on the meeting network as _tmbox._tcp.
 
     A box resolves the address from this record, so the service name has to be
     the one the firmware looks for. The TXT record carries the protocol
     generation (2: firmware 0.7 and later) and a server id, so a box on a
-    network with several servers can tell them apart.
+    network with several servers can tell them apart. The record points at the
+    MQTT port the boxes use; `http` names the web port, where the iPhone TMBox
+    finds the same server.
     """
     records = [f"protocol={protocol_version}"]
     if server_id:
         records.append(f"server_id={server_id}")
+    if http_port:
+        records.append(f"http={http_port}")
     if sys.platform == "darwin":
         executable = shutil.which("dns-sd")
         command = (

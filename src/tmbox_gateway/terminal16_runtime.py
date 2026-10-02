@@ -176,6 +176,17 @@ class Terminal16Service:
                     "lines": lines, "lcd": encode_lcd(lines), "keys": {}, "entry": None,
                     "view_token": "", "status": "Administratören tilldelar station i Inställningar."}
 
+    def timetable(self, device):
+        """The station timetable beside the box; empty until a station is assigned."""
+        with self.service.operations_store.command_lock:
+            views = self._views(device)
+            if views is None:
+                return {"station": None, "side": None, "clock": None, "revision": 0, "rows": []}
+            result = views.station_timetable(device)
+            if self.service.simulation and self.service.simulation.active:
+                result["simulation"] = True
+            return result
+
     def command(self, device, body):
         with self.service.operations_store.command_lock:
             views = self._views(device)
