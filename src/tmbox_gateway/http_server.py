@@ -159,7 +159,6 @@ def _tkl_engine_reason(reason: str) -> str:
         "unknown_track": "Spåret finns inte i stationens spårkatalog",
         "departure_not_reserved": "Tåget saknar beviljad klarering",
         "train_not_departed": "Tåget finns inte registrerat på sträckan",
-        "train_not_arrived": "Tåget har inte ankommit till stationen",
         "request_no_longer_pending": "Klareringsförfrågan gäller inte längre",
         "interaction_owned": "En annan terminal arbetar redan med samma A–D-panel",
     }.get(reason, "Sträckåtgärden kunde inte genomföras")

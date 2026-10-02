@@ -123,8 +123,6 @@ class SharedPanelTraffic:
                     elif action == "depart":
                         operation, body = "train.departed", {"movement_id": case["movement_id"]}
                     elif action == "arrive":
-                        if not self.service.case_departed(case):
-                            raise CommandRejected("train_not_departed")
                         movement = self.service.resolve_number(station_id, self.service.case_train_number(case), arrival=True)
                         operation, body = "train.arrived", {"movement_id": movement["id"]}
                     else:

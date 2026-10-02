@@ -100,6 +100,9 @@ tmbox/terminal/device/esp8266-308398b57200/ack
             "keys": {"#": {"label": "Begär klartecken", "acts": true}, …}, "view_token": "9502eba8…"}}
 ```
 
+Sedan Server 2.1.0 begär samma tryck klartecken direkt, och bilden i kvittot blir
+`CDA?428` / `*Åter B:Öv` i stället för `CDA-428` / `#Beg A:Kö`.
+
 Livstecknet, också fångat:
 
 ```json

@@ -22,7 +22,7 @@ from tmbox_gateway.terminal16_demo import demo_lab
 TRAFFIC_ACTIONS = {"request", "accept", "reject", "cancel", "depart", "arrive", "arrive_track"}
 # Reached only through a few exact paths, so they are pressed on purpose in
 # the scripted tests below rather than hoped for in the random walk.
-SCRIPTED = {"reject_view", "next_request", "previous_request", "next_track", "previous_track"}
+SCRIPTED = {"reject_view", "next_request", "previous_request", "next_track", "previous_track", "cancel_view"}
 
 
 class KeysSayWhetherTheyActTests(unittest.TestCase):
@@ -74,8 +74,9 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
         seen = self.walk(20261001)
         self.assertLessEqual(seen, NAVIGATION_ACTIONS | TRAFFIC_ACTIONS, seen - NAVIGATION_ACTIONS - TRAFFIC_ACTIONS)
         # Vandringen ska ha sett allt utom det som provas skriptat nedan,
-        # annars bevisar den för lite.
-        self.assertEqual(TRAFFIC_ACTIONS - {"reject"}, seen & TRAFFIC_ACTIONS - {"reject"})
+        # annars bevisar den för lite. Sedan 2.1.0 begär sökningen själv, så
+        # vandringen når sällan ett återtagande; det provas skriptat nedan.
+        self.assertEqual(TRAFFIC_ACTIONS - {"reject", "cancel"}, seen & TRAFFIC_ACTIONS - {"reject", "cancel"})
         self.assertLessEqual(NAVIGATION_ACTIONS - seen, SCRIPTED)
 
     def walk(self, seed, after_each=lambda: None):
@@ -99,11 +100,12 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
         return seen
 
     def test_boxes_on_one_side_keep_to_their_side(self):
-        """Samma vandring med två extra boxar på CDA, en för varje sida.
-        Märkningen ska hålla, trafiken ska ändå gå runt, och en box på ena
-        sidan får aldrig ha ett tåg från andra sidan valt."""
+        """Samma vandring med en box för varje sida på CDA i stället för den
+        som har båda. Märkningen ska hålla, trafiken ska ändå gå runt, och en
+        box på ena sidan får aldrig ha ett tåg från andra sidan valt."""
 
         lab = self.lab
+        del lab.terminals["DEMO-CDA"]
         lab.terminals["CDA-L"] = Terminal("cda", side="left")
         lab.terminals["CDA-R"] = Terminal("cda", side="right")
         sides = {lab._side("cda", other) for other in ("mun", "va")}
@@ -116,13 +118,15 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
                     self.assertTrue(lab._on_side(terminal, lab.legs[terminal.selected]), (name, terminal.selected))
 
         self.walk(20261002, keeps_to_its_side)
+        # Sedan 2.1.0 kan en ankomst placeras med #, så vandringens fyra tåg
+        # tar slut fort; varje sidobox ska ändå ha kört trafik på sin sida.
         for name in ("CDA-L", "CDA-R"):
             done = {action for device, action in self.traffic if device == name}
-            self.assertLessEqual({"request", "depart", "arrive"}, done, f"{name} ska köra trafik på sin sida")
+            self.assertTrue(done & TRAFFIC_ACTIONS, f"{name} ska köra trafik på sin sida")
 
     def test_reject_and_withdraw_paths_are_marked(self):
-        self.lookup("DEMO-CDA", "39")
-        self.assertEqual("request", self.press("DEMO-CDA", "#"))
+        self.lookup("DEMO-CDA", "39")                      # begär direkt (2.1.0)
+        self.assertEqual(("DEMO-CDA", "request"), self.traffic[-1])
         self.lookup("DEMO-VA", "39")
         self.assertEqual("reject_view", self.press("DEMO-VA", "*"))
         self.assertEqual("back", self.press("DEMO-VA", "*"))
@@ -130,15 +134,15 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
         self.assertEqual("reject", self.press("DEMO-VA", "#"))
         self.assertEqual("back", self.press("DEMO-CDA", "#"))  # meddelandet om nekat
         self.lookup("DEMO-CDA", "39")
-        self.assertEqual("request", self.press("DEMO-CDA", "#"))
+        self.assertEqual(("DEMO-CDA", "request"), self.traffic[-1])
         self.assertEqual("cancel_view", self.press("DEMO-CDA", "*"))
         self.assertEqual("cancel", self.press("DEMO-CDA", "#"))
 
     def test_queue_and_track_paths_are_marked(self):
         self.lookup("DEMO-MUN", "93")
-        self.assertEqual("request", self.press("DEMO-MUN", "#"))
+        self.assertEqual(("DEMO-MUN", "request"), self.traffic[-1])
         self.lookup("DEMO-VA", "94")
-        self.assertEqual("request", self.press("DEMO-VA", "#"))
+        self.assertEqual(("DEMO-VA", "request"), self.traffic[-1])
         self.assertEqual("requests", self.press("DEMO-CDA", "A"))
         self.assertEqual("next_request", self.press("DEMO-CDA", "D"))
         self.assertEqual("previous_request", self.press("DEMO-CDA", "C"))
@@ -161,7 +165,14 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
         frame = self.lab.frame("DEMO-CDA")
         self.assertFalse(frame["keys"]["D"]["acts"])
         self.assertFalse(frame["keys"]["A"]["acts"])
-        self.send("DEMO-CDA", "#", train_number="39", entry_context=frame["entry"]["context"])
+        # Ett skrivet nummer begär direkt sedan 2.1.0; '#' som begär erbjuds
+        # när tåget väljs ur tidtabellen.
+        self.assertEqual("browse", self.press("DEMO-CDA", "#"))
+        for _ in range(10):
+            if self.lab.terminals["DEMO-CDA"].selected == "39-cda":
+                break
+            self.press("DEMO-CDA", "D")
+        self.assertEqual("select", self.press("DEMO-CDA", "#"))
         frame = self.lab.frame("DEMO-CDA")
         self.assertEqual("Begär klartecken", frame["keys"]["#"]["label"])
         self.assertTrue(frame["keys"]["#"]["acts"])

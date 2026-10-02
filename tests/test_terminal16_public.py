@@ -131,8 +131,8 @@ class PublicHTTPTests(unittest.TestCase):
     def test_two_browsers_are_isolated_and_reset_does_not_affect_other(self):
         first, second = self.session(), self.session()
         self.assertNotEqual(first, second)
-        self.key(first, "#", "39"); self.key(first, "#")
-        self.key(second, "#", "17"); self.key(second, "#")
+        self.key(first, "#", "39")
+        self.key(second, "#", "17")
         before_other = self.state(second)
         status, _, data = self.request("/api/reset-devices", cookie=first, body={})
         self.assertEqual(status, 200)
@@ -142,7 +142,7 @@ class PublicHTTPTests(unittest.TestCase):
 
     def test_same_browser_reload_resumes_without_allocating_another_session(self):
         cookie = self.session()
-        self.key(cookie, "#", "39"); self.key(cookie, "#")
+        self.key(cookie, "#", "39")
         status, headers, _ = self.request(cookie=cookie)
         self.assertEqual(status, 200)
         self.assertNotIn("Set-Cookie", headers)
@@ -218,7 +218,7 @@ class PublicHTTPTests(unittest.TestCase):
 
     def test_sse_uses_only_session_snapshot(self):
         first, second = self.session(), self.session()
-        self.key(first, "#", "39"); self.key(first, "#")
+        self.key(first, "#", "39")
         connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=3)
         connection.request("GET", "/tmbox-lab/events", headers={"Host": "cloud.example", "Cookie": second})
         response = connection.getresponse()

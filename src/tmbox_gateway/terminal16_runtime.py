@@ -91,6 +91,11 @@ class RuntimeViews(Terminal16Lab):
         if action == "request":
             operation = "clearance.request"
             body = {"movement_id": leg["from_movement_id"], "connection_id": leg["connection_id"]}
+        elif action in {"arrive", "arrive_track"}:
+            # Also a train never sent in the system: it is placed here (2.1.0).
+            tracks = self._tracks(terminal)
+            track = tracks[terminal.track % len(tracks)].id if action == "arrive_track" and tracks else self._planned_track(leg)
+            operation, body = "train.arrived", {"movement_id": leg["to_movement_id"], "track_id": track}
         elif case is None:
             return "Läget ändrades. Välj tåget igen."
         elif action in {"accept", "reject", "cancel"}:
@@ -98,23 +103,20 @@ class RuntimeViews(Terminal16Lab):
             body = {"clearance_id": case["clearance_id"], "approved": action == "accept"}
         elif action == "depart":
             operation, body = "train.departed", {"movement_id": leg["from_movement_id"]}
-        elif action in {"arrive", "arrive_track"}:
-            tracks = self._tracks(terminal)
-            track = tracks[terminal.track % len(tracks)].id if action == "arrive_track" and tracks else self._planned_track(leg)
-            operation, body = "train.arrived", {"movement_id": leg["to_movement_id"], "track_id": track}
         else:
             return "Åtgärden finns inte"
         try:
-            self.service.execute_station_command(device, terminal.station, operation, body)
+            result = self.service.execute_station_command(device, terminal.station, operation, body) or {}
         except CommandRejected as error:
             return {"track_occupied": "Spåret är upptaget", "unknown_track": "Ankomstspåret är inte giltigt",
                     "channel_occupied": "Sträckan är upptagen", "departure_not_reserved": "Klartecken saknas",
-                    "train_not_departed": "Tåget har inte avgått", "train_not_arrived": "Tåget har inte ankommit"}.get(error.reason, str(error) if error.reason.startswith("simulation_") else "Läget ändrades. Välj tåget igen.")
+                    "train_not_departed": "Tåget har inte avgått"}.get(error.reason, str(error) if error.reason.startswith("simulation_") else "Läget ändrades. Välj tåget igen.")
         self.refresh()
         if action == "accept":
             terminal.screen = "detail"
         if action in {"arrive", "arrive_track", "cancel", "reject"}:
-            terminal.notice = f"{leg['train_number']} " + ("MOTTAGET" if action.startswith("arrive") else "ÅTERTAGET" if action == "cancel" else "NEKAT")
+            terminal.notice = f"{leg['train_number']} " + (("UPPT SPÅR" if result.get("track_occupied_by") is not None else "MOTTAGET")
+                                                          if action.startswith("arrive") else "ÅTERTAGET" if action == "cancel" else "NEKAT")
             terminal.notice_until = self.now() + 3
         return ""
 

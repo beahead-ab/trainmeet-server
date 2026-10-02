@@ -66,6 +66,24 @@ Exempel, fångade från mosquitto 2026-10-01 (bilden förkortad):
   `rejected` med en ny bild.
 - Ett tågnummer skickas med `#` som `train_number` (1–5 siffror) och
   `entry_context` ur bilden. Siffrorna stannar i boxen tills dess.
+- Är tåget en egen avgång med fri sträcka begär samma tryck klartecken, eller
+  reserverar på en direktsträcka (Server 2.1.0). `93#` räcker alltså, och `*`
+  återtar förfrågan tills mottagaren har svarat. Allt annat som numret hittar
+  (en förfrågan att svara på, ett tåg att ta emot, ett besked) väntar på sin
+  egen tangent. Går förfrågan inte att skicka blir svaret `rejected` med
+  skälet, och bilden visar tåget med *Begär klartecken*.
+- Systemet följer spelet i stället för att stoppa det (Server 2.1.0). Klartecken
+  krävs för avgång, men inte att tågets ankomst är registrerad: *Rapportera
+  avgång* finns så fort klartecknet finns. Har tåget inte setts komma, hoppar det
+  fram till stationen med avgången. Varje tidigare del av rutten som står öppen
+  avslutas: en väntande förfrågan återtas, ett klartecken släpps så att sträckan
+  blir fri, och avgången där räknas som gjord.
+- En ankomst kan alltid tas emot. Ett tåg som ingen skickat visas med numret och
+  i tidtabellen med *Placera på spår*, och `B` väljer annat spår. Ett tåg med
+  klartecken men utan rapporterad avgång placeras via `B` och spårvalet, så att
+  `#` efter *Ge klart* aldrig tar emot tåget. Tåget hoppar fram på samma sätt.
+- Ett upptaget spår stoppar inte en ankomst. Kvittot blir `<nr> UPPT SPÅR` i
+  stället för `<nr> MOTTAGET`.
 - `status` är `accepted`, `rejected` eller `duplicate`. `message` är en text att
   visa, på boxens språk.
 

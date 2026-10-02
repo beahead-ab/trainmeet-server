@@ -92,9 +92,11 @@ class TwoSidedStationTests(unittest.TestCase):
         return {views.legs[key]["train_number"] for key in views._candidates(views.terminals[device])}
 
     def test_each_box_sees_and_finds_only_the_trains_on_its_side(self):
-        self.assertEqual({"101", "303"}, self.trains("esp8266"), "both: the whole station, as before")
+        # 404 comes in from MUN: since 2.1.0 an arrival nobody has sent is in
+        # the list too, to be placed.
+        self.assertEqual({"101", "303", "404"}, self.trains("esp8266"), "both: the whole station, as before")
         self.assertEqual({"101"}, self.trains("cda-lek"))
-        self.assertEqual({"303"}, self.trains("cda-mun"))
+        self.assertEqual({"303", "404"}, self.trains("cda-mun"))
         timetable = lambda device: {row["train_number"] for row in self.terminals.views.timetable(device)["rows"]}
         self.assertEqual({"101", "303", "404"}, timetable("esp8266"))
         self.assertEqual({"101"}, timetable("cda-lek"))
@@ -111,13 +113,15 @@ class TwoSidedStationTests(unittest.TestCase):
         # Not "not requested yet" either: 404 arrives on the MUN side.
         self.assertEqual("ANNAN SIDA", self.send("cda-lek", "#", train_number="404")["frame"]["lines"][0].strip())
         self.send("cda-lek", "#")
-        self.assertEqual("EJ BEGÄRT ÄN", self.send("cda-mun", "#", train_number="404")["frame"]["lines"][0].strip())
-        self.send("cda-mun", "#")
+        # 404 from MUN, never sent: found on its side, to be placed (2.1.0).
+        frame = self.send("cda-mun", "#", train_number="404")["frame"]
+        self.assertEqual("404-MUN", frame["lines"][0].strip())
+        self.assertEqual("Placera på spår", frame["keys"]["#"]["label"])
+        self.send("cda-mun", "*")                          # back, without placing it
         self.assertEqual("INGET TÅG", self.send("cda-lek", "#", train_number="999")["frame"]["lines"][0].strip())
 
     def test_a_request_reaches_only_the_box_on_its_side(self):
         self.send("mun", "#", train_number="404")
-        self.send("mun", "#")
         mun_side, lek_side, both = (self.terminals.frame(device) for device in ("cda-mun", "cda-lek", "esp8266"))
         self.assertEqual(1, mun_side["requests"]["count"])
         self.assertIn("404", mun_side["lines"][0])
@@ -139,7 +143,6 @@ class TwoSidedStationTests(unittest.TestCase):
 
     def test_the_receipt_goes_to_the_senders_side_only(self):
         self.send("cda-lek", "#", train_number="101")
-        self.send("cda-lek", "#")
         self.assertEqual(1, self.terminals.frame("esp32")["requests"]["count"])
         self.send("esp32", "#")
         self.assertEqual(0, self.terminals.frame("cda-mun")["active"]["count"])
@@ -150,12 +153,14 @@ class TwoSidedStationTests(unittest.TestCase):
         self.assertNotIn("MOTTAGET", self.terminals.frame("cda-mun")["lines"][0])
 
     def test_changing_side_starts_the_box_afresh(self):
-        frame = self.send("cda-lek", "#", train_number="101")["frame"]
+        frame = self.terminals.frame("cda-lek")
         self.fixture.ids.assign_discovered_device("TBX-CDALEK", station_id="station-a", station_side=self.mun_side)
         fresh = self.terminals.frame("cda-lek")
-        self.assertEqual({"303"}, self.trains("cda-lek"))
+        self.assertEqual({"303", "404"}, self.trains("cda-lek"))
         self.assertNotEqual(frame["view_token"], fresh["view_token"])
-        stale = self.terminals.command("cda-lek", {"command_id": uuid4().hex, "view_token": frame["view_token"], "key": "#"})
+        # 101# typed on the old side would ask LEK at once (2.1.0): it must do nothing.
+        stale = self.terminals.command("cda-lek", {"command_id": uuid4().hex, "view_token": frame["view_token"], "key": "#",
+                                                   "train_number": "101", "entry_context": frame["entry"]["context"]})
         self.assertEqual("rejected", stale["status"], "a key pressed for the old side does nothing")
         self.assertEqual([], self.service.open_cases(None))
 

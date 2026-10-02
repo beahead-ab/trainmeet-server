@@ -65,8 +65,7 @@ class TrainDetailTests(unittest.TestCase):
 
     def test_where_the_train_is_follows_each_step(self):
         # LEK requests, CDA gives clear, LEK departs, CDA receives.
-        self.send("esp32", "#", train_number="505")
-        self.send("esp32", "#")
+        self.send("esp32", "#", train_number="505")         # asks at once (2.1.0)
         self.assertEqual({"state": "waiting", "from_station_id": "station-b", "to_station_id": "station-a"}, self.now())
         self.send("esp8266", "#")
         now = self.now()
@@ -86,7 +85,6 @@ class TrainDetailTests(unittest.TestCase):
         self.assertEqual(("4", "5"), (detail["stops"][1]["planned_track"], detail["stops"][1]["actual_track"]))
         # On to MUN, and in. The second leg is followed the same way.
         self.send("esp8266", "#", train_number="505")
-        self.send("esp8266", "#")
         self.assertEqual({"state": "waiting", "from_station_id": "station-a", "to_station_id": "station-c"}, self.now())
         self.send("munbox", "#")
         now = self.now()

@@ -18,7 +18,7 @@ from tmbox_gateway.terminal16_demo import demo_lab
 KEY_ORDER = "#*ABCD"
 MODES = {"clearance": "Med klartecken", "direct": "Direkttrafik"}
 # Flows run on the bench's meet with train 55 added, VA -> CDA -> MUN.
-THROUGH = {"genomgaende"}
+THROUGH = {"genomgaende", "hoppa-fram"}
 NOTICE_SECONDS, RECEIPT_SECONDS = 3, 5
 
 # Each flow: id, title, mode, the boxes it shows, when to use it, an optional
@@ -32,8 +32,8 @@ FLOWS = [
      "avsändaren rapporterar avgång och mottagaren tar emot.",
      None, [
         ("CDA", "39", "Skriv tågnumret direkt från översikten. Siffrorna stannar i boxen tills du trycker #."),
-        ("CDA", "#", "# söker tåget. 39 ska till Vagnsta; - betyder att inget är begärt än."),
-        ("CDA", "#", "# begär klartecken (?). Vagnsta står i översikten och visar förfrågan direkt."),
+        ("CDA", "#", "# söker tåget och begär klartecken (?) i samma tryck. 39 ska till Vagnsta, som står i "
+                     "översikten och visar förfrågan direkt. * återtar så länge Vagnsta inte har svarat."),
         ("VA", "#", "Vagnsta ger klart med #. Tecknet blir > hos båda."),
         ("CDA", "#", "Charlottendal rapporterar faktisk avgång med #. Sträckan är upptagen (▶) "
                      "och Vagnsta kan ta emot direkt."),
@@ -45,7 +45,7 @@ FLOWS = [
     ]),
     ("annat-spar", "Ta emot på ett annat spår", "clearance", ["CDA", "VA"],
      "När tåget ska in på ett annat spår än det planerade.",
-     ([("CDA", "39#"), ("CDA", "#"), ("VA", "#"), ("CDA", "#")],
+     ([("CDA", "39#"), ("VA", "#"), ("CDA", "#")],
       "39 har fått klart och avgått från Charlottendal mot Vagnsta."), [
         ("VA", "B", "B väljer annat ankomstspår. Boxen börjar på spår 1."),
         ("VA", "D", "C/D bläddrar bland stationens spår."),
@@ -53,7 +53,7 @@ FLOWS = [
     ]),
     ("neka", "Neka en förfrågan", "clearance", ["CDA", "VA"],
      "Mottagaren kan inte ta emot tåget just nu.",
-     ([("CDA", "39#"), ("CDA", "#")], "Charlottendal har begärt klartecken för 39."), [
+     ([("CDA", "39#")], "Charlottendal har begärt klartecken för 39."), [
         ("VA", "*", "* på förfrågan frågar först: NEKA 39? Inget är ändrat än."),
         ("VA", "#", "# bekräftar. Båda boxarna visar 39 NEKAT och sträckan är fri igen."),
         ("wait", NOTICE_SECONDS, "Vagnsta går tillbaka till översikten efter tre sekunder. "
@@ -62,7 +62,7 @@ FLOWS = [
     ]),
     ("aterta-begaran", "Återta en begäran", "clearance", ["CDA", "VA"],
      "Avsändaren ångrar sig innan mottagaren har svarat.",
-     ([("CDA", "39#"), ("CDA", "#")], "Charlottendal har begärt klartecken för 39."), [
+     ([("CDA", "39#")], "Charlottendal har begärt klartecken för 39."), [
         ("CDA", "*", "* frågar först: ÅTER 39? Förfrågan ligger kvar hos Vagnsta tills du bekräftar."),
         ("CDA", "#", "# återtar. Förfrågan försvinner ur Vagnstas kö."),
         ("wait", NOTICE_SECONDS, "Charlottendal går tillbaka till översikten efter tre sekunder."),
@@ -70,7 +70,7 @@ FLOWS = [
     ]),
     ("aterta-klartecken", "Återta ett klartecken före avgång", "clearance", ["CDA", "VA"],
      "Tåget har fått klart men ska inte gå ändå. Efter faktisk avgång går det inte att återta.",
-     ([("CDA", "39#"), ("CDA", "#"), ("VA", "#")], "Vagnsta har gett klart för 39."), [
+     ([("CDA", "39#"), ("VA", "#")], "Vagnsta har gett klart för 39."), [
         ("CDA", "*", "* frågar först: ÅTER 39? Klartecknet gäller tills du bekräftar."),
         ("CDA", "#", "# återtar. Vagnsta ser att klartecknet är borta (-)."),
         ("wait", NOTICE_SECONDS, "Charlottendal går tillbaka till översikten efter tre sekunder."),
@@ -78,10 +78,10 @@ FLOWS = [
     ("tva-forfragningar", "Två förfrågningar samtidigt", "clearance", ["MUN", "CDA", "VA"],
      "Charlottendal får förfrågningar från båda hållen.",
      None, [
-        ("MUN", "93#", "Munkeröd söker 93."),
-        ("MUN", "#", "Munkeröd begär klartecken. Charlottendal står i översikten och visar förfrågan direkt."),
-        ("VA", "94#", "Vagnsta söker 94."),
-        ("VA", "#", "Vagnsta begär också. Charlottendal stannar på förfrågan den visar; räknaren blir 1/2."),
+        ("MUN", "93#", "Munkeröd skriver 93 och trycker #: förfrågan går direkt. Charlottendal står i "
+                       "översikten och visar den."),
+        ("VA", "94#", "Vagnsta begär 94 på samma sätt. Charlottendal stannar på förfrågan den visar; "
+                      "räknaren blir 1/2."),
         ("CDA", "D", "D bläddrar till nästa förfrågan i kön, 2/2."),
         ("CDA", "#", "# ger klart för just det visade tåget, 94. Boxen stannar på det tåget."),
         ("CDA", "A", "A öppnar kön igen. Kvar är 93 från Munkeröd."),
@@ -89,7 +89,7 @@ FLOWS = [
     ]),
     ("hitta-aktivt", "Hitta ett tåg som har fått klart", "clearance", ["MUN", "CDA", "VA"],
      "Klartecknet kommer medan du gör något annat. B visar alla tåg som pågår.",
-     ([("CDA", "17#"), ("CDA", "#"), ("CDA", "B"), ("CDA", "39#"), ("CDA", "#"), ("CDA", "B")],
+     ([("CDA", "17#"), ("CDA", "B"), ("CDA", "39#"), ("CDA", "B")],
       "Charlottendal har begärt klartecken för 17 mot Munkeröd och 39 mot Vagnsta, och står i översikten."), [
         ("MUN", "#", "Munkeröd ger klart för 17."),
         ("VA", "#", "Vagnsta ger klart för 39. Charlottendals översikt visar båda och B:Akt2: två aktiva tåg."),
@@ -101,8 +101,8 @@ FLOWS = [
     ("direkt", "Direkttrafik utan klartecken", "direct", ["CDA", "VA"],
      "På en sträcka med direkttrafik reserverar avsändaren själv. Mottagaren får ingen förfrågan.",
      None, [
-        ("CDA", "39#", "Charlottendal söker 39. Knappen heter #Sändklar."),
-        ("CDA", "#", "# reserverar sträckan (>). Vagnsta ser tåget som aktivt: B:Akt1."),
+        ("CDA", "39#", "Charlottendal skriver 39 och trycker #. På direkttrafik reserverar det sträckan "
+                       "direkt (>). Vagnsta ser tåget som aktivt: B:Akt1."),
         ("CDA", "#", "# rapporterar avgång."),
         ("VA", "B", "Vagnsta öppnar det aktiva tåget med B."),
         ("VA", "#", "# tar emot på planerat spår."),
@@ -112,47 +112,57 @@ FLOWS = [
      None, [
         ("CDA", "#", "# från översikten öppnar stationens kommande tåg, med planerad tid."),
         ("CDA", "D", "C/D bläddrar."),
-        ("CDA", "B", "B filtrerar, först på ankomster. En ankomst går att välja först när avsändaren har begärt den."),
+        ("CDA", "B", "B filtrerar, först på ankomster. Även en ankomst som ingen har skickat går att välja och placera."),
         ("CDA", "B", "B igen visar bara avgångar. Ett tredje B visar alla tåg."),
         ("CDA", "#", "# väljer tåget. Nu kan du begära klartecken för det."),
     ]),
     ("nej", "När boxen säger nej", "clearance", ["CDA"],
-     "Boxen säger varför ett nummer inte går att välja. Inget skickas förrän du trycker #.",
+     "Boxen säger varför ett nummer inte går att välja. Siffrorna skickas först när du trycker #.",
      None, [
-        ("CDA", "93#", "93 kommer från Munkeröd men är inte begärt än. En ankomst går inte att välja "
-                       "innan avsändaren har begärt den."),
-        ("CDA", "#", "# kvitterar beskedet."),
         ("CDA", "123#", "Ett nummer som inte går vid stationen ger INGET TÅG."),
         ("CDA", "#", "# kvitterar."),
         ("CDA", "4", "Har du börjat skriva ett fel nummer, suddar B sista siffran …"),
         ("CDA", "*", "… och * tömmer hela inmatningen. Inget har skickats till servern."),
     ]),
     ("genomgaende", "Genomgående tåg", "clearance", ["VA", "CDA", "MUN"],
-     "Tåg 55 kommer in från Vagnsta och går vidare mot Munkeröd med samma nummer. Avgången går att "
-     "begära innan tåget har kommit, men tåget kan avgå först när ankomsten är registrerad.",
+     "Tåg 55 kommer in från Vagnsta och går vidare mot Munkeröd med samma nummer. Numret gäller "
+     "det som är på gång: först ankomsten, sedan avgången.",
      None, [
-        ("CDA", "55#", "Charlottendal söker 55 innan tåget har kommit. Inget är på gång än, så numret "
-                       "ger avgången mot Munkeröd."),
-        ("CDA", "#", "# begär klartecken redan nu. Munkeröd visar förfrågan direkt."),
-        ("MUN", "#", "Munkeröd ger klart. Tåget har inte kommit, så Charlottendal visar EJ ANK och har "
-                     "inget #Avg."),
-        ("CDA", "B", "B går till översikten utan att ändra något. Klartecknet mot Munkeröd ligger kvar."),
-        ("VA", "55#", "Vagnsta söker 55."),
-        ("VA", "#", "Vagnsta begär klartecken. Charlottendal står i översikten och visar förfrågan direkt."),
-        ("CDA", "#", "Charlottendal ger klart."),
+        ("VA", "55#", "Vagnsta begär 55 mot Charlottendal; förfrågan går direkt."),
+        ("CDA", "#", "Charlottendal står i översikten och ger klart."),
         ("VA", "#", "Vagnsta rapporterar avgång. Charlottendal kan ta emot direkt."),
         ("CDA", "#", "Charlottendal tar emot 55 på planerat spår."),
         ("wait", NOTICE_SECONDS, "Efter tre sekunder går Charlottendal tillbaka till översikten."),
-        ("CDA", "55#", "Nu har 55 kommit, och avgången mot Munkeröd har redan klart: #Avg."),
+        ("CDA", "55#", "Nu gäller numret avgången mot Munkeröd, och förfrågan går direkt."),
+        ("MUN", "#", "Munkeröd ger klart."),
         ("CDA", "#", "Charlottendal rapporterar avgång. Munkeröd kan ta emot."),
+    ]),
+    ("hoppa-fram", "Tåget hoppar fram", "clearance", ["VA", "CDA", "MUN"],
+     "Vagnsta tappade bort 55 och skickade det aldrig, men tåget står i Charlottendal. Charlottendal "
+     "skickar det vidare ändå. Systemet följer med i stället för att stoppa spelet.",
+     None, [
+        ("CDA", "55#", "Charlottendal skriver 55. Inget är på gång, så numret gäller avgången mot Munkeröd "
+                       "och förfrågan går direkt."),
+        ("MUN", "#", "Munkeröd ger klart. #Avg finns direkt, fast tåget aldrig lämnade Vagnsta i systemet."),
+        ("CDA", "#", "Charlottendal rapporterar avgång. Tåget hoppar fram: Vagnstas del räknas som gjord, "
+                     "och Vagnsta har inte längre 55 att skicka."),
+        ("MUN", "#", "Munkeröd tar emot 55."),
+    ]),
+    ("placera", "Placera ett tåg i efterhand", "clearance", ["MUN", "CDA"],
+     "Munkeröd skickade aldrig 93, men tåget kom till Charlottendal. Charlottendal placerar det på ett "
+     "spår i efterhand, med tidtabellens spår som förslag, och spelet går vidare.",
+     None, [
+        ("CDA", "93#", "Charlottendal skriver 93. Tåget visas ur tidtabellen med #In: placera på planerat spår."),
+        ("CDA", "B", "B väljer ett annat spår i stället. Boxen börjar på spår 1."),
+        ("CDA", "D", "C/D bläddrar bland stationens spår."),
+        ("CDA", "#", "# placerar 93 på det valda spåret. Munkeröds del räknas som gjord."),
     ]),
     ("tva-boxar", "Två boxar på samma station", "clearance", ["CDA-V", "CDA-H", "VA"],
      "En station kan ha en box per sida. Varje box hanterar bara tågen på sina sträckor.",
      None, [
         ("CDA-V", "39#", "Vänsterboxen (mot Munkeröd) söker 39, som går mot Vagnsta. Svaret blir ANNAN SIDA."),
         ("CDA-V", "#", "# kvitterar."),
-        ("CDA-H", "39#", "Högerboxen hittar tåget."),
-        ("CDA-H", "#", "# begär klartecken."),
+        ("CDA-H", "39#", "Högerboxen hittar tåget och begär klartecken direkt."),
         ("VA", "#", "Vagnsta ger klart. På Charlottendal visar bara högerboxen tåget."),
     ]),
 ]

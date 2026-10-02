@@ -48,29 +48,34 @@ class TMBoxFlowsTest(unittest.TestCase):
 
     def test_the_flows_say_what_casper_asked_for(self):
         """Klarera, ta emot, hitta ett klarerat tåg - and the ways a box says no."""
-        self.assertEqual(12, len(self.data["flows"]))
+        self.assertEqual(14, len(self.data["flows"]))
         self.assertEqual("TÅG: 39___      ", self.lines("klarera", 0, "CDA")[0])
-        self.assertEqual("CDA?39       1/1", self.lines("klarera", 2, "VA")[0])
-        self.assertEqual("39 MOTTAGET     ", self.lines("klarera", 5, "CDA")[0])
+        # 39# finds the train and asks Vagnsta in one press (Casper, 2026-10-02).
+        self.assertEqual(["           39?VA", "*Åter B:Öv 12:34"], self.lines("klarera", 1, "CDA"))
+        self.assertEqual("CDA?39       1/1", self.lines("klarera", 1, "VA")[0])
+        self.assertEqual("39 MOTTAGET     ", self.lines("klarera", 4, "CDA")[0])
         self.assertEqual(" " * 16, self.lines("klarera", -1, "CDA")[0])
         self.assertEqual("39 ANK SP2      ", self.lines("annat-spar", -1, "VA")[0])
         self.assertEqual("39 NEKAT        ", self.lines("neka", 1, "CDA")[0])
         self.assertEqual("CDA-39          ", self.lines("aterta-klartecken", 1, "VA")[0])
-        self.assertEqual("2/2        94?VA", self.lines("tva-forfragningar", 4, "CDA")[0])
+        self.assertEqual("2/2        94?VA", self.lines("tva-forfragningar", 2, "CDA")[0])
         self.assertEqual("MUN<17       1/2", self.lines("hitta-aktivt", 2, "CDA")[0])
-        self.assertEqual("#Sändklar  12:34", self.lines("direkt", 0, "CDA")[1])
-        self.assertEqual("INGA ANKOMSTER  ", self.lines("tidtabell", 2, "CDA")[0])
-        self.assertEqual("EJ BEGÄRT ÄN    ", self.lines("nej", 0, "CDA")[0])
-        self.assertEqual("INGET TÅG       ", self.lines("nej", 2, "CDA")[0])
-        # A through train: the departure is requested before the train has come,
-        # and departs once it has.
-        self.assertEqual(["MUN-55          ", "#Beg A:Kö  12:34"], self.lines("genomgaende", 0, "CDA"))
-        self.assertEqual("1/1       55?CDA", self.lines("genomgaende", 1, "MUN")[0])
-        self.assertEqual(["MUN<55    EJ ANK", "*Åter B:Öv 12:34"], self.lines("genomgaende", 2, "CDA"))
-        self.assertEqual("1/1        55?VA", self.lines("genomgaende", 5, "CDA")[0])
-        self.assertEqual("55 ANK SP2      ", self.lines("genomgaende", 8, "CDA")[0])
-        self.assertEqual(["MUN<55          ", "#Avg *Åter 12:34"], self.lines("genomgaende", 10, "CDA"))
+        self.assertEqual(["           39>VA", "#Avg *Åter 12:34"], self.lines("direkt", 0, "CDA"))
+        # The timetable has the arrivals nobody has sent yet (2.1.0).
+        self.assertEqual("93 ANK     12:40", self.lines("tidtabell", 2, "CDA")[0])
+        self.assertEqual("INGET TÅG       ", self.lines("nej", 0, "CDA")[0])
+        # A through train in the usual order: the arrival first, then the departure.
+        self.assertEqual("1/1        55?VA", self.lines("genomgaende", 0, "CDA")[0])
+        self.assertEqual("55 ANK SP2      ", self.lines("genomgaende", 3, "CDA")[0])
+        self.assertEqual(["MUN?55          ", "*Åter B:Öv 12:34"], self.lines("genomgaende", 5, "CDA"))
         self.assertEqual(["          55◀CDA", "#In B:Sp   12:34"], self.lines("genomgaende", -1, "MUN"))
+        # Never sent from VA, sent on from CDA all the same: it jumps there.
+        self.assertEqual(["MUN<55          ", "#Avg *Åter 12:34"], self.lines("hoppa-fram", 1, "CDA"))
+        self.assertEqual(["          55◀CDA", "#In B:Sp   12:34"], self.lines("hoppa-fram", 2, "MUN"))
+        self.assertEqual(" " * 16, self.lines("hoppa-fram", 2, "VA")[0])
+        # Never sent from MUN: placed on a track afterwards.
+        self.assertEqual(["MUN-93          ", "#In B:Sp   12:34"], self.lines("placera", 0, "CDA"))
+        self.assertEqual("93 ANK SP2      ", self.lines("placera", -1, "CDA")[0])
         self.assertEqual("ANNAN SIDA      ", self.lines("tva-boxar", 0, "CDA-V")[0])
         self.assertEqual(" " * 16, self.lines("tva-boxar", -1, "CDA-V")[0])
 

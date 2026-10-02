@@ -114,10 +114,8 @@ class Terminal16Lab:
             own = leg["from_station_id"] == terminal.station
             incoming = leg["to_station_id"] == terminal.station
             active = self._is_active(leg)
-            # Receivers cannot initiate a movement from a future timetable arrival.
-            # Only the exact leg initiated by its sender becomes selectable here.
-            if incoming and not (active and self._line(leg).state in {State.REQUESTED, State.RESERVED, State.OCCUPIED}):
-                continue
+            # Every arrival still to come can be chosen here, sent or not: a
+            # train nobody sent can be placed on a track afterwards (2.1.0).
             # A departed train is no longer an upcoming departure at its sender.
             if own and active and self._line(leg).state == State.OCCUPIED:
                 continue
@@ -134,17 +132,24 @@ class Terminal16Lab:
         A through train has two at its station: in from MUN and on to MUN.
         The one with a case wins (a request to answer, a train to receive or
         an own request); with both under way the arrival comes first, and
-        the departure is under B. Until 2.0.2 such a number matched twice and
-        the box got no answer at all.
+        the departure is under B; with neither, the departure. Until 2.0.2
+        such a number matched twice and the box got no answer at all.
         """
         matches = [key for key in self._candidates(terminal) if self.legs[key]["train_number"] == number]
         if len(matches) > 1:
             active = [key for key in matches if self._is_active(self.legs[key])]
             if len(active) == 1:
                 return active
-            arriving = {self.legs[key]["to_movement_id"] for key in matches
-                        if self.legs[key]["to_station_id"] == terminal.station}
-            matches = [key for key in matches if self.legs[key]["from_movement_id"] not in arriving]
+            if active:
+                # Both under way: the arrival first, the departure under B.
+                arriving = {self.legs[key]["to_movement_id"] for key in active
+                            if self.legs[key]["to_station_id"] == terminal.station}
+                return [key for key in active if self.legs[key]["from_movement_id"] not in arriving]
+            # Nothing under way: the station's own departure, which 93# asks
+            # for at once; an arrival only when nothing leaves from here. An
+            # arrival is still in the timetable, to be placed (2.1.0).
+            own = [key for key in matches if self.legs[key]["from_station_id"] == terminal.station]
+            matches = own or matches
         return matches
 
     def timetable(self, device):
@@ -257,10 +262,27 @@ class Terminal16Lab:
             terminal.receipt_until = self.now() + 5
             terminal.revision += 1
 
-    def _departure_ready(self, leg):
-        # For a through train the preceding arrival must be recorded first.
-        return all(key in self.completed for key, incoming in self.legs.items()
-                   if incoming["to_movement_id"] == leg["from_movement_id"])
+    def _finish_leg(self, device, key):
+        """Bring the lab engine's line for this leg to its end, whatever it
+        last knew: answered, departed and arrived, so the line is free."""
+        leg = self.legs[key]
+        if self._is_active(leg):
+            steps = {State.REQUESTED: ("accept", "depart", "arrive"), State.RESERVED: ("depart", "arrive"),
+                     State.OCCUPIED: ("arrive",)}.get(self._line(leg).state, ())
+            for step in steps:
+                station = leg["from_station_id"] if step == "depart" else leg["to_station_id"]
+                accepted, reason = self.engine.perform(station_id=station, connection_id=leg["connection_id"], action=step,
+                                                       train_number=leg["train_number"], client_id=device)
+                if not accepted:
+                    return reason
+            self.bindings.pop(leg["connection_id"], None)
+        self.completed.add(key)
+        return None
+
+    def _can_take_in(self, leg):
+        """An arrival can be reported unless it waits for an answer: sent,
+        cleared but not reported departed, or never sent at all (2.1.0)."""
+        return not self._is_active(leg) or self._line(leg).state in {State.RESERVED, State.OCCUPIED}
 
     def _line(self, leg):
         return self.engine.connections[leg["connection_id"]]
@@ -388,14 +410,15 @@ class Terminal16Lab:
                 buttons["#"] = ("reject", "Bekräfta neka")
             return buttons
         if terminal.screen == "tracks":
-            if not own and active and line.state == State.OCCUPIED:
+            if not own and self._can_take_in(leg):
                 buttons.update({"#": ("arrive_track", "Ankommit på valt spår"),
                                 "C": ("previous_track", "Föregående spår"), "D": ("next_track", "Nästa spår")})
             return buttons
         if not active_view:
             buttons.update(C=("previous", "Föregående tåg"), D=("next", "Nästa tåg"))
         # A through train's next leg can be requested while it is still on
-        # its way in (Casper, 2026-10-02); it departs only once it has come.
+        # its way in, and sent on once cleared: if the system has not seen it
+        # come, it jumps here with the departure (Casper, 2026-10-02).
         if own and line.state == State.FREE:
             direct = (self.engine.config.connections[leg["connection_id"]].dispatch_mode_override
                       or self.engine.config.default_dispatch_mode) == DispatchMode.DIRECT
@@ -407,11 +430,17 @@ class Terminal16Lab:
             else:
                 buttons.update({"#": ("accept", "Ge klart"), "*": ("reject_view", "Neka begäran…")})
         elif active and line.state == State.RESERVED and own:
-            buttons.update({"*": ("cancel_view", "Återta klartecken…"), "B": ("home", "Översikt utan trafikändring")})
-            if self._departure_ready(leg):
-                buttons["#"] = ("depart", "Rapportera avgång")
-        elif active and line.state == State.OCCUPIED and not own:
+            buttons.update({"#": ("depart", "Rapportera avgång"), "*": ("cancel_view", "Återta klartecken…"),
+                            "B": ("home", "Översikt utan trafikändring")})
+        elif not own and active and line.state == State.OCCUPIED:
             buttons.update({"#": ("arrive", "Rapportera ankomst"), "B": ("tracks", "Annat ankomstspår")})
+        elif not own and not active:
+            # Never sent in the system: 93# shows it, # places it (2.1.0).
+            buttons.update({"#": ("arrive", "Placera på spår"), "B": ("tracks", "Annat ankomstspår")})
+        elif not own and line.state == State.RESERVED:
+            # Cleared here but never reported departed: placed through the
+            # track picker only, so the # after #Ja never takes a train in.
+            buttons["B"] = ("tracks", "Placera på spår…")
         return buttons
 
     def _frame(self, device):
@@ -485,16 +514,9 @@ class Terminal16Lab:
                                                "C/D A:Kö" if "C" in buttons else "A:Kö *=Bak")
             if action == "request" and buttons["#"][1] == "Reservera":
                 hint = "#Sändklar"
-            # Cleared, but the train has not come in yet: no #Avg, and why.
-            waiting = (selected["from_station_id"] == terminal.station and self._is_active(selected)
-                       and self._line(selected).state == State.RESERVED and not self._departure_ready(selected))
-            if waiting and terminal.screen != "active":
-                note = t("EJ ANK")
-                if len(text_cells(label)) + len(text_cells(note)) < 16:
-                    first = row(label, note) if side == "left" else row(note, label)
             if terminal.screen == "active":
                 counter = f"{compact(active_position)}/{compact(len(active))}"
-                hint = {"depart": "#Avg C/D", "arrive": "#In B:Sp"}.get(action, "EJ ANK C/D" if waiting else "C/D B:Öv")
+                hint = {"depart": "#Avg C/D", "arrive": "#In B:Sp"}.get(action, "C/D B:Öv")
                 if len(text_cells(label)) + len(counter) < 16:
                     first = row(label, counter) if side == "left" else row(counter, label)
                 else:
@@ -550,7 +572,7 @@ class Terminal16Lab:
                       "lines": entry_lines, "lcd": encode_lcd(entry_lines),
                       "row": 0, "column": 5, "commit": "#", "cancel": "*", "erase": "B",
                       "shortcut": "A",
-                      "labels": {"#": t("Sök tåg"), "*": t("Avbryt inmatning"), "B": t("Sudda siffra"),
+                      "labels": {"#": t("Sök tåg (begär direkt)"), "*": t("Avbryt inmatning"), "B": t("Sudda siffra"),
                                  "A": t("Förfrågningskö (avbryt inmatning)")}},
             "requests": {"count": len(requests), "position": requests.index(terminal.selected) + 1 if terminal.selected in requests else 0,
                          "label": "A · " + t("Förfrågningskö ({count} väntar)", count=len(requests))},
@@ -609,14 +631,20 @@ class Terminal16Lab:
             if len(matches) != 1:
                 here = [leg for key, leg in self.legs.items() if leg["train_number"] == number and key not in self.completed
                         and terminal.station in {leg["from_station_id"], leg["to_station_id"]}]
-                future_arrival = any(leg["to_station_id"] == terminal.station for leg in here)
                 # The train is here, but on the lines the station's other box handles.
                 other_side = here and not any(self._on_side(terminal, leg) for leg in here)
-                terminal.notice = (("ANNAN SIDA" if other_side else "EJ BEGÄRT ÄN" if future_arrival else "INGET TÅG")
-                                   if not matches else "FLERA TÅG ADMIN")
+                terminal.notice = ("ANNAN SIDA" if other_side else "INGET TÅG") if not matches else "FLERA TÅG ADMIN"
             else:
                 terminal.selected, terminal.screen, terminal.notice = matches[0], "detail", ""
                 terminal.browse_filter = "all"
+                # 93# is enough: a departure that can be asked for is asked for
+                # at once, and * takes it back until the receiver has answered
+                # (Casper, 2026-10-02). Anything else waits for its own key.
+                if self._buttons(terminal).get("#", (None,))[0] == "request":
+                    message = self._traffic(device, terminal, "request")
+                    if message:
+                        terminal.revision += 1
+                        return self._answer(device, False, message)
             terminal.revision += 1
             return self._answer(device, True)
         if "train_number" in body:
@@ -671,22 +699,33 @@ class Terminal16Lab:
             return "Tågets rutt kan inte identifieras"
         if fresh != leg:
             return "Tågets rutt har ändrats"
-        arrival_track = None
+        arrival_track, occupied = None, False
+        refused = lambda reason: {"connection_busy": "Sträckan är upptagen", "departure_not_reserved": "Klartecken saknas",
+                                  "train_not_departed": "Tåget har inte avgått"}.get(reason, "Läget har ändrats. Välj tåget igen.")
         if action in {"arrive", "arrive_track"}:
             arrival_track = (self._tracks(terminal)[terminal.track % len(self._tracks(terminal))].id
                              if action == "arrive_track" else self._planned_track(leg))
             track = self.engine.config.tracks.get(arrival_track)
             if not track or not track.active or track.station_id != terminal.station:
                 return "Ankomstspåret är inte giltigt"
-            if any(a["station"] == terminal.station and a["track"] == arrival_track for a in self.arrivals.values()):
-                return "Spåret är upptaget i testet"
-        accepted, reason = self.engine.perform(
-            station_id=terminal.station, connection_id=leg["connection_id"],
-            action="arrive" if action == "arrive_track" else action,
-            train_number=leg["train_number"], client_id=device)
-        if not accepted:
-            return {"connection_busy": "Sträckan är upptagen", "departure_not_reserved": "Klartecken saknas",
-                    "train_not_departed": "Tåget har inte avgått"}.get(reason, "Läget har ändrats. Välj tåget igen.")
+            # Another train on the track does not stop the arrival (2.1.0).
+            occupied = any(a["station"] == terminal.station and a["track"] == arrival_track for a in self.arrivals.values())
+            reason = self._finish_leg(device, key)
+            if reason:
+                return refused(reason)
+        else:
+            if action == "depart" and self._is_active(leg) and self._line(leg).state == State.RESERVED:
+                # Not seen to come in: it jumps here with the departure.
+                for other, incoming in self.legs.items():
+                    if incoming["to_movement_id"] == key and other not in self.completed:
+                        reason = self._finish_leg(device, other)
+                        if reason:
+                            return refused(reason)
+            accepted, reason = self.engine.perform(
+                station_id=terminal.station, connection_id=leg["connection_id"], action=action,
+                train_number=leg["train_number"], client_id=device)
+            if not accepted:
+                return refused(reason)
         if action == "request":
             self.bindings[leg["connection_id"]] = key
             if self._line(leg).state == State.REQUESTED:
@@ -698,7 +737,8 @@ class Terminal16Lab:
             self.arrivals[key] = {"station": terminal.station, "track": arrival_track,
                                   "planned_track": self._planned_track(leg), "movement_id": leg["to_movement_id"]}
             self.completed.add(key)
-            terminal.notice = f"{leg['train_number']} ANK SP{self.engine.config.tracks[arrival_track].display_label}"
+            terminal.notice = (f"{leg['train_number']} UPPT SPÅR" if occupied else
+                               f"{leg['train_number']} ANK SP{self.engine.config.tracks[arrival_track].display_label}")
             terminal.notice_until = self.now() + 3
             self._notify_arrival(leg)
         if action in {"cancel", "reject", "arrive", "arrive_track"}:
