@@ -339,6 +339,16 @@ class ThroughTrainTests(_Boxes):
         self.assertEqual(["LEK<102      1/1", "EJ ANK C/D 09:15"], frame["lines"])
         self.assertNotIn("#", frame["keys"])
 
+    def test_a_box_with_an_old_picture_is_told_the_train_has_not_come(self):
+        self.lookup("esp8266"); self.send("esp8266", "#"); self.send("esp32", "#")
+        # As if the box still showed #Avg: the server says no, and why.
+        with patch("tmbox_gateway.terminal16.Terminal16Lab._departure_ready", return_value=True):
+            frame = self.terminals.frame("esp8266")
+            self.assertEqual("Rapportera avgång", frame["keys"]["#"]["label"])
+            answer = self.terminals.command("esp8266", {"command_id": uuid4().hex, "view_token": frame["view_token"], "key": "#"})
+        self.assertEqual(("rejected", "Tåget har inte ankommit"), (answer["status"], answer["message"]))
+        self.assertEqual(["approved"], [c["status"] for c in self.service.open_cases("station-a")])
+
     def test_received_first_then_sent_on(self):
         self.lookup("esp32"); self.send("esp32", "#")
         frame = self.lookup("esp8266")          # the request, not the departure

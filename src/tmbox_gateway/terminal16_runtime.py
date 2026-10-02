@@ -109,7 +109,7 @@ class RuntimeViews(Terminal16Lab):
         except CommandRejected as error:
             return {"track_occupied": "Spåret är upptaget", "unknown_track": "Ankomstspåret är inte giltigt",
                     "channel_occupied": "Sträckan är upptagen", "departure_not_reserved": "Klartecken saknas",
-                    "train_not_departed": "Tåget har inte avgått"}.get(error.reason, str(error) if error.reason.startswith("simulation_") else "Läget ändrades. Välj tåget igen.")
+                    "train_not_departed": "Tåget har inte avgått", "train_not_arrived": "Tåget har inte ankommit"}.get(error.reason, str(error) if error.reason.startswith("simulation_") else "Läget ändrades. Välj tåget igen.")
         self.refresh()
         if action == "accept":
             terminal.screen = "detail"
