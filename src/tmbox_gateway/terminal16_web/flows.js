@@ -2702,6 +2702,696 @@ globalThis.TMBoxFlows = {
    ]
   },
   {
+   "id": "genomgaende",
+   "title": "Genomgående tåg",
+   "mode": "Med klartecken",
+   "intro": "Tåg 55 kommer in från Vagnsta och går vidare mot Munkeröd med samma nummer. Avgången går att begära innan tåget har kommit, men tåget kan avgå först när ankomsten är registrerad.",
+   "setup": null,
+   "boxes": [
+    {
+     "id": "VA",
+     "code": "VA",
+     "label": "VA",
+     "station": "Vagnsta"
+    },
+    {
+     "id": "CDA",
+     "code": "CDA",
+     "label": "CDA",
+     "station": "Charlottendal"
+    },
+    {
+     "id": "MUN",
+     "code": "MUN",
+     "label": "MUN",
+     "station": "Munkeröd"
+    }
+   ],
+   "start": [
+    {
+     "box": "VA",
+     "lines": [
+      "                ",
+      "Nr# A:Kö   12:34"
+     ],
+     "changed": true
+    },
+    {
+     "box": "CDA",
+     "lines": [
+      "                ",
+      "Nr# A:Kö   12:34"
+     ],
+     "changed": true
+    },
+    {
+     "box": "MUN",
+     "lines": [
+      "                ",
+      "Nr# A:Kö   12:34"
+     ],
+     "changed": true
+    }
+   ],
+   "steps": [
+    {
+     "box": "CDA",
+     "keys": [
+      "5",
+      "5",
+      "#"
+     ],
+     "wait": null,
+     "caption": "Charlottendal söker 55 innan tåget har kommit. Inget är på gång än, så numret ger avgången mot Munkeröd.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "                ",
+        "Nr# A:Kö   12:34"
+       ],
+       "changed": false
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "MUN-55          ",
+        "#Beg A:Kö  12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "                ",
+        "Nr# A:Kö   12:34"
+       ],
+       "changed": false
+      }
+     ],
+     "meanings": [
+      [
+       "#",
+       "Begär klartecken"
+      ],
+      [
+       "*",
+       "Tillbaka"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ],
+      [
+       "C",
+       "Föregående tåg"
+      ],
+      [
+       "D",
+       "Nästa tåg"
+      ]
+     ]
+    },
+    {
+     "box": "CDA",
+     "keys": [
+      "#"
+     ],
+     "wait": null,
+     "caption": "# begär klartecken redan nu. Munkeröd visar förfrågan direkt.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "                ",
+        "Nr# A:Kö   12:34"
+       ],
+       "changed": false
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "MUN?55          ",
+        "*Åter B:Öv 12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "1/1       55?CDA",
+        "#Ja *Nej   12:34"
+       ],
+       "changed": true
+      }
+     ],
+     "meanings": [
+      [
+       "*",
+       "Återta begäran…"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ],
+      [
+       "B",
+       "Översikt utan trafikändring"
+      ],
+      [
+       "C",
+       "Föregående tåg"
+      ],
+      [
+       "D",
+       "Nästa tåg"
+      ]
+     ]
+    },
+    {
+     "box": "MUN",
+     "keys": [
+      "#"
+     ],
+     "wait": null,
+     "caption": "Munkeröd ger klart. Tåget har inte kommit, så Charlottendal visar EJ ANK och har inget #Avg.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "                ",
+        "Nr# A:Kö   12:34"
+       ],
+       "changed": false
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "MUN<55    EJ ANK",
+        "*Åter B:Öv 12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "          55<CDA",
+        "C/D A:Kö   12:34"
+       ],
+       "changed": true
+      }
+     ],
+     "meanings": [
+      [
+       "*",
+       "Tillbaka"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ],
+      [
+       "C",
+       "Föregående tåg"
+      ],
+      [
+       "D",
+       "Nästa tåg"
+      ]
+     ]
+    },
+    {
+     "box": "CDA",
+     "keys": [
+      "B"
+     ],
+     "wait": null,
+     "caption": "B går till översikten utan att ändra något. Klartecknet mot Munkeröd ligger kvar.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "                ",
+        "Nr# A:Kö   12:34"
+       ],
+       "changed": false
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "MUN<55          ",
+        "B:Akt1 C/D 12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "          55<CDA",
+        "C/D A:Kö   12:34"
+       ],
+       "changed": false
+      }
+     ],
+     "meanings": [
+      [
+       "#",
+       "Visa kommande tåg"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ],
+      [
+       "B",
+       "Aktiva tåg (1)"
+      ],
+      [
+       "C",
+       "Föregående aktiva tåg"
+      ],
+      [
+       "D",
+       "Nästa aktiva tåg"
+      ]
+     ]
+    },
+    {
+     "box": "VA",
+     "keys": [
+      "5",
+      "5",
+      "#"
+     ],
+     "wait": null,
+     "caption": "Vagnsta söker 55.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "CDA-55          ",
+        "#Beg A:Kö  12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "MUN<55          ",
+        "B:Akt1 C/D 12:34"
+       ],
+       "changed": false
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "          55<CDA",
+        "C/D A:Kö   12:34"
+       ],
+       "changed": false
+      }
+     ],
+     "meanings": [
+      [
+       "#",
+       "Begär klartecken"
+      ],
+      [
+       "*",
+       "Tillbaka"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ],
+      [
+       "C",
+       "Föregående tåg"
+      ],
+      [
+       "D",
+       "Nästa tåg"
+      ]
+     ]
+    },
+    {
+     "box": "VA",
+     "keys": [
+      "#"
+     ],
+     "wait": null,
+     "caption": "Vagnsta begär klartecken. Charlottendal står i översikten och visar förfrågan direkt.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "CDA?55          ",
+        "*Åter B:Öv 12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "1/1        55?VA",
+        "#Ja *Nej   12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "          55<CDA",
+        "C/D A:Kö   12:34"
+       ],
+       "changed": false
+      }
+     ],
+     "meanings": [
+      [
+       "*",
+       "Återta begäran…"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ],
+      [
+       "B",
+       "Översikt utan trafikändring"
+      ],
+      [
+       "C",
+       "Föregående tåg"
+      ],
+      [
+       "D",
+       "Nästa tåg"
+      ]
+     ]
+    },
+    {
+     "box": "CDA",
+     "keys": [
+      "#"
+     ],
+     "wait": null,
+     "caption": "Charlottendal ger klart.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "CDA<55          ",
+        "#Avg *Åter 12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "           55<VA",
+        "C/D A:Kö   12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "          55<CDA",
+        "C/D A:Kö   12:34"
+       ],
+       "changed": false
+      }
+     ],
+     "meanings": [
+      [
+       "*",
+       "Tillbaka"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ],
+      [
+       "C",
+       "Föregående tåg"
+      ],
+      [
+       "D",
+       "Nästa tåg"
+      ]
+     ]
+    },
+    {
+     "box": "VA",
+     "keys": [
+      "#"
+     ],
+     "wait": null,
+     "caption": "Vagnsta rapporterar avgång. Charlottendal kan ta emot direkt.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "CDA◀55          ",
+        "C/D A:Kö   12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "           55◀VA",
+        "#In B:Sp   12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "          55<CDA",
+        "C/D A:Kö   12:34"
+       ],
+       "changed": false
+      }
+     ],
+     "meanings": [
+      [
+       "*",
+       "Tillbaka"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ],
+      [
+       "C",
+       "Föregående tåg"
+      ],
+      [
+       "D",
+       "Nästa tåg"
+      ]
+     ]
+    },
+    {
+     "box": "CDA",
+     "keys": [
+      "#"
+     ],
+     "wait": null,
+     "caption": "Charlottendal tar emot 55 på planerat spår.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "55 MOTTAGET     ",
+        "CDA        12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "55 ANK SP2      ",
+        "#OK *=Bak  12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "          55<CDA",
+        "C/D A:Kö   12:34"
+       ],
+       "changed": false
+      }
+     ],
+     "meanings": [
+      [
+       "#",
+       "OK"
+      ],
+      [
+       "*",
+       "Tillbaka"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ]
+     ]
+    },
+    {
+     "box": null,
+     "keys": [],
+     "wait": 3,
+     "caption": "Efter tre sekunder går Charlottendal tillbaka till översikten.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "55 MOTTAGET     ",
+        "CDA        12:34"
+       ],
+       "changed": false
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "MUN<55          ",
+        "B:Akt1 C/D 12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "          55<CDA",
+        "C/D A:Kö   12:34"
+       ],
+       "changed": false
+      }
+     ],
+     "meanings": []
+    },
+    {
+     "box": "CDA",
+     "keys": [
+      "5",
+      "5",
+      "#"
+     ],
+     "wait": null,
+     "caption": "Nu har 55 kommit, och avgången mot Munkeröd har redan klart: #Avg.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "55 MOTTAGET     ",
+        "CDA        12:34"
+       ],
+       "changed": false
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "MUN<55          ",
+        "#Avg *Åter 12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "          55<CDA",
+        "C/D A:Kö   12:34"
+       ],
+       "changed": false
+      }
+     ],
+     "meanings": [
+      [
+       "#",
+       "Rapportera avgång"
+      ],
+      [
+       "*",
+       "Återta klartecken…"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ],
+      [
+       "B",
+       "Översikt utan trafikändring"
+      ],
+      [
+       "C",
+       "Föregående tåg"
+      ],
+      [
+       "D",
+       "Nästa tåg"
+      ]
+     ]
+    },
+    {
+     "box": "CDA",
+     "keys": [
+      "#"
+     ],
+     "wait": null,
+     "caption": "Charlottendal rapporterar avgång. Munkeröd kan ta emot.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "                ",
+        "Nr# A:Kö   12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "MUN◀55          ",
+        "C/D A:Kö   12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "          55◀CDA",
+        "#In B:Sp   12:34"
+       ],
+       "changed": true
+      }
+     ],
+     "meanings": [
+      [
+       "*",
+       "Tillbaka"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ],
+      [
+       "C",
+       "Föregående tåg"
+      ],
+      [
+       "D",
+       "Nästa tåg"
+      ]
+     ]
+    }
+   ]
+  },
+  {
    "id": "tva-boxar",
    "title": "Två boxar på samma station",
    "mode": "Med klartecken",

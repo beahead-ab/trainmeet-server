@@ -133,9 +133,12 @@ class RuntimeTerminalTests(unittest.TestCase):
 
     def test_lost_commit_does_not_release_line_or_change_arrival(self):
         self.depart()
-        with patch.object(self.fixture.ops, "release_clearance", side_effect=RuntimeError("disk")):
-            with self.assertRaises(RuntimeError):
-                self.send("esp32", "#")
+        with patch.object(self.fixture.ops, "release_clearance", side_effect=RuntimeError("disk")), \
+                self.assertLogs("tmbox_gateway.terminal16", "ERROR"):
+            frame = self.terminals.frame("esp32")
+            answer = self.terminals.command("esp32", {"command_id": uuid4().hex, "view_token": frame["view_token"], "key": "#"})
+            # A no with the screen, not silence (since 2.0.3); nothing changed.
+            self.assertEqual("rejected", answer["status"])
         self.assertEqual(len(self.service.open_cases(None)), 1)
         live = self.fixture.ops.tkl_station_state(self.fixture.publication.publication_id, "Lör", "station-b")
         self.assertNotEqual(live["movements"].get("movement-101-b", {}).get("arrival"), "arrived")
@@ -277,3 +280,143 @@ class RuntimeTerminalTests(unittest.TestCase):
         self.assertEqual(1, pushed[-1]["requests"]["count"])
         self.assertTrue(pushed[-1]["lines"][0].startswith("CDA?101"), pushed[-1]["lines"])
         self.assertTrue(pushed[-1]["lines"][1].startswith("#Ja *Nej"), pushed[-1]["lines"])
+
+
+def through_package(publication_id="through-102"):
+    """Benny's 102 (2026-10-02), on the fixture's two stations: in from LEK to
+    CDA, and on to LEK again with the same number. CDA plays his VAG."""
+    package = runtime_package_v3(publication_id=publication_id)
+    stops = [("station-b", "LEK", None, "09:40"), ("station-a", "CDA", "09:50", "09:55"), ("station-b", "LEK", "10:05", None)]
+    package["services"].append({"id": "service-102-Dagl", "train_number": "102", "days": "Dagl", "train_type": "person",
+        "stops": [{"station_id": station, "station_name": code, "stop_order": order, "arrival_time": arrival,
+                   "departure_time": departure, "service_day_offset": 0, "service_minute": 580 + 10 * order}
+                  for order, (station, code, arrival, departure) in enumerate(stops)]})
+    template = next(row for row in package["trains"] if row["id"] == "movement-101-a")
+    for order, (station, code, arrival, departure) in enumerate(stops):
+        package["trains"].append({**deepcopy(template), "id": f"movement-102-{order}", "train_number": "102",
+            "service_id": "service-102-Dagl", "station_id": station, "station": code, "arrival_time": arrival,
+            "departure_time": departure, "sort_time": arrival or departure, "stop_order": order,
+            "arrival_from": None, "departure_to": None,
+            "track_id": "track-station-a-2" if station == "station-a" else "track-station-b-1"})
+    return package
+
+
+class _Boxes(unittest.TestCase):
+    """Real boxes on the shared station service, without RuntimeTerminalTests' tests."""
+
+    setUp, tearDown, send = RuntimeTerminalTests.setUp, RuntimeTerminalTests.tearDown, RuntimeTerminalTests.send
+
+
+class ThroughTrainTests(_Boxes):
+    """A train that arrives and leaves again with the same number (Benny's 102)."""
+
+    def setUp(self):
+        super().setUp()
+        self.fixture.install(through_package())
+        self.terminals = Terminal16Service(self.service)
+
+    def lookup(self, device, number="102"):
+        return self.send(device, "#", train_number=number)["frame"]
+
+    def test_the_departure_can_be_requested_before_the_train_has_come(self):
+        # Benny's film: 102 # at VAG gave LEK-102 without a #, and MUN got nothing.
+        frame = self.lookup("esp8266")
+        self.assertEqual(["LEK-102         ", "#Beg A:Kö  09:15"], frame["lines"])
+        self.send("esp8266", "#")
+        lek = self.terminals.frame("esp32")
+        self.assertEqual(1, lek["requests"]["count"])
+        self.assertTrue(lek["lines"][0].startswith("CDA?102"), lek["lines"])
+        # Cleared, but 102 has not come in: no #Avg, and the box says so.
+        self.send("esp32", "#")
+        frame = self.terminals.frame("esp8266")
+        self.assertNotIn("#", frame["keys"])
+        self.assertEqual("LEK<102   EJ ANK", frame["lines"][0])
+        # Typed again, 102 is the departure with the case, not the arrival.
+        self.assertEqual("LEK<102   EJ ANK", self.lookup("esp8266")["lines"][0])
+        # Among the active trains (B, B) it says why there is no #Avg.
+        self.send("esp8266", "B")
+        frame = self.send("esp8266", "B")["frame"]
+        self.assertEqual(["LEK<102      1/1", "EJ ANK C/D 09:15"], frame["lines"])
+        self.assertNotIn("#", frame["keys"])
+
+    def test_received_first_then_sent_on(self):
+        self.lookup("esp32"); self.send("esp32", "#")
+        frame = self.lookup("esp8266")          # the request, not the departure
+        self.assertTrue(frame["lines"][0].startswith("LEK?102"), frame["lines"])
+        self.assertEqual("Ge klart", frame["keys"]["#"]["label"])
+        self.send("esp8266", "#")
+        self.send("esp32", "#")
+        self.assertEqual("Rapportera ankomst", self.lookup("esp8266")["keys"]["#"]["label"])
+        self.send("esp8266", "#")
+        frame = self.lookup("esp8266")          # arrived: now it is the departure
+        self.assertEqual("Begär klartecken", frame["keys"]["#"]["label"])
+        self.send("esp8266", "#")
+        self.assertEqual(1, self.terminals.frame("esp32")["requests"]["count"])
+
+    def install_twin(self):
+        """Another train 102, from CDA to LEK: the number alone cannot tell them apart."""
+        package = through_package("through-102-twice")
+        twin = deepcopy(next(s for s in package["services"] if s["train_number"] == "101"))
+        twin.update(id="service-102b", train_number="102")
+        package["services"].append(twin)
+        for row in [r for r in package["trains"] if r["train_number"] == "101"]:
+            package["trains"].append({**deepcopy(row), "id": row["id"].replace("101", "102b"),
+                                      "train_number": "102", "service_id": "service-102b"})
+        self.fixture.install(package)
+        self.terminals = Terminal16Service(self.service)
+
+    def test_two_trains_with_one_number_say_so_instead_of_falling_silent(self):
+        self.install_twin()
+        self.assertEqual("FLERA TÅG ADMIN ", self.lookup("esp8266")["lines"][0])
+
+    def test_of_two_trains_with_one_number_the_one_under_way_is_meant(self):
+        self.install_twin()
+        self.lookup("esp32"); self.send("esp32", "#")
+        frame = self.lookup("esp8266")
+        self.assertTrue(frame["lines"][0].startswith("LEK?102"), frame["lines"])
+        self.assertEqual("Ge klart", frame["keys"]["#"]["label"])
+
+
+class CommandErrorTests(_Boxes):
+    def test_an_error_answers_no_with_the_screen_instead_of_silence(self):
+        before = self.terminals.frame("esp8266")
+        body = {"command_id": uuid4().hex, "view_token": before["view_token"], "key": "#"}
+        with patch("tmbox_gateway.terminal16.Terminal16Lab.command", side_effect=ValueError("broken")), \
+                self.assertLogs("tmbox_gateway.terminal16", "ERROR"):
+            answer = self.terminals.command("esp8266", body)
+        self.assertEqual("rejected", answer["status"])
+        self.assertEqual(before["lines"], answer["frame"]["lines"])
+        # Nothing was kept: a press on the screen it was sent works.
+        self.assertEqual("accepted", self.terminals.command("esp8266", {
+            "command_id": uuid4().hex, "view_token": answer["frame"]["view_token"], "key": "#"})["status"])
+
+
+class PublicationParsedOnceTests(_Boxes):
+    """Until 2.0.2 every frame parsed the whole publication again, once per
+    station: on a Pi with a real meet a key press took four seconds."""
+
+    def test_frames_and_presses_parse_the_publication_once(self):
+        from tmbox_gateway.runtime import RuntimePublication
+        parse = RuntimePublication.parse
+        with patch.object(RuntimePublication, "parse", side_effect=parse) as parsed:
+            for _ in range(5):
+                self.terminals.frame("esp8266"); self.terminals.frame("esp32")
+            self.send("esp8266", "#", train_number="101"); self.send("esp8266", "#")
+            self.assertEqual(0, parsed.call_count, "the installed publication is already parsed")
+            self.send("esp8266", "*"); self.send("esp8266", "#")  # take it back: nothing open
+            self.fixture.install(through_package("parsed-again"))  # installing parses, as before
+            parsed.reset_mock()
+            for _ in range(5):
+                self.terminals.frame("esp8266"); self.terminals.frame("esp32")
+            # The new publication is the one the boxes see: 102 only exists there.
+            self.assertEqual("LEK-102         ", self.send("esp8266", "#", train_number="102")["frame"]["lines"][0])
+            self.send("esp8266", "#"); self.send("esp32", "#")
+            self.assertEqual(0, parsed.call_count, "the new publication is parsed once, on activation")
+
+    def test_nobody_changes_the_shared_publication(self):
+        import json
+        stored = json.loads(self.fixture.runtime._connection.execute(
+            "SELECT payload_json FROM runtime_publications WHERE active = 1").fetchone()[0])
+        self.send("esp8266", "#", train_number="101"); self.send("esp8266", "#"); self.send("esp32", "#")
+        self.send("esp8266", "#"); self.send("esp32", "#")
+        self.assertEqual(stored, self.service.publication().payload)

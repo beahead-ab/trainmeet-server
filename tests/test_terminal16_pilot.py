@@ -286,7 +286,10 @@ class Terminal16Tests(unittest.TestCase):
         self.assertEqual(self.lab.command("DEMO-VA", {"command_id": "stale-choice", "view_token": stale, "key": "#"})["status"], "rejected")
         self.assertEqual(len(self.lab.arrivals), 1)
 
-    def test_through_train_cannot_depart_before_its_arrival(self):
+    def test_through_train_is_requested_before_its_arrival_but_departs_after_it(self):
+        """Casper, 2026-10-02: the next leg can be requested while the train is
+        still on its way in; only the departure waits for the arrival. Until
+        2.0.2 the request waited too, without a word on the box."""
         package = deepcopy(self.lab.publication)
         next(m for m in package["trains"] if m["id"] == "93-cda")["departure_time"] = "12:43"
         service = next(s for s in package["services"] if s["id"] == "93")
@@ -295,20 +298,53 @@ class Terminal16Tests(unittest.TestCase):
         service["stops"].append(stop)
         package["trains"].append({**stop, "id": "93-va", "service_id": "93", "train_number": "93", "days": "Dagl", "track_id": "va-1"})
         self.lab = Terminal16Lab(self.lab.engine, package, {"DEMO-MUN": "mun", "DEMO-CDA": "cda", "DEMO-VA": "va"})
-        def choose(movement):
-            for _ in range(5):
-                if self.accept("DEMO-CDA", "D")["frame"]["upcoming"]["movement_id"] == movement:
-                    return self.accept("DEMO-CDA", "#")["frame"]
-            self.fail("Movement was not available in the station timetable")
-        frame = choose("93-cda")
-        self.assertNotIn("#", frame["keys"])
-        self.assertEqual(self.send("DEMO-CDA", "#")["status"], "rejected")
-        self.lookup("93", "DEMO-MUN"); self.accept("DEMO-MUN", "#")
-        choose("93-mun"); self.accept("DEMO-CDA", "#")
-        self.accept("DEMO-MUN", "#"); self.accept("DEMO-CDA", "#")
-        self.accept("DEMO-CDA", "#")  # Dismiss the arrival acknowledgement.
-        frame = choose("93-cda")
+        frame = self.lookup("93")["frame"]
         self.assertEqual(frame["keys"]["#"]["label"], "Begär klartecken")
+        self.accept("DEMO-CDA", "#")
+        self.lookup("93", "DEMO-VA"); self.accept("DEMO-VA", "#")
+        frame = self.lab.frame("DEMO-CDA")
+        self.assertNotIn("#", frame["keys"])
+        self.assertEqual("EJ ANK     93>VA", frame["lines"][0])
+        self.assertEqual(self.send("DEMO-CDA", "#")["status"], "rejected")
+        # EJ ANK beside the train, and under B among the active trains, in every language.
+        from tmbox_gateway.device_ui import LANGUAGES
+        terminal = self.lab.terminals["DEMO-CDA"]
+        swedish = terminal.language
+        for screen in ("detail", "active"):
+            if screen == "active":
+                self.accept("DEMO-CDA", "B"); self.accept("DEMO-CDA", "B")
+                self.assertEqual("EJ ANK C/D 12:34", self.lab.frame("DEMO-CDA")["lines"][1])
+            for language, _ in LANGUAGES:
+                with self.subTest(screen=screen, language=language):
+                    terminal.language = language
+                    self.assertEqual([16, 16], [len(line) for line in self.lab.frame("DEMO-CDA")["lines"]])
+            terminal.language = swedish
+        # MUN sends 93 in. Both parts are under way now: the number means the arrival.
+        self.lookup("93", "DEMO-MUN"); self.accept("DEMO-MUN", "#")
+        frame = self.lookup("93")["frame"]
+        self.assertEqual(frame["keys"]["#"]["label"], "Ge klart")
+        self.accept("DEMO-CDA", "#")
+        self.accept("DEMO-MUN", "#")
+        self.assertEqual(self.lookup("93")["frame"]["keys"]["#"]["label"], "Rapportera ankomst")
+        self.accept("DEMO-CDA", "#")
+        self.accept("DEMO-CDA", "#")  # Dismiss the arrival acknowledgement.
+        frame = self.lookup("93")["frame"]
+        self.assertEqual(frame["keys"]["#"]["label"], "Rapportera avgång")
+        self.assertNotIn("EJ ANK", frame["lines"][0])
+
+    def test_every_notice_fits_and_can_be_drawn_in_every_language(self):
+        """FLERA TÅG - ADMIN was 17 characters: the frame raised and the box
+        got no answer at all."""
+        from tmbox_gateway.device_ui import LANGUAGES
+        terminal = self.lab.terminals["DEMO-CDA"]
+        for language, _ in LANGUAGES:
+            for notice in ("ANNAN SIDA", "EJ BEGÄRT ÄN", "INGET TÅG", "FLERA TÅG ADMIN", "12345 MOTTAGET",
+                           "12345 ÅTERTAGET", "12345 NEKAT", "12345 ANK SP12A"):
+                with self.subTest(language=language, notice=notice):
+                    terminal.language, terminal.notice = language, notice
+                    frame = self.lab.frame("DEMO-CDA")
+                    self.assertEqual([16, 16], [len(line) for line in frame["lines"]])
+        terminal.notice = ""
 
     def test_full_clearance_chain(self):
         self.lookup("39"); self.accept("DEMO-CDA", "#")

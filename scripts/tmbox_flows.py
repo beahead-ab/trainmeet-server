@@ -17,6 +17,8 @@ from tmbox_gateway.terminal16_demo import demo_lab
 
 KEY_ORDER = "#*ABCD"
 MODES = {"clearance": "Med klartecken", "direct": "Direkttrafik"}
+# Flows run on the bench's meet with train 55 added, VA -> CDA -> MUN.
+THROUGH = {"genomgaende"}
 NOTICE_SECONDS, RECEIPT_SECONDS = 3, 5
 
 # Each flow: id, title, mode, the boxes it shows, when to use it, an optional
@@ -125,6 +127,25 @@ FLOWS = [
         ("CDA", "4", "Har du börjat skriva ett fel nummer, suddar B sista siffran …"),
         ("CDA", "*", "… och * tömmer hela inmatningen. Inget har skickats till servern."),
     ]),
+    ("genomgaende", "Genomgående tåg", "clearance", ["VA", "CDA", "MUN"],
+     "Tåg 55 kommer in från Vagnsta och går vidare mot Munkeröd med samma nummer. Avgången går att "
+     "begära innan tåget har kommit, men tåget kan avgå först när ankomsten är registrerad.",
+     None, [
+        ("CDA", "55#", "Charlottendal söker 55 innan tåget har kommit. Inget är på gång än, så numret "
+                       "ger avgången mot Munkeröd."),
+        ("CDA", "#", "# begär klartecken redan nu. Munkeröd visar förfrågan direkt."),
+        ("MUN", "#", "Munkeröd ger klart. Tåget har inte kommit, så Charlottendal visar EJ ANK och har "
+                     "inget #Avg."),
+        ("CDA", "B", "B går till översikten utan att ändra något. Klartecknet mot Munkeröd ligger kvar."),
+        ("VA", "55#", "Vagnsta söker 55."),
+        ("VA", "#", "Vagnsta begär klartecken. Charlottendal står i översikten och visar förfrågan direkt."),
+        ("CDA", "#", "Charlottendal ger klart."),
+        ("VA", "#", "Vagnsta rapporterar avgång. Charlottendal kan ta emot direkt."),
+        ("CDA", "#", "Charlottendal tar emot 55 på planerat spår."),
+        ("wait", NOTICE_SECONDS, "Efter tre sekunder går Charlottendal tillbaka till översikten."),
+        ("CDA", "55#", "Nu har 55 kommit, och avgången mot Munkeröd har redan klart: #Avg."),
+        ("CDA", "#", "Charlottendal rapporterar avgång. Munkeröd kan ta emot."),
+    ]),
     ("tva-boxar", "Två boxar på samma station", "clearance", ["CDA-V", "CDA-H", "VA"],
      "En station kan ha en box per sida. Varje box hanterar bara tågen på sina sträckor.",
      None, [
@@ -140,8 +161,8 @@ FLOWS = [
 class Flow:
     """One lab, a fixed clock and a stopwatch that only moves when told."""
 
-    def __init__(self, mode, boxes):
-        self.lab = demo_lab(mode)
+    def __init__(self, mode, boxes, *, through=False):
+        self.lab = demo_lab(mode, through=through)
         self.lab.engine.set_clock_source(lambda: {"configured": True, "running": False, "time": "12:34"})
         self.time = 0.0
         self.lab.now = lambda: self.time
@@ -217,7 +238,7 @@ def box_label(flow, box):
 def build_flows():
     flows = []
     for flow_id, title, mode, boxes, intro, start, steps in FLOWS:
-        flow = Flow(mode, boxes)
+        flow = Flow(mode, boxes, through=flow_id in THROUGH)
         setup = None
         if start:
             for box, keys in start[0]:

@@ -18,7 +18,10 @@ from .terminal16_glyphs import language_samples
 from .display_placement import default_side, station_connections, station_overrides
 
 
-def demo_lab(mode="clearance"):
+def demo_lab(mode="clearance", *, through=False):
+    """The test bench's meet. `through` adds train 55, VA -> CDA -> MUN, which
+    arrives at Charlottendal and leaves again with the same number (the flows
+    page shows it; the bench's own timetable stays the four trains)."""
     stations = {
         "mun": StationConfig("mun", "MUN", "Munkeröd"),
         "cda": StationConfig("cda", "CDA", "Charlottendal"),
@@ -53,6 +56,14 @@ def demo_lab(mode="clearance"):
             package["trains"].append({**stop, "id": f"{number}-{station}", "service_id": number,
                                       "train_number": number, "days": "Dagl", "track_id": f"{station}-1"})
         package["services"].append({"id": number, "train_number": number, "days": "Dagl", "stops": stops})
+    if through:
+        stops = [{"station_id": "va", "stop_order": 0, "arrival_time": None, "departure_time": "12:36"},
+                 {"station_id": "cda", "stop_order": 1, "arrival_time": "12:41", "departure_time": "12:43"},
+                 {"station_id": "mun", "stop_order": 2, "arrival_time": "12:50", "departure_time": None}]
+        for stop in stops:
+            package["trains"].append({**stop, "id": f"55-{stop['station_id']}", "service_id": "55",
+                                      "train_number": "55", "days": "Dagl", "track_id": f"{stop['station_id']}-2"})
+        package["services"].append({"id": "55", "train_number": "55", "days": "Dagl", "stops": stops})
     return Terminal16Lab(engine, package, {"DEMO-MUN": "mun", "DEMO-CDA": "cda", "DEMO-VA": "va"})
 
 

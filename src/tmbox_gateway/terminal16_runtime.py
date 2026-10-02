@@ -8,6 +8,7 @@ each other's data. No device is allowed to choose its station.
 from copy import deepcopy
 from hashlib import sha256
 import json
+import logging
 from time import monotonic
 
 from .engine import TrafficEngine
@@ -16,6 +17,8 @@ from .protocol_v2 import CommandRejected
 from .terminal16 import Terminal, Terminal16Lab, row
 from .terminal16_glyphs import encode_lcd
 from .terminal16_i18n import text
+
+LOGGER = logging.getLogger("tmbox_gateway.terminal16")
 
 
 class RuntimeViews(Terminal16Lab):
@@ -50,7 +53,7 @@ class RuntimeViews(Terminal16Lab):
         self.update_display_placement(publication.session_config(),
             service.runtime_store.display_placement_overrides(publication.meet_id))
         states = {station: service.operations_store.tkl_station_state(
-            service.publication().publication_id, self.day, station)["movements"] for station in self.engine.config.stations}
+            publication.publication_id, self.day, station)["movements"] for station in self.engine.config.stations}
         cases = {case["movement_id"]: case for case in service.open_cases(None)
                  if case["movement_id"] in self.legs
                  and case["connection_id"] == self.legs[case["movement_id"]]["connection_id"]
@@ -194,6 +197,16 @@ class Terminal16Service:
                     result = views.command(device, body)
                     if result["status"] == "accepted":
                         self.service.operations_store.remember_device_command(device, cache_id, {"status": "accepted", "signature": signature})
+            except Exception:
+                views.terminals, views.processed = saved
+                views.fingerprint = None
+                views.refresh()
+                # A box that gets no answer waits, then gives up after 30 s
+                # (INGET SVAR). A no with the current screen is the honest
+                # answer; nothing was changed. Until 2.0.2 a too long notice
+                # (FLERA TÅG - ADMIN) left the box waiting like this.
+                LOGGER.exception("TMBox-kommandot kunde inte hanteras: %s", device)
+                return {"status": "rejected", "message": "Serverfel. Försök igen.", "frame": self.frame(device)}
             except BaseException:
                 views.terminals, views.processed = saved
                 views.fingerprint = None
