@@ -131,12 +131,15 @@ class SharedTrafficTests(unittest.TestCase):
             self.app.update_tkl_movement(self.admin, {"station_id": "station-a", "movement_id": "movement-101-a", "departure": "departed"})
         self.assertEqual(caught.exception.code, "departure_not_reserved")
 
-    def test_arrival_does_not_release_a_train_that_has_not_departed(self):
+    def test_an_arrival_never_reported_departed_finishes_the_train(self):
+        """Since 2.1.0 the receiver can take in a cleared train whose sender
+        forgot to report it departed: it jumps there, and the line is free."""
         case = self.request_v1()
         self.approve(case)
         result = self.v2("train.arrived", {"movement_id": "movement-101-b"})
-        self.assertEqual(result["reason"], "train_not_departed")
-        self.assertEqual(len(self.service.open_cases("station-a")), 1)
+        self.assertEqual(result["status"], "accepted", result)
+        self.assertEqual(self.service.open_cases("station-a"), [])
+        self.assertEqual(self.service.snapshot_payload("station-a")["movements"][0]["departure"], "departed")
 
     def test_restart_restores_shared_case_and_no_input_session(self):
         case = self.request_v1()

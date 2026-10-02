@@ -153,9 +153,9 @@ const root = path.resolve(__dirname, '../..');
     await lek.locator('.box h2').getByText('Lekeberg',{exact:true}).waitFor();
     const lcd = (target, text) => target.waitForFunction(value => document.querySelector('.lcd').textContent.includes(value), text);
     const press = async (target, key) => { await target.waitForTimeout(600); await target.locator(`.keypad [data-key="${key}"]`).click(); };
+    // 101# finds the train and asks LEK in the same press (2.1.0).
     for (const key of ['1', '0', '1', '#']) await page.locator(`.keypad [data-key="${key}"]`).click();
-    await lcd(page, '#Beg');
-    await press(page, '#');
+    await lcd(page, '*Åter');
     await lcd(lek, '#Ja *Nej');
     await press(lek, '#');
     await lcd(page, '#Avg');

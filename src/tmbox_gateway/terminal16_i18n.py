@@ -44,12 +44,12 @@ NEKA {number}?|REFUSE {number}?|AFVIS {number}?|AVVIS {number}?|NEIN {number}?
 MOTTAGET|ARRIVED|ANKOMMET|ANKOMMET|ANGEKOMMEN
 ÅTERTAGET|WITHDRAWN|TRUKKET|TRUKKET|ZURÜCK
 NEKAT|REFUSED|AFVIST|AVVIST|ABGELEHNT
-EJ BEGÄRT ÄN|NOT REQUESTED|IKKE ANMODET|IKKE FORESPURT|NICHT ANGEFRAGT
 INGET TÅG|NO TRAIN|INTET TOG|INGEN TOG|KEIN ZUG
 ANNAN SIDA|OTHER SIDE|ANDEN SIDE|ANNEN SIDE|ANDERE SEITE
 FLERA TÅG ADMIN|MULTIPLE - ADMIN|FLERE - ADMIN|FLERE - ADMIN|MEHRERE - ADMIN
-EJ ANK|NOT IN|IKKE ANK|IKKE ANK|NICHT DA
-EJ ANK C/D|NOT IN C/D|IKKE ANK|IKKE ANK|NICHT DA
+UPPT SPÅR|TRK BUSY|SPOR OPT|SPOR OPPT|GLEIS BES
+Placera på spår|Place on track|Placér på spor|Plasser på spor|Auf Gleis stellen
+Placera på spår…|Place on track…|Placér på spor…|Plasser på spor…|Auf Gleis stellen…
 TÅG: _____|NO.: _____|TOG: _____|TOG: _____|ZUG: _____
 #Sök B:Del|#Find B:Del|#Søg B:Del|#Søk B:Del|#Such B:Del
 VÄNTAR PÅ ADMIN|WAITING ADMIN|VENTER PÅ ADMIN|VENTER PÅ ADMIN|WARTE AUF ADMIN
@@ -87,6 +87,7 @@ Rapportera avgång|Report departure|Meld afgang|Meld avgang|Abfahrt melden
 Rapportera ankomst|Report arrival|Meld ankomst|Meld ankomst|Ankunft melden
 Annat ankomstspår|Different arrival track|Andet ankomstspor|Annet ankomstspor|Anderes Ankunftsgleis
 Sök tåg|Find train|Søg tog|Søk tog|Zug suchen
+Sök tåg (begär direkt)|Find train (asks at once)|Søg tog (anmoder straks)|Søk tog (spør straks)|Zug suchen (fragt sofort an)
 Avbryt inmatning|Cancel input|Annuller indtastning|Avbryt inntasting|Eingabe abbrechen
 Sudda siffra|Erase digit|Slet ciffer|Slett siffer|Ziffer löschen
 Förfrågningskö (avbryt inmatning)|Requests (cancel input)|Forespørgsler (annuller input)|Forespørsler (avbryt input)|Anfragen (Eingabe abbrechen)
@@ -115,6 +116,6 @@ def text(language, key, **values):
 def notice(language, value):
     # Notice is a structured number + catalogue token, not a rendered frame.
     number, _, suffix = value.partition(" ")
-    if number.isdigit() and suffix in {"MOTTAGET", "ÅTERTAGET", "NEKAT"}:
+    if number.isdigit() and suffix in {"MOTTAGET", "ÅTERTAGET", "NEKAT", "UPPT SPÅR"}:
         return number + " " + text(language, suffix)
     return text(language, value)

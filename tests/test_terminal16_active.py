@@ -18,8 +18,7 @@ class ActiveTrainTests(unittest.TestCase):
     accept = pilot.Terminal16Tests.accept
 
     def ready(self, number, receiver):
-        self.lookup(number)
-        self.accept("DEMO-CDA", "#")
+        self.lookup(number)                                # asks at once (2.1.0)
         if self.lab.engine.connections[self.lab.legs[number + "-cda"]["connection_id"]].state == State.REQUESTED:
             self.accept(receiver, "#")
 
@@ -62,7 +61,7 @@ class ActiveTrainTests(unittest.TestCase):
     def test_future_trains_and_unanswered_requests_are_not_active(self):
         self.assertEqual(self.accept("DEMO-CDA", "B")["frame"]["active"]["count"], 0)
         self.assertNotIn("#", self.lab.frame("DEMO-CDA")["keys"])
-        self.lookup("93", "DEMO-MUN"); self.accept("DEMO-MUN", "#")
+        self.lookup("93", "DEMO-MUN")
         frame = self.lab.frame("DEMO-CDA")
         self.assertEqual(frame["requests"]["count"], 1)
         self.assertEqual(frame["active"]["count"], 0)
@@ -75,7 +74,7 @@ class ActiveTrainTests(unittest.TestCase):
         self.assertEqual(self.lab.frame("DEMO-CDA")["keys"]["#"]["label"], "Rapportera ankomst")
 
     def test_clear_departure_is_prioritized_over_waiting_outbound(self):
-        self.lookup("17"); self.accept("DEMO-CDA", "#")
+        self.lookup("17")
         self.ready("39", "DEMO-VA")
         self.accept("DEMO-CDA", "B")
         self.assertEqual(self.accept("DEMO-CDA", "B")["frame"]["active"]["movement_id"], "39-cda")
@@ -106,7 +105,7 @@ class ActiveTrainTests(unittest.TestCase):
     def test_new_request_does_not_replace_active_selection_and_a_is_reachable(self):
         self.ready("39", "DEMO-VA")
         self.accept("DEMO-CDA", "B"); self.accept("DEMO-CDA", "B")
-        self.lookup("93", "DEMO-MUN"); self.accept("DEMO-MUN", "#")
+        self.lookup("93", "DEMO-MUN")
         frame = self.lab.frame("DEMO-CDA")
         self.assertEqual(frame["active"]["movement_id"], "39-cda")
         self.assertEqual(frame["requests"]["count"], 1)

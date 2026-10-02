@@ -153,8 +153,8 @@ class TMBoxStationService:
             apply("train.track.change", track_id=track)
         departure = changes.get("departure")
         arrival = changes.get("arrival")
-        # The arrival first: a train that came in and goes on, sent in one
-        # form, must be in before it can leave (train_not_arrived).
+        # The arrival first: sent in one form with the departure, it is
+        # recorded as reported, not left to the departure to tell.
         if arrival is not None and arrival != live().get("arrival", "none"):
             if arrival not in {"approaching", "arrived"}:
                 raise CommandRejected("invalid_arrival")
@@ -364,9 +364,6 @@ class TMBoxStationService:
                 case["movement_id"] == movement_id and case["from_station_id"] == station_id
                 and case["status"] == "approved" for case in clearances
             ):
-                actions.remove("train.departed")
-            if ("train.departed" in actions and live.get("arrival") != "arrived"
-                    and resolve_arrival(publication.payload, active_day, station_id, movement_id)):
                 actions.remove("train.departed")
             revisions[movement_id] = int(live.get("revision", 0))
             movements.append(
@@ -615,16 +612,23 @@ class TMBoxStationService:
         if action == "train.departed":
             if not movement.get("departure_time") or departure == "departed":
                 raise CommandRejected("invalid_departure")
-            # A train that comes in from another station leaves only once it
-            # has come, whoever reports it: the boxes' #Avg and TKL's "Tåg ut"
-            # wait for the same thing. Until 2.0.3 only the clearance counted.
-            if arrival != "arrived" and resolve_arrival(publication.payload, active_day, station_id, movement_id):
-                raise CommandRejected("train_not_arrived")
             cases = [case for case in self.open_cases(station_id)
                      if case["from_station_id"] == station_id
                      and case["movement_id"] == movement_id and case["status"] == "approved"]
             if len(cases) != 1:
                 raise CommandRejected("departure_not_reserved")
+            if arrival != "arrived" and resolve_arrival(publication.payload, active_day, station_id, movement_id):
+                # Whoever sends it on knows it is here, even if the system does
+                # not: it arrives first, on the planned track, and every part
+                # of its route before that is finished (Casper, 2026-10-02:
+                # "kan inte bara tåget hoppa fram till där den är nu?").
+                self._apply(device_id, station_id, {"action": "train.arrived", "payload": {"movement_id": movement_id}},
+                            shift_id=shift_id)
+                state = self.operations_store.tkl_station_state(
+                    publication.publication_id, active_day, station_id
+                )["movements"].get(movement_id, {})
+                arrival = state.get("arrival", "none")
+                track = state.get("actualTrack") or movement.get("track_id")
         else:
             cases = []
         if action == "train.arrived":
@@ -633,8 +637,11 @@ class TMBoxStationService:
             incoming = [case for case in self.open_cases(station_id)
                         if case["to_station_id"] == station_id
                         and self.case_train_number(case) == str(movement["train_number"])]
-            if incoming and (len(incoming) != 1 or not self.case_departed(incoming[0])):
-                raise CommandRejected("train_not_departed")
+            if not (len(incoming) == 1 and self.case_departed(incoming[0])):
+                # Never sent in the system, or sent without a reported
+                # departure: it is here all the same, and can be taken in so
+                # the game goes on (2.1.0). Until then train_not_departed.
+                self._advance(publication, active_day, station_id, movement_id, device_id, shift_id)
 
             # Receive on the actual track AND release the line in this same
             # transaction. Never change a track in a separate preliminary act.
@@ -644,8 +651,9 @@ class TMBoxStationService:
                 raise CommandRejected("unknown_track") from error
             if track is None:
                 raise CommandRejected("unknown_track")
-            if self.track_conflict(publication, active_day, station_id, movement_id, track) is not None:
-                raise CommandRejected("track_occupied")
+            # Another train on the track, on paper or for real, does not stop
+            # the arrival (2.1.0); the answer says so.
+            occupied_by = self.track_conflict(publication, active_day, station_id, movement_id, track)
 
         if action == CREW_ACTION:
             crew_ready = bool((body.get("crew_ready", True)))
@@ -710,13 +718,16 @@ class TMBoxStationService:
             )
         if self.simulation:
             self.simulation.record_action(action, movement_id)
-        return {
+        result = {
             "revision": {
                 "scope": "movement",
                 "key": movement_id,
                 "value": int(updated["revision"]),
             }
         }
+        if action == "train.arrived" and occupied_by is not None:
+            result["track_occupied_by"] = str(occupied_by.get("train_number") or "")
+        return result
 
     def _clearance(
         self,
@@ -919,6 +930,54 @@ class TMBoxStationService:
             if numbers.get(case["movement_id"]) != train_number or not self.case_departed(case):
                 continue
             self.operations_store.release_clearance(case["clearance_id"], actor)
+
+    def _advance(self, publication: RuntimePublication, day: str, station_id: str, movement_id: str,
+                 actor: str, shift_id: str | None) -> None:
+        """The train is here now, whatever the system last knew.
+
+        Every earlier part of its route still open is finished, back to where
+        the system last saw it leave: a request is withdrawn and a clearance
+        released, so the line is free, and the departure there and any arrival
+        in between are recorded. A game goes on when someone lost track
+        (Casper, 2026-10-02). The arrival here is the caller's.
+        """
+        leg = resolve_arrival(publication.payload, day, station_id, movement_id)
+        visited = set()
+        while leg is not None and leg["from_movement_id"] not in visited:
+            sender, sent = leg["from_station_id"], leg["from_movement_id"]
+            visited.add(sent)
+            self.operations_store.invalidate_clearances_for_movement(
+                publication.publication_id, day, sent, actor, "train_moved_on")
+            for case in self.operations_store.open_clearances_for_station(publication.publication_id, day, sender):
+                if case["movement_id"] == sent and case["status"] == "approved":
+                    self.operations_store.release_clearance(case["clearance_id"], actor)
+            had_left = self._advance_movement(publication, day, sender, sent, actor, shift_id, departure="departed")
+            if leg["to_movement_id"] != movement_id:
+                self._advance_movement(publication, day, leg["to_station_id"], leg["to_movement_id"], actor, shift_id,
+                                       arrival="arrived")
+            if had_left:
+                break
+            leg = resolve_arrival(publication.payload, day, sender, sent)
+
+    def _advance_movement(self, publication: RuntimePublication, day: str, station_id: str, movement_id: str,
+                          actor: str, shift_id: str | None, **changes: str) -> bool:
+        """Record what the train did there without asking; True if it already had."""
+        state = self.operations_store.tkl_station_state(publication.publication_id, day, station_id)["movements"].get(movement_id, {})
+        field, value = next(iter(changes.items()))
+        if state.get(field) == value:
+            return True
+        row = next(r for r in publication.payload["trains"] if str(r["id"]) == movement_id)
+        departure = state.get("storedDeparture", state.get("departure", "none"))
+        self.operations_store.update_tkl_movement(
+            publication.publication_id, day, station_id, movement_id,
+            arrival=changes.get("arrival", state.get("arrival", "none")),
+            departure=changes.get("departure", "positioned" if departure == "ready" else departure),
+            actual_track=state.get("actualTrack") or row.get("track_id"),
+            updated_by=actor, shift_id=shift_id, event_type="train.advanced",
+            crew_ready=bool(state.get("crewReady", False)), operator_note=None)
+        if self.simulation:
+            self.simulation.record_action("train." + value, movement_id)
+        return False
 
     def open_cases(self, station_id: str | None) -> list[dict[str, Any]]:
         publication = self.publication()

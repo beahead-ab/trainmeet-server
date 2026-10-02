@@ -288,9 +288,9 @@ const root = path.resolve(__dirname, '../..');
     await page.waitForURL(/\/tmbox-lab\/floden$/);
     for (const width of [1280, 390]) {
       await page.setViewportSize({width, height: 900});
-      await page.locator('.flow').nth(11).waitFor();
-      assert.equal(await page.locator('.flow').count(), 12);
-      assert.equal(await page.locator('#flow-index a').count(), 12);
+      await page.locator('.flow').nth(13).waitFor();
+      assert.equal(await page.locator('.flow').count(), 14);
+      assert.equal(await page.locator('#flow-index a').count(), 14);
       const drawn = await page.evaluate(() => [...document.querySelectorAll('.flow .lcd')].map(lcd =>
         [...lcd.querySelectorAll('.lcd-row')].map(row => row.querySelectorAll('.lcd-cell').length)));
       assert.ok(drawn.length > 100, `${drawn.length} displays`);
