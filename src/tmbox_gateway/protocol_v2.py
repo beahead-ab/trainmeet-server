@@ -23,7 +23,7 @@ from .observability import log_event, use_correlation
 from .operations import SQLiteOperationsStore
 from .runtime import RuntimePublication, SQLiteRuntimeStore, matches_active_day
 from .lifecycle import MeetLifecycleError
-from .train_routes import describe_departure
+from .train_routes import describe_departure, resolve_arrival
 
 
 LOGGER = logging.getLogger("tmbox_gateway.protocol_v2")
@@ -153,6 +153,12 @@ class TMBoxStationService:
             apply("train.track.change", track_id=track)
         departure = changes.get("departure")
         arrival = changes.get("arrival")
+        # The arrival first: a train that came in and goes on, sent in one
+        # form, must be in before it can leave (train_not_arrived).
+        if arrival is not None and arrival != live().get("arrival", "none"):
+            if arrival not in {"approaching", "arrived"}:
+                raise CommandRejected("invalid_arrival")
+            apply("train." + arrival)
         if departure is not None and departure != live().get("departure", "none"):
             if departure in {"ready", "positioned"}:
                 if live().get("departure") == "departed":
@@ -165,10 +171,6 @@ class TMBoxStationService:
                 raise CommandRejected("invalid_departure")
             else:
                 raise CommandRejected("invalid_departure")
-        if arrival is not None and arrival != live().get("arrival", "none"):
-            if arrival not in {"approaching", "arrived"}:
-                raise CommandRejected("invalid_arrival")
-            apply("train." + arrival)
         state = live()
         if "operator_note" in changes:
             state = self.operations_store.update_tkl_movement(
@@ -362,6 +364,9 @@ class TMBoxStationService:
                 case["movement_id"] == movement_id and case["from_station_id"] == station_id
                 and case["status"] == "approved" for case in clearances
             ):
+                actions.remove("train.departed")
+            if ("train.departed" in actions and live.get("arrival") != "arrived"
+                    and resolve_arrival(publication.payload, active_day, station_id, movement_id)):
                 actions.remove("train.departed")
             revisions[movement_id] = int(live.get("revision", 0))
             movements.append(
@@ -610,6 +615,11 @@ class TMBoxStationService:
         if action == "train.departed":
             if not movement.get("departure_time") or departure == "departed":
                 raise CommandRejected("invalid_departure")
+            # A train that comes in from another station leaves only once it
+            # has come, whoever reports it: the boxes' #Avg and TKL's "Tåg ut"
+            # wait for the same thing. Until 2.0.3 only the clearance counted.
+            if arrival != "arrived" and resolve_arrival(publication.payload, active_day, station_id, movement_id):
+                raise CommandRejected("train_not_arrived")
             cases = [case for case in self.open_cases(station_id)
                      if case["from_station_id"] == station_id
                      and case["movement_id"] == movement_id and case["status"] == "approved"]

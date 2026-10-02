@@ -122,6 +122,39 @@ def resolve_departure(payload: dict, active_day: str, station_id: str, movement_
     }
 
 
+def resolve_arrival(payload: dict, active_day: str, station_id: str, movement_id: str) -> dict | None:
+    """The leg that brings this visit in from the previous station, or None.
+
+    None when the train starts here, or its previous stop is not a station of
+    the meet: then nobody can report the arrival, and nobody has to. The legs
+    are the ones resolve_departure gives the boxes and the simulation, so a
+    rule built on this is never stricter than what a box shows.
+    """
+    rows = [row for row in payload.get("trains", []) if str(row.get("id")) == movement_id]
+    if len(rows) != 1 or rows[0].get("station_id") != station_id or not rows[0].get("arrival_time"):
+        return None
+    movement = rows[0]
+    services = [item for item in payload.get("services", []) if item.get("id") == movement.get("service_id")]
+    if len(services) != 1:
+        return None
+    try:
+        stops = sorted(services[0].get("stops", []), key=lambda stop: _order(stop.get("stop_order")))
+        visits = _visits(stops, movement)
+        if len(visits) != 1 or visits[0] == 0:
+            return None
+        previous = [row for row in payload.get("trains", [])
+                    if row.get("service_id") == movement.get("service_id")
+                    and str(row.get("train_number")) == str(movement.get("train_number"))
+                    and matches_active_day(str(row.get("days", "")), active_day)
+                    and _visits(stops, row) == [visits[0] - 1]]
+        if len(previous) != 1:
+            return None
+        leg = resolve_departure(payload, active_day, str(previous[0]["station_id"]), str(previous[0]["id"]))
+    except RouteResolutionError:
+        return None
+    return leg if leg.get("status") == "resolved" and leg["to_movement_id"] == movement_id else None
+
+
 def describe_departure(payload: dict, active_day: str, station_id: str, movement_id: str) -> dict:
     """Additive lookup metadata. A failed route does not hide the train itself."""
     try:
