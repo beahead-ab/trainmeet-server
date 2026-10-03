@@ -812,7 +812,7 @@
               <div id="danger-banner" class="kr-state danger"><span class="kr-dot"></span><span id="danger-banner-text" class="kr-state__text">Inget här bör göras under en pågående träff.</span></div>
               <section id="server-system-settings" class="kr-panel kr-danger-panel" aria-label="Åtgärder">
                 <div class="kr-rows">
-                  <div class="kr-rowact"><span class="kr-k">Återställ från säkerhetskopia</span><div class="kr-what"><span>Lägger tillbaka databasen som den var före en tidigare uppdatering</span><span class="kr-m">En kopia tas automatiskt före varje programuppdatering.</span></div><button type="button" class="kr-btn sm danger" data-open-modal="restore-modal">Återställ…</button></div>
+                  <div class="kr-rowact"><span class="kr-k">Återställ från säkerhetskopia</span><div class="kr-what"><span>Lägger tillbaka databasen som den var före en tidigare uppdatering</span><span class="kr-m">En kopia tas automatiskt före varje programuppdatering.</span><p id="restore-last-farozon" class="form-message" role="status"></p></div><button type="button" class="kr-btn sm danger" data-open-modal="restore-modal">Återställ…</button></div>
                   <div class="kr-rowact"><span class="kr-k">Nollställ träffdata</span><div class="kr-what"><span id="reset-what">Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och den aktiva webbinloggningen behålls.</span></div><button id="reset-mode-summary" type="button" class="kr-btn sm danger" data-open-modal="reset-modal">Nollställ…</button></div>
                 </div>
               </section>
@@ -910,6 +910,7 @@
 <dialog id="restore-modal" class="admin-modal" aria-label="Återställ från säkerhetskopia"><div class="reset-body">
                 <h3><tm-text data-tm-text="Ta tillbaka en tidigare version av servern">Ta tillbaka en tidigare version av servern</tm-text></h3>
                 <p><tm-text data-tm-text="En kopia tas automatiskt före varje programuppdatering. Att återställa byter ut ">En kopia tas automatiskt före varje programuppdatering. Att återställa byter ut </tm-text><b><tm-text data-tm-text="hela">hela</tm-text></b><tm-text data-tm-text=" serverns databas — träff, tidtabell, användare och parkopplade enheter blir de som fanns när kopian togs."> serverns databas — träff, tidtabell, användare och parkopplade enheter blir de som fanns när kopian togs.</tm-text></p>
+                <p id="restore-last" class="form-message" role="status"></p>
                 <div id="restore-list" class="restore-list" role="radiogroup" aria-label="Säkerhetskopior" data-tm-aria-label="Säkerhetskopior"></div>
                 <p id="restore-empty" class="restore-empty hidden"><tm-text data-tm-text="Inga säkerhetskopior finns än. Den första tas vid nästa programuppdatering.">Inga säkerhetskopior finns än. Den första tas vid nästa programuppdatering.</tm-text></p>
                 <div id="restore-consequences" class="restore-consequences hidden"></div>

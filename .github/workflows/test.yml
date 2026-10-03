@@ -32,3 +32,4 @@ jobs:
           node tests/js/server-shell-live.test.cjs
           node tests/js/public-workspaces-live.test.cjs
           node tests/js/terminal16-placement-live.test.cjs
+          node tests/js/restore-last.test.cjs

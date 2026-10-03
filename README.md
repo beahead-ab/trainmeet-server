@@ -580,6 +580,10 @@ varför (`problem`). Utan det går en misslyckad återställning inte att skilja
 från en lyckad: servern går ner och kommer tillbaka i båda fallen. Beskedet
 står kvar tills nästa återställning och försvinner vid fabriksåterställning.
 
+Kontrollrummet visar beskedet i **Farozon**, på raden Återställ från
+säkerhetskopia, och överst i återställningsrutan: grönt med vilken kopia som
+lades tillbaka, eller i rött med skälet och att databasen är som före försöket.
+
 ### Glömt lösenord
 
 Servern har ingen e-post och kan inte skicka en återställningslänk. Beviset är
