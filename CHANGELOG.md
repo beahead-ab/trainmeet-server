@@ -5,6 +5,27 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Kontrollrummet: nya Drift, Inställningar, skärmar och deltagarvy
+
+Hela serverns gränssnitt är byggt om efter designen "Kontrollrummet", i
+mörkt och ljust läge och på sv, da, nb, en och de.
+
+- Drift: klockrad, karta, händelser, tågdiagram och tågpanel i den nya
+  designen. Tåg som står på en station visas som antal (`KOD · n`) i stället
+  för klossar, så kartan går att läsa även när många står inne.
+- Inställningar: sidomeny med nio avsnitt i grupper, och Avbryt/Spara per
+  avsnitt i stället för en gemensam spara-knapp.
+- Skärmarna (klocka, Banöversikt, Tågdiagram, Översikt): gemensam
+  verktygsrad som döljs efter fyra sekunder i helskärm och alltid syns i
+  fönster. Större siffror, sekunder valbara per skärm, tydlig stoppad klocka,
+  QR-koderna för Wi-Fi och Träffen i skärmens topp och valbart tidsfönster
+  (2, 3, 6 eller 24 timmar) i Tågdiagrammet. Skärmarna har eget färgtema.
+- Deltagarvyn på mobil: klocka, tåg på banan, nästa händelser och tidtabell
+  med sökruta i en smal kolumn. "Anslut din TMBox" öppnas som ett blad från
+  botten. Kartan går att dra i sidled. Gäster får ljust eller mörkt läge
+  efter sin enhet.
+- Gammal CSS och död kod som de nya vyerna gjort överflödig är borttagen.
+
 ### Helskärmsvyerna i designens form: ringar, På linjen och händelsetabell
 
 Resten av granskningen av TV-skärmarna mot designen (SkarmBana, SkarmOversikt).
