@@ -24,16 +24,20 @@ WEB = ROOT / "src" / "tmbox_gateway" / "web"
 MARKUP = (WEB / "index.html").read_text(encoding="utf-8")
 SCRIPT = (WEB / "app.js").read_text(encoding="utf-8")
 STYLE = (WEB / "app.css").read_text(encoding="utf-8")
+KR = (WEB / "kontrollrummet.css").read_text(encoding="utf-8")
 IDENTITY = (ROOT / "src" / "tmbox_gateway" / "identity.py").read_text(encoding="utf-8")
 HTTP = (ROOT / "src" / "tmbox_gateway" / "http_server.py").read_text(encoding="utf-8")
 
 
 class UsersViewTests(unittest.TestCase):
     def test_the_section_exists_and_belongs_to_the_settings_view(self) -> None:
-        self.assertIn('data-admin-section="users"', MARKUP)
-        sections = re.search(r"const SETTINGS_SECTIONS = \[([^\]]*)\]", SCRIPT)
+        # Användare är ett av Inställningarnas nio avsnitt, med egen menypunkt.
+        self.assertIn('<section id="anvandare" class="kr-setsec" data-section="anvandare"', MARKUP)
+        self.assertIn('id="admin-users-settings"', MARKUP)
+        self.assertIn('href="/installningar#anvandare"', MARKUP)
+        sections = re.search(r"const SECTIONS = \[([^\]]*)\]", (WEB / "settings.js").read_text(encoding="utf-8"))
         assert sections
-        self.assertIn("users", sections.group(1))
+        self.assertIn('"anvandare"', sections.group(1))
 
     def test_opening_the_settings_view_loads_the_users(self) -> None:
         """Utan det här anropet står listan tom tills något annat råkar hämta
@@ -118,7 +122,7 @@ class UsersStyleTests(unittest.TestCase):
         used = set(re.findall(r'className = "([a-z- ]+)"', view))
         for group in used:
             for name in group.split():
-                self.assertIn(f".{name}", STYLE, f"klassen {name} saknar stil")
+                self.assertIn(f".{name}", STYLE + KR, f"klassen {name} saknar stil")
 
 
 class UsersFeedbackTests(unittest.TestCase):
@@ -141,26 +145,26 @@ class UsersOnAPhoneTests(unittest.TestCase):
     smala skärmar, och kolumnerna fälls bort.
     """
 
-    def test_the_narrow_layout_folds_the_two_columns_away(self) -> None:
-        narrow = STYLE[STYLE.index("@media (max-width: 560px) {\n  .users-table"):]
-        narrow = narrow[: narrow.index("\n}")]
-        self.assertIn("th:nth-child(2)", narrow)
-        self.assertIn("th:nth-child(3)", narrow)
-        self.assertIn("td.users-role", narrow)
-        self.assertIn("td.users-state", narrow)
-        self.assertIn(".users-state-inline { display: block", narrow)
-        self.assertIn(".users-table { min-width: 0; }", narrow)
+    def test_the_narrow_layout_stacks_the_row_instead_of_scrolling(self) -> None:
+        narrow = KR[KR.index("  #users-table thead { display: none; }"):]
+        narrow = narrow[: narrow.index("  .kr-findings-list")]
+        # The name and the action stay on the first line; role and state wrap
+        # underneath when they do not fit.
+        self.assertIn("#users-rows tr { display: flex; flex-wrap: wrap;", narrow)
+        self.assertIn("#users-rows td:nth-child(4) { order: 2; margin-left: auto; }", narrow)
+        self.assertIn("#users-rows td:nth-child(1) { order: 1;", narrow)
+        self.assertIn("overflow-wrap: anywhere", narrow)
 
-    def test_the_same_row_carries_both_forms(self) -> None:
+    def test_the_same_row_carries_every_width(self) -> None:
         """En brytpunkt i CSS och en i JS skulle kunna glida isär. Raden ritas
-        en gång och bär båda formerna; CSS väljer vilken som syns."""
+        en gång; CSS väljer hur den läggs ut."""
 
         view = SCRIPT[SCRIPT.index("function renderUsers()"): SCRIPT.index("function usersButton(")]
-        self.assertIn("users-state-inline", view)
-        self.assertIn('role.className = "users-role"', view)
-        self.assertIn('column.className = "users-state"', view)
         self.assertNotIn("matchMedia", view)
-        self.assertIn(".users-state-inline { display: none; }", STYLE)
+        # Four cells, in the order the stylesheet lays them out.
+        self.assertEqual(view.count('document.createElement("td")'), 4)
+        self.assertIn('actions.className = "r"', view)
+        self.assertIn('<th>Namn</th><th>Roll</th><th>Status</th><th></th>', MARKUP)
 
 
 if __name__ == "__main__":

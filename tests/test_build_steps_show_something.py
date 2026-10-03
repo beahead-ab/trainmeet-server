@@ -16,7 +16,7 @@ class CloudOnlyViewTests(unittest.TestCase):
             self.assertNotIn(retired, JS)
 
     def test_every_runtime_panel_has_markup(self):
-        for panel in ("overview-view", "overview-traffic", "displays-view", "tmbox-v2-view"):
+        for panel in ("overview-view", "overview-traffic", "admin-view", "tmbox-v2-view"):
             self.assertIn(f'id="{panel}"', HTML)
             self.assertIn(f'#{panel}', JS)
 
@@ -36,4 +36,5 @@ class CloudOnlyViewTests(unittest.TestCase):
         self.assertNotIn("Bygg om träffen", HTML)
         self.assertNotIn('data-source="lokal"', HTML)
         self.assertNotIn('data-source="fil"', HTML)
-        self.assertIn("Träffens innehåll ändras i", HTML)
+        # Inställningar säger det i stället för att erbjuda en redigerare.
+        self.assertIn("planeras i Cloud · körs här", HTML)

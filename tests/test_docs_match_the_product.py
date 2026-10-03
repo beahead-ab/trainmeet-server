@@ -41,10 +41,12 @@ class RetiredMenuNameTests(unittest.TestCase):
     def test_the_replacement_name_is_the_one_the_interface_uses(self):
         """Annars byter testet bara ett fel namn mot ett annat."""
         html = (WEB / "index.html").read_text(encoding="utf-8")
-        for heading in ("Inställningar", "Programuppdatering"):
-            self.assertIn(
-                f'<h2><tm-text data-tm-text="{heading}">{heading}</tm-text></h2>', html
-            )
+        # ⚙ Inställningar öppnar sidan; Programuppdatering är ett av dess avsnitt.
+        self.assertIn('<a href="#settings" id="open-settings">Inställningar</a>', html)
+        self.assertIn(
+            '<a class="kr-nav" href="/installningar#uppdatering" data-section="uppdatering" data-group="servern">Programuppdatering</a>', html
+        )
+        self.assertIn('<h1 id="uppdatering-title">Programuppdatering</h1>', html)
 
     def test_the_readme_names_the_settings_menu_somewhere(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

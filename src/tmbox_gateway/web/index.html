@@ -468,12 +468,6 @@
                 </div>
               </section>
             </section>
-            <section id="published-findings" class="kr-findings" hidden aria-labelledby="published-findings-title">
-              <h3 id="published-findings-title">Tidtabellens kontrolluppgifter</h3>
-              <p>Uppgifter från den aktiva Cloud-versionen. Rättelser görs i Cloud; detta är inte en kontroll av pågående trafik.</p>
-              <p id="published-findings-summary"></p>
-              <ul id="published-findings-list"></ul>
-            </section>
           </dialog>
 
           <!-- Simulering · stationer och tåg (när en simulering pågår). -->
@@ -578,27 +572,258 @@
           </dialog>
         </section>
 
-        <section id="admin-view" class="view-panel hidden">
-          <header id="settings-heading" class="build-panel-heading hidden">
-            <div class="build-panel-title">
-              <h2><tm-text data-tm-text="Inställningar">Inställningar</tm-text></h2>
-              <p>Servern, användare och anslutna enheter. Träffens innehåll ändras i TrainMeet Cloud och uppdateras automatiskt här.</p>
-            </div>
-          </header>
-          <section id="language-settings" class="card section-card admin-section-panel" data-admin-section="language">
-            <h2 data-tm-text="Språk">Språk</h2>
-            <p data-tm-text="Språkvalet gäller den här webbläsaren. Träffens innehåll ändras inte.">Språkvalet gäller den här webbläsaren. Träffens innehåll ändras inte.</p>
-            <label class="settings-language-choice"><span data-tm-text="Språk">Språk</span><select data-language-picker aria-label="Språk" data-tm-aria-label="Språk"></select></label>
-          </section>
-          <section class="card section-card clock-control-card admin-section-panel" data-admin-section="meet">
-            <div class="section-heading compact-heading">
-              <div>
-                <p class="eyebrow"><tm-text data-tm-text="TRÄFFINSTÄLLNINGAR">TRÄFFINSTÄLLNINGAR</tm-text></p>
-                <h2><tm-text data-tm-text="Träffklocka">Träffklocka</tm-text></h2>
-                <p>Alla skärmar och TMBoxar hämtar tiden från denna server. Välj intern klocka eller anslut träffens FastClock.</p>
+        <section id="admin-view" class="view-panel kr-settings hidden" aria-label="Inställningar">
+          <nav id="settings-nav" class="kr-setnav" aria-label="Inställningar">
+            <label class="kr-setsearch">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+              <input id="settings-search" type="search" placeholder="Sök i inställningar" aria-label="Sök i inställningar" autocomplete="off">
+            </label>
+            <span class="kr-grp" data-group="traffen">Träffen</span>
+            <a class="kr-nav" href="/installningar#traff" data-section="traff" data-group="traffen">Träff och Cloud</a>
+            <a class="kr-nav" href="/installningar#skarmar" data-section="skarmar" data-group="traffen">Skärmar och klocka</a>
+            <a class="kr-nav" href="/installningar#wifi" data-section="wifi" data-group="traffen">Wi-Fi och QR-koder</a>
+            <span class="kr-grp" data-group="servern">Den här servern</span>
+            <a class="kr-nav" href="/installningar#server" data-section="server" data-group="servern">Namn och nätverk</a>
+            <a class="kr-nav" href="/installningar#kod" data-section="kod" data-group="servern">Anslutningskod</a>
+            <a class="kr-nav" href="/installningar#anvandare" data-section="anvandare" data-group="servern">Användare</a>
+            <a class="kr-nav" href="/installningar#uppdatering" data-section="uppdatering" data-group="servern">Programuppdatering</a>
+            <span class="kr-grp" data-group="webblasaren">Webbläsaren</span>
+            <a class="kr-nav" href="/installningar#sprak" data-section="sprak" data-group="webblasaren">Språk</a>
+            <span class="kr-sp"></span>
+            <a class="kr-nav danger" href="/installningar#farozon" data-section="farozon">Farozon</a>
+            <span id="settings-version" class="kr-navver"></span>
+          </nav>
+
+          <div class="kr-setmain">
+
+            <!-- 1 · Träff och Cloud -->
+            <section id="traff" class="kr-setsec" data-section="traff" aria-labelledby="traff-title">
+              <div class="kr-sectitle"><h1 id="traff-title">Träff och Cloud</h1><span>planeras i Cloud · körs här</span></div>
+              <div id="cloud-banner" class="kr-state ok">
+                <span class="kr-dot"></span>
+                <span id="cloud-version-state" class="kr-state__text" role="status"></span>
+                <span class="kr-state__note">byts när det är säkert för trafiken</span>
+                <button id="runtime-check-update" class="kr-btn sm" type="button">Sök configuppdatering</button>
               </div>
-            </div>
-<button type="button" class="secondary modal-launch" data-open-modal="clock-source-modal">Anslut träffklocka</button>
+              <p id="cloud-update-message" class="form-message" role="status"></p>
+              <form id="cloud-auto-form" class="kr-panel kr-setform" aria-label="Träffen" novalidate>
+                <div class="kr-rows">
+                  <div class="kr-kv"><span class="kr-k">Träff</span><b id="cloud-connection-meet">Ingen träff vald</b><span id="cloud-meet-region" class="kr-eu" hidden></span><span id="cloud-meet-meta" class="kr-m"></span></div>
+                  <div class="kr-kv"><span class="kr-k">Kör version</span><span id="cloud-connection-meta" class="kr-pill ok"></span><span id="cloud-published-at" class="kr-m"></span></div>
+                  <div class="kr-kv"><span class="kr-k">Cloud</span><span id="cloud-connection-state" class="kr-tag off">Inte kopplad</span><span id="cloud-auto-status" class="kr-m"></span></div>
+                  <div class="kr-kv"><span class="kr-k">Automatiskt</span><label class="kr-switch"><input id="cloud-auto-enabled" type="checkbox" data-change-label="Hämta automatiskt"><span>Hämta publicerade versioner automatiskt</span></label></div>
+                  <div class="kr-kv"><span class="kr-k">Byt träff</span><button type="button" class="kr-btn sm" data-open-modal="runtime-sync-form-modal">Byt träff…</button><span class="kr-m">användare och nätverk behålls · stationstilldelningarna följer inte med</span></div>
+                </div>
+                <p class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+              <section id="published-findings" class="kr-panel" aria-label="Tidtabellens kontrolluppgifter" hidden>
+                <div class="kr-ph"><span>Tidtabellens kontrolluppgifter</span><span id="published-findings-summary" class="kr-pill"></span><span class="kr-c">från den körande versionen · rättas i Cloud</span></div>
+                <ul id="published-findings-list" class="kr-findings-list"></ul>
+                <div class="kr-pf"><span>Observationer stoppar varken publicering eller trafik. Detta är inte en kontroll av pågående trafik.</span></div>
+              </section>
+            </section>
+
+            <!-- 2 · Skärmar och klocka -->
+            <section id="skarmar" class="kr-setsec" data-section="skarmar" aria-labelledby="skarmar-title" hidden>
+              <div class="kr-sectitle"><h1 id="skarmar-title">Skärmar och klocka</h1><span>gäller träffens skärmar på alla datorer</span></div>
+              <form id="clock-appearance-form" class="kr-panel kr-setform" aria-label="Klockan" novalidate>
+                <div class="kr-ph"><span>Klockan</span><span class="kr-c">standard för alla klockskärmar</span></div>
+                <div class="kr-rows">
+                  <div class="kr-kv kr-kv--tiles">
+                    <div id="clock-style-tiles" class="kr-tiles" role="radiogroup" aria-label="Klockstil"></div>
+                    <select id="meet-clock-style" class="kr-visually-hidden" tabindex="-1" aria-label="Klockstil" data-change-label="Klockstil"></select>
+                  </div>
+                  <div class="kr-kv"><span class="kr-k">Sekunder</span><label class="kr-switch"><input id="meet-clock-seconds" type="checkbox" data-change-label="Sekunder"><span>Visa sekundvisare</span></label></div>
+                  <div class="kr-kv"><span class="kr-k">Tidsformat</span><span>24 timmar</span><span class="kr-m">följer träffens typ · US-träffar visar AM/PM</span></div>
+                </div>
+                <p id="clock-appearance-message" class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+              <section class="kr-panel" aria-label="Skärmarna">
+                <div class="kr-ph"><span>Skärmarna</span><span class="kr-c">publika adresser · samma länkar som under Öppna på skärm</span></div>
+                <div class="kr-lines">
+                  <div class="kr-line" data-eu-only><span>Träffklocka</span><span class="kr-mono kr-m" data-no-i18n>/display/clock</span><span class="kr-actions"><a class="kr-btn sm" href="/display/clock" target="_blank" rel="noopener">Öppna ↗</a></span></div>
+                  <div class="kr-line" data-eu-only><span>Banöversikt</span><span class="kr-mono kr-m" data-no-i18n>/display/topology</span><span class="kr-actions"><a class="kr-btn sm" href="/display/topology" target="_blank" rel="noopener">Öppna ↗</a></span></div>
+                  <div class="kr-line" data-eu-only><span>Tågdiagram</span><span class="kr-mono kr-m" data-no-i18n>/display/graph</span><span class="kr-actions"><a class="kr-btn sm" href="/display/graph" target="_blank" rel="noopener">Öppna ↗</a></span></div>
+                  <div class="kr-line" data-eu-only><span>Översikt</span><span class="kr-mono kr-m" data-no-i18n>/display/dashboard</span><span class="kr-actions"><a class="kr-btn sm" href="/display/dashboard" target="_blank" rel="noopener">Öppna ↗</a></span></div>
+                  <div class="kr-line" data-us-only hidden><span>Träffklocka</span><span class="kr-mono kr-m" data-no-i18n>/display/clock</span><span class="kr-actions"><a class="kr-btn sm" href="/display/clock" target="_blank" rel="noopener">Öppna ↗</a></span></div>
+                  <div class="kr-line" data-us-only hidden><span>Områdestavla</span><span class="kr-mono kr-m" data-no-i18n>/display/territories</span><span class="kr-actions"><a class="kr-btn sm" href="/display/territories" target="_blank" rel="noopener">Öppna ↗</a></span></div>
+                </div>
+                <div class="kr-pf"><span>Skärmarna kan läsas utan inloggning. Områdestavlan finns bara på US-träffar.</span></div>
+              </section>
+            </section>
+
+            <!-- 3 · Wi-Fi och QR-koder -->
+            <section id="wifi" class="kr-setsec" data-section="wifi" aria-labelledby="wifi-title" hidden>
+              <div class="kr-sectitle"><h1 id="wifi-title">Wi-Fi och QR-koder</h1><span>det deltagarna skannar på TV:n</span></div>
+              <form id="connection-wifi-form" class="kr-panel kr-setform" aria-label="Träffens Wi-Fi" novalidate>
+                <div class="kr-ph"><span>Träffens Wi-Fi</span><span class="kr-c">står på deltagarvyn och i QR-kod 1</span></div>
+                <div class="kr-rows">
+                  <div class="kr-kv"><label class="kr-k" for="connection-wifi-name">Nätverksnamn</label><input id="connection-wifi-name" class="kr-field kr-w-md" maxlength="32" autocomplete="off" placeholder="Lämna tomt om nätet inte ska delas" data-change-label="Nätverksnamn"></div>
+                  <div class="kr-kv"><label class="kr-k" for="connection-wifi-password">Lösenord</label><input id="connection-wifi-password" class="kr-field kr-w-md mono" type="password" maxlength="63" autocomplete="off" placeholder="Tomt = öppet nät" data-change-label="Lösenord"><button id="connection-wifi-show" class="kr-btn sm" type="button" aria-pressed="false">Visa</button><span class="kr-m">lämnas tomt om nätet inte ska delas</span></div>
+                </div>
+                <p id="connection-wifi-message" class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+              <form id="connection-badge-form" class="kr-panel kr-setform" aria-label="QR-koder på skärmarna" novalidate>
+                <div class="kr-ph"><span>QR-koder på skärmarna</span><span class="kr-c">genereras lokalt · 1 Wi-Fi först, sedan 2 Träffen</span></div>
+                <div class="kr-qrrow">
+                  <div class="kr-qrcol">
+                    <span>Visas på</span>
+                    <div id="connection-badge-screens" class="kr-qrcol">
+                      <label class="kr-chk"><input type="checkbox" value="clock" checked data-change-label="Träffklocka"><span>Träffklocka</span></label>
+                      <label class="kr-chk" data-eu-only><input type="checkbox" value="topology" checked data-change-label="Banöversikt"><span>Banöversikt</span></label>
+                      <label class="kr-chk" data-eu-only><input type="checkbox" value="graph" checked data-change-label="Tågdiagram"><span>Tågdiagram</span></label>
+                      <label class="kr-chk" data-eu-only><input type="checkbox" value="dashboard" checked data-change-label="Översikt"><span>Översikt</span></label>
+                      <label class="kr-chk" data-us-only hidden><input type="checkbox" value="territories" checked data-change-label="Områdestavla"><span>Områdestavla</span></label>
+                    </div>
+                  </div>
+                  <div id="settings-qrs" class="kr-qrs"></div>
+                </div>
+                <p id="connection-badge-message" class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+            </section>
+
+            <!-- 4 · Namn och nätverk -->
+            <section id="server" class="kr-setsec" data-section="server" aria-labelledby="server-title" hidden>
+              <div class="kr-sectitle"><h1 id="server-title">Namn och nätverk</h1><span>namnet syns i Cloud och längst ner på skärmarna</span></div>
+              <form id="server-identity-form" class="kr-panel kr-setform" aria-label="Den här servern" novalidate>
+                <div class="kr-rows">
+                  <div class="kr-kv"><label class="kr-k" for="admin-server-name">Servernamn</label><input id="admin-server-name" class="kr-field kr-w-lg" maxlength="80" placeholder="Exempel: Grimslöv driftserver" required data-change-label="Servernamn"></div>
+                  <div class="kr-kv"><span class="kr-k">Syns i Cloud som</span><b id="system-server-name" class="kr-val">TrainMeet Server</b><span class="kr-m">flera servrar kan tillhöra samma träff – namnet skiljer Pi från molnservern</span></div>
+                  <div class="kr-kv"><span class="kr-k">Aktiv träff</span><span id="system-runtime-name">Ingen aktiv träff</span></div>
+                  <div class="kr-kv"><span class="kr-k">Cloud</span><span id="system-cloud-state">Inte kopplad</span></div>
+                  <div class="kr-kv"><span class="kr-k">Adress</span><span id="server-network-line" class="kr-mono">—</span><span class="kr-m">adressen på träffens nätverk</span><span class="kr-sp"></span><button type="button" class="kr-btn sm" data-copy="server-network-line">Kopiera</button></div>
+                </div>
+                <p id="server-identity-message" class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+            </section>
+
+            <!-- 5 · Anslutningskod -->
+            <section id="kod" class="kr-setsec" data-section="kod" aria-labelledby="kod-title" hidden>
+              <div class="kr-sectitle"><h1 id="kod-title">Anslutningskod</h1><span>för boxar och appar som ansluter med kod · fysiska TMBoxar hittar servern själva</span></div>
+              <form id="connection-code-form" class="kr-panel kr-setform" aria-label="Koden" novalidate>
+                <div class="kr-codeblock">
+                  <span id="kod-value" class="kr-bigcode">–</span>
+                  <div class="kr-codemeta"><span id="kod-state" class="kr-tag off"><span class="kr-dot"></span><span id="kod-state-text">Ingen kod utfärdad</span></span><span id="kod-meta" class="kr-m"></span></div>
+                  <span class="kr-sp"></span>
+                  <button type="button" class="kr-btn" data-copy="kod-value">Kopiera</button>
+                  <button id="kod-renew" type="button" class="kr-btn">Ny kod</button>
+                </div>
+                <div class="kr-rows">
+                  <div class="kr-kv"><label class="kr-k" for="connection-badge-validity">Koden gäller</label>
+                    <select id="connection-badge-validity" class="kr-field kr-w-sm" data-change-label="Giltighet">
+                      <option value="0">Tills vidare</option>
+                      <option value="12">12 timmar</option>
+                      <option value="24">24 timmar</option>
+                      <option value="72">3 dygn</option>
+                      <option value="168">7 dygn</option>
+                    </select>
+                    <span class="kr-m">en ny kod gäller nya klienter – de som redan är anslutna fortsätter</span></div>
+                  <div class="kr-kv"><label class="kr-k" for="web-client-ttl">Städning</label><span>Virtuella TMBoxar utan station tas bort efter</span><input id="web-client-ttl" class="kr-field mono kr-w-xs" type="number" min="5" max="240" step="5" value="30" required data-change-label="Städning"><span>minuter</span><span class="kr-m">tilldelade och fysiska boxar berörs aldrig</span></div>
+                </div>
+                <p id="connection-code-message" class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+              <section class="kr-panel" aria-label="Var koden visas">
+                <div class="kr-ph"><span>Var koden visas</span><span class="kr-c">samma uppgifter, en källa</span></div>
+                <div class="kr-lines">
+                  <div class="kr-line kr-line--two"><span>Drift</span><span>knappen <b>Anslut en box</b> i Stationer och boxar – adress, kod och QR i en ruta</span></div>
+                  <div class="kr-line kr-line--two"><span>Deltagarvyn</span><span>Wi-Fi, adress och kod som text, för den som redan är på nätet</span></div>
+                  <div class="kr-line kr-line--two"><span>Skärmarna</span><span>QR-kod 2 leder till deltagarvyn – koden i sig visas inte på TV:n</span></div>
+                </div>
+              </section>
+            </section>
+
+            <!-- 6 · Användare -->
+            <section id="anvandare" class="kr-setsec" data-section="anvandare" aria-labelledby="anvandare-title" hidden>
+              <div class="kr-sectitle"><h1 id="anvandare-title">Användare</h1><span>inloggning krävs överallt, också på serverdatorn</span></div>
+              <section id="admin-users-settings" class="kr-panel" aria-label="Användare">
+                <div class="kr-ph"><span>Användare</span><span id="users-role-chip" class="kr-pill">–</span><span class="kr-c">ägaren lägger till och tar bort · en administratör sköter hela servern men inte vilka som har tillgång</span><span class="kr-sp"></span><button type="button" class="kr-btn sm primary" id="users-invite-open" data-open-modal="users-invite-form-modal">+ Bjud in</button></div>
+                <div class="kr-scroll-x">
+                  <table id="users-table" class="kr-tbl">
+                    <thead><tr><th>Namn</th><th>Roll</th><th>Status</th><th></th></tr></thead>
+                    <tbody id="users-rows"></tbody>
+                  </table>
+                </div>
+                <div id="users-invite-code" class="kr-codeblock hidden">
+                  <div class="kr-codemeta"><b>Kod till <span id="users-code-for">–</span></b><span class="kr-m">Lämna över koden. Den gäller i sju dagar och kan bara användas en gång.</span></div>
+                  <code id="users-code-value" class="kr-bigcode">–</code>
+                </div>
+                <p id="users-message" class="form-message" role="status"></p>
+                <div class="kr-pf"><span>Glömt lösenord: <span class="kr-mono" data-no-i18n>tmbox_gateway.recover</span> i serverns terminal.</span></div>
+              </section>
+              <section id="admin-access-settings" class="legacy-internal" hidden>
+                <span id="access-mode"></span><p id="access-password-state"></p>
+                <button type="button" data-open-modal="admin-access-form-modal">Ändra inloggning</button>
+              </section>
+            </section>
+
+            <!-- 7 · Programuppdatering -->
+            <section id="uppdatering" class="kr-setsec" data-section="uppdatering" aria-labelledby="uppdatering-title" hidden>
+              <div class="kr-sectitle"><h1 id="uppdatering-title">Programuppdatering</h1><span>hämtar från GitHub, säkerhetskopierar och installerar</span></div>
+              <div id="update-banner" class="kr-state ok">
+                <span class="kr-dot"></span>
+                <span id="software-update-message" class="form-message" role="status"></span>
+                <button id="software-check" class="kr-btn sm" type="button">Sök efter uppdatering</button>
+                <button id="software-install" class="kr-btn sm primary hidden" type="button">Installera och starta om</button>
+                <button id="software-retry" class="kr-btn sm hidden" type="button">Försök igen</button>
+                <button id="software-restart" class="kr-btn sm hidden" type="button">Starta om servern</button>
+              </div>
+              <section id="software-update-settings" class="kr-panel" aria-label="Version">
+                <div class="kr-rows">
+                  <div class="kr-kv"><span class="kr-k">Installerad</span><span id="software-version" class="kr-mono">Läser version …</span></div>
+                  <div class="kr-kv"><span id="software-version-move" class="hidden"></span></div>
+                  <div class="kr-kv"><span class="kr-k">Säkerhetskopia</span><span id="update-backup">–</span><span class="kr-m">tas automatiskt före varje uppdatering · återställs under Farozon</span></div>
+                </div>
+              </section>
+              <section class="kr-panel" aria-label="Pågående uppdatering">
+                <div class="kr-ph"><span>När en uppdatering pågår</span><span class="kr-c">stegen visas bara då · annars är raden tom</span></div>
+                <ol id="update-progress" class="kr-steps5" aria-live="polite"></ol>
+              </section>
+              <section class="kr-panel" aria-label="Teknisk information">
+                <div class="kr-ph"><span>Teknisk information</span><span class="kr-c">för felsökning</span></div>
+                <dl id="software-technical" class="kr-dl"></dl>
+              </section>
+            </section>
+
+            <!-- 8 · Språk -->
+            <section id="sprak" class="kr-setsec" data-section="sprak" aria-labelledby="sprak-title" hidden>
+              <div class="kr-sectitle"><h1 id="sprak-title">Språk</h1><span>gäller den här webbläsaren · träffens innehåll ändras inte</span></div>
+              <form id="language-form" class="kr-panel kr-setform" aria-label="Språk" novalidate>
+                <div id="language-tiles" class="kr-langs" role="radiogroup" aria-label="Språk"></div>
+                <select id="language-choice" class="kr-visually-hidden" tabindex="-1" aria-label="Språk" data-change-label="Språk"></select>
+                <p id="language-message" class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+              <section class="kr-panel" aria-label="Språk på annat håll">
+                <div class="kr-ph"><span>Språk på annat håll</span><span class="kr-c">inte den här sidan</span></div>
+                <div class="kr-lines">
+                  <div class="kr-line kr-line--two"><span>TMBoxarna</span><span>sätts per box på Drift – Redigera i Stationer och boxar</span></div>
+                  <div class="kr-line kr-line--two"><span>Skärmarna</span><span>följer serverns språk – en TV kan inte ha eget språk</span></div>
+                  <div class="kr-line kr-line--two"><span>Deltagarvyn</span><span>följer deltagarens webbläsare, med svenska som reserv</span></div>
+                </div>
+              </section>
+            </section>
+
+            <!-- 9 · Farozon -->
+            <section id="farozon" class="kr-setsec" data-section="farozon" aria-labelledby="farozon-title" hidden>
+              <div class="kr-sectitle"><h1 id="farozon-title" class="danger">Farozon</h1><span>varje åtgärd bekräftas i ett eget fönster</span></div>
+              <div id="danger-banner" class="kr-state danger"><span class="kr-dot"></span><span id="danger-banner-text" class="kr-state__text">Inget här bör göras under en pågående träff.</span></div>
+              <section id="server-system-settings" class="kr-panel kr-danger-panel" aria-label="Åtgärder">
+                <div class="kr-rows">
+                  <div class="kr-rowact"><span class="kr-k">Återställ från säkerhetskopia</span><div class="kr-what"><span>Lägger tillbaka databasen som den var före en tidigare uppdatering</span><span class="kr-m">En kopia tas automatiskt före varje programuppdatering.</span></div><button type="button" class="kr-btn sm danger" data-open-modal="restore-modal">Återställ…</button></div>
+                  <div class="kr-rowact"><span class="kr-k">Nollställ träffdata</span><div class="kr-what"><span id="reset-what">Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och den aktiva webbinloggningen behålls.</span></div><button id="reset-mode-summary" type="button" class="kr-btn sm danger" data-open-modal="reset-modal">Nollställ…</button></div>
+                </div>
+              </section>
+            </section>
+
+          </div>
+
+          <!-- Fönster som öppnas från Inställningar och från Drift. -->
 <dialog id="clock-source-modal" class="admin-modal" aria-labelledby="clock-source-title"><h2 id="clock-source-title">Anslut träffklocka</h2>
 <form id="clock-source-form">
   <p>Inställningen gäller bara den här träffen på denna server. Inga klockuppgifter skickas till TrainMeet Cloud.</p>
@@ -650,85 +875,6 @@
               </div>
 </form>
 </dialog>
-<button type="button" class="secondary modal-launch" data-open-modal="clock-appearance-modal">Ändra klockans utseende</button>
-<dialog id="clock-appearance-modal" class="admin-modal" aria-labelledby="clock-appearance-title"><h2 id="clock-appearance-title">Klockans utseende</h2>
-<form id="clock-appearance-form">
-<p>Gäller träffens klockskärmar på alla datorer. Sparas på TrainMeet Server.</p>
-<label for="meet-clock-style">Klockstil</label><select id="meet-clock-style"></select>
-<label><input id="meet-clock-seconds" type="checkbox"> Visa sekunder</label>
-<p id="clock-appearance-message" class="form-message" role="status"></p>
-<div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara</button></div>
-</form></dialog>
-          </section>
-
-
-
-
-          <div class="server-hero card admin-section-panel" data-admin-section="runtime">
-            <div>
-              <p class="eyebrow"><tm-text data-tm-text="DEN HÄR RASPBERRY PI:N">DEN HÄR RASPBERRY PI:N</tm-text></p>
-              <h2 id="server-name"><tm-text data-tm-text="Lokal trafikserver">Lokal trafikserver</tm-text></h2>
-              <p id="server-detail"><tm-text data-tm-text="Läser in serverstatus …">Läser in serverstatus …</tm-text></p>
-            </div>
-            <div id="runtime-pill" class="runtime-pill"><tm-text data-tm-text="Ingen lokal träff vald">Ingen lokal träff vald</tm-text></div>
-          </div>
-
-
-
-
-          <section id="server-identity-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="identity">
-            <div class="identity-status-grid">
-              <div><small><tm-text data-tm-text="SERVER">SERVER</tm-text></small><b id="system-server-name"><tm-text data-tm-text="TrainMeet Server">TrainMeet Server</tm-text></b></div>
-              <div><small><tm-text data-tm-text="AKTIV TRÄFF">AKTIV TRÄFF</tm-text></small><b id="system-runtime-name"><tm-text data-tm-text="Ingen aktiv träff">Ingen aktiv träff</tm-text></b></div>
-              <div><small><tm-text data-tm-text="CLOUD">CLOUD</tm-text></small><b id="system-cloud-state"><tm-text data-tm-text="Inte kopplad">Inte kopplad</tm-text></b></div>
-            </div>
-<button type="button" class="secondary modal-launch" data-open-modal="server-identity-form-modal">Ändra servernamn</button>
-<dialog id="server-identity-form-modal" class="admin-modal" aria-labelledby="server-identity-form-title"><h2 id="server-identity-form-title">Ändra servernamn</h2>
-<form id="server-identity-form" class="server-identity-form">
-              <label for="admin-server-name"><tm-text data-tm-text="Servernamn">Servernamn</tm-text></label>
-              <input id="admin-server-name" maxlength="80" placeholder="Exempel: Grimslöv driftserver" required data-tm-placeholder="Exempel: Grimslöv driftserver">
-              <p id="server-identity-message" class="form-message" role="status"></p>
-              <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary"><tm-text data-tm-text="Spara servernamn">Spara servernamn</tm-text></button></div>
-</form>
-</dialog>
-          </section>
-
-          <!-- Användare. Ägaren bjuder in; den inbjudne väljer sitt eget
-               lösenord med en engångskod som lämnas över på plats. Ägaren
-               känner alltså aldrig till någon annans lösenord.
-
-               Mönstret är be-a-legend-2:s, där inbjudan går med mejl. Servern
-               har ingen e-post och behöver ingen: den som bjuder in står i
-               samma klubblokal som den som bjuds in. -->
-          <section id="admin-users-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="users">
-            <div class="section-heading compact-heading">
-              <div>
-                <h2><tm-text data-tm-text="Användare">Användare</tm-text></h2>
-                <p class="access-explainer"><tm-text data-tm-text="Ägaren lägger till och tar bort. En administratör kan sköta hela servern, men inte ändra vilka som har tillgång.">Ägaren lägger till och tar bort. En administratör kan sköta hela servern, men inte ändra vilka som har tillgång.</tm-text></p>
-              </div>
-              <span id="users-role-chip" class="status-chip">–</span>
-            </div>
-
-            <div class="users-toolbar">
-              <button type="button" class="primary modal-launch" data-open-modal="users-invite-form-modal" id="users-invite-open">Lägg till användare</button>
-            </div>
-            <div class="table-scroll">
-              <table id="users-table" class="users-table">
-                <thead>
-                  <tr><th><tm-text data-tm-text="Användare">Användare</tm-text></th><th><tm-text data-tm-text="Roll">Roll</tm-text></th><th><tm-text data-tm-text="Läge">Läge</tm-text></th><th class="users-actions-head"><tm-text data-tm-text="Åtgärder">Åtgärder</tm-text></th></tr>
-                </thead>
-                <tbody id="users-rows"></tbody>
-              </table>
-            </div>
-
-            <div id="users-invite-code" class="users-code hidden">
-              <div>
-                <b><tm-text data-tm-text="Kod till ">Kod till </tm-text><span id="users-code-for">–</span></b>
-                <p><tm-text data-tm-text="Lämna över koden. Den gäller i sju dagar och kan bara användas en gång.">Lämna över koden. Den gäller i sju dagar och kan bara användas en gång.</tm-text></p>
-              </div>
-              <code id="users-code-value">–</code>
-            </div>
-
 <dialog id="users-invite-form-modal" class="admin-modal" aria-labelledby="users-invite-form-title"><h2 id="users-invite-form-title">Lägg till användare</h2>
 <form id="users-invite-form" class="users-invite">
               <label class="users-invite-name"><tm-text data-tm-text="Användarnamn
@@ -743,20 +889,6 @@
               <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary"><tm-text data-tm-text="Bjud in">Bjud in</tm-text></button></div>
 </form>
 </dialog>
-
-            <p id="users-message" class="form-message" role="status"></p>
-          </section>
-
-          <section id="admin-access-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="access">
-            <div class="section-heading compact-heading">
-              <div>
-                <h2><tm-text data-tm-text="Inloggning">Inloggning</tm-text></h2>
-                <p class="access-explainer"><tm-text data-tm-text="Inloggning krävs överallt, också på serverdatorn. Här byter du ägarens lösenord; andra användare sätter sina egna.">Inloggning krävs överallt, också på serverdatorn. Här byter du ägarens lösenord; andra användare sätter sina egna.</tm-text></p>
-                <p id="access-password-state" class="access-password-state" role="status"></p>
-              </div>
-              <span id="access-mode" class="status-chip"><tm-text data-tm-text="Vid servern">Vid servern</tm-text></span>
-            </div>
-<button type="button" class="secondary modal-launch" data-open-modal="admin-access-form-modal">Ändra inloggning</button>
 <dialog id="admin-access-form-modal" class="admin-modal" aria-labelledby="admin-access-form-title"><h2 id="admin-access-form-title">Ändra inloggning</h2>
 <form id="admin-access-form" class="form-grid access-grid">
               <label><tm-text data-tm-text="Användarnamn
@@ -778,41 +910,6 @@
               </div>
 </form>
 </dialog>
-          </section>
-
-          <section id="software-update-settings" class="card section-card server-step-card admin-section-panel hidden" data-admin-section="software">
-            <div class="section-heading compact-heading">
-              <div>
-                <h2><tm-text data-tm-text="Programuppdatering">Programuppdatering</tm-text></h2>
-                <p class="update-explainer"><tm-text data-tm-text="Hämtar senaste versionen från GitHub, säkerhetskopierar databasen och installerar automatiskt.">Hämtar senaste versionen från GitHub, säkerhetskopierar databasen och installerar automatiskt.</tm-text></p>
-              </div>
-              <span id="software-version" class="version-row"><tm-text data-tm-text="Läser version …">Läser version …</tm-text></span>
-            </div>
-
-            <p id="software-version-move" class="version-move hidden"></p>
-
-            <ol id="update-progress" class="update-progress" aria-live="polite"></ol>
-
-            <div class="inline-form update-actions">
-              <button id="software-check" class="secondary" type="button"><tm-text data-tm-text="Sök efter uppdatering">Sök efter uppdatering</tm-text></button>
-              <button id="software-install" class="primary hidden" type="button"><tm-text data-tm-text="Installera och starta om">Installera och starta om</tm-text></button>
-              <button id="software-retry" class="secondary hidden" type="button"><tm-text data-tm-text="Försök igen">Försök igen</tm-text></button>
-              <button id="software-restart" class="secondary hidden" type="button"><tm-text data-tm-text="Starta om servern">Starta om servern</tm-text></button>
-              <p id="software-update-message" class="form-message" role="status"></p>
-            </div>
-
-            <details class="technical-details">
-              <summary><tm-text data-tm-text="Teknisk information">Teknisk information</tm-text></summary>
-              <dl id="software-technical"></dl>
-            </details>
-          </section>
-
-          <section id="server-system-settings" class="card section-card reset-card server-step-card admin-section-panel hidden" data-admin-section="system">
-            <!-- Återställning. Kopiorna tas av uppdateraren före varje
-                 installation; vägen tillbaka låg bara i terminalen, vilket är
-                 fel plats den dagen man behöver den. Hopfälld som
-                 nollställningen: det här är inte något man gör i förbifarten. -->
-<button type="button" class="secondary" data-open-modal="restore-modal">Återställ från säkerhetskopia</button>
 <dialog id="restore-modal" class="admin-modal" aria-label="Återställ från säkerhetskopia"><div class="reset-body">
                 <h3><tm-text data-tm-text="Ta tillbaka en tidigare version av servern">Ta tillbaka en tidigare version av servern</tm-text></h3>
                 <p><tm-text data-tm-text="En kopia tas automatiskt före varje programuppdatering. Att återställa byter ut ">En kopia tas automatiskt före varje programuppdatering. Att återställa byter ut </tm-text><b><tm-text data-tm-text="hela">hela</tm-text></b><tm-text data-tm-text=" serverns databas — träff, tidtabell, användare och parkopplade enheter blir de som fanns när kopian togs."> serverns databas — träff, tidtabell, användare och parkopplade enheter blir de som fanns när kopian togs.</tm-text></p>
@@ -826,7 +923,6 @@
                 <p id="restore-message" class="form-message" role="status"></p>
               </div>
             <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button id="restore-start" class="danger-action" type="button" disabled><tm-text data-tm-text="Återställ och starta om">Återställ och starta om</tm-text></button></div></dialog>
-<button type="button" class="secondary" id="reset-mode-summary" data-open-modal="reset-modal">Nollställ träffdata</button>
 <dialog id="reset-modal" class="admin-modal" aria-label="Nollställ träffdata"><div class="reset-body">
                 <h3 id="reset-mode-title"><tm-text data-tm-text="Börja om utan att förlora administratörsåtkomsten">Börja om utan att förlora administratörsåtkomsten</tm-text></h3>
                 <p id="reset-mode-description"><tm-text data-tm-text="Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och den aktiva webbinloggningen behålls.">Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och den aktiva webbinloggningen behålls.</tm-text></p>
@@ -837,20 +933,6 @@
                 <p id="factory-reset-message" class="form-message" role="status"></p>
               </div>
             <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button id="factory-reset-server" class="danger-action" type="button" disabled><tm-text data-tm-text="Nollställ träffdata">Nollställ träffdata</tm-text></button></div></dialog>
-          </section>
-
-          <section id="sync-and-devices" class="card section-card cloud-section-card admin-section-panel hidden" data-admin-section="cloud">
-<h2>Cloud-koppling och config</h2><p>Träffens innehåll ändras i Cloud. Publicerade uppdateringar hämtas automatiskt och används när det är säkert för pågående trafik.</p>
-<div class="cloud-connection-summary"><div><b id="cloud-connection-meet">Ingen träff vald</b><span id="cloud-connection-meta"></span></div><span id="cloud-connection-state" class="revision-badge">Inte kopplad</span></div>
-<p id="cloud-auto-status"></p><p id="cloud-version-state" role="status"></p><div class="cloud-actions"><button id="runtime-check-update" class="secondary" type="button">Sök configuppdatering</button><button id="cloud-auto-edit" type="button" class="secondary" data-open-modal="cloud-auto-modal">Automatiska uppdateringar</button><button type="button" class="secondary" data-open-modal="runtime-sync-form-modal">Koppla eller byt träff</button></div><p id="cloud-update-message" class="form-message" role="status"></p>
-<dialog id="cloud-auto-modal" class="admin-modal" aria-labelledby="cloud-auto-title">
-<h2 id="cloud-auto-title">Automatiska uppdateringar</h2>
-<form id="cloud-auto-form">
-<p>Endast publicerade ändringar hämtas från Cloud. Pågående trafik skyddas innan en ny konfiguration används.</p>
-<label class="switch-confirmation"><input id="cloud-auto-enabled" type="checkbox"> Hämta publicerade uppdateringar automatiskt</label>
-<p class="form-message" role="status"></p>
-<div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara</button></div>
-</form></dialog>
 <dialog id="runtime-sync-form-modal" class="admin-modal" aria-labelledby="runtime-sync-form-title"><h2 id="runtime-sync-form-title">Koppla eller byt träff</h2>
 <form id="runtime-sync-form" class="inline-form"><p>Servern representerar en enda träff. Ett byte bevarar serverns användare och nätverk, men gamla stationstilldelningar följer inte med.</p><label class="switch-confirmation"><input id="confirm-meet-change" type="checkbox"> Jag vill byta serverns valda träff om koden gäller en annan träff.</label><p id="runtime-message" class="form-message" role="status"></p>
                   <label for="runtime-central-url"><tm-text data-tm-text="Config-server">Config-server</tm-text></label>
@@ -869,8 +951,6 @@
                   <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button class="primary" type="submit"><tm-text data-tm-text="Koppla och hämta">Koppla och hämta</tm-text></button></div>
 </form>
 </dialog>
-</section>
-
         </section>
 
         <section id="tmbox-v2-view" class="view-panel tmbox-v2-view hidden" aria-live="polite">
@@ -968,70 +1048,6 @@
           </div>
         </section>
 
-        <section id="displays-view" class="view-panel hidden">
-          <div class="server-hero card">
-            <div>
-              <p class="eyebrow"><tm-text data-tm-text="FULLSKÄRMSVYER">FULLSKÄRMSVYER</tm-text></p>
-              <h2><tm-text data-tm-text="Skärmar på träffen">Skärmar på träffen</tm-text></h2>
-              <p><tm-text data-tm-text="Öppna varje vy på en egen TV, dator eller surfplatta. De läser samma lokala lägesbild och återansluter automatiskt.">Öppna varje vy på en egen TV, dator eller surfplatta. De läser samma lokala lägesbild och återansluter automatiskt.</tm-text></p>
-            </div>
-          </div>
-          <div class="display-launcher-grid">
-            <a class="display-launch-card" href="/display/topology" target="_blank" rel="noopener">
-              <span class="display-launch-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h5m8 0h5M8 6a2 2 0 1 0 4 0 2 2 0 1 0-4 0Zm4 0h4M3 18h5m8 0h5m-13 0a2 2 0 1 0 4 0 2 2 0 1 0-4 0Zm4 0h4M10 8v8"/></svg></span><b><tm-text data-tm-text="Banöversikt">Banöversikt</tm-text></b><small id="display-card-topology"><tm-text data-tm-text="Läser stationsplanen …">Läser stationsplanen …</tm-text></small>
-            </a>
-            <a class="display-launch-card" href="/display/graph" target="_blank" rel="noopener">
-              <span class="display-launch-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h16M7 15l4-5 3 3 5-7"/></svg></span><b><tm-text data-tm-text="Tågdiagram">Tågdiagram</tm-text></b><small id="display-card-graph"><tm-text data-tm-text="Läser tidtabellen …">Läser tidtabellen …</tm-text></small>
-            </a>
-            <a class="display-launch-card" href="/display/clock" target="_blank" rel="noopener">
-              <span class="display-launch-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b><tm-text data-tm-text="Träffklocka">Träffklocka</tm-text></b><small id="display-card-clock"><tm-text data-tm-text="Läser klockan …">Läser klockan …</tm-text></small>
-            </a>
-            <a class="display-launch-card" href="/display/dashboard" target="_blank" rel="noopener">
-              <span class="display-launch-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><b><tm-text data-tm-text="Översikt">Översikt</tm-text></b><small id="display-card-dashboard"><tm-text data-tm-text="Läser trafikläget …">Läser trafikläget …</tm-text></small>
-            </a>
-          </div>
-          <section class="card section-card connection-badge-card">
-            <div class="section-heading compact-heading">
-              <div>
-                <p class="eyebrow"><tm-text data-tm-text="ANSLUT TMBOX">ANSLUT TMBOX</tm-text></p>
-                <h2><tm-text data-tm-text="Visa anslutningsuppgifter">Visa anslutningsuppgifter</tm-text></h2>
-                <p><tm-text data-tm-text="Adress, port och kod som en TMBox behöver. Visas som standard på alla skärmar.">Adress, port och kod som en TMBox behöver. Visas som standard på alla skärmar.</tm-text></p>
-              </div>
-              <span id="connection-badge-code" class="revision-badge"><tm-text data-tm-text="Läser koden …">Läser koden …</tm-text></span>
-            </div>
-<button type="button" class="secondary" data-open-modal="connection-badge-modal">Ändra visning av anslutningsuppgifter</button>
-<dialog id="connection-badge-modal" class="admin-modal" aria-labelledby="connection-badge-title"><h2 id="connection-badge-title">Anslutningsuppgifter på skärmar</h2>
-<form id="connection-badge-form">
-            <p class="pv-note"><tm-text data-tm-text="Skärmarna som visar Wi-Fi-koden och länken till deltagarvyn.">Skärmarna som visar Wi-Fi-koden och länken till deltagarvyn.</tm-text></p>
-            <div id="connection-badge-screens" class="connection-badge-screens">
-              <label><input type="checkbox" value="clock" checked><tm-text data-tm-text=" Träffklocka"> Träffklocka</tm-text></label>
-              <label><input type="checkbox" value="topology" checked><tm-text data-tm-text=" Banöversikt"> Banöversikt</tm-text></label>
-              <label><input type="checkbox" value="graph" checked><tm-text data-tm-text=" Tågdiagram"> Tågdiagram</tm-text></label>
-              <label><input type="checkbox" value="dashboard" checked><tm-text data-tm-text=" Översikt"> Översikt</tm-text></label>
-            </div>
-            <p id="connection-badge-message" class="form-message"></p>
-<div class="modal-actions"><button type="submit" class="primary">Spara</button></div></form>
-<form id="connection-code-form">
-            <label class="connection-badge-validity"><tm-text data-tm-text="Koden gäller">Koden gäller</tm-text><select id="connection-badge-validity">
-                <option value="0" data-tm-text="Tills vidare">Tills vidare</option>
-                <option value="12" data-tm-text="12 timmar">12 timmar</option>
-                <option value="24" data-tm-text="24 timmar">24 timmar</option>
-                <option value="72" data-tm-text="3 dygn">3 dygn</option>
-                <option value="168" data-tm-text="7 dygn">7 dygn</option>
-              </select></label>
-            <label class="web-client-ttl"><tm-text data-tm-text="Virtuella TMBoxar utan station tas bort efter">Virtuella TMBoxar utan station tas bort efter</tm-text><span class="server-ttl-row"><input id="web-client-ttl" type="number" min="5" max="240" step="5" value="30" required> <tm-text data-tm-text="minuter">minuter</tm-text></span></label>
-            <p id="connection-code-message" class="form-message"></p>
-<div class="modal-actions"><button type="submit" class="primary">Spara</button></div></form>
-<form id="connection-wifi-form">
-            <div class="server-wifi-row">
-              <label><tm-text data-tm-text="Nätverksnamn">Nätverksnamn</tm-text><input id="connection-wifi-name" maxlength="32" autocomplete="off" placeholder="Lämna tomt om nätet inte ska delas" data-tm-placeholder="Lämna tomt om nätet inte ska delas"></label>
-              <label><tm-text data-tm-text="Lösenord">Lösenord</tm-text><input id="connection-wifi-password" type="password" maxlength="63" autocomplete="off" placeholder="Tomt = öppet nät" data-tm-placeholder="Tomt = öppet nät"></label>
-            </div>
-            <p class="pv-note"><tm-text data-tm-text="Namn och lösenord står på deltagarvyn och finns i Wi-Fi-koden på skärmarna. Lämna fälten tomma om nätet inte ska delas.">Namn och lösenord står på deltagarvyn och finns i Wi-Fi-koden på skärmarna. Lämna fälten tomma om nätet inte ska delas.</tm-text></p>
-            <p id="connection-wifi-message" class="form-message"></p>
-<div class="modal-actions"><button type="submit" class="primary">Spara</button></div></form></dialog>
-          </section>
-        </section>
           </div>
         </div>
       </section>
@@ -1101,6 +1117,7 @@
     <script src="/assets/drift-model.js" defer></script>
     <script src="/assets/drift.js" defer></script>
     <script src="/assets/server-ui.js" defer></script>
+    <script src="/assets/settings.js" defer></script>
     <script src="/assets/app.js?v=20260927-6" defer></script>
     <script src="/assets/participant.js" defer></script>
   </body>

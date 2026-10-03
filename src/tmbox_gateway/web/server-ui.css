@@ -7,8 +7,7 @@
    owner chip, invitation codes and update steps. */
 :root { --trainmeet-dark: #183f94; --accent-warm-dark: #1f3f8a; --accent-tint: #eef3fb; --accent-tint-light: #f5f8fd; --accent-edge: #c9d7f2; }
 #app-chrome #connection { display: none; }
-button.secondary, .server-step-card button.secondary { color: var(--text); background: white; border-color: #d9d9d9; }
-#overview-traffic-heading { font-size: 13px; }
+button.secondary { color: var(--text); background: white; border-color: #d9d9d9; }
 #app-view input, #app-view select { border-radius: 6px; }
 :is(#device-list, #terminal-list, #device-removed-trying) .status-row > div:first-child { min-width: 0; }
 :is(#device-list, #terminal-list, #device-removed-trying) .status-row b { white-space: nowrap; }
@@ -41,7 +40,7 @@ body:not(.display-mode) .page-shell { max-width: none; width: 100%; margin: 0; p
 #app-view { padding: 12px 24px 20px; max-width: 1920px; margin: auto; }
 .server-admin-shell, .server-workspace { display: block; min-width: 0; }
 #overview-view { display: flex; flex-direction: column; gap: 12px; }
-.card, .section-card, .overview-section { border: 1px solid var(--border); border-radius: 8px; box-shadow: none; padding: 12px 14px; margin: 0; min-width: 0; }
+.card { border: 1px solid var(--border); border-radius: 8px; box-shadow: none; padding: 12px 14px; margin: 0; min-width: 0; }
 h1, h2, h3, h4, p { margin-top: 0; }
 h2 { font-size: 16px; line-height: 1.3; margin-bottom: 10px; }
 h3 { font-size: 13px; line-height: 1.4; margin-bottom: 8px; }
@@ -59,56 +58,18 @@ input[type=checkbox], input[type=radio] { min-height: 0; width: 15px; height: 15
 label { font-size: 12px; font-weight: 600; gap: 5px; }
 .form-message { font-size: 12px; margin: 4px 0; min-height: 0; }
 .form-message:empty { display: none; }
-.section-heading, .compact-heading, .overview-section-heading { margin: 0 0 10px; gap: 10px; align-items: center; }
-.section-heading p, .overview-section-heading p { font-size: 12px; color: var(--muted); }
-#local-clock-time { width: 132px; font-family: var(--font-mono); }
-#local-clock-speed { width: 65px; font-family: var(--font-mono); }
 #local-clock-reason { width: 180px; }
-.server-source { display: flex; flex-direction: column; gap: 5px; }
 .clock-control-actions { border: 0; padding: 0; margin: 0; display: flex; align-items: center; gap: 6px; width: auto; }
 #clock-control-message { flex-basis: 100%; order: 10; }
 .server-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.server-grid-two, .server-settings-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; align-items: start; }
-.server-settings-columns > div { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.server-settings-nav { display: flex; flex-wrap: wrap; gap: 6px; }
-#settings-heading { margin-bottom: 12px; padding: 0; display: flex; align-items: center; gap: 14px; }
-#settings-heading h2 { font-size: 22px; margin: 0; }
-.server-anchor { scroll-margin-top: 70px; }
-.server-card { position: relative; }
-.server-card > h2, .server-card > .section-heading { border-bottom: 1px solid var(--border-soft); padding-bottom: 8px; margin-bottom: 10px; }
-.server-card .eyebrow { display: none; }
-.server-inline-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin: 8px 0; padding: 0; }
-.server-inline-form > p { flex-basis: 100%; }
-.server-inline-form .modal-actions { border: 0; padding: 0; margin: 0; display: flex; gap: 6px; }
-.server-inline-form label { display: flex; flex-direction: column; }
+.server-grid-two { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; align-items: start; }
 .server-inline-form label:has(input[type=checkbox]) { flex-direction: row; align-items: center; }
 /* ⚙ › Skärmar och klocka: four parts, each with its own heading and Spara. */
-.server-part { padding: 12px 0 4px; border-top: 1px solid var(--border-soft); }
-.server-part--first { border-top: 0; padding-top: 2px; }
 /* Spara on a line of its own under the part's fields, in every part. */
-.server-part .server-inline-form .modal-actions { flex-basis: 100%; }
-.server-part .form-message:empty { display: none; }
-.server-part__title { margin: 0 0 2px; font-size: 13.5px; font-weight: 700; }
-.server-part .server-inline-form { margin: 6px 0 8px; }
-.server-part .server-network { margin-top: 4px; }
-.server-part .pv-note { flex-basis: 100%; margin: 0; }
 #clock-appearance-form > p:first-child { display: none; }
-#connection-badge-form .connection-badge-screens { display: flex; flex-wrap: wrap; gap: 8px; }
-#cloud-auto-form { align-items: center; }
-.cloud-connection-summary { display: flex; justify-content: space-between; margin: 8px 0; padding: 10px; gap: 10px; min-height: 0; }
-.cloud-connection-summary > div { min-width: 0; flex: 1; }
-.cloud-connection-summary b { font-size: 14px; }
-.cloud-connection-summary span { font-size: 12px; }
-.cloud-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .server-network { font: 11.5px/1.5 var(--font-mono); color: var(--muted); margin: 0; overflow-wrap: anywhere; }
-.status-grid { gap: 8px; }
-.status-grid strong, .status-grid b { font-size: 13px; }
-.status-grid span, .status-grid small { font-size: 12px; }
-.server-card .users-toolbar { margin: 0 0 8px; }
-.users-table { font-size: 12.5px; }
-.users-table th, .users-table td, .tm-table th, .tm-table td { padding: 7px 10px; font-size: 12.5px; line-height: 18px; }
-.users-table th, .tm-table th { background: var(--row-alt); font-size: 11.5px; text-transform: none; letter-spacing: 0; }
-.status-chip, .revision-badge { font-size: 11px; padding: 3px 7px; }
+.tm-table th, .tm-table td { padding: 7px 10px; font-size: 12.5px; line-height: 18px; }
+.tm-table th { background: var(--row-alt); font-size: 11.5px; text-transform: none; letter-spacing: 0; }
 #device-list, #terminal-list, #device-removed-trying { display: block; margin: 0; }
 /* Code · station · status · actions. The status sits just before the buttons,
    in the same place on every row whatever the station's name. */
@@ -129,9 +90,6 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 :is(#device-list, #terminal-list, #device-removed-trying) .status-row > .device-connection--offline::before { border: 1.5px solid var(--muted); box-sizing: border-box; }
 #device-removed-trying .status-row > span { text-align: left; }
 #device-removed-trying h3 { margin: 10px 12px 2px; font-size: 12px; color: var(--muted); font-weight: 600; }
-.overview-section-heading h2, .overview-section-heading h3 { font-size: 13px; margin: 0; }
-.overview-section-heading .overview-kicker { display: none; }
-.overview-section-heading a { font-size: 11.5px; white-space: nowrap; }
 .server-event { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--border-soft); }
 /* Drift: each upcoming train is a button that opens its route (#drift-train-detail). */
 .train-detail-now { margin: 6px 0 10px; font-size: 13px; }
@@ -142,21 +100,14 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 .train-detail-stops .route-stop.current > i { border-color: var(--trainmeet); background: var(--trainmeet); box-shadow: 0 0 0 3px var(--trainmeet-soft); }
 .train-detail-stops .route-stop.current b { color: var(--trainmeet); }
 .train-detail-between { margin: 0 0 6px 25px; color: var(--trainmeet); font-size: 11px; font-weight: 600; }
-.server-details { font-size: 12px; padding: 6px 0; }
-.server-details > summary { cursor: pointer; font-weight: 600; }
 /* A part of a Drift module: its name and what is in it, never folded. */
-.server-block__title { margin: 0; font-size: 12px; font-weight: 600; }
 /* As tall as the layout's stations need, then it scrolls. */
 /* Module heads (DriftEU): name, then a short grey line. */
-.overview-section-heading > div { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 /* Tidtabell och tågrutter: one card, the timetable and then Cloud's findings. */
-#published-findings.timetable-findings { margin: 0; padding: 8px 14px; border-top: 1px solid var(--border); font-size: 12.5px; }
 /* Tågrutter: the chosen train on a small map above its calls. A call is a
    plain row, its name over its times, not a framed button. */
 .route-stop-button { display: block; min-height: 0; padding: 3px 8px; border: 0; text-align: left; font-weight: 400; }
 .route-map { display: block; width: 100%; height: 180px; margin: 0 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--row-alt); }
-#server-system-settings { border-color: #e6b8b8; }
-#server-system-settings h2 { color: var(--danger-text); }
 .admin-modal { padding: 24px; border: 1px solid var(--border); border-radius: 12px; width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; box-shadow: 0 24px 80px #0003; }
 .admin-modal h2 { font-size: 20px; padding-right: 30px; }
 .admin-modal p { font-size: 13px; }
@@ -169,21 +120,18 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 .simulation-station p { font-size: 12px; }
 #login, #setup { max-width: 680px; margin: 40px auto; padding: 24px; }
 @media (max-width: 1200px) {
-  #header-server-meta { display: none; }
+#header-server-meta { display: none; }
 }
 @media (max-width: 900px) {
-  #app-chrome { height: auto; min-height: 52px; flex-wrap: wrap; padding: 10px 16px; gap: 8px; }
-  #app-chrome .topbar-right { width: 100%; justify-content: flex-end; }
-  #app-chrome .tm-switch { border: 0; padding: 0; }
-  #app-view { padding: 12px; }
-  .server-grid-two, .server-settings-columns { grid-template-columns: 1fr; }
-  #settings-heading { display: block; }
-  #settings-heading h2 { margin-bottom: 10px; }
-  :is(#device-list, #terminal-list, #device-removed-trying) .status-row { grid-template-columns: 1fr; }
-  :is(#device-list, #terminal-list, #device-removed-trying) .status-row > .device-connection { justify-self: start; }
-  :is(#device-list, #terminal-list, #device-removed-trying) .device-actions { justify-content: flex-start; flex-wrap: wrap; }
+#app-chrome { height: auto; min-height: 52px; flex-wrap: wrap; padding: 10px 16px; gap: 8px; }
+#app-chrome .topbar-right { width: 100%; justify-content: flex-end; }
+#app-chrome .tm-switch { border: 0; padding: 0; }
+#app-view { padding: 12px; }
+.server-grid-two { grid-template-columns: 1fr; }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row { grid-template-columns: 1fr; }
+:is(#device-list, #terminal-list, #device-removed-trying) .status-row > .device-connection { justify-self: start; }
+:is(#device-list, #terminal-list, #device-removed-trying) .device-actions { justify-content: flex-start; flex-wrap: wrap; }
 }
-
 /* ---------- Småputs: en knapp, en etikett, ett fält (design/komponenter.html) ----------
    app.css is still loaded and its .app-view rules win over the kit's element
    selectors, so these id-anchored rules restate the kit sizes once, for all. */
@@ -196,33 +144,17 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 #app-view .tm-btn--sm, #device-list .device-actions button { min-height: 26px; padding: 4px 10px; }
 #app-view label, .admin-modal label { font: 600 12px/1.3 var(--font); color: var(--text-2); gap: 5px; }
 #app-view label:has(> input[type=checkbox]), #app-view label:has(> input[type=radio]) { font-weight: 500; color: var(--text); align-items: center; }
-#app-view .server-field-label { font: 600 12px/1.3 var(--font); color: var(--text-2); }
 .admin-modal label:has(> input[type=checkbox]) { font: 500 13px/1.4 var(--font); color: var(--text); }
 #app-view input:not([type=checkbox]):not([type=radio]), #app-view select, #app-view textarea, .admin-modal input:not([type=checkbox]):not([type=radio]), .admin-modal select {
   font-size: 13px; line-height: 18px; padding: 6px 10px; min-height: 32px;
 }
 #app-view select { padding-right: 26px; }
-.server-source > button { height: 32px; min-height: 32px; box-sizing: border-box; }
 #local-clock-time { width: 148px; }
 #local-clock-speed { width: 72px; }
-.server-divider { width: 1px; align-self: stretch; background: var(--border-soft); margin: 0 4px; }
-.server-field { display: flex; flex-direction: column; gap: 5px; }
-.server-wifi-row { display: flex; flex-wrap: wrap; gap: 10px; }
-.server-wifi-row label { display: flex; flex-direction: column; }
-#connection-wifi-name, #connection-wifi-password { width: 220px; max-width: 100%; font-family: var(--font-mono); }
 /* The name and password are read aloud and typed into a box: code font. The
    hint in an empty field is ordinary text. */
-#connection-wifi-name::placeholder, #connection-wifi-password::placeholder { font-family: var(--font); }
-.server-wifi-row { flex-basis: 100%; }
-.server-ttl-row { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text); }
-#web-client-ttl { width: 72px; font-family: var(--font-mono); }
-.server-field > label { margin: 0; }
-#meet-clock-style { width: 240px; }
-#connection-badge-form .connection-badge-screens { gap: 4px 16px; min-height: 32px; align-items: center; }
-#connection-badge-form .connection-badge-screens label { padding: 0; background: none; border-radius: 0; font: 500 12.5px/1.3 var(--font); color: var(--text); gap: 6px; }
 .clock-control-actions { gap: 8px; }
 #app-chrome .tm-status { line-height: 16px; }
-
 /* ---------- Deltagarvyn (SPEC A4): serverns startsida, utan inloggning ----------
    One column on a phone, two above 900 px. Same kit, same map renderer. */
 body.participant-mode #app-chrome { display: none !important; }
@@ -285,15 +217,14 @@ body.participant-mode #app-view { padding: 0; max-width: none; }
 .pv-step .h { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
 .pv-values { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
 .pv-value { font: 600 14px/1.3 var(--font-mono); background: var(--row-alt); border: 1px solid var(--border-soft); border-radius: 6px; padding: 4px 8px; }
-.pv-value--big { font-size: 26px; padding: 6px 12px; letter-spacing: .04em; }
 .pv-value--muted { font-family: var(--font); font-weight: 500; color: var(--muted); }
 .pv-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px 20px; font-size: 12px; color: var(--muted); max-width: 1400px; width: 100%; box-sizing: border-box; margin: 0 auto; }
 .pv-foot a { font-weight: 600; }
 @media (max-width: 900px) {
-  .pv-page { grid-template-columns: minmax(0, 1fr); padding: 12px 16px 0; gap: 12px; }
-  .pv-row { grid-template-columns: minmax(0, 1fr); }
-  #app-view .pv-login { display: none; }
-  .pv-foot { flex-direction: column-reverse; align-items: flex-start; gap: 10px; padding: 14px 16px 20px; }
+.pv-page { grid-template-columns: minmax(0, 1fr); padding: 12px 16px 0; gap: 12px; }
+.pv-row { grid-template-columns: minmax(0, 1fr); }
+#app-view .pv-login { display: none; }
+.pv-foot { flex-direction: column-reverse; align-items: flex-start; gap: 10px; padding: 14px 16px 20px; }
 }
 @media (min-width: 901px) {
 #pv-foot-login { display: none; }
@@ -384,9 +315,6 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .sc-clock-layout .clock-digital[data-seconds=true] { font-size: 330px; }
 .sc-clock-layout .clock-digital.stopped { color: #a3a3a3; opacity: 1; }
 #display-connection #display-connection-address { font: 26px var(--font-mono); }
-.server-card.cloud-section-card { gap: 10px; }
-.server-settings-columns .server-card { padding: 12px 14px; }
-.server-card .section-heading h2 { font-size: 16px; }
 .admin-modal .modal-close { width: 44px; height: 44px; }
 .sc-clock-layout .sc-run { font-size: 30px; }
 .sc-clock-layout .sc-stopped { max-width: 1240px; text-align: left; }
@@ -555,14 +483,10 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .sc-online.has-more { grid-template-columns: repeat(var(--count, 3), minmax(0, 1fr)) auto; }
 .sc-online__more { white-space: nowrap; }
 @media (max-width: 600px) {
-  #app-chrome .topbar-right { flex-wrap: wrap; }
-  #header-cloud-status { max-width: 165px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .server-settings-nav .tm-seg { padding: 5px 8px; }
+#app-chrome .topbar-right { flex-wrap: wrap; }
+#header-cloud-status { max-width: 165px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
-
 /* Farozon is the last card on the page, under both columns. */
-#admin-view > .server-card[data-anchor=farozon] { margin-top: 12px; }
-
 /* ---------- Telefon: fasta sidmarginaler ----------
    The page never pans sideways: one fixed gutter, and anything wider scrolls
    inside its own box. On touch screens fields use 16 px text; smaller text
@@ -570,46 +494,28 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
    floats from side to side. */
 html, body { overflow-x: clip; }
 @media (hover: none) and (pointer: coarse) {
-  input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { font-size: 16px !important; }
+input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { font-size: 16px !important; }
 }
 @media (max-width: 900px) {
-  #app-view { padding: 12px 16px 24px; }
-  body[data-mode] .server-admin-shell { width: 100%; padding: 0 0 32px; }
-  #app-view .server-workspace { padding-left: 0; padding-right: 0; }
-  #login, #setup { width: auto; margin: 16px; }
-  /* Card headings stay left-aligned when their row stacks on a phone. */
-  #app-view .section-heading { align-items: flex-start; text-align: left; }
+#app-view { padding: 12px 16px 24px; }
+body[data-mode] .server-admin-shell { width: 100%; padding: 0 0 32px; }
+#app-view .server-workspace { padding-left: 0; padding-right: 0; }
+#login, #setup { width: auto; margin: 16px; }
+/* Card headings stay left-aligned when their row stacks on a phone. */
 }
 /* Drift › Anslut ställverk och appar: the address and the code, large, with what to type where. */
-#connect-terminals .connect-facts { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 6px 0 4px; }
 /* The label, then the value and Kopiera; on a phone Kopiera goes to its own
    line rather than breaking the address. */
-#connect-terminals .connect-fact { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; max-width: 100%; }
-#connect-terminals .connect-fact .server-field-label { flex-basis: 100%; }
 /* An address longer than the card (a long host name) wraps inside it. */
-#connect-terminals .connect-value { min-width: 0; overflow-wrap: anywhere; font: 700 20px/1.2 var(--font-mono); letter-spacing: .02em; }
 /* A full IPv4 address with its port fits one line on a phone. */
-@media (max-width: 480px) {
-#connect-terminals .connect-value { font-size: 17px; }
-}
 #connect-terminals #connect-code { font-size: 26px; letter-spacing: .08em; }
-#connect-terminals .connect-copy { font-size: 11.5px; padding: 3px 8px; min-height: 24px; }
-#connect-terminals .connect-note:empty { display: none; }
-#connect-terminals .connect-note { margin: 6px 0; padding: 6px 10px; border-radius: 6px; background: var(--warn-bg); color: var(--warn-text); font-size: 12.5px; }
-#connect-terminals .connect-steps { margin: 8px 0 10px; padding-left: 20px; font-size: 12.5px; color: var(--text-2); }
-#connect-terminals .connect-steps li { margin: 2px 0; }
-#connect-terminals .connect-renew-note { font-size: 11.5px; color: var(--muted); margin: 4px 0 0; }
 #terminal-list h3 { margin: 10px 12px 2px; font-size: 12px; color: var(--muted); font-weight: 600; }
 #terminal-list .status-row > span { text-align: left; }
-
 /* ---------- Designkorrektur 2026-10-01: the kit applied the same way everywhere ----------
    One gutter, one card head, one link for "show it on a TV", outline icons,
    the TrainMeet mark as it is. */
-
 /* One frame on Drift, Inställningar and Hjälp: 24 px from the edge, 12 px down. */
 body[data-mode] .server-admin-shell { width: 100%; max-width: none; margin: 0; padding: 0 0 24px; }
-.tm-visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-
 /* Header: the mark without a colour filter, icons as outlines, the open page's
    icon marked. Signed out (the login page) the header is the meet's name only. */
 #app-chrome .brand-mark, .pv-top .brand-mark { filter: none; width: 26px; height: 26px; object-fit: contain; flex-shrink: 0; }
@@ -617,212 +523,67 @@ body[data-mode] .server-admin-shell { width: 100%; max-width: none; margin: 0; p
 #app-chrome .tm-icon-btn:hover { background: var(--row-alt); color: var(--text); }
 #app-chrome .tm-icon-btn[aria-current="page"] { background: var(--primary-soft); color: var(--primary); }
 body[data-signed-in="no"] #app-chrome :is(#header-cloud-status, .topbar-right, #header-server-meta) { display: none !important; }
-
 /* Module heads on Drift: title, grey line, controls, "Öppna på skärm ↗". */
-#overview-view .overview-section-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: -12px -14px 12px; padding: 9px 12px; min-height: 40px; box-sizing: border-box; border-bottom: 1px solid var(--border-soft); }
-#overview-view .overview-section-heading > div:first-child { flex: 1 1 auto; }
 #overview-view .overview-section-heading :is(h2, h3) { margin: 0; font-size: 13px; font-weight: 700; white-space: nowrap; }
-#app-view a.server-screen-link { font-size: 12px; font-weight: 600; color: var(--primary); text-decoration: none; white-space: nowrap; }
-#app-view a.server-screen-link:hover { color: var(--primary-hover); }
-#overview-traffic .overview-section-heading > div:first-child { flex: 0 1 auto; }
-#overview-traffic .overview-section-heading .traffic-filters { flex: 1 1 auto; justify-content: flex-end; flex-wrap: nowrap; gap: 10px; margin: 0; padding: 0; }
-#overview-traffic .overview-section-heading .traffic-filters label { font-weight: 500; color: var(--text-3); white-space: nowrap; }
-#app-view #overview-traffic .overview-section-heading select { width: 150px; min-width: 110px; max-width: 150px; flex: 0 1 150px; min-height: 28px; padding: 3px 26px 3px 8px; font-size: 12px; }
-
 /* Klockraden: the fields in the middle of the row, not at its foot. */
 #app-view .tm-clockrow__aside .server-actions :is(button, a) { min-height: 26px; padding: 4px 10px; }
-
 /* Klienter: waiting count beside the title, the address as a chip; a waiting
    box is a pale yellow row with a yellow tag, as in the design. */
-#app-view #device-management > .section-heading { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 8px 12px; text-align: left; }
 #device-awaiting.tm-tag { margin: 0; min-height: 0; font-size: 11px; line-height: 16px; color: var(--warn-text); }
 #device-list .status-row { background: #fff; }
-#device-list .status-row.is-waiting { background: #fffdf5; }
 /* Dark ink on the yellow tag: the yellow text belongs to "Ingen kontakt" in the status column. */
-#device-list .status-row.is-waiting > span:nth-child(2) { justify-self: start; padding: 1px 8px; border-radius: 999px; background: var(--warn-bg); color: var(--text-2); font-size: 11px; font-weight: 600; }
-
 /* TMBox-placering: the name first, the code quiet; Redigera as a link at the right. */
-.station-name-cell b { font-weight: 600; }
-.station-name-cell .station-code { font: 11px var(--font-mono); color: var(--muted); }
-#app-view #server-station-rows td:last-child > button.secondary { min-height: 0; padding: 2px 4px; border: 0; background: none; color: var(--primary); font-size: 12px; }
-#app-view #server-station-rows td:last-child > button.secondary:disabled { color: var(--faint); }
-
 /* One look for every "▸ more" on Drift: a blue link that opens in place. */
 :is(#device-management, #station-placement, #overview-traffic) details > summary { list-style: none; cursor: pointer; font: 600 12.5px/1.4 var(--font); color: var(--primary); letter-spacing: 0; text-transform: none; margin: 0; padding: 6px 0; }
 :is(#device-management, #station-placement, #overview-traffic) details > summary::-webkit-details-marker { display: none; }
 :is(#device-management, #station-placement, #overview-traffic) details > summary::before { content: "▸ "; }
 :is(#device-management, #station-placement, #overview-traffic) details[open] > summary::before { content: "▾ "; }
-#server-station-rows > details > summary { padding: 8px 12px; }
 /* Banöversikt and Trafik just nu side by side at one height; the map is the
    card's body, not a second box inside it. */
 /* When a train is selected, the badge follows the map instead of the card
    edge. Do not let the edge-to-edge map margin eat the gap above it. */
 /* Trafik just nu: tiles, the events in columns, the two folded lists in a row. */
-#overview-traffic .traffic-section { margin: 12px 0 0; }
-#overview-traffic :not(summary).section-eyebrow { margin: 0 0 4px; font: 700 11px/1.3 var(--font); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.drift-more { display: flex; flex-wrap: wrap; gap: 0 18px; margin-top: 8px; }
-#overview-traffic .drift-more > details { margin: 0; padding: 0; }
-.drift-more > details[open] { flex-basis: 100%; }
-
 /* Tågdiagram: the dark band runs edge to edge in its card; "now" is a red
    dashed line with a dot, as in the Drift design (the TV graph has its own). */
 /* Inställningar: the same card head as Drift; Spara is the quiet button, so
    the page is not a column of blue; Farozon is white with red. */
-#admin-view { gap: 12px; }
-#settings-heading { flex-wrap: wrap; margin-bottom: 0; }
-#settings-heading .server-settings-nav { flex: 1 1 auto; align-items: center; }
-#settings-heading .server-settings-nav > .tm-btn { margin-left: auto; }
-.server-settings-nav a.tm-seg[href$="#farozon"] { color: var(--danger-text); }
-.server-card > .server-anchor { position: absolute; top: 0; left: 0; }
-.server-card > h2, .server-card > .section-heading { margin: -12px -14px 12px; padding: 9px 12px; border-bottom: 1px solid var(--border-soft); }
-.server-card > h2, .server-card > .section-heading h2 { font-size: 13px; font-weight: 700; line-height: 1.4; }
-.server-card > .section-heading h2 { margin: 0; }
-#app-view .server-card > .section-heading { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 6px 10px; text-align: left; }
-.server-card > .section-heading > div:first-child { flex: 1 1 auto; min-width: 0; }
-.server-card__note { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
-#admin-view .server-card .modal-actions button.primary { color: var(--text); background: #fff; border-color: #d9d9d9; }
-#admin-view .server-card .modal-actions button.primary:hover { background: var(--row-alt); }
-#admin-view > .server-card[data-anchor=farozon] { margin-top: 0; }
-#server-system-settings { background: #fff; border-color: #f0c4c4; }
-#server-system-settings > h2 { color: var(--danger-text); }
-#server-system-settings button.danger-action { color: var(--danger-text); background: #fff; border-color: #f0c4c4; }
-#server-system-settings button.danger-action:hover { background: var(--danger-bg); }
-#language-settings select { width: 240px; max-width: 100%; }
 #login input:not([type=checkbox]):not([type=radio]):not(.code-boxes input) { border-radius: 6px; }
-
 /* Hjälp: one card, the three guides as quiet rows. */
 #help-view { display: block; }
 #help-view > .server-actions { margin: 0 0 6px; }
-#help-view > .server-details { padding: 8px 0; border-top: 1px solid var(--border-soft); }
-
 /* Deltagarvyn: no clipped line, and on a phone the design's order – the
    clock, the line right now, then the timetable. */
 #pv-virtual-ttl { white-space: normal; }
 @media (max-width: 900px) {
-  .pv-row { display: contents; }
-  .pv-main > .pv-row > .pv-clock-card { order: 1; }
-  .pv-main > #pv-track-card { order: 2; }
-  .pv-main > .pv-row > :not(.pv-clock-card) { order: 3; }
+.pv-row { display: contents; }
+.pv-main > .pv-row > .pv-clock-card { order: 1; }
+.pv-main > #pv-track-card { order: 2; }
+.pv-main > .pv-row > :not(.pv-clock-card) { order: 3; }
 }
-
 /* Phone: one row of header controls (the status pill only when it says
    something: a newer version, no contact); no stray divider in the clock row. */
 @media (max-width: 600px) {
-  #app-chrome #header-cloud-status.tm-status--published { display: none; }
-  #overview-traffic .overview-section-heading .traffic-filters { flex-wrap: wrap; justify-content: flex-start; }
+#app-chrome #header-cloud-status.tm-status--published { display: none; }
 }
-
 /* ---------- Inställningar i designens form (ServerSida) ----------
    Each card: a head (name + grey line), rows of key and value with the action
    last in its row, a foot for the small print. Kit sizes: 13 px heads,
    12.5 px rows, 140 px keys, 11.5 px foot. */
-#admin-view .server-card > .section-heading { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: -12px -14px 10px; padding: 9px 12px; border-bottom: 1px solid #eee; text-align: left; }
-#admin-view .server-card > .section-heading > div:first-child { display: contents; }
-#admin-view .server-card > .section-heading h2 { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.4; }
-.server-card__note-inline { font-size: 12px; font-weight: 500; color: var(--muted); }
-.tm-spacer { flex-grow: 1; }
-.tm-lines { display: flex; flex-direction: column; }
-#admin-view .tm-line { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px 12px; min-height: 30px; padding: 4px 0; margin: 0; border-bottom: 1px solid var(--border-soft); font: 400 12.5px/1.4 var(--font); color: var(--text); }
-#admin-view .tm-lines > .tm-line:last-child { border-bottom: 0; }
-#admin-view .tm-line > .tm-line__key { flex: 0 0 140px; width: 140px; margin: 0; font: 600 12.5px/1.4 var(--font); color: var(--text); }
-#admin-view .tm-line > p { margin: 0; font-size: 12.5px; }
-#admin-view .tm-line > p.form-message:empty { display: none; }
-.tm-line__muted, #cloud-auto-status, #cloud-version-state { color: var(--muted); }
-.tm-line__mono { font-family: var(--font-mono); }
-#app-view button.tm-linkbtn { min-height: 0; padding: 0; border: 0; background: none; color: var(--primary); font: 600 12px/1.4 var(--font); }
-#app-view button.tm-linkbtn:hover { color: var(--primary-hover); background: none; }
-#admin-view .server-card > .tm-card__foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 10px -14px -12px; padding: 8px 12px; border-top: 1px solid var(--border-soft); font-size: 11.5px; color: var(--muted); }
-#admin-view .server-card > .tm-card__foot p { margin: 0; font-size: 11.5px; color: var(--muted); }
-#admin-view .tm-card__foot button, #admin-view .tm-line button:not(.tm-linkbtn) { min-height: 26px; padding: 4px 10px; }
-
 /* Träff och Cloud */
-#cloud-connection-meet { font-weight: 600; }
-#cloud-connection-meta.tm-badge { font-size: 10.5px; padding: 2px 6px; }
-#cloud-connection-state { padding: 1px 7px; border: 0; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--neutral-bg); color: var(--neutral-text); }
-#cloud-connection-state.active { background: var(--ok-bg); color: var(--ok-text); }
-#sync-and-devices #cloud-auto-form { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin: 0; padding: 0; }
-#sync-and-devices #cloud-auto-form label { display: flex; flex-direction: row; align-items: center; gap: 8px; font: 500 12.5px/1.4 var(--font); color: var(--text); }
-#sync-and-devices #cloud-auto-form .modal-actions { margin: 0; padding: 0; border: 0; }
-#cloud-update-message:empty { display: none; }
-
 /* Den här servern */
-#admin-view #server-identity-form.tm-line { display: flex; flex-wrap: wrap; align-items: center; margin: 0; }
-#admin-view #server-identity-form > label { display: block; }
-#admin-view #admin-server-name { width: 290px; max-width: 100%; }
-#server-identity-form .modal-actions { margin: 0; padding: 0; border: 0; }
-#server-identity-form #server-identity-message { flex-basis: 100%; margin: 0; }
-
 /* Användare: role as a pill, Redigera as a link, the rule in the foot. */
-#admin-users-settings .users-toolbar { display: none; }
-#admin-users-settings .table-scroll { margin: -10px -14px 0; }
-#users-table th { padding: 6px 10px; font-size: 11.5px; font-weight: 600; color: var(--text-3); background: var(--row-alt); border-bottom: 1px solid var(--border); text-transform: none; letter-spacing: 0; }
-#users-table td { padding: 5px 10px; font-size: 12.5px; line-height: 18px; border-bottom: 1px solid var(--border-soft); }
-#users-table .users-name { font-weight: 600; }
-#users-table .role-chip { display: inline-block; padding: 2px 8px; border: 1px solid #d9d9d9; border-radius: 999px; background: #fff; font-size: 11.5px; font-weight: 600; color: var(--text); }
-#users-table .role-chip.is-owner { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-text); }
-#users-table td:last-child { text-align: right; }
-#app-view #users-table td:last-child button { min-height: 0; padding: 0; border: 0; background: none; color: var(--primary); font: 600 12px/1.4 var(--font); }
-#users-role-chip { padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--neutral-bg); color: var(--neutral-text); border: 0; }
-
 /* Skärmar och klocka: four parts, each one row – the part's name as the key,
    the fields, Spara last; notes under the row. */
-.clock-control-card .server-part { display: grid; grid-template-columns: 160px minmax(0, 1fr); column-gap: 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border-soft); }
-.clock-control-card .server-part--first { border-top: 0; padding-top: 0; }
-.clock-control-card .server-part > .server-part__title { grid-column: 1; grid-row: 1 / span 3; align-self: start; margin: 0; padding-top: 6px; font: 600 12.5px/1.4 var(--font); }
-.clock-control-card .server-part > :not(.server-part__title) { grid-column: 2; }
-#admin-view .clock-control-card .server-part form { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin: 0; padding: 0; }
-#admin-view .clock-control-card .server-part form label:not(:has(> input[type=checkbox])) { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; font: 500 12.5px/1.4 var(--font); color: var(--text-3); }
-.clock-control-card .server-part form .server-field, .clock-control-card .server-part .server-wifi-row { display: contents; }
-.clock-control-card .server-part .modal-actions { order: 10; flex-basis: auto; margin: 0; padding: 0; border: 0; }
-.clock-control-card .server-part .pv-note { order: 20; flex-basis: 100%; margin: 0; font-size: 11.5px; color: var(--muted); }
-.clock-control-card .server-part .form-message { order: 21; flex-basis: 100%; margin: 0; }
-.clock-control-card .server-part #connection-badge-code { justify-self: start; margin: 2px 0; }
-#admin-view #meet-clock-style { width: 190px; }
-#admin-view #connection-badge-validity { width: 130px; }
-#admin-view #connection-wifi-name, #admin-view #connection-wifi-password { width: 180px; }
-
 /* Språk and Programuppdatering: one row each. */
-#admin-view .settings-language-choice.tm-line { display: flex; flex-direction: row; max-width: none; border-bottom: 0; }
-#admin-view .settings-language-choice select { width: 190px; }
-#admin-view .update-actions.tm-line { border-bottom: 0; }
-.update-actions #software-version { order: 0; font-family: var(--font-mono); font-size: 12.5px; }
-.update-actions #software-update-message { order: 1; flex: 1 1 auto; margin: 0; }
-.update-actions button { order: 2; }
-
 /* Farozon: each action with what it does beside it. */
-#server-system-settings > .section-heading h2 { color: var(--danger-text); }
-#server-system-settings > .section-heading { border-bottom-color: #f5e0e0; }
-
-@media (max-width: 600px) {
-  #admin-view .tm-line > .tm-line__key { flex-basis: 100%; width: auto; }
-  .clock-control-card .server-part { grid-template-columns: minmax(0, 1fr); }
-  .clock-control-card .server-part > .server-part__title { grid-row: auto; padding-top: 4px; }
-  .clock-control-card .server-part > :not(.server-part__title) { grid-column: 1; }
-}
-
 /* Cards stack their parts without the old grid gaps; a wrapped value stays in
    its column; the QR choices and Spara flow on one line. */
-#admin-view .server-settings-columns .server-card, #admin-view > .server-card { display: flex; flex-direction: column; gap: 0; }
-#admin-view .tm-line__value { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; flex: 1 1 0; min-width: 0; }
-#admin-view .tm-line__value > p { margin: 0; font-size: 12.5px; }
-#admin-view .tm-line__value > p.form-message:empty { display: none; }
-.clock-control-card #connection-badge-screens { display: contents; }
-#admin-view #connection-badge-form .connection-badge-screens label { gap: 6px; }
-#admin-users-settings #users-role-chip { align-self: center; margin: 0; }
-#admin-users-settings .table-scroll { overflow-x: auto; }
-#users-table { width: 100%; margin: 0; border-collapse: collapse; }
-
 /* ---------- Drift i designens form (DriftEU) ---------- */
 /* Klockraden: one grey line under the time; the source as Intern | FastClock…. */
-#app-view #clock-source-toggle button { min-height: 32px; padding: 6px 12px; border: 0; border-radius: 0; background: #fff; color: var(--text-3); font: 600 12.5px/1.3 var(--font); }
-#app-view #clock-source-toggle button + button { border-left: 1px solid #d9d9d9; }
-#app-view #clock-source-toggle button.is-active { background: var(--primary); color: #fff; }
 /* Klienter: Tilldela is the row's one blue button, Ta bort a grey link. */
-#app-view #device-list .status-row.is-waiting .device-actions > button:first-child { color: #fff; background: var(--primary); border-color: var(--primary); }
 #app-view #device-list .device-actions > button.device-remove { min-height: 0; padding: 2px 4px; border: 0; background: none; color: var(--muted); font-weight: 500; }
 #app-view #device-list .device-actions > button.device-remove:hover { color: var(--danger-text); }
 #device-list .status-row > div:first-child b { font-family: var(--font-mono); font-weight: 700; }
-
 /* Trafik just nu: the third tile is green while nothing deviates, yellow when something does. */
 /* Maps on Drift and the participant view: blue rings on grey 4 px track, as in the design. */
 #pv-topology .topology-station:not(.active):not(.highlighted) { fill: #eef3fb; stroke: #2256c3; stroke-width: 2; }
@@ -831,7 +592,6 @@ body[data-signed-in="no"] #app-chrome :is(#header-cloud-status, .topbar-right, #
 #app-view #local-clock-time { width: 124px; }
 /* One set of columns for every client row, so tags and states line up. */
 @media (min-width: 901px) {
-  :is(#device-list, #device-removed-trying) .status-row { grid-template-columns: minmax(220px, 280px) 150px minmax(0, 1fr) auto; }
+:is(#device-list, #device-removed-trying) .status-row { grid-template-columns: minmax(220px, 280px) 150px minmax(0, 1fr) auto; }
 }
 /* No clients yet: a quiet row in the card, not a dashed box. */
-#device-list .empty-status { margin: 0; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--border-soft); border-radius: 0; background: none; font-size: 12.5px; color: var(--muted); }

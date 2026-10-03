@@ -63,14 +63,20 @@ class ShellStructureTests(unittest.TestCase):
         self.assertIn('authorizedFetch("/v1/clock"', self.js)
 
     def test_settings_and_drift_have_separate_responsibilities(self):
-        sections = re.search(r"const SETTINGS_SECTIONS = \[([^\]]*)\]", self.js)
+        # Inställningar är nio avsnitt, ett i taget (settings.js). Boxarna och
+        # stationerna hör till Drift och finns inte här.
+        sections = re.search(r"const SECTIONS = \[([^\]]*)\]", (WEB / "settings.js").read_text())
         self.assertIsNotNone(sections)
-        for name in ("identity", "users", "software", "cloud", "system"):
-            self.assertIn(f'"{name}"', sections.group(1))
-        self.assertNotIn('"devices"', sections.group(1))
+        names = re.findall(r'"(\w+)"', sections.group(1))
+        self.assertEqual(names, ["traff", "skarmar", "wifi", "server", "kod", "anvandare", "uppdatering", "sprak", "farozon"])
+        for name in names:
+            self.assertIn(f'<section id="{name}" class="kr-setsec" data-section="{name}"', self.html)
+            self.assertIn(f'href="/installningar#{name}"', self.html)
+        self.assertNotIn("devices", names)
+        self.assertNotIn("SETTINGS_SECTIONS", self.js)
 
     def test_admin_forms_are_real_dialogs(self):
-        for name in ("server-identity-form", "admin-access-form", "users-invite-form",
+        for name in ("admin-access-form", "users-invite-form",
                      "device-form", "runtime-sync-form", "clock-control-form"):
             start = self.html.index(f'<dialog id="{name}-modal"')
             end = self.html.index("</dialog>", start)
@@ -81,6 +87,22 @@ class ShellStructureTests(unittest.TestCase):
         self.assertIn('modalChanged(dialog)', self.js)
         self.assertIn('beginModalAction', self.js)
         self.assertIn('endModalAction', self.js)
+
+    def test_what_is_edited_in_place_has_its_own_save_bar(self):
+        """Inställningar: varje panel som går att ändra är ett eget formulär med
+        Avbryt och Spara, släckta tills något skiljer sig från det sparade."""
+        forms = re.findall(r'<form id="([\w-]+)" class="kr-panel kr-setform"', self.html)
+        self.assertEqual(forms, ["cloud-auto-form", "clock-appearance-form", "connection-wifi-form",
+                                 "connection-badge-form", "server-identity-form", "connection-code-form", "language-form"])
+        for name in forms:
+            start = self.html.index(f'<form id="{name}"')
+            block = self.html[start:self.html.index("</form>", start)]
+            self.assertIn('data-savebar', block, name)
+            self.assertRegex(block, r'<button[^>]*data-save-cancel[^>]*disabled', name)
+            self.assertRegex(block, r'<button[^>]*type="submit"[^>]*data-save-submit[^>]*disabled', name)
+        # The dialogs these forms replaced are gone; no form is both.
+        for gone in ("server-identity-form-modal", "cloud-auto-modal", "clock-appearance-modal", "connection-badge-modal"):
+            self.assertNotIn(f'<dialog id="{gone}"', self.html)
 
     def test_software_and_config_updates_remain_separate(self):
         self.assertIn('id="runtime-check-update"', self.html)
@@ -138,8 +160,13 @@ class DesignTokenTests(unittest.TestCase):
 
     def test_motion_is_only_where_it_means_something(self):
         """DEL 7.7: blinkar allt betyder blinkandet ingenting."""
-        self.assertIn("@keyframes traffic-pulse", self.css)
-        self.assertIn("prefers-reduced-motion", self.css)
+        css = "".join((WEB / name).read_text(encoding="utf-8") for name in ("app.css", "kontrollrummet.css", "server-ui.css"))
+        # Every animation that is defined is used by something, and everything
+        # that moves stops when the system asks for less motion.
+        for name in re.findall(r"@keyframes ([\w-]+)", css):
+            self.assertRegex(css, rf"animation:[^;]*\b{name}\b", name)
+        self.assertIn("@keyframes update-pulse", css)
+        self.assertRegex(self.css, r"@media \(prefers-reduced-motion: reduce\)[^}]*animation-duration")
 
     def test_no_external_font_is_reintroduced(self):
         html = (WEB / "index.html").read_text(encoding="utf-8")

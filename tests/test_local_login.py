@@ -246,9 +246,17 @@ class SignedOutChromeTests(unittest.TestCase):
         )
 
     def test_the_controls_that_need_a_login_are_hidden_without_one(self) -> None:
-        rule = self.css[self.css.index('body[data-signed-in="no"] .enter-build'):]
+        # The header's clock and devices, its right-hand controls (search,
+        # screens, settings, log out) and the cloud and server chips all go.
+        rule = self.css[self.css.index('body[data-signed-in="no"] .app-clock'):]
         rule = rule[: rule.index("}")]
-        for control in (".enter-build", ".settings-button", ".leave-settings", ".app-clock"):
+        for control in (".app-clock", ".app-devices"):
+            self.assertIn(control, rule)
+        self.assertIn('body[data-signed-in="no"] #logout { display: none; }', self.css)
+        server_ui = (Path(__file__).resolve().parent.parent / "src" / "tmbox_gateway" / "web" / "server-ui.css").read_text(encoding="utf-8")
+        rule = server_ui[server_ui.index('body[data-signed-in="no"] #app-chrome'):]
+        rule = rule[: rule.index("}")]
+        for control in ("#header-cloud-status", ".topbar-right", "#header-server-meta"):
             self.assertIn(control, rule)
 
     def test_the_card_no_longer_calls_itself_external(self) -> None:

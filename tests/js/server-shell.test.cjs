@@ -264,10 +264,12 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     findings = imported;
     await page.evaluate(() => refreshCloudPresentation());
     await findingsChip.click();
-    await page.locator('#drift-timetable-dialog').waitFor({state: 'visible'});
+    await page.locator('#published-findings').waitFor({state: 'visible'});
+    assert.equal(new URL(page.url()).pathname + new URL(page.url()).hash, '/installningar#fynd');
     assert.equal(await page.locator('#published-findings-list img').count(), 0);
     assert.match(await page.locator('#published-findings-list').textContent(), /<img/);
-    await page.locator('#drift-timetable-dialog [data-close-modal]').click();
+    await page.locator('#app-chrome a[href="/drift"]').first().click();
+    await page.locator('#overview-graph').waitFor({state: 'visible'});
     // The diagram is as tall as its stations and meets their names: never
     // stretched on a wide screen, the first hour readable beside the names.
     await page.setViewportSize({ width: 1600, height: 900 });
@@ -296,9 +298,6 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     const showTraffic = async (channels, recorded) => {
       lineChannels = channels; positions = recorded;
       await page.evaluate(() => refreshLocalClock());
-      // Kontrollrummet draws the map on the next animation frame, and again when
-      // the map's width changes; measure only after that drawing.
-      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     };
     const line = (state, from = 'a', to = 'b') => ({ state, from_station_id: from, to_station_id: to, train_number: '421' });
     const parked = count => Array.from({ length: count }, (_, i) => ({ train_number: String(901 + i), status: 'station', station_id: 'a' }));
@@ -553,19 +552,39 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
 
     // Drafts stay intact when the live state refreshes or a save fails.
     await page.getByRole('link',{name:'Inställningar',exact:true}).click();
-    // Settings › Anslutning: the code and how long it holds, out of Skärmar och klocka.
-    const connectionSettings = page.locator('#connection-settings');
-    assert.equal(await page.locator('.server-settings-nav a[href="/installningar#anslutning"]').textContent(), 'Anslutning');
-    assert.equal(await connectionSettings.locator('#connection-badge-code').count(), 1);
-    assert.equal(await connectionSettings.locator('#connection-code-form').count(), 1);
-    assert.equal(await page.locator('.clock-control-card #connection-badge-code, .clock-control-card #connection-code-form').count(), 0);
-    await page.locator('#server-identity-form').waitFor({state:'visible'});
-    // The settings kit moves existing controls into rows and card feet;
-    // their handlers and the separate TKL connection section stay intact.
-    assert.equal(await page.locator('#sync-and-devices .tm-lines > .tm-line').count(), 4);
-    assert.equal(await page.locator('#sync-and-devices .tm-card__foot [data-open-modal="runtime-sync-form-modal"]').isVisible(), true);
-    assert.equal(await page.locator('#admin-users-settings .section-heading #users-invite-open').isVisible(), true);
-    assert.equal(await page.locator('#software-update-settings .update-actions #software-version').count(), 1);
+    // Settings is one section at a time, with a side menu in three groups.
+    // Every form that can be changed has its own Avbryt and Spara, both dark
+    // until something differs from what was last saved.
+    const nav = page.locator('#settings-nav');
+    assert.equal(await nav.locator('a[href="/installningar#kod"]').textContent(), 'Anslutningskod');
+    assert.deepEqual(await nav.locator('a.kr-nav').evaluateAll(links => links.map(link => link.getAttribute('href').split('#')[1])),
+      ['traff', 'skarmar', 'wifi', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'farozon']);
+    assert.equal(await page.locator('#admin-view .kr-setsec').count(), 9);
+    assert.equal(await page.locator('#admin-view .kr-setsec:not([hidden])').count(), 1, 'one section at a time');
+    await nav.locator('a[href="/installningar#kod"]').click();
+    await page.locator('#connection-code-form').waitFor({state:'visible'});
+    assert.equal(await page.locator('#connection-code-form #kod-value').count(), 1);
+    assert.equal(await page.locator('#connection-code-form #connection-badge-validity').count(), 1);
+    assert.equal(await page.locator('#traff').isVisible(), false);
+    const savebar = form => page.evaluate(selector => { const f = document.querySelector(selector); return { cancel: !f.querySelector('[data-save-cancel]').disabled, save: !f.querySelector('[data-save-submit]').disabled, text: f.querySelector('[data-save-state]').textContent }; }, form);
+    assert.deepEqual(await savebar('#connection-code-form'), { cancel: false, save: false, text: 'Inget ändrat' });
+    await page.locator('#connection-badge-validity').selectOption('24');
+    assert.deepEqual(await savebar('#connection-code-form'), { cancel: true, save: true, text: 'Ändrat: Giltighet' });
+    await page.locator('#connection-code-form [data-save-cancel]').click();
+    assert.equal(await page.locator('#connection-badge-validity').inputValue(), '0');
+    assert.deepEqual(await savebar('#connection-code-form'), { cancel: false, save: false, text: 'Inget ändrat' });
+    // The old addresses still land in the right section.
+    await page.evaluate(() => { history.pushState(null, '', '/installningar#anslutning'); applyWorkspaceRoute(); });
+    await page.locator('#connection-code-form').waitFor({state:'visible'});
+    await page.evaluate(() => { history.pushState(null, '', '/installningar#traff'); applyWorkspaceRoute(); });
+    await page.locator('#cloud-auto-form').waitFor({state:'visible'});
+    assert.equal(await page.locator('#cloud-auto-form .kr-kv').count(), 5);
+    assert.equal(await page.locator('#traff [data-open-modal="runtime-sync-form-modal"]').isVisible(), true);
+    await nav.locator('a[href="/installningar#anvandare"]').click();
+    assert.equal(await page.locator('#admin-users-settings #users-invite-open').isVisible(), true);
+    await nav.locator('a[href="/installningar#uppdatering"]').click();
+    assert.equal(await page.locator('#software-update-settings #software-version').count(), 1);
+    await nav.locator('a[href="/installningar#server"]').click();
     await page.locator('#admin-server-name').fill('Verified server');
     await page.evaluate(()=>refreshInfo());
     assert.equal(await page.locator('#admin-server-name').inputValue(),'Verified server');
@@ -584,6 +603,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(serverName,'Verified server');
 
     cloudAuto=false;
+    await nav.locator('a[href="/installningar#traff"]').click();
     await page.evaluate(()=>refreshServerContext());
     await page.locator('#cloud-auto-enabled').check();
     await page.evaluate(()=>refreshServerContext());
@@ -620,18 +640,30 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       const overflow=await page.evaluate(()=>({document:document.documentElement.scrollWidth,width:innerWidth}));
       assert.ok(overflow.document<=overflow.width+1,JSON.stringify(overflow));
     }
-    // Language preference lives in Settings, not an extra toolbar.
+    // Language preference lives in Settings, not an extra toolbar: tiles to pick
+    // from, saved with Spara like everything else.
     for(const language of ['sv','da','nb','en','de']){
-      await page.goto('http://127.0.0.1:9999/installningar');
-      await page.locator('[data-language-picker]').selectOption(language);
-      assert.equal(await page.locator('.server-settings-nav a[href="/installningar#farozon"]').textContent(),{sv:'Farozon',da:'Farezone',nb:'Faresone',en:'Danger zone',de:'Gefahrenbereich'}[language]);
+      await page.goto('http://127.0.0.1:9999/installningar#sprak');
+      const tile = page.locator(`#language-tiles [data-value="${language}"]`);
+      await tile.waitFor();
+      if (await tile.getAttribute('aria-checked') !== 'true') {
+        await tile.click();
+        assert.equal(await page.locator('#language-form [data-save-submit]').isDisabled(), false);
+        await page.locator('#language-form [data-save-submit]').click();
+      }
+      await page.waitForFunction(code => TrainMeetI18n.getLanguage() === code, language);
+      assert.equal(await page.locator('#settings-nav a[href="/installningar#farozon"]').textContent(),{sv:'Farozon',da:'Farezone',nb:'Faresone',en:'Danger zone',de:'Gefahrenbereich'}[language]);
+      assert.equal(await page.locator('#language-form [data-save-submit]').isDisabled(), true);
       // Signed in, the old picker address lands on Drift, whatever the language.
       await page.goto('http://127.0.0.1:9999/#workspaces');
       await page.waitForURL('**/drift');
       assert.equal(await page.locator('#participant-view').isVisible(), false);
     }
-    await page.goto('http://127.0.0.1:9999/installningar');
-    await page.locator('[data-language-picker]').selectOption('sv');
+    await page.goto('http://127.0.0.1:9999/installningar#sprak');
+    await page.locator('#language-tiles [data-value="sv"]').click();
+    await page.locator('#language-form [data-save-submit]').click();
+    await page.waitForFunction(() => TrainMeetI18n.getLanguage() === 'sv');
+    await page.goto('http://127.0.0.1:9999/installningar#traff');
     // Linking to Cloud never reports "undefined", even without a message.
     await page.locator('[data-open-modal="runtime-sync-form-modal"]').click();
     const syncBoxes=page.locator('#runtime-sync-code-boxes input');
@@ -676,9 +708,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     region='us';
     await page.goto('http://127.0.0.1:9999/drift');
     await page.locator('#server-region').filter({hasText:'US'}).waitFor();
-    // Drift hides its panels and shows the US summary in one drawing, on the next frame.
-    await page.locator('#us-runtime-summary').waitFor({state:'visible'});
     for (const id of ['drift-simulation', 'drift-map', 'drift-stations', 'drift-graph', 'overview-traffic', 'drift-stats', 'connect-terminals']) assert.equal(await page.locator('#' + id).isVisible(), false, id);
+    assert.equal(await page.locator('#us-runtime-summary').isVisible(), true);
     assert.equal(calls.some(c=>c[1].includes('local-configuration')||c[1]==='/v1/operating-mode'),false);
     assert.deepEqual(errors,[]);
     await screenshot('server-design');

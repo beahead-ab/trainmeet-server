@@ -120,7 +120,7 @@ class ContainerAwareGridTests(unittest.TestCase):
     """
 
     def test_no_form_grid_demands_a_fixed_number_of_wide_columns(self):
-        for selector in (".basics-grid", ".access-grid"):
+        for selector in (".access-grid",):
             body = _rule(selector)
             with self.subTest(selector=selector):
                 self.assertIn("auto-fit", body, f"{selector} har fast kolumnantal")
@@ -129,9 +129,18 @@ class ContainerAwareGridTests(unittest.TestCase):
     def test_the_minimum_can_never_exceed_the_space(self):
         """`min(180px, 100%)` betyder "180px, eller allt som finns om det är
         mindre" - alltså aldrig mer än ytan."""
-        for selector in (".basics-grid", ".access-grid"):
+        for selector in (".access-grid",):
             with self.subTest(selector=selector):
                 self.assertIn("min(", _rule(selector))
+
+    def test_settings_rows_wrap_instead_of_sticking_out(self):
+        """Inställningarna är rader (etikett, fält, förklaring) som lägger om sig,
+        och sidomenyn blir en rad överst på smala skärmar."""
+        self.assertIn("flex-wrap: wrap", _rule(".kr-kv", KR_CSS))
+        narrow = KR_CSS[KR_CSS.index("@media (max-width: 900px) {\n  #admin-view.kr-settings"):]
+        self.assertIn("flex-direction: column", narrow)
+        self.assertIn("overflow-x: auto", narrow)
+        self.assertIn(".kr-kv .kr-k, .kr-lbl { width: 100%; }", narrow)
 
 
 class ModalFormLayoutTests(unittest.TestCase):

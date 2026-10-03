@@ -544,10 +544,9 @@ setupFinishForm.addEventListener("submit", async (event) => {
 
 
 // Server workspaces select an interface, never a different meet or engine.
-const SETTINGS_SECTIONS = ["language", "meet", "identity", "users", "software", "cloud", "system"];
 const WORKSPACE_PANELS = {
   kor: "#overview-view", installningar: "#admin-view",
-  skarmar: "#displays-view", tmbox: "#tmbox-v2-view",
+  tmbox: "#tmbox-v2-view",
   help: "#help-view",
 };
 const MODES = ["workspaces", ...Object.keys(WORKSPACE_PANELS)];
@@ -593,8 +592,6 @@ async function refreshServerContext() {
   renderCloudStatus();
   const us = payload.operating_region === "us";
   document.querySelector("#us-runtime-summary").classList.toggle("hidden", !us);
-  document.querySelectorAll('.display-launch-card[href="/display/topology"], .display-launch-card[href="/display/graph"], .display-launch-card[href="/display/dashboard"], .connection-badge-card')
-    .forEach((node) => node.classList.toggle("hidden", us));
   globalThis.TrainMeetDrift?.update({ us });
   document.querySelector("#workspace-home").href = workspaceHome();
   serverUI.refreshHeader();
@@ -619,7 +616,6 @@ function setMode(mode) {
     document.querySelector(selector).classList.toggle("hidden", name !== next);
   }
   document.querySelector("#application-menu").open = false;
-  document.querySelector("#settings-heading").classList.toggle("hidden", next !== "installningar");
   if (next !== "tmbox") stopTMBoxV2();
   if (next === "tmbox") {
     startTMBoxV2();
@@ -631,9 +627,7 @@ function setMode(mode) {
 }
 
 function showSettings() {
-  document.querySelectorAll(".admin-section-panel").forEach((panel) => {
-    panel.classList.toggle("hidden", !SETTINGS_SECTIONS.includes(panel.dataset.adminSection));
-  });
+  globalThis.TrainMeetSettings?.show();
   Promise.allSettled([checkSoftwareUpdate(), refreshUsers(), refreshBackups(), refreshRuntime(), refreshDevices()]);
 }
 
@@ -665,7 +659,6 @@ function applyWorkspaceRoute() {
   appView.classList.remove("hidden");
   document.querySelector("#application-menu").open = false;
   if (route === "settings") setMode("installningar");
-  else if (route === "screens") setMode("skarmar");
   else if (route === "tmbox") {
     if (!availableWorkspaces().includes("tmbox")) { setMode("workspaces"); return; }
     location.replace("/tmbox/");
@@ -719,6 +712,8 @@ function endModalAction(element) {
   modalControls.delete(dialog);
   dialog.dataset.busy = "false";
   dialog.removeAttribute("aria-busy");
+  // Avbryt och Spara i en inställningspanel följer vad som är ändrat, inte vad som var påslaget före sparandet.
+  if (dialog.classList.contains("kr-setform")) globalThis.TrainMeetSettings?.refresh(dialog);
 }
 function openModal(id, trigger = document.activeElement) {
   const dialog = document.getElementById(id);
@@ -764,6 +759,7 @@ let modalResultTimer;
 function finishModal(form, confirmation = null) {
   delete form.dataset.dirty;
   delete form.dataset.meetGeneration;
+  if (form.classList.contains("kr-setform")) globalThis.TrainMeetSettings?.saved(form);
   const dialog = form.closest("dialog");
   if (dialog) {
     let receipt = document.querySelector("#modal-result");
@@ -1209,6 +1205,8 @@ async function refreshBackups() {
     restoreEl("overwrites").textContent = restore.overwrites || "–";
     restoreEl("confirmation").placeholder = restore.overwrites || "Namnet på det som skrivs över";
     renderBackups(payload.backups || []);
+    const latest = (payload.backups || []).map((item) => item.taken_at).filter(Boolean).sort().at(-1);
+    document.querySelector("#update-backup").textContent = latest ? t("senaste {time}", { time: restoreClock(latest) }) : t("Ingen än");
     updateRestoreButton();
   } catch {
     setMessage(restoreEl("message"), "Säkerhetskopiorna kunde inte läsas", "error");
@@ -1351,7 +1349,6 @@ function renderCloudStatus() {
   document.querySelector("#cloud-connection-meta").textContent = meet?.publication_id
     ? t("Publicerad config · {version}", { version: meet.publication_id }) : t("Koppla en publicerad träff med koden från Cloud.");
   document.querySelector("#cloud-connection-state").textContent = t(update.linked ? "Kopplad" : "Inte kopplad");
-  document.querySelector("#cloud-connection-state").classList.toggle("active", Boolean(update.linked));
   document.querySelector("#cloud-auto-status").textContent = t(update.linked
     ? (update.auto_sync ? "Automatisk configuppdatering är aktiv." : "Automatisk configuppdatering är pausad.")
     : "Automatisk uppdatering aktiveras när servern kopplas till Cloud.");
@@ -1359,10 +1356,16 @@ function renderCloudStatus() {
     update.pending_publication_id ? "Ny config hämtad – väntar på säker aktivering." :
     "Senaste fungerande config används även utan internet.");
   runtimeCheckUpdate.disabled = !update.linked;
-  document.querySelector("#cloud-auto-edit").disabled = !update.linked;
-  if (!editorActive(document.querySelector("#cloud-auto-form"))) {
+  const newer = Boolean(update.pending_publication_id || update.available_publication_id);
+  document.querySelector("#cloud-banner").className = `kr-state${newer || (update.linked && update.state === "error") ? "" : " ok"}`;
+  const cloudAutoForm = document.querySelector("#cloud-auto-form");
+  document.querySelector("#cloud-auto-enabled").disabled = !update.linked || cloudAutoForm.dataset.busy === "true";
+  if (!editorActive(cloudAutoForm)) {
     document.querySelector("#cloud-auto-enabled").checked = Boolean(update.auto_sync);
+    globalThis.TrainMeetSettings?.rebase(cloudAutoForm);
   }
+  const cloudTag = document.querySelector("#cloud-connection-state");
+  cloudTag.className = `kr-tag ${update.linked ? "ok" : "off"}`;
   serverUI.refreshHeader();
 }
 
@@ -1502,6 +1505,7 @@ function renderSoftwareUpdate(payload) {
     : `${payload.installed_version}`;
   softwareVersion.dataset.version = payload.installed_version;
   softwareVersion.dataset.build = build;
+  globalThis.TrainMeetSettings?.setVersion(build ? `${payload.installed_version} · ${build.slice(0, 8)}` : payload.installed_version);
   // Stegräckan visar samma version som kortet, ur samma svar - annars kan de
   // stå och säga olika saker om vilken programvara som kör.
 
@@ -1514,6 +1518,7 @@ function renderSoftwareUpdate(payload) {
   document.querySelector("#update-progress").classList.toggle("hidden", !running && !failed);
   softwareRetry.classList.toggle("hidden", !failed);
   softwareCheck.disabled = running;
+  document.querySelector("#update-banner").className = `kr-state${failed ? " danger" : running || payload.update_available || payload.check_error ? "" : " ok"}`;
 
   if (!payload.supported) {
     softwareInstall.classList.add("hidden");
@@ -1536,9 +1541,8 @@ function renderSoftwareUpdate(payload) {
     return;
   }
   softwareInstall.classList.toggle("hidden", !payload.update_available);
-  setMessage(softwareUpdateMessage, payload.update_available
-    ? `Version ${payload.latest_version || payload.latest_build} finns tillgänglig.`
-    : "Servern har senaste versionen.", payload.update_available ? "notice" : "success");
+  if (payload.update_available) setMessage(softwareUpdateMessage, "Version {version} finns tillgänglig.", "notice", { version: payload.latest_version || payload.latest_build });
+  else setMessage(softwareUpdateMessage, "Servern har senaste versionen.", "success");
 }
 
 async function checkSoftwareUpdate() {
@@ -1670,23 +1674,13 @@ async function refreshInfo() {
   const info = await response.json();
   serverUI.info = info;
   serverUI.refreshHeader();
-  document.querySelector("#server-name").textContent = info.gateway_id || "TrainMeet Server";
-  document.querySelector("#server-detail").textContent =
-    `Kör lokalt · aktiv trafiksession: ${info.traffic_session_name}`;
   document.querySelector("#system-server-name").textContent = info.runtime?.server_name || info.gateway_id || "TrainMeet Server";
   document.querySelector("#system-runtime-name").textContent = state.serverContext?.selected_meet?.name || t("Ingen aktiv träff");
   document.querySelector("#system-cloud-state").textContent = state.serverContext?.cloud_update?.linked ? t("Kopplad") : t("Inte kopplad");
   const serverNameInput = document.querySelector("#admin-server-name");
   if (!editorActive(serverIdentityForm)) {
     serverNameInput.value = info.runtime?.server_name || info.gateway_id || "";
-  }
-  const pill = document.querySelector("#runtime-pill");
-  if (state.serverContext?.selected_meet) {
-    pill.textContent = state.serverContext.selected_meet.name;
-    pill.classList.add("active");
-  } else {
-    pill.textContent = info.runtime?.error ? t("Konfigurationen behöver rättas") : t("Ingen träff aktiverad");
-    pill.classList.remove("active");
+    globalThis.TrainMeetSettings?.rebase(serverIdentityForm);
   }
   updateRuntimeNavigation(Boolean(state.serverContext?.selected_meet));
   updateRestartButton(Boolean(info.restart_required));
@@ -1788,6 +1782,7 @@ async function refreshDevices() {
   state.removedTrying = payload.removed_trying || [];
   state.terminals = payload.terminals || [];
   renderDevices({ devices: state.devices, stations: state.stations });
+  renderDangerBanner();
   renderTerminals(state.terminals);
   renderRemovedTrying(state.removedTrying, state.stations);
 }
@@ -1972,18 +1967,24 @@ function renderCloudPresentation() {
   serverUI.presentation = data;
   serverUI.refreshHeader();
   // Stationernas vänster/höger-placering ritas av Drift (Stationer och boxar);
-  // här finns kontrolluppgifterna från Cloud, som visas i tidtabellsdialogen.
+  // här finns kontrolluppgifterna från Cloud, som visas under Inställningar › Träff och Cloud.
   globalThis.TrainMeetDrift?.update({ presentation: data });
   document.querySelector("#published-findings").hidden = !data?.supported;
   const findings = data?.findings;
   const summary = document.querySelector("#published-findings-summary");
+  summary.className = `kr-pill${Array.isArray(findings) && findings.some((item) => item.level === "conflict") ? " warn" : ""}`;
   summary.textContent = !Array.isArray(findings) ? t("Den här Cloud-versionen innehåller inga kontrolluppgifter.")
     : findings.length ? t("{count} noterade uppgifter", {count: findings.length}) : t("Inga konflikter eller observationer noterade.");
   const list = document.querySelector("#published-findings-list"); list.replaceChildren();
   for (const finding of findings || []) {
     const li = document.createElement("li");
     const kind = finding.level === "conflict" ? t("Konflikt") : finding.level === "observation" ? t("Observation") : t("Uppgift");
-    li.textContent = `${kind}${finding.rule ? ` ${finding.rule}` : ""} · ${typeof finding.message === "string" ? finding.message : "—"}`;
+    const tag = document.createElement("span");
+    tag.className = `kr-tag ${finding.level === "conflict" ? "warn" : "off"}`;
+    tag.textContent = `${kind}${finding.rule ? ` ${finding.rule}` : ""}`;
+    const message = document.createElement("span");
+    message.textContent = typeof finding.message === "string" ? finding.message : "—";
+    li.append(tag, message);
     list.append(li);
   }
 }
@@ -2057,9 +2058,16 @@ async function refreshLocalClock() {
     const styleSelect = document.querySelector("#meet-clock-style");
     const styles = ["digital", "analog", "stationsur", "swiss"];
     if (clock.style && !styles.includes(clock.style)) styles.push(clock.style);
-    styleSelect.replaceChildren(...styles.map(value => new Option(t(clockStyleLabels[value] || value), value)));
+    const options = styles.map(value => [t(clockStyleLabels[value] || value), value]);
+    // Only when the list changed: the style tiles are rebuilt from it.
+    const optionSignature = JSON.stringify(options);
+    if (styleSelect.dataset.options !== optionSignature) {
+      styleSelect.dataset.options = optionSignature;
+      styleSelect.replaceChildren(...options.map(([label, value]) => new Option(label, value)));
+    }
     styleSelect.value = clock.style || styles[0];
     document.querySelector("#meet-clock-seconds").checked = clock.show_seconds !== false;
+    globalThis.TrainMeetSettings?.rebase(document.querySelector("#clock-appearance-form"));
   }
   // Tid, gång/stoppad-pillret och start/stopp-knapparna ritas av Drift.
   globalThis.TrainMeetDrift?.update({ clock });
@@ -2086,6 +2094,18 @@ async function refreshLocalClock() {
   }
   updateClockControlAvailability();
   serverUI.refreshClock(clock);
+  renderDangerBanner();
+}
+
+// Farozon: what is going on right now, so nobody resets a server in the middle of a meet.
+function renderDangerBanner() {
+  const running = Boolean(state.clock?.running);
+  const boxes = (state.devices || []).filter((device) => device.station_id).length;
+  document.querySelector("#danger-banner-text").textContent = running && boxes
+    ? t("Klockan går och {boxes} boxar är anslutna – inget här bör göras under en pågående träff", { boxes })
+    : running ? t("Klockan går – inget här bör göras under en pågående träff")
+    : boxes ? t("{boxes} boxar är anslutna – inget här bör göras under en pågående träff", { boxes })
+    : t("Åtgärderna här går inte att ångra.");
 }
 
 function updateClockControlAvailability() {
@@ -2102,24 +2122,42 @@ function renderConnectionBadgeSettings(connection) {
   if (!container) return;
   // Never rewrite a part someone is editing; each part is its own form.
   const idle = (selector) => !editorActive(document.querySelector(selector));
+  const settings = globalThis.TrainMeetSettings;
   if (idle("#connection-badge-form")) {
     const screens = connection.screens || [];
     for (const input of container.querySelectorAll("input[type=checkbox]")) input.checked = screens.includes(input.value);
+    settings?.rebase(document.querySelector("#connection-badge-form"));
   }
   if (idle("#connection-code-form")) {
     document.querySelector("#connection-badge-validity").value = String(connection.validity_hours ?? 0);
     document.querySelector("#web-client-ttl").value = String(connection.web_client_ttl_minutes ?? 30);
+    settings?.rebase(document.querySelector("#connection-code-form"));
   }
   if (idle("#connection-wifi-form")) {
     const wifi = connection.wifi || {};
     document.querySelector("#connection-wifi-name").value = wifi.name || "";
     document.querySelector("#connection-wifi-password").value = wifi.password || "";
+    settings?.rebase(document.querySelector("#connection-wifi-form"));
   }
-  const badge = document.querySelector("#connection-badge-code");
-  badge.textContent = connection.code
-    ? `${connection.host}:${connection.port} · ${t("Kod")} ${connection.code}`
-    : t("Ingen kod utfärdad");
+  settings?.renderQr(connection);
+  renderConnectionCode(connection);
   renderConnectCard(connection);
+}
+
+// Inställningar › Anslutningskod: the code itself, whether it still works, and for how long it holds.
+function renderConnectionCode(connection) {
+  const state = connection.code_state || "no_meet";
+  document.querySelector("#kod-value").textContent = connection.code || "–";
+  const tag = document.querySelector("#kod-state");
+  tag.className = `kr-tag ${state === "valid" ? "ok" : state === "expired" || state === "used_up" ? "warn" : "off"}`;
+  const hours = Number(connection.validity_hours || 0);
+  document.querySelector("#kod-state-text").textContent = state === "valid"
+    ? (hours ? t("Gäller i {hours} timmar", { hours }) : t("Gäller tills vidare"))
+    : state === "expired" ? t("Har gått ut")
+    : state === "used_up" ? t("Fullanvänd")
+    : t("Ingen kod utfärdad");
+  document.querySelector("#kod-meta").textContent = t(CONNECT_CODE_NOTES[state] || "");
+  document.querySelector("#kod-renew").disabled = !["valid", "used_up", "expired"].includes(state);
 }
 
 // Drift › Anslut ställverk och appar: what to type into TKL, and why it
@@ -2129,7 +2167,7 @@ const CONNECT_CODE_NOTES = {
   no_panels: "Ingen kod: träffen i Cloud har inga stationspaneler. Lägg till TMBox-paneler i Cloud och publicera.",
   no_meet: "Ingen kod: servern har ingen aktiv träff ännu. Koppla servern till en träff under Inställningar.",
   used_up: "Koden har använts 50 gånger och tar inte emot fler. Ta en ny kod.",
-  expired: "Koden har gått ut. Ta en ny kod, eller ändra hur länge koden gäller under Inställningar → Anslutning.",
+  expired: "Koden har gått ut. Ta en ny kod, eller ändra hur länge koden gäller under Inställningar → Anslutningskod.",
 };
 // Behind a TLS proxy (server.trainmeet.app) the signal box reaches the Server
 // where this page came from, not on the port the Server itself listens on.
@@ -2149,9 +2187,7 @@ function renderConnectCard(connection) {
   document.querySelector("#connect-new-code").hidden = !["valid", "used_up", "expired"].includes(state);
 }
 
-document.querySelector("#connect-new-code")?.addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  const note = document.querySelector("#connect-code-note");
+async function renewConnectionCode(button, note) {
   button.disabled = true;
   try {
     const response = await authorizedFetch("/v1/display/connection/code", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
@@ -2160,7 +2196,9 @@ document.querySelector("#connect-new-code")?.addEventListener("click", async (ev
     renderConnectionBadgeSettings(result);
   } catch (error) { note.textContent = error.message; }
   finally { button.disabled = false; }
-});
+}
+document.querySelector("#connect-new-code")?.addEventListener("click", (event) => renewConnectionCode(event.currentTarget, document.querySelector("#connect-code-note")));
+document.querySelector("#kod-renew")?.addEventListener("click", (event) => renewConnectionCode(event.currentTarget, document.querySelector("#kod-meta")));
 
 // Klienter › Ställverk (TKL): each paired signal box, its station, whether it
 // is heard, and Ta bort. A removed one can pair again with the code.
@@ -2446,20 +2484,6 @@ function stationTrafficRows(snapshot, stationID) {
   }).sort((a, b) => a.sort - b.sort || a.trainNumber.localeCompare(b.trainNumber, "sv", { numeric: true }));
 }
 
-function updateRuntimeDataViews(snapshot, services) {
-  const stations = snapshot.stations || [];
-  const connections = snapshot.connections || [];
-  const activeConnections = (snapshot.connection_states || []).filter((item) => item.state !== "free").length;
-  const activeTrains = (snapshot.train_positions || []).length;
-  const clockTime = String(snapshot.clock?.time || "--:--").slice(0, 5);
-  const clockState = snapshot.clock?.running ? `${clockTime} · ${Number(snapshot.clock?.speed || 1)}×` : `${clockTime} · stoppad`;
-
-
-  document.querySelector("#display-card-topology").textContent = `${stations.length} stationer · ${connections.length} sträckor`;
-  document.querySelector("#display-card-graph").textContent = `${services.length} tåg · ${snapshot.active_day || "Dagl"}`;
-  document.querySelector("#display-card-clock").textContent = clockState;
-  document.querySelector("#display-card-dashboard").textContent = `${activeTrains} aktiva tåg · ${activeConnections} upptagna sträckor`;
-}
 
 
 
@@ -2468,7 +2492,6 @@ function renderOverview(snapshot) {
   const services = uniqueOverviewServices(snapshot);
   const stations = snapshot.stations || [];
   document.querySelector("#overview-route-count").textContent = services.length;
-  updateRuntimeDataViews(snapshot, services);
 
   const signature = `${snapshot.publication_id || "unconfigured"}:${snapshot.active_day || ""}:${services.length}:${stations.length}`;
   if (state.overviewDataSignature !== signature) {
@@ -2498,7 +2521,7 @@ if (globalThis.TrainMeetDrift) {
     editBox: openDeviceEditor,
     editPlacement: editDisplayPlacement,
     simulationDetails: (trigger) => globalThis.TrainMeetDrift.openDialog("drift-simulation-dialog", trigger),
-    showFindings: (trigger) => globalThis.TrainMeetDrift.openDialog("drift-timetable-dialog", trigger),
+    showFindings: () => { history.pushState(null, "", "/installningar#fynd"); applyWorkspaceRoute(); },
     dialogOpened: (id) => { if (id === "drift-timetable-dialog") renderRouteExplorer(); },
   });
 }
@@ -2815,11 +2838,12 @@ function setTranslatedMessage(element, text, kind = "") {
   element.textContent = text;
 }
 
-function setMessage(element, text, kind = "") {
+function setMessage(element, text, kind = "", values) {
   const modalFeedback = element.classList.contains("modal-feedback");
   const contextWarning = element.classList.contains("context-warning");
   element.dataset.tmText = text || "";
-  element.textContent = t(text || "");
+  if (values) element.dataset.tmValues = JSON.stringify(values); else delete element.dataset.tmValues;
+  element.textContent = t(text || "", values);
   element.className = `form-message ${kind}${modalFeedback ? " modal-feedback" : ""}${contextWarning ? " context-warning" : ""}`.trim();
 }
 
@@ -4618,39 +4642,32 @@ function renderUsers() {
 
   body.replaceChildren(...users.list.map((user) => {
     const tr = document.createElement("tr");
-
-    const state = user.invitation_pending
-      ? "Inbjuden — har inte valt lösenord"
-      : t("Aktiv");
-    const roleLabel = user.role === "owner" ? t("Ägare") : t("Administratör");
+    const pending = Boolean(user.invitation_pending);
 
     const name = document.createElement("td");
-    name.className = "users-name";
-    name.textContent = user.username;
-    // Läget står två gånger med flit: som egen kolumn när det finns plats,
-    // och som rad under namnet när kolumnen fälls bort på en telefon. CSS
-    // väljer vilken som syns, så det behövs ingen brytpunkt i koden.
-    const inline = document.createElement("small");
-    inline.className = "users-state-inline";
-    inline.textContent = `${roleLabel} · ${state}`;
-    name.append(inline);
+    const strong = document.createElement("b");
+    strong.textContent = user.username;
+    name.append(strong);
     tr.append(name);
 
     const role = document.createElement("td");
-    role.className = "users-role";
     const chip = document.createElement("span");
-    chip.className = user.role === "owner" ? "role-chip is-owner" : "role-chip";
-    chip.textContent = roleLabel;
+    chip.className = user.role === "owner" ? "kr-pill sel" : "kr-pill";
+    chip.textContent = user.role === "owner" ? t("Ägare") : t("Administratör");
     role.append(chip);
     tr.append(role);
 
     const column = document.createElement("td");
-    column.className = "users-state";
-    column.textContent = state;
+    const tag = document.createElement("span");
+    tag.className = `kr-tag ${pending ? "warn" : "ok"}`;
+    const dot = document.createElement("span");
+    dot.className = "kr-dot";
+    tag.append(dot, document.createTextNode(pending ? t("Inbjuden — har inte valt lösenord") : t("Aktiv")));
+    column.append(tag);
     tr.append(column);
 
     const actions = document.createElement("td");
-    actions.className = "users-actions";
+    actions.className = "r";
     if (owner) {
       actions.append(usersButton("Redigera", () => editUser(user)));
     }
@@ -4662,7 +4679,7 @@ function renderUsers() {
 function usersButton(label, onClick, kind = "") {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = kind ? `link-button ${kind}` : "link-button";
+  button.className = kind ? `kr-linkbtn ${kind}` : "kr-linkbtn";
   button.dataset.tmText = label;
   button.textContent = t(label);
   button.addEventListener("click", onClick);

@@ -3543,6 +3543,7 @@ class TrainMeetHTTPApplication:
             "/assets/server-ui.js": "server-ui.js",
             "/assets/drift.js": "drift.js",
             "/assets/drift-model.js": "drift-model.js",
+            "/assets/settings.js": "settings.js",
             "/assets/kr-theme.js": "kr-theme.js",
             "/assets/kontrollrummet.css": "kontrollrummet.css",
             "/assets/participant.js": "participant.js",
