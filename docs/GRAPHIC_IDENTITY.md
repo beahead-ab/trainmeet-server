@@ -5,6 +5,29 @@ centrala TrainMeet-tjänsten. Servern använder därför inte ett fristående te
 Den centrala koden i `trainmeet/src/index.css` och de centrala
 fullskärmskomponenterna är grafisk källa.
 
+## Kontrollrummet (2026-10)
+
+Serverns Drift, sidhuvudet och de dialoger som öppnas därifrån har ett eget
+mörkt och ljust läge, "Kontrollrummet". Det är byggt för att man ska se hela
+träffen på en blick, på en skärm bredvid banan, och är därför tätare och mörkare
+än Clouds varma adminyta. Resten av servern (Inställningar, Hjälp, inloggning)
+följer tills vidare principerna nedan.
+
+- Tokens ligger i `web/kontrollrummet.css` (`--kr-*`). Mörkt är grundläget:
+  bakgrund `#0d0f13`, paneler `#15181e`, blått för det som är aktivt. Valet
+  mörkt/ljust sparas per webbläsare (`trainmeet.theme`) och sätts av
+  `web/kr-theme.js` innan sidan målas, så att den inte blinkar till.
+- Typsnitten är desamma som ovan, via `--kr-sans` (Inter) och `--kr-mono`
+  (JetBrains Mono). `tests/test_fonts.py` håller fast vid det.
+- Beräkningarna bakom Drift (var tågen är, stationsrader, nästa händelser,
+  diagrammets fönster, sökning) ligger i `web/drift-model.js` som rena
+  funktioner med enhetstester i `tests/js/drift-model.test.cjs`. `web/drift.js`
+  ritar; `app.js` hämtar data och skickar kommandon.
+- En sak visas på ett ställe. Det som sällan behövs (språk på en box, ta bort
+  en box, ändra vänster och höger, koppla om med kod) ligger bakom en knapp i
+  en dialog och inte som permanent text.
+- Mobil: stationslistan blir kort, övriga kolumner göms (`kr-hide-sm`).
+
 ## Gemensamma principer
 
 - Administrativa ytor har varm ljus bakgrund `#faf9f5`, vita kort, tunna
@@ -37,11 +60,15 @@ Samma märke i Drift, på skärmarna och i deltagarvyn, större på en TV:
 
 ## Drift
 
-- Ingenting på Drift fälls ihop. Varje modul visar allt den har; långa listor
-  (tidslinjen, kontrolluppgifterna) rullar inom sitt kort.
-- Ett tåg valt i Tågrutter, Banöversikten, Tågdiagrammet eller Kommande är
-  valt överallt: rutten tänds, tågpanelen öppnas, och Tågrutter visar tåget på
-  en liten karta (bara det tåget) med hållplatserna och var det är nu.
+- Allt som Drift visar syns samtidigt: nyckeltal, banöversikt, stationer och
+  boxar, kommande händelser, tågdiagram och kontrolluppgifter. Långa listor
+  rullar inom sitt kort.
+- Ett tåg eller en station vald i banöversikten, diagrammet, kommande eller
+  stationslistan är vald överallt: rutten tänds i banöversikten och diagrammet
+  och en flytande panel visar tåget eller stationen. Panelen byter sida så att
+  det valda aldrig hamnar bakom den.
+- Sökrutan i sidhuvudet hittar tåg och stationer.
+- Är servern i US-läge visas inga Drift-paneler, bara US-sammanfattningen.
 
 ## Typografi
 
