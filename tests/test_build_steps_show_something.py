@@ -16,7 +16,7 @@ class CloudOnlyViewTests(unittest.TestCase):
             self.assertNotIn(retired, JS)
 
     def test_every_runtime_panel_has_markup(self):
-        for panel in ("overview-view", "overview-traffic", "displays-view", "tmbox-v2-view"):
+        for panel in ("overview-view", "overview-traffic", "admin-view", "tmbox-v2-view"):
             self.assertIn(f'id="{panel}"', HTML)
             self.assertIn(f'#{panel}', JS)
 
@@ -27,7 +27,8 @@ class CloudOnlyViewTests(unittest.TestCase):
         self.assertNotIn('id="runtime-activate-update"', HTML)
 
     def test_station_assignment_remains_a_runtime_action(self):
-        self.assertIn('data-admin-section="devices"', HTML)
+        # Stationerna och deras boxar är en panel i Drift; tilldelningen sker i en dialog.
+        self.assertIn('id="drift-stations"', HTML)
         self.assertIn('authorizedFetch("/v1/devices/assign"', JS)
         self.assertIn('id="device-form-modal"', HTML)
 
@@ -35,4 +36,5 @@ class CloudOnlyViewTests(unittest.TestCase):
         self.assertNotIn("Bygg om träffen", HTML)
         self.assertNotIn('data-source="lokal"', HTML)
         self.assertNotIn('data-source="fil"', HTML)
-        self.assertIn("Träffens innehåll ändras i", HTML)
+        # Inställningar säger det i stället för att erbjuda en redigerare.
+        self.assertIn("planeras i Cloud · körs här", HTML)

@@ -44,9 +44,14 @@
   }
   const escape = (value) => String(value).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const protectedTags = 'script,style,pre,code,textarea,[data-no-i18n]';
-  function localizeText(source) {
+  function localizeText(source, values) {
     const text = source.trim();
-    return text ? source.replace(text, () => t(text)) : source;
+    return text ? source.replace(text, () => t(text, values)) : source;
+  }
+  // A message with {placeholders} keeps its values beside its source
+  // (data-tm-values, JSON), so it can be translated again when the language changes.
+  function markedValues(element) {
+    try { return element.dataset.tmValues ? JSON.parse(element.dataset.tmValues) : undefined; } catch { return undefined; }
   }
   // This is called ONLY on authored HTML, before interpolated data is inserted.
   // Never call it on a populated application subtree or on server responses.
@@ -86,13 +91,15 @@
       for (const attr of ['title', 'placeholder', 'aria-label', 'alt']) {
         const source = element.getAttribute(attr);
         if (!source || source.includes('__TM_ARG_') || !/[a-zåäöæøü]/i.test(source)) continue;
+        // Already marked: the attribute now holds the translation, not the source.
+        if (element.hasAttribute('data-tm-' + attr)) continue;
         element.setAttribute('data-tm-' + attr, source);
         element.setAttribute(attr, t(source));
       }
     });
   }
   function updateMarked(root) {
-    root.querySelectorAll('[data-tm-text]').forEach((element) => { element.textContent = localizeText(element.dataset.tmText); });
+    root.querySelectorAll('[data-tm-text]').forEach((element) => { element.textContent = localizeText(element.dataset.tmText, markedValues(element)); });
     for (const attr of ['title', 'placeholder', 'aria-label', 'alt']) {
       root.querySelectorAll('[data-tm-' + attr + ']').forEach((element) => { element.setAttribute(attr, t(element.getAttribute('data-tm-' + attr))); });
     }

@@ -50,34 +50,29 @@ const root = path.resolve(__dirname, '../..');
     }
 
     await login(urls.eu);
-    await page.locator('#device-list .status-row').waitFor();
+    const smokeRow = page.locator('#device-list tr').filter({hasText: 'TBX-SMOKE'});
+    await smokeRow.waitFor();
     assert.equal(await page.locator('#overview-traffic').isVisible(),true);
-    // Clients and the left/right setting are two cards: operations and a
-    // setting used to share one, and the station table read as client rows.
-    assert.equal((await page.locator('#device-management > .section-heading h2').textContent()).trim(),'Klienter');
-    assert.equal(await page.locator('#device-management #server-station-rows').count(),0);
-    assert.equal((await page.locator('#station-placement > h2').textContent()).trim(),'TMBox-placering');
-    assert.equal(await page.locator('#station-placement #server-station-rows').count(),1);
+    // Drift is one screen: the clock, the line, the stations with their boxes,
+    // what comes next and the diagram, each once.
+    for (const id of ['drift-clock', 'drift-map', 'drift-stations', 'overview-traffic', 'drift-graph']) assert.equal(await page.locator('#' + id).isVisible(), true, id);
     // The fixture box connected once and has not pinged since this server
-    // started: no contact, with the time it was last seen, just before the
-    // buttons. The pairing code is not shown here; boxes never use it.
-    const smokeStatus=page.locator('#device-list .status-row').filter({hasText:'TBX-SMOKE'}).locator('.device-connection');
+    // started: no contact, with the time it was last seen. The pairing code is
+    // not shown here; boxes never use it.
+    const smokeStatus=smokeRow.locator('.kr-tag');
     assert.match(await smokeStatus.textContent(),/^Ingen kontakt · sist sedd \d{2}[:.]\d{2}$/);
-    assert.equal(await smokeStatus.getAttribute('class'),'device-connection device-connection--lost');
-    assert.ok(await smokeStatus.evaluate(status=>status.nextElementSibling.classList.contains('device-actions')),'Status sits just before the buttons');
-    // Warning colour, not the station column's ink (app.css styled every span in the row as the station).
-    const [statusColor,stationColor,statusWeight]=await smokeStatus.evaluate(status=>{const station=status.previousElementSibling;
-      return [getComputedStyle(status).color,getComputedStyle(station).color,getComputedStyle(status).fontWeight];});
-    assert.notEqual(statusColor,stationColor);
+    assert.match(await smokeStatus.getAttribute('class'),/\bwarn\b/);
+    // Warning colour, not the row's ink.
+    const [statusColor,stationColor,statusWeight]=await smokeStatus.evaluate(status=>{const probe=document.createElement('i');probe.style.color='var(--kr-amber)';document.body.append(probe);
+      const amber=getComputedStyle(probe).color;probe.remove();return [getComputedStyle(status).color,amber,getComputedStyle(status).fontWeight];});
+    assert.equal(statusColor,stationColor);
     assert.equal(statusWeight,'600');
-    assert.doesNotMatch(await page.locator('#client-network').textContent(),/Kod/);
-    assert.ok(await page.locator('#device-management').evaluate(card=>card.querySelector('#device-list').compareDocumentPosition(card.querySelector('.device-reconnect'))&Node.DOCUMENT_POSITION_FOLLOWING),'Reconnect comes after the client list');
     assert.equal(await page.locator('#overview-graph').isVisible(),true);
     assert.equal(await page.locator('#overview-view details').count(),0,'Drift folds nothing away');
     await page.locator('#overview-clock-start').click();
-    await page.locator('#stop-local-clock').waitFor({state:'visible'});
+    await page.locator('#overview-clock-stop').waitFor({state:'visible'});
     assert.equal((await (await page.request.get(urls.eu+'/v1/clock')).json()).running,true);
-    await page.locator('#stop-local-clock').click();
+    await page.locator('#overview-clock-stop').click();
     await page.locator('#overview-clock-start').waitFor({state:'visible'});
     assert.equal((await (await page.request.get(urls.eu+'/v1/clock')).json()).running,false);
     for(const width of [1280,360]){
@@ -85,10 +80,13 @@ const root = path.resolve(__dirname, '../..');
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Drift overflow');
       await screenshot('drift-'+width);
     }
+    await page.setViewportSize({width:1280,height:960});
+    // Left and right on the boxes of a station: a dialog from the stations table, saved against Cloud's version.
     const initialPlacement=await (await page.request.get(urls.eu+'/v1/cloud/presentation')).json();
-    const launch=page.locator('#server-station-rows button').first();
+    const firstStation=initialPlacement.stations[0].station_id;
+    const launch=page.locator(`#device-list tr[data-station-id="${firstStation}"] button[title="Ändra vänster och höger"]`);
     await launch.click();
-    const placementForm=page.locator('.placement-inline-edit');
+    const placementForm=page.locator('#display-placement-modal');
     await placementForm.locator('select').selectOption('right');
     await placementForm.locator('[type=submit]').click();
     await placementForm.waitFor({state:'hidden'});
@@ -97,41 +95,66 @@ const root = path.resolve(__dirname, '../..');
     const stale=await page.request.post(urls.eu+'/v1/cloud/display-placement',{data:{publication_id:initialPlacement.publication_id,config_version:initialPlacement.config_version,station_id:initialPlacement.stations[0].station_id,sides:{}}});
     assert.equal(stale.status(),409);
     await launch.click(); await placementForm.locator('select').selectOption('');
+    page.once('dialog', dialog => dialog.accept());  // "Stäng utan att spara ändringarna?"
     await placementForm.getByRole('button',{name:'Avbryt',exact:true}).click();
+    await placementForm.waitFor({state:'hidden'});
     assert.equal((await (await page.request.get(urls.eu+'/v1/cloud/presentation')).json()).stations[0].connections[0].side,'right');
+    const deviceDialog=page.locator('#device-form-modal');
     for(const [width,station] of [[1280,'station-a'],[360,'station-b']]){
       await page.setViewportSize({width,height:900});
-      const row=page.locator('#device-list .status-row').filter({hasText:'TBX-SMOKE'});
-      await row.getByRole('button',{name:width===1280?'Tilldela station':'Ändra station',exact:true}).click();
-      const form=row.locator('.device-inline-edit');
-      await form.locator('select.device-station').selectOption(station);
-      await form.locator('[type=submit]').click();
-      await form.waitFor({state:'hidden'});
+      // Waiting for a station: "Välj station"; once assigned: "Redigera". Both open the same dialog.
+      await smokeRow.getByRole('button',{name:width===1280?'Välj station ▾':'Redigera',exact:true}).click();
+      await deviceDialog.locator('#device-station').selectOption(station);
+      await deviceDialog.locator('[type=submit]').click();
+      await deviceDialog.waitFor({state:'hidden'});
       assert.equal((await (await page.request.get(urls.eu+'/v1/devices')).json()).devices[0].station_id,station);
       await page.reload();
-      await row.getByRole('button',{name:'Ändra station',exact:true}).click();
-      assert.equal(await form.locator('select.device-station').inputValue(),station);
-      await form.getByRole('button',{name:'Avbryt',exact:true}).click();
+      await smokeRow.getByRole('button',{name:'Redigera',exact:true}).click();
+      assert.equal(await deviceDialog.locator('#device-station').inputValue(),station);
+      await deviceDialog.getByRole('button',{name:'Avbryt',exact:true}).click();
+      await deviceDialog.waitFor({state:'hidden'});
     }
     // Clock settings propagate to a separate unauthenticated TV context.
     await page.setViewportSize({width:1280,height:960});
+    await page.locator('#clock-adjust').click();
     await page.locator('#local-clock-time').fill('14:26:00');
     await page.locator('#local-clock-speed').fill('4,3');
     await page.locator('#clock-control-form [type=submit]').click();
     await page.waitForFunction(()=>!document.querySelector('#clock-control-form').dataset.dirty);
     await page.getByRole('link',{name:'Inställningar',exact:true}).click();
-    await page.locator('#meet-clock-style').selectOption('digital');
+    await page.locator('#settings-nav a[href="/installningar#skarmar"]').click();
+    await page.locator('#clock-style-tiles [data-value="digital"]').click();
     await page.locator('#meet-clock-seconds').check();
     await page.locator('#clock-appearance-form [type=submit]').click();
     await page.waitForFunction(()=>!document.querySelector('#clock-appearance-form').dataset.dirty);
-    const screenContext=await browser.newContext({viewport:{width:1920,height:1080}});
+    // A 1920 × 1080 window on a 1920 × 1080 screen is a full screen; a smaller window is a window.
+    const screenContext=await browser.newContext({viewport:{width:1920,height:1080},screen:{width:1920,height:1080}});
     const clockScreen=await screenContext.newPage();
     clockScreen.on('pageerror',e=>errors.push(e.message));
     await clockScreen.goto(urls.eu+'/display/clock?style=swedish');
-    await clockScreen.locator('.clock-digital').filter({hasText:'14:26:00'}).waitFor();
+    // Hours and minutes large, the seconds small beside them, so that the seconds always fit.
+    await clockScreen.locator('.clock-digital .cd-hm').filter({hasText:'14:26'}).waitFor();
+    assert.equal((await clockScreen.locator('.clock-digital .cd-ss').textContent()).trim(),'00');
     assert.equal(await clockScreen.locator('.sc-stopped').isVisible(),true);
+    const digits=await clockScreen.locator('.clock-digital').boundingBox();
+    assert.ok(digits.x>=0&&digits.x+digits.width<=1920,'The digits with seconds fit the screen');
+    // The toolbar: a full screen hides it after four seconds and brings it back at a movement; a window keeps it.
+    assert.equal(await clockScreen.locator('#display-app').getAttribute('data-chrome'),'fullscreen');
+    await clockScreen.mouse.move(960,700);
+    await clockScreen.locator('#display-toolbar.hidden-toolbar').waitFor({timeout:9000});
+    await clockScreen.mouse.move(900,720);
+    await clockScreen.locator('#display-toolbar:not(.hidden-toolbar)').waitFor();
+    const windowContext=await browser.newContext({locale:'sv-SE',viewport:{width:1440,height:900},screen:{width:1920,height:1080}});
+    const windowScreen=await windowContext.newPage();
+    await windowScreen.goto(urls.eu+'/display/clock');
+    await windowScreen.locator('#display-loading').waitFor({state:'hidden'});
+    assert.equal(await windowScreen.locator('#display-app').getAttribute('data-chrome'),'window');
+    await windowScreen.waitForTimeout(4800);
+    assert.equal(await windowScreen.locator('#display-toolbar.hidden-toolbar').count(),0,'A window keeps its toolbar');
+    assert.match(await windowScreen.locator('#display-fullscreen').textContent(),/^\s*Helskärm/);
+    await windowContext.close();
     for(const style of ['analog','stationsur','swiss','digital']){
-      await page.locator('#meet-clock-style').selectOption(style);
+      await page.locator(`#clock-style-tiles [data-value="${style}"]`).click();
       await page.locator('#clock-appearance-form [type=submit]').click();
       await page.waitForFunction(()=>!document.querySelector('#clock-appearance-form').dataset.dirty);
       await clockScreen.waitForFunction(style=>document.querySelector('#clock-view').dataset.clockSignature.startsWith(style+'|'),style);
@@ -152,6 +175,16 @@ const root = path.resolve(__dirname, '../..');
         // As in the design: stations are rings, and the trains on the line are listed under the map.
         assert.ok(Number(await clockScreen.locator('#topology-svg .topology-station').first().getAttribute('r'))>=16,'TV stations are rings');
         assert.equal(await clockScreen.locator('#topology-online').isVisible(),true,'Banöversikt lists the trains on the line under the map');
+      }
+      if(path==='graph'){
+        // The diagram's time window is this screen's own choice, kept in this browser.
+        const windowSelect=clockScreen.locator('#display-graph-window');
+        assert.deepEqual(await windowSelect.locator('option').evaluateAll(options=>options.map(option=>option.value)),['120','180','360','1440']);
+        const before=await clockScreen.locator('#screen-meet .sc-subtitle').textContent();
+        await windowSelect.selectOption('1440');
+        await clockScreen.waitForFunction(before=>document.querySelector('#screen-meet .sc-subtitle').textContent!==before,before);
+        assert.equal(await clockScreen.evaluate(()=>localStorage.getItem('trainmeet.displayGraphWindow')),'1440');
+        await windowSelect.selectOption('180');
       }
       if(path==='dashboard'){
         assert.equal(await clockScreen.locator('.dash-status').isVisible(),true,'På linjen just nu says whether traffic keeps to the timetable');
@@ -188,20 +221,29 @@ const root = path.resolve(__dirname, '../..');
       }
     }
     await screenContext.close();
+    await page.setViewportSize({width:1280,height:960});
     await page.goto(urls.eu+'/drift');
     await page.locator('#overview-clock-start').click();
-    await page.locator('#stop-local-clock').waitFor({state:'visible'});
-    await page.locator('#stop-local-clock').click();
+    await page.locator('#overview-clock-stop').waitFor({state:'visible'});
+    await page.locator('#overview-clock-stop').click();
     await page.locator('#overview-clock-start').waitFor({state:'visible'});
     // Removing a client leaves actual traffic/history untouched.
     const before=await (await page.request.get(urls.eu+'/v1/display')).json();
-    await page.locator('#device-list .device-remove').click();
-    await page.locator('.device-inline-edit').getByRole('button',{name:'Avbryt',exact:true}).click();
+    const removal=page.locator('#device-remove-modal');
+    const openRemoval=async()=>{
+      await smokeRow.getByRole('button',{name:'Redigera',exact:true}).click();
+      await deviceDialog.locator('#device-remove-open').click();
+      await removal.waitFor({state:'visible'});
+    };
+    await openRemoval();
+    await removal.getByRole('button',{name:'Avbryt',exact:true}).click();
+    await removal.waitFor({state:'hidden'});
     assert.equal((await (await page.request.get(urls.eu+'/v1/devices')).json()).devices.length,1);
-    await page.locator('#device-list .device-remove').click();
-    assert.match(await page.locator('.device-inline-edit').textContent(),/spärras och kommer inte tillbaka av sig själv/);
-    await page.locator('.device-inline-edit').getByRole('button',{name:'Ta bort',exact:true}).click();
-    await page.locator('#device-list .empty-status').waitFor();
+    await openRemoval();
+    assert.match(await removal.textContent(),/kan inte längre styra trafiken/);
+    await removal.getByRole('button',{name:'Ta bort klient',exact:true}).click();
+    await removal.waitFor({state:'hidden'});
+    await smokeRow.waitFor({state:'detached'});
     // Removed, but it was here a moment ago: it is offered back with one
     // click instead of copying its code from the box.
     const trying=page.locator('#device-removed-trying');
@@ -209,25 +251,27 @@ const root = path.resolve(__dirname, '../..');
     await trying.locator('.status-row').filter({hasText:'TBX-SMOKE'}).getByRole('button',{name:'Återanslut',exact:true}).click();
     await trying.locator('select').selectOption('station-a');
     await trying.locator('[type=submit]').click();
-    await page.locator('#device-list .status-row').filter({hasText:'TBX-SMOKE'}).waitFor();
+    await smokeRow.waitFor();
     assert.equal(await trying.isHidden(),true);
     assert.equal((await (await page.request.get(urls.eu+'/v1/devices')).json()).devices[0].station_id,'station-a');
     // One box per side at a station: the side is chosen with the station, and shown unless it is both.
-    const smokeRow=page.locator('#device-list .status-row').filter({hasText:'TBX-SMOKE'});
-    await smokeRow.getByRole('button',{name:'Ändra station',exact:true}).click();
-    const sideSelect=page.locator('#device-list .device-inline-edit select.device-side');
+    await smokeRow.getByRole('button',{name:'Redigera',exact:true}).click();
+    const sideSelect=deviceDialog.locator('#device-side');
     assert.equal(await sideSelect.inputValue(),'both');
     assert.deepEqual(await sideSelect.locator('option').allTextContents(),['Båda sidor','Vänster','Höger']);
     await sideSelect.selectOption('left');
-    await page.locator('#device-list .device-inline-edit [type=submit]').click();
-    await page.locator('#device-list .status-row').filter({hasText:'· vänster'}).waitFor();
+    await deviceDialog.locator('[type=submit]').click();
+    await deviceDialog.waitFor({state:'hidden'});
+    await smokeRow.locator('.kr-code').filter({hasText:'vänster'}).waitFor();
     assert.equal((await (await page.request.get(urls.eu+'/v1/devices')).json()).devices[0].station_side,'left');
-    await smokeRow.getByRole('button',{name:'Ändra station',exact:true}).click();
+    await smokeRow.getByRole('button',{name:'Redigera',exact:true}).click();
     assert.equal(await sideSelect.inputValue(),'left','the form opens on the side the box has');
-    await page.locator('#device-list .device-inline-edit').getByRole('button',{name:'Avbryt',exact:true}).click();
-    await page.locator('#device-list .device-remove').click();
-    await page.locator('.device-inline-edit').getByRole('button',{name:'Ta bort',exact:true}).click();
-    await page.locator('#device-list .empty-status').waitFor();
+    await deviceDialog.getByRole('button',{name:'Avbryt',exact:true}).click();
+    await deviceDialog.waitFor({state:'hidden'});
+    await openRemoval();
+    await removal.getByRole('button',{name:'Ta bort klient',exact:true}).click();
+    await removal.waitFor({state:'hidden'});
+    await smokeRow.waitFor({state:'detached'});
     const after=await (await page.request.get(urls.eu+'/v1/display')).json();
     for(const key of ['stations','connections','routes','train_positions','connection_states'])assert.deepEqual(after[key],before[key]);
     await page.getByRole('link',{name:'Hjälp',exact:true}).click();
@@ -258,7 +302,7 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await screenMenu.getAttribute('open'),'');
     // The Open menu has the screens and, as its own group, both TMBox pages:
     // the test bench used to be reachable only from Help.
-    assert.equal((await screenMenu.locator('summary').textContent()).trim(),'Öppna');
+    assert.equal((await screenMenu.locator('summary').textContent()).trim(),'Öppna på skärm');
     assert.deepEqual(await screenMenu.locator('nav .tm-eyebrow:visible').allTextContents(),['Skärmar','TMBox']);
     for(const [href,text] of [['/tmbox/','Virtuell TMBox'],['/tmbox-lab/','Provbänk med testdata']]){
       const link=screenMenu.locator(`nav a[href="${href}"]`);
@@ -271,13 +315,15 @@ const root = path.resolve(__dirname, '../..');
     await screenMenu.locator('summary').click();
     await page.keyboard.press('Escape');
     assert.equal(await screenMenu.getAttribute('open'),null,'Escape closes the menu');
-    // ⚙ › Skärmar och klocka is three parts that each save only their own
-    // fields; the code for apps and TKL has its own category, Anslutning
-    // (1.22.0). Farozon is the last card on the page.
-    await page.goto(urls.eu+'/installningar');
-    assert.deepEqual(await page.locator('.clock-control-card .server-part__title').allTextContents(),['Klocka','QR-koder på skärmarna','Träffens Wi-Fi']);
-    assert.equal(await page.locator('#connection-settings #connection-code-form').count(),1);
-    assert.equal(await page.locator('#admin-view > .server-card').last().getAttribute('data-anchor'),'farozon');
+    // ⚙ is nine sections, one at a time. Every part that can be changed is its
+    // own form and saves only its own fields; the code for apps and TKL has its
+    // own section, Anslutningskod. Farozon is the last one.
+    await page.goto(urls.eu+'/installningar#wifi');
+    const panels = section => page.locator(`#${section} form.kr-setform`).evaluateAll(forms => forms.map(form => form.getAttribute('aria-label')));
+    assert.deepEqual(await panels('skarmar'), ['Klockan']);
+    assert.deepEqual(await panels('wifi'), ['Träffens Wi-Fi', 'QR-koder på skärmarna']);
+    assert.equal(await page.locator('#kod #connection-code-form').count(),1);
+    assert.equal(await page.locator('#admin-view .kr-setsec').last().getAttribute('data-section'),'farozon');
     await page.locator('#connection-wifi-name').fill('Test-Wifi');
     await page.locator('#connection-wifi-password').fill('test-only-1234');
     await page.locator('#connection-wifi-form [type=submit]').click();
@@ -289,6 +335,7 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(connection.wifi.name,'Test-Wifi','Saving the QR part leaves the Wi-Fi as it was');
     assert.ok(!connection.screens.includes('graph'));
     assert.equal(await page.locator('text=Serverns nätverk').count(),0);
+    await page.goto(urls.eu+'/installningar#kod');
     await page.locator('#web-client-ttl').fill('45');
     await page.locator('#connection-code-form [type=submit]').click();
     await page.locator('#connection-code-message').getByText(/Sparat/).waitFor();
@@ -299,12 +346,10 @@ const root = path.resolve(__dirname, '../..');
     await login(urls.us);
     assert.equal(await page.locator('#workspace-options').count(),0);
     await page.locator('#server-region').filter({hasText:'US'}).waitFor();
-    assert.equal(await page.locator('#drift-simulation').isVisible(),false);
-    assert.equal(await page.locator('#device-management').isVisible(),false);
-    assert.equal(await page.locator('#station-placement').isVisible(),false);
+    for (const id of ['drift-simulation', 'drift-map', 'drift-stations', 'overview-traffic', 'drift-graph']) assert.equal(await page.locator('#' + id).isVisible(), false, id);
     await page.locator('#overview-clock-start').click();
-    await page.locator('#stop-local-clock').waitFor({state:'visible'});
-    await page.locator('#stop-local-clock').click();
+    await page.locator('#overview-clock-stop').waitFor({state:'visible'});
+    await page.locator('#overview-clock-stop').click();
     await page.locator('#overview-clock-start').waitFor({state:'visible'});
     // The US dispatcher uses its own dialog host; verify the same contract
     // against real commands on this disposable session, never the LAN meet.
