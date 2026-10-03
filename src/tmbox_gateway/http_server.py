@@ -2264,6 +2264,9 @@ class TrainMeetHTTPApplication:
             "supported": self.config.allow_restart,
             "overwrites": self._current_meet_name(),
             "backups": backup.available(self._backup_dir()),
+            # Hur det gick förra gången. Servern startade om däremellan, och
+            # webbläsaren som bad om det har inget annat sätt att få veta.
+            "last_restore": backup.last_restore(Path(self.config.state_dir)),
         }
 
     def restore_backup(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:

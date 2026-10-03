@@ -310,8 +310,33 @@ def _restore_from_backup(backup_path: Path, database_path: Path) -> None:
         # Återställningen skriver till ett tillfälligt namn och byter in det
         # sist, så ett avbrott kostar återställningen - inte databasen.
         LOGGER.error("Återställningen misslyckades och databasen är orörd: %s", error)
+        _record_restore(backup_path, database_path, _restore_problem(error, backup_path))
         return
     LOGGER.warning("TrainMeet Server är återställd från %s och startar om", backup_path.name)
+    _record_restore(backup_path, database_path, None)
+
+
+def _restore_problem(error: Exception, backup_path: Path) -> str:
+    """Felet så som ägaren ska läsa det: utan sökvägar på disk."""
+
+    if isinstance(error, backup.BackupError):
+        if isinstance(error.__cause__, sqlite3.DatabaseError):
+            # Samma ord som listan använder, inte SQLites egen engelska.
+            return "kopian går inte att läsa - filen är skadad eller inte en databas"
+        return str(error).replace(str(backup_path), backup_path.name)
+    if isinstance(error, OSError):
+        return f"kopian kunde inte skrivas på plats ({error.strerror or type(error).__name__})"
+    return f"oväntat fel ({type(error).__name__})"
+
+
+def _record_restore(backup_path: Path, database_path: Path, problem: str | None) -> None:
+    """Utfallet till statuskatalogen, där databasen ligger. Går det inte att
+    skriva startar servern om ändå - det är bara beskedet som uteblir."""
+
+    try:
+        backup.record_restore(database_path.parent, backup_path, problem)
+    except OSError as error:
+        LOGGER.error("Utfallet av återställningen kunde inte sparas: %s", error)
 
 
 def _reset_server_state(database_path: Path, state_directory: Path) -> None:
@@ -321,6 +346,7 @@ def _reset_server_state(database_path: Path, state_directory: Path) -> None:
         database_path.with_name(f"{database_path.name}-wal"),
         database_path.with_name(f"{database_path.name}-shm"),
         state_directory / "connection-code.txt",
+        state_directory / backup.RESTORE_RECORD,
     ):
         path.unlink(missing_ok=True)
     LOGGER.warning("TrainMeet Server är nollställd och startar första installationen")
