@@ -55,25 +55,23 @@ FLOWS = [
      "Mottagaren kan inte ta emot tåget just nu.",
      ([("CDA", "39#")], "Charlottendal har begärt klartecken för 39."), [
         ("VA", "*", "* på förfrågan frågar först: NEKA 39? Inget är ändrat än."),
-        ("VA", "#", "# bekräftar. Båda boxarna visar 39 NEKAT och sträckan är fri igen."),
-        ("wait", NOTICE_SECONDS, "Vagnsta går tillbaka till översikten efter tre sekunder. "
-                                 "Charlottendal behåller beskedet tills någon trycker #."),
-        ("CDA", "#", "# kvitterar. Charlottendal kan begära igen senare."),
+        ("VA", "#", "# bekräftar. Båda boxarna visar 39 NEKAT med den andra stationen under, och sträckan är fri igen."),
+        ("wait", NOTICE_SECONDS, "Efter tre sekunder går båda tillbaka till översikten av sig själva. "
+                                 "Inget besked behöver kvitteras. Charlottendal kan begära igen senare."),
     ]),
     ("aterta-begaran", "Återta en begäran", "clearance", ["CDA", "VA"],
      "Avsändaren ångrar sig innan mottagaren har svarat.",
      ([("CDA", "39#")], "Charlottendal har begärt klartecken för 39."), [
         ("CDA", "*", "* frågar först: ÅTER 39? Förfrågan ligger kvar hos Vagnsta tills du bekräftar."),
-        ("CDA", "#", "# återtar. Förfrågan försvinner ur Vagnstas kö."),
-        ("wait", NOTICE_SECONDS, "Charlottendal går tillbaka till översikten efter tre sekunder."),
-        ("VA", "*", "Vagnsta står kvar i den tomma kön (INGA FRÅGOR). * eller B går till översikten."),
+        ("CDA", "#", "# återtar. Båda boxarna visar 39 ÅTERTAGET, och förfrågan är borta ur Vagnstas kö."),
+        ("wait", NOTICE_SECONDS, "Efter tre sekunder går båda tillbaka till översikten av sig själva."),
     ]),
     ("aterta-klartecken", "Återta ett klartecken före avgång", "clearance", ["CDA", "VA"],
      "Tåget har fått klart men ska inte gå ändå. Efter faktisk avgång går det inte att återta.",
      ([("CDA", "39#"), ("VA", "#")], "Vagnsta har gett klart för 39."), [
         ("CDA", "*", "* frågar först: ÅTER 39? Klartecknet gäller tills du bekräftar."),
-        ("CDA", "#", "# återtar. Vagnsta ser att klartecknet är borta (-)."),
-        ("wait", NOTICE_SECONDS, "Charlottendal går tillbaka till översikten efter tre sekunder."),
+        ("CDA", "#", "# återtar. Båda boxarna visar 39 ÅTERTAGET: Vagnsta ska inte ta emot ett tåg som aldrig gick."),
+        ("wait", NOTICE_SECONDS, "Efter tre sekunder går båda tillbaka till översikten och sträckan är fri."),
     ]),
     ("tva-forfragningar", "Två förfrågningar samtidigt", "clearance", ["MUN", "CDA", "VA"],
      "Charlottendal får förfrågningar från båda hållen.",
@@ -120,7 +118,7 @@ FLOWS = [
      "Boxen säger varför ett nummer inte går att välja. Siffrorna skickas först när du trycker #.",
      None, [
         ("CDA", "123#", "Ett nummer som inte går vid stationen ger INGET TÅG."),
-        ("CDA", "#", "# kvitterar."),
+        ("wait", NOTICE_SECONDS, "Beskedet försvinner av sig självt efter tre sekunder; # eller * stänger det direkt."),
         ("CDA", "4", "Har du börjat skriva ett fel nummer, suddar B sista siffran …"),
         ("CDA", "*", "… och * tömmer hela inmatningen. Inget har skickats till servern."),
     ]),
@@ -161,7 +159,7 @@ FLOWS = [
      "En station kan ha en box per sida. Varje box hanterar bara tågen på sina sträckor.",
      None, [
         ("CDA-V", "39#", "Vänsterboxen (mot Munkeröd) söker 39, som går mot Vagnsta. Svaret blir ANNAN SIDA."),
-        ("CDA-V", "#", "# kvitterar."),
+        ("wait", NOTICE_SECONDS, "Beskedet försvinner av sig självt efter tre sekunder."),
         ("CDA-H", "39#", "Högerboxen hittar tåget och begär klartecken direkt."),
         ("VA", "#", "Vagnsta ger klart. På Charlottendal visar bara högerboxen tåget."),
     ]),

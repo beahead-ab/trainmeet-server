@@ -84,6 +84,16 @@ Exempel, fångade från mosquitto 2026-10-01 (bilden förkortad):
   `#` efter *Ge klart* aldrig tar emot tåget. Tåget hoppar fram på samma sätt.
 - Ett upptaget spår stoppar inte en ankomst. Kvittot blir `<nr> UPPT SPÅR` i
   stället för `<nr> MOTTAGET`.
+- Inga besked väntar på `#OK` (Server 2.4.0). Ett besked som `<nr> ÅTERTAGET`,
+  `<nr> NEKAT`, `<nr> ANK SP2`, `INGET TÅG` eller `INGA FRÅGOR` har den andra
+  stationens kod på rad 2 och försvinner efter `NOTICE_SECONDS`, och boxen går
+  då till startskärmen av sig själv. `#` och `*` stänger det direkt men gör
+  inget annat. En fråga som väntar på ett beslut (`#Ja *Nej`) står kvar.
+- Tar avsändaren tillbaka en förfrågan eller ett klartecken får båda
+  stationerna `<nr> ÅTERTAGET`: avsändaren med mottagarens kod, mottagaren med
+  avsändarens. Mottagaren står alltså inte kvar på `INGA FRÅGOR` eller med
+  *Placera på spår* för ett tåg som aldrig gick. En box som håller på med ett
+  annat tåg störs inte. En ny förfrågan ersätter `INGA FRÅGOR` direkt.
 - `status` är `accepted`, `rejected` eller `duplicate`. `message` är en text att
   visa, på boxens språk.
 
@@ -146,6 +156,7 @@ samma tangentregler över HTTP i stället för MQTT. De får ingen egen trafiklo
 | `SESSION_IDLE_SECONDS` | 45 |
 | `MAX_PAYLOAD_BYTES` | 4096 |
 | `input_guard_ms` | 500 |
+| `NOTICE_SECONDS` | 3 |
 | `entry.max_length` | 5 |
 | `DEVICE_ONLINE_SECONDS` | 20 |
 | `DEVICE_OFFLINE_SECONDS` | 900 |

@@ -57,7 +57,11 @@ class TMBoxFlowsTest(unittest.TestCase):
         self.assertEqual(" " * 16, self.lines("klarera", -1, "CDA")[0])
         self.assertEqual("39 ANK SP2      ", self.lines("annat-spar", -1, "VA")[0])
         self.assertEqual("39 NEKAT        ", self.lines("neka", 1, "CDA")[0])
-        self.assertEqual("CDA-39          ", self.lines("aterta-klartecken", 1, "VA")[0])
+        # Taken back, both stations are told and neither waits for #OK (Benny, 2026-10-03).
+        self.assertEqual(["39 ÅTERTAGET    ", "CDA        12:34"], self.lines("aterta-klartecken", 1, "VA"))
+        self.assertEqual(["39 ÅTERTAGET    ", "VA         12:34"], self.lines("aterta-klartecken", 1, "CDA"))
+        self.assertEqual(["39 ÅTERTAGET    ", "CDA        12:34"], self.lines("aterta-begaran", 1, "VA"))
+        self.assertEqual(" " * 16, self.lines("aterta-begaran", -1, "VA")[0])
         self.assertEqual("2/2        94?VA", self.lines("tva-forfragningar", 2, "CDA")[0])
         self.assertEqual("MUN<17       1/2", self.lines("hitta-aktivt", 2, "CDA")[0])
         self.assertEqual(["           39>VA", "#Avg *Åter 12:34"], self.lines("direkt", 0, "CDA"))

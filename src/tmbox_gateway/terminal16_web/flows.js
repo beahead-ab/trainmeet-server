@@ -262,7 +262,7 @@ globalThis.TMBoxFlows = {
        "box": "VA",
        "lines": [
         "39 ANK SP1      ",
-        "#OK *=Bak  12:34"
+        "CDA        12:34"
        ],
        "changed": true
       }
@@ -489,7 +489,7 @@ globalThis.TMBoxFlows = {
        "box": "VA",
        "lines": [
         "39 ANK SP2      ",
-        "#OK *=Bak  12:34"
+        "CDA        12:34"
        ],
        "changed": true
       }
@@ -596,13 +596,13 @@ globalThis.TMBoxFlows = {
       "#"
      ],
      "wait": null,
-     "caption": "# bekräftar. Båda boxarna visar 39 NEKAT och sträckan är fri igen.",
+     "caption": "# bekräftar. Båda boxarna visar 39 NEKAT med den andra stationen under, och sträckan är fri igen.",
      "screens": [
       {
        "box": "CDA",
        "lines": [
         "39 NEKAT        ",
-        "#OK *=Bak  12:34"
+        "VA         12:34"
        ],
        "changed": true
       },
@@ -610,7 +610,7 @@ globalThis.TMBoxFlows = {
        "box": "VA",
        "lines": [
         "39 NEKAT        ",
-        "#OK *=Bak  12:34"
+        "CDA        12:34"
        ],
        "changed": true
       }
@@ -634,15 +634,15 @@ globalThis.TMBoxFlows = {
      "box": null,
      "keys": [],
      "wait": 3,
-     "caption": "Vagnsta går tillbaka till översikten efter tre sekunder. Charlottendal behåller beskedet tills någon trycker #.",
+     "caption": "Efter tre sekunder går båda tillbaka till översikten av sig själva. Inget besked behöver kvitteras. Charlottendal kan begära igen senare.",
      "screens": [
       {
        "box": "CDA",
        "lines": [
-        "39 NEKAT        ",
-        "#OK *=Bak  12:34"
+        "                ",
+        "Nr# A:Kö   12:34"
        ],
-       "changed": false
+       "changed": true
       },
       {
        "box": "VA",
@@ -654,54 +654,6 @@ globalThis.TMBoxFlows = {
       }
      ],
      "meanings": []
-    },
-    {
-     "box": "CDA",
-     "keys": [
-      "#"
-     ],
-     "wait": null,
-     "caption": "# kvitterar. Charlottendal kan begära igen senare.",
-     "screens": [
-      {
-       "box": "CDA",
-       "lines": [
-        "                ",
-        "Nr# A:Kö   12:34"
-       ],
-       "changed": true
-      },
-      {
-       "box": "VA",
-       "lines": [
-        "                ",
-        "Nr# A:Kö   12:34"
-       ],
-       "changed": false
-      }
-     ],
-     "meanings": [
-      [
-       "#",
-       "Visa kommande tåg"
-      ],
-      [
-       "A",
-       "Förfrågningskö (0 väntar)"
-      ],
-      [
-       "B",
-       "Aktiva tåg (0)"
-      ],
-      [
-       "C",
-       "Föregående tåg"
-      ],
-      [
-       "D",
-       "Nästa tåg"
-      ]
-     ]
     }
    ]
   },
@@ -790,21 +742,21 @@ globalThis.TMBoxFlows = {
       "#"
      ],
      "wait": null,
-     "caption": "# återtar. Förfrågan försvinner ur Vagnstas kö.",
+     "caption": "# återtar. Båda boxarna visar 39 ÅTERTAGET, och förfrågan är borta ur Vagnstas kö.",
      "screens": [
       {
        "box": "CDA",
        "lines": [
         "39 ÅTERTAGET    ",
-        "#OK *=Bak  12:34"
+        "VA         12:34"
        ],
        "changed": true
       },
       {
        "box": "VA",
        "lines": [
-        "INGA FRÅGOR     ",
-        "A:Kö *=Bak 12:34"
+        "39 ÅTERTAGET    ",
+        "CDA        12:34"
        ],
        "changed": true
       }
@@ -828,7 +780,7 @@ globalThis.TMBoxFlows = {
      "box": null,
      "keys": [],
      "wait": 3,
-     "caption": "Charlottendal går tillbaka till översikten efter tre sekunder.",
+     "caption": "Efter tre sekunder går båda tillbaka till översikten av sig själva.",
      "screens": [
       {
        "box": "CDA",
@@ -841,61 +793,13 @@ globalThis.TMBoxFlows = {
       {
        "box": "VA",
        "lines": [
-        "INGA FRÅGOR     ",
-        "A:Kö *=Bak 12:34"
+        "                ",
+        "Nr# A:Kö   12:34"
        ],
-       "changed": false
+       "changed": true
       }
      ],
      "meanings": []
-    },
-    {
-     "box": "VA",
-     "keys": [
-      "*"
-     ],
-     "wait": null,
-     "caption": "Vagnsta står kvar i den tomma kön (INGA FRÅGOR). * eller B går till översikten.",
-     "screens": [
-      {
-       "box": "CDA",
-       "lines": [
-        "                ",
-        "Nr# A:Kö   12:34"
-       ],
-       "changed": false
-      },
-      {
-       "box": "VA",
-       "lines": [
-        "                ",
-        "Nr# A:Kö   12:34"
-       ],
-       "changed": true
-      }
-     ],
-     "meanings": [
-      [
-       "#",
-       "Visa kommande tåg"
-      ],
-      [
-       "A",
-       "Förfrågningskö (0 väntar)"
-      ],
-      [
-       "B",
-       "Aktiva tåg (0)"
-      ],
-      [
-       "C",
-       "Föregående tåg"
-      ],
-      [
-       "D",
-       "Nästa tåg"
-      ]
-     ]
     }
    ]
   },
@@ -984,21 +888,21 @@ globalThis.TMBoxFlows = {
       "#"
      ],
      "wait": null,
-     "caption": "# återtar. Vagnsta ser att klartecknet är borta (-).",
+     "caption": "# återtar. Båda boxarna visar 39 ÅTERTAGET: Vagnsta ska inte ta emot ett tåg som aldrig gick.",
      "screens": [
       {
        "box": "CDA",
        "lines": [
         "39 ÅTERTAGET    ",
-        "#OK *=Bak  12:34"
+        "VA         12:34"
        ],
        "changed": true
       },
       {
        "box": "VA",
        "lines": [
-        "CDA-39          ",
-        "#In B:Sp   12:34"
+        "39 ÅTERTAGET    ",
+        "CDA        12:34"
        ],
        "changed": true
       }
@@ -1022,7 +926,7 @@ globalThis.TMBoxFlows = {
      "box": null,
      "keys": [],
      "wait": 3,
-     "caption": "Charlottendal går tillbaka till översikten efter tre sekunder.",
+     "caption": "Efter tre sekunder går båda tillbaka till översikten och sträckan är fri.",
      "screens": [
       {
        "box": "CDA",
@@ -1035,10 +939,10 @@ globalThis.TMBoxFlows = {
       {
        "box": "VA",
        "lines": [
-        "CDA-39          ",
-        "#In B:Sp   12:34"
+        "                ",
+        "Nr# A:Kö   12:34"
        ],
-       "changed": false
+       "changed": true
       }
      ],
      "meanings": []
@@ -2000,7 +1904,7 @@ globalThis.TMBoxFlows = {
        "box": "VA",
        "lines": [
         "39 ANK SP1      ",
-        "#OK *=Bak  12:34"
+        "CDA        12:34"
        ],
        "changed": true
       }
@@ -2305,7 +2209,7 @@ globalThis.TMBoxFlows = {
        "box": "CDA",
        "lines": [
         "INGET TÅG       ",
-        "#OK *=Bak  12:34"
+        "           12:34"
        ],
        "changed": true
       }
@@ -2326,12 +2230,10 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
-     "keys": [
-      "#"
-     ],
-     "wait": null,
-     "caption": "# kvitterar.",
+     "box": null,
+     "keys": [],
+     "wait": 3,
+     "caption": "Beskedet försvinner av sig självt efter tre sekunder; # eller * stänger det direkt.",
      "screens": [
       {
        "box": "CDA",
@@ -2342,28 +2244,7 @@ globalThis.TMBoxFlows = {
        "changed": true
       }
      ],
-     "meanings": [
-      [
-       "#",
-       "Visa kommande tåg"
-      ],
-      [
-       "A",
-       "Förfrågningskö (0 väntar)"
-      ],
-      [
-       "B",
-       "Aktiva tåg (0)"
-      ],
-      [
-       "C",
-       "Föregående tåg"
-      ],
-      [
-       "D",
-       "Nästa tåg"
-      ]
-     ]
+     "meanings": []
     },
     {
      "box": "CDA",
@@ -2682,7 +2563,7 @@ globalThis.TMBoxFlows = {
        "box": "CDA",
        "lines": [
         "55 ANK SP2      ",
-        "#OK *=Bak  12:34"
+        "VA         12:34"
        ],
        "changed": true
       },
@@ -3158,7 +3039,7 @@ globalThis.TMBoxFlows = {
        "box": "MUN",
        "lines": [
         "55 ANK SP2      ",
-        "#OK *=Bak  12:34"
+        "CDA        12:34"
        ],
        "changed": true
       }
@@ -3389,7 +3270,7 @@ globalThis.TMBoxFlows = {
        "box": "CDA",
        "lines": [
         "93 ANK SP2      ",
-        "#OK *=Bak  12:34"
+        "MUN        12:34"
        ],
        "changed": true
       }
@@ -3478,7 +3359,7 @@ globalThis.TMBoxFlows = {
        "box": "CDA-V",
        "lines": [
         "ANNAN SIDA      ",
-        "#OK *=Bak  12:34"
+        "           12:34"
        ],
        "changed": true
       },
@@ -3515,12 +3396,10 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA-V",
-     "keys": [
-      "#"
-     ],
-     "wait": null,
-     "caption": "# kvitterar.",
+     "box": null,
+     "keys": [],
+     "wait": 3,
+     "caption": "Beskedet försvinner av sig självt efter tre sekunder.",
      "screens": [
       {
        "box": "CDA-V",
@@ -3547,28 +3426,7 @@ globalThis.TMBoxFlows = {
        "changed": false
       }
      ],
-     "meanings": [
-      [
-       "#",
-       "Visa kommande tåg"
-      ],
-      [
-       "A",
-       "Förfrågningskö (0 väntar)"
-      ],
-      [
-       "B",
-       "Aktiva tåg (0)"
-      ],
-      [
-       "C",
-       "Föregående tåg"
-      ],
-      [
-       "D",
-       "Nästa tåg"
-      ]
-     ]
+     "meanings": []
     },
     {
      "box": "CDA-H",

@@ -54,6 +54,10 @@ SHORT_LABELS = {
     "Annat ankomstspår": "SPÅR", "Placera på spår": "PLACERA", "Placera på spår…": "PLACERA",
 }
 
+#: How long a notice stays before the box goes back to its start screen by
+#: itself. Nothing on the box waits for #OK (Casper, 2026-10-03).
+NOTICE_SECONDS = 3
+
 
 @dataclass
 class Terminal:
@@ -66,6 +70,8 @@ class Terminal:
     track: int = 0
     revision: int = 0
     notice: str = ""
+    # The other station of the notice (its code), on the second row.
+    notice_hint: str = ""
     browse_filter: str = "all"
     return_screen: str = "detail"
     receipts: list[tuple[str, str]] = field(default_factory=list)
@@ -299,7 +305,9 @@ class Terminal16Lab:
 
     def _notify_request(self, leg):
         for terminal in self.terminals.values():
-            if (terminal.station == leg["to_station_id"] and self._on_side(terminal, leg) and not terminal.notice
+            # An empty queue's INGA FRÅGOR gives way to the request at once.
+            if (terminal.station == leg["to_station_id"] and self._on_side(terminal, leg)
+                    and terminal.notice in ("", "INGA FRÅGOR")
                     and (terminal.screen == "overview"
                          or (terminal.screen == "requests" and terminal.selected is None))):
                 self._open_requests(terminal)
@@ -315,6 +323,20 @@ class Terminal16Lab:
             terminal.receipts.append((leg["train_number"], leg["to_station_id"]))
             terminal.revision += 1
 
+    def _notify_withdrawn(self, leg, key):
+        """The receiver is told when the sender takes a train back, also one it
+        had cleared: "3510 ÅTERTAGET" with the sender's code, then the start
+        screen. A box busy with another train is left alone."""
+        sender = self.engine.config.stations[leg["from_station_id"]].code
+        for terminal in self.terminals.values():
+            if terminal.station != leg["to_station_id"] or not self._on_side(terminal, leg):
+                continue
+            if terminal.selected not in (None, key) and terminal.screen != "overview":
+                continue
+            terminal.notice, terminal.notice_hint = f"{leg['train_number']} ÅTERTAGET", sender
+            terminal.notice_until = self.now() + NOTICE_SECONDS
+            terminal.revision += 1
+
     def _dismiss_receipt(self, terminal):
         if terminal.receipt_until is not None:
             terminal.receipts.pop(0)
@@ -322,8 +344,21 @@ class Terminal16Lab:
             terminal.revision += 1
 
     def _advance_receipts(self, terminal):
+        # An empty request queue is said and then goes away, it does not stay
+        # on the box until someone presses a key (Benny, 2026-10-03).
+        if (terminal.screen == "requests" and terminal.selected is None and not terminal.notice
+                and not self._requests(terminal)):
+            terminal.notice, terminal.notice_hint = "INGA FRÅGOR", ""
+            terminal.revision += 1
+        # A notice replaced by something else takes its time limit with it, or
+        # the box would be sent home in the middle of what replaced it.
+        if not terminal.notice and terminal.notice_until is not None:
+            terminal.notice_until, terminal.notice_hint = None, ""
+        # Every notice clears itself; the clock starts when it is first shown.
+        if terminal.notice and terminal.notice_until is None:
+            terminal.notice_until = self.now() + NOTICE_SECONDS
         if terminal.notice_until is not None and self.now() >= terminal.notice_until:
-            terminal.notice, terminal.notice_until = "", None
+            terminal.notice, terminal.notice_until, terminal.notice_hint = "", None, ""
             terminal.selected, terminal.screen = None, "overview"
             terminal.revision += 1
         # Real elapsed time, independent of a paused/accelerated meeting clock.
@@ -539,7 +574,7 @@ class Terminal16Lab:
             if len(text_cells(hint)) > 11:
                 hint = t("A{count} B:Akt", count=compact(len(requests)))
         if terminal.notice:
-            first, hint = row(translated_notice(terminal.language, terminal.notice)), "#OK *=Bak"
+            first, hint = row(translated_notice(terminal.language, terminal.notice)), terminal.notice_hint
         elif terminal.screen == "requests":
             if position:
                 label, side = self._label(terminal.station, selected)
@@ -728,7 +763,7 @@ class Terminal16Lab:
             return self._answer(device, False, "Tangenten är inte tillgänglig i det här läget")
         self._dismiss_receipt(terminal)
         action = button[0]
-        terminal.notice = ""
+        terminal.notice, terminal.notice_hint = "", ""
         terminal.notice_until = None
         if action == "back":
             terminal.screen = terminal.return_screen if terminal.screen in {"tracks", "cancel", "reject"} else "overview"
@@ -813,18 +848,24 @@ class Terminal16Lab:
             self.completed.add(key)
             terminal.notice = (f"{leg['train_number']} UPPT SPÅR" if occupied else
                                f"{leg['train_number']} ANK SP{self.engine.config.tracks[arrival_track].display_label}")
-            terminal.notice_until = self.now() + 3
+            terminal.notice_hint = self.engine.config.stations[leg["from_station_id"]].code
+            terminal.notice_until = self.now() + NOTICE_SECONDS
             self._notify_arrival(leg)
         if action in {"cancel", "reject", "arrive", "arrive_track"}:
             self.bindings.pop(leg["connection_id"], None)
         if action == "cancel":
             terminal.notice = f"{leg['train_number']} ÅTERTAGET"
-            terminal.notice_until = self.now() + 3
+            terminal.notice_hint = self.engine.config.stations[leg["to_station_id"]].code
+            terminal.notice_until = self.now() + NOTICE_SECONDS
+            self._notify_withdrawn(leg, key)
         if action == "reject":
             terminal.notice = f"{leg['train_number']} NEKAT"
-            terminal.notice_until = self.now() + 3
+            terminal.notice_hint = self.engine.config.stations[leg["from_station_id"]].code
+            terminal.notice_until = self.now() + NOTICE_SECONDS
             for other in self.terminals.values():
                 if other.station == leg["from_station_id"] and other.selected == key:
                     other.notice = f"{leg['train_number']} NEKAT"
+                    other.notice_hint = self.engine.config.stations[leg["to_station_id"]].code
+                    other.notice_until = self.now() + NOTICE_SECONDS
                     other.revision += 1
         return ""

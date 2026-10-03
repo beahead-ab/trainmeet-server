@@ -22,7 +22,7 @@ from tmbox_gateway.terminal16_demo import demo_lab
 TRAFFIC_ACTIONS = {"request", "accept", "reject", "cancel", "depart", "arrive", "arrive_track"}
 # Reached only through a few exact paths, so they are pressed on purpose in
 # the scripted tests below rather than hoped for in the random walk.
-SCRIPTED = {"reject_view", "next_request", "previous_request", "next_track", "previous_track", "cancel_view"}
+SCRIPTED = {"reject_view", "next_request", "previous_request", "tracks", "next_track", "previous_track", "cancel_view"}
 
 
 class KeysSayWhetherTheyActTests(unittest.TestCase):
@@ -75,8 +75,11 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
         self.assertLessEqual(seen, NAVIGATION_ACTIONS | TRAFFIC_ACTIONS, seen - NAVIGATION_ACTIONS - TRAFFIC_ACTIONS)
         # Vandringen ska ha sett allt utom det som provas skriptat nedan,
         # annars bevisar den för lite. Sedan 2.1.0 begär sökningen själv, så
-        # vandringen når sällan ett återtagande; det provas skriptat nedan.
-        self.assertEqual(TRAFFIC_ACTIONS - {"reject", "cancel"}, seen & TRAFFIC_ACTIONS - {"reject", "cancel"})
+        # vandringen når sällan ett återtagande, och sedan besked släcks av sig
+        # själva (3 s) och en tom kö är ett besked når den sällan spårvalet.
+        # De provas skriptat nedan.
+        scripted = {"reject", "cancel", "arrive_track"}
+        self.assertEqual(TRAFFIC_ACTIONS - scripted, seen & TRAFFIC_ACTIONS - scripted)
         self.assertLessEqual(NAVIGATION_ACTIONS - seen, SCRIPTED)
 
     def walk(self, seed, after_each=lambda: None):
@@ -123,6 +126,15 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
         for name in ("CDA-L", "CDA-R"):
             done = {action for device, action in self.traffic if device == name}
             self.assertTrue(done & TRAFFIC_ACTIONS, f"{name} ska köra trafik på sin sida")
+
+    def test_track_choice_is_marked(self):
+        self.lookup("DEMO-CDA", "39")                      # begär direkt
+        self.assertEqual("accept", self.press("DEMO-VA", "#"))
+        self.assertEqual("depart", self.press("DEMO-CDA", "#"))
+        self.assertEqual("tracks", self.press("DEMO-VA", "B"))
+        self.assertEqual("next_track", self.press("DEMO-VA", "D"))
+        self.assertEqual("previous_track", self.press("DEMO-VA", "C"))
+        self.assertEqual("arrive_track", self.press("DEMO-VA", "#"))
 
     def test_reject_and_withdraw_paths_are_marked(self):
         self.lookup("DEMO-CDA", "39")                      # begär direkt (2.1.0)

@@ -103,6 +103,10 @@ tmbox/terminal/device/esp8266-308398b57200/ack
 Sedan Server 2.1.0 begär samma tryck klartecken direkt, och bilden i kvittot blir
 `CDA?428` / `*Åter B:Öv` i stället för `CDA-428` / `#Beg A:Kö`.
 
+Sedan Server 2.4.0 väntar inga besked på `#OK`: rad 2 visar den andra
+stationens kod, och beskedet släcks efter tre sekunder. Servern skickar då en
+ny bild av sig själv. Boxen behöver inget nytt, eftersom den bara visar bilden.
+
 Livstecknet, också fångat:
 
 ```json
