@@ -176,7 +176,11 @@
     if (row.kind === "simulated") return h("td", { class: "m" }, t("Simulator"));
     if (!row.device) return h("td", { class: "m" }, "—");
     const side = { left: t("vänster"), right: t("höger") }[row.device.station_side];
-    return h("td", { class: "mono", title: [row.device.model, row.device.device_id].filter(Boolean).join(" · ") }, row.device.device_code,
+    // Firmware för en fysisk box, appversion för iPhone. En webbläsarbox kör
+    // serverns egen kod och har ingen egen version ("unknown").
+    const version = row.device.firmware_version && row.device.firmware_version !== "unknown" ? row.device.firmware_version : "";
+    return h("td", { class: "mono", title: [row.device.model, version && t("ver. {version}", { version }), row.device.device_id].filter(Boolean).join(" · ") },
+      row.device.device_code, version ? h("span", { class: "kr-code" }, t("ver. {version}", { version })) : null,
       side ? h("span", { class: "kr-code" }, side) : null);
   }
   function placementCell(row) {
@@ -210,7 +214,7 @@
     if (meta) meta.textContent = [t("{manned} av {total} bemannade", { manned, total: stations }),
       simulated ? t(simulated === 1 ? "1 sköts av simulatorn" : "{n} sköts av simulatorn", { n: simulated }) : ""].filter(Boolean).join(" · ");
     const sig = [rows.map((row) => [row.key, row.kind, row.tone, row.trains, row.device?.connection?.state, row.device?.connection?.last_seen,
-      row.device?.station_side, row.device?.device_code, row.placement && [row.placement.left, row.placement.right], row.sim?.mode]), selected, root.lang];
+      row.device?.station_side, row.device?.device_code, row.device?.firmware_version, row.placement && [row.placement.left, row.placement.right], row.sim?.mode]), selected, root.lang];
     if (!changed("stations", sig)) return;
     if (!rows.length) { body.replaceChildren(h("tr", {}, h("td", { colspan: 6, class: "kr-empty" }, t("Inga stationer i träffen.")))); return; }
     body.replaceChildren(...rows.map((row) => {

@@ -1,4 +1,4 @@
-// Stationer och boxar på Drift efter att en TMBox tagits bort: meddelandet
+// Stationer och boxar på Drift: firmware per box, och efter att en TMBox tagits bort meddelandet
 // under listan får inte trycka ihop den. Förut tog det hela panelens höjd, och
 // listan krympte till några rader tills sidan laddades om (#107). API:et är
 // fixturen i kr-fixture.cjs.
@@ -18,6 +18,12 @@ const { open } = require('./kr-fixture.cjs');
       return { shown: Math.round(scroll.getBoundingClientRect().height), table: Math.round(table.getBoundingClientRect().height),
         message: message.textContent, messageHeight: Math.round(message.getBoundingClientRect().height) };
     });
+    // Firmware per box: a physical box says which it runs, a web box has none.
+    const boxCell = (code) => page.locator('#device-list td.mono', { hasText: code }).first().innerText();
+    assert.match(await boxCell('TBX-3C11'), /^TBX-3C11\s*ver\. 0\.7\.5$/);
+    assert.equal((await boxCell('WEB-K3M9')).trim(), 'WEB-K3M9', 'no version for a browser box');
+    assert.equal((await boxCell('TBX-77A0')).trim(), 'TBX-77A0', 'no version until the box has said one');
+
     const before = await list();
     assert.equal(before.shown, before.table, 'the whole list shows before');
     assert.equal(before.messageHeight, 0, 'an empty message takes no room');
