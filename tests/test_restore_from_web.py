@@ -23,7 +23,9 @@ import tempfile
 import threading
 import unittest
 from http import HTTPStatus
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -127,6 +129,19 @@ class RestoreOverHTTPTests(unittest.TestCase):
     def test_the_list_names_what_a_restore_would_overwrite(self) -> None:
         _, payload = self._call("/v1/server/backups")
         self.assertEqual("Sommarträffen", payload["overwrites"])
+
+    def test_the_list_says_how_the_last_restore_went(self) -> None:
+        """Webbläsaren som bad om återställningen ser bara servern gå ner och
+        komma tillbaka. Efter inloggningen ska listan säga hur det gick."""
+
+        _, payload = self._call("/v1/server/backups")
+        self.assertIsNone(payload["last_restore"])
+
+        backup.record_restore(self.state, self.copy, "kopian är tom")
+        _, payload = self._call("/v1/server/backups")
+        self.assertEqual(self.copy.name, payload["last_restore"]["backup"])
+        self.assertFalse(payload["last_restore"]["restored"])
+        self.assertEqual("kopian är tom", payload["last_restore"]["problem"])
 
     # ── bekräftelsen ───────────────────────────────────────────────────
 
@@ -318,6 +333,75 @@ class RestoreOnDiskTests(unittest.TestCase):
         before = self.database.read_bytes()
         local_server._restore_from_backup(broken, self.database)
         self.assertEqual(before, self.database.read_bytes())
+
+    # ── beskedet efter omstarten ───────────────────────────────────────
+
+    def test_a_restore_that_worked_is_written_down(self) -> None:
+        local_server._restore_from_backup(self.copy, self.database)
+        record = backup.last_restore(self.state)
+        self.assertEqual(
+            {"backup": self.copy.name, "taken_at": "2026-08-25T10:15:00+00:00",
+             "restored": True, "problem": None},
+            {key: record[key] for key in ("backup", "taken_at", "restored", "problem")},
+        )
+        self.assertTrue(record["attempted_at"])
+
+    def test_a_restore_that_failed_is_written_down_too(self) -> None:
+        """Annars startar servern om med den gamla databasen och ägaren tror
+        att kopian ligger på plats. Felet stod bara i loggen."""
+
+        broken = self.state / "backups" / "trainmeet-20260101-000000.db"
+        broken.write_bytes(b"inte en databas")
+        local_server._restore_from_backup(broken, self.database)
+        record = backup.last_restore(self.state)
+        self.assertEqual(broken.name, record["backup"])
+        self.assertFalse(record["restored"])
+        self.assertEqual(
+            "kopian går inte att läsa - filen är skadad eller inte en databas",
+            record["problem"],
+            "samma ord som listan, inte SQLites egen text",
+        )
+
+    def test_the_written_problem_names_no_path_on_disk(self) -> None:
+        missing = self.state / "backups" / "trainmeet-20200101-000000.db"
+        local_server._restore_from_backup(missing, self.database)
+        self.assertEqual(
+            "säkerhetskopian finns inte: trainmeet-20200101-000000.db",
+            backup.last_restore(self.state)["problem"],
+        )
+
+    def test_a_full_disk_is_said_in_words_without_the_path(self) -> None:
+        full = OSError(28, "No space left on device", str(self.database) + ".restoring")
+        with mock.patch.object(backup, "restore", side_effect=full):
+            local_server._restore_from_backup(self.copy, self.database)
+        problem = backup.last_restore(self.state)["problem"]
+        self.assertEqual("kopian kunde inte skrivas på plats (No space left on device)", problem)
+        self.assertNotIn(str(self.state), problem)
+
+    def test_an_outcome_that_cannot_be_written_does_not_stop_the_restart(self) -> None:
+        with mock.patch.object(backup, "record_restore", side_effect=OSError("skrivskyddat")):
+            local_server._restore_from_backup(self.copy, self.database)
+        self.assertEqual(["Sommarträffen"], self._meet_names())
+
+    def test_a_damaged_record_reads_as_no_restore(self) -> None:
+        record = self.state / backup.RESTORE_RECORD
+        for content in ("{inte json", "[1, 2]", ""):
+            record.write_text(content, encoding="utf-8")
+            self.assertIsNone(backup.last_restore(self.state), content)
+
+    def test_the_record_is_kept_for_the_next_restore_to_replace(self) -> None:
+        earlier = datetime(2026, 8, 26, 9, 0, tzinfo=timezone.utc)
+        backup.record_restore(self.state, self.copy, "kopian är tom", now=earlier)
+        local_server._restore_from_backup(self.copy, self.database)
+        record = backup.last_restore(self.state)
+        self.assertTrue(record["restored"])
+        self.assertNotEqual(earlier.isoformat(), record["attempted_at"])
+        self.assertFalse((self.state / (backup.RESTORE_RECORD + ".partial")).exists())
+
+    def test_a_factory_reset_forgets_the_last_restore(self) -> None:
+        backup.record_restore(self.state, self.copy)
+        local_server._reset_server_state(self.database, self.state)
+        self.assertIsNone(backup.last_restore(self.state))
 
 
 if __name__ == "__main__":
