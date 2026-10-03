@@ -1717,6 +1717,16 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_shift", str(error)) from error
         return {"shift": result}
 
+    def _tkl_actor(self, client: PairedClient, snapshot: dict[str, Any], station_id: str) -> tuple[str, str | None]:
+        """Who a TKL step is recorded as: the shift's operator when the
+        station has one, otherwise the paired terminal itself."""
+        shift = self.operations_store.tkl_station_state(
+            snapshot["publication_id"], snapshot["active_day"], station_id
+        )["shift"]
+        if shift is not None:
+            return shift["operator_name"], shift["shift_id"]
+        return client.display_name or client.client_id, None
+
     @runtime_command("eu")
     def update_tkl_movement(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         if self.operations_store is None:
@@ -1734,19 +1744,18 @@ class TrainMeetHTTPApplication:
         )
         if movement is None:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "movement_not_found", "Tågrörelsen finns inte på stationen")
-        current_shift = self.operations_store.tkl_station_state(
-            snapshot["publication_id"], snapshot["active_day"], station_id
-        )["shift"]
-        if current_shift is None:
-            raise HTTPAPIError(HTTPStatus.CONFLICT, "tkl_shift_not_started", "Starta trafikpasset innan tågrörelser hanteras")
+        # A paired terminal is in service the way an assigned box is: no
+        # traffic shift is needed. An active shift only names the operator.
+        actor, shift_id = self._tkl_actor(client, snapshot, station_id)
+        self.station_service.observe_operator(client.client_id, station_id)
         if self.engine.shared_traffic is not None:
             from .protocol_v2 import CommandRejected
             try:
                 result = self.station_service.update_station_movement(
-                    current_shift["operator_name"], station_id, movement_id,
+                    actor, station_id, movement_id,
                     {key: payload[key] for key in ("arrival", "departure", "actual_track", "operator_note")
                      if key in payload and payload[key] is not None},
-                    shift_id=current_shift["shift_id"],
+                    shift_id=shift_id,
                 )
             except (CommandRejected, ValueError) as error:
                 reason = error.reason if isinstance(error, CommandRejected) else str(error)
@@ -1787,8 +1796,8 @@ class TrainMeetHTTPApplication:
                 arrival=str(payload.get("arrival") or "none"),
                 departure=str(payload.get("departure") or "none"),
                 actual_track=actual_track,
-                updated_by=current_shift["operator_name"],
-                shift_id=current_shift["shift_id"],
+                updated_by=actor,
+                shift_id=shift_id,
                 event_type=str(payload.get("event_type") or "movement_updated")[:80],
                 # Saknas fältet lämnas anteckningen ifred. Ett anrop som bara
                 # byter spår ska inte råka radera vad någon annan skrivit.
@@ -1819,15 +1828,6 @@ class TrainMeetHTTPApplication:
         action = str(payload.get("action") or "")
         self._require_station_access(client, station_id)
         snapshot = self.display_snapshot()
-        current_shift = self.operations_store.tkl_station_state(
-            snapshot["publication_id"], snapshot["active_day"], station_id
-        )["shift"]
-        if current_shift is None:
-            raise HTTPAPIError(
-                HTTPStatus.CONFLICT,
-                "tkl_shift_not_started",
-                "Starta trafikpasset innan en tågklarering hanteras",
-            )
         connection = self.engine.config.connections.get(connection_id)
         if connection is None or station_id not in (
             connection.station_a_id,
@@ -1846,6 +1846,7 @@ class TrainMeetHTTPApplication:
                 "invalid_tkl_clearance_action",
                 "Ogiltig sträckåtgärd eller tågnummer",
             )
+        self.station_service.observe_operator(client.client_id, station_id)
         with use_correlation(f"tkl-{uuid4().hex[:12]}") as trace:
             accepted, reason = self.engine.perform(
                 station_id=station_id,

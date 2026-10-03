@@ -809,6 +809,40 @@ class HTTPServerTests(unittest.TestCase):
         )
         self.assertEqual(arrived["connection"]["state"], "free")
 
+    def test_a_paired_terminal_needs_no_shift_to_clear_and_report_trains(self):
+        # Like an assigned box: being paired is being in service. Steps are
+        # recorded under the terminal's own name when no shift is active.
+        publication = self._select_package(runtime_package_v3())
+        self.operations_store.ensure_publication(publication)
+        client = self.application.local_admin()
+        self.assertIsNone(self.application.tkl_context(client, "station-a")["shift"])
+
+        requested = self.application.tkl_clearance_action(
+            client,
+            {
+                "station_id": "station-a",
+                "connection_id": "connection-a-b",
+                "train_number": "101",
+                "action": "request",
+            },
+        )
+        self.assertEqual(requested["connection"]["state"], "requested")
+
+        updated = self.application.update_tkl_movement(
+            client,
+            {
+                "station_id": "station-a",
+                "movement_id": "movement-101-a",
+                "arrival": "none",
+                "departure": "positioned",
+                "event_type": "positioned",
+            },
+        )
+        self.assertEqual(updated["movement"]["departure"], "positioned")
+        movement = self.application.tkl_context(client, "station-a")["movements"]["movement-101-a"]
+        self.assertEqual(movement["updated_by"], client.display_name)
+        self.assertIsNone(self.application.tkl_context(client, "station-a")["shift"])
+
     def test_linked_runtime_update_safely_adopts_without_a_second_activation_step(self):
         self._select_package(runtime_package_v3(publication_id="publication-v2-first"))
         manifest = self._json_request("/v1/runtime/update")
