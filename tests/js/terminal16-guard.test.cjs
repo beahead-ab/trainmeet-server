@@ -2,7 +2,7 @@
 // i trainmeet-tmbox): samma spärregel, samma väntetext, samma tider.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {screenChanged, guarded, overlay, times} = require('../../src/tmbox_gateway/terminal16_web/terminal.js');
+const {screenChanged, guarded, overlay, commandId, times} = require('../../src/tmbox_gateway/terminal16_web/terminal.js');
 
 const frame = {view_token: 'a', lines: ['                ', 'Nr# A:Kö   12:34'], keys: {
   '#': {label: 'Begär klartecken', acts: true}, 'C': {label: 'Föregående tåg', acts: false},
@@ -50,4 +50,13 @@ test('waiting is shown on the display after 1.5 s, as on the box', () => {
 test('the same times as the box', () => {
   assert.deepEqual(times, {WAITING_SHOWN_MS: 1500, COMMAND_GIVE_UP_MS: 30000, UNANSWERED_SHOWN_MS: 3000,
     SILENCE_MS: 15000, POLL_MS: 500});
+});
+
+test('a key reaches the server on plain LAN HTTP, where randomUUID is missing', () => {
+  // Benny's box at http://trainmeet.local: A, # and * did nothing (2026-10-03).
+  const lan = {getRandomValues: bytes => require('node:crypto').webcrypto.getRandomValues(bytes)};
+  const ids = new Set(Array.from({length: 50}, () => commandId(lan)));
+  assert.equal(ids.size, 50, 'every press its own id');
+  for (const id of ids) assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.equal(commandId({randomUUID: () => 'from-the-browser'}), 'from-the-browser', 'HTTPS and localhost keep their own');
 });
