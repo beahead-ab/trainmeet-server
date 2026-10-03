@@ -378,6 +378,12 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     for (const [from, to] of [['a', 'b'], ['b', 'a']]) {
       await showTraffic([line('occupied', from, to)], []);
       await page.waitForFunction(([from]) => document.querySelector('#overview-topology .topology-train[data-train-number="421"]')?.getAttribute('aria-label').includes(`${from.toUpperCase()} →`), [from]);
+      // The map is redrawn when its box changes width, a frame after the resize.
+      await page.waitForFunction(() => {
+        const at = name => document.querySelector(`#overview-topology .topology-node[aria-label^="${name}"] .topology-station`)?.getBoundingClientRect();
+        const a = at('Alpha'), b = at('Beta');
+        return Boolean(a && b) && Math.abs(b.y - a.y) > Math.abs(b.x - a.x);
+      });
       const g = await mapGeometry();
       assert.ok(Math.abs(g.b.y - g.a.y) > Math.abs(g.b.x - g.a.x), 'portrait: the line is upright');
       assert.ok(pointsTowards(g, from, to), `upright, the triangle points at ${to}: ${JSON.stringify(g.points)}`);
