@@ -586,8 +586,35 @@ lades tillbaka, eller i rött med skälet och att databasen är som före förs�
 
 ### Glömt lösenord
 
-Servern har ingen e-post och kan inte skicka en återställningslänk. Beviset är
-i stället fysisk åtkomst till maskinen:
+**Med e-post.** Servern har ingen egen e-post, men en server som är kopplad
+till en träff i TrainMeet Cloud kan be Cloud skicka två brev:
+
+- **En inbjudan.** Under Inställningar → Användare kan ägaren ange en
+  e-postadress för den som bjuds in. Koden skickas då dit och visas ändå på
+  skärmen, som förut.
+- **En kod för nytt lösenord.** Har kontot en e-postadress skickas en kod dit
+  när någon väljer **Glömt lösenordet?** på inloggningen och anger
+  användarnamnet. Koden gäller i 30 minuter och en gång. Användaren anger den
+  sedan under **Jag har en kod**, tillsammans med ett nytt lösenord.
+
+Hur det fungerar:
+
+- **Svaret är alltid detsamma**, så det går inte att se vilka konton som finns.
+  Arbetet sker först efter svaret.
+- **Det gamla lösenordet gäller** tills koden lösts in. Efter inlösen loggas
+  kontots sessioner ut.
+- **Gränsen** är tre koder per konto och tolv begäranden per adress och timme.
+- **Länken i brevet** går bara till den adress som är konfigurerad med
+  `--public-client-origin`, eller till ingen alls. Den tas aldrig ur
+  begäran.
+- **Cloud står för avsändare och mallar.** Servern skickar bara mottagare,
+  användarnamn, kod och adress, med sin kopplingsnyckel. Det beskrivs i
+  `docs/EPOST-OCH-KONTON.md` §10 i Cloud-repot.
+
+Var och en kan ändra sin egen adress, och ägaren allas.
+
+**Utan koppling eller internet.** Beviset är i stället fysisk åtkomst till
+maskinen:
 
 ```bash
 sudo -u trainmeet-server /opt/trainmeet-server/venv/bin/python -m tmbox_gateway.recover \
@@ -596,7 +623,7 @@ sudo -u trainmeet-server /opt/trainmeet-server/venv/bin/python -m tmbox_gateway.
 
 Kommandot sätter inget lösenord. Det skriver ut en engångskod - samma sort som
 en inbjudan - och den som får koden väljer sitt eget lösenord under "Jag har en
-inbjudningskod" på inloggningssidan. Koden gäller i sju dagar och en gång. Utan
+kod" på inloggningssidan. Koden gäller i sju dagar och en gång. Utan
 `--user` listar kommandot kontona på servern.
 
 Bakom en reverse proxy eller Kubernetes Ingress ska servern startas med
