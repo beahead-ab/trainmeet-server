@@ -1,8 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="TrainMeet">
-  <rect x="28" y="8" width="8" height="9" rx="2.5" fill="#1f1e1d"></rect>
-  <rect x="12" y="15" width="40" height="39" rx="12" fill="none" stroke="#1f1e1d" stroke-width="3.5"></rect>
-  <rect x="20" y="23" width="24" height="12" rx="5" fill="#1f1e1d"></rect>
-  <circle cx="32" cy="44" r="4.5" fill="none" stroke="#1f1e1d" stroke-width="3"></circle>
-  <rect x="14" y="49" width="7" height="5" rx="2.5" fill="#1f1e1d"></rect>
-  <rect x="43" y="49" width="7" height="5" rx="2.5" fill="#1f1e1d"></rect>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="64" height="64" role="img" aria-label="TrainMeet">
+<path d="M 96 592 H 928" fill="none" stroke="#0F1E3D" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 240 592 C 320 592 320 432 400 432 H 624 C 704 432 704 592 784 592" fill="none" stroke="#0F1E3D" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="402" y="376" width="220" height="112" rx="56" fill="#0F1E3D"/>
+<rect x="402" y="536" width="220" height="112" rx="56" fill="#0F1E3D"/>
 </svg>

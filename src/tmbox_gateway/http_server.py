@@ -3686,6 +3686,7 @@ class TrainMeetHTTPApplication:
             "/assets/ikon/png/trainmeet-ikon-128.png": "ikon/png/trainmeet-ikon-128.png",
             "/assets/ikon/png/trainmeet-ikon-256.png": "ikon/png/trainmeet-ikon-256.png",
             "/assets/ikon/png/trainmeet-ikon-512.png": "ikon/png/trainmeet-ikon-512.png",
+            "/assets/ikon/png/trainmeet-ikon-kvadrat-180.png": "ikon/png/trainmeet-ikon-kvadrat-180.png",
             "/assets/fonts/inter-400.woff2": "fonts/inter-400.woff2",
             "/assets/fonts/inter-500.woff2": "fonts/inter-500.woff2",
             "/assets/fonts/inter-600.woff2": "fonts/inter-600.woff2",
