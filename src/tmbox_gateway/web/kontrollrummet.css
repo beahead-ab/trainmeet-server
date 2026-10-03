@@ -624,3 +624,40 @@ a.kr-btn { text-decoration: none; }
   .kr-codeblock .kr-bigcode { font-size: 34px; }
   .kr-sectitle h1 { font-size: 21px; }
 }
+
+/* ── Inloggning ─────────────────────────────────────────────────────────
+ * Samma rum som resten: kontrollrummets botten och en panel i mörkt eller
+ * ljust läge. Förut stod ett ljust kort från det äldre formspråket under den
+ * mörka toppen, med tillbakalänken tryckt mot loggan och fälten mot texten. */
+html:has(#login:not(.hidden)), body:has(#login:not(.hidden)) { background: var(--kr-bg); }
+body:has(#login:not(.hidden)) { color-scheme: dark; }
+:root[data-kr-theme="light"] body:has(#login:not(.hidden)) { color-scheme: light; }
+#login.pairing-card { box-sizing: border-box; display: flex; flex-direction: column; width: min(420px, calc(100% - 32px)); max-width: none;
+  margin: 8vh auto 32px; padding: 26px 28px 22px; background: var(--kr-panel); border: 1px solid var(--kr-line); border-radius: var(--kr-r);
+  box-shadow: var(--kr-shadow); color: var(--kr-ink); font-family: var(--kr-sans); }
+#login > a[href="/"] { align-self: flex-start; margin: 0 0 20px; font-size: 12.5px; color: var(--kr-mute); text-decoration: none; }
+#login > a[href="/"]:hover, #login > a[href="/"]:focus-visible { color: var(--kr-blue); }
+#login .pairing-icon { width: 40px; height: 40px; margin: 0 0 14px; border-radius: 10px; }
+#login .eyebrow { margin: 0 0 6px; font: 600 11px/1 var(--kr-mono); letter-spacing: .08em; color: var(--kr-blue); }
+#login h2 { margin: 0 0 8px; font-size: 20px; font-weight: 650; letter-spacing: -.01em; color: var(--kr-ink); }
+#login :is(#login-intro, #redeem-intro) > p:not(.eyebrow) { margin: 0 0 22px; font-size: 13px; line-height: 1.55; color: var(--kr-ink-2); }
+#login code { padding: 1px 5px; border-radius: 5px; background: var(--kr-panel-3); color: var(--kr-ink); font: 12px var(--kr-mono); }
+#login form { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+#login form label { margin: 10px 0 0; font-size: 12.5px; font-weight: 600; color: var(--kr-ink-2); }
+#login form > label:first-child { margin-top: 0; }
+#login input:not([type="hidden"]):not(.code-boxes input) { box-sizing: border-box; width: 100%; height: 40px; min-height: 40px; padding: 0 12px;
+  border: 1px solid var(--kr-line-2); border-radius: var(--kr-r-sm); background: var(--kr-panel-2); color: var(--kr-ink); font: 14px var(--kr-sans); box-shadow: none; }
+#login .code-boxes input { background: var(--kr-panel-2); color: var(--kr-ink); border-color: var(--kr-line-2); }
+#login input:focus-visible { outline: 2px solid var(--kr-blue); outline-offset: 1px; border-color: var(--kr-blue); }
+#login button.primary { margin-top: 16px; height: 40px; border: 0; border-radius: var(--kr-r-sm); background: var(--kr-blue); color: var(--kr-blue-ink);
+  font: 600 14px var(--kr-sans); cursor: pointer; }
+#login button.primary:hover { filter: brightness(1.08); }
+#login button.primary:focus-visible { outline: 2px solid var(--kr-ink); outline-offset: 2px; }
+#login .form-message { margin: 6px 0 0; font-size: 12.5px; color: var(--kr-ink-2); }
+#login .form-message:empty { display: none; }
+#login .form-message.error { color: var(--kr-red); }
+#login .form-message.success { color: var(--kr-green); }
+#login .link-button { display: block; width: 100%; margin: 20px 0 0; padding: 14px 0 0; border: 0; border-top: 1px solid var(--kr-line); border-radius: 0;
+  background: none; color: var(--kr-blue); font: 500 13px var(--kr-sans); text-align: center; cursor: pointer; }
+#login #redeem-form .link-button { margin-top: 8px; padding-top: 8px; border-top: 0; color: var(--kr-mute); }
+#login .link-button:hover { text-decoration: underline; }
