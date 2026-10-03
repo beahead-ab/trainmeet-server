@@ -245,7 +245,10 @@ class Terminal16Tests(unittest.TestCase):
         self.accept("DEMO-CDA", "*"); self.accept("DEMO-CDA", "#")
         # Withdrawn, 39 is an arrival in the timetable again: no request to answer.
         self.assertEqual(self.lab._candidates(self.lab.terminals["DEMO-VA"]), ["94-va", "39-cda"])
-        self.assertNotIn("#", self.lab.frame("DEMO-VA")["keys"])   # the queue is empty now
+        # VA is told, and # only closes the notice: it can no longer answer anything.
+        frame = self.lab.frame("DEMO-VA")
+        self.assertEqual(["39 ÅTERTAGET    ", "CDA        12:34"], frame["lines"])
+        self.assertFalse(frame["keys"]["#"]["acts"])
         result = self.lab.command("DEMO-VA", {"key": "#", "command_id": "withdrawn-selection", "view_token": stale})
         self.assertEqual(result["status"], "rejected")
         self.assertEqual([item["action"] for item in self.lab.engine.audit], ["request", "cancel"])
@@ -464,8 +467,8 @@ class Terminal16Tests(unittest.TestCase):
         stale = self.lab.frame("DEMO-VA")["view_token"]
         self.accept("DEMO-CDA", "*"); self.accept("DEMO-CDA", "#")
         frame = self.lab.frame("DEMO-VA")
-        self.assertNotIn("#", frame["keys"])
-        self.assertIn("LÄGET ÄNDRAT", frame["lines"][0])
+        self.assertFalse(frame["keys"]["#"]["acts"], "# closes the notice, it cannot reject")
+        self.assertIn("39 ÅTERTAGET", frame["lines"][0])
         self.assertEqual(self.lab.command("DEMO-VA", {"command_id": "stale-rejection", "view_token": stale, "key": "#"})["status"], "rejected")
         self.accept("DEMO-VA", "*")
         self.assertEqual([event["action"] for event in self.lab.engine.audit], ["request", "cancel"])
@@ -728,7 +731,7 @@ class Terminal16ReceiptTests(unittest.TestCase):
         self.accept("DEMO-MUN", "A")
         self.assertEqual(self.lab.terminals["DEMO-MUN"].screen, "requests")
         self.assertEqual(self.lab.terminals["DEMO-MUN"].receipts, [])
-        self.accept("DEMO-MUN", "B")
+        self.accept("DEMO-MUN", "*")   # INGA FRÅGOR: * (or three seconds) leaves it
         self.assertEqual(self.lab.frame("DEMO-MUN")["lines"][0], " " * 16)
 
     def test_multiple_receipts_are_shown_in_order_for_five_seconds_each(self):
@@ -740,12 +743,68 @@ class Terminal16ReceiptTests(unittest.TestCase):
         self.accept("DEMO-CDA", "A")
         self.accept("DEMO-MUN", "#"); self.accept("DEMO-VA", "#")
         self.assertEqual(self.lab.terminals["DEMO-CDA"].screen, "requests")
-        self.accept("DEMO-CDA", "B")
+        self.accept("DEMO-CDA", "*")
         self.assertIn("17 MOTTAGET", self.lab.frame("DEMO-CDA")["lines"][0])
         self.now += 5
         self.assertIn("39 MOTTAGET", self.lab.frame("DEMO-CDA")["lines"][0])
         self.now += 5
         self.assertEqual(self.lab.frame("DEMO-CDA")["lines"][0], " " * 16)
+
+
+class Terminal16NoticeTests(unittest.TestCase):
+    """Notices clear themselves, name the other station and never ask for #OK."""
+    send = Terminal16Tests.send
+    lookup = Terminal16Tests.lookup
+    accept = Terminal16Tests.accept
+    setUp = Terminal16ReceiptTests.setUp
+
+    def request(self, number="93", sender="DEMO-MUN"):
+        return Terminal16RequestQueueTests.request(self, number, sender)
+
+    def test_an_empty_queue_says_so_and_goes_home_by_itself(self):
+        """Benny, 2026-10-03: INGA FRÅGOR stayed until a key was pressed."""
+        frame = self.accept("DEMO-CDA", "A")["frame"]
+        self.assertEqual("INGA FRÅGOR     ", frame["lines"][0])
+        self.now += 2.9
+        self.assertEqual("INGA FRÅGOR     ", self.lab.frame("DEMO-CDA")["lines"][0])
+        self.now += 0.2
+        self.assertEqual(" " * 16, self.lab.frame("DEMO-CDA")["lines"][0])
+        self.assertEqual("overview", self.lab.terminals["DEMO-CDA"].screen)
+
+    def test_a_request_replacing_inga_fragor_is_not_sent_home_by_its_timer(self):
+        self.accept("DEMO-CDA", "A")
+        self.lab.frame("DEMO-CDA")            # INGA FRÅGOR is shown, its three seconds start
+        self.request()
+        self.assertIn("MUN?93", self.lab.frame("DEMO-CDA")["lines"][0])
+        self.now += 10
+        self.assertIn("MUN?93", self.lab.frame("DEMO-CDA")["lines"][0], "a question waits for its answer")
+
+    def test_a_box_busy_with_another_train_is_left_alone(self):
+        self.lookup("39")                         # CDA asks VA for 39
+        self.accept("DEMO-VA", "B")               # VA leaves the queue ...
+        self.lookup("94", "DEMO-VA")              # ... and works on its own 94
+        busy = self.lab.frame("DEMO-VA")["lines"][0]
+        self.accept("DEMO-CDA", "*"); self.accept("DEMO-CDA", "#")
+        terminal = self.lab.terminals["DEMO-VA"]
+        self.assertEqual((busy, "", "detail", "94-va"),
+                         (self.lab.frame("DEMO-VA")["lines"][0], terminal.notice, terminal.screen, terminal.selected))
+        # Only what 94 can do changes: the line 39 held is free, so # asks for 94 now.
+        self.assertEqual("#Beg A:Kö  12:34", self.lab.frame("DEMO-VA")["lines"][1])
+
+    def test_no_notice_asks_for_hash_ok(self):
+        """Nothing on the box waits for #OK (Casper, 2026-10-03): every notice
+        names the other station, or nothing, and clears itself."""
+        cases = {"INGET TÅG": lambda: self.lookup("123"),
+                 "39 ÅTERTAGET": lambda: (self.lookup("39"), self.accept("DEMO-CDA", "*"), self.accept("DEMO-CDA", "#"))}
+        for notice, make in cases.items():
+            with self.subTest(notice):
+                self.setUp()
+                make()
+                frame = self.lab.frame("DEMO-CDA")
+                self.assertTrue(frame["lines"][0].startswith(notice), frame["lines"])
+                self.assertNotIn("#OK", frame["lines"][1])
+                self.now += 3
+                self.assertEqual(" " * 16, self.lab.frame("DEMO-CDA")["lines"][0])
 
 
 class Terminal16RequestQueueTests(unittest.TestCase):
@@ -837,10 +896,13 @@ class Terminal16RequestQueueTests(unittest.TestCase):
         self.accept("DEMO-MUN", "*"); self.accept("DEMO-MUN", "#")
         frame = self.lab.frame("DEMO-CDA")
         self.assertEqual(frame["requests"]["count"], 1)
-        self.assertIn("FRÅGAN ÄNDRAD", frame["lines"][0])
-        self.assertNotIn("#", frame["keys"])
+        self.assertIn("93 ÅTERTAGET", frame["lines"][0])
+        self.assertFalse(frame["keys"]["#"]["acts"])
         self.assertEqual(self.lab.command("DEMO-CDA", {"key": "#", "view_token": stale, "command_id": "late"})["status"], "rejected")
-        self.assertEqual(self.send("DEMO-CDA", "#")["status"], "rejected")
+        # # only closes the notice; 94 is still waiting, never answered by it.
+        self.accept("DEMO-CDA", "#")
+        self.assertEqual(self.lab.terminals["DEMO-CDA"].screen, "overview")
+        self.assertEqual(self.lab.engine.connections["east"].state, State.REQUESTED)
         self.accept("DEMO-CDA", "A")
         self.assertIn("94", self.lab.frame("DEMO-CDA")["lines"][0])
         self.assertEqual(self.lab.engine.connections["east"].state, State.REQUESTED)
@@ -874,7 +936,7 @@ class Terminal16RequestQueueTests(unittest.TestCase):
         frame = self.accept("DEMO-CDA", "A")["frame"]
         self.assertIn("INGA FRÅGOR", frame["lines"][0])
         self.assertEqual(frame["requests"]["count"], 0)
-        self.assertNotIn("#", frame["keys"])
+        self.assertFalse(frame["keys"]["#"]["acts"])
         self.assertEqual(self.lab.engine.audit, [])
         self.request()
         self.assertIn("MUN?93", self.lab.frame("DEMO-CDA")["lines"][0])

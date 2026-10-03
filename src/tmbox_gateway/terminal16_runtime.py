@@ -14,7 +14,7 @@ from time import monotonic
 from .engine import TrafficEngine
 from .models import ConnectionRuntime, ConnectionState
 from .protocol_v2 import CommandRejected
-from .terminal16 import Terminal, Terminal16Lab, row
+from .terminal16 import NOTICE_SECONDS, Terminal, Terminal16Lab, row
 from .terminal16_glyphs import encode_lcd
 from .terminal16_i18n import text
 
@@ -79,8 +79,13 @@ class RuntimeViews(Terminal16Lab):
                     for terminal in self.terminals.values():
                         if terminal.selected == key and terminal.station == self.legs[key]["from_station_id"]:
                             terminal.notice = self.legs[key]["train_number"] + " NEKAT"
-                            terminal.notice_until = self.now() + 3
+                            terminal.notice_hint = self.engine.config.stations[self.legs[key]["to_station_id"]].code
+                            terminal.notice_until = self.now() + NOTICE_SECONDS
                             terminal.revision += 1
+                elif closed and closed["status"] == "cancelled":
+                    # Taken back by the sender, by its box or by TKL; an arrival
+                    # also closes its case but is in self.completed.
+                    self._notify_withdrawn(self.legs[key], key)
         self.engine.revision += 1
         self.fingerprint = fingerprint
 
@@ -117,7 +122,9 @@ class RuntimeViews(Terminal16Lab):
         if action in {"arrive", "arrive_track", "cancel", "reject"}:
             terminal.notice = f"{leg['train_number']} " + (("UPPT SPÅR" if result.get("track_occupied_by") is not None else "MOTTAGET")
                                                           if action.startswith("arrive") else "ÅTERTAGET" if action == "cancel" else "NEKAT")
-            terminal.notice_until = self.now() + 3
+            other = leg["to_station_id"] if action == "cancel" else leg["from_station_id"]
+            terminal.notice_hint = self.engine.config.stations[other].code
+            terminal.notice_until = self.now() + NOTICE_SECONDS
         return ""
 
 

@@ -574,3 +574,54 @@ class NeverSentTests(_Boxes):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TakenBackTests(_Boxes):
+    """Benny's table, 2026-10-03: the sender takes 101 back. Both stations are
+    told "101 ÅTERTAGET" and go home by themselves after three seconds; the
+    receiver neither stays on INGA FRÅGOR nor keeps a #In for a train that
+    never left. Nothing waits for #OK (Casper)."""
+
+    def setUp(self):
+        super().setUp()
+        self.now = 1000.0
+        self.terminals = Terminal16Service(self.service, now=lambda: self.now)
+
+    def lines(self, device):
+        return self.terminals.frame(device)["lines"]
+
+    def take_back(self):
+        self.assertEqual("ÅTER 101?       ", self.send("esp8266", "*")["frame"]["lines"][0])
+        self.send("esp8266", "#")
+
+    def assert_both_told_then_home(self):
+        self.assertEqual(["101 ÅTERTAGET   ", "LEK        09:15"], self.lines("esp8266"))
+        self.assertEqual(["101 ÅTERTAGET   ", "CDA        09:15"], self.lines("esp32"))
+        self.now += 3
+        for device in ("esp8266", "esp32"):
+            self.assertEqual(" " * 16, self.lines(device)[0], device)
+        self.assertEqual([], self.service.open_cases(None))
+
+    def test_a_request_taken_back_before_the_answer(self):
+        self.send("esp8266", "#", train_number="101")
+        self.assertIn("CDA?101", self.lines("esp32")[0])            # LEK's queue is open
+        self.take_back()
+        self.assertNotIn("INGA FRÅGOR", self.lines("esp32")[0])
+        self.assert_both_told_then_home()
+
+    def test_a_clearance_taken_back_before_the_departure(self):
+        self.send("esp8266", "#", train_number="101")
+        self.send("esp32", "#")                                       # LEK clears
+        self.take_back()
+        frame = self.terminals.frame("esp32")
+        self.assertNotIn("#In", frame["lines"][1])
+        self.assertFalse(frame["keys"]["#"]["acts"], "# only closes the notice")
+        self.assert_both_told_then_home()
+
+    def test_a_rejection_tells_both_and_asks_for_nothing(self):
+        self.send("esp8266", "#", train_number="101")
+        self.send("esp32", "*"); self.send("esp32", "#")             # NEKA 101? -> yes
+        self.assertEqual(["101 NEKAT       ", "LEK        09:15"], self.lines("esp8266"))
+        self.assertEqual(["101 NEKAT       ", "CDA        09:15"], self.lines("esp32"))
+        self.now += 3
+        self.assertEqual(" " * 16, self.lines("esp8266")[0])

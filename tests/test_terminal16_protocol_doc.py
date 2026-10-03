@@ -13,6 +13,7 @@ import test_shared_traffic
 from tmbox_gateway.http_server import DEVICE_OFFLINE_SECONDS, DEVICE_ONLINE_SECONDS
 from tmbox_gateway.terminal16_mqtt import MAX_PAYLOAD_BYTES, MAX_SESSIONS, SESSION_IDLE_SECONDS, Terminal16Gateway
 from tmbox_gateway.terminal16_runtime import Terminal16Service
+from tmbox_gateway.terminal16 import NOTICE_SECONDS
 
 DOC = Path(__file__).resolve().parents[1] / "docs" / "protocol" / "terminal16" / "README.md"
 
@@ -36,6 +37,7 @@ class ProtocolTextMatchesCodeTests(unittest.TestCase):
             "SESSION_IDLE_SECONDS": str(SESSION_IDLE_SECONDS),
             "MAX_PAYLOAD_BYTES": str(MAX_PAYLOAD_BYTES),
             "input_guard_ms": str(frame["input_guard_ms"]),
+            "NOTICE_SECONDS": str(NOTICE_SECONDS),
             "entry.max_length": str(frame["entry"]["max_length"]),
             "DEVICE_ONLINE_SECONDS": str(DEVICE_ONLINE_SECONDS),
             "DEVICE_OFFLINE_SECONDS": str(DEVICE_OFFLINE_SECONDS),
