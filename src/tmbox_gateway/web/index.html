@@ -238,6 +238,8 @@
             <a id="pv-login" class="pv-login" href="/login">Logga in</a>
           </header>
           <div class="pv-page">
+            <!-- Två kolumner på en dator, en på telefonen: pv-col är display: contents där. -->
+            <div class="pv-col pv-col--main">
             <section class="pv-panel pv-clock-card" aria-label="Träffklockan" data-tm-aria-label="Träffklockan"><div class="pv-clock" id="pv-clock"></div></section>
             <section class="pv-panel" id="pv-track-card" data-pv-eu aria-label="På banan nu" data-tm-aria-label="På banan nu">
               <div class="pv-head"><span>På banan nu</span><span class="pv-spacer"></span><a href="/display/graph">Tågdiagram →</a></div>
@@ -251,6 +253,8 @@
                 <button id="pv-clear-station" class="pv-link" type="button" hidden>Visa alla stationer</button>
               </div>
             </section>
+            </div>
+            <div class="pv-col pv-col--side">
             <section class="pv-panel" id="pv-events-card" data-pv-eu aria-label="Nästa händelser" data-tm-aria-label="Nästa händelser">
               <div class="pv-head"><span>Nästa händelser</span><span id="pv-events-scope" class="pv-c">hela banan</span></div>
               <div id="pv-events" class="pv-list"></div>
@@ -278,6 +282,7 @@
                 <a class="pv-btn" href="/tmbox/">Starta virtuell TMBox</a>
                 <a class="pv-btn pv-btn--ghost" href="/tmbox-lab/">Provbänk</a>
               </div>
+            </div>
             </div>
           </div>
           <footer class="pv-foot"><span id="pv-foot-meta"></span></footer>
