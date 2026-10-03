@@ -151,9 +151,24 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#application-menu').isVisible(), false);
     assert.equal(await page.locator('#pv-meet-name').textContent(), 'Demo meet');
     assert.equal(await page.locator('#workspace-options').count(), 0);
-    // A box finds the server and needs no address or code; the card says so.
+    // The connect steps sit behind one button and open as a sheet from the
+    // bottom (Deltagare.dc). A box finds the server and needs no address or
+    // code; the sheet says so.
+    assert.equal(await page.locator('#pv-connect-card').isVisible(), false);
+    await page.locator('#pv-connect-open').click();
     await page.locator('#pv-connect-card').getByText('Boxen hittar servern själv').waitFor();
     assert.equal(await page.locator('#pv-connect-card').getByText(/parningskod/i).count(), 0);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#pv-connect-card').isVisible(), false);
+    // The summary under the map, and what comes next: a filled badge for a
+    // train on its way in, a hollow one for a departure (Deltagare.dc).
+    assert.equal(await page.locator('#pv-stat-line').textContent(), '0');
+    const events = await page.locator('#pv-events .pv-item--event').evaluateAll(rows => rows.map(row => ({ train: row.querySelector('.pv-badge-train').textContent, hollow: row.querySelector('.pv-badge-train').classList.contains('is-hollow') })));
+    assert.deepEqual(events.slice(0, 2), [{ train: '421', hollow: true }, { train: '421', hollow: false }]);
+    // Search in the timetable: a train number or a station.
+    await page.locator('#pv-timetable-search').fill('zzz-no-such-train');
+    await page.locator('#pv-timetable .pv-empty').waitFor();
+    await page.locator('#pv-timetable-search').fill('');
     assert.equal(await page.locator('#participant-view a[href="/tmbox/"]').count(), 1, 'One button starts a virtual TMBox');
     assert.equal(await page.locator('#pv-login').getAttribute('href'), '/login');
     // No stream here (503): the participant view keeps asking every five seconds.
@@ -164,50 +179,42 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.goto('http://127.0.0.1:9999/');
     await page.waitForURL('**/drift');
     assert.equal(await page.locator('#participant-view').isVisible(), false);
-    await page.locator('#device-list .status-row').waitFor();
+    await page.locator('#device-list tr[data-station-id="a"]').waitFor();
     assert.equal(await page.locator('#application-menu').isVisible(), false);
-    // Clients and the left/right setting are two cards: operations and a
-    // setting used to share one, and the station table read as client rows.
-    assert.equal((await page.locator('#device-management > .section-heading h2').textContent()).trim(),'Klienter');
-    assert.equal(await page.locator('#device-management #server-station-rows').count(),0);
-    assert.equal((await page.locator('#station-placement > h2').textContent()).trim(),'TMBox-placering');
-    assert.equal(await page.locator('#station-placement #server-station-rows').count(),1);
-    assert.ok(await page.locator('#device-management').evaluate(card=>card.querySelector('#device-list').compareDocumentPosition(card.querySelector('.device-reconnect'))&Node.DOCUMENT_POSITION_FOLLOWING),'Reconnect comes after the client list');
-    // Nothing on Drift folds away (1.23.0): every module and every part of it
-    // is open, the timetable and its search included.
+    // Kontrollrummet: Drift is one screen. The clock, the line, the stations
+    // with their boxes, what comes next and the diagram are each there once,
+    // and nothing folds away.
+    for (const id of ['drift-clock', 'drift-map', 'drift-stations', 'overview-traffic', 'drift-graph']) assert.equal(await page.locator('#' + id).isVisible(), true, id);
     assert.equal(await page.locator('#overview-view details').count(), 0);
-    assert.equal(await page.locator('#overview-route-search').isVisible(), true);
-    assert.equal(await page.locator('#device-management .device-reconnect button').isVisible(), true);
-    assert.equal(await page.locator('#traffic-timeline').isVisible(), true);
-    // The design correction keeps 1.23.0's open blocks and updates their
-    // real heading, not the removed disclosure summary.
-    assert.equal(await page.locator('#traffic-stations-heading').textContent(), 'Inne på stationerna (2)');
-    // TMBox-placering lists every station at once, however many there are.
-    extraPlacementStations = 6;
-    await page.evaluate(() => refreshCloudPresentation());
-    await page.locator('#server-station-rows tbody tr').nth(6).waitFor();
-    assert.equal(await page.locator('#server-station-rows tbody tr').count(), 7);
-    assert.equal(await page.locator('#server-station-rows tbody tr').nth(6).isVisible(), true);
-    assert.equal(await page.locator('#station-placement details').count(), 0);
-    extraPlacementStations = 0;
-    await page.evaluate(() => refreshCloudPresentation());
-    await page.locator('#server-station-rows tbody tr').nth(1).waitFor({ state: 'detached' });
-    assert.equal(await page.locator('#traffic-only-deviations').isChecked(), true);
+    assert.equal((await page.locator('#drift-stations .kr-ph > span').first().textContent()).trim(), 'Stationer och boxar');
+    assert.equal(await page.locator('#device-management, #station-placement, #traffic-timeline, #overview-route-search:visible').count(), 0, 'the old modules are gone');
+    // One row per station: its box, its status, what stands there.
+    assert.equal(await page.locator('#device-list tr').count(), 2);
+    assert.match(await page.locator('#device-list tr[data-station-id="a"]').textContent(), /Alpha.*TBX-123/);
+    assert.match(await page.locator('#device-list tr[data-station-id="b"]').textContent(), /Beta.*Obemannad/);
+    assert.equal(await page.locator('#drift-stations-meta').textContent(), '0 av 2 bemannade');
+    assert.equal(await page.locator('#drift-graph').isVisible(), true);
     assert.equal(await page.locator('#overview-graph').isVisible(), true);
-    // Connecting a signal box (1.22.0): under Klienter, the address and the
-    // code to type into TKL, and each paired signal box with its station.
+    // The theme is a switch in the header: dark first, remembered by the browser.
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.krTheme), 'dark');
+    await page.locator('#kr-theme-toggle').click();
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.krTheme), 'light');
+    assert.equal(await page.evaluate(() => localStorage.getItem('trainmeet.theme')), 'light');
+    await page.locator('#kr-theme-toggle').click();
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.krTheme), 'dark');
+    // Connecting a signal box: "Anslut en box" opens a popover with the
+    // address and the code to type into TKL; each paired signal box is listed
+    // under the stations with its station.
     const connect = page.locator('#connect-terminals');
-    assert.equal(await page.locator('#device-management').evaluate(card => card.nextElementSibling.id), 'connect-terminals');
-    assert.equal(await connect.locator('h2').textContent(), 'Anslut ställverk och appar');
+    await page.locator('#drift-connect-open').click();
+    await connect.waitFor({ state: 'visible' });
+    assert.equal(await connect.locator('h3').textContent(), 'Anslut en box');
     await connect.locator('#connect-code').getByText('262-617', { exact: true }).waitFor();
     assert.equal(await connect.locator('#connect-address').textContent(), 'http://192.168.1.20:8787');
     // Behind Caddy on server.trainmeet.app the box comes in where this page did.
     assert.equal(await page.evaluate(() => connectAddress({host: '10.0.0.5', port: 8787}, 'https://server.trainmeet.app')), 'https://server.trainmeet.app');
-    assert.equal(await connect.locator('.connect-steps li').count(), 3);
+    assert.equal(await connect.locator('.kr-steps li').count(), 3);
     assert.equal(await connect.locator('#connect-code-note').isVisible(), false);
-    const terminalRow = page.locator('#terminal-list .terminal-row[data-client-id="tkl-cda"]');
-    assert.equal(await page.locator('#terminal-list h3').textContent(), 'Ställverk (TKL)');
-    assert.match(await terminalRow.textContent(), /CDA TKL 1.*A · Alpha.*Online/);
     for (const [state, note, renew] of [
       ['used_up', /använts 50 gånger/, true], ['expired', /gått ut/, true],
       ['no_panels', /inga stationspaneler/, false], ['no_meet', /ingen aktiv träff/, false]]) {
@@ -224,6 +231,14 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await connect.locator('#connect-code').getByText('777-111', { exact: true }).waitFor({ timeout: 1500 });
     assert.equal(renewals, 1);
     assert.equal(await connect.locator('#connect-code-note').isVisible(), false);
+    // A long address stays inside the popover.
+    await page.evaluate(() => renderConnectCard({ host: 'trainmeet-server-grimslov-2027.example.org', port: 8787, code: '123-456', code_state: 'valid' }));
+    assert.ok(await connect.evaluate(card => card.scrollWidth <= card.clientWidth + 1), 'nothing in the connect popover runs past its edge');
+    await page.evaluate(() => refreshLocalClock());
+    await page.evaluate(() => document.querySelector('#connect-terminals').hidePopover());
+    const terminalRow = page.locator('#terminal-list .terminal-row[data-client-id="tkl-cda"]');
+    assert.equal(await page.locator('#terminal-list h3').textContent(), 'Ställverk (TKL)');
+    assert.match(await terminalRow.textContent(), /CDA TKL 1.*A · Alpha.*Online/);
     terminals[0] = { ...terminals[0], has_access: false };
     await page.evaluate(() => refreshDevices());
     await terminalRow.getByText('Ny träff: ange den nya koden i ställverket').waitFor();
@@ -234,62 +249,67 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.deepEqual(terminals, []);
     assert.equal(JSON.parse(calls.find(c => c[1] === '/v1/terminals/remove')[2]).client_id, 'tkl-cda');
 
-    // Drift as one whole (1.20.0). The train diagram is drawn without opening
-    // the timetable, and nothing is lit until someone picks a train.
-    await page.locator('#overview-graph .overview-train-group[data-train-number="421"]').waitFor();
-    assert.equal(await page.locator('#overview-graph .overview-train-group.dimmed, #overview-graph .overview-train-group.selected').count(), 0);
+    // Drift as one whole. The train diagram is drawn without opening the
+    // timetable, and nothing is lit until someone picks a train.
+    await page.locator('#overview-graph .tr-line[data-train-number="421"]').waitFor();
+    assert.equal(await page.locator('#overview-graph .pl.lit, #overview-graph .pl.sel').count(), 0);
     assert.equal(await page.locator('#overview-topology .route-highlight, #overview-topology .dimmed').count(), 0);
     assert.equal(await page.locator('#overview-route-list .route-number.active').count(), 0);
-    assert.equal(await page.locator('#topology-head-meta').textContent(), '2 stationer · 1 sträcka');
-    // One timetable card. Its head says what is inside; Cloud's check findings
-    // are its last part, the count in their heading and the list below.
+    assert.equal(await page.locator('#topology-head-meta').textContent(), '2 stationer · 1 sträcka · tryck på en station för att filtrera');
+    // The timetable is a dialog away; its head says what is inside.
     assert.equal(await page.locator('#timetable-summary-meta').textContent(), '1 tåg · sök tåg · tågrutter · stationer');
-    const findingsRow = page.locator('#drift-timetable > #published-findings');
-    const findingsTag = findingsRow.locator('#published-findings-tag');
-    await findingsTag.getByText('1 konflikt i version 8', {exact: true}).waitFor();
-    assert.match(await findingsTag.getAttribute('class'), /tm-tag--warn/);
-    assert.equal(await findingsRow.locator('#published-findings-list').isVisible(), true);
-    assert.equal(await page.locator('#drift-timetable details').count(), 0);
-    for (const [rows, text, kind] of [
-      [[...imported, imported[0], {level: 'observation'}], '2 konflikter · 1 observation i version 8', 'warn'],
-      [[{level: 'observation'}, {level: 'observation'}], '2 observationer i version 8', 'neutral'],
-      [[], 'Inga konflikter i version 8', 'ok'],
-      [null, 'Inga kontrolluppgifter i version 8', 'neutral']]) {
+    // Cloud's check findings are a chip in the header, the count by kind;
+    // it opens the timetable dialog, which lists them. Imported text is never HTML.
+    const findingsChip = page.locator('#header-findings');
+    await findingsChip.getByText('1 konflikt', {exact: true}).waitFor();
+    assert.match(await findingsChip.getAttribute('class'), /warn/);
+    for (const [rows, text, warn] of [
+      [[...imported, imported[0], {level: 'observation'}], '2 konflikter · 1 observation', true],
+      [[{level: 'observation'}, {level: 'observation'}], '2 observationer', false]]) {
       findings = rows;
       await page.evaluate(() => refreshCloudPresentation());
-      await findingsTag.getByText(text, {exact: true}).waitFor();
-      assert.match(await findingsTag.getAttribute('class'), new RegExp(`tm-tag--${kind}$`));
+      await findingsChip.getByText(text, {exact: true}).waitFor();
+      assert.equal(/warn/.test(await findingsChip.getAttribute('class')), warn);
+    }
+    for (const rows of [[], null]) {
+      findings = rows;
+      await page.evaluate(() => refreshCloudPresentation());
+      await findingsChip.waitFor({state: 'hidden'});
     }
     findings = imported;
     await page.evaluate(() => refreshCloudPresentation());
-    // Without a version number from Cloud the tag says no version.
-    version = undefined;
-    await page.evaluate(() => refreshServerContext());
-    await findingsTag.getByText('1 konflikt', {exact: true}).waitFor();
-    version = 8;
-    await page.evaluate(() => refreshServerContext());
-    await findingsTag.getByText('1 konflikt i version 8', {exact: true}).waitFor();
+    await findingsChip.click();
+    await page.locator('#published-findings').waitFor({state: 'visible'});
+    assert.equal(new URL(page.url()).pathname + new URL(page.url()).hash, '/installningar#fynd');
+    assert.equal(await page.locator('#published-findings-list img').count(), 0);
+    assert.match(await page.locator('#published-findings-list').textContent(), /<img/);
+    await page.locator('#app-chrome a[href="/drift"]').first().click();
+    await page.locator('#overview-graph').waitFor({state: 'visible'});
     // The diagram is as tall as its stations and meets their names: never
     // stretched on a wide screen, the first hour readable beside the names.
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.evaluate(() => refreshLocalClock());
     const diagram = await page.evaluate(() => {
-      const scroller = document.querySelector('#overview-graph-scroll').getBoundingClientRect();
-      const axes = [...document.querySelectorAll('#overview-graph .overview-graph-axis')].map(line => line.getBoundingClientRect().y);
-      const names = [...document.querySelectorAll('#overview-graph-station-labels .overview-graph-station')].map(text => { const r = text.getBoundingClientRect(); return r.y + r.height / 2; });
-      const firstHour = document.querySelector('#overview-graph .overview-graph-time').getBoundingClientRect();
-      return { axes, names, firstHourLeft: firstHour.x - scroller.x, height: scroller.height, canvas: document.querySelector('#overview-graph').getBoundingClientRect().height };
+      const svg = document.querySelector('#overview-graph'), box = svg.getBoundingClientRect(), holder = svg.parentElement.getBoundingClientRect();
+      const rows = [...svg.querySelectorAll('line.gl:not(.h):not(.d)')].map(line => line.getBoundingClientRect().y);
+      const names = [...svg.querySelectorAll('text.lbl.s')].map(text => { const r = text.getBoundingClientRect(); return r.y + r.height / 2; });
+      const firstHour = svg.querySelector('text.ax').getBoundingClientRect();
+      return { rows, names, labels: [...svg.querySelectorAll('text.lbl.s')].map(text => text.textContent), firstHourLeft: firstHour.x - box.x, width: box.width, holder: holder.width };
     });
-    assert.equal(diagram.axes.length, 2);
-    diagram.axes.forEach((y, index) => assert.ok(Math.abs(y - diagram.names[index]) < 4, `station ${index}: line ${y}, name ${diagram.names[index]}`));
+    assert.equal(diagram.rows.length, 2);
+    assert.deepEqual(diagram.labels, ['Alpha', 'Beta']);
+    diagram.rows.forEach((y, index) => assert.ok(Math.abs(y - diagram.names[index]) < 8, `station ${index}: line ${y}, name ${diagram.names[index]}`));
     assert.ok(diagram.firstHourLeft >= 60, `first hour at ${diagram.firstHourLeft}`);
-    assert.ok(diagram.height <= diagram.canvas + 20, `no empty diagram: ${diagram.height} for ${diagram.canvas}`);
+    assert.ok(diagram.width <= diagram.holder + 1, 'the diagram fits its panel');
     await page.setViewportSize({ width: 1200, height: 900 });
 
     // Trains on the map. A clear given is an outlined tag a quarter along from
     // the station the train leaves, its triangle towards where it goes; once
     // departed the tag is filled. A request alone draws nothing.
     const mapTrain = page.locator('#overview-topology .topology-train[data-train-number="421"]');
+    // Colours come from the theme's tokens, so the test asks the page what they are.
+    const paint = name => page.evaluate(token => { const probe = document.createElement('i'); probe.style.color = `var(${token})`; document.body.append(probe); const colour = getComputedStyle(probe).color; probe.remove(); return colour; }, name);
+    const [panel, blue, blueInk] = [await paint('--kr-panel'), await paint('--kr-blue'), await paint('--kr-blue-ink')];
     const showTraffic = async (channels, recorded) => {
       lineChannels = channels; positions = recorded;
       await page.evaluate(() => refreshLocalClock());
@@ -323,24 +343,24 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       let g = await mapGeometry();
       const route = `${from.toUpperCase()} → ${to.toUpperCase()}`;
       assert.equal(await mapTrain.getAttribute('aria-label'), `Tåg 421 · ${route} · klart, inte avgått`);
-      assert.equal(g.tagFill, 'rgb(255, 255, 255)', 'outlined');
+      assert.equal(g.tagFill, panel, 'outlined');
       assert.equal(g.arrowFill, 'none');
       const at = along(g, g.tag, from, to);
       assert.ok(at > 0.15 && at < 0.4, `near the station it leaves: ${at}`);
       assert.ok((g.arrow.x - g.number.x) * (g[to].x - g[from].x) > 0, `the triangle leads towards ${to}`);
       assert.ok(pointsTowards(g, from, to), `the triangle points at ${to}: ${JSON.stringify(g.points)}`);
       if (from === 'a') assert.equal(overlaps(g.box, g.ring), false, 'clear of the station it leaves');
-      // ...and of the ring drawn round it when its route is lit (radius 12 to
-      // the dot's 7): on a short line the tag sat on it (1.23.0).
-      const r = g.ring.width / 2 * 12 / 7, c = { x: g.ring.x + g.ring.width / 2, y: g.ring.y + g.ring.height / 2 };
+      // ...and of the ring drawn round it when its route is lit (radius 19 to
+      // the dot's 11): on a short line the tag sat on it (1.23.0).
+      const r = g.ring.width / 2 * 19 / 11, c = { x: g.ring.x + g.ring.width / 2, y: g.ring.y + g.ring.height / 2 };
       if (from === 'a') assert.equal(overlaps(g.box, { x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r }), false, 'clear of the ring');
       await showTraffic([line('occupied', from, to)], [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: from, to_station_id: to }]);
       await page.locator('#overview-topology .topology-train.on-line[data-train-number="421"]').waitFor();
       g = await mapGeometry();
       assert.equal(await mapTrain.count(), 1, 'one tag, not one per source');
       assert.equal(await mapTrain.getAttribute('aria-label'), `Tåg 421 · ${route} · på linjen`);
-      assert.equal(g.tagFill, 'rgb(34, 86, 195)', 'filled');
-      assert.equal(g.arrowFill, 'rgb(255, 255, 255)');
+      assert.equal(g.tagFill, blue, 'filled');
+      assert.equal(g.arrowFill, blueInk);
     }
     // Two trains the same way on one line: both between the stations, apart.
     await showTraffic([line('occupied'), { ...line('occupied'), train_number: '4221' }], []);
@@ -358,117 +378,104 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     for (const [from, to] of [['a', 'b'], ['b', 'a']]) {
       await showTraffic([line('occupied', from, to)], []);
       await page.waitForFunction(([from]) => document.querySelector('#overview-topology .topology-train[data-train-number="421"]')?.getAttribute('aria-label').includes(`${from.toUpperCase()} →`), [from]);
+      // The map is redrawn when its box changes width, a frame after the resize.
+      await page.waitForFunction(() => {
+        const at = name => document.querySelector(`#overview-topology .topology-node[aria-label^="${name}"] .topology-station`)?.getBoundingClientRect();
+        const a = at('Alpha'), b = at('Beta');
+        return Boolean(a && b) && Math.abs(b.y - a.y) > Math.abs(b.x - a.x);
+      });
       const g = await mapGeometry();
       assert.ok(Math.abs(g.b.y - g.a.y) > Math.abs(g.b.x - g.a.x), 'portrait: the line is upright');
       assert.ok(pointsTowards(g, from, to), `upright, the triangle points at ${to}: ${JSON.stringify(g.points)}`);
     }
-    // Trains inside a station take a side free of names and lines.
+    // Trains inside a station are not drawn: the number after the station's code
+    // says how many stand there (SkarmBana: "siffran = tåg inne").
     for (const station of ['a', 'b']) {
       await showTraffic([], parked(4).map(train => ({ ...train, station_id: station })));
-      await page.locator('#overview-topology .topology-train[data-train-number="+2"]').waitFor();
-      const clash = await page.evaluate(() => {
-        const rects = selector => [...document.querySelectorAll(selector)].map(element => element.getBoundingClientRect());
-        const hit = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-        const tags = rects('#overview-topology .topology-train.at-station .topology-train-tag');
-        return tags.some(tag => rects('#overview-topology .topology-name, #overview-topology .topology-track').some(other => hit(tag, other)));
-      });
-      assert.equal(clash, false, `station ${station}: the row covers a name or a line`);
+      const name = station === 'a' ? 'Alpha' : 'Beta';
+      await page.waitForFunction(name => /· 4$/.test(document.querySelector(`#overview-topology .topology-node[aria-label^="${name}"] .topology-code`)?.textContent || ''), name);
+      assert.equal(await page.locator('#overview-topology .topology-train.at-station').count(), 0, `station ${station}: no row of tags`);
     }
     // Readable on a phone: the map's box grows with the upright line.
-    const smallest = await page.locator('#overview-topology .topology-name, #overview-topology .train-number').evaluateAll(texts => Math.min(...texts.map(text => text.getBoundingClientRect().height)));
-    assert.ok(smallest >= 7, `map text ${smallest} px high`);
-    for (const heading of await page.locator('.overview-section-heading a').all()) {
+    // Wait and measure in one step: the map may be redrawn (new nodes) between two separate calls.
+    const heights = await (await page.waitForFunction(() => {
+      const texts = [...document.querySelectorAll('#overview-topology .topology-name, #overview-topology .train-number')];
+      const names = texts.filter(text => text.matches('.topology-name'));
+      if (!names.length || names.some(text => text.getBoundingClientRect().height === 0)) return null;
+      return texts.map(text => [text.textContent, text.getBoundingClientRect().height, getComputedStyle(text).display]);
+    })).jsonValue();
+    const smallest = Math.min(...heights.map(([, height]) => height));
+    assert.ok(smallest >= 7, `map text ${smallest} px high: ${JSON.stringify(heights)}`);
+    for (const heading of await page.locator('#overview-view .kr-ph a, #overview-view .kr-ph .kr-linkbtn').all()) {
       if (await heading.isVisible()) assert.ok((await heading.boundingBox()).height < 22, 'a heading link stays on one line');
     }
-    // The chosen train's badge sits under the map: upright on a phone, the
-    // line ends at the bottom, where the badge used to cover the last station.
-    await page.evaluate(() => selectOverviewTrain('421'));
-    const badge = await page.locator('#overview-route-badge').boundingBox();
-    const map = await page.locator('#overview-topology').boundingBox();
-    assert.ok(badge.y >= map.y + map.height + 8, `the badge (${badge.y}) leaves a gap below the map (${map.y + map.height})`);
-    await page.evaluate(() => selectOverviewTrain(null));
-    // A long address wraps inside the connect card instead of running out of it.
-    const spill = await page.evaluate(() => {
-      renderConnectCard({ host: 'trainmeet-server-grimslov-2027.example.org', port: 8787, code: '123-456', code_state: 'valid' });
-      const card = document.querySelector('#connect-terminals');
-      const inner = card.getBoundingClientRect().right - parseFloat(getComputedStyle(card).paddingRight);
-      // The text itself, not just its box: overflowing text leaves the box as it was.
-      const right = element => { const range = document.createRange(); range.selectNodeContents(element); return Math.max(element.getBoundingClientRect().right, range.getBoundingClientRect().right); };
-      return [...card.querySelectorAll('.connect-fact, .connect-fact > *')].filter(element => right(element) > inner + 0.5).map(element => element.id || element.className);
-    });
-    assert.deepEqual(spill, [], 'nothing in the connect card runs past its edge');
-    // A usual address stays whole on one line; Kopiera moves below it instead.
-    await page.evaluate(() => renderConnectCard({ host: '192.168.100.200', port: 8787, code: '123-456', code_state: 'valid' }));
-    assert.ok((await page.locator('#connect-address').boundingBox()).height < 30, 'the address is not broken');
     await page.evaluate(() => refreshLocalClock());
     await page.setViewportSize({ width: 1200, height: 900 });
     // Older paths record only the line position; that is on the line too.
     await showTraffic([], [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: 'a', to_station_id: 'b' }]);
     await page.locator('#overview-topology .topology-train.on-line[data-train-number="421"]').waitFor();
-    // Inside a station: a pale tag above it, no triangle. With a clear for the
-    // next line it is that outlined tag instead, not both.
+    // Inside a station: no tag, only the number beside the code. With a clear
+    // for the next line the train is that outlined tag on the line instead.
     await showTraffic([], [{ train_number: '421', status: 'station', station_id: 'b' }]);
-    await page.locator('#overview-topology .topology-train.at-station[data-train-number="421"]').waitFor();
-    let g = await mapGeometry();
-    assert.equal(g.arrow, null);
-    assert.equal(await mapTrain.getAttribute('aria-label'), 'Tåg 421 vid B');
-    assert.ok(g.tag.y < g.b.y && Math.abs(g.tag.x - g.b.x) < 2, 'above its station');
+    await page.waitForFunction(() => /· 1$/.test(document.querySelector('#overview-topology .topology-node[aria-label^="Beta"] .topology-code')?.textContent || ''));
+    assert.equal(await mapTrain.count(), 0);
     await showTraffic([line('reserved', 'b', 'a')], [{ train_number: '421', status: 'station', station_id: 'b' }]);
     await page.locator('#overview-topology .topology-train.cleared[data-train-number="421"]').waitFor();
     assert.equal(await mapTrain.count(), 1);
-    // Three trains fit above a station; more show two and +N.
-    await showTraffic([], parked(3));
-    await page.locator('#overview-topology .topology-train.at-station[data-train-number="903"]').waitFor();
+    // Many trains inside one station: still only the number.
     await showTraffic([], parked(4));
-    await page.locator('#overview-topology .topology-train[data-train-number="+2"]').waitFor();
-    assert.deepEqual(await page.locator('#overview-topology .topology-train.at-station').evaluateAll(tags => tags.map(tag => tag.dataset.trainNumber)), ['901', '902', '+2']);
-    const row = await page.locator('#overview-topology .topology-train.at-station .topology-train-tag').evaluateAll(tags => tags.map(tag => tag.getBoundingClientRect().toJSON()));
-    assert.equal(overlaps(row[0], row[1]) || overlaps(row[1], row[2]), false, 'side by side');
+    await page.waitForFunction(() => [...document.querySelectorAll('#overview-topology .topology-code')].some(code => /· 4$/.test(code.textContent)));
+    assert.equal(await page.locator('#overview-topology .topology-train').count(), 0);
     // Clicking a train on the map lights its route and opens the train panel.
     await showTraffic([line('occupied')], [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: 'a', to_station_id: 'b' }]);
     await page.locator('#overview-topology .topology-train.on-line[data-train-number="421"]').click();
-    await page.locator('#drift-train-detail .train-detail-now').waitFor();
-    assert.equal(await page.locator('#drift-train-detail h3').textContent(), 'Tåg 421');
+    const trainPanel = page.locator('#drift-train-detail');
+    await trainPanel.locator('.kr-aside__now').waitFor();
+    assert.equal((await trainPanel.locator('.kr-aside__row .train-number, .kr-aside__row .kr-badge').first().textContent()).trim(), '421');
     await page.locator('#overview-topology .topology-train.selected[data-train-number="421"]').waitFor();
     assert.ok(await page.locator('#overview-topology .route-highlight').count() > 0);
-    assert.equal(await page.locator('#overview-graph .overview-train-group.selected').getAttribute('data-train-number'), '421');
-    // The other trains step back, the parked ones and their +N too.
+    assert.equal(await page.locator('#overview-graph .tr-line[data-train-number="421"] .pl.sel').count(), 1);
+    // The other trains step back; the ones standing inside a station are not drawn at all.
     await showTraffic([line('occupied')], parked(4));
-    await page.locator('#overview-topology .topology-train.dimmed[data-train-number="+2"]').waitFor();
-    assert.equal(await page.locator('#overview-topology .topology-train.dimmed[data-train-number="901"]').count(), 1);
+    await page.waitForFunction(() => document.querySelector('#overview-topology .topology-train.on-line') !== null);
+    assert.equal(await page.locator('#overview-topology .topology-train[data-train-number="901"]').count(), 0);
     assert.equal(await page.locator('#overview-topology .topology-train.dimmed[data-train-number="421"]').count(), 0);
-    await page.locator('#drift-train-detail').getByRole('button', { name: 'Stäng' }).click();
+    await trainPanel.getByRole('button', { name: 'Stäng tågpanelen' }).click();
     await showTraffic([], []);
 
-    // A train in "Kommande enligt tidtabell" opens its route and where it is now.
-    const upcomingTrain = page.locator('#drift-upcoming button.server-event[data-train-number="421"]').first();
+    // A train under "Nästa händelser" opens its route and where it is now.
+    const upcomingTrain = page.locator('#drift-upcoming button.kr-ev[data-train-number="421"]').first();
     await upcomingTrain.click();
-    const trainPanel = page.locator('#drift-train-detail');
-    await trainPanel.locator('.train-detail-now').waitFor();
-    assert.equal(await trainPanel.locator('h3').textContent(), 'Tåg 421');
-    assert.equal(await trainPanel.locator('.train-detail-now').textContent(), 'Nu: På linjen A → B · avgick 06:05 3 min sen');
-    assert.deepEqual(await trainPanel.locator('.route-stop b').allTextContents(), ['A · Alpha', 'B · Beta']);
-    assert.deepEqual(await trainPanel.locator('.route-stop span').allTextContents(), ['avg 06:05 · spår 1', 'ank 06:20 · spår 2']);
-    assert.equal(await trainPanel.locator('.route-stop.done').count(), 1);
-    assert.equal(await trainPanel.locator('.train-detail-between').textContent(), 'På linjen');
-    assert.equal(await page.locator('#drift-upcoming button.server-event[aria-pressed="true"]').first().getAttribute('data-train-number'), '421');
-    // Tågrutter (1.23.0) follows the same choice: the train is marked in the
-    // list, its route is lit on a small map, and its calls say where it is.
+    await trainPanel.locator('.kr-aside__now').waitFor();
+    assert.equal((await trainPanel.locator('.kr-aside__route').textContent()).trim(), 'Alpha → Beta');
+    assert.equal(await trainPanel.locator('.kr-aside__now').textContent(), 'På linjen A → B · avgick 06:05');
+    assert.equal(await trainPanel.locator('.kr-aside__status .kr-tag').textContent(), '3 min sen');
+    assert.deepEqual(await trainPanel.locator('.kr-stop:not(.between) .kr-stoplink > span').allTextContents(), ['Alpha', 'Beta']);
+    assert.deepEqual(await trainPanel.locator('.kr-stop:not(.between) .kr-stoplink small').allTextContents(), ['spår 1', 'spår 2']);
+    assert.deepEqual(await trainPanel.locator('.kr-stop:not(.between) .t').allTextContents(), ['—', '06:05', '06:20', '—']);
+    assert.equal(await trainPanel.locator('.kr-stop.done').count(), 1);
+    assert.equal(await trainPanel.locator('.kr-stop.between .kr-between__text').textContent(), 'På linjen · 421 →');
+    assert.equal(await page.locator('#drift-upcoming button.kr-ev[aria-pressed="true"]').first().getAttribute('data-train-number'), '421');
+    // The timetable dialog follows the same choice: the train is marked in
+    // the list, its route is lit on a small map, and its calls say where it is.
+    await page.locator('#drift-timetable-open').click();
     const routeDetail = page.locator('#overview-route-detail');
-    assert.equal(await page.locator('#overview-route-list .route-number.active').textContent(), '421');
     await routeDetail.locator('.train-detail-now').waitFor();
+    assert.equal(await page.locator('#overview-route-list .route-number.active').textContent(), '421');
     assert.equal(await routeDetail.locator('.train-detail-now').textContent(), 'Nu: På linjen A → B · avgick 06:05 3 min sen');
     assert.deepEqual(await routeDetail.locator('.route-stop b').allTextContents(), ['A · Alpha', 'B · Beta']);
     assert.equal(await routeDetail.locator('.route-stop.done').count(), 1);
     assert.equal(await routeDetail.locator('.train-detail-between').textContent(), 'På linjen');
     assert.ok(await routeDetail.locator('#overview-route-map .topology-track.route-highlight').count() > 0, 'its route is lit');
-    // The small map has this train only; Banöversikten above has them all.
+    // The small map has this train only; Banöversikten has the ones on the line (those inside a station are a number).
     // It moves with the line at once, not when /v1/train next answers.
     let releaseTrain; holdTrain = new Promise(resolve => { releaseTrain = resolve; });
     await showTraffic([line('occupied')], parked(2));
     await routeDetail.locator('#overview-route-map .topology-train.on-line.selected[data-train-number="421"]').waitFor({ timeout: 2000 });
     assert.equal(await routeDetail.locator('#overview-route-map .topology-train').count(), 1);
-    assert.equal(await page.locator('#overview-topology .topology-train').count(), 3);
+    // Banöversikten is redrawn on the next animation frame; count once it has its train.
+    await page.locator('#overview-topology .topology-train[data-train-number="421"]').waitFor({ timeout: 2000 });
+    assert.equal(await page.locator('#overview-topology .topology-train').count(), 1);
     holdTrain = null; releaseTrain();
     // A call is a button: its station is lit, the train stays chosen. So
     // does a station on the small map.
@@ -479,6 +486,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await routeDetail.locator('.route-stop.selected button[data-station-id="a"]').waitFor();
     assert.equal(await page.locator('#overview-route-list .route-number.active').textContent(), '421');
     assert.equal(await trainPanel.isVisible(), true);
+    await page.locator('#drift-timetable-dialog [data-close-modal]').click();
     await showTraffic([], []);
     // Without a stream (here a 503) Drift keeps its five seconds.
     assert.ok(calls.some(c => c[1] === '/v1/events'), 'the page asked for the stream');
@@ -488,55 +496,114 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.waitForTimeout(5600);
     assert.ok(calls.filter(c => c[1] === '/v1/train').length > trainCalls, 'the open panel refreshes with Drift');
     assert.equal(await trainPanel.isVisible(), true);
-    await trainPanel.getByRole('button', { name: 'Stäng' }).click();
-    assert.equal(await trainPanel.isHidden(), true);
-    assert.equal(await page.locator('#drift-upcoming button.server-event[aria-pressed="true"]').count(), 0);
+    await trainPanel.getByRole('button', { name: 'Stäng tågpanelen' }).click();
+    await trainPanel.waitFor({ state: 'hidden', timeout: 1500 });
+    assert.equal(await page.locator('#drift-upcoming button.kr-ev[aria-pressed="true"]').count(), 0);
     // Closing it lets go of the train everywhere.
     assert.equal(await page.locator('#overview-route-list .route-number.active').count(), 0);
     assert.equal(await page.locator('#overview-route-map').count(), 0);
-    assert.equal(await page.locator('#overview-graph .overview-train-group.selected').count(), 0);
-    // Chosen in Tågrutter, the train opens the train panel at once and is lit
-    // in the diagram and in Kommande, as when chosen anywhere else.
+    assert.equal(await page.locator('#overview-graph .pl.sel').count(), 0);
+    // Chosen in the timetable dialog, the train opens the train panel at once
+    // and is lit in the diagram and under Nästa händelser, as when chosen anywhere else.
+    await page.locator('#drift-timetable-open').click();
     await page.locator('#overview-route-list .route-number[data-train-number="421"]').click();
-    await trainPanel.locator('.train-detail-now').waitFor({ timeout: 1500 });
-    assert.equal(await page.locator('#overview-graph .overview-train-group.selected').getAttribute('data-train-number'), '421');
-    assert.equal(await page.locator('#drift-upcoming button.server-event[aria-pressed="true"]').first().getAttribute('data-train-number'), '421');
-    // A station picked under Stationer shows that station instead: the train
+    await trainPanel.locator('.kr-aside__now').waitFor({ timeout: 1500 });
+    assert.equal(await page.locator('#overview-graph .tr-line[data-train-number="421"] .pl.sel').count(), 1);
+    assert.equal(await page.locator('#drift-upcoming button.kr-ev[aria-pressed="true"]').first().getAttribute('data-train-number'), '421');
+    // A station picked under Stationer there shows that station instead: the train
     // is let go everywhere.
     await page.locator('#overview-station-counts button[data-station-id="b"]').click();
     await trainPanel.waitFor({ state: 'hidden', timeout: 1500 });
     assert.equal(await page.locator('#overview-route-list .route-number.active').count(), 0);
-    // Chosen in the diagram, the same as in Tågrutter.
-    await page.locator('#overview-graph .overview-train-group[data-train-number="421"]').dispatchEvent('click');
-    await trainPanel.locator('.train-detail-now').waitFor({ timeout: 1500 });
-    assert.equal(await page.locator('#overview-route-list .route-number.active').textContent(), '421');
+    assert.equal(await page.locator('#overview-station-inspector').isVisible(), true);
+    await page.locator('#drift-timetable-dialog [data-close-modal]').click();
+    // A station chosen in the table keeps its row lit and opens its panel.
+    await page.locator('#device-list tr.sel[data-station-id="b"]').waitFor({ timeout: 1500 });
+    await page.locator('#overview-station-inspector .kr-aside__name').getByText('Beta', { exact: true }).waitFor({ timeout: 1500 });
+    await page.locator('#overview-station-inspector').getByRole('button', { name: 'Stäng stationspanelen' }).click();
+    await page.locator('#overview-station-inspector').waitFor({ state: 'hidden', timeout: 1500 });
+    assert.equal(await page.locator('#device-list tr.sel').count(), 0);
+    // Chosen in the diagram, the same as under Nästa händelser.
+    await page.locator('#overview-graph .tr-line[data-train-number="421"]').dispatchEvent('click');
+    await trainPanel.locator('.kr-aside__now').waitFor({ timeout: 1500 });
+    assert.equal(await page.locator('#drift-upcoming button.kr-ev[aria-pressed="true"]').first().getAttribute('data-train-number'), '421');
     // A click on the map's open ground lets go of it, panel and all.
     await page.locator('#overview-topology').dispatchEvent('click');
     await trainPanel.waitFor({ state: 'hidden', timeout: 1500 });
-    assert.equal(await page.locator('#overview-graph .overview-train-group.selected').count(), 0);
+    assert.equal(await page.locator('#overview-graph .pl.sel').count(), 0);
+    // The search in the header finds a train or a station, and Esc lets go.
+    await page.locator('#kr-search').fill('421');
+    await page.locator('#kr-search-results [role="option"]').first().click();
+    await trainPanel.locator('.kr-aside__now').waitFor({ timeout: 1500 });
+    await page.keyboard.press('Escape');
+    await trainPanel.waitFor({ state: 'hidden', timeout: 1500 });
     await page.locator('#overview-clock-start').click();
-    await page.locator('#stop-local-clock').waitFor({state:'visible'});
+    await page.locator('#overview-clock-stop').waitFor({state:'visible'});
     assert.equal(running, true);
-    await page.locator('#stop-local-clock').click();
+    await page.locator('#overview-clock-stop').click();
     await page.locator('#overview-clock-start').waitFor({state:'visible'});
     assert.equal(running, false);
     assert.equal(JSON.parse(calls.find(c=>c[0]==='POST'&&c[1]==='/v1/clock')[2]).meet_generation,7);
 
+
+    // Every text Drift draws is translated in all five languages: the panels, the
+    // train and station panels, the popover and the dialogs.
+    for (const language of ['en', 'da', 'nb', 'de']) {
+      await page.evaluate(code => TrainMeetI18n.setLanguage(code), language);
+      await page.evaluate(() => { TrainMeetDrift.hooks.selectTrain('421'); });
+      await page.locator('#drift-train-detail .kr-aside__now').waitFor();
+      await page.evaluate(() => { TrainMeetDrift.hooks.selectStation('a', true); });
+      await page.locator('#overview-station-inspector .kr-aside__name').waitFor();
+      await page.evaluate(() => document.querySelector('#connect-terminals').showPopover());
+      await page.evaluate(() => document.querySelector('#connect-terminals').hidePopover());
+      for (const id of ['drift-timetable-dialog', 'drift-simulation-dialog']) {
+        await page.evaluate(id => TrainMeetDrift.openDialog(id), id);
+        await page.keyboard.press('Escape');
+      }
+      for (const id of ['simulation-start-modal', 'device-form-modal', 'display-placement-modal', 'device-language-modal', 'device-remove-modal', 'clock-control-form-modal', 'clock-source-modal']) {
+        await page.evaluate(id => openModal(id), id);
+        await page.evaluate(id => document.getElementById(id).close(), id);
+      }
+      assert.deepEqual(await page.evaluate(() => TrainMeetI18n.missing()), [], `untranslated in ${language}`);
+      await page.evaluate(() => { TrainMeetDrift.hooks.clear(); });
+    }
+    await page.evaluate(() => TrainMeetI18n.setLanguage('sv'));
+
     // Drafts stay intact when the live state refreshes or a save fails.
     await page.getByRole('link',{name:'Inställningar',exact:true}).click();
-    // Settings › Anslutning: the code and how long it holds, out of Skärmar och klocka.
-    const connectionSettings = page.locator('#connection-settings');
-    assert.equal(await page.locator('.server-settings-nav a[href="/installningar#anslutning"]').textContent(), 'Anslutning');
-    assert.equal(await connectionSettings.locator('#connection-badge-code').count(), 1);
-    assert.equal(await connectionSettings.locator('#connection-code-form').count(), 1);
-    assert.equal(await page.locator('.clock-control-card #connection-badge-code, .clock-control-card #connection-code-form').count(), 0);
-    await page.locator('#server-identity-form').waitFor({state:'visible'});
-    // The settings kit moves existing controls into rows and card feet;
-    // their handlers and the separate TKL connection section stay intact.
-    assert.equal(await page.locator('#sync-and-devices .tm-lines > .tm-line').count(), 4);
-    assert.equal(await page.locator('#sync-and-devices .tm-card__foot [data-open-modal="runtime-sync-form-modal"]').isVisible(), true);
-    assert.equal(await page.locator('#admin-users-settings .section-heading #users-invite-open').isVisible(), true);
-    assert.equal(await page.locator('#software-update-settings .update-actions #software-version').count(), 1);
+    // Settings is one section at a time, with a side menu in three groups.
+    // Every form that can be changed has its own Avbryt and Spara, both dark
+    // until something differs from what was last saved.
+    const nav = page.locator('#settings-nav');
+    assert.equal(await nav.locator('a[href="/installningar#kod"]').textContent(), 'Anslutningskod');
+    assert.deepEqual(await nav.locator('a.kr-nav').evaluateAll(links => links.map(link => link.getAttribute('href').split('#')[1])),
+      ['traff', 'skarmar', 'wifi', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'farozon']);
+    assert.equal(await page.locator('#admin-view .kr-setsec').count(), 9);
+    assert.equal(await page.locator('#admin-view .kr-setsec:not([hidden])').count(), 1, 'one section at a time');
+    await nav.locator('a[href="/installningar#kod"]').click();
+    await page.locator('#connection-code-form').waitFor({state:'visible'});
+    assert.equal(await page.locator('#connection-code-form #kod-value').count(), 1);
+    assert.equal(await page.locator('#connection-code-form #connection-badge-validity').count(), 1);
+    assert.equal(await page.locator('#traff').isVisible(), false);
+    const savebar = form => page.evaluate(selector => { const f = document.querySelector(selector); return { cancel: !f.querySelector('[data-save-cancel]').disabled, save: !f.querySelector('[data-save-submit]').disabled, text: f.querySelector('[data-save-state]').textContent }; }, form);
+    assert.deepEqual(await savebar('#connection-code-form'), { cancel: false, save: false, text: 'Inget ändrat' });
+    await page.locator('#connection-badge-validity').selectOption('24');
+    assert.deepEqual(await savebar('#connection-code-form'), { cancel: true, save: true, text: 'Ändrat: Giltighet' });
+    await page.locator('#connection-code-form [data-save-cancel]').click();
+    assert.equal(await page.locator('#connection-badge-validity').inputValue(), '0');
+    assert.deepEqual(await savebar('#connection-code-form'), { cancel: false, save: false, text: 'Inget ändrat' });
+    // The old addresses still land in the right section.
+    await page.evaluate(() => { history.pushState(null, '', '/installningar#anslutning'); applyWorkspaceRoute(); });
+    await page.locator('#connection-code-form').waitFor({state:'visible'});
+    await page.evaluate(() => { history.pushState(null, '', '/installningar#traff'); applyWorkspaceRoute(); });
+    await page.locator('#cloud-auto-form').waitFor({state:'visible'});
+    assert.equal(await page.locator('#cloud-auto-form .kr-kv').count(), 5);
+    assert.equal(await page.locator('#traff [data-open-modal="runtime-sync-form-modal"]').isVisible(), true);
+    await nav.locator('a[href="/installningar#anvandare"]').click();
+    assert.equal(await page.locator('#admin-users-settings #users-invite-open').isVisible(), true);
+    await nav.locator('a[href="/installningar#uppdatering"]').click();
+    assert.equal(await page.locator('#software-update-settings #software-version').count(), 1);
+    await nav.locator('a[href="/installningar#server"]').click();
     await page.locator('#admin-server-name').fill('Verified server');
     await page.evaluate(()=>refreshInfo());
     assert.equal(await page.locator('#admin-server-name').inputValue(),'Verified server');
@@ -555,6 +622,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(serverName,'Verified server');
 
     cloudAuto=false;
+    await nav.locator('a[href="/installningar#traff"]').click();
     await page.evaluate(()=>refreshServerContext());
     await page.locator('#cloud-auto-enabled').check();
     await page.evaluate(()=>refreshServerContext());
@@ -591,18 +659,30 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       const overflow=await page.evaluate(()=>({document:document.documentElement.scrollWidth,width:innerWidth}));
       assert.ok(overflow.document<=overflow.width+1,JSON.stringify(overflow));
     }
-    // Language preference lives in Settings, not an extra toolbar.
+    // Language preference lives in Settings, not an extra toolbar: tiles to pick
+    // from, saved with Spara like everything else.
     for(const language of ['sv','da','nb','en','de']){
-      await page.goto('http://127.0.0.1:9999/installningar');
-      await page.locator('[data-language-picker]').selectOption(language);
-      assert.equal(await page.locator('.server-settings-nav a[href="/installningar#farozon"]').textContent(),{sv:'Farozon',da:'Farezone',nb:'Faresone',en:'Danger zone',de:'Gefahrenbereich'}[language]);
+      await page.goto('http://127.0.0.1:9999/installningar#sprak');
+      const tile = page.locator(`#language-tiles [data-value="${language}"]`);
+      await tile.waitFor();
+      if (await tile.getAttribute('aria-checked') !== 'true') {
+        await tile.click();
+        assert.equal(await page.locator('#language-form [data-save-submit]').isDisabled(), false);
+        await page.locator('#language-form [data-save-submit]').click();
+      }
+      await page.waitForFunction(code => TrainMeetI18n.getLanguage() === code, language);
+      assert.equal(await page.locator('#settings-nav a[href="/installningar#farozon"]').textContent(),{sv:'Farozon',da:'Farezone',nb:'Faresone',en:'Danger zone',de:'Gefahrenbereich'}[language]);
+      assert.equal(await page.locator('#language-form [data-save-submit]').isDisabled(), true);
       // Signed in, the old picker address lands on Drift, whatever the language.
       await page.goto('http://127.0.0.1:9999/#workspaces');
       await page.waitForURL('**/drift');
       assert.equal(await page.locator('#participant-view').isVisible(), false);
     }
-    await page.goto('http://127.0.0.1:9999/installningar');
-    await page.locator('[data-language-picker]').selectOption('sv');
+    await page.goto('http://127.0.0.1:9999/installningar#sprak');
+    await page.locator('#language-tiles [data-value="sv"]').click();
+    await page.locator('#language-form [data-save-submit]').click();
+    await page.waitForFunction(() => TrainMeetI18n.getLanguage() === 'sv');
+    await page.goto('http://127.0.0.1:9999/installningar#traff');
     // Linking to Cloud never reports "undefined", even without a message.
     await page.locator('[data-open-modal="runtime-sync-form-modal"]').click();
     const syncBoxes=page.locator('#runtime-sync-code-boxes input');
@@ -611,20 +691,27 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     // The dialog closes on success; its message is shown in #modal-result.
     await page.locator('#modal-result').getByText('3/3 · Cloud-kopplingen är sparad på servern.',{exact:true}).waitFor();
     assert.doesNotMatch(await page.locator('#modal-result').textContent(),/undefined/);
+    await page.setViewportSize({width: 1200, height: 900});
     await page.goto('http://127.0.0.1:9999/drift');
-    await page.locator('#device-list .device-remove').click();
-    const confirmation=page.locator('.device-inline-edit');
-    await confirmation.getByRole('button',{name:'Ta bort',exact:true}).click();
-    await confirmation.getByText('Tillfälligt fel').waitFor();
-    assert.equal(await page.locator('#device-list .status-row').count(),1);
-    removeFails=false;
-    await confirmation.getByRole('button',{name:'Ta bort',exact:true}).click();
-    await page.locator('#device-list .empty-status').waitFor();
+    // A box is removed from the dialog its row opens, after a confirmation;
+    // a failure leaves it where it was.
+    const aRow = page.locator('#device-list tr[data-station-id="a"]');
+    await aRow.getByRole('button', {name: 'Redigera', exact: true}).click();
+    await page.locator('#device-remove-open').click();
+    const removal = page.locator('#device-remove-modal');
+    assert.equal(await removal.locator('#device-remove-code').textContent(), 'TBX-123');
+    await removal.getByRole('button', {name: 'Ta bort klient', exact: true}).click();
+    await removal.getByText('Tillfälligt fel').waitFor();
+    assert.match(await aRow.textContent(), /TBX-123/);
+    removeFails = false;
+    await removal.getByRole('button', {name: 'Ta bort klient', exact: true}).click();
+    await removal.waitFor({state: 'hidden'});
+    await aRow.getByText('Obemannad', {exact: true}).waitFor();
     assert.equal(JSON.parse(calls.find(c=>c[1]==='/v1/devices/remove')[2]).device_id,'esp-1');
 
     // Placement retains publication/config CAS and never interprets imported HTML.
-    await page.locator('#server-station-rows button').click();
-    const form=page.locator('.placement-inline-edit');
+    await aRow.locator('button[title="Ändra vänster och höger"]').click();
+    const form = page.locator('#display-placement-modal');
     await form.locator('select').selectOption('right');
     await page.evaluate(()=>refreshCloudPresentation());
     assert.equal(await form.locator('select').inputValue(),'right');
@@ -635,18 +722,14 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await form.locator('[type=submit]').click();
     await form.waitFor({state:'hidden'});
     assert.equal(placementSide,'right');
-    assert.equal(await page.locator('#published-findings-list img').count(),0);
-    assert.match(await page.locator('#published-findings-list').textContent(),/<img/);
+    await aRow.locator('button[title="Ändra vänster och höger"]').getByText('— · B', {exact: true}).waitFor();
 
     region='us';
     await page.goto('http://127.0.0.1:9999/drift');
     await page.locator('#server-region').filter({hasText:'US'}).waitFor();
-    assert.equal(await page.locator('#drift-simulation').isVisible(),false);
-    assert.equal(await page.locator('#device-management').isVisible(),false);
-    assert.equal(await page.locator('#station-placement').isVisible(),false);
-    assert.equal(await page.locator('#connect-terminals').isVisible(),false);
-    assert.equal(await page.locator('#overview-traffic').isVisible(),false);
-    assert.equal(await page.locator('#drift-timetable').isVisible(),false);
+    // The shell shows the US summary at once; Drift hides its panels on its next drawing.
+    await page.locator('#us-runtime-summary').waitFor({state:'visible'});
+    for (const id of ['drift-simulation', 'drift-map', 'drift-stations', 'drift-graph', 'overview-traffic', 'drift-stats', 'connect-terminals']) await page.locator('#' + id).waitFor({state:'hidden', timeout: 2000});
     assert.equal(calls.some(c=>c[1].includes('local-configuration')||c[1]==='/v1/operating-mode'),false);
     assert.deepEqual(errors,[]);
     await screenshot('server-design');

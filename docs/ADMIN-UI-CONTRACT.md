@@ -13,6 +13,29 @@ TrainMeet Server och TrainMeet Cloud ska uppfattas som samma administrativa prod
 
 Referens-URL för visuell verifiering är `https://trainmeet.app/meet/hela-huset-fullt-med-tag-2026/data`. Referensdata ska inte följa med en ren installation.
 
+## Kontrollrummet och Drift (2026-10)
+
+Drift, Inställningar, sidhuvudet och dialogerna som öppnas därifrån är byggda i
+temat Kontrollrummet (mörkt och ljust, se
+[`GRAPHIC_IDENTITY.md`](GRAPHIC_IDENTITY.md)). Reglerna nedan om accentfärg,
+bakgrund och sidhuvudets utseende gäller tills vidare bara för de ytor som ännu
+inte flyttats över (Hjälp och inloggning). Skärmarna och deltagarvyn har samma
+utseende som Drift. Följande gäller
+redan överallt:
+
+- Dialogreglerna längre ned (Avbryt först, Spara sist, osparade ändringar
+  kräver bekräftelse, spärrat läge under sparande) gäller även de dialoger
+  Drift öppnar: boxens inställningar, ändra vänster och höger, ta bort box,
+  språk, starta simulering och klocka.
+- Inställningar är undantaget från "redigering sker i en dialog": där är varje
+  panel ett eget formulär med Avbryt och Spara som är släckta tills något är
+  ändrat, så att man ser vad som är osparat per panel. Avbryt kastar utan
+  fråga eftersom det bara återställer panelen. Det som är riskabelt (återställ,
+  nollställ, byt träff) är fortfarande en dialog med bekräftelse.
+- Rutt, enhetsnamn och status visas som text och form, inte bara med färg.
+- Siffror och tider är i monospace och får plats i tabellcellen på alla fem
+  språk; rubriker och status får radbrytas hellre än att tabellen växer.
+
 ## Regler
 
 Följande värden är det gällande kontraktet för utseende, struktur och

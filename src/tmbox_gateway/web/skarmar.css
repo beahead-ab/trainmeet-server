@@ -1,0 +1,234 @@
+/* TrainMeet Server · Kontrollrummet · Skärmarna (/display/…)
+ *
+ * Samma tokens som Drift och Inställningar (--kr-*). Skärmarna är en
+ * 1920 × 1080-duk som skalas in i fönstret (server-ui.js, resizeStage).
+ * I fönsterläge står verktygsraden kvar (52 px) och duken får resten; i
+ * helskärm döljs raden efter fyra sekunder och kommer tillbaka vid
+ * musrörelse. Servern har strikt CSP: allt utseende ligger här.
+ *
+ * Laddas efter server-ui.css och vinner mot dess äldre regler genom id-väljare. */
+
+/* ── Tokens ─────────────────────────────────────────────────────────── */
+#display-app, #display-app.light {
+  --display-bg: var(--kr-bg); --display-card: var(--kr-panel); --display-fg: var(--kr-ink);
+  --display-muted: var(--kr-mute); --display-line: var(--kr-track); --display-primary: var(--kr-blue);
+  --sc-primary: var(--kr-blue); --sc-card: var(--kr-panel); --sc-border: var(--kr-line);
+  background: var(--kr-bg); color: var(--kr-ink); font-family: var(--kr-sans);
+  color-scheme: dark;
+}
+:root[data-kr-theme="light"] #display-app, #display-app.light { color-scheme: light; }
+body.server-display { background: var(--kr-bg); }
+#display-stage, #display-stage.toolbar-hidden { background: var(--kr-bg); color: var(--kr-ink); }
+
+/* ── Verktygsrad ────────────────────────────────────────────────────── */
+#display-toolbar.tbbar {
+  position: fixed; z-index: 50; top: 0; left: 0; right: 0; height: 52px; min-height: 52px; box-sizing: border-box;
+  padding: 0 16px; gap: 10px; display: flex; align-items: center; flex-wrap: nowrap;
+  background: var(--kr-panel); border: 0; border-bottom: 1px solid var(--kr-line); border-radius: 0;
+  backdrop-filter: none; color: var(--kr-ink); font: 500 13px/1.45 var(--kr-sans);
+  transition: opacity .3s ease, transform .3s ease;
+}
+#display-toolbar.tbbar.hidden-toolbar { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+#display-app.display-offline #display-toolbar.tbbar.hidden-toolbar { opacity: 1; transform: none; pointer-events: auto; }
+#display-toolbar.tbbar .tbbar__name { font: 700 14px/1 var(--kr-sans); padding-left: 12px; border-left: 1px solid var(--kr-line-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#display-toolbar.tbbar .display-back { border-radius: var(--kr-r-sm); }
+#display-toolbar.tbbar .kr-btn { height: 28px; min-height: 28px; padding: 0 10px; border-radius: var(--kr-r-sm); font: 600 12.5px/1 var(--kr-sans); border: 1px solid var(--kr-line-2); background: var(--kr-panel-2); color: var(--kr-ink); }
+#display-toolbar.tbbar .kr-btn.primary { background: var(--kr-blue); border-color: var(--kr-blue); color: var(--kr-blue-ink); }
+#display-toolbar.tbbar select.kr-btn { appearance: auto; width: auto; max-width: 300px; padding: 0 6px 0 8px; font-weight: 500; }
+#display-toolbar.tbbar select.kr-btn.hidden, #display-toolbar.tbbar .hidden { display: none; }
+#display-toolbar.tbbar select option { background: var(--kr-panel); color: var(--kr-ink); }
+#display-toolbar.tbbar .kr-pill { height: 26px; min-height: 0; padding: 0 10px; border-radius: 999px; font: 600 12.5px/1 var(--kr-sans); }
+#display-toolbar.tbbar .display-live.offline { color: var(--kr-red); background: var(--kr-red-soft); }
+#display-toolbar.tbbar .display-live i { box-shadow: none; }
+#display-toolbar.tbbar .tbbar__switch { position: relative; }
+#display-toolbar.tbbar .tbbar__switch summary { list-style: none; cursor: pointer; }
+#display-toolbar.tbbar .tbbar__switch summary::-webkit-details-marker { display: none; }
+#display-toolbar.tbbar .tbbar__switch nav { position: absolute; top: 34px; left: 0; z-index: 5; min-width: 180px; padding: 6px; display: flex; flex-direction: column; background: var(--kr-panel); border: 1px solid var(--kr-line-2); border-radius: 10px; box-shadow: var(--kr-shadow); }
+#display-toolbar.tbbar .tbbar__switch nav a { padding: 8px 10px; border-radius: 6px; color: var(--kr-ink-2); font-weight: 500; text-decoration: none; white-space: nowrap; }
+#display-toolbar.tbbar .tbbar__switch nav a:hover { background: var(--kr-panel-3); color: var(--kr-ink); }
+#display-toolbar.tbbar .tbbar__switch nav a[aria-current] { color: var(--kr-ink); font-weight: 700; }
+@media (max-width: 1100px) { #display-toolbar.tbbar #display-day, #display-toolbar.tbbar #display-clock-seconds { display: none; } }
+@media (max-width: 760px) { #display-toolbar.tbbar .tbbar__name, #display-toolbar.tbbar .tbbar__switch, #display-toolbar.tbbar #display-live { display: none; } }
+
+/* Duken: i fönsterläge ligger den under verktygsraden. */
+#display-app[data-chrome="window"] #display-stage { top: 50%; }
+#display-app[data-chrome="window"] #display-stage .sc-top { opacity: 1; }
+
+/* ── Sidhuvud, sidfot, QR ───────────────────────────────────────────── */
+.sc-top { min-height: 104px; }
+.sc-top__meet { gap: 20px; font-size: 36px; font-weight: 700; }
+.sc-subtitle { color: var(--kr-mute); font-size: 28px; font-weight: 500; }
+.sc-top__clock { color: var(--kr-ink); font: 700 64px/1 var(--kr-mono); letter-spacing: -.02em; }
+.sc-top__run { color: var(--kr-green); font-size: 26px; }
+.sc-top__run.is-stopped { color: var(--kr-amber); }
+.light .sc-top__run, .light .sc-top__run.is-stopped { color: inherit; }
+.light .sc-top__run { color: var(--kr-green); }
+.light .sc-top__run.is-stopped { color: var(--kr-amber); }
+.sc-foot { font-size: 22px; color: var(--kr-mute); }
+#screen-status { color: var(--kr-mute); }
+.sc-legend { color: var(--kr-mute); }
+.sc-legend__swatch--line { background: var(--kr-blue); }
+.sc-legend__swatch--plan { background: var(--kr-faint); }
+.sc-legend__swatch--now { background: var(--kr-amber); }
+
+.sc-qr__code { background: #fff; color: #0b0b0b; padding: 8px; border-radius: 10px; }
+.light .sc-qr__code { border: 1px solid var(--kr-line); }
+.sc-qr__text { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; font-size: 20px; color: var(--kr-mute); white-space: nowrap; }
+.sc-qr__text b { font-size: 26px; font-weight: 700; color: var(--kr-ink); }
+.sc-top .sc-qr { gap: 28px; margin: 0 10px 0 0; padding-right: 28px; border-right: 1px solid var(--kr-line-2); }
+.light .sc-top .sc-qr { border-right-color: var(--kr-line-2); }
+.sc-top .sc-qr__item { flex-direction: row-reverse; gap: 12px; }
+.sc-top .sc-qr__item .sc-qr__text { align-items: flex-end; }
+.sc-top .sc-qr__code svg { width: 88px; height: 88px; }
+.sc-top .sc-qr__text { font-size: 20px; }
+
+/* ── Klockskärmen ───────────────────────────────────────────────────── */
+#clock-view { display: flex; width: 100%; height: 100%; }
+.sc-clock-layout { gap: 36px; }
+.sc-clock-layout .clock-face { width: 960px; height: 960px; }
+.sc-clock-layout.is-stopped .clock-face { width: 700px; height: 700px; }
+.sc-clock-layout .clock-face.stopped { opacity: .5; }
+
+/* Urtavlan: tokens, inte fasta färger. Stationsuret har alltid ljus tavla. */
+.clock-face { --cf-face: var(--kr-panel); --cf-bezel: var(--kr-line-2); --cf-mark: var(--kr-ink); --cf-hand: var(--kr-ink); --cf-num: var(--kr-ink-2); }
+.clock-face.cf-light { --cf-face: #fff; --cf-bezel: #333; --cf-mark: #1a1a1a; --cf-hand: #1a1a1a; --cf-num: #333; }
+.clock-face .cf-bezel { fill: none; stroke: var(--cf-bezel); }
+.clock-face .cf-face { fill: var(--cf-face); stroke: none; }
+.clock-face .cf-mark { stroke: var(--cf-mark); }
+.clock-face .cf-hand { stroke: var(--cf-hand); }
+.clock-face .cf-num { fill: var(--cf-num); }
+.clock-face .cf-hub { fill: var(--cf-hand); }
+
+/* Siffror: timmar:minuter stora, sekunderna (och AM/PM) mindre intill. Måtten
+ * är räknade så att allt ryms på 1840 px även med sekunder: 520 px siffror
+ * (5 tecken à 0,56 em) och 208 px sekunder (2 tecken) är ca 1 710 px. Utan
+ * sekunder är det plats för 640 px. */
+.sc-clock-layout .clock-digital { display: flex; align-items: flex-end; justify-content: center; gap: 24px; width: 100%; font-family: var(--kr-mono); font-weight: 700; line-height: .9; letter-spacing: -.04em; color: var(--kr-ink); white-space: nowrap; }
+.clock-digital .cd-hm { font-size: 640px; }
+.clock-digital .cd-side { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 0; }
+.clock-digital .cd-ss { font-size: 256px; line-height: .9; }
+.clock-digital .cd-ap { font-size: 120px; line-height: 1; letter-spacing: 0; }
+.clock-digital .cd-ap:empty, .clock-digital .cd-ss:empty { display: none; }
+.sc-clock-layout .clock-digital[data-seconds="true"] .cd-hm { font-size: 520px; }
+.sc-clock-layout .clock-digital[data-seconds="true"] .cd-ss { font-size: 208px; }
+.sc-clock-layout .clock-digital[data-seconds="true"] .cd-ap { font-size: 96px; }
+#clock-view[data-us="true"] .clock-digital .cd-hm { font-size: 560px; }
+#clock-view[data-us="true"] .clock-digital[data-seconds="true"] .cd-hm { font-size: 440px; }
+#clock-view[data-us="true"] .clock-digital[data-seconds="true"] .cd-ss { font-size: 176px; }
+.sc-clock-layout .clock-digital.stopped { color: var(--kr-mute); opacity: 1; }
+.sc-clock-layout .sc-run { display: inline-flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 600; color: var(--kr-green); }
+.sc-clock-layout .sc-run::before { content: ""; width: 16px; height: 16px; border-radius: 50%; background: currentColor; }
+.light .sc-run, .light .sc-run::before { color: var(--kr-green); }
+.light .sc-run::before { background: var(--kr-green); }
+
+/* Stoppad klocka: gul ruta med orsak, hastighet och källa. */
+.sc-clock-layout .sc-stopped { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; max-width: 1560px; padding: 18px 28px; border: 0; border-radius: 16px; background: var(--kr-amber-soft); color: var(--kr-amber); }
+.sc-stopped::before { content: none; }
+.sc-stopped__dot { width: 16px; height: 16px; border-radius: 50%; background: var(--kr-amber); flex-shrink: 0; }
+.sc-stopped__title { font-size: 28px; font-weight: 600; color: var(--kr-amber); line-height: 1.2; }
+.sc-stopped__reason, .sc-stopped__meta { font-size: 22px; font-weight: 500; color: var(--kr-mute); }
+.sc-stopped__reason { overflow-wrap: anywhere; max-width: 1000px; }
+.light .sc-stopped { background: var(--kr-amber-soft); }
+.light .sc-stopped__title { color: var(--kr-amber); }
+
+/* På klockskärmen är QR-koderna nere till höger, utan egen ram. */
+#display-stage[data-kind="clock"] .sc-foot { position: absolute; right: 40px; bottom: 28px; }
+#display-stage[data-kind="clock"] .sc-qr { gap: 28px; margin: 0; }
+#display-stage[data-kind="clock"] .sc-qr__item { flex-direction: row-reverse; gap: 12px; }
+#display-stage[data-kind="clock"] .sc-qr__code svg { width: 88px; height: 88px; }
+
+/* ── Banöversikt ────────────────────────────────────────────────────── */
+#display-stage[data-kind="topology"] .sc-content { background: var(--kr-panel); border: 1px solid var(--kr-line); border-radius: 20px; }
+#display-app #topology-svg .topology-name, #display-app #topology-svg .topology-code,
+#display-app #dashboard-topology .topology-name, #display-app #dashboard-topology .topology-code { stroke: var(--kr-panel); }
+#display-app .topology-tv .topology-name { fill: var(--kr-ink); font-weight: 600; }
+#display-app .topology-tv .topology-code { fill: var(--kr-mute); }
+#display-app .topology-tv .topology-track { stroke: var(--kr-track); }
+#display-app .topology-tv .topology-track.active { stroke: var(--kr-blue); }
+#display-app .topology-tv .topology-track.route-highlight, #display-app .topology-tv .topology-track.station-highlight { stroke: var(--kr-blue); }
+#display-app .topology-tv .topology-mask { fill: var(--kr-panel); }
+#display-app .topology-tv .topology-station { fill: var(--kr-node-fill); stroke: var(--kr-node-line); }
+/* Tåg inne ger ingen blå ring (siffran i kodraden säger det); blått är en simulerad eller vald station. */
+#display-app .topology-tv .topology-station.active { fill: var(--kr-node-fill); stroke: var(--kr-node-line); }
+#display-app .topology-tv .topology-station.sim, #display-app .topology-tv .topology-station.highlighted { fill: var(--kr-node-fill); stroke: var(--kr-blue); }
+#display-app .topology-tv .topology-station-ring { stroke: var(--kr-blue); }
+/* Tågbrickor: fylld = på linjen, ofylld = klart men inte avgått. */
+#display-app .topology-tv .topology-train-tag { fill: var(--kr-blue); stroke: var(--kr-blue); }
+#display-app .topology-tv .topology-train .train-number, #display-app .topology-tv .topology-train-arrow { fill: var(--kr-blue-ink); }
+#display-app .topology-tv .topology-train.cleared .topology-train-tag { fill: var(--kr-panel); }
+#display-app .topology-tv .topology-train.cleared .train-number { fill: var(--kr-blue); }
+#display-app .topology-tv .topology-train.cleared .topology-train-arrow { fill: none; stroke: var(--kr-blue); }
+#display-app .topology-tv .topology-train.at-station .topology-train-tag { fill: var(--kr-panel); stroke: var(--kr-blue); }
+#display-app .topology-tv .topology-train.at-station .train-number { fill: var(--kr-blue); }
+#display-app .topology-tv .topology-train-ring { stroke: var(--kr-ink); }
+.sc-online { border-top-color: var(--kr-line); }
+.sc-online__item { border-right-color: var(--kr-line); }
+.light .sc-online, .light .sc-online__item { border-color: var(--kr-line); }
+.sc-online__kicker, .sc-online__due, .sc-online__more, .sc-online__empty { color: var(--kr-mute); }
+.sc-online__due.is-late, .light .sc-online__due.is-late { color: var(--kr-amber); }
+
+/* ── Tågdiagram ─────────────────────────────────────────────────────── */
+#graph-scroll { border: 1px solid var(--kr-line); border-radius: 20px; background: var(--kr-panel); }
+.sc-graph-past { fill: var(--kr-panel-2); }
+.graph-grid { stroke: var(--kr-line); stroke-width: 2; }
+.graph-grid.graph-col { stroke: var(--kr-line-2); }
+.graph-grid.graph-col.is-half { stroke: var(--kr-line); stroke-dasharray: 4 7; }
+.sc-graph-label { font: 600 26px var(--kr-sans); fill: var(--kr-ink); }
+.sc-graph-code { font: 22px var(--kr-mono); fill: var(--kr-mute); }
+text.sc-graph-label[text-anchor] { font: 24px var(--kr-mono); fill: var(--kr-mute); }
+.sc-graph-line { fill: none; stroke: var(--kr-faint); stroke-width: 3; stroke-linejoin: round; }
+.sc-graph-line.is-out { stroke: var(--kr-blue); stroke-width: 6; }
+.graph-train-group.selected .sc-graph-line { stroke: var(--kr-ink); }
+.graph-train-group.selected .sc-graph-line.is-out { stroke: var(--kr-blue); stroke-width: 9; }
+.sc-graph-train { font: 700 22px var(--kr-mono); fill: var(--kr-mute); stroke: var(--kr-panel); }
+.sc-graph-train.is-out { fill: var(--kr-blue); }
+.sc-graph-tag { fill: var(--kr-blue); }
+.sc-graph-tag-text { font: 700 24px var(--kr-mono); fill: var(--kr-blue-ink); }
+.light .sc-graph-tag { fill: var(--kr-blue); }
+.light .sc-graph-tag-text { fill: var(--kr-blue-ink); }
+.sc-graph-now { stroke: var(--kr-amber); stroke-width: 4; }
+.sc-graph-now-tag { fill: var(--kr-amber); }
+.sc-graph-now-text { font: 700 22px var(--kr-mono); fill: var(--kr-amber-ink); }
+
+/* ── Översikt ───────────────────────────────────────────────────────── */
+#dashboard-view .display-card { background: var(--kr-panel); border: 1px solid var(--kr-line); border-radius: 20px; }
+#dashboard-view .dashboard-clock-card { background: var(--kr-panel); }
+#dashboard-view .dashboard-clock { color: var(--kr-ink); letter-spacing: -.02em; }
+#dashboard-view .dashboard-clock-meta b { font-size: 28px; }
+#dashboard-view .dashboard-run { color: var(--kr-green); }
+#dashboard-view .dashboard-run.is-stopped { color: var(--kr-amber); }
+.light #dashboard-view .dashboard-run { color: var(--kr-green); }
+.light #dashboard-view .dashboard-run.is-stopped { color: var(--kr-amber); }
+#dashboard-view .dashboard-day { color: var(--kr-mute); }
+#dashboard-view .dashboard-stat { border: 1px solid var(--kr-line); border-radius: 20px; background: var(--kr-panel); }
+#dashboard-view .dashboard-stat b { font-family: var(--kr-mono); letter-spacing: -.02em; }
+#dashboard-view .dashboard-stat span { color: var(--kr-mute); }
+#dashboard-view .dashboard-stat.ok b { color: var(--kr-green); }
+#dashboard-view .dashboard-stat.warn b { color: var(--kr-amber); }
+#display-stage[data-kind="dashboard"] .sc-qr { background: var(--kr-panel); border: 1px solid var(--kr-line); border-radius: 20px; }
+.light #display-stage[data-kind="dashboard"] .sc-qr, .light #dashboard-view .dashboard-stat { border-color: var(--kr-line); }
+#display-stage[data-kind="dashboard"] .sc-qr__item { flex-direction: column; align-items: center; gap: 6px; }
+#display-stage[data-kind="dashboard"] .sc-qr__text { flex-direction: row; align-items: baseline; gap: 6px; font-size: 19px; max-width: none; }
+#display-stage[data-kind="dashboard"] .sc-qr__text b { font-size: 24px; }
+.dash-head { border-bottom-color: var(--kr-line); }
+.dash-head span, .dash-time, .server-dashboard-bottom .dash-in, .server-dashboard-bottom .dash-row--more, .dash-empty, .server-dashboard-bottom .dash-status { color: var(--kr-mute); }
+.server-dashboard-bottom .dash-row { border-bottom-color: var(--kr-line); }
+.server-dashboard-bottom .dash-status { border-top-color: var(--kr-line); }
+.dash-status::before { background: var(--kr-green); }
+.dash-status.is-late::before { background: var(--kr-amber); }
+.server-dashboard-bottom .dash-in.is-late, .light .server-dashboard-bottom .dash-in.is-late { color: var(--kr-amber); }
+.light .dash-head, .light .server-dashboard-bottom .dash-row, .light .dash-status { border-color: var(--kr-line); }
+
+/* ── Områdestavlan (US) ─────────────────────────────────────────────── */
+.sc-territories .server-us-infra, .sc-territories .server-us-card { border-color: var(--kr-line); background: var(--kr-panel); }
+
+/* Duken: lite mindre luft överst än den äldre skärmen hade. */
+#display-stage, #display-stage.toolbar-hidden { padding-top: 22px; }
+
+/* Översikt: tile-raden är 160 px hög; siffror och etiketter ryms utan att svämma över. */
+#display-stage[data-kind="dashboard"] .sc-qr { top: 22px; height: 160px; }
+#dashboard-view .dashboard-clock-card { gap: 20px; padding: 14px 26px; }
+#dashboard-view .dashboard-clock { font-size: 104px; }
+#dashboard-view .dashboard-stat { padding: 14px 20px; gap: 2px; }
+#dashboard-view .dashboard-stat b { font-size: 64px; }
+#dashboard-view .dashboard-stat span { font-size: 21px; line-height: 1.15; }

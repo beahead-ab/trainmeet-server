@@ -35,20 +35,18 @@
     const us = meet.operating_region === "us";
     $("#pv-meet-name").textContent = meet.name || "TrainMeet Server";
     $("#pv-region").textContent = us ? "US · TWC" : "EU";
-    $("#pv-region").className = `tm-badge tm-badge--${us ? "us" : "eu"}`;
-    $("#pv-day").textContent = snapshot.active_day || "";
     const authenticated = typeof state !== "undefined" && Boolean(state?.authStatus?.authenticated);
-    for (const link of [$("#pv-login"), $("#pv-foot-login")]) {
-      link.href = authenticated ? "/drift" : "/login";
-      label(link, authenticated ? "Till driften →" : "Logga in");
-    }
+    const link = $("#pv-login");
+    link.href = authenticated ? "/drift" : "/login";
+    label(link, authenticated ? "Till driften →" : "Logga in");
     $("#pv-foot-meta").textContent = [snapshot.meet?.version_number ? `${t("Version")} ${snapshot.meet.version_number}` : "", snapshot.server_name, "TrainMeet Server"].filter(Boolean).join(" · ");
     document.querySelectorAll("[data-pv-eu]").forEach((node) => { node.hidden = us; });
     document.querySelectorAll("[data-pv-us]").forEach((node) => { node.hidden = !us; });
   }
 
-  // One clock, in the style chosen under ⚙ – as on the screens. Faces are
-  // app.js's own (the Swiss one is the existing code, untouched).
+  // One clock, in the style the meet has chosen – as on the screens: hours and
+  // minutes large, the seconds (when they are on) small beside them. The faces
+  // are app.js's own.
   function renderClockCard() {
     const target = $("#pv-clock");
     if (!target || !snapshot) return;
@@ -57,82 +55,57 @@
     const digital = style === "digital";
     const showSeconds = clock.show_seconds !== false;
     const stopped = !clock.running;
-    const time = currentClockTime(snapshot);
     const us = snapshot.meet?.operating_region === "us";
-    let displayTime = showSeconds ? time : time.slice(0, 5);
-    if (us && /^\d\d:/.test(time)) { const hour = Number(time.slice(0, 2)); displayTime = `${hour % 12 || 12}${displayTime.slice(2)} ${hour >= 12 ? "PM" : "AM"}`; }
-    const meta = `${snapshot.meet?.name || ""} · ${snapshot.active_day || ""} · ${clock.source === "fastclock" ? "FastClock" : t("intern klocka")}`;
-    const status = stopped
-      ? html`<div class="pv-clock__status is-stopped">${t("Klockan stoppad")}${clock.stopped_reason ? ` · ${escapeHTML(clock.stopped_reason)}` : ""}</div>`
-      : html`<div class="pv-clock__status">${t("Klockan går")} · ${Number(clock.speed || 1)}×</div>`;
-    const signature = [style, showSeconds, stopped, clock.stopped_reason, clock.speed, meta, TrainMeetI18n.getLanguage()].join("|");
+    const meta = [snapshot.active_day, stopped && clock.stopped_reason ? clock.stopped_reason : clock.source === "fastclock" ? "FastClock" : t("intern klocka")].filter(Boolean).join(" · ");
+    const status = stopped ? t("Klockan stoppad") : `${t("Klockan går")} · ${Number(clock.speed || 1)}×`;
+    const signature = [style, showSeconds, stopped, status, meta, TrainMeetI18n.getLanguage()].join("|");
     if (target.dataset.signature !== signature) {
       target.dataset.signature = signature;
       const face = digital
-        ? html`<div class="pv-clock__digits${stopped ? " is-stopped" : ""}"></div>`
+        ? `<div class="pv-clock__time${stopped ? " is-stopped" : ""}"><span class="hm"></span><small></small></div>`
         : `<div class="pv-clock__face${stopped ? " is-stopped" : ""}">${clockSVG(style, style !== "stationsur", showSeconds, stopped)}</div>`;
-      target.innerHTML = `${face}${status}<div class="pv-clock__meta">${escapeHTML(meta)}</div>`;
+      target.innerHTML = `${face}<div class="pv-clock__side"><div class="pv-clock__status${stopped ? " is-stopped" : ""}">${escapeHTML(status)}</div><div class="pv-clock__meta">${escapeHTML(meta)}</div></div>`;
     }
-    const digits = target.querySelector(".pv-clock__digits");
-    if (digits && digits.textContent !== displayTime) digits.textContent = displayTime;
-    if (!digital) updateAnalogClockHands(target, currentClockSeconds(snapshot), style, !stopped);
+    if (digital) {
+      const parts = clockDigitParts(currentClockTime(snapshot), us, showSeconds);
+      const small = [parts.ss ? `:${parts.ss}` : "", parts.ap].filter(Boolean).join(" ");
+      const hm = target.querySelector(".hm"), tail = target.querySelector("small");
+      if (hm && hm.textContent !== parts.hm) hm.textContent = parts.hm;
+      if (tail && tail.textContent !== small) tail.textContent = small;
+    } else {
+      updateAnalogClockHands(target, currentClockSeconds(snapshot), style, !stopped);
+    }
+  }
+
+  // The map is drawn by app.js, the way Drift draws it, in real pixels. The
+  // line runs sideways even on a phone: it is 880 px wide and scrolls inside
+  // its panel, and the hint under it says so.
+  function drawMap(svg) {
+    const host = svg.closest(".pv-map");
+    const available = Math.max(280, (host?.clientWidth || 0) - 20);
+    renderTopology(snapshot, svg, { kr: { width: Math.max(available, 880), noCode: true, wide: true }, tv: true, showBadge: false, selectedStationID: selectedStation,
+      onStationSelect: id => { selectedStation = selectedStation === id ? null : id; renderTrack(); renderTimetable(); },
+      onClear: () => { selectedStation = null; renderTrack(); renderTimetable(); } });
+    const [, , width, height] = svg.getAttribute("viewBox").split(" ").map(Number);
+    svg.style.width = `${width}px`;
+    svg.style.height = `${height}px`;
+    $("#pv-map-hint").hidden = Boolean(selectedStation) || width <= available + 1;
   }
 
   function renderTrack() {
     const positions = snapshot.train_positions || [];
     const moving = positions.filter((position) => position.connection_id);
-    const visibleMoving = moving.filter(p => !selectedStation || [p.from_station_id, p.to_station_id].includes(selectedStation));
     const now = nowMinutes();
-    const staffed = snapshot.staffed_station_count;
-    const stations = snapshot.stations?.length || 0;
+    const late = globalThis.TrainMeetDriftModel?.lateTrains?.(snapshot).length || 0;
     $("#pv-stat-line").textContent = String(moving.length);
     $("#pv-stat-station").textContent = String(positions.filter((position) => position.station_id && !position.connection_id).length);
-    $("#pv-stat-staffed").textContent = staffed == null ? String(stations) : `${staffed} / ${stations}`;
-    label($("#pv-stat-staffed-label"), staffed == null ? "stationer" : "bemannade");
-    const svg = $("#pv-topology");
-    renderTopology(snapshot, svg, { showBadge: false, refit: true, selectedStationID: selectedStation,
-      onStationSelect: id => { selectedStation = selectedStation === id ? null : id; renderTrack(); renderTimetable(); },
-      onClear: () => { selectedStation = null; renderTrack(); renderTimetable(); } });
+    $("#pv-stat-dev").textContent = String(late);
+    $("#pv-stat-dev-chip").classList.toggle("is-late", late > 0);
+    drawMap($("#pv-topology"));
     $("#pv-clear-station").hidden = !selectedStation;
-    // Fit the drawing to its stations, not to the editor's padded canvas, so a
-    // small layout is not a speck in the corner of the phone.
-    try {
-      const box = svg.getBBox();
-      if (box.width > 0 && box.height > 0) {
-        // Landscape layouts (the line runs sideways) are 220 px high and scroll
-        // sideways when wider than the card, as the hint under the map says.
-        // Portrait layouts (phones get the line top to bottom) fill the card's
-        // width and grow downwards instead. Either way a small layout is not
-        // blown up: at most 1.8 px per layout unit.
-        const maxZoom = 1.8, pad = 48;
-        const host = svg.closest(".pv-map");
-        const available = Math.max(0, (host?.clientWidth || 0) - 14);
-        const boxWidth = box.width + pad, boxHeight = box.height + pad;
-        let zoom, width, height;
-        if (boxHeight > boxWidth) {
-          zoom = Math.min(maxZoom, available / boxWidth, 720 / boxHeight);
-          width = available;
-          height = Math.round(boxHeight * zoom);
-        } else {
-          height = 220;
-          zoom = Math.min(maxZoom, height / boxHeight);
-          width = Math.max(available, Math.round(boxWidth * zoom));
-        }
-        const viewWidth = width / zoom, viewHeight = height / zoom;
-        const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
-        svg.setAttribute("viewBox", `${cx - viewWidth / 2} ${cy - viewHeight / 2} ${viewWidth} ${viewHeight}`);
-        svg.style.width = `${Math.min(width, 1400)}px`;
-        svg.style.height = `${height}px`;
-        svg.classList.toggle("is-wide", width > available + 1);
-      }
-    } catch {}
-    const arrival = (position) => (snapshot.routes || []).find((route) => route.train_number === position.train_number && route.station_id === position.to_station_id)?.arrival_time;
-    const line = $("#pv-on-line");
-    line.replaceChildren();
-    if (!visibleMoving.length) line.append(Object.assign(document.createElement("p"), { className: "pv-empty", textContent: t("Inget tåg är ute på linjen just nu.") }));
-    for (const position of visibleMoving.slice(0, 6)) {
-      line.insertAdjacentHTML("beforeend", html`<div class="pv-row-item pv-row-item--line"><b>${escapeHTML(position.train_number)}</b><span>${escapeHTML(stationNameOf(position.from_station_id))} → ${escapeHTML(stationNameOf(position.to_station_id))}</span><span class="m">${arrival(position) ? `${t("ank")} ${escapeHTML(arrival(position))}` : ""}</span></div>`);
-    }
+    const scope = $("#pv-events-scope");
+    scope.dataset.tmText = selectedStation ? "" : "hela banan";
+    scope.textContent = selectedStation ? stationNameOf(selectedStation) : t("hela banan");
     const upcoming = (snapshot.routes || [])
       .filter(route => !selectedStation || route.station_id === selectedStation)
       .flatMap(route => ["arrival_time", "departure_time"].filter(key => route[key]).map(key => ({...route, eventTime: route[key], departure: key === "departure_time"})))
@@ -143,7 +116,11 @@
     events.replaceChildren();
     if (!upcoming.length) events.append(Object.assign(document.createElement("p"), { className: "pv-empty", textContent: t("Inga fler planerade händelser idag.") }));
     for (const route of upcoming) {
-      events.insertAdjacentHTML("beforeend", html`<div class="pv-row-item pv-row-item--event"><span class="m mono">${escapeHTML(route.eventTime)}</span><b>${escapeHTML(route.train_number)}</b><span>${escapeHTML(route.station_name || stationNameOf(route.station_id))} · ${route.departure ? t("avgång") : t("ankomst")}</span></div>`);
+      const station = route.station_name || stationNameOf(route.station_id);
+      const what = route.departure ? t("avgår {station}", { station }) : t("ankommer {station}", { station });
+      const delta = minutes(route.eventTime) - now;
+      // Hollow: the train stands at the station and is about to leave; filled: on its way in.
+      events.insertAdjacentHTML("beforeend", html`<div class="pv-item pv-item--event"><span class="t">${escapeHTML(route.eventTime)}</span><span class="pv-badge-train${route.departure ? " is-hollow" : ""}">${escapeHTML(route.train_number)}</span><span>${escapeHTML(what)}</span><span class="in">${escapeHTML(delta <= 0 ? t("nu") : t("{n} min", { n: delta }))}</span></div>`);
     }
   }
 
@@ -162,18 +139,18 @@
       ? services.filter((row) => row.number.toLowerCase().includes(needle) || row.search.includes(needle))
       : services;
     const upcoming = matches.filter((row) => minutes(row.arrival || row.departure) >= now);
-    const rows = fullTimetable || needle ? matches : (upcoming.length ? upcoming.slice(0, 5) : matches.slice(-5));
+    const rows = fullTimetable || needle ? matches : (upcoming.length ? upcoming.slice(0, 4) : matches.slice(-4));
     $("#pv-timetable-count").textContent = `${services.length} ${t("tåg")} · ${snapshot.active_day || ""}`;
     const list = $("#pv-timetable");
     list.replaceChildren();
     if (!rows.length) list.append(Object.assign(document.createElement("p"), { className: "pv-empty", textContent: needle ? t("Inget tåg matchar sökningen.") : t("Ingen tidtabell för dagen.") }));
     for (const row of rows) {
-      const tag = out.has(row.number) ? `<span class="tm-tag tm-tag--info">${t("ute")}</span>` : `<span class="m">${escapeHTML(relative(row.departure))}</span>`;
-      list.insertAdjacentHTML("beforeend", html`<div class="pv-row-item pv-row-item--line"><b>${escapeHTML(row.number)}</b><span>${escapeHTML(row.from)} ${escapeHTML(row.departure)} → ${escapeHTML(row.to)} ${escapeHTML(row.arrival)}</span>${tag}</div>`);
+      const tag = out.has(row.number) ? `<span class="pv-tag-out">${t("ute")}</span>` : `<span class="in">${escapeHTML(relative(row.departure))}</span>`;
+      list.insertAdjacentHTML("beforeend", html`<div class="pv-item pv-item--line"><span class="no">${escapeHTML(row.number)}</span><span>${escapeHTML(row.from)} <span class="sub">${escapeHTML(row.departure)}</span> → ${escapeHTML(row.to)} <span class="sub">${escapeHTML(row.arrival)}</span></span>${tag}</div>`);
     }
     const toggle = $("#pv-timetable-toggle");
-    toggle.hidden = Boolean(needle) || matches.length <= rows.length && !fullTimetable;
-    label(toggle, fullTimetable ? "Visa bara de närmaste ↑" : "Visa hela tidtabellen ↓");
+    $("#pv-timetable-toggle").closest(".pv-foot-row").hidden = toggle.hidden = Boolean(needle) || matches.length <= rows.length && !fullTimetable;
+    label(toggle, fullTimetable ? "Visa bara de närmaste ↑" : "Hela tidtabellen ↓");
   }
 
   function renderConnect() {
@@ -242,9 +219,20 @@
     frameTimer = requestAnimationFrame(tick);
   }
 
+  // Mörkt är grundläget i Kontrollrummet; deltagarvyn har ingen väljare och
+  // följer därför enhetens ljus eller mörker så länge ingen har valt själv.
+  // Lämnar man vyn (till Drift eller inloggningen) gäller det sparade valet igen.
+  function applyTheme(own) {
+    let stored = null;
+    try { stored = localStorage.getItem("trainmeet.theme"); } catch { /* privat läge */ }
+    const light = stored === "light" || (own && stored === null && matchMedia("(prefers-color-scheme: light)").matches);
+    document.documentElement.dataset.krTheme = light ? "light" : "dark";
+  }
+
   function start() {
     if (active) return;
     active = true;
+    applyTheme(true);
     document.body.classList.add("participant-mode");
     $("#participant-view").classList.remove("hidden");
     if (!bound) {
@@ -253,6 +241,10 @@
       TrainMeetI18n.annotate($("#participant-view"));
       $("#pv-timetable-search")?.addEventListener("input", (event) => { query = event.target.value; if (snapshot) renderTimetable(); });
       $("#pv-timetable-toggle")?.addEventListener("click", () => { fullTimetable = !fullTimetable; if (snapshot) renderTimetable(); });
+      const sheet = $("#pv-connect-card");
+      $("#pv-connect-open")?.addEventListener("click", () => { if (typeof sheet.showModal === "function") sheet.showModal(); else sheet.setAttribute("open", ""); });
+      $("#pv-connect-close")?.addEventListener("click", () => sheet.close());
+      sheet?.addEventListener("click", (event) => { if (event.target === sheet) sheet.close(); });
       $("#pv-clear-station")?.addEventListener("click", () => { selectedStation = null; if (snapshot) { renderTrack(); renderTimetable(); } });
       document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && active) poll(); });
       globalThis.TrainMeetLive?.subscribe((topics) => {
@@ -266,6 +258,7 @@
   }
 
   function stop() {
+    applyTheme(false);
     if (!active) return;
     active = false;
     clearTimeout(pollTimer); cancelAnimationFrame(frameTimer); request?.abort(); request = null;

@@ -1,0 +1,135 @@
+/* TrainMeet Server · Kontrollrummet · Deltagarvyn (/)
+ *
+ * Det QR-koden på skärmarna leder till: ingen inloggning, inget att ändra.
+ * Telefonen först (390 px): klockan, banan, nästa händelser, tidtabellen och
+ * knapparna i en kolumn; "Anslut din TMBox" kommer upp som ett ark underifrån.
+ * På bredare skärmar står samma kolumn mitt på sidan. Samma tokens som Drift
+ * och skärmarna (--kr-*), ljust och mörkt byter bara färger.
+ *
+ * Servern har strikt CSP: allt utseende ligger här, ingenting i style-attribut. */
+
+body.participant-mode { background: var(--kr-bg); }
+body.participant-mode #app-chrome { display: none !important; }
+body.participant-mode #app-view { padding: 0; max-width: none; }
+
+.participant {
+  min-height: 100vh; display: flex; flex-direction: column;
+  background: var(--kr-bg); color: var(--kr-ink); font-family: var(--kr-sans);
+  font-size: 13px; line-height: 1.45; -webkit-text-size-adjust: 100%;
+  color-scheme: dark;
+}
+:root[data-kr-theme="light"] .participant { color-scheme: light; }
+.participant.hidden { display: none; }
+.participant a { color: var(--kr-blue); text-decoration: none; }
+.participant a:hover { text-decoration: underline; }
+.participant button, .participant input { font: inherit; color: inherit; }
+.participant *, .participant *::before, .participant *::after { box-sizing: border-box; }
+.pv-spacer { flex-grow: 1; }
+
+/* ── Sidhuvud ───────────────────────────────────────────────────────── */
+.pv-top { height: 52px; flex: none; padding: 0 16px; display: flex; align-items: center; gap: 10px; background: var(--kr-panel); border-bottom: 1px solid var(--kr-line); }
+.pv-top .brand-mark { width: 26px; height: 26px; object-fit: contain; flex-shrink: 0; filter: none; }
+.pv-top b { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-badge { display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; padding: 2px 6px; border-radius: 4px; background: var(--kr-blue-soft); color: var(--kr-blue); flex: none; }
+.pv-badge:empty { display: none; }
+.pv-live { width: 8px; height: 8px; border-radius: 50%; background: var(--kr-green); flex: none; }
+.pv-live.is-offline { background: var(--kr-amber); }
+.pv-login { font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+
+/* ── Sida ───────────────────────────────────────────────────────────── */
+.pv-page { width: 100%; max-width: 560px; margin: 0 auto; padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 10px; flex-grow: 1; }
+.pv-panel { background: var(--kr-panel); border: 1px solid var(--kr-line); border-radius: var(--kr-r); display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.pv-panel[hidden], .pv-actions[hidden], .pv-foot-row[hidden] { display: none; }
+.pv-head { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--kr-line); font-size: 14px; font-weight: 700; }
+.pv-head a { font-size: 12px; font-weight: 600; }
+.pv-c { font-size: 12.5px; color: var(--kr-mute); font-weight: 500; }
+.pv-foot-row { display: flex; align-items: center; gap: 16px; padding: 8px 14px; border-top: 1px solid var(--kr-line); font-size: 12.5px; color: var(--kr-mute); flex-wrap: wrap; }
+.pv-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+.pv-note, .pv-empty { margin: 0; font-size: 12.5px; color: var(--kr-mute); line-height: 1.5; }
+.pv-empty { padding: 12px 14px; }
+#participant-view .pv-link { background: none; border: 0; padding: 0; min-height: 0; color: var(--kr-blue); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+#participant-view .pv-link[hidden] { display: none; }
+.pv-hint { font-size: 11.5px; }
+.pv-hint[hidden] { display: none; }
+
+/* ── Klockan ────────────────────────────────────────────────────────── */
+.pv-clock-card { padding: 14px 16px; }
+.pv-clock { display: flex; align-items: center; gap: 14px; }
+.pv-clock__time { font: 700 52px/1 var(--kr-mono); letter-spacing: -.03em; color: var(--kr-ink); white-space: nowrap; }
+.pv-clock__time small { font-size: 22px; letter-spacing: 0; color: var(--kr-mute); margin-left: 2px; }
+.pv-clock__time.is-stopped { color: var(--kr-ink-2); }
+.pv-clock__face { width: 84px; height: 84px; flex: none; line-height: 0; }
+.pv-clock__face .clock-face { width: 84px; height: 84px; filter: none; }
+.pv-clock__face.is-stopped { opacity: .6; }
+.pv-clock__side { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+.pv-clock__status { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--kr-green-soft); color: var(--kr-green); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.pv-clock__status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.pv-clock__status.is-stopped { background: var(--kr-amber-soft); color: var(--kr-amber); }
+.pv-clock__meta { font-size: 12px; color: var(--kr-mute); overflow-wrap: anywhere; }
+
+/* ── På banan nu ────────────────────────────────────────────────────── */
+.pv-map { padding: 8px 10px 2px; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+.pv-map svg { display: block; width: auto; max-width: none; height: auto; overflow: visible; }
+.pv-map .topology-name { font-size: 14px; stroke-width: 7px; }
+.pv-map .topology-train .train-number { font-size: 14px; }
+.pv-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--kr-ink-2); }
+.pv-chip b { font: 700 14px var(--kr-mono); color: var(--kr-ink); }
+.pv-chip--dev { color: var(--kr-green); }
+.pv-chip--dev b { color: inherit; }
+.pv-chip--dev.is-late { color: var(--kr-amber); }
+
+/* ── Listor: händelser och tidtabell ────────────────────────────────── */
+.pv-list { display: flex; flex-direction: column; }
+.pv-item { display: grid; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--kr-line); font-size: 13px; }
+.pv-item:last-child { border-bottom: 0; }
+.pv-item--event { grid-template-columns: 48px 54px minmax(0, 1fr) 54px; }
+.pv-item--line { grid-template-columns: 54px minmax(0, 1fr) auto; }
+.pv-item .t { font-family: var(--kr-mono); color: var(--kr-ink-2); }
+.pv-item .in { font-family: var(--kr-mono); color: var(--kr-mute); text-align: right; font-size: 12px; white-space: nowrap; }
+.pv-item .no { font: 700 13px var(--kr-mono); }
+.pv-item .sub { color: var(--kr-mute); }
+.pv-badge-train { display: inline-flex; align-items: center; justify-content: center; font: 700 12.5px/1.2 var(--kr-mono); padding: 2px 7px; border-radius: 6px; background: var(--kr-blue); color: var(--kr-blue-ink); }
+.pv-badge-train.is-hollow { background: transparent; color: var(--kr-blue); box-shadow: inset 0 0 0 1.5px var(--kr-blue); }
+.pv-tag-out { color: var(--kr-blue); font-size: 12px; font-weight: 600; }
+
+.pv-search { display: flex; align-items: center; gap: 8px; height: 40px; margin: 10px 14px 4px; padding: 0 12px; border: 1px solid var(--kr-line-2); border-radius: var(--kr-r-sm); background: var(--kr-panel-2); color: var(--kr-mute); }
+.pv-search:focus-within { border-color: var(--kr-blue); }
+#participant-view .pv-search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: 0; color: var(--kr-ink); font-size: 16px; }
+#participant-view .pv-search input::placeholder { color: var(--kr-mute); }
+
+/* ── Knappar ────────────────────────────────────────────────────────── */
+.pv-actions { margin-top: auto; padding-top: 6px; display: flex; flex-direction: column; gap: 8px; }
+.pv-actions__row { display: flex; gap: 8px; }
+#participant-view .pv-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 14px; border-radius: var(--kr-r-sm); border: 1px solid var(--kr-line-2); background: var(--kr-panel-2); color: var(--kr-ink); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; text-decoration: none; }
+#participant-view a.pv-btn { color: var(--kr-ink); }
+#participant-view .pv-btn:hover, #participant-view a.pv-btn:hover { background: var(--kr-panel-3); text-decoration: none; }
+#participant-view .pv-actions__row .pv-btn { flex: 1; }
+#participant-view .pv-actions__row .pv-btn--ghost { flex: none; }
+#participant-view .pv-btn--primary, #participant-view a.pv-btn--primary { height: 48px; font-size: 15px; background: var(--kr-blue); border-color: var(--kr-blue); color: var(--kr-blue-ink); }
+#participant-view .pv-btn--primary:hover { background: var(--kr-blue); filter: brightness(1.08); }
+#participant-view .pv-btn--ghost, #participant-view a.pv-btn--ghost { background: transparent; color: var(--kr-mute); }
+#participant-view .pv-btn:focus-visible, #participant-view .pv-link:focus-visible, #participant-view .pv-x:focus-visible, #participant-view a:focus-visible, #participant-view .pv-search input:focus-visible { outline: 2px solid var(--kr-blue); outline-offset: 2px; }
+#participant-view .pv-search input:focus-visible { outline: 0; }
+
+/* ── Bottenarket: Anslut din TMBox ──────────────────────────────────── */
+.pv-sheet { width: 100%; max-width: 560px; margin: auto auto 0; padding: 0; border: 1px solid var(--kr-line-2); border-bottom: 0; border-radius: 20px 20px 0 0; background: var(--kr-panel); color: var(--kr-ink); box-shadow: var(--kr-shadow); font-family: var(--kr-sans); max-height: 88vh; overflow: auto; }
+.pv-sheet::backdrop { background: var(--kr-backdrop); }
+.pv-sheet[open] { animation: pv-sheet-in .22s ease-out; }
+@keyframes pv-sheet-in { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pv-sheet[open] { animation: none; } }
+.pv-sheet .pv-head { position: sticky; top: 0; background: var(--kr-panel); }
+#participant-view .pv-x { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--kr-mute); font-size: 22px; line-height: 1; cursor: pointer; }
+#participant-view .pv-x:hover { background: var(--kr-panel-3); color: var(--kr-ink); }
+.pv-steps { padding: 0 14px; display: flex; flex-direction: column; }
+.pv-step { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--kr-line); }
+.pv-step:last-child { border-bottom: 0; }
+.pv-step .n { width: 26px; height: 26px; border-radius: 50%; background: var(--kr-blue-soft); color: var(--kr-blue); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+.pv-step .h { font-size: 13.5px; font-weight: 700; margin-bottom: 4px; }
+.pv-values { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
+.pv-value { font: 600 14px/1.3 var(--kr-mono); background: var(--kr-panel-2); border: 1px solid var(--kr-line); border-radius: 6px; padding: 4px 8px; overflow-wrap: anywhere; }
+.pv-value--muted { font-family: var(--kr-sans); font-weight: 500; color: var(--kr-mute); }
+.pv-sheet__foot { padding: 12px 14px 18px; border-top: 1px solid var(--kr-line); display: flex; flex-direction: column; gap: 6px; }
+.pv-sheet__foot .pv-note:empty { display: none; }
+
+/* ── Fot ────────────────────────────────────────────────────────────── */
+.pv-foot { flex: none; width: 100%; max-width: 560px; margin: 0 auto; padding: 4px 14px 22px; font-size: 11.5px; color: var(--kr-mute); }

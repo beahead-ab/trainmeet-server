@@ -208,7 +208,9 @@ class CloudTopologyViewTests(unittest.TestCase):
     def test_runtime_topology_is_still_visible(self):
         self.assertIn('id="overview-topology"', self.html)
         self.assertIn("function renderTopology(", self.js)
-        self.assertIn("function renderOverviewTopology()", self.js)
+        # Kartan ritas av Drift med app.js:s renderTopology som penna.
+        self.assertIn("renderTopology,", self.js)
+        self.assertIn("function renderMap()", (Path(__file__).resolve().parent.parent / "src" / "tmbox_gateway" / "web" / "drift.js").read_text())
         self.assertIn('id="overview-route-list"', self.html)
 
     def test_pending_config_has_status_not_a_local_edit_activation_button(self):
@@ -218,6 +220,6 @@ class CloudTopologyViewTests(unittest.TestCase):
         self.assertNotIn('id="activate-pending"', self.html)
 
     def test_device_station_assignment_remains_runtime_admin(self):
-        self.assertIn('data-admin-section="devices"', self.html)
+        self.assertIn('id="drift-stations"', self.html)
         self.assertIn('id="device-form-modal"', self.html)
         self.assertIn('"/v1/devices/assign"', self.js)

@@ -20,7 +20,7 @@ FONTS = WEB / "fonts"
 # the box itself – LCD and keys – keeps the physical TMBox's look, fonts included.
 STYLESHEETS = [
     WEB / "app.css", WEB / "server-design.css", WEB / "server-ui.css", WEB / "meet-type.css",
-    PACKAGE / "us_web" / "style.css",
+    WEB / "kontrollrummet.css", WEB / "skarmar.css", WEB / "deltagare.css", PACKAGE / "us_web" / "style.css",
 ]
 
 
@@ -56,13 +56,23 @@ class ShippedFontsTests(unittest.TestCase):
             css = sheet.read_text(encoding="utf-8")
             for match in re.finditer(r"font(?:-family)?\s*:[^;{}]+;", css):
                 declaration = match.group(0)
-                if "var(--font" in declaration or "inherit" in declaration:
+                if "var(--font" in declaration or "var(--kr-sans)" in declaration or "var(--kr-mono)" in declaration or "inherit" in declaration:
                     continue
                 family = first_family(declaration)
                 if not family:
                     continue
                 with self.subTest(sheet=sheet.name, declaration=declaration[:80]):
                     self.assertIn(family, {"inter", "jetbrains mono"})
+
+    def test_kontrollrummet_font_tokens_start_with_the_shipped_fonts(self):
+        # Kontrollrummet sets every font through two tokens; if a token started
+        # with a system font, every rule that uses it would too.
+        css = (WEB / "kontrollrummet.css").read_text(encoding="utf-8")
+        for token, family in {"--kr-sans": "inter", "--kr-mono": "jetbrains mono"}.items():
+            with self.subTest(token=token):
+                match = re.search(rf"{token}\s*:\s*([^;]+);", css)
+                self.assertIsNotNone(match)
+                self.assertEqual(match.group(1).split(",")[0].strip().strip("\"'").lower(), family)
 
     def test_every_page_loads_the_shared_fonts(self):
         self.assertIn('@import "fonts/fonts.css"', (WEB / "server-design.css").read_text(encoding="utf-8").replace("url(", "").replace(")", "").replace("'", '"'))
@@ -77,7 +87,7 @@ class ShippedFontsTests(unittest.TestCase):
     def test_svg_text_uses_the_shipped_fonts(self):
         script = (WEB / "app.js").read_text(encoding="utf-8")
         self.assertNotIn('font-family="sans-serif"', script)
-        self.assertIn('class="clock-numeral"', script)
+        self.assertRegex(script, r'class="clock-numeral[ "]')
         self.assertIn(".clock-numeral { font-family: var(--font); }", (WEB / "server-ui.css").read_text(encoding="utf-8"))
 
     def test_scripts_do_not_pick_a_system_font(self):

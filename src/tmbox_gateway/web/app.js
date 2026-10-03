@@ -14,11 +14,18 @@ const simulationReasons = {
 
 function renderSimulation(data) {
   simulationState = data;
-  document.querySelector("#drift-simulation-details").hidden = !data.active || state.serverContext?.operating_region === "us";
+  document.querySelector("#simulation-details-open").hidden = !data.active || state.serverContext?.operating_region === "us";
   const clock = data.clock || {};
-  document.querySelector("#simulation-summary").textContent = data.active
-    ? `${clock.running ? t("Går") : t("Pausad")} · ${clock.time} · ${clock.speed}× · ${t("Trafikdag")} ${data.day} · ${t("Scenario")} ${data.seed}${data.notice ? " · " + data.notice : ""}`
-    : t(data.supported ? "Ingen simulering igång. Starten pausar spelet och sparar trafikläget." : "Koppla en EU-träff från Cloud för att simulera stationsarbetet.");
+  // Raden i Drift är kort; dag, scenario och eventuell notis ligger i dialogen.
+  const summary = document.querySelector("#simulation-summary");
+  summary.textContent = data.active
+    ? `${clock.running ? t("Går") : t("Pausad")} · ${clock.speed}×`
+    : t(data.supported ? "av" : "Koppla en EU-träff från Cloud");
+  summary.title = data.active ? "" : t(data.supported ? "Starten pausar spelet och sparar trafikläget." : "Koppla en EU-träff från Cloud för att simulera stationsarbetet.");
+  document.querySelector("#simulation-meta").textContent = data.active
+    ? `${t("Trafikdag")} ${data.day} · ${t("Scenario")} ${data.seed}${data.notice ? " · " + data.notice : ""}`
+    : "";
+  globalThis.TrainMeetDrift?.update({ simulation: data });
   document.querySelector("#simulation-start-open").hidden = data.active;
   document.querySelector("#simulation-start-open").disabled = !data.supported;
   for (const id of ["simulation-pause", "simulation-reset-open", "simulation-finish-open", "simulation-stations-card", "simulation-trains-card"]) document.getElementById(id).hidden = !data.active;
@@ -67,7 +74,7 @@ function renderSimulation(data) {
 }
 
 async function refreshSimulation() {
-  if (simulationRefreshing || !["simulation", "kor"].includes(document.body.dataset.mode) || state.serverContext?.operating_region === "us") return;
+  if (simulationRefreshing || document.body.dataset.mode !== "kor" || state.serverContext?.operating_region === "us") return;
   simulationRefreshing = true;
   try {
     const response = await authorizedFetch("/v1/simulation", {cache: "no-store"});
@@ -330,7 +337,6 @@ const overviewRouteSearch = document.querySelector("#overview-route-search");
 const overviewRouteList = document.querySelector("#overview-route-list");
 const overviewRouteDetail = document.querySelector("#overview-route-detail");
 const overviewStationCounts = document.querySelector("#overview-station-counts");
-const closeStationInspector = document.querySelector("#close-station-inspector");
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -538,11 +544,9 @@ setupFinishForm.addEventListener("submit", async (event) => {
 
 
 // Server workspaces select an interface, never a different meet or engine.
-const SETTINGS_SECTIONS = ["language", "meet", "identity", "users", "software", "cloud", "system"];
 const WORKSPACE_PANELS = {
   kor: "#overview-view", installningar: "#admin-view",
-  simulation: "#simulation-view",
-  skarmar: "#displays-view", tmbox: "#tmbox-v2-view",
+  tmbox: "#tmbox-v2-view",
   help: "#help-view",
 };
 const MODES = ["workspaces", ...Object.keys(WORKSPACE_PANELS)];
@@ -588,10 +592,7 @@ async function refreshServerContext() {
   renderCloudStatus();
   const us = payload.operating_region === "us";
   document.querySelector("#us-runtime-summary").classList.toggle("hidden", !us);
-  document.querySelectorAll('.display-launch-card[href="/display/topology"], .display-launch-card[href="/display/graph"], .display-launch-card[href="/display/dashboard"], .connection-badge-card')
-    .forEach((node) => node.classList.toggle("hidden", us));
-  document.querySelectorAll("#overview-view .topology-overview-card, #overview-traffic, #drift-timetable")
-    .forEach((node) => node.classList.toggle("hidden", us));
+  globalThis.TrainMeetDrift?.update({ us });
   document.querySelector("#workspace-home").href = workspaceHome();
   serverUI.refreshHeader();
   return payload;
@@ -615,12 +616,10 @@ function setMode(mode) {
     document.querySelector(selector).classList.toggle("hidden", name !== next);
   }
   document.querySelector("#application-menu").open = false;
-  document.querySelector("#settings-heading").classList.toggle("hidden", next !== "installningar");
   if (next !== "tmbox") stopTMBoxV2();
   if (next === "tmbox") {
     startTMBoxV2();
   } else if (next === "installningar") showSettings();
-  else if (next === "simulation") refreshSimulation();
   else if (next === "kor" && state.serverContext?.operating_region === "eu") renderOverview(state.overviewSnapshot);
   if (next === "kor") refreshSimulation();
   serverUI.mode(next);
@@ -628,9 +627,7 @@ function setMode(mode) {
 }
 
 function showSettings() {
-  document.querySelectorAll(".admin-section-panel").forEach((panel) => {
-    panel.classList.toggle("hidden", !SETTINGS_SECTIONS.includes(panel.dataset.adminSection));
-  });
+  globalThis.TrainMeetSettings?.show();
   Promise.allSettled([checkSoftwareUpdate(), refreshUsers(), refreshBackups(), refreshRuntime(), refreshDevices()]);
 }
 
@@ -662,8 +659,6 @@ function applyWorkspaceRoute() {
   appView.classList.remove("hidden");
   document.querySelector("#application-menu").open = false;
   if (route === "settings") setMode("installningar");
-  else if (route === "simulation") setMode("simulation");
-  else if (route === "screens") setMode("skarmar");
   else if (route === "tmbox") {
     if (!availableWorkspaces().includes("tmbox")) { setMode("workspaces"); return; }
     location.replace("/tmbox/");
@@ -717,6 +712,8 @@ function endModalAction(element) {
   modalControls.delete(dialog);
   dialog.dataset.busy = "false";
   dialog.removeAttribute("aria-busy");
+  // Avbryt och Spara i en inställningspanel följer vad som är ändrat, inte vad som var påslaget före sparandet.
+  if (dialog.classList.contains("kr-setform")) globalThis.TrainMeetSettings?.refresh(dialog);
 }
 function openModal(id, trigger = document.activeElement) {
   const dialog = document.getElementById(id);
@@ -726,6 +723,9 @@ function openModal(id, trigger = document.activeElement) {
     document.querySelector("#device-code").readOnly = false;
     document.querySelector("#device-code").value = "";
     deviceStation.value = "";
+    document.querySelector("#device-side").value = "both";
+    document.querySelector("#device-form-extra").hidden = true;
+    delete deviceForm.dataset.deviceId;
     document.querySelector("#device-form-title").textContent = t("Återanslut borttagen klient");
     setMessage(deviceMessage, "");
   }
@@ -759,6 +759,7 @@ let modalResultTimer;
 function finishModal(form, confirmation = null) {
   delete form.dataset.dirty;
   delete form.dataset.meetGeneration;
+  if (form.classList.contains("kr-setform")) globalThis.TrainMeetSettings?.saved(form);
   const dialog = form.closest("dialog");
   if (dialog) {
     let receipt = document.querySelector("#modal-result");
@@ -833,7 +834,6 @@ overviewStationCounts.addEventListener("click", (event) => {
   if (button) selectOverviewStation(button.dataset.stationId, false);
 });
 
-closeStationInspector.addEventListener("click", () => selectOverviewStation(null, true));
 
 
 logoutButton.addEventListener("click", async () => {
@@ -1050,6 +1050,7 @@ deviceForm.addEventListener("submit", async (event) => {
       body: JSON.stringify({
         device_code: document.querySelector("#device-code").value,
         station_id: deviceStation.value,
+        side: document.querySelector("#device-side").value,
       }),
     });
     const payload = await response.json();
@@ -1204,6 +1205,8 @@ async function refreshBackups() {
     restoreEl("overwrites").textContent = restore.overwrites || "–";
     restoreEl("confirmation").placeholder = restore.overwrites || "Namnet på det som skrivs över";
     renderBackups(payload.backups || []);
+    const latest = (payload.backups || []).map((item) => item.taken_at).filter(Boolean).sort().at(-1);
+    document.querySelector("#update-backup").textContent = latest ? t("senaste {time}", { time: restoreClock(latest) }) : t("Ingen än");
     updateRestoreButton();
   } catch {
     setMessage(restoreEl("message"), "Säkerhetskopiorna kunde inte läsas", "error");
@@ -1346,7 +1349,6 @@ function renderCloudStatus() {
   document.querySelector("#cloud-connection-meta").textContent = meet?.publication_id
     ? t("Publicerad config · {version}", { version: meet.publication_id }) : t("Koppla en publicerad träff med koden från Cloud.");
   document.querySelector("#cloud-connection-state").textContent = t(update.linked ? "Kopplad" : "Inte kopplad");
-  document.querySelector("#cloud-connection-state").classList.toggle("active", Boolean(update.linked));
   document.querySelector("#cloud-auto-status").textContent = t(update.linked
     ? (update.auto_sync ? "Automatisk configuppdatering är aktiv." : "Automatisk configuppdatering är pausad.")
     : "Automatisk uppdatering aktiveras när servern kopplas till Cloud.");
@@ -1354,10 +1356,16 @@ function renderCloudStatus() {
     update.pending_publication_id ? "Ny config hämtad – väntar på säker aktivering." :
     "Senaste fungerande config används även utan internet.");
   runtimeCheckUpdate.disabled = !update.linked;
-  document.querySelector("#cloud-auto-edit").disabled = !update.linked;
-  if (!editorActive(document.querySelector("#cloud-auto-form"))) {
+  const newer = Boolean(update.pending_publication_id || update.available_publication_id);
+  document.querySelector("#cloud-banner").className = `kr-state${newer || (update.linked && update.state === "error") ? "" : " ok"}`;
+  const cloudAutoForm = document.querySelector("#cloud-auto-form");
+  document.querySelector("#cloud-auto-enabled").disabled = !update.linked || cloudAutoForm.dataset.busy === "true";
+  if (!editorActive(cloudAutoForm)) {
     document.querySelector("#cloud-auto-enabled").checked = Boolean(update.auto_sync);
+    globalThis.TrainMeetSettings?.rebase(cloudAutoForm);
   }
+  const cloudTag = document.querySelector("#cloud-connection-state");
+  cloudTag.className = `kr-tag ${update.linked ? "ok" : "off"}`;
   serverUI.refreshHeader();
 }
 
@@ -1497,6 +1505,7 @@ function renderSoftwareUpdate(payload) {
     : `${payload.installed_version}`;
   softwareVersion.dataset.version = payload.installed_version;
   softwareVersion.dataset.build = build;
+  globalThis.TrainMeetSettings?.setVersion(build ? `${payload.installed_version} · ${build.slice(0, 8)}` : payload.installed_version);
   // Stegräckan visar samma version som kortet, ur samma svar - annars kan de
   // stå och säga olika saker om vilken programvara som kör.
 
@@ -1509,6 +1518,7 @@ function renderSoftwareUpdate(payload) {
   document.querySelector("#update-progress").classList.toggle("hidden", !running && !failed);
   softwareRetry.classList.toggle("hidden", !failed);
   softwareCheck.disabled = running;
+  document.querySelector("#update-banner").className = `kr-state${failed ? " danger" : running || payload.update_available || payload.check_error ? "" : " ok"}`;
 
   if (!payload.supported) {
     softwareInstall.classList.add("hidden");
@@ -1531,9 +1541,8 @@ function renderSoftwareUpdate(payload) {
     return;
   }
   softwareInstall.classList.toggle("hidden", !payload.update_available);
-  setMessage(softwareUpdateMessage, payload.update_available
-    ? `Version ${payload.latest_version || payload.latest_build} finns tillgänglig.`
-    : "Servern har senaste versionen.", payload.update_available ? "notice" : "success");
+  if (payload.update_available) setMessage(softwareUpdateMessage, "Version {version} finns tillgänglig.", "notice", { version: payload.latest_version || payload.latest_build });
+  else setMessage(softwareUpdateMessage, "Servern har senaste versionen.", "success");
 }
 
 async function checkSoftwareUpdate() {
@@ -1665,27 +1674,13 @@ async function refreshInfo() {
   const info = await response.json();
   serverUI.info = info;
   serverUI.refreshHeader();
-  document.querySelector("#server-name").textContent = info.gateway_id || "TrainMeet Server";
-  document.querySelector("#server-detail").textContent =
-    `Kör lokalt · aktiv trafiksession: ${info.traffic_session_name}`;
   document.querySelector("#system-server-name").textContent = info.runtime?.server_name || info.gateway_id || "TrainMeet Server";
   document.querySelector("#system-runtime-name").textContent = state.serverContext?.selected_meet?.name || t("Ingen aktiv träff");
   document.querySelector("#system-cloud-state").textContent = state.serverContext?.cloud_update?.linked ? t("Kopplad") : t("Inte kopplad");
   const serverNameInput = document.querySelector("#admin-server-name");
   if (!editorActive(serverIdentityForm)) {
     serverNameInput.value = info.runtime?.server_name || info.gateway_id || "";
-  }
-  const pill = document.querySelector("#runtime-pill");
-  if (state.serverContext?.selected_meet) {
-    pill.textContent = state.serverContext.selected_meet.name;
-    pill.classList.add("active");
-    document.querySelector("#overview-runtime-state").textContent = "Lokalt aktiv";
-  } else {
-    pill.textContent = info.runtime?.error ? t("Konfigurationen behöver rättas") : t("Ingen träff aktiverad");
-    pill.classList.remove("active");
-    document.querySelector("#overview-runtime-state").textContent = info.runtime?.error
-      ? "Konfigurationsfel"
-      : "Ej konfigurerad";
+    globalThis.TrainMeetSettings?.rebase(serverIdentityForm);
   }
   updateRuntimeNavigation(Boolean(state.serverContext?.selected_meet));
   updateRestartButton(Boolean(info.restart_required));
@@ -1787,6 +1782,7 @@ async function refreshDevices() {
   state.removedTrying = payload.removed_trying || [];
   state.terminals = payload.terminals || [];
   renderDevices({ devices: state.devices, stations: state.stations });
+  renderDangerBanner();
   renderTerminals(state.terminals);
   renderRemovedTrying(state.removedTrying, state.stations);
 }
@@ -1853,118 +1849,76 @@ function renderRemovedTrying(boxes, stations) {
 
 function renderDevices(payload) {
   document.querySelector("#app-devices").textContent = `${state.devices.length} ${t("klienter")}`;
-  const list = document.querySelector("#device-list");
   updateStationOptions(payload.stations || []);
-  if (list.querySelector(".device-inline-edit")) return;
-  const signature = JSON.stringify([payload, document.documentElement.lang]);
-  if (list.dataset.signature === signature) return;
-  list.dataset.signature = signature;
-  list.replaceChildren();
-  const waiting = payload.devices.filter(device => !device.station_id).length;
-  const waitingMessage = document.querySelector("#device-awaiting");
-  waitingMessage.hidden = !waiting;
-  waitingMessage.textContent = waiting ? `${t("Väntar på station")} · ${waiting}` : "";
-  if (!payload.devices.length) {
-    list.innerHTML = html`<div class="empty-status">${t("Inga anslutna klienter.")}</div>`;
-    return;
+  // Listan "Stationer och boxar" ritas av Drift; tilldela, byta sida, språk och
+  // ta bort sker i dialogen som öppnas från raden (openDeviceEditor).
+  globalThis.TrainMeetDrift?.update({ devices: payload.devices || [] });
+  const waiting = (payload.devices || []).filter((device) => !device.station_id).length;
+  const codes = document.querySelector("#device-code-options");
+  if (codes && !codes.closest("dialog")?.open) {
+    codes.replaceChildren(...[...(payload.devices || []).filter((device) => !device.station_id), ...(state.removedTrying || [])]
+      .map((device) => Object.assign(document.createElement("option"), { value: device.device_code })));
   }
-  for (const device of [...payload.devices].sort((a, b) => Number(!!a.station_id) - Number(!!b.station_id))) {
-    const row = document.createElement("div");
-    row.className = device.station_id ? "status-row" : "status-row is-waiting";
-    const identity = document.createElement("div");
-    const code = document.createElement("b");
-    code.textContent = device.device_code;
-    const model = document.createElement("small");
-    // What the box is, as on Drift in the design; its long id on hover.
-    model.textContent = device.model; model.title = device.device_id;
-    identity.append(code, model);
-    const station = (payload.stations || []).find((entry) => entry.id === device.station_id);
-    const assignment = document.createElement("span");
-    // A station can have one box per side; "both" is the default and not shown.
-    const side = {left: t("vänster"), right: t("höger")}[device.station_side];
-    assignment.textContent = station
-      ? `${station.code} · ${station.name}${side ? ` · ${side}` : ""}`
-      : t("Väntar på station");
-    row.append(identity, assignment, deviceConnectionStatus(device.connection));
-    const edit = document.createElement("button");
-    edit.type = "button";
-    edit.className = "secondary";
-    const editLabel = device.station_id ? "Ändra station" : "Tilldela station";
-    edit.dataset.tmText = editLabel;
-    edit.textContent = t(editLabel);
-    edit.addEventListener("click", () => {
-      const meetGeneration = state.serverContext?.selected_meet?.generation;
-      const form = document.createElement("form"); form.className = "device-inline-edit server-actions";
-      const select = document.createElement("select"); select.required = true; select.className = "device-station"; select.setAttribute("aria-label", t("Station"));
-      select.append(new Option(t("Välj station"), ""));
-      (payload.stations || []).forEach(s => select.append(new Option(`${s.code} · ${s.name}`, s.id)));
-      select.value = device.station_id || "";
-      // Left and right as on the station's TMBox placement.
-      const sideSelect = document.createElement("select"); sideSelect.className = "device-side"; sideSelect.setAttribute("aria-label", t("Sida"));
-      sideSelect.append(new Option(t("Båda sidor"), "both"), new Option(t("Vänster"), "left"), new Option(t("Höger"), "right"));
-      sideSelect.value = device.station_side || "both";
-      const save = document.createElement("button"); save.type = "submit"; save.textContent = t("Spara");
-      const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = t("Avbryt");
-      const message = document.createElement("span"); message.setAttribute("role", "status");
-      const close = () => { form.remove(); delete list.dataset.signature; renderDevices({devices: state.devices, stations: state.stations}); };
-      cancel.addEventListener("click", close);
-      form.append(select, sideSelect, save, cancel, message); actions.replaceChildren(form); select.focus();
-      form.addEventListener("submit", async event => {
-        event.preventDefault(); if (save.disabled) return; save.disabled = cancel.disabled = select.disabled = sideSelect.disabled = true;
-        try {
-          const response = await authorizedFetch("/v1/devices/assign", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({device_code: device.device_code, station_id: select.value, side: sideSelect.value, meet_generation: meetGeneration})});
-          const result = await response.json(); if (!response.ok) throw new Error(result.message || t("Kunde inte tilldela station"));
-          close(); await refreshDevices();
-        } catch (error) { message.textContent = error.message; }
-        finally { save.disabled = cancel.disabled = select.disabled = sideSelect.disabled = false; }
-      });
-    });
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "secondary device-remove";
-    remove.dataset.tmText = "Ta bort";
-    remove.textContent = t("Ta bort");
-    remove.addEventListener("click", () => {
-      const meetGeneration = state.serverContext?.selected_meet?.generation;
-      const confirm = document.createElement("div"); confirm.className = "device-inline-edit server-actions";
-      const question = document.createElement("span"); question.textContent = t("Boxen spärras och kommer inte tillbaka av sig själv – återanslut den här eller med dess kod. Trafik och historik behålls.");
-      const yes = document.createElement("button"); yes.type = "button"; yes.textContent = t("Ta bort");
-      const no = document.createElement("button"); no.type = "button"; no.textContent = t("Avbryt");
-      no.addEventListener("click", () => { confirm.remove(); delete list.dataset.signature; renderDevices(payload); });
-      yes.addEventListener("click", async () => {
-        yes.disabled = no.disabled = true;
-        try {
-          const response = await authorizedFetch("/v1/devices/remove", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({device_id: device.device_id, meet_generation: meetGeneration})});
-          const result = await response.json(); if (!response.ok) throw new Error(result.message || t("Kunde inte ta bort klienten"));
-          confirm.remove(); delete list.dataset.signature; renderDevices({devices: state.devices, stations: state.stations}); await refreshDevices();
-        } catch (error) { question.textContent = error.message; }
-        finally { yes.disabled = no.disabled = false; }
-      });
-      confirm.append(question, yes, no); actions.replaceChildren(confirm); no.focus();
-    });
-    const actions = document.createElement("div");
-    actions.className = "device-actions";
-    actions.append(edit, remove);
-    if (device.language) {
-      const language = document.createElement("button");
-      language.type = "button";
-      language.className = "secondary device-language";
-      const current = (state.deviceLanguages || []).find(item => item.code === device.language);
-      language.textContent = "Språk / " + (current?.name || device.language);
-      language.addEventListener("click", () => {
-        document.querySelector("#device-language-form").dataset.deviceId = device.device_id;
-        document.querySelector("#device-language-code").textContent = device.device_code;
-        const select = document.querySelector("#device-language");
-        select.replaceChildren(...(state.deviceLanguages || []).map(item => new Option(item.name, item.code)));
-        select.value = device.language;
-        openModal("device-language-modal");
-      });
-      actions.insertBefore(language, remove);
-    }
-    row.append(actions);
-    list.append(row);
-  }
+  return waiting;
 }
+
+// Boxens dialog: station och sida, och för en redan ansluten box även språk och
+// ta bort. Utan box (en obemannad station) anges koden för en väntande eller
+// borttagen box.
+function openDeviceEditor(device, station, trigger) {
+  const code = document.querySelector("#device-code");
+  const side = document.querySelector("#device-side");
+  const extra = document.querySelector("#device-form-extra");
+  if (device) {
+    code.value = device.device_code; code.readOnly = true;
+    deviceStation.value = device.station_id || "";
+    side.value = device.station_side || "both";
+    deviceForm.dataset.deviceId = device.device_id;
+    document.querySelector("#device-form-title").textContent = t("Tilldela eller ändra station");
+    document.querySelector("#device-language-open").hidden = !device.language;
+    extra.hidden = false;
+  } else {
+    code.value = ""; code.readOnly = false;
+    deviceStation.value = station?.id || "";
+    side.value = "both";
+    delete deviceForm.dataset.deviceId;
+    document.querySelector("#device-form-title").textContent = station ? `${t("Tilldela box")} · ${station.code}` : t("Återanslut borttagen klient");
+    extra.hidden = true;
+  }
+  setMessage(deviceMessage, "");
+  openModal("device-form-modal", trigger);
+}
+
+function deviceInEditor() {
+  return (state.devices || []).find((device) => device.device_id === deviceForm.dataset.deviceId) || null;
+}
+// Språk och ta bort har egna dialoger: boxens dialog stängs först, eftersom bara en dialog är öppen åt gången.
+function leaveDeviceEditor() {
+  const dialog = deviceForm.closest("dialog");
+  dialog.dataset.dirty = "false";
+  dialog.close();
+}
+document.querySelector("#device-language-open").addEventListener("click", (event) => {
+  const device = deviceInEditor();
+  if (!device) return;
+  leaveDeviceEditor();
+  document.querySelector("#device-language-form").dataset.deviceId = device.device_id;
+  document.querySelector("#device-language-code").textContent = device.device_code;
+  const select = document.querySelector("#device-language");
+  select.replaceChildren(...(state.deviceLanguages || []).map((item) => new Option(item.name, item.code)));
+  select.value = device.language;
+  openModal("device-language-modal", event.currentTarget);
+});
+document.querySelector("#device-remove-open").addEventListener("click", (event) => {
+  const device = deviceInEditor();
+  if (!device) return;
+  const station = (state.stations || []).find((entry) => entry.id === device.station_id);
+  leaveDeviceEditor();
+  document.querySelector("#device-remove-form").dataset.deviceId = device.device_id;
+  document.querySelector("#device-remove-code").textContent = device.device_code;
+  document.querySelector("#device-remove-station").textContent = station ? `${station.code} · ${station.name}` : t("Väntar på station");
+  openModal("device-remove-modal", event.currentTarget);
+});
 
 function updateStationOptions(stations) {
   if (deviceStation.closest("dialog")?.open) return;
@@ -2012,80 +1966,27 @@ function renderCloudPresentation() {
   const data = cloudPresentation;
   serverUI.presentation = data;
   serverUI.refreshHeader();
-  // Keep the displayed publication/configuration fence with an inline draft.
-  if (document.querySelector(".placement-inline-edit")) return;
-  document.querySelector("#display-placement-section").hidden = !data?.supported;
+  // Stationernas vänster/höger-placering ritas av Drift (Stationer och boxar);
+  // här finns kontrolluppgifterna från Cloud, som visas under Inställningar › Träff och Cloud.
+  globalThis.TrainMeetDrift?.update({ presentation: data });
   document.querySelector("#published-findings").hidden = !data?.supported;
-  const rows = document.querySelector("#display-placement-rows");
-  rows.replaceChildren();
-  for (const station of data?.stations || []) {
-    const tr = document.createElement("tr");
-    // The station's name first, its code quiet beside it (as on every map).
-    const nameCell = document.createElement("td"); nameCell.className = "station-name-cell";
-    const stationName = document.createElement("b"); stationName.textContent = station.name;
-    const stationCode = document.createElement("span"); stationCode.className = "station-code"; stationCode.textContent = station.code;
-    nameCell.append(stationName, " ", stationCode); tr.append(nameCell);
-    for (const value of ["left", "right"].map(side => station.connections.filter(c => c.side === side).map(c => c.other_station_code).join(", ") || "—")) {
-      const td = document.createElement("td"); td.textContent = value; tr.append(td);
-    }
-    if (station.legacy_layout_limited) {
-      const note = document.createElement("small");
-      note.className = "placement-legacy-note";
-      note.textContent = t("Äldre klienter med fast layout behåller Cloud-placeringen. Den nya TMBox-vyn använder ditt val.");
-      tr.firstChild.append(note);
-    }
-    const action = document.createElement("td");
-    const button = document.createElement("button"); button.type = "button"; button.className = "secondary";
-    button.textContent = t("Redigera"); button.disabled = !station.connections.length;
-    button.setAttribute("aria-label", `${t("TMBox-placering")} · ${station.name}`);
-    button.addEventListener("click", () => station.connections.length <= 2
-      ? editInlinePlacement(station, action, data)
-      : editDisplayPlacement(station.station_id, button));
-    const dialog = document.querySelector("#display-placement-modal");
-    if (dialog.open && placementEdit?.station_id === station.station_id) modalOrigins.set(dialog, button);
-    action.append(button); tr.append(action); rows.append(tr);
-  }
   const findings = data?.findings;
   const summary = document.querySelector("#published-findings-summary");
+  summary.className = `kr-pill${Array.isArray(findings) && findings.some((item) => item.level === "conflict") ? " warn" : ""}`;
   summary.textContent = !Array.isArray(findings) ? t("Den här Cloud-versionen innehåller inga kontrolluppgifter.")
     : findings.length ? t("{count} noterade uppgifter", {count: findings.length}) : t("Inga konflikter eller observationer noterade.");
   const list = document.querySelector("#published-findings-list"); list.replaceChildren();
   for (const finding of findings || []) {
     const li = document.createElement("li");
     const kind = finding.level === "conflict" ? t("Konflikt") : finding.level === "observation" ? t("Observation") : t("Uppgift");
-    li.textContent = `${kind}${finding.rule ? ` ${finding.rule}` : ""} · ${typeof finding.message === "string" ? finding.message : "—"}`;
+    const tag = document.createElement("span");
+    tag.className = `kr-tag ${finding.level === "conflict" ? "warn" : "off"}`;
+    tag.textContent = `${kind}${finding.rule ? ` ${finding.rule}` : ""}`;
+    const message = document.createElement("span");
+    message.textContent = typeof finding.message === "string" ? finding.message : "—";
+    li.append(tag, message);
     list.append(li);
   }
-  serverUI.stationRows(rows);
-}
-
-function editInlinePlacement(station, host, data) {
-  const fence = {publication_id: data.publication_id, config_version: data.config_version, station_id: station.station_id, meet_generation: state.serverContext?.selected_meet?.generation};
-  const form = document.createElement("form"); form.className = "placement-inline-edit server-actions";
-  station.connections.forEach(connection => {
-    const label = document.createElement("label"); label.textContent = connection.other_station_code;
-    const select = document.createElement("select"); select.name = connection.connection_id;
-    select.append(new Option(`${t("Följ Cloud")} · ${t(connection.default_side === "left" ? "Vänster" : "Höger")}`, ""), new Option(t("Vänster"), "left"), new Option(t("Höger"), "right"));
-    select.value = connection.overridden ? connection.side : ""; label.append(select); form.append(label);
-  });
-  const save = document.createElement("button"); save.type = "submit"; save.textContent = t("Spara");
-  const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = t("Avbryt");
-  const message = document.createElement("span"); message.setAttribute("role", "status");
-  const close = () => { form.remove(); renderCloudPresentation(); };
-  cancel.addEventListener("click", close); form.append(save, cancel, message); host.replaceChildren(form);
-  form.querySelector("select").focus();
-  form.addEventListener("submit", async event => {
-    event.preventDefault(); if (save.disabled) return;
-    const selects = [...form.querySelectorAll("select")];
-    const sides = Object.fromEntries(selects.filter(s => s.value).map(s => [s.name, s.value]));
-    save.disabled = cancel.disabled = true; selects.forEach(s => { s.disabled = true; });
-    try {
-      const response = await authorizedFetch("/v1/cloud/display-placement", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...fence,sides})});
-      const result = await response.json(); if (!response.ok) throw new Error(result.message || t("Inställningen kunde inte sparas."));
-      ++presentationRequest; cloudPresentation = result; close();
-    } catch(error) { message.textContent = error.message; }
-    finally { save.disabled = cancel.disabled = false; selects.forEach(s => { s.disabled = false; }); }
-  });
 }
 
 function editDisplayPlacement(stationId, origin) {
@@ -2153,17 +2054,23 @@ async function refreshLocalClock() {
   if (!editorActive(clockControlForm)) timeInput.value = String(clock.time || "12:00").slice(0, 5);
   const speedInput = document.querySelector("#local-clock-speed");
   if (!editorActive(clockControlForm)) speedInput.value = Number(clock.speed || 1);
-  const stateLabel = document.querySelector("#clock-state");
   if (!editorActive(document.querySelector("#clock-appearance-form"))) {
     const styleSelect = document.querySelector("#meet-clock-style");
     const styles = ["digital", "analog", "stationsur", "swiss"];
     if (clock.style && !styles.includes(clock.style)) styles.push(clock.style);
-    styleSelect.replaceChildren(...styles.map(value => new Option(t(clockStyleLabels[value] || value), value)));
+    const options = styles.map(value => [t(clockStyleLabels[value] || value), value]);
+    // Only when the list changed: the style tiles are rebuilt from it.
+    const optionSignature = JSON.stringify(options);
+    if (styleSelect.dataset.options !== optionSignature) {
+      styleSelect.dataset.options = optionSignature;
+      styleSelect.replaceChildren(...options.map(([label, value]) => new Option(label, value)));
+    }
     styleSelect.value = clock.style || styles[0];
     document.querySelector("#meet-clock-seconds").checked = clock.show_seconds !== false;
+    globalThis.TrainMeetSettings?.rebase(document.querySelector("#clock-appearance-form"));
   }
-  stateLabel.textContent = clock.running ? t("Går · {speed}×", { speed: Number(clock.speed || 1) }) : t("Stoppad");
-  stateLabel.classList.toggle("clock-running", Boolean(clock.running));
+  // Tid, gång/stoppad-pillret och start/stopp-knapparna ritas av Drift.
+  globalThis.TrainMeetDrift?.update({ clock });
   const external = clock.source === "fastclock";
   const sourceStatus = document.querySelector("#clock-source-status");
   sourceStatus.textContent = external
@@ -2185,10 +2092,20 @@ async function refreshLocalClock() {
       renderClockSourceFields();
     }
   }
-  document.querySelector("#overview-clock").textContent = String(clock.time || "--:--").slice(0, 5);
-  document.querySelector("#app-clock").textContent = String(clock.time || "--:--").slice(0, 5);
   updateClockControlAvailability();
   serverUI.refreshClock(clock);
+  renderDangerBanner();
+}
+
+// Farozon: what is going on right now, so nobody resets a server in the middle of a meet.
+function renderDangerBanner() {
+  const running = Boolean(state.clock?.running);
+  const boxes = (state.devices || []).filter((device) => device.station_id).length;
+  document.querySelector("#danger-banner-text").textContent = running && boxes
+    ? t("Klockan går och {boxes} boxar är anslutna – inget här bör göras under en pågående träff", { boxes })
+    : running ? t("Klockan går – inget här bör göras under en pågående träff")
+    : boxes ? t("{boxes} boxar är anslutna – inget här bör göras under en pågående träff", { boxes })
+    : t("Åtgärderna här går inte att ångra.");
 }
 
 function updateClockControlAvailability() {
@@ -2205,24 +2122,42 @@ function renderConnectionBadgeSettings(connection) {
   if (!container) return;
   // Never rewrite a part someone is editing; each part is its own form.
   const idle = (selector) => !editorActive(document.querySelector(selector));
+  const settings = globalThis.TrainMeetSettings;
   if (idle("#connection-badge-form")) {
     const screens = connection.screens || [];
     for (const input of container.querySelectorAll("input[type=checkbox]")) input.checked = screens.includes(input.value);
+    settings?.rebase(document.querySelector("#connection-badge-form"));
   }
   if (idle("#connection-code-form")) {
     document.querySelector("#connection-badge-validity").value = String(connection.validity_hours ?? 0);
     document.querySelector("#web-client-ttl").value = String(connection.web_client_ttl_minutes ?? 30);
+    settings?.rebase(document.querySelector("#connection-code-form"));
   }
   if (idle("#connection-wifi-form")) {
     const wifi = connection.wifi || {};
     document.querySelector("#connection-wifi-name").value = wifi.name || "";
     document.querySelector("#connection-wifi-password").value = wifi.password || "";
+    settings?.rebase(document.querySelector("#connection-wifi-form"));
   }
-  const badge = document.querySelector("#connection-badge-code");
-  badge.textContent = connection.code
-    ? `${connection.host}:${connection.port} · ${t("Kod")} ${connection.code}`
-    : t("Ingen kod utfärdad");
+  settings?.renderQr(connection);
+  renderConnectionCode(connection);
   renderConnectCard(connection);
+}
+
+// Inställningar › Anslutningskod: the code itself, whether it still works, and for how long it holds.
+function renderConnectionCode(connection) {
+  const state = connection.code_state || "no_meet";
+  document.querySelector("#kod-value").textContent = connection.code || "–";
+  const tag = document.querySelector("#kod-state");
+  tag.className = `kr-tag ${state === "valid" ? "ok" : state === "expired" || state === "used_up" ? "warn" : "off"}`;
+  const hours = Number(connection.validity_hours || 0);
+  document.querySelector("#kod-state-text").textContent = state === "valid"
+    ? (hours ? t("Gäller i {hours} timmar", { hours }) : t("Gäller tills vidare"))
+    : state === "expired" ? t("Har gått ut")
+    : state === "used_up" ? t("Fullanvänd")
+    : t("Ingen kod utfärdad");
+  document.querySelector("#kod-meta").textContent = t(CONNECT_CODE_NOTES[state] || "");
+  document.querySelector("#kod-renew").disabled = !["valid", "used_up", "expired"].includes(state);
 }
 
 // Drift › Anslut ställverk och appar: what to type into TKL, and why it
@@ -2232,7 +2167,7 @@ const CONNECT_CODE_NOTES = {
   no_panels: "Ingen kod: träffen i Cloud har inga stationspaneler. Lägg till TMBox-paneler i Cloud och publicera.",
   no_meet: "Ingen kod: servern har ingen aktiv träff ännu. Koppla servern till en träff under Inställningar.",
   used_up: "Koden har använts 50 gånger och tar inte emot fler. Ta en ny kod.",
-  expired: "Koden har gått ut. Ta en ny kod, eller ändra hur länge koden gäller under Inställningar → Anslutning.",
+  expired: "Koden har gått ut. Ta en ny kod, eller ändra hur länge koden gäller under Inställningar → Anslutningskod.",
 };
 // Behind a TLS proxy (server.trainmeet.app) the signal box reaches the Server
 // where this page came from, not on the port the Server itself listens on.
@@ -2252,9 +2187,7 @@ function renderConnectCard(connection) {
   document.querySelector("#connect-new-code").hidden = !["valid", "used_up", "expired"].includes(state);
 }
 
-document.querySelector("#connect-new-code")?.addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  const note = document.querySelector("#connect-code-note");
+async function renewConnectionCode(button, note) {
   button.disabled = true;
   try {
     const response = await authorizedFetch("/v1/display/connection/code", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
@@ -2263,7 +2196,9 @@ document.querySelector("#connect-new-code")?.addEventListener("click", async (ev
     renderConnectionBadgeSettings(result);
   } catch (error) { note.textContent = error.message; }
   finally { button.disabled = false; }
-});
+}
+document.querySelector("#connect-new-code")?.addEventListener("click", (event) => renewConnectionCode(event.currentTarget, document.querySelector("#connect-code-note")));
+document.querySelector("#kod-renew")?.addEventListener("click", (event) => renewConnectionCode(event.currentTarget, document.querySelector("#kod-meta")));
 
 // Klienter › Ställverk (TKL): each paired signal box, its station, whether it
 // is heard, and Ta bort. A removed one can pair again with the code.
@@ -2336,7 +2271,8 @@ async function controlLocalClock(command) {
   if (!beginModalAction(clockControlForm)) return;
   const buttons = [...clockControlForm.querySelectorAll("button"), document.querySelector("#overview-clock-start"), document.querySelector("#overview-clock-stop")];
   buttons.forEach((button) => { button.disabled = true; });
-  const message = clockControlMessage;
+  // Från Drift (dialogen är stängd) hamnar svaret på klockraden, inte i en dold dialog.
+  const message = clockControlForm.closest("dialog")?.open ? clockControlMessage : document.querySelector("#overview-clock-message");
   setMessage(message, "Uppdaterar den lokala klockan …", "notice");
   try {
     const response = await authorizedFetch("/v1/clock", {
@@ -2346,9 +2282,9 @@ async function controlLocalClock(command) {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Klockan kunde inte uppdateras");
-    setMessage(
+    setTranslatedMessage(
       message,
-      payload.running ? `Klockan går från ${payload.time.slice(0, 5)} i ${Number(payload.speed)}×.` : "Klockan är stoppad.",
+      payload.running ? t("Klockan går från {time} i {speed}×.", { time: payload.time.slice(0, 5), speed: Number(payload.speed) }) : t("Klockan är stoppad."),
       "success",
     );
     finishModal(clockControlForm);
@@ -2384,13 +2320,23 @@ function serviceForTrain(snapshot, trainNumber) {
   return uniqueOverviewServices(snapshot).find((service) => String(service.train_number) === String(trainNumber)) || null;
 }
 
-// ── Tågpanelen i Drift ────────────────────────────────────────────────
+// ── Valt tåg och vald station i Drift ─────────────────────────────────
 //
-// Klick på ett tåg i "Kommande enligt tidtabell" visar hela sträckningen och
-// var tåget är nu (/v1/train). Tåget markeras samtidigt i Banöversikten och
-// Tågdiagrammet. Panelen hämtas om med Drift var femte sekund medan den är öppen.
+// Ett tåg som väljs (på kartan, i diagrammet, bland händelserna eller i
+// tidtabellsdialogen) tänds överallt, och tågpanelen visar sträckningen och var
+// tåget är nu (/v1/train). Panelerna ritas av drift.js; här finns bara tillståndet
+// och hämtningen. Tågets läge hämtas om med varje ny bild medan det är valt.
 const trainDetail = { number: null, data: null, error: "", loading: false };
-serverUI.onTrainSelect = (number) => openTrainDetail(number);
+
+// Lämnar urval, snapshot och tågdata till Drift, som ritar om det som berörs.
+function pushDrift(extra = {}) {
+  globalThis.TrainMeetDrift?.update({
+    snapshot: state.overviewSnapshot,
+    selection: { train: state.selectedTrainNumber, station: state.selectedStationID },
+    trainDetail: { number: trainDetail.number, data: trainDetail.data, error: trainDetail.error },
+    ...extra,
+  });
+}
 
 function openTrainDetail(number) {
   selectOverviewTrain(number);
@@ -2415,7 +2361,7 @@ async function refreshTrainDetail() {
     if (trainDetail.number === number) trainDetail.error = error.message;
   } finally {
     trainDetail.loading = false;
-    renderTrainDetail();
+    pushDrift();
     renderRouteDetail();
   }
 }
@@ -2432,34 +2378,6 @@ function trainNowText(now, stops) {
     case "arrived": return t("Ankommit {station}", { station: at });
     default: return now.time ? t("Inte avgått · {station} · avgår {time}", { station: at, time: now.time }) : t("Inte avgått · {station}", { station: at });
   }
-}
-
-function renderTrainDetail() {
-  const host = document.querySelector("#drift-train-detail");
-  if (!host) return;
-  host.hidden = !trainDetail.number;
-  if (!trainDetail.number) { host.replaceChildren(); return; }
-  const head = document.createElement("div"); head.className = "train-detail-head";
-  const title = document.createElement("h3"); title.textContent = t("Tåg {number}", { number: trainDetail.number });
-  const close = document.createElement("button"); close.type = "button"; close.className = "train-detail-close";
-  close.setAttribute("aria-label", t("Stäng")); close.textContent = "×";
-  close.addEventListener("click", closeTrainDetail);
-  head.append(title, close);
-  const parts = [head];
-  if (trainDetail.error) {
-    const message = document.createElement("p"); message.className = "train-detail-error"; message.textContent = trainDetail.error;
-    parts.push(message);
-  } else if (!trainDetail.data) {
-    const message = document.createElement("p"); message.className = "train-detail-loading"; message.textContent = t("Hämtar tåget …");
-    parts.push(message);
-  }
-  for (const service of trainDetail.data?.services || []) {
-    const status = trainNowLine(service);
-    const list = document.createElement("ol"); list.className = "route-stops train-detail-stops";
-    list.append(...trainStopItems(service));
-    parts.push(status, list);
-  }
-  host.replaceChildren(...parts);
 }
 
 // "Nu: På linjen A → B · avgick 06:05", with the delay.
@@ -2528,11 +2446,7 @@ function selectTrain(trainNumber) {
 
 function renderSelection() {
   renderRouteExplorer();
-  renderOverviewTopology();
-  renderOverviewGraph(state.overviewSnapshot);
-  if (state.overviewSnapshot) serverUI.traffic(state.overviewSnapshot, trafficState.station, trainDetail.number);
-  renderTrainDetail();
-  renderStationInspector();
+  pushDrift();
   if (trainDetail.number) refreshTrainDetail();
 }
 
@@ -2554,25 +2468,6 @@ function clearOverviewSelection() {
   renderSelection();
 }
 
-function renderOverviewTopology() {
-  if (!state.overviewSnapshot) return;
-  const map = document.querySelector("#overview-topology");
-  renderTopology(state.overviewSnapshot, map, {
-    selectedTrainNumber: state.selectedTrainNumber,
-    selectedStationID: state.selectedStationID,
-    showBadge: false,
-    // A train on the map opens its route and where it is now, as in Kommande.
-    onTrainSelect: (trainNumber) => openTrainDetail(trainNumber),
-    onStationSelect: (stationID) => selectOverviewStation(stationID, Boolean(state.selectedTrainNumber)),
-    onClear: clearOverviewSelection,
-  });
-  // As tall as the drawing needs at the card's width, within reason: a phone
-  // gets the line upright, and a low box shrank it past reading.
-  const [, , width, height] = String(map.getAttribute("viewBox")).split(" ").map(Number);
-  const preview = map.closest(".topology-preview");
-  if (preview && width && height) preview.style.height = `${Math.round(Math.min(640, Math.max(225, preview.clientWidth * height / width)))}px`;
-}
-
 function stationTrafficRows(snapshot, stationID) {
   const currentMinute = minuteValue(snapshot.clock?.time) ?? 0;
   return uniqueOverviewServices(snapshot).flatMap((service) => {
@@ -2589,48 +2484,6 @@ function stationTrafficRows(snapshot, stationID) {
   }).sort((a, b) => a.sort - b.sort || a.trainNumber.localeCompare(b.trainNumber, "sv", { numeric: true }));
 }
 
-function renderStationInspector() {
-  const inspector = document.querySelector("#overview-station-inspector");
-  const snapshot = state.overviewSnapshot;
-  const station = snapshot?.stations?.find((item) => item.id === state.selectedStationID);
-  inspector.classList.toggle("hidden", !station);
-  if (!station) return;
-  const connections = (snapshot.connections || []).filter((connection) =>
-    connection.station_a_id === station.id || connection.station_b_id === station.id
-  );
-  const stationByID = new Map((snapshot.stations || []).map((item) => [item.id, item]));
-  const neighbors = connections.map((connection) => {
-    const otherID = connection.station_a_id === station.id ? connection.station_b_id : connection.station_a_id;
-    return { station: stationByID.get(otherID), connection };
-  }).filter((item) => item.station);
-  const trains = stationTrafficRows(snapshot, station.id);
-  document.querySelector("#station-inspector-name").textContent = station.name;
-  document.querySelector("#station-inspector-meta").textContent = `${station.code || "–"} · ${trains.length} tåg · ${connections.length} anslutna sträckor`;
-  document.querySelector("#station-inspector-connections").innerHTML = neighbors.length
-    ? neighbors.map(({ station: neighbor, connection }) => html`<span>${escapeHTML(neighbor.name)} · ${connection.track_type === "double" ? t("dubbelspår") : t("enkelspår")}</span>`).join("")
-    : html`<span>Fristående station</span>`;
-  document.querySelector("#station-inspector-trains").innerHTML = trains.length
-    ? trains.slice(0, 5).map((train) => html`<li><button type="button" data-train-number="${escapeHTML(train.trainNumber)}"><b>${escapeHTML(train.trainNumber)}</b><span>${escapeHTML(train.kind)} ${escapeHTML(train.time)}</span></button></li>`).join("")
-    : html`<li>Inga tåg i tidtabellen.</li>`;
-  document.querySelector("#station-inspector-trains").querySelectorAll("button[data-train-number]").forEach((button) => {
-    button.addEventListener("click", () => selectOverviewTrain(button.dataset.trainNumber));
-  });
-}
-
-function updateRuntimeDataViews(snapshot, services) {
-  const stations = snapshot.stations || [];
-  const connections = snapshot.connections || [];
-  const activeConnections = (snapshot.connection_states || []).filter((item) => item.state !== "free").length;
-  const activeTrains = (snapshot.train_positions || []).length;
-  const clockTime = String(snapshot.clock?.time || "--:--").slice(0, 5);
-  const clockState = snapshot.clock?.running ? `${clockTime} · ${Number(snapshot.clock?.speed || 1)}×` : `${clockTime} · stoppad`;
-
-
-  document.querySelector("#display-card-topology").textContent = `${stations.length} stationer · ${connections.length} sträckor`;
-  document.querySelector("#display-card-graph").textContent = `${services.length} tåg · ${snapshot.active_day || "Dagl"}`;
-  document.querySelector("#display-card-clock").textContent = clockState;
-  document.querySelector("#display-card-dashboard").textContent = `${activeTrains} aktiva tåg · ${activeConnections} upptagna sträckor`;
-}
 
 
 
@@ -2638,33 +2491,39 @@ function renderOverview(snapshot) {
   if (!snapshot) return;
   const services = uniqueOverviewServices(snapshot);
   const stations = snapshot.stations || [];
-  const mode = snapshot.meet?.default_dispatch_mode === "direct" ? "Direkttrafik" : "Tåganmälan";
-  document.querySelector("#overview-meet-name").textContent = snapshot.meet?.name || "TrainMeet Server";
-  document.querySelector("#overview-runtime-meta").textContent = `${snapshot.active_day || "Dagl"} · ${mode} · lokal runtime`;
-  document.querySelector("#overview-station-meta").textContent = `${stations.length} stationer · ${services.length} tåg`;
-  document.querySelector("#overview-clock").textContent = String(snapshot.clock?.time || "--:--").slice(0, 5);
-  document.querySelector("#overview-day").textContent = snapshot.active_day || "Dagl";
   document.querySelector("#overview-route-count").textContent = services.length;
-  updateRuntimeDataViews(snapshot, services);
 
   const signature = `${snapshot.publication_id || "unconfigured"}:${snapshot.active_day || ""}:${services.length}:${stations.length}`;
   if (state.overviewDataSignature !== signature) {
     state.overviewDataSignature = signature;
     renderRouteExplorer();
   }
-  renderOverviewTopology();
-  renderRouteMap();
-  renderStationInspector();
-  renderTraffic(snapshot);
-  // The train diagram is its own card on Drift and follows the clock, open
-  // timetable or not.
-  renderOverviewGraph(snapshot);
+  // A train that left the timetable can no longer be the chosen one.
+  if (state.selectedTrainNumber !== null && !services.some((service) => String(service.train_number) === state.selectedTrainNumber)) selectTrain(null);
+  if (state.selectedStationID && !stations.some((station) => station.id === state.selectedStationID)) state.selectedStationID = null;
+  // Kartan, diagrammet, klockraden, stationerna och händelserna ritas av Drift.
+  pushDrift();
+  if (document.querySelector("#drift-timetable-dialog")?.open) renderRouteMap();
   const timetableMeta = document.querySelector("#timetable-summary-meta");
   if (timetableMeta) timetableMeta.textContent = t("{count} tåg · sök tåg · tågrutter · stationer", { count: services.length });
-  const topologyMeta = document.querySelector("#topology-head-meta");
-  const lines = (snapshot.connections || []).length;
-  if (topologyMeta) topologyMeta.textContent = [t(stations.length === 1 ? "{count} station" : "{count} stationer", { count: stations.length }),
-    t(lines === 1 ? "{count} sträcka" : "{count} sträckor", { count: lines })].join(" · ");
+  if (trainDetail.number) refreshTrainDetail();
+}
+
+// Drift ritar; app.js äger data och handlingar. Det här är sömmen mellan dem.
+if (globalThis.TrainMeetDrift) {
+  Object.assign(globalThis.TrainMeetDrift.hooks, {
+    renderTopology,
+    selectTrain: (number) => openTrainDetail(number),
+    // From the map or a list a station keeps a chosen train; from the station
+    // panel's own close button the caller says so explicitly.
+    selectStation: (id, preserveTrain) => selectOverviewStation(id, preserveTrain === undefined ? Boolean(state.selectedTrainNumber) : preserveTrain),
+    clear: clearOverviewSelection,
+    editBox: openDeviceEditor,
+    editPlacement: editDisplayPlacement,
+    simulationDetails: (trigger) => globalThis.TrainMeetDrift.openDialog("drift-simulation-dialog", trigger),
+    showFindings: () => { history.pushState(null, "", "/installningar#fynd"); applyWorkspaceRoute(); },
+    dialogOpened: (id) => { if (id === "drift-timetable-dialog") renderRouteExplorer(); },
+  });
 }
 
 function renderRouteExplorer() {
@@ -2730,10 +2589,6 @@ function renderRouteExplorer() {
     button.append(label, track);
     return button;
   }));
-
-  const badge = document.querySelector("#overview-route-badge");
-  badge.classList.toggle("hidden", !selected);
-  if (selected) badge.textContent = `Tåg ${selected.train_number} · ${(selected.stops || []).length} stopp`;
 }
 
 // Tågrutter's middle column: the chosen train on a small map of the line, its
@@ -2976,11 +2831,19 @@ function setConnection(kind, text) {
   label.textContent = t(text);
 }
 
-function setMessage(element, text, kind = "") {
+// Ett meddelande som redan är översatt och ifyllt (med värden i texten): det översätts inte en gång till.
+function setTranslatedMessage(element, text, kind = "") {
+  setMessage(element, "", kind);
+  delete element.dataset.tmText;
+  element.textContent = text;
+}
+
+function setMessage(element, text, kind = "", values) {
   const modalFeedback = element.classList.contains("modal-feedback");
   const contextWarning = element.classList.contains("context-warning");
   element.dataset.tmText = text || "";
-  element.textContent = t(text || "");
+  if (values) element.dataset.tmValues = JSON.stringify(values); else delete element.dataset.tmValues;
+  element.textContent = t(text || "", values);
   element.className = `form-message ${kind}${modalFeedback ? " modal-feedback" : ""}${contextWarning ? " context-warning" : ""}`.trim();
 }
 
@@ -3030,7 +2893,8 @@ function orderedStations(snapshot) {
   return result;
 }
 
-function topologyLayout(snapshot) {
+// orientation "wide" ritar linjen i sidled även i ett stående fönster (telefonens karta rullar i sidled).
+function topologyLayout(snapshot, orientation = "") {
   const stations = snapshot.stations || [];
   const stationIDs = new Set(stations.map((station) => station.id));
   const branchIDs = new Set(snapshot.display?.topology_branch_station_ids
@@ -3055,7 +2919,7 @@ function topologyLayout(snapshot) {
   const connectedIDs = stations.map((station) => station.id).filter((id) => adjacency.get(id)?.size);
   if (!connectedIDs.length) {
     const positions = new Map(stations.map((station, index) => [station.id, { x: index * 100, y: 0 }]));
-    return topologyBounds(positions, edges);
+    return topologyBounds(positions, edges, orientation);
   }
 
   const bfsFarthest = (start, excluded) => {
@@ -3114,11 +2978,11 @@ function topologyLayout(snapshot) {
       isolatedX += 100;
     }
   }
-  return topologyBounds(positions, edges);
+  return topologyBounds(positions, edges, orientation);
 }
 
-function topologyBounds(sourcePositions, edges) {
-  const portrait = innerHeight > innerWidth * 1.2;
+function topologyBounds(sourcePositions, edges, orientation = "") {
+  const portrait = orientation !== "wide" && innerHeight > innerWidth * 1.2;
   const positions = new Map([...sourcePositions].map(([id, point]) => [
     id,
     portrait ? { x: point.y, y: point.x } : point,
@@ -3169,17 +3033,19 @@ function topologyTrains(snapshot) {
   return { onLine, atStation };
 }
 
-function topologyTrainSize(trainNumber, withArrow, tv) {
-  const font = tv ? 26 : 11, arrow = tv ? 18 : 8, pad = tv ? 10 : 4, gap = tv ? 6 : 2.5;
-  const textWidth = String(trainNumber).length * font * 0.62;
-  return { font, arrow, pad, textWidth, height: tv ? 40 : 16, width: textWidth + pad * 2 + (withArrow ? arrow + gap : 0) };
+// Kontrollrummet (kr) ritar i riktiga pixlar: ett tåg är 26 px högt, siffran 15 px.
+function topologyTrainSize(trainNumber, withArrow, tv, kr = false) {
+  const font = kr ? 15 : tv ? 26 : 11, arrow = kr ? 11 : tv ? 18 : 8, pad = kr ? 7 : tv ? 10 : 4, gap = kr ? 5 : tv ? 6 : 2.5;
+  const textWidth = String(trainNumber).length * font * (kr ? 0.6 : 0.62);
+  return { font, arrow, pad, textWidth, height: kr ? 26 : tv ? 40 : 16, width: textWidth + pad * 2 + (withArrow ? arrow + gap : 0) };
 }
 
 function appendTopologyTrain(target, point, train, options = {}) {
   const tv = Boolean(options.tv);
+  const kr = Boolean(options.kr);
   const label = String(train.trainNumber);
   const heading = train.heading; // the way it runs from the station it leaves; none inside a station
-  const { font, arrow, pad, textWidth, height, width } = topologyTrainSize(label, Boolean(heading), tv);
+  const { font, arrow, pad, textWidth, height, width } = topologyTrainSize(label, Boolean(heading), tv, kr);
   const kind = !heading ? "at-station" : train.departed ? "on-line" : "cleared";
   const group = svgElement("g", {
     transform: `translate(${point.x},${point.y})`,
@@ -3189,8 +3055,8 @@ function appendTopologyTrain(target, point, train, options = {}) {
     "aria-label": train.label,
   });
   group.dataset.trainNumber = label;
-  if (options.selected) group.append(svgElement("rect", { x: -width / 2 - 3, y: -height / 2 - 3, width: width + 6, height: height + 6, rx: tv ? 11 : 6, class: "topology-train-ring" }));
-  group.append(svgElement("rect", { x: -width / 2, y: -height / 2, width, height, rx: tv ? 8 : 3, class: "topology-train-tag" }));
+  if (options.selected) group.append(svgElement("rect", { x: -width / 2 - 3, y: -height / 2 - 3, width: width + 6, height: height + 6, rx: kr ? 9 : tv ? 11 : 6, class: "topology-train-ring" }));
+  group.append(svgElement("rect", { x: -width / 2, y: -height / 2, width, height, rx: kr ? 6 : tv ? 8 : 3, class: "topology-train-tag" }));
   let textX = 0;
   if (heading) {
     // Sideways the triangle leads: after the number going right, before it
@@ -3249,8 +3115,9 @@ function topologyCrosses(box, [a, b]) {
 function placeTopologyLabels(items, segments, viewBox, options = {}) {
   if (!items.length) return;
   const tv = Boolean(options.tv);
-  const gap = tv ? 14 : 5;
-  const lineGap = 30; // TV: from the name's baseline to the code line's
+  const kr = Boolean(options.kr);
+  const gap = kr ? 8 : tv ? 14 : 5;
+  const lineGap = kr ? 17 : 30; // TV: from the name's baseline to the code line's
   const measure = (element) => {
     const size = parseFloat(getComputedStyle(element).fontSize) || (tv ? 30 : 11);
     let width = 0;
@@ -3269,7 +3136,7 @@ function placeTopologyLabels(items, segments, viewBox, options = {}) {
     const width = Math.max(name.width, code ? code.width : 0);
     const ascent = name.size * 0.75;
     const height = ascent + (code ? lineGap + code.size * 0.22 : name.size * 0.22);
-    const corner = horizontal && vertical ? radius * 0.75 + (tv ? 6 : 2) : 0;
+    const corner = horizontal && vertical ? radius * 0.75 + (kr ? 4 : tv ? 6 : 2) : 0;
     let baseline;
     // A name beside and below its node keeps the row's baseline when there is room.
     if (vertical > 0) baseline = horizontal ? Math.max(y + corner + ascent, y + item.below) : y + item.below;
@@ -3281,7 +3148,7 @@ function placeTopologyLabels(items, segments, viewBox, options = {}) {
     return { side, preference, anchor, textX, baseline, box: { x1, x2: x1 + width, y1: baseline - ascent, y2: baseline - ascent + height } };
   };
   const overlap = (a, b, margin = 0) => Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) + margin) * Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1) + margin);
-  const clearance = tv ? 10 : 6; // two names never closer than this
+  const clearance = kr ? 8 : tv ? 10 : 6; // two names never closer than this
   const crosses = topologyCrosses;
   const [viewX, viewY, viewWidth, viewHeight] = String(viewBox).split(" ").map(Number);
   const placed = new Map(items.map((item) => [item, layout(item, "below")]));
@@ -3327,12 +3194,29 @@ function placeTopologyLabels(items, segments, viewBox, options = {}) {
 
 function renderTopology(snapshot, target = document.querySelector("#topology-svg"), options = {}) {
   if (!target) return;
-  let { positions, edges, viewBox } = topologyLayout(snapshot);
-  target.classList.toggle("topology-tv", Boolean(options.tv));
+  let { positions, edges, viewBox } = topologyLayout(snapshot, options.kr?.wide ? "wide" : "");
+  // kr = Kontrollrummet: ritas i riktiga pixlar på rutans bredd, med egna storlekar.
+  const kr = options.kr || null;
+  target.classList.toggle("topology-tv", Boolean(options.tv) && !kr);
+  target.classList.toggle("topology-kr", Boolean(kr));
   // On a TV a station is a ring, as in the design (SkarmBana): 22 px on the
   // Banöversikt screen, 16 px on the lower map of Översikt.
-  const ring = options.tv ? ((options.height || 680) < 600 ? 16 : 22) : 7;
-  if (options.tv) {
+  const ring = kr ? 11 : options.tv ? ((options.height || 680) < 600 ? 16 : 22) : 7;
+  if (kr) {
+    const width = Math.max(280, Math.round(kr.width || 1200));
+    const points = [...positions.values()];
+    const minX = Math.min(...points.map((p) => p.x)), maxX = Math.max(...points.map((p) => p.x));
+    const minY = Math.min(...points.map((p) => p.y)), maxY = Math.max(...points.map((p) => p.y));
+    const spanX = maxX - minX, spanY = maxY - minY;
+    // En stående linje (telefon) får nodavstånd i höjdled; annars fyller linjen bredden.
+    const upright = spanY > spanX * 1.2;
+    const marginX = upright ? 120 : Math.min(84, width * 0.08);
+    const scaleX = upright ? 1.7 : spanX ? (width - marginX * 2) / spanX : 1;
+    const scaleY = upright ? 0.95 : 1.7;
+    const top = upright ? 36 : 58, bottom = upright ? 44 : 66;
+    positions = new Map([...positions].map(([id, p]) => [id, { x: (p.x - (minX + maxX) / 2) * scaleX + width / 2, y: (p.y - minY) * scaleY + top }]));
+    viewBox = `0 0 ${width} ${Math.ceil(top + spanY * scaleY + bottom)}`;
+  } else if (options.tv) {
     // Fit the actual nodes, not the editor's padded canvas. Small layouts
     // otherwise collapse to an unreadable cluster in the middle of a TV.
     const points = [...positions.values()], height = options.height || 680;
@@ -3385,9 +3269,10 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const lineClass = `topology-track${active ? " active" : ""}${routeHighlighted ? " route-highlight" : ""}${stationHighlighted ? " station-highlight" : ""}${dimmed ? " dimmed" : ""}`;
     if (edge.source?.track_type === "double") {
       const dx = to.x - from.x, dy = to.y - from.y, length = Math.hypot(dx, dy) || 1;
-      const ox = -dy / length * 2.5, oy = dx / length * 2.5;
-      target.append(svgElement("line", { x1: from.x + ox, y1: from.y + oy, x2: to.x + ox, y2: to.y + oy, class: lineClass }));
-      target.append(svgElement("line", { x1: from.x - ox, y1: from.y - oy, x2: to.x - ox, y2: to.y - oy, class: lineClass }));
+      const offset = kr ? 3.4 : 2.5;
+      const ox = -dy / length * offset, oy = dx / length * offset;
+      target.append(svgElement("line", { x1: from.x + ox, y1: from.y + oy, x2: to.x + ox, y2: to.y + oy, class: `${lineClass} double` }));
+      target.append(svgElement("line", { x1: from.x - ox, y1: from.y - oy, x2: to.x - ox, y2: to.y - oy, class: `${lineClass} double` }));
     } else {
       target.append(svgElement("line", { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: lineClass, "stroke-dasharray": edge.autonomous ? "4 3" : "none" }));
     }
@@ -3409,15 +3294,23 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
       tabindex: stationClickable ? "0" : "-1",
       "aria-label": `${station.name}, ${station.code || "station"}`,
     });
-    if (onRoute || selected) group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + 5, class: "topology-station-ring" }));
+    if (onRoute || selected) group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + (kr ? 8 : 5), class: "topology-station-ring" }));
     group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + 1, class: "topology-mask" }));
-    group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius, class: `topology-station${autonomous ? " autonomous" : ""}${activeStationIDs.has(station.id) ? " active" : ""}${onRoute || selected ? " highlighted" : ""}` }));
-    const name = svgElement("text", { x: point.x, y: point.y + (options.tv ? radius + 34 : autonomous ? 16 : 20), class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name);
+    const extraClass = options.stationClass?.(station);
+    group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius, class: `topology-station${autonomous ? " autonomous" : ""}${activeStationIDs.has(station.id) ? " active" : ""}${onRoute || selected ? " highlighted" : ""}${extraClass ? ` ${extraClass}` : ""}` }));
+    const name = svgElement("text", { x: point.x, y: point.y + (kr ? radius + 25 : options.tv ? radius + 34 : autonomous ? 16 : 20), class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name);
     group.append(name);
     let code = null;
-    if (options.tv) {
-      const count = (snapshot.train_positions || []).filter(p=>p.station_id===station.id && !p.connection_id).length;
-      code = svgElement("text", {x:point.x,y:point.y+radius+64,class:"topology-code"}, `${station.code || ""} · ${count} ${t("tåg")}`);
+    // Siffran i kodraden är antalet tåg inne på stationen; själva tågen ritas
+    // inte, bara de som har klart och det valda tåget (se nedan).
+    const inside = (snapshot.train_positions || []).filter((p) => p.station_id === station.id && !p.connection_id).length;
+    if (kr?.noCode) {
+      // Telefonen visar bara namnet; siffran står i sammanfattningen under kartan.
+    } else if (kr) {
+      code = svgElement("text", { x: point.x, y: point.y + radius + 42, class: "topology-code" }, `${station.code || ""} · ${inside}`);
+      group.append(code);
+    } else if (options.tv) {
+      code = svgElement("text", {x:point.x,y:point.y+radius+64,class:"topology-code"}, options.compactCount ? `${station.code || ""} · ${inside}` : `${station.code || ""} · ${inside} ${t("tåg")}`);
       group.append(code);
     }
     labels.push({ point, radius, name, code });
@@ -3443,6 +3336,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   const code = (id) => (snapshot.stations || []).find((station) => station.id === id)?.code || "?";
   const trainOptions = (trainNumber) => ({
     tv: Boolean(options.tv),
+    kr: Boolean(kr),
     selected: trainNumber === String(options.selectedTrainNumber),
     dimmed: Boolean(selectedService && trainNumber !== String(options.selectedTrainNumber)),
     clickable: Boolean(options.onTrainSelect),
@@ -3454,14 +3348,19 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   // the first instead of hiding it.
   const sameWay = new Map();
   const taken = []; // tags already drawn: a station's row never covers one
+  const names = labels.flatMap((label) => [label.name, label.code].filter(Boolean)).flatMap((text) => {
+    // A map not on screen has no measured text (and some browsers throw).
+    try { const box = text.getBBox(); return [{ x1: box.x, y1: box.y, x2: box.x + box.width, y2: box.y + box.height }]; } catch { return []; }
+  });
+  const overlaps = (box, list, margin = 0) => list.some((o) => box.x1 < o.x2 + margin && o.x1 - margin < box.x2 && box.y1 < o.y2 + margin && o.y1 - margin < box.y2);
   for (const train of trains.onLine) {
     const from = positions.get(train.from), to = positions.get(train.to);
     if (!from || !to) continue;
     const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
     const along = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
-    const size = topologyTrainSize(train.trainNumber, true, options.tv);
+    const size = topologyTrainSize(train.trainNumber, true, options.tv, Boolean(kr));
     const reach = Math.abs(along.x) * size.width / 2 + Math.abs(along.y) * size.height / 2;
-    const clear = (options.tv ? ring + 14 : 14) + reach; // off the station's ring
+    const clear = (kr ? ring + 10 : options.tv ? ring + 14 : 14) + reach; // off the station's ring
     const distance = Math.min(Math.max(length * 0.25, clear), length / 2);
     const key = `${train.from}>${train.to}`;
     const order = sameWay.get(key) || 0;
@@ -3473,8 +3372,25 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const route = `${code(train.from)} → ${code(train.to)}`;
     // On a TV the names under the line are large: the tag rides on the line
     // rather than over them.
-    const lift = options.tv && Math.abs(along.y) < 0.5 ? 12 : 0;
-    const at = { x: from.x + along.x * distance + side.x * across, y: from.y + along.y * distance + side.y * across - lift };
+    const lift = options.tv && !kr && Math.abs(along.y) < 0.5 ? 12 : 0;
+    const spot = (d) => ({ x: from.x + along.x * d + side.x * across, y: from.y + along.y * d + side.y * across - lift });
+    const boxAt = (p) => ({ x1: p.x - size.width / 2, y1: p.y - size.height / 2, x2: p.x + size.width / 2, y2: p.y + size.height / 2 });
+    let at = spot(distance);
+    // Kontrollrummet och TV: sitter taggen över ett stationsnamn får den glida
+    // längs linjen till närmaste ställe som är fritt.
+    if ((kr || options.tv) && overlaps(boxAt(at), names, 2)) {
+      const low = Math.min(clear, length / 2), high = Math.max(length - clear, length / 2);
+      const covered = (box) => names.reduce((sum, o) => sum + Math.max(0, Math.min(box.x2, o.x2) - Math.max(box.x1, o.x1)) * Math.max(0, Math.min(box.y2, o.y2) - Math.max(box.y1, o.y1)), 0);
+      let best = { d: distance, area: covered(boxAt(at)) };
+      for (let step = 6; step <= length && best.area > 0; step += 6) {
+        for (const d of [distance + step, distance - step]) {
+          if (d < low || d > high) continue;
+          const area = covered(boxAt(spot(d)));
+          if (area < best.area) best = { d, area };
+        }
+      }
+      at = spot(best.d);
+    }
     taken.push({ x1: at.x - size.width / 2, y1: at.y - size.height / 2, x2: at.x + size.width / 2, y2: at.y + size.height / 2 });
     appendTopologyTrain(target, at, {
       ...train, heading: along,
@@ -3486,40 +3402,52 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   // the first side that covers neither a name nor a line: above, below, left,
   // right.
   const segments = edges.map((edge) => [positions.get(edge.from), positions.get(edge.to)]).filter(([from, to]) => from && to);
-  const names = labels.flatMap((label) => [label.name, label.code].filter(Boolean)).flatMap((text) => {
-    // A map not on screen has no measured text (and some browsers throw).
-    try { const box = text.getBBox(); return [{ x1: box.x, y1: box.y, x2: box.x + box.width, y2: box.y + box.height }]; } catch { return []; }
-  });
-  const overlaps = (box, list, margin = 0) => list.some((o) => box.x1 < o.x2 + margin && o.x1 - margin < box.x2 && box.y1 < o.y2 + margin && o.y1 - margin < box.y2);
-  const free = (box) => !overlaps(box, names) && !overlaps(box, taken, 4)
+  // Kontrollrummet ritar i riktiga pixlar: en tagg-rad får inte hamna utanför rutan.
+  const [viewX, viewY, viewWidth, viewHeight] = viewBox.split(" ").map(Number);
+  const inView = (box) => !kr || (box.x1 >= viewX + 2 && box.x2 <= viewX + viewWidth - 2 && box.y1 >= viewY && box.y2 <= viewY + viewHeight);
+  const free = (box) => inView(box) && !overlaps(box, names) && !overlaps(box, taken, 4)
     && !segments.some((segment) => topologyCrosses(box, segment));
   const byStation = new Map();
-  for (const train of trains.atStation) byStation.set(train.station, [...(byStation.get(train.station) || []), train]);
+  const plainMap = !options.tv && !kr; // deltagarvyn och äldre kartor visar fortfarande raden vid stationen
+  for (const train of trains.atStation) {
+    if (!plainMap && train.trainNumber !== String(options.selectedTrainNumber)) continue;
+    byStation.set(train.station, [...(byStation.get(train.station) || []), train]);
+  }
   for (const [stationID, here] of byStation) {
     const point = positions.get(stationID);
     if (!point) continue;
     const shown = here.length > 3 ? here.slice(0, 2) : here;
     const items = [...shown.map((train) => train.trainNumber), ...(here.length > shown.length ? [`+${here.length - shown.length}`] : [])];
-    const gap = options.tv ? 10 : 4, off = (options.tv ? ring + 4 : 7) + gap;
-    const widths = items.map((item) => topologyTrainSize(item, false, options.tv).width);
-    const height = topologyTrainSize("", false, options.tv).height;
-    const width = widths.reduce((sum, value) => sum + value, 0) + gap * (items.length - 1);
+    const gap = kr ? 6 : options.tv ? 10 : 4, off = (kr ? ring + 6 : options.tv ? ring + 4 : 7) + gap;
+    const height = topologyTrainSize("", false, options.tv, Boolean(kr)).height;
+    // Kontrollrummet: finns ingen fri plats för raden krymper den, först till ett tåg och +N, sedan bara +N.
+    const variants = [items];
+    if (kr && here.length > 2 && items.length > 2) variants.push([here[0].trainNumber, `+${here.length - 1}`]);
+    if (kr && here.length > 1) variants.push([`+${here.length}`]);
     // Above, below, left, right; then the four corners, which miss both the
     // line through the station and its name when all four sides are taken.
-    const across = off + width / 2, up = off + height / 2;
-    const sides = [[0, -up], [0, up], [-across, 0], [across, 0], [across, -up], [-across, -up], [across, up], [-across, up]]
-      .map(([dx, dy]) => ({ x: point.x + dx, y: point.y + dy }));
-    const boxes = sides.map((side) => ({ x1: side.x - width / 2, y1: side.y - height / 2, x2: side.x + width / 2, y2: side.y + height / 2 }));
-    // No side free of lines: rather over a line than over a name or a tag.
-    const pick = boxes.findIndex(free), fallback = boxes.findIndex((box) => !overlaps(box, names) && !overlaps(box, taken, 4));
-    const centre = sides[pick >= 0 ? pick : fallback >= 0 ? fallback : 0];
-    taken.push(boxes[sides.indexOf(centre)]);
+    const place = (list) => {
+      const widths = list.map((item) => topologyTrainSize(item, false, options.tv, Boolean(kr)).width);
+      const width = widths.reduce((sum, value) => sum + value, 0) + gap * (list.length - 1);
+      const across = off + width / 2, up = off + height / 2;
+      const sides = [[0, -up], [0, up], [-across, 0], [across, 0], [across, -up], [-across, -up], [across, up], [-across, up]]
+        .map(([dx, dy]) => ({ x: point.x + dx, y: point.y + dy }));
+      const boxes = sides.map((side) => ({ x1: side.x - width / 2, y1: side.y - height / 2, x2: side.x + width / 2, y2: side.y + height / 2 }));
+      // No side free of lines: rather over a line than over a name or a tag.
+      return { list, widths, width, sides, free: boxes.findIndex(free), loose: boxes.findIndex((box) => inView(box) && !overlaps(box, names) && !overlaps(box, taken, 4)) };
+    };
+    const candidates = variants.map(place);
+    const chosen = candidates.find((o) => o.free >= 0) || candidates.find((o) => o.loose >= 0) || candidates[candidates.length - 1];
+    const { widths, width } = chosen;
+    const centre = { ...chosen.sides[chosen.free >= 0 ? chosen.free : chosen.loose >= 0 ? chosen.loose : 0] };
+    if (kr) centre.x = Math.min(Math.max(centre.x, viewX + width / 2 + 2), viewX + viewWidth - width / 2 - 2);
+    taken.push({ x1: centre.x - width / 2, y1: centre.y - height / 2, x2: centre.x + width / 2, y2: centre.y + height / 2 });
     let left = centre.x - width / 2;
-    items.forEach((item, index) => {
+    chosen.list.forEach((item, index) => {
       const at = { x: left + widths[index] / 2, y: centre.y };
       left += widths[index] + gap;
       if (item.startsWith("+")) {
-        appendTopologyTrain(target, at, { trainNumber: item, label: item }, { tv: Boolean(options.tv), dimmed: Boolean(selectedService) });
+        appendTopologyTrain(target, at, { trainNumber: item, label: item }, { tv: Boolean(options.tv), kr: Boolean(kr), dimmed: Boolean(selectedService) });
         return;
       }
       appendTopologyTrain(target, at, { trainNumber: item, label: t("Tåg {number} vid {station}", { number: item, station: code(stationID) }) }, trainOptions(item));
@@ -3559,7 +3487,6 @@ const trainPalette = [
 
 let graphLastCenteredMinute = null;
 let graphLastCenteredSelection = null;
-let overviewGraphLastCenteredMinute = null;
 
 function servicePoints(service, stationIndex) {
   const points = [];
@@ -3581,113 +3508,6 @@ function servicePoints(service, stationIndex) {
     }
   }
   return points;
-}
-
-function updateOverviewGraphSelection() {
-  const active = state.hoveredOverviewTrainNumber || state.selectedTrainNumber;
-  document.querySelectorAll("#overview-graph .overview-train-group").forEach((group) => {
-    const selected = group.dataset.trainNumber === state.selectedTrainNumber;
-    group.classList.toggle("selected", selected);
-    group.classList.toggle("dimmed", Boolean(active && group.dataset.trainNumber !== active));
-  });
-}
-
-function renderOverviewGraph(snapshot) {
-  if (!snapshot) return;
-  const svg = document.querySelector("#overview-graph");
-  const canvas = document.querySelector("#overview-graph-canvas");
-  const stationLabels = document.querySelector("#overview-graph-station-labels");
-  const stationOverlay = document.querySelector(".overview-graph-stations");
-  if (!svg || !canvas || !stationLabels || !stationOverlay) return;
-  const stations = orderedStations(snapshot);
-  const stationIndex = new Map(stations.map((station, index) => [station.id, index]));
-  const lines = uniqueOverviewServices(snapshot).map((service, index) => ({
-    service,
-    points: servicePoints(service, stationIndex),
-    color: trainPalette[index % trainPalette.length],
-  })).filter((line) => line.points.length >= 2);
-  const minutes = lines.flatMap((line) => line.points.map((point) => point.minute));
-  const minMinute = minutes.length ? Math.floor(Math.min(...minutes) / 60) * 60 : 0;
-  const maxMinute = minutes.length ? Math.max(minMinute + 60, Math.ceil(Math.max(...minutes) / 60) * 60) : 24 * 60;
-  // 20 px per station: the whole line in a low band, as in the design.
-  const left = 60, right = 16, top = 22, bottom = 28, stationStep = 20;
-  // Never narrower than its card: a stretched drawing no longer meets the
-  // station names beside it.
-  // 4 px a minute: about five hours across a computer screen, close to the
-  // TV graph, instead of most of the day squeezed into one card.
-  const width = Math.max(1200, document.querySelector("#overview-graph-scroll")?.clientWidth || 0, left + (maxMinute - minMinute) * 4 + right);
-  const height = top + Math.max(stations.length - 1, 1) * stationStep + bottom;
-  const x = (minute) => left + (minute - minMinute) / (maxMinute - minMinute) * (width - left - right);
-  const y = (index) => top + index * stationStep;
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-  stationOverlay.style.height = `${height}px`;
-  stationOverlay.style.marginTop = `-${height}px`;
-  stationLabels.setAttribute("viewBox", `0 0 ${left} ${height}`);
-  stationLabels.setAttribute("width", left);
-  stationLabels.setAttribute("height", height);
-  svg.replaceChildren();
-  svg.onclick = (event) => {
-    if (event.target === svg) clearOverviewSelection();
-  };
-  stationLabels.replaceChildren();
-  stationLabels.append(svgElement("rect", { x: 0, y: 0, width: left, height, class: "overview-graph-label-bg" }));
-  for (let minute = minMinute; minute <= maxMinute; minute += 60) {
-    svg.append(svgElement("line", { x1: x(minute), y1: top - 5, x2: x(minute), y2: height - bottom + 3, class: "overview-graph-grid" }));
-    // The first hour starts at the station column, so it reads from there.
-    svg.append(svgElement("text", { x: x(minute) + (minute === minMinute ? 3 : 0), y: height - 6, "text-anchor": minute === minMinute ? "start" : "middle", class: "overview-graph-time" }, `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:00`));
-  }
-  stations.forEach((station, index) => {
-    svg.append(svgElement("line", { x1: left, y1: y(index), x2: width - right, y2: y(index), class: "overview-graph-axis" }));
-    stationLabels.append(svgElement("text", { x: left - 9, y: y(index) + 4, "text-anchor": "end", class: "overview-graph-station" }, station.code));
-  });
-  for (const { service, points: rawPoints, color } of lines) {
-    const trainNumber = String(service.train_number);
-    const points = rawPoints.map((point) => ({ x: x(point.minute), y: y(point.station) }));
-    const pointText = points.map((point) => `${point.x},${point.y}`).join(" ");
-    const group = svgElement("g", {
-      class: "overview-train-group",
-      "data-train-number": trainNumber,
-      role: "button",
-      tabindex: "0",
-      "aria-label": `Tåg ${trainNumber}`,
-    });
-    group.dataset.trainNumber = trainNumber;
-    group.append(svgElement("polyline", { points: pointText, class: "overview-train-line", stroke: color }));
-    group.append(svgElement("polyline", { points: pointText, class: "overview-train-hit" }));
-    const first = points[0], second = points[1];
-    const labelX = first.x + (second.x - first.x) * .22;
-    const labelY = first.y + (second.y - first.y) * .22;
-    let angle = Math.atan2(second.y - first.y, second.x - first.x) * 180 / Math.PI;
-    if (angle > 90) angle -= 180;
-    if (angle < -90) angle += 180;
-    group.append(svgElement("text", { x: labelX, y: labelY - 3, transform: `rotate(${angle} ${labelX} ${labelY})`, fill: color, class: "overview-train-label" }, trainNumber));
-    const activate = (event) => {
-      event.stopPropagation();
-      selectOverviewTrain(trainNumber);
-    };
-    group.addEventListener("mouseenter", () => { state.hoveredOverviewTrainNumber = trainNumber; updateOverviewGraphSelection(); });
-    group.addEventListener("mouseleave", () => { state.hoveredOverviewTrainNumber = null; updateOverviewGraphSelection(); });
-    group.addEventListener("click", activate);
-    group.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") activate(event); });
-    svg.append(group);
-  }
-  let current = minuteValue(snapshot.clock?.time);
-  if (current !== null && current < minMinute && current + 1440 <= maxMinute) current += 1440;
-  if (current !== null && current >= minMinute && current <= maxMinute) {
-    const currentX = x(current);
-    svg.append(svgElement("line", { x1: currentX, y1: top - 7, x2: currentX, y2: height - bottom + 3, class: "overview-graph-now" }));
-    svg.append(svgElement("circle", { cx: currentX, cy: top - 7, r: 4, class: "overview-graph-now-dot" }));
-    if (overviewGraphLastCenteredMinute === null || Math.abs(current - overviewGraphLastCenteredMinute) >= 5) {
-      const scroller = document.querySelector("#overview-graph-scroll");
-      scroller.scrollTo({ left: Math.max(0, currentX - scroller.clientWidth / 2), behavior: overviewGraphLastCenteredMinute === null ? "auto" : "smooth" });
-      overviewGraphLastCenteredMinute = current;
-    }
-  }
-  updateOverviewGraphSelection();
 }
 
 function updateDisplayGraphSelection() {
@@ -3715,6 +3535,18 @@ function renderDisplaySelection(snapshot) {
   }
 }
 
+// Diagrammets tidsfönster: hela timmar, med "nu" ungefär en tredjedel in.
+function graphWindowBounds(snapshot) {
+  const now = currentClockSeconds(snapshot) / 60, span = displayGraphWindow();
+  const min = Math.floor((now - span / 3) / 60) * 60;
+  return { now, min, max: min + span, span };
+}
+function graphWindowRange(snapshot) {
+  const { min, max } = graphWindowBounds(snapshot);
+  const clock = (minute) => { const value = (Math.floor(minute) % 1440 + 1440) % 1440; return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`; };
+  return `${clock(min)}–${clock(max)}`;
+}
+
 function renderGraph(snapshot) {
   const svg = document.querySelector("#graph-svg");
   // Draw for the box the diagram really has, so 28 px text stays 28 px
@@ -3722,8 +3554,7 @@ function renderGraph(snapshot) {
   const box = svg.getBoundingClientRect();
   const width = 1840, left = 270, top = 65, bottom = 50;
   const height = box.width > 0 && box.height > 0 ? Math.max(600, Math.round(width * box.height / box.width)) : 850;
-  const now = currentClockSeconds(snapshot) / 60;
-  const min = now - 60, max = now + 120;
+  const { now, min, max, span } = graphWindowBounds(snapshot);
   const stations = orderedStations(snapshot);
   const stationIndex = new Map(stations.map((s, i) => [s.id, i]));
   const x = minute => left + (minute - min) / (max - min) * (width - left - 30);
@@ -3731,13 +3562,19 @@ function renderGraph(snapshot) {
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`); svg.removeAttribute("width"); svg.removeAttribute("height"); svg.replaceChildren();
   const defs = svgElement("defs"), clip = svgElement("clipPath", {id: "screen-graph-clip"});
   clip.append(svgElement("rect", {x: left, y: top - 24, width: width - left, height: height - top - bottom + 48})); defs.append(clip); svg.append(defs);
-  for (let minute = Math.ceil(min / 30) * 30; minute <= max; minute += 30) {
-    svg.append(svgElement("line", {x1:x(minute), x2:x(minute), y1:top - 24, y2:height - bottom, class:"graph-grid", "stroke-dasharray":minute%60?"6 8":"none"}));
+  // Det som redan hänt ligger i en skuggad yta; timmarna är heldragna och
+  // halvtimmarna prickade (hela dygnet: varannan timme, timmarna prickade).
+  svg.append(svgElement("rect", {x:left, y:top - 24, width:Math.max(0, x(now) - left), height:height - top - bottom + 24, class:"sc-graph-past"}));
+  const gridStep = span <= 360 ? 30 : 60, labelStep = span <= 360 ? 60 : 120;
+  for (let minute = Math.ceil(min / gridStep) * gridStep; minute <= max; minute += gridStep) {
+    const solid = minute % labelStep === 0;
+    svg.append(svgElement("line", {x1:x(minute), x2:x(minute), y1:top - 24, y2:height - bottom, class:`graph-grid graph-col${solid ? "" : " is-half"}`}));
+    if (!solid) continue;
     const normalized = (Math.floor(minute) % 1440 + 1440) % 1440;
-    svg.append(svgElement("text", {x:x(minute), y:height - 12, "text-anchor":"middle", class:"sc-graph-label"}, `${String(Math.floor(normalized/60)).padStart(2,"0")}:${String(normalized%60).padStart(2,"0")}`));
+    svg.append(svgElement("text", {x:x(minute), y:height - 12, "text-anchor":minute >= max ? "end" : "middle", class:"sc-graph-label"}, `${String(Math.floor(normalized/60)).padStart(2,"0")}:${String(normalized%60).padStart(2,"0")}`));
   }
   stations.forEach((station, i) => {
-    svg.append(svgElement("line", {x1:left, x2:width, y1:y(i), y2:y(i), class:"graph-grid"}));
+    svg.append(svgElement("line", {x1:left, x2:width, y1:y(i), y2:y(i), class:"graph-grid graph-row"}));
     // Name and code on the station's own line, as in the design; a name too
     // long to leave room for the code keeps the code on a row of its own.
     const long = String(station.name || "").length > 14;
@@ -3755,15 +3592,15 @@ function renderGraph(snapshot) {
     const centre = (points[0].minute + points.at(-1).minute) / 2;
     const shift = Math.round((now - centre) / 1440) * 1440;
     if (points.at(-1).minute + shift < min || points[0].minute + shift > max) continue;
-    const colour = active.has(String(service.train_number)) ? "#7fa3ea" : "#737373";
+    const isOut = active.has(String(service.train_number));
     const group = svgElement("g",{class:"graph-train-group",role:"button",tabindex:0,"aria-label":`Tåg ${service.train_number}`});
     group.dataset.trainNumber=String(service.train_number);
     const line = points.map(p=>`${x(p.minute+shift)},${y(p.station)}`).join(" ");
-    group.append(svgElement("polyline", {points:line, fill:"none", stroke:colour, "stroke-width":active.has(String(service.train_number))?6:3}));
+    group.append(svgElement("polyline", {points:line, class:`sc-graph-line${isOut ? " is-out" : ""}`}));
     group.append(svgElement("polyline",{points:line,fill:"none",stroke:"transparent","stroke-width":20}));
     const select=()=>{state.displaySelectedTrainNumber=state.displaySelectedTrainNumber===String(service.train_number)?null:String(service.train_number); document.querySelector("#display-train-select").value=state.displaySelectedTrainNumber||"";updateDisplayGraphSelection();renderDisplaySelection(snapshot);};
     group.addEventListener("click",select);group.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select();}});
-    drawn.push({group, service, points, shift, colour, select, out: active.has(String(service.train_number))});
+    drawn.push({group, service, points, shift, select, out: isOut});
     trains.append(group);
   }
   // Train numbers: never on top of each other. A train out on the line gets
@@ -3788,7 +3625,7 @@ function renderGraph(snapshot) {
         const b = {x1: px, x2: px + w, y1: ty - 22, y2: ty + 4};
         if (!free(b)) continue;
         placed.push(b);
-        layer(entry).append(svgElement("text", {x: px, y: ty, fill: entry.colour, class: "sc-graph-train"}, text));
+        layer(entry).append(svgElement("text", {x: px, y: ty, class: `sc-graph-train${entry.out ? " is-out" : ""}`}, text));
         return;
       }
     }
@@ -3811,136 +3648,11 @@ function renderGraph(snapshot) {
   };
   drawn.filter(entry => entry.out).forEach(tag);
   drawn.filter(entry => !entry.out).forEach(label);
-  svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top-24, y2:height-bottom, stroke:"#f2c230", "stroke-width":3}), labels);
+  svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top-24, y2:height-bottom, class:"sc-graph-now"}), labels);
   // The time on the now line, as a yellow tag like the design's.
   svg.append(svgElement("rect", {x:x(now)-48, y:top-60, width:96, height:36, rx:8, class:"sc-graph-now-tag"}),
     svgElement("text",{x:x(now),y:top-33,"text-anchor":"middle",class:"sc-graph-now-text"},currentClockTime(snapshot).slice(0,5)));
   updateDisplayGraphSelection();
-}
-
-function renderScrollableGraph(snapshot) {
-  const svg = document.querySelector("#graph-svg");
-  const canvas = document.querySelector("#graph-canvas");
-  const stationOverlay = document.querySelector("#graph-station-overlay");
-  const stationLabels = document.querySelector("#graph-station-labels");
-  const timeOverlay = document.querySelector("#graph-time-overlay");
-  const timeLabels = document.querySelector("#graph-time-labels");
-  const stations = orderedStations(snapshot);
-  const stationIndex = new Map(stations.map((station, index) => [station.id, index]));
-  const services = graphServices(snapshot).map((service) => ({ ...service, stops: [...service.stops].sort((a, b) => a.stop_order - b.stop_order) }));
-  const lines = services.map((service, index) => ({
-    service,
-    points: servicePoints(service, stationIndex),
-    color: trainPalette[index % trainPalette.length],
-  })).filter((line) => line.points.length >= 2);
-  const minutes = lines.flatMap((line) => line.points.map((point) => point.minute));
-  const minMinute = minutes.length ? Math.floor(Math.min(...minutes) / 60) * 60 : 0;
-  const maxMinute = minutes.length ? Math.max(minMinute + 60, Math.ceil(Math.max(...minutes) / 60) * 60) : 24 * 60;
-  const left = 70, right = 20, top = 30, bottom = 35;
-  const width = Math.max(1000, left + (maxMinute - minMinute) * 5 + right);
-  // Never fall below the CSS floor for .graph-canvas > .display-visual. A
-  // viewBox smaller than the rendered box makes the SVG scale and centre its
-  // own contents, which silently stretched the timeline off its minute grid.
-  const height = Math.max(600, innerHeight - 50, top + Math.max(stations.length, 1) * 60 + bottom);
-  const x = (minute) => left + (minute - minMinute) / (maxMinute - minMinute) * (width - left - right);
-  const y = (index) => top + index * 60;
-  let selectedStartX = null;
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-  stationOverlay.style.height = `${height}px`;
-  stationOverlay.style.marginTop = `-${height}px`;
-  stationLabels.setAttribute("viewBox", `0 0 ${left} ${height}`);
-  stationLabels.setAttribute("width", left);
-  stationLabels.setAttribute("height", height);
-  timeOverlay.style.width = `${width}px`;
-  timeOverlay.style.height = `${bottom}px`;
-  timeOverlay.style.marginTop = `-${bottom}px`;
-  timeLabels.setAttribute("viewBox", `0 0 ${width} ${bottom}`);
-  timeLabels.setAttribute("width", width);
-  timeLabels.setAttribute("height", bottom);
-  svg.replaceChildren();
-  stationLabels.replaceChildren();
-  timeLabels.replaceChildren();
-  stationLabels.append(svgElement("rect", { x: 0, y: 0, width: left, height, class: "graph-station-label-bg" }));
-  timeLabels.append(svgElement("rect", { x: 0, y: 0, width, height: bottom, class: "graph-time-label-bg" }));
-  for (let minute = minMinute + 30; minute < maxMinute; minute += 60) {
-    svg.append(svgElement("line", { x1: x(minute), y1: top - 5, x2: x(minute), y2: height - bottom, class: "graph-grid-half" }));
-  }
-  for (let minute = minMinute; minute <= maxMinute; minute += 60) {
-    const lineX = x(minute);
-    svg.append(svgElement("line", { x1: lineX, y1: top - 5, x2: lineX, y2: height - bottom, class: "graph-grid" }));
-    // Drawn in the pinned overlay, whose x axis matches the graph's own.
-    timeLabels.append(svgElement("text", { x: lineX, y: 18, "text-anchor": "middle", class: "graph-label" }, `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:00`));
-  }
-  stations.forEach((station, index) => {
-    const lineY = y(index);
-    svg.append(svgElement("line", { x1: left - 5, y1: lineY, x2: width - right, y2: lineY, class: "graph-axis" }));
-    stationLabels.append(svgElement("text", { x: left - 12, y: lineY + 5, "text-anchor": "end", class: "graph-station-label" }, station.code));
-  });
-  for (const { service, points: rawPoints, color } of lines) {
-    const points = rawPoints.map((point) => ({ x: x(point.minute), y: y(point.station) }));
-    const trainNumber = String(service.train_number);
-    const pointText = points.map((point) => `${point.x},${point.y}`).join(" ");
-    if (trainNumber === state.displaySelectedTrainNumber) selectedStartX = points[0]?.x ?? null;
-    const trainGroup = svgElement("g", {
-      class: "graph-train-group",
-      "data-train-number": trainNumber,
-      role: "button",
-      tabindex: "0",
-      "aria-label": `Tåg ${trainNumber}`,
-    });
-    trainGroup.dataset.trainNumber = trainNumber;
-    trainGroup.append(svgElement("polyline", { points: pointText, class: "graph-train-line", stroke: color }));
-    trainGroup.append(svgElement("polyline", { points: pointText, class: "graph-train-hit" }));
-    const first = points[0], second = points[1];
-    const labelX = first.x + (second.x - first.x) * .2;
-    const labelY = first.y + (second.y - first.y) * .2;
-    let angle = Math.atan2(second.y - first.y, second.x - first.x) * 180 / Math.PI;
-    if (angle > 90) angle -= 180;
-    if (angle < -90) angle += 180;
-    const label = String(service.train_number);
-    const labelGroup = svgElement("g", { transform: `translate(${labelX},${labelY}) rotate(${angle})` });
-    labelGroup.append(svgElement("rect", { x: -(label.length * 6 + 4) / 2, y: -12, width: label.length * 6 + 4, height: 12, rx: 2, class: "graph-label-bg" }));
-    labelGroup.append(svgElement("text", { x: 0, y: -2, "text-anchor": "middle", fill: color, class: "graph-train-label" }, label));
-    trainGroup.append(labelGroup);
-    const activate = (event) => {
-      event.stopPropagation();
-      state.displaySelectedTrainNumber = state.displaySelectedTrainNumber === trainNumber ? null : trainNumber;
-      state.displaySelectedStationID = null;
-      const selector = document.querySelector("#display-train-select");
-      if (selector) selector.value = state.displaySelectedTrainNumber || "";
-      updateDisplayGraphSelection();
-      renderDisplaySelection(snapshot);
-    };
-    trainGroup.addEventListener("mouseenter", () => { state.displayHoveredTrainNumber = trainNumber; updateDisplayGraphSelection(); });
-    trainGroup.addEventListener("mouseleave", () => { state.displayHoveredTrainNumber = null; updateDisplayGraphSelection(); });
-    trainGroup.addEventListener("click", activate);
-    trainGroup.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") activate(event); });
-    svg.append(trainGroup);
-  }
-  let current = minuteValue(snapshot.clock?.time);
-  if (current !== null && current < minMinute && current + 1440 <= maxMinute) current += 1440;
-  if (current !== null && current >= minMinute && current <= maxMinute) {
-    const currentX = x(current);
-    svg.append(svgElement("line", { x1: currentX, y1: top - 8, x2: currentX, y2: height - bottom, class: "graph-now" }));
-    svg.append(svgElement("circle", { cx: currentX, cy: top - 8, r: 5, fill: "#ef4444" }));
-    if (graphLastCenteredMinute === null || Math.abs(current - graphLastCenteredMinute) >= 5) {
-      const scroller = document.querySelector("#graph-scroll");
-      scroller.scrollTo({ left: Math.max(0, currentX - scroller.clientWidth / 2), behavior: graphLastCenteredMinute === null ? "auto" : "smooth" });
-      graphLastCenteredMinute = current;
-    }
-  }
-  if (selectedStartX !== null && graphLastCenteredSelection !== state.displaySelectedTrainNumber) {
-    const scroller = document.querySelector("#graph-scroll");
-    scroller.scrollTo({ left: Math.max(0, selectedStartX - scroller.clientWidth / 2), behavior: "smooth" });
-    graphLastCenteredSelection = state.displaySelectedTrainNumber;
-  }
-  if (!state.displaySelectedTrainNumber) graphLastCenteredSelection = null;
-  updateDisplayGraphSelection();
-  renderDisplaySelection(snapshot);
 }
 
 const clockStyleConfig = {
@@ -3967,38 +3679,36 @@ const clockStyleLabels = {
   italian: "Italiensk (FS)", american: "Amerikansk", digital: "Digital",
 };
 
+// Urtavlan ritas med klasser, inte färgattribut: färgerna kommer från
+// Kontrollrummets tokens (skarmar.css), så den följer mörkt och ljust läge.
+// Stationsuret har alltid ljus tavla (darkBackground false).
 function clockSVG(style, darkBackground, showSeconds, stopped) {
   const config = clockStyleConfig[style] || clockStyleConfig.swiss;
-  const faceColor = darkBackground ? "#1a1a1a" : "#fff";
-  const handColor = darkBackground ? "#e0e0e0" : "#1a1a1a";
-  const markerColor = darkBackground ? "#d0d0d0" : "#1a1a1a";
-  const bezelColor = darkBackground ? "#444" : "#333";
-  const numberColor = darkBackground ? "#ccc" : "#333";
   const marks = Array.from({ length: 60 }, (_, index) => {
     const major = index % 5 === 0;
     const length = major ? config.hourMarkerLength : config.minuteMarkerLength;
     const width = major ? config.hourMarkerWidth : config.minuteMarkerWidth;
     const start = 8 + config.bezelWidth;
-    return html`<line x1="100" y1="${start}" x2="100" y2="${start + length}" stroke="${markerColor}" stroke-width="${width}" transform="rotate(${index * 6} 100 100)"/>`;
+    return html`<line class="cf-mark" x1="100" y1="${start}" x2="100" y2="${start + length}" stroke-width="${width}" transform="rotate(${index * 6} 100 100)"/>`;
   }).join("");
   const numbers = config.hasNumbers ? Array.from({ length: 12 }, (_, index) => {
     const value = index === 0 ? 12 : index;
     const angle = (index * 30 - 90) * Math.PI / 180;
-    return html`<text x="${100 + 68 * Math.cos(angle)}" y="${100 + 68 * Math.sin(angle)}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="700" fill="${numberColor}" class="clock-numeral">${value}</text>`;
+    return html`<text x="${100 + 68 * Math.cos(angle)}" y="${100 + 68 * Math.sin(angle)}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="700" class="clock-numeral cf-num">${value}</text>`;
   }).join("") : "";
   const secondHand = showSeconds ? html`<g data-clock-hand="second" transform="rotate(0 100 100)">
     <line x1="100" y1="118" x2="100" y2="${100 - config.secondHandLength}" stroke="${config.secondHandColor}" stroke-width="${config.secondHandWidth}" stroke-linecap="round"/>
     ${config.secondBallRadius > 0 ? html`<circle cx="100" cy="${100 - config.secondBallOffset}" r="${config.secondBallRadius}" fill="${config.secondHandColor}"/>` : ""}
   </g>` : "";
-  return html`<svg class="clock-face${stopped ? " stopped" : ""}" viewBox="0 0 200 200">
-    <circle cx="100" cy="100" r="96" fill="none" stroke="${bezelColor}" stroke-width="${config.bezelWidth}"/>
-    <circle cx="100" cy="100" r="${94 - config.bezelWidth / 2}" fill="${faceColor}"/>
+  return html`<svg class="clock-face${darkBackground ? "" : " cf-light"}${stopped ? " stopped" : ""}" viewBox="0 0 200 200">
+    <circle class="cf-bezel" cx="100" cy="100" r="96" stroke-width="${config.bezelWidth}"/>
+    <circle class="cf-face" cx="100" cy="100" r="${94 - config.bezelWidth / 2}"/>
     ${marks}
     ${numbers}
-    <line data-clock-hand="hour" x1="100" y1="100" x2="100" y2="${100 - config.hourHandLength}" stroke="${handColor}" stroke-width="${config.hourHandWidth}" stroke-linecap="round" transform="rotate(0 100 100)"/>
-    <line data-clock-hand="minute" x1="100" y1="100" x2="100" y2="${100 - config.minuteHandLength}" stroke="${handColor}" stroke-width="${config.minuteHandWidth}" stroke-linecap="round" transform="rotate(0 100 100)"/>
+    <line class="cf-hand" data-clock-hand="hour" x1="100" y1="100" x2="100" y2="${100 - config.hourHandLength}" stroke-width="${config.hourHandWidth}" stroke-linecap="round" transform="rotate(0 100 100)"/>
+    <line class="cf-hand" data-clock-hand="minute" x1="100" y1="100" x2="100" y2="${100 - config.minuteHandLength}" stroke-width="${config.minuteHandWidth}" stroke-linecap="round" transform="rotate(0 100 100)"/>
     ${secondHand}
-    <circle cx="100" cy="100" r="${config.centerDotRadius}" fill="${handColor}"/>
+    <circle class="cf-hub" cx="100" cy="100" r="${config.centerDotRadius}"/>
   </svg>`;
 }
 
@@ -4130,50 +3840,69 @@ function renderClockToolbar(snapshot) {
   const signature = [globalThis.TrainMeetI18n?.getLanguage?.(), styles.join(","), serverStyle, serverSeconds].join("|");
   if (styleSelect.dataset.signature !== signature) {
     styleSelect.dataset.signature = signature;
+    // "Stil: Digital", "Sekunder: på": reglaget säger vad det styr och vad det står på.
     styleSelect.replaceChildren(
-      new Option(`${t("Som i inställningarna")}: ${serverStyle}`, ""),
-      ...styles.map(value => new Option(t(clockStyleLabels[value] || value), value)));
+      new Option(`${t("Stil")}: ${t("Som i inställningarna")} (${serverStyle})`, ""),
+      ...styles.map(value => new Option(`${t("Stil")}: ${t(clockStyleLabels[value] || value)}`, value)));
     secondsSelect.replaceChildren(
-      new Option(`${t("Som i inställningarna")}: ${serverSeconds ? t("med sekunder") : t("utan sekunder")}`, ""),
-      new Option(t("Med sekunder"), "on"),
-      new Option(t("Utan sekunder"), "off"));
+      new Option(`${t("Sekunder")}: ${t("Som i inställningarna")} (${serverSeconds ? t("på") : t("av")})`, ""),
+      new Option(`${t("Sekunder")}: ${t("på")}`, "on"),
+      new Option(`${t("Sekunder")}: ${t("av")}`, "off"));
   }
   styleSelect.value = styles.includes(preference.style) ? preference.style : "";
   secondsSelect.value = ["on", "off"].includes(preference.seconds) ? preference.seconds : "";
 }
 
+// Digitalklockan: timmar och minuter stora, sekunderna (och AM/PM) mindre intill,
+// så att sekunderna alltid får plats när de är på. Måtten ligger i skarmar.css.
+function clockDigitParts(time, us, showSeconds) {
+  const match = /^(\d\d):(\d\d)(?::(\d\d))?$/.exec(time);
+  if (!match) return { hm: "--:--", ss: showSeconds ? "--" : "", ap: "" };
+  let hour = Number(match[1]);
+  let ap = "";
+  if (us) { ap = hour >= 12 ? "PM" : "AM"; hour = hour % 12 || 12; }
+  return { hm: `${us ? hour : String(hour).padStart(2, "0")}:${match[2]}`, ss: showSeconds ? (match[3] ?? "00") : "", ap };
+}
+
 function renderClock(snapshot) {
   const target = document.querySelector("#clock-view");
-  target.dataset.us = String(snapshot.meet?.operating_region === "us");
+  const us = snapshot.meet?.operating_region === "us";
+  target.dataset.us = String(us);
   const { style, showSeconds } = resolveClockAppearance(snapshot);
   const digital = style === "digital";
   const seconds = currentClockSeconds(snapshot);
   const time = currentClockTime(snapshot);
-  let displayTime = showSeconds ? time : time.slice(0, 5);
-  if (snapshot.meet?.operating_region === "us" && /^\d\d:/.test(time)) {
-    const hour = Number(time.slice(0, 2)); displayTime = `${hour % 12 || 12}${displayTime.slice(2)} ${hour >= 12 ? "PM" : "AM"}`;
-  }
   const darkBackground = !document.querySelector("#display-app").classList.contains("light");
   const stopped = !snapshot.clock?.running;
   const externalMissing = snapshot.clock?.source === "fastclock" && !snapshot.clock.available;
   const reason = snapshot.clock?.stopped_reason || (externalMissing ? t("Senast mottagna tid visas") : "");
   const meta = `${Number(snapshot.clock?.speed || 1)}× · ${snapshot.clock?.source === "fastclock" ? "FastClock" : t("Intern klocka")}`;
-  const renderSignature = [style, darkBackground, showSeconds, stopped, externalMissing, reason, meta].join("|");
+  // Stoppad klocka står still: tiden den visar är tiden den stannade på.
+  const since = stopped && !externalMissing && /^\d\d:\d\d/.test(time) ? time.slice(0, 5) : "";
+  const renderSignature = [style, darkBackground, showSeconds, stopped, externalMissing, reason, meta, since, us, globalThis.TrainMeetI18n?.getLanguage?.()].join("|");
   if (target.dataset.clockSignature !== renderSignature) {
     target.dataset.clockSignature = renderSignature;
-    // A running face fills the screen on its own; the status line is only for
-    // digits (where it costs no size) and for a stopped or unreachable clock.
+    // Går klockan fyller siffrorna eller urtavlan skärmen själva; raden under
+    // finns bara för siffror (där den inte kostar storlek) och för en klocka som
+    // stannat eller tappat kontakten.
+    const detail = [since ? `${t("sedan")} <span class="mono">${escapeHTML(since)}</span>` : "", escapeHTML(reason)].filter(Boolean).join(" · ");
     const status = stopped || externalMissing
-      ? html`<div class="sc-stopped"><div><div class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan stoppad")}</div><div class="sc-stopped__reason">${escapeHTML(reason)}</div><div class="sc-stopped__meta">${escapeHTML(meta)}</div></div></div>`
+      ? html`<div class="sc-stopped"><span class="sc-stopped__dot"></span><span class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan är stoppad")}</span>${detail ? `<span class="sc-stopped__reason">${detail}</span>` : ""}<span class="sc-stopped__meta">${escapeHTML(meta)}</span></div>`
       : digital ? html`<div class="sc-run">${t("Klockan går")} · ${escapeHTML(meta)}</div>` : "";
     // One clock only: a face never has digits beside it, and digits never have a face.
     const clock = digital
-      ? html`<div class="clock-digital${stopped ? " stopped" : ""}" data-seconds="${showSeconds}"></div>`
+      ? html`<div class="clock-digital${stopped ? " stopped" : ""}" data-seconds="${showSeconds}"><span class="cd-hm"></span><span class="cd-side"><span class="cd-ap"></span><span class="cd-ss"></span></span></div>`
       : clockSVG(style, style === "stationsur" ? false : darkBackground, showSeconds, stopped);
     target.innerHTML = html`<div class="sc-clock-layout ${digital ? "sc-clock-layout--digital" : "sc-clock-layout--face"}${stopped || externalMissing ? " is-stopped" : ""}">${clock}${status}</div>`;
   }
   const digits = target.querySelector(".clock-digital");
-  if (digits && digits.textContent !== displayTime) digits.textContent = displayTime;
+  if (digits) {
+    const parts = clockDigitParts(time, us, showSeconds);
+    for (const [name, text] of [["cd-hm", parts.hm], ["cd-ap", parts.ap], ["cd-ss", parts.ss]]) {
+      const node = digits.querySelector(`.${name}`);
+      if (node.textContent !== text) node.textContent = text;
+    }
+  }
   if (!digital) updateAnalogClockHands(target, seconds, style, !stopped);
 }
 
@@ -4204,21 +3933,21 @@ function renderDashboard(snapshot) {
   const shownOnLine = onLine.length > 3 ? onLine.slice(0, 2) : onLine;
   const lineRows = shownOnLine.map((train) => html`<div class="server-event dash-row dash-row--line"><b>${escapeHTML(train.train)}</b><span class="dash-what">${escapeHTML(train.from)} → ${escapeHTML(train.to)}</span><span class="dash-in${train.late ? " is-late" : ""}">${train.due ? escapeHTML(t("ank {time}", { time: train.due })) : ""}</span></div>`).join("")
     + (onLine.length > shownOnLine.length ? html`<div class="server-event dash-row dash-row--more">${escapeHTML(t("och {n} till", { n: onLine.length - shownOnLine.length }))}</div>` : "");
-  const status = late.length ? (late.length === 1 ? t("1 sen ankomst") : t("{n} sena ankomster", { n: late.length })) : `${t("Inga sena ankomster")} · ${t("trafiken följer tidtabellen")}`;
+  const status = late.length ? (late.length === 1 ? t("1 sen ankomst") : t("{n} sena ankomster", { n: late.length })) : `${t("Inga avvikelser")} · ${t("trafiken följer tidtabellen")}`;
   target.innerHTML = html`<div class="dashboard-column">
     <section class="display-card dashboard-clock-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><div class="dashboard-clock-meta"><b>${escapeHTML(snapshot.meet?.name || "TrainMeet")}</b><span class="dashboard-run${snapshot.clock?.running ? "" : " is-stopped"}">${snapshot.clock?.running ? `${escapeHTML(t("Klockan går"))} · ${Number(snapshot.clock?.speed || 1)}×` : escapeHTML(t("Klockan är stoppad"))}</span><span class="dashboard-day">${escapeHTML(snapshot.active_day || "")}</span></div></section>
     <section class="display-card dashboard-stats">
       <div class="dashboard-stat"><b>${moving.length}</b><span>tåg på linjen</span></div>
       <div class="dashboard-stat"><b>${positions.filter(p=>p.station_id && !p.connection_id).length}</b><span>inne på stationerna</span></div>
       <div class="dashboard-stat"><b>${staffed == null ? (snapshot.stations?.length || 0) : `${staffed} / ${snapshot.stations?.length || 0}`}</b><span>${staffed == null ? "stationer" : "stationer bemannade"}</span></div>
-      <div class="dashboard-stat"><b>${late.length}</b><span>sena ankomster</span></div>
+      <div class="dashboard-stat${late.length ? " warn" : " ok"}"><b>${late.length}</b><span>avvikelser</span></div>
     </section>
   </div><section class="display-card"><svg id="dashboard-topology" class="display-visual" role="img" aria-label="Banöversikt"></svg></section>
   <div class="server-dashboard-bottom"><section class="display-card dash-card"><div class="dash-head"><h3>Nästa händelser</h3><span>de fyra närmaste</span></div>${upcoming.map(eventRow).join("") || html`<p class="dash-empty">Inga fler planerade händelser idag.</p>`}</section>
   <section class="display-card dash-card"><div class="dash-head"><h3>På linjen just nu</h3><span>tåg · sträcka · ankomst</span></div>${lineRows || html`<p class="dash-empty">Inget tåg är ute på linjen</p>`}<p class="dash-status${late.length ? " is-late" : ""}">${escapeHTML(status)}</p></section></div>`;
   // Draw for the height the card really has, so station names stay at their 30 px.
   const dashboardMap = document.querySelector("#dashboard-topology");
-  renderTopology(snapshot, dashboardMap, {tv:true, height: Math.max(300, Math.round(dashboardMap.clientHeight || 450))});
+  renderTopology(snapshot, dashboardMap, {tv:true, compactCount:true, height: Math.max(300, Math.round(dashboardMap.clientHeight || 450))});
 }
 
 // Trains out on the line, where they run and when they are due: the strip
@@ -4310,17 +4039,91 @@ function renderConnectionBadge(snapshot) {
   document.querySelector("#display-connection-code").textContent = connection.code;
 }
 
+// ── Skärmarnas verktygsrad ───────────────────────────────────────────────
+// Fönsterläge: raden står kvar. Helskärm (webbläsarens eller kioskens): raden
+// döljs efter fyra sekunder och kommer tillbaka vid musrörelse eller tryck.
+const DISPLAY_THEME_KEY = "trainmeet.displayTheme";
+const DISPLAY_GRAPH_WINDOW_KEY = "trainmeet.displayGraphWindow";
+const DISPLAY_GRAPH_WINDOWS = [120, 180, 360, 1440];
+const DISPLAY_TOOLBAR_HIDE_MS = 4000;
+
+function displayStored(key) { try { return localStorage.getItem(key) || ""; } catch { return ""; } }
+function displayStore(key, value) { try { localStorage.setItem(key, value); } catch { /* privat läge: gäller bara den här sidan */ } }
+function displayGraphWindow() {
+  const value = Number(displayStored(DISPLAY_GRAPH_WINDOW_KEY));
+  return DISPLAY_GRAPH_WINDOWS.includes(value) ? value : 180;
+}
+function displayTheme() {
+  const stored = displayStored(DISPLAY_THEME_KEY);
+  return stored === "light" || stored === "dark" ? stored : (document.documentElement.dataset.krTheme === "light" ? "light" : "dark");
+}
+function applyDisplayTheme(theme) {
+  const light = theme === "light";
+  document.querySelector("#display-app").classList.toggle("light", light);
+  document.documentElement.dataset.krTheme = light ? "light" : "dark";
+}
+function displayIsFullscreen() {
+  return Boolean(document.fullscreenElement)
+    || globalThis.matchMedia?.("(display-mode: fullscreen)").matches === true
+    || (innerWidth >= screen.width - 1 && innerHeight >= screen.height - 1);
+}
+function formatGraphWindow(minutes) {
+  return minutes >= 1440 ? t("Hela dygnet") : t("{n} timmar", { n: minutes / 60 });
+}
+
+function renderDisplayThemeChoice() {
+  const select = document.querySelector("#display-theme");
+  const signature = globalThis.TrainMeetI18n?.getLanguage?.() || "";
+  if (select.dataset.signature !== signature) {
+    select.dataset.signature = signature;
+    select.replaceChildren(new Option(t("Mörkt"), "dark"), new Option(t("Ljust"), "light"));
+  }
+  select.value = displayTheme();
+}
+
+function renderDisplayGraphWindow() {
+  const select = document.querySelector("#display-graph-window");
+  select.classList.toggle("hidden", displayKind !== "graph");
+  const signature = globalThis.TrainMeetI18n?.getLanguage?.() || "";
+  if (select.dataset.signature !== signature) {
+    select.dataset.signature = signature;
+    select.replaceChildren(...DISPLAY_GRAPH_WINDOWS.map((minutes) => new Option(`${t("Fönster")}: ${formatGraphWindow(minutes)}`, String(minutes))));
+  }
+  select.value = String(displayGraphWindow());
+}
+
+// "Byt skärm": de skärmar som finns för träffens region.
+function renderDisplaySwitch(snapshot) {
+  const list = document.querySelector("#display-switch-list");
+  const us = snapshot.meet?.operating_region === "us";
+  const kinds = us ? ["clock", "territories"] : ["clock", "dashboard", "topology", "graph"];
+  const names = { clock: "Träffklocka", dashboard: "Översikt", topology: "Banöversikt", graph: "Tågdiagram", territories: "Områdestavla" };
+  const signature = [kinds.join(","), displayKind, globalThis.TrainMeetI18n?.getLanguage?.()].join("|");
+  if (list.dataset.signature === signature) return;
+  list.dataset.signature = signature;
+  list.replaceChildren(...kinds.map((kind) => {
+    const link = document.createElement("a");
+    link.href = `/display/${kind}`;
+    link.textContent = t(names[kind]);
+    if (kind === displayKind) link.setAttribute("aria-current", "page");
+    return link;
+  }));
+}
+
 function renderDisplay(snapshot) {
   displaySnapshot = snapshot;
-  serverUI.display(snapshot, displayKind, currentClockTime(snapshot));
+  serverUI.display(snapshot, displayKind, currentClockTime(snapshot), { range: displayKind === "graph" ? graphWindowRange(snapshot) : "" });
   document.querySelector("#display-loading").classList.add("hidden");
-  document.querySelector("#display-title").textContent = `${snapshot.meet?.name || "TrainMeet"} · ${({ topology: t("Banöversikt"), graph: "Tågdiagram", clock: t("Träffklocka"), dashboard: t("Översikt"), territories: t("Områdestavla") })[displayKind]}`;
+  const screenNames = { topology: t("Banöversikt"), graph: t("Tågdiagram"), clock: t("Träffklocka"), dashboard: t("Översikt"), territories: t("Områdestavla") };
+  document.querySelector("#display-title").textContent = screenNames[displayKind];
+  document.title = `${screenNames[displayKind]} · ${snapshot.meet?.name || "TrainMeet"}`;
   document.querySelector("#display-day").textContent = snapshot.active_day || "Dagl";
   const isClock = displayKind === "clock";
-  document.querySelector("#display-speed").classList.toggle("hidden", !isClock);
-  document.querySelector("#display-speed").textContent = `${Number(snapshot.clock?.speed || 1)}×`;
   document.querySelector("#display-clock-style").classList.toggle("hidden", !isClock);
   document.querySelector("#display-clock-seconds").classList.toggle("hidden", !isClock);
+  renderDisplaySwitch(snapshot);
+  renderDisplayGraphWindow();
+  renderDisplayThemeChoice();
   const trainSelect = document.querySelector("#display-train-select");
   const trainSelectable = displayKind === "topology" || displayKind === "graph";
   const services = uniqueOverviewServices(snapshot);
@@ -4393,16 +4196,16 @@ async function initDisplay() {
   serverUI.initDisplay();
   const displayApp = document.querySelector("#display-app");
   displayApp.classList.remove("hidden");
-  const light = localStorage.getItem("trainmeet.displayTheme") === "light";
-  displayApp.classList.toggle("light", light);
-  document.querySelector("#display-theme").textContent = light ? "Mörkt" : "Ljust";
+  applyDisplayTheme(displayTheme());
   document.title = "TrainMeet · Skärm";
-  document.querySelector("#display-theme").addEventListener("click", () => {
-    displayApp.classList.toggle("light");
-    const isLight = displayApp.classList.contains("light");
-    localStorage.setItem("trainmeet.displayTheme", isLight ? "light" : "dark");
-    document.querySelector("#display-theme").textContent = isLight ? "Mörkt" : "Ljust";
+  document.querySelector("#display-theme").addEventListener("change", (event) => {
+    displayStore(DISPLAY_THEME_KEY, event.target.value);
+    applyDisplayTheme(event.target.value);
     if (displaySnapshot) renderDisplay(displaySnapshot);
+  });
+  document.querySelector("#display-graph-window").addEventListener("change", (event) => {
+    displayStore(DISPLAY_GRAPH_WINDOW_KEY, event.target.value);
+    if (displaySnapshot && displayKind === "graph") renderGraph(displaySnapshot);
   });
   document.querySelector("#display-train-select").addEventListener("change", (event) => {
     state.displaySelectedTrainNumber = event.target.value || null;
@@ -4422,26 +4225,45 @@ async function initDisplay() {
     saveDisplayClockPreference(DISPLAY_CLOCK_SECONDS_KEY, event.target.value);
     if (displaySnapshot) renderClock(displaySnapshot);
   });
-  document.querySelector("#display-fullscreen").addEventListener("click", async () => {
+  const fullscreenButton = document.querySelector("#display-fullscreen");
+  fullscreenButton.addEventListener("click", async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await displayApp.requestFullscreen();
     } catch {}
   });
+  const toolbar = document.querySelector("#display-toolbar"), stage = document.querySelector("#display-stage");
+  const setToolbar = (visible) => {
+    toolbar.classList.toggle("hidden-toolbar", !visible);
+    stage.classList.toggle("toolbar-hidden", !visible);
+  };
+  // I helskärm kommer raden tillbaka vid rörelse och döljs efter fyra sekunder;
+  // i fönster står den kvar.
   const showToolbar = () => {
     clearTimeout(displayToolbarTimer);
-    document.querySelector("#display-toolbar").classList.remove("hidden-toolbar");
-    document.querySelector("#display-stage").classList.remove("toolbar-hidden");
+    setToolbar(true);
+    if (displayApp.dataset.chrome !== "fullscreen") return;
     displayToolbarTimer = setTimeout(() => {
-      document.querySelector("#display-toolbar").classList.add("hidden-toolbar");
-      document.querySelector("#display-stage").classList.add("toolbar-hidden");
-    }, 4000);
+      // Raden står kvar medan pekaren är över den eller menyn är öppen.
+      if (toolbar.matches(":hover") || document.querySelector("#display-switch")?.open) { showToolbar(); return; }
+      setToolbar(false);
+    }, DISPLAY_TOOLBAR_HIDE_MS);
+  };
+  const updateChrome = () => {
+    const full = displayIsFullscreen();
+    displayApp.dataset.chrome = full ? "fullscreen" : "window";
+    fullscreenButton.querySelector("tm-text").textContent = t(full ? "Avsluta helskärm" : "Helskärm");
+    fullscreenButton.querySelector("tm-text").dataset.tmText = full ? "Avsluta helskärm" : "Helskärm";
+    showToolbar();
+    serverUI.resizeStage?.();
   };
   displayApp.addEventListener("mousemove", showToolbar);
   displayApp.addEventListener("click", showToolbar);
   displayApp.addEventListener("touchstart", showToolbar, {passive:true});
   document.addEventListener("keydown", showToolbar);
-  showToolbar();
+  window.addEventListener("resize", updateChrome);
+  document.addEventListener("fullscreenchange", updateChrome);
+  updateChrome();
   try { await navigator.wakeLock?.request("screen"); } catch {}
   const animateClock = () => {
     if (displaySnapshot && displayKind === "clock") renderClock(displaySnapshot);
@@ -4848,39 +4670,32 @@ function renderUsers() {
 
   body.replaceChildren(...users.list.map((user) => {
     const tr = document.createElement("tr");
-
-    const state = user.invitation_pending
-      ? "Inbjuden — har inte valt lösenord"
-      : t("Aktiv");
-    const roleLabel = user.role === "owner" ? t("Ägare") : t("Administratör");
+    const pending = Boolean(user.invitation_pending);
 
     const name = document.createElement("td");
-    name.className = "users-name";
-    name.textContent = user.username;
-    // Läget står två gånger med flit: som egen kolumn när det finns plats,
-    // och som rad under namnet när kolumnen fälls bort på en telefon. CSS
-    // väljer vilken som syns, så det behövs ingen brytpunkt i koden.
-    const inline = document.createElement("small");
-    inline.className = "users-state-inline";
-    inline.textContent = `${roleLabel} · ${state}`;
-    name.append(inline);
+    const strong = document.createElement("b");
+    strong.textContent = user.username;
+    name.append(strong);
     tr.append(name);
 
     const role = document.createElement("td");
-    role.className = "users-role";
     const chip = document.createElement("span");
-    chip.className = user.role === "owner" ? "role-chip is-owner" : "role-chip";
-    chip.textContent = roleLabel;
+    chip.className = user.role === "owner" ? "kr-pill sel" : "kr-pill";
+    chip.textContent = user.role === "owner" ? t("Ägare") : t("Administratör");
     role.append(chip);
     tr.append(role);
 
     const column = document.createElement("td");
-    column.className = "users-state";
-    column.textContent = state;
+    const tag = document.createElement("span");
+    tag.className = `kr-tag ${pending ? "warn" : "ok"}`;
+    const dot = document.createElement("span");
+    dot.className = "kr-dot";
+    tag.append(dot, document.createTextNode(pending ? t("Inbjuden — har inte valt lösenord") : t("Aktiv")));
+    column.append(tag);
     tr.append(column);
 
     const actions = document.createElement("td");
-    actions.className = "users-actions";
+    actions.className = "r";
     if (owner) {
       actions.append(usersButton("Redigera", () => editUser(user)));
     }
@@ -4892,7 +4707,7 @@ function renderUsers() {
 function usersButton(label, onClick, kind = "") {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = kind ? `link-button ${kind}` : "link-button";
+  button.className = kind ? `kr-linkbtn ${kind}` : "kr-linkbtn";
   button.dataset.tmText = label;
   button.textContent = t(label);
   button.addEventListener("click", onClick);
@@ -5413,224 +5228,4 @@ function v2Payload(command) {
     }
   }
   return payload;
-}
-
-// ==================================================== Unified live overview
-// Uses the overview's snapshot and refresh cycle, never a second polling loop.
-//
-// All data kommer från /v1/display — samma källa som trafikmotorn och
-// hallskärmarna. Ingenting här är exempeldata, och ingenting härleds på ett
-// annat sätt än motorn gör det.
-
-const trafficState = { station: "", onlyDeviations: true };
-
-document.querySelector("#traffic-station")?.addEventListener("change", (event) => {
-  trafficState.station = event.target.value;
-  renderTraffic(state.overviewSnapshot);
-});
-document.querySelector("#traffic-only-deviations")?.addEventListener("change", (event) => {
-  trafficState.onlyDeviations = event.target.checked;
-  renderTraffic(state.overviewSnapshot);
-});
-
-function renderTraffic(snapshot) {
-  if (!snapshot) return;
-  serverUI.traffic(snapshot, trafficState.station, trainDetail.number);
-  if (trainDetail.number) refreshTrainDetail();
-
-  fillTrafficStationFilter(snapshot);
-  renderTrafficOnline(snapshot);
-  renderTrafficStations(snapshot);
-  renderTrafficTimeline(snapshot);
-}
-
-function fillTrafficStationFilter(snapshot) {
-  const select = document.querySelector("#traffic-station");
-  if (!select) return;
-  const stations = snapshot.stations || [];
-  const signature = JSON.stringify(stations.map(({ id, name }) => [id, name]));
-  if (select.dataset.stations === signature) return;
-  select.dataset.stations = signature;
-  // Keep the all-stations option (and its localization metadata), replace data.
-  while (select.options.length > 1) select.remove(1);
-  for (const station of stations) {
-    const option = document.createElement("option");
-    option.value = station.id;
-    option.textContent = station.name;
-    select.append(option);
-  }
-  if (!stations.some((station) => station.id === trafficState.station)) trafficState.station = "";
-  select.value = trafficState.station;
-}
-
-/** Minuter från träffklockan till `time`, som kan vara negativt. */
-function minutesFromClock(clock, time) {
-  const now = clockMinutes(clock);
-  const then = clockMinutes(time);
-  if (now === null || then === null) return null;
-  return then - now;
-}
-
-function clockMinutes(value) {
-  const parts = String(value || "").split(":");
-  if (parts.length < 2) return null;
-  const hours = Number(parts[0]);
-  const minutes = Number(parts[1]);
-  return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
-}
-
-function stationName(snapshot, id) {
-  return (snapshot.stations || []).find((station) => station.id === id)?.name || id || "–";
-}
-
-/** Ett kort per tåg som är mellan två stationer. */
-function renderTrafficOnline(snapshot) {
-  const host = document.querySelector("#traffic-online");
-  if (!host) return;
-  const clock = snapshot.clock?.time || "";
-  const moving = (snapshot.train_positions || []).filter((position) => position.connection_id);
-
-  const cards = moving
-    .filter((position) => !trafficState.station
-      || position.from_station_id === trafficState.station
-      || position.to_station_id === trafficState.station)
-    .map((position) => {
-      const route = (snapshot.routes || []).find(
-        (row) => row.train_number === position.train_number
-          && row.station_id === position.to_station_id,
-      );
-      const arrival = route?.arrival_time || route?.departure_time || "";
-      const away = minutesFromClock(clock, arrival);
-      const late = away !== null && away < 0;
-
-      const card = document.createElement("article");
-      card.className = "traffic-card";
-      const number = document.createElement("b");
-      number.className = "traffic-train-number";
-      number.textContent = position.train_number;
-      const leg = document.createElement("p");
-      leg.className = "traffic-leg";
-      leg.textContent = `${stationName(snapshot, position.from_station_id)} → ${stationName(snapshot, position.to_station_id)}`;
-
-      const bar = document.createElement("div");
-      bar.className = "traffic-progress";
-      const fill = document.createElement("i");
-      // Fyllnaden är hur långt tåget hunnit mot ankomsttiden. Utan ankomsttid
-      // ritas ingen stapel alls hellre än en påhittad.
-      if (away !== null) {
-        const share = Math.max(0, Math.min(1, 1 - away / 12));
-        fill.style.width = `${Math.round(share * 100)}%`;
-      }
-      bar.append(fill);
-
-      const times = document.createElement("p");
-      times.className = "traffic-times";
-      times.textContent = arrival ? `Ankomst ${arrival}` : "Ingen ankomsttid";
-
-      const chip = document.createElement("span");
-      chip.className = `traffic-chip ${late ? "late" : "on-time"}`;
-      chip.textContent = late ? `${Math.abs(away)} min sen` : t("I tid");
-
-      card.append(number, leg, bar, times, chip);
-      return { card, late };
-    })
-    .filter((entry) => !trafficState.onlyDeviations || entry.late)
-    .map((entry) => entry.card);
-
-  host.replaceChildren(...(cards.length ? cards : [emptyNote("Inget tåg är ute på linjen just nu.")]));
-}
-
-function emptyNote(text) {
-  const note = document.createElement("p");
-  note.className = "traffic-empty";
-  note.textContent = text;
-  return note;
-}
-
-/** Ett kort per station: spår, tåg, tider och status ur trafikmotorn. */
-function renderTrafficStations(snapshot) {
-  const host = document.querySelector("#traffic-stations");
-  if (!host) return;
-  const clock = snapshot.clock?.time || "";
-  const stations = (snapshot.stations || [])
-    .filter((station) => !trafficState.station || station.id === trafficState.station);
-
-  const cards = stations.map((station) => {
-    const rows = (snapshot.routes || [])
-      .filter((row) => row.station_id === station.id)
-      .map((row) => ({ row, away: minutesFromClock(clock, row.departure_time || row.arrival_time) }))
-      .filter((entry) => entry.away === null || entry.away > -30)
-      .sort((a, b) => (a.away ?? 0) - (b.away ?? 0))
-      .slice(0, 6);
-
-    const card = document.createElement("article");
-    card.className = "traffic-card traffic-station-card";
-    const heading = document.createElement("header");
-    const name = document.createElement("b");
-    name.textContent = station.name;
-    const code = document.createElement("span");
-    code.className = "traffic-station-code";
-    code.textContent = station.code || "";
-    heading.append(name, code);
-    card.append(heading);
-
-    if (!rows.length) {
-      card.append(emptyNote("Inga rörelser kvar i dag."));
-      return card;
-    }
-
-    const list = document.createElement("ul");
-    list.className = "traffic-station-rows";
-    for (const { row, away } of rows) {
-      const item = document.createElement("li");
-      const time = document.createElement("span");
-      time.className = "traffic-time";
-      time.textContent = row.departure_time || row.arrival_time || "–";
-      const train = document.createElement("span");
-      train.className = "traffic-train-number small";
-      train.textContent = row.train_number;
-      const status = document.createElement("span");
-      status.className = "traffic-status";
-      // Härledd, aldrig lagrad: ett lagrat statusfält blir inaktuellt.
-      status.textContent = away === null ? "" : away < 0 ? t("Avgått") : away <= 2 ? "Strax" : `${away} min`;
-      if (away !== null && away >= 0 && away <= 2) item.classList.add("needs-attention");
-      item.append(time, train, status);
-      list.append(item);
-    }
-    card.append(list);
-    return card;
-  });
-
-  host.replaceChildren(...(cards.length ? cards : [emptyNote("Ingen station att visa.")]));
-}
-
-/** Hela träffdagen i en kolumn med en nu-linje som följer träffklockan. */
-function renderTrafficTimeline(snapshot) {
-  const host = document.querySelector("#traffic-timeline");
-  if (!host) return;
-  const clock = snapshot.clock?.time || "";
-  const rows = (snapshot.routes || [])
-    .filter((row) => !trafficState.station || row.station_id === trafficState.station)
-    .map((row) => ({ row, away: minutesFromClock(clock, row.departure_time || row.arrival_time) }))
-    .filter((entry) => entry.away !== null)
-    .sort((a, b) => a.away - b.away);
-
-  let upcomingMarked = 0;
-  const items = rows.map(({ row, away }) => {
-    const item = document.createElement("li");
-    item.className = "traffic-timeline-row";
-    if (away < 0) item.classList.add("past");
-    else if (upcomingMarked < 2) { item.classList.add("next"); upcomingMarked += 1; }
-    else item.classList.add("future");
-
-    const time = document.createElement("span");
-    time.className = "traffic-time";
-    time.textContent = row.departure_time || row.arrival_time || "–";
-    const text = document.createElement("span");
-    text.textContent = `${row.train_number} · ${stationName(snapshot, row.station_id)}`;
-    item.append(time, text);
-    return item;
-  });
-
-  host.replaceChildren(...(items.length ? items : [emptyNote("Tidtabellen är tom.")]));
 }

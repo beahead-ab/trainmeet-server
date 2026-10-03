@@ -17,7 +17,9 @@ class ShellStructureTests(unittest.TestCase):
         self.assertNotIn('run-tabs', self.css)
         for retired in ('RUN_TABS', 'RUN_PANELS', 'selectRunTab', 'trafficTimer', 'renderTrafficView'):
             self.assertNotIn(retired, self.js)
-        self.assertIn('renderTraffic(snapshot)', self.js)
+        # Trafiken ritas av Drift (drift.js); app.js äger data och matar den.
+        self.assertIn('pushDrift()', self.js)
+        self.assertIn('function renderEvents()', (WEB / "drift.js").read_text())
         self.assertNotIn('id="traffic-view"', self.html)
         self.assertIn('id="overview-traffic"', self.html)
         self.assertNotIn('data-build-step=', self.html)
@@ -40,6 +42,42 @@ class ShellStructureTests(unittest.TestCase):
         self.assertIn('aria-label="Sök i tidtabellen"', self.html)
         self.assertIn('id="pv-topology"', self.html)
 
+    def test_participant_view_is_the_designs_mobile_column(self):
+        # Deltagare.dc: clock, the line right now, what comes next, the
+        # timetable with a search, then the buttons. "Anslut din TMBox" is a
+        # button that opens a sheet from the bottom, not a permanent card.
+        start = self.html.index('id="participant-view"')
+        view = self.html[start:self.html.index('class="server-admin-shell"', start)]
+        order = [view.index(marker) for marker in ('id="pv-clock"', 'id="pv-track-card"', 'id="pv-events-card"', 'id="pv-timetable-card"', 'id="pv-connect-open"')]
+        self.assertEqual(order, sorted(order))
+        self.assertIn('<dialog id="pv-connect-card" class="pv-sheet"', view)
+        self.assertNotIn(' style=', view)
+        self.assertNotIn('tm-card', view)
+        self.assertNotIn('pv-foot-login', self.html)
+        for link in ('/assets/kontrollrummet.css', '/assets/skarmar.css', '/assets/deltagare.css'):
+            self.assertIn(f'href="{link}"', self.html)
+        css = (WEB / "deltagare.css").read_text(encoding="utf-8")
+        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,8}\b", "colours come from the --kr- tokens")
+        self.assertNotIn("participant-view", (WEB / "server-ui.css").read_text(encoding="utf-8"))
+        # The map runs sideways on a phone too, and shows no station codes there.
+        participant = (WEB / "participant.js").read_text(encoding="utf-8")
+        self.assertIn("wide: true", participant)
+        self.assertIn("noCode: true", participant)
+
+    def test_screens_share_one_toolbar_and_keep_their_own_choices(self):
+        self.assertIn('id="display-toolbar"', self.html)
+        self.assertIn('class="kr-btn sm display-back"', self.html)
+        for element in ("display-switch", "display-clock-style", "display-clock-seconds", "display-graph-window", "display-theme", "display-fullscreen"):
+            self.assertIn(f'id="{element}"', self.html)
+        self.assertLess(self.html.index('href="/assets/server-ui.css"'), self.html.index('href="/assets/skarmar.css"'))
+        # Helskärm hides the toolbar after four seconds; a window keeps it.
+        self.assertIn("const DISPLAY_TOOLBAR_HIDE_MS = 4000;", self.js)
+        self.assertIn("function displayIsFullscreen()", self.js)
+        for key in ("trainmeet.displayTheme", "trainmeet.displayGraphWindow", "trainmeet.displayClockStyle", "trainmeet.displayClockSeconds"):
+            self.assertIn(key, self.js)
+        self.assertIn("function clockDigitParts(", self.js)
+        self.assertNotIn("function renderScrollableGraph", self.js)
+
     def test_menu_is_single_settings_entry(self):
         self.assertEqual(1, self.html.count('id="open-settings"'))
         self.assertIn('id="application-menu"', self.html)
@@ -61,14 +99,20 @@ class ShellStructureTests(unittest.TestCase):
         self.assertIn('authorizedFetch("/v1/clock"', self.js)
 
     def test_settings_and_drift_have_separate_responsibilities(self):
-        sections = re.search(r"const SETTINGS_SECTIONS = \[([^\]]*)\]", self.js)
+        # Inställningar är nio avsnitt, ett i taget (settings.js). Boxarna och
+        # stationerna hör till Drift och finns inte här.
+        sections = re.search(r"const SECTIONS = \[([^\]]*)\]", (WEB / "settings.js").read_text())
         self.assertIsNotNone(sections)
-        for name in ("identity", "users", "software", "cloud", "system"):
-            self.assertIn(f'"{name}"', sections.group(1))
-        self.assertNotIn('"devices"', sections.group(1))
+        names = re.findall(r'"(\w+)"', sections.group(1))
+        self.assertEqual(names, ["traff", "skarmar", "wifi", "server", "kod", "anvandare", "uppdatering", "sprak", "farozon"])
+        for name in names:
+            self.assertIn(f'<section id="{name}" class="kr-setsec" data-section="{name}"', self.html)
+            self.assertIn(f'href="/installningar#{name}"', self.html)
+        self.assertNotIn("devices", names)
+        self.assertNotIn("SETTINGS_SECTIONS", self.js)
 
     def test_admin_forms_are_real_dialogs(self):
-        for name in ("server-identity-form", "admin-access-form", "users-invite-form",
+        for name in ("admin-access-form", "users-invite-form",
                      "device-form", "runtime-sync-form", "clock-control-form"):
             start = self.html.index(f'<dialog id="{name}-modal"')
             end = self.html.index("</dialog>", start)
@@ -79,6 +123,22 @@ class ShellStructureTests(unittest.TestCase):
         self.assertIn('modalChanged(dialog)', self.js)
         self.assertIn('beginModalAction', self.js)
         self.assertIn('endModalAction', self.js)
+
+    def test_what_is_edited_in_place_has_its_own_save_bar(self):
+        """Inställningar: varje panel som går att ändra är ett eget formulär med
+        Avbryt och Spara, släckta tills något skiljer sig från det sparade."""
+        forms = re.findall(r'<form id="([\w-]+)" class="kr-panel kr-setform"', self.html)
+        self.assertEqual(forms, ["cloud-auto-form", "clock-appearance-form", "connection-wifi-form",
+                                 "connection-badge-form", "server-identity-form", "connection-code-form", "language-form"])
+        for name in forms:
+            start = self.html.index(f'<form id="{name}"')
+            block = self.html[start:self.html.index("</form>", start)]
+            self.assertIn('data-savebar', block, name)
+            self.assertRegex(block, r'<button[^>]*data-save-cancel[^>]*disabled', name)
+            self.assertRegex(block, r'<button[^>]*type="submit"[^>]*data-save-submit[^>]*disabled', name)
+        # The dialogs these forms replaced are gone; no form is both.
+        for gone in ("server-identity-form-modal", "cloud-auto-modal", "clock-appearance-modal", "connection-badge-modal"):
+            self.assertNotIn(f'<dialog id="{gone}"', self.html)
 
     def test_software_and_config_updates_remain_separate(self):
         self.assertIn('id="runtime-check-update"', self.html)
@@ -122,21 +182,27 @@ class DesignTokenTests(unittest.TestCase):
     def test_times_and_numbers_are_monospace(self):
         """DEL 6: den enskilt viktigaste typografiska regeln - siffror som ska
         jämföras måste ligga i rad."""
-        # Exakt selektor, inte substräng: .traffic-time och .traffic-times är
-        # två olika regler och en substrängsökning hittar fel block.
-        for selector in (".app-clock", ".traffic-time", ".traffic-times",
-                         ".traffic-train-number", ".traffic-station-code"):
-            index = self.css.index(selector + " {")
-            block = self.css[index:index + 400]
+        # Exakt selektor, inte substräng: .kr-ev .t och .kr-stat b är olika regler.
+        kr = (WEB / "kontrollrummet.css").read_text()
+        for selector in (".kr-clock-time", ".kr-stat b", ".kr-ev .t", ".kr-badge", ".kr-trainno", ".kr-code"):
+            index = kr.index(selector + " {")
+            block = kr[index:index + 300]
             # Through the token, so every one of them is the shipped JetBrains Mono.
-            self.assertIn("var(--font-mono)", block, selector)
-        self.assertIn('--font-mono: "JetBrains Mono"', self.css)
+            self.assertIn("var(--kr-mono)", block, selector)
+        self.assertIn("#app-chrome .app-clock", kr)
+        self.assertIn('--kr-mono: "JetBrains Mono"', kr)
+        self.assertNotRegex(kr, r"font-family:\s*ui-monospace")
         self.assertNotRegex(self.css, r"font-family:\s*ui-monospace")
 
     def test_motion_is_only_where_it_means_something(self):
         """DEL 7.7: blinkar allt betyder blinkandet ingenting."""
-        self.assertIn("@keyframes traffic-pulse", self.css)
-        self.assertIn("prefers-reduced-motion", self.css)
+        css = "".join((WEB / name).read_text(encoding="utf-8") for name in ("app.css", "kontrollrummet.css", "server-ui.css"))
+        # Every animation that is defined is used by something, and everything
+        # that moves stops when the system asks for less motion.
+        for name in re.findall(r"@keyframes ([\w-]+)", css):
+            self.assertRegex(css, rf"animation:[^;]*\b{name}\b", name)
+        self.assertIn("@keyframes update-pulse", css)
+        self.assertRegex(self.css, r"@media \(prefers-reduced-motion: reduce\)[^}]*animation-duration")
 
     def test_no_external_font_is_reintroduced(self):
         html = (WEB / "index.html").read_text(encoding="utf-8")
