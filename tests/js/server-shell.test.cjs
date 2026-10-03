@@ -397,8 +397,13 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       assert.equal(await page.locator('#overview-topology .topology-train.at-station').count(), 0, `station ${station}: no row of tags`);
     }
     // Readable on a phone: the map's box grows with the upright line.
-    await page.waitForFunction(() => { const texts = [...document.querySelectorAll('#overview-topology .topology-name')]; return texts.length > 0 && texts.every(text => text.getBoundingClientRect().height > 0); });
-    const heights = await page.locator('#overview-topology .topology-name, #overview-topology .train-number').evaluateAll(texts => texts.map(text => [text.textContent, text.getBoundingClientRect().height, getComputedStyle(text).display]));
+    // Wait and measure in one step: the map may be redrawn (new nodes) between two separate calls.
+    const heights = await (await page.waitForFunction(() => {
+      const texts = [...document.querySelectorAll('#overview-topology .topology-name, #overview-topology .train-number')];
+      const names = texts.filter(text => text.matches('.topology-name'));
+      if (!names.length || names.some(text => text.getBoundingClientRect().height === 0)) return null;
+      return texts.map(text => [text.textContent, text.getBoundingClientRect().height, getComputedStyle(text).display]);
+    })).jsonValue();
     const smallest = Math.min(...heights.map(([, height]) => height));
     assert.ok(smallest >= 7, `map text ${smallest} px high: ${JSON.stringify(heights)}`);
     for (const heading of await page.locator('#overview-view .kr-ph a, #overview-view .kr-ph .kr-linkbtn').all()) {
