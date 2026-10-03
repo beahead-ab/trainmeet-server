@@ -572,6 +572,14 @@ vilken kopia som gäller, servern stänger sina anslutningar, och filen byts fö
 därefter — samma ordning som nollställningen använder. Misslyckas det står den
 gamla databasen kvar orörd och tjänsten startar om ändå.
 
+Hur det gick sparas i `last-restore.json` i datamappen, bredvid databasen och
+inte i den, eftersom det är den som byts ut. Efter omstarten svarar
+`GET /v1/server/backups` med `last_restore`: vilken kopia det gällde, när den
+togs, när återställningen gjordes, om den lyckades (`restored`) och annars
+varför (`problem`). Utan det går en misslyckad återställning inte att skilja
+från en lyckad: servern går ner och kommer tillbaka i båda fallen. Beskedet
+står kvar tills nästa återställning och försvinner vid fabriksåterställning.
+
 ### Glömt lösenord
 
 Servern har ingen e-post och kan inte skicka en återställningslänk. Beviset är

@@ -22,6 +22,7 @@ unless the copy holds as much as the source did.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sqlite3
 import sys
@@ -245,6 +246,16 @@ def _meet_name(connection: sqlite3.Connection) -> str | None:
     return str(row[0]) if row and row[0] else None
 
 
+def _taken_at(path: Path) -> str | None:
+    """När kopian togs, läst ur filnamnet (UTC)."""
+
+    stamp = Path(path).stem.removeprefix("trainmeet-")
+    try:
+        return datetime.strptime(stamp, "%Y%m%d-%H%M%S").replace(tzinfo=timezone.utc).isoformat()
+    except ValueError:
+        return None
+
+
 def describe(path: Path) -> dict[str, object]:
     """Vad en fil i backupmappen innehåller, och om den går att lita på.
 
@@ -253,21 +264,14 @@ def describe(path: Path) -> dict[str, object]:
     """
 
     path = Path(path)
-    stamp = path.stem.removeprefix("trainmeet-")
     described: dict[str, object] = {
         "name": path.name,
         "size_bytes": path.stat().st_size,
-        "taken_at": None,
+        "taken_at": _taken_at(path),
         "meet_name": None,
         "usable": False,
         "problem": None,
     }
-    try:
-        described["taken_at"] = (
-            datetime.strptime(stamp, "%Y%m%d-%H%M%S").replace(tzinfo=timezone.utc).isoformat()
-        )
-    except ValueError:
-        described["taken_at"] = None
 
     try:
         connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
@@ -315,3 +319,46 @@ def resolve(backup_dir: Path, name: str) -> Path:
     if candidate.parent != backup_dir or not candidate.is_file():
         raise BackupError("Säkerhetskopian finns inte")
     return candidate
+
+
+#: Hur den senaste återställningen gick. Det kan inte stå i databasen - det är
+#: den som byts ut - så det ligger bredvid den i statuskatalogen.
+RESTORE_RECORD = "last-restore.json"
+
+
+def record_restore(
+    state_dir: Path, backup: Path, problem: str | None = None, now: datetime | None = None
+) -> None:
+    """Skriv ner utfallet innan servern startar om.
+
+    Webbläsaren som bad om återställningen ser bara att servern går ner och
+    kommer tillbaka. Utan det här går det inte att skilja en lyckad
+    återställning från en misslyckad, där servern startar om med den gamla
+    databasen och felet bara står i loggen.
+    """
+
+    record = {
+        "backup": Path(backup).name,
+        "taken_at": _taken_at(Path(backup)),
+        "attempted_at": (now or datetime.now(timezone.utc)).isoformat(),
+        "restored": problem is None,
+        "problem": problem,
+    }
+    path = Path(state_dir) / RESTORE_RECORD
+    staged = path.with_name(path.name + ".partial")
+    staged.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+    staged.replace(path)
+
+
+def last_restore(state_dir: Path) -> dict[str, object] | None:
+    """Utfallet av den senaste återställningen, eller None om ingen har gjorts.
+
+    En fil som inte går att läsa räknas som ingen: listan över kopior ska
+    fungera även när det här inte gör det.
+    """
+
+    try:
+        record = json.loads((Path(state_dir) / RESTORE_RECORD).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return record if isinstance(record, dict) else None
