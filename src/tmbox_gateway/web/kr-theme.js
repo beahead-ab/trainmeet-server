@@ -12,4 +12,7 @@
     else if (!stored && location.pathname === "/" && matchMedia("(prefers-color-scheme: light)").matches) theme = "light";
   } catch { /* privat läge: mörkt */ }
   document.documentElement.dataset.krTheme = theme;
+  // Adminsidorna har kontrollrummets botten redan i första bilden, innan app.js
+  // vet vilken vy som ska visas. Annars syntes en ljus sida en stund.
+  if (/^\/(drift|installningar|hjalp|login)\/?$/.test(location.pathname)) document.documentElement.dataset.krPage = "admin";
 })();
