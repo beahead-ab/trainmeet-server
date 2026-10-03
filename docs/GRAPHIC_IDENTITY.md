@@ -7,11 +7,11 @@ fullskärmskomponenterna är grafisk källa.
 
 ## Kontrollrummet (2026-10)
 
-Serverns Drift, sidhuvudet och de dialoger som öppnas därifrån har ett eget
-mörkt och ljust läge, "Kontrollrummet". Det är byggt för att man ska se hela
-träffen på en blick, på en skärm bredvid banan, och är därför tätare och mörkare
-än Clouds varma adminyta. Resten av servern (Inställningar, Hjälp, inloggning)
-följer tills vidare principerna nedan.
+Serverns Drift, Inställningar, sidhuvudet och de dialoger som öppnas därifrån
+har ett eget mörkt och ljust läge, "Kontrollrummet". Det är byggt för att man
+ska se hela träffen på en blick, på en skärm bredvid banan, och är därför tätare
+och mörkare än Clouds varma adminyta. Resten av servern (Hjälp, inloggning,
+deltagarvyn och skärmarna) följer tills vidare principerna nedan.
 
 - Tokens ligger i `web/kontrollrummet.css` (`--kr-*`). Mörkt är grundläget:
   bakgrund `#0d0f13`, paneler `#15181e`, blått för det som är aktivt. Valet
@@ -27,6 +27,30 @@ följer tills vidare principerna nedan.
   en box, ändra vänster och höger, koppla om med kod) ligger bakom en knapp i
   en dialog och inte som permanent text.
 - Mobil: stationslistan blir kort, övriga kolumner göms (`kr-hide-sm`).
+
+### Inställningar
+
+- Sidomeny i tre grupper (Träffen · Den här servern · Webbläsaren) och ett
+  avsnitt i taget: Träff och Cloud, Skärmar och klocka, Wi-Fi och QR-koder,
+  Namn och nätverk, Anslutningskod, Användare, Programuppdatering, Språk och
+  sist Farozon. Adressen är `/installningar#<avsnitt>`; äldre adresser
+  (`#anslutning`, `#fynd`, `#klocka`) hamnar i rätt avsnitt. På en smal skärm
+  blir menyn en rad överst.
+- Varje panel som går att ändra är ett eget formulär (`form.kr-setform`) med
+  en egen **Avbryt** och **Spara** längst ned. Båda är släckta tills något
+  skiljer sig från det sparade; raden säger då vilka fält som är ändrade
+  ("Ändrat: Nätverksnamn, Lösenord"), efter sparandet "Sparat", annars
+  "Inget ändrat". Avbryt återställer fälten. `web/settings.js` räknar och äger
+  menyn, valen med brickor (klockstil, språk), Wi-Fi-lösenordets Visa/Dölj,
+  sökningen i menyn och QR-koderna; formulärens sparande ligger kvar i
+  `app.js`.
+- Det som sällan behövs eller kräver ett eget beslut ligger kvar i dialog:
+  bjud in och redigera användare, byt träff (Cloud-koppling), återställa från
+  säkerhetskopia och nollställa träffdata (med skriven bekräftelse), klockkälla
+  och klockstyrning. Farozon visar bara vad som händer och öppnar dialogen.
+- Det som designen visade men servern inte kan göra (automatisk uppdatering
+  av programvaran, loggvy, separat start/stopp-konto, serverns hårdvara,
+  fönsterläge) finns inte med; inget i gränssnittet lovar mer än servern gör.
 
 ## Gemensamma principer
 
