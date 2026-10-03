@@ -548,8 +548,8 @@ class NeverSentTests(_Boxes):
     def test_the_receiver_places_a_train_nobody_sent(self):
         """Casper: placed on a track afterwards, with the timetable's help."""
         frame = self.send("esp32", "#", train_number="103")["frame"]
-        self.assertEqual("#In B:Sp   09:15", frame["lines"][1])
-        self.assertEqual("Placera på spår", frame["keys"]["#"]["label"])
+        self.assertEqual(["FLYTTA 103 HIT? ", "#Ja B:Sp   09:15"], frame["lines"])
+        self.assertEqual("Flytta hit", frame["keys"]["#"]["label"])
         self.assertEqual([], self.service.open_cases(None))   # the lookup sent nothing
         answer = self.send("esp32", "#")
         self.assertEqual("103 MOTTAGET    ", answer["frame"]["lines"][0])
@@ -567,6 +567,19 @@ class NeverSentTests(_Boxes):
         self.assertEqual("Placera på spår…", frame["keys"]["B"]["label"])
         self.send("esp32", "B")
         self.send("esp32", "#")
+        self.assertEqual("arrived", self.movement("station-b", "movement-103-2")["arrival"])
+        self.assertEqual("departed", self.movement("station-a", "movement-103-1")["departure"])
+        self.assertEqual([], self.service.open_cases(None))
+
+    def test_a_cleared_train_never_reported_departed_is_moved_here_when_typed(self):
+        """Issue #115: the sender forgot to report the departure; the
+        receiver types the number and the box asks to move it here."""
+        self.cleared()
+        self.send("esp32", "*")
+        frame = self.send("esp32", "#", train_number="103")["frame"]
+        self.assertEqual("FLYTTA 103 HIT? ", frame["lines"][0])
+        answer = self.send("esp32", "#")
+        self.assertEqual("103 MOTTAGET    ", answer["frame"]["lines"][0])
         self.assertEqual("arrived", self.movement("station-b", "movement-103-2")["arrival"])
         self.assertEqual("departed", self.movement("station-a", "movement-103-1")["departure"])
         self.assertEqual([], self.service.open_cases(None))

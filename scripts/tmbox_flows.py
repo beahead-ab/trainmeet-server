@@ -110,7 +110,7 @@ FLOWS = [
      None, [
         ("CDA", "#", "# från översikten öppnar stationens kommande tåg, med planerad tid."),
         ("CDA", "D", "C/D bläddrar."),
-        ("CDA", "B", "B filtrerar, först på ankomster. Även en ankomst som ingen har skickat går att välja och placera."),
+        ("CDA", "B", "B filtrerar, först på ankomster. Även en ankomst som ingen har skickat går att välja och flytta hit."),
         ("CDA", "B", "B igen visar bara avgångar. Ett tredje B visar alla tåg."),
         ("CDA", "#", "# väljer tåget. Nu kan du begära klartecken för det."),
     ]),
@@ -146,14 +146,14 @@ FLOWS = [
                      "och Vagnsta har inte längre 55 att skicka."),
         ("MUN", "#", "Munkeröd tar emot 55."),
     ]),
-    ("placera", "Placera ett tåg i efterhand", "clearance", ["MUN", "CDA"],
-     "Munkeröd skickade aldrig 93, men tåget kom till Charlottendal. Charlottendal placerar det på ett "
-     "spår i efterhand, med tidtabellens spår som förslag, och spelet går vidare.",
+    ("placera", "Flytta hit ett tåg som ingen skickat", "clearance", ["MUN", "CDA"],
+     "Munkeröd skickade aldrig 93, men tåget kom till Charlottendal. Charlottendal flyttar det hit "
+     "i efterhand, med tidtabellens spår som förslag, och spelet går vidare.",
      None, [
-        ("CDA", "93#", "Charlottendal skriver 93. Tåget visas ur tidtabellen med #In: placera på planerat spår."),
+        ("CDA", "93#", "Charlottendal skriver 93. Boxen frågar FLYTTA 93 HIT?: # flyttar det till planerat spår."),
         ("CDA", "B", "B väljer ett annat spår i stället. Boxen börjar på spår 1."),
         ("CDA", "D", "C/D bläddrar bland stationens spår."),
-        ("CDA", "#", "# placerar 93 på det valda spåret. Munkeröds del räknas som gjord."),
+        ("CDA", "#", "# flyttar 93 hit, på det valda spåret. Munkeröds del räknas som gjord."),
     ]),
     ("tva-boxar", "Två boxar på samma station", "clearance", ["CDA-V", "CDA-H", "VA"],
      "En station kan ha en box per sida. Varje box hanterar bara tågen på sina sträckor.",

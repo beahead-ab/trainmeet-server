@@ -175,10 +175,12 @@ class Terminal16Tests(unittest.TestCase):
 
     def test_a_train_never_sent_can_be_placed_from_its_number(self):
         """Casper, 2026-10-02: the receiver places a train nobody sent, with
-        the timetable's track, so the game goes on. Until 2.1.0: EJ BEGÄRT ÄN."""
+        the timetable's track, so the game goes on. Until 2.1.0: EJ BEGÄRT ÄN.
+        Since issue #115 the box asks first whether to move it here."""
         frame = self.lookup("93")["frame"]                 # MUN never sent 93
-        self.assertEqual(["MUN-93          ", "#In B:Sp   12:34"], frame["lines"])
-        self.assertEqual("Placera på spår", frame["keys"]["#"]["label"])
+        self.assertEqual(["FLYTTA 93 HIT?  ", "#Ja B:Sp   12:34"], frame["lines"])
+        self.assertEqual("Flytta hit", frame["keys"]["#"]["label"])
+        self.assertEqual("FLYTTA", frame["keys"]["#"]["short"])
         self.assertEqual(self.lab.engine.audit, [])        # a lookup sends nothing
         self.accept("DEMO-CDA", "#")
         self.assertEqual("cda-1", self.lab.arrivals["93-mun"]["track"])
@@ -232,11 +234,11 @@ class Terminal16Tests(unittest.TestCase):
         self.lab = Terminal16Lab(self.lab.engine, package, {"DEMO-CDA": "cda", "DEMO-VA": "va"})
         self.lookup("39")
         self.assertEqual(self.lab._candidates(self.lab.terminals["DEMO-VA"]), ["94-va", "39-cda", "41-cda"])
-        # 39 is the request to answer; 41, never sent, can only be placed.
+        # 39 is the request to answer; 41, never sent, can only be moved here.
         self.assertEqual("Ge klart", self.lookup("39", "DEMO-VA")["frame"]["keys"]["#"]["label"])
         frame = self.lookup("41", "DEMO-VA")["frame"]
         self.assertEqual(self.lab.terminals["DEMO-VA"].selected, "41-cda")
-        self.assertEqual("Placera på spår", frame["keys"]["#"]["label"])
+        self.assertEqual("Flytta hit", frame["keys"]["#"]["label"])
 
     def test_withdrawn_incoming_disappears_and_stale_selection_cannot_confirm(self):
         self.lookup("39")
@@ -259,10 +261,12 @@ class Terminal16Tests(unittest.TestCase):
         receiver = self.lab.terminals["DEMO-VA"]
         self.assertEqual(self.lab._candidates(receiver), ["94-va", "39-cda"])
         self.lookup("39")                                  # reserved at once
+        # Typed at the receiver, a reserved train never reported departed is
+        # offered as a question (issue #115); only a typed number gets there.
         frame = self.lookup("39", "DEMO-VA")["frame"]
-        self.assertNotIn("#", frame["keys"])  # Reserved is not yet departed: no # to take it in by mistake.
-        self.assertEqual("Placera på spår…", frame["keys"]["B"]["label"])
+        self.assertEqual(["FLYTTA 39 HIT?  ", "#Ja B:Sp   12:34"], frame["lines"])
         self.accept("DEMO-CDA", "#")
+        # Seen to leave, it is the ordinary arrival on the same screen.
         self.assertEqual(self.lab.frame("DEMO-VA")["keys"]["#"]["label"], "Rapportera ankomst")
 
     def test_departed_train_leaves_sender_list_but_remains_for_receiver(self):
