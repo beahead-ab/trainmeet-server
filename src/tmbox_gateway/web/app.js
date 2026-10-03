@@ -609,6 +609,7 @@ globalThis.TrainMeetI18n.subscribe(() => {
 function setMode(mode) {
   const next = MODES.includes(mode) ? mode : "workspaces";
   document.body.dataset.mode = next;
+  document.body.dataset.routeReady = "yes";
   document.querySelector("#workspace-home").href = workspaceHome();
   document.querySelector(".server-admin-shell").classList.toggle("hidden", next === "workspaces");
   if (next === "workspaces") globalThis.TrainMeetParticipant?.start(); else globalThis.TrainMeetParticipant?.stop();
@@ -1626,6 +1627,8 @@ async function openApplication() {
     bindAdminLive();
     scheduleAdminRefresh();
   } catch (error) {
+    // Felet ska synas, inte en tom sida som väntar på en vy.
+    document.body.dataset.routeReady = "yes";
     handleConnectionError(error);
   }
 }

@@ -1,7 +1,7 @@
 // Gemensam fixtur för Kontrollrummets webbläsartester (Drift, Inställningar): riktig webb-kod
 // från repot med en strikt CSP, men API:et är en fixtur som liknar träffen i designen
 // (Grimslöv 2027, elva stationer). Ingen server, ingen Cloud, inga användardata.
-// open({ route, theme, width, height, sim, running, lang, lastRestore, loggedOut }) → { page, browser, errors, violations, state }
+// open({ route, theme, width, height, sim, running, lang, lastRestore, loggedOut, apiDelay }) → { page, browser, errors, violations, state }
 const { chromium } = require('playwright');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -117,6 +117,7 @@ async function open(opts = {}) {
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname.startsWith('/v1/')) {
+      if (o.apiDelay) await new Promise(resolve => setTimeout(resolve, o.apiDelay));
       let data = {};
       switch (url.pathname) {
         case '/v1/setup': case '/v1/setup/status': data = { required: false, admin_configured: true, runtime }; break;

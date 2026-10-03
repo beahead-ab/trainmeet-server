@@ -173,6 +173,13 @@ body[data-mode="kor"] #app-chrome #app-clock { display: none; }
 .kr-search-item .kr-kind { font-size: 11px; color: var(--kr-faint); text-transform: uppercase; letter-spacing: .06em; }
 .kr-search-empty { padding: 8px 10px; color: var(--kr-mute); font-size: 12.5px; }
 
+/* ── Start ──────────────────────────────────────────────────────────────
+ * Tills app.js har valt vy (setMode) visas inget av appen: annars syntes
+ * HTML:ens utgångsläge, Drift på ljus botten, en stund innan rätt vy kom,
+ * också på Inställningar. Adminsidorna har botten redan från första bilden. */
+:root[data-kr-page="admin"], :root[data-kr-page="admin"] body { background: var(--kr-bg); }
+body:not([data-route-ready]) #app-view { visibility: hidden; }
+
 /* ── Drift ──────────────────────────────────────────────────────────── */
 html:has(> body[data-mode="kor"]), body[data-mode="kor"] { background: var(--kr-bg); }
 body[data-mode="kor"] { color: var(--kr-ink); color-scheme: dark; }
