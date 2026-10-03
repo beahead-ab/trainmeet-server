@@ -1686,7 +1686,18 @@ class TrainMeetHTTPApplication:
             "previous_shift": state["previous_shift"],
             "movements": state["movements"],
             "connection_states": connection_states,
+            # Who answers at the other end of each line: automatic, manual or
+            # disconnected (issue #115). Additive; older terminals ignore it.
+            "station_modes": self._neighbour_modes(snapshot, station_id),
         }
+
+    def _neighbour_modes(self, snapshot: dict[str, Any], station_id: str) -> dict[str, str]:
+        if not self.automatic or not self.automatic.running():
+            return {}
+        neighbours = {connection["station_b_id"] if connection["station_a_id"] == station_id else connection["station_a_id"]
+                      for connection in snapshot["connections"]
+                      if station_id in {connection["station_a_id"], connection["station_b_id"]}}
+        return {neighbour: self.automatic.mode(neighbour) for neighbour in sorted(neighbours)}
 
     @runtime_command("eu")
     def start_tkl_shift(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:

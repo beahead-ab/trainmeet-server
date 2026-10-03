@@ -124,8 +124,12 @@ class AutomaticStationTests(unittest.TestCase):
 
     def test_a_signal_box_working_a_station_mans_it(self):
         terminal = self.ids.register_client("tkl-cda", "CDA TKL", DeviceKind.TKL_TERMINAL, "secret", ("panel-b",))
-        self.app.tkl_context(terminal, "station-b")     # no traffic shift needed
+        context = self.app.tkl_context(terminal, "station-b")     # no traffic shift needed
         self.assertEqual("manual", self.auto.mode("station-b"))
+        # The terminal is told who answers at the other end of its lines.
+        self.assertEqual({"station-a": "automatic"}, context["station_modes"])
+        self.auto.set_enabled(False)
+        self.assertEqual({}, self.app.tkl_context(terminal, "station-b")["station_modes"])
         self.assertEqual("automatic", self.auto.mode("station-a"))
 
     def test_trains_planned_before_the_automation_started_are_not_sent(self):

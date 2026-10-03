@@ -48,6 +48,10 @@ Glömmer en station att klarera och skickar bara tåget, skriver mottagaren
 tågnumret och svarar `#` på **FLYTTA 93 HIT?**. Se TMBox-flödet "Flytta hit ett
 tåg som ingen skickat".
 
+En TKL får grannstationernas läge i `/v1/tkl/context` som `station_modes`
+(`automatic`, `manual` eller `disconnected` per granne; tomt när automatiken är
+avstängd), så att ställverket kan visa vem som svarar i andra änden.
+
 Admin-API: `GET /v1/automatic-stations`, `POST /v1/automatic-stations` med
 `action` = `enable` (`enabled`), `automatic` (`station_id`, `confirmed: true`) eller
 `manual` (`station_id`, `device_id`, `confirmed: true`).
