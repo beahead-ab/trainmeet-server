@@ -512,6 +512,7 @@ select.kr-field { padding-right: 26px; }
 
 .kr-setsec .form-message { margin: 0; padding: 0 18px 10px; font-size: 12.5px; color: var(--kr-ink-2); }
 .kr-setsec > .form-message { padding: 0; }
+.kr-rowact .kr-what .form-message { padding: 0; }
 .kr-setsec .form-message:empty { display: none; }
 .kr-setsec .form-message.error { color: var(--kr-red); }
 .kr-setsec .form-message.success { color: var(--kr-green); }

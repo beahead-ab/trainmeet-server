@@ -1,7 +1,7 @@
 // Gemensam fixtur för Kontrollrummets webbläsartester (Drift, Inställningar): riktig webb-kod
 // från repot med en strikt CSP, men API:et är en fixtur som liknar träffen i designen
 // (Grimslöv 2027, elva stationer). Ingen server, ingen Cloud, inga användardata.
-// open({ route, theme, width, height, sim, running, lang }) → { page, browser, errors, violations, state }
+// open({ route, theme, width, height, sim, running, lang, lastRestore }) → { page, browser, errors, violations, state }
 const { chromium } = require('playwright');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -144,7 +144,7 @@ async function open(opts = {}) {
         case '/v1/server/update': data = process.env.KR_UPDATE === 'running'
           ? { supported: true, status: 'running', installed_version: '2.2.0', installed_build: '4bd9c9a1e2f3', latest_version: '2.3.0', latest_build: '9c1d2e3f4a5b', update_available: true, message: 'Uppdaterar …', steps: [{ label: 'Kontrollera version', state: 'done' }, { label: 'Hämta ny version', state: 'done' }, { label: 'Säkerhetskopiera', state: 'active' }, { label: 'Installera', state: 'pending' }, { label: 'Starta om', state: 'pending' }, { label: 'Kontrollera', state: 'pending' }, { label: 'Klart', state: 'pending' }] }
           : { supported: true, status: 'idle', installed_version: '2.2.0', installed_build: '4bd9c9a1e2f3', latest_version: '2.3.0', latest_build: '9c1d2e3f4a5b', update_available: process.env.KR_UPDATE !== 'none', steps: [{ label: 'Kontrollera version', state: 'pending' }, { label: 'Hämta ny version', state: 'pending' }, { label: 'Säkerhetskopiera', state: 'pending' }, { label: 'Installera', state: 'pending' }, { label: 'Starta om', state: 'pending' }, { label: 'Kontrollera', state: 'pending' }, { label: 'Klart', state: 'pending' }] }; break;
-        case '/v1/server/backups': data = { backups: [{ name: 'b1', usable: true, taken_at: '2026-10-02T21:14:00Z', version: '2.1.0' }] }; break;
+        case '/v1/server/backups': data = { backups: [{ name: 'b1', usable: true, taken_at: '2026-10-02T21:14:00Z', version: '2.1.0' }], last_restore: o.lastRestore || null }; break;
         default: data = { backups: [], panels: [], message: 'Sparat' };
       }
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });

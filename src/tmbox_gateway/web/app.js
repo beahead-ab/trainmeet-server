@@ -735,6 +735,8 @@ function openModal(id, trigger = document.activeElement) {
   modalValues.set(dialog, [...dialog.querySelectorAll("input, select, textarea")].map((input) => [input, input.value, input.checked]));
   dialog.dataset.dirty = "false";
   dialog.querySelectorAll(".form-message").forEach((message) => setMessage(message, ""));
+  // Hur den förra återställningen gick är inget gammalt felmeddelande att tömma.
+  if (id === "restore-modal") renderLastRestore(restore.last);
   document.body.append(dialog);
   dialog.showModal();
   const initial = dialog.querySelector('input:not([type="hidden"]):not(:disabled):not([readonly]), select:not(:disabled), textarea:not(:disabled):not([readonly])')
@@ -1139,7 +1141,7 @@ runtimeForm.addEventListener("submit", async (event) => {
 // Bekräftelsen är namnet på det som skrivs över, inte ett fast ord. Man ska
 // behöva läsa vad man håller på att förlora för att kunna skriva det.
 
-const restore = { chosen: null, overwrites: "" };
+const restore = { chosen: null, overwrites: "", last: null };
 
 function restoreEl(name) {
   return document.querySelector(`#restore-${name}`);
@@ -1189,6 +1191,28 @@ function renderBackups(backups) {
   }));
 }
 
+// Hur den senaste återställningen gick. Servern startade om däremellan, så
+// det här är enda stället ägaren får veta det - också när den misslyckades
+// och den gamla databasen fortfarande ligger kvar.
+function renderLastRestore(record) {
+  restore.last = record;
+  for (const element of [restoreEl("last"), restoreEl("last-farozon")]) {
+    if (!element) continue;
+    if (!record) {
+      setMessage(element, "");
+      continue;
+    }
+    const values = { when: restoreClock(record.attempted_at), time: restoreClock(record.taken_at) };
+    if (record.restored) {
+      setMessage(element, "Senaste återställningen {when} lade tillbaka kopian från {time}.", "success", values);
+    } else {
+      // Skälet är serverns egen text och översätts inte, som item.problem i listan.
+      setMessage(element, "Senaste återställningen {when} misslyckades: {problem}. Databasen är som före försöket.", "error",
+        { ...values, problem: record.problem || "okänt fel" });
+    }
+  }
+}
+
 function updateRestoreButton() {
   const typed = restoreEl("confirmation").value.trim().toLocaleLowerCase("sv-SE");
   const expected = restore.overwrites.trim().toLocaleLowerCase("sv-SE");
@@ -1205,6 +1229,7 @@ async function refreshBackups() {
     restoreEl("overwrites").textContent = restore.overwrites || "–";
     restoreEl("confirmation").placeholder = restore.overwrites || "Namnet på det som skrivs över";
     renderBackups(payload.backups || []);
+    renderLastRestore(payload.last_restore || null);
     const latest = (payload.backups || []).map((item) => item.taken_at).filter(Boolean).sort().at(-1);
     document.querySelector("#update-backup").textContent = latest ? t("senaste {time}", { time: restoreClock(latest) }) : t("Ingen än");
     updateRestoreButton();
