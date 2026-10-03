@@ -92,10 +92,11 @@ class RedeemViewTests(unittest.TestCase):
 
         self.assertIn('id="redeem-intro"', MARKUP)
         self.assertIn("Välj ditt lösenord", MARKUP)
-        show = SCRIPT[SCRIPT.index("function showRedeem(open)"):]
+        show = SCRIPT[SCRIPT.index("function showLoginPane(pane)"):]
         show = show[: show.index("\n}")]
-        self.assertIn('#login-intro', show)
-        self.assertIn('#redeem-intro', show)
+        for intro in ("#login-intro", "#redeem-intro", "#forgot-intro"):
+            self.assertIn(intro, show)
+        self.assertIn('showLoginPane(open ? "redeem" : "login")', SCRIPT)
 
     def test_redeeming_needs_no_session(self) -> None:
         """authorizedFetch skickar sessionen. Här finns ingen - att använda den

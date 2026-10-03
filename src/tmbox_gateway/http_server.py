@@ -37,6 +37,7 @@ from .central_sync import (
     fetch_linked_runtime,
     fetch_runtime_download,
 )
+from .cloud_mail import send_server_mail
 from .identity import (
     AdminAccessError,
     DeviceKind,
@@ -363,6 +364,16 @@ class TrainMeetHTTPApplication:
                 **(self.cloud_config.heartbeat() if self.cloud_config else {})
             )
         )
+        # E-post går via TrainMeet Cloud (send_server_mail). Utbytbar i prov,
+        # som hämtningen ovan, så att ingen riktig e-post skickas därifrån.
+        self.server_mailer: Callable[[str, str, dict[str, Any]], None] = send_server_mail
+        # Glömt lösenord svarar innan kontot ens slagits upp. Arbetet sker
+        # efteråt, så att svarstiden inte avslöjar vilka konton som finns.
+        self.run_in_background: Callable[[Callable[[], None]], None] = (
+            lambda job: threading.Thread(target=job, name="password-reset", daemon=True).start()
+        )
+        self._reset_attempts: dict[str, list[float]] = {}
+        self._reset_lock = threading.Lock()
         self.web_root = files("tmbox_gateway").joinpath("web")
         self.us_web_root = files("tmbox_gateway").joinpath("us_web")
 
@@ -675,11 +686,12 @@ class TrainMeetHTTPApplication:
             user = self.identities.invite_admin_user(
                 str(payload.get("username") or ""),
                 str(payload.get("role") or "admin"),
+                str(payload.get("email") or ""),
             )
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
         self._record_user_change(client, "user.invited", str(user.get("username")))
-        return {"user": user}
+        return {"user": user, "mail": self._mail_account_code("invite", user, payload)}
 
     def reissue_admin_setup(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_owner(client)
@@ -688,7 +700,93 @@ class TrainMeetHTTPApplication:
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
         self._record_user_change(client, "user.invitation_reissued", str(user.get("username")))
-        return {"user": user}
+        return {"user": user, "mail": self._mail_account_code("invite", user, payload)}
+
+    # ---------------------------------------------- e-post via TrainMeet Cloud
+
+    #: Glömt lösenord: högst så här många begäranden per konto och per adress
+    #: och timme. Fler ger samma svar men inget brev.
+    RESET_PER_USERNAME = 3
+    RESET_PER_ADDRESS = 12
+    RESET_WINDOW_SECONDS = 3600
+
+    def _cloud_mail_link(self) -> tuple[str, str] | None:
+        """Kopplingsnyckeln och Clouds adress, eller None utan koppling."""
+        token = self.runtime_store.link_token() if self.runtime_store is not None else None
+        if not token:
+            return None
+        return token, canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url)
+
+    def _server_url(self, requested: object = "") -> str:
+        """Serverns adress i ett brev.
+
+        Den konfigurerade publika adressen gäller före allt annat. Annars
+        används adressen som ägarens webbläsare står på, men bara när en
+        inloggad ägare skickar. Glömt lösenord tar aldrig adressen ur
+        begäran: då kunde vem som helst få ett äkta brev med en riktig kod att
+        peka till en annan sida.
+        """
+        configured = (self.config.public_client_origin or "").strip().rstrip("/")
+        url = configured or str(requested or "").strip().rstrip("/")
+        parsed = urlparse(url)
+        if (not url or parsed.scheme not in {"http", "https"} or not parsed.hostname
+                or "@" in parsed.netloc or parsed.query or parsed.fragment or len(url) > 200):
+            return ""
+        return url
+
+    def _mail_account_code(self, kind: str, user: dict[str, Any], payload: dict[str, Any]) -> dict[str, str]:
+        """Skicka koden med e-post när det går. Koden visas ändå alltid för ägaren."""
+        email = str(user.get("email") or "")
+        if not email:
+            return {"status": "no_email"}
+        link = self._cloud_mail_link()
+        if link is None:
+            return {"status": "not_linked"}
+        try:
+            self.server_mailer(link[0], link[1], {
+                "kind": kind, "to": email, "username": str(user.get("username") or ""),
+                "code": str(user.get("setup_code") or ""),
+                "server_url": self._server_url(payload.get("server_url")),
+                "language": str(payload.get("language") or "sv"),
+            })
+        except CentralSyncError as error:
+            LOGGER.warning("E-post till %s via TrainMeet Cloud gick inte: %s", user.get("username"), error)
+            return {"status": "failed", "message": str(error)}
+        return {"status": "sent", "to": email}
+
+    def _reset_allowed(self, key: str, limit: int) -> bool:
+        now = time.monotonic()
+        with self._reset_lock:
+            recent = [moment for moment in self._reset_attempts.get(key, []) if now - moment < self.RESET_WINDOW_SECONDS]
+            allowed = len(recent) < limit
+            if allowed:
+                recent.append(now)
+            self._reset_attempts[key] = recent
+        return allowed
+
+    def request_password_reset(self, payload: dict[str, Any], remote: str) -> dict[str, Any]:
+        """Glömt lösenord. Utan inloggning, och alltid samma svar.
+
+        Svaret säger aldrig om kontot finns eller har en e-postadress, bara om
+        servern alls kan skicka e-post. Koden går till kontots egen adress via
+        TrainMeet Cloud och gäller 30 minuter. Utan koppling återstår en ny kod
+        från ägaren eller `tmbox_gateway.recover` på serverdatorn.
+        """
+        username = str(payload.get("username") or "").strip()[:64]
+        language = "en" if payload.get("language") == "en" else "sv"
+        linked = self._cloud_mail_link() is not None
+        if linked and username and self._reset_allowed(f"ip:{remote}", self.RESET_PER_ADDRESS) \
+                and self._reset_allowed(f"user:{username.lower()}", self.RESET_PER_USERNAME):
+            self.run_in_background(lambda: self._send_password_reset(username, language))
+        return {"email_available": linked}
+
+    def _send_password_reset(self, username: str, language: str) -> None:
+        issued = self.identities.issue_admin_password_reset(username)
+        if issued is None:
+            return
+        user, code = issued
+        result = self._mail_account_code("password_reset", {**user, "setup_code": code}, {"language": language})
+        LOGGER.info("Kod för nytt lösenord till %s: %s", user.get("username"), result["status"])
 
     def redeem_admin_setup(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Utan inloggning, med flit: den inbjudne har inget konto att logga in
@@ -745,6 +843,13 @@ class TrainMeetHTTPApplication:
         self._require_admin(client)
         user_id = str(payload.get("user_id") or "")
         try:
+            if payload.get("email") is not None:
+                # Adressen är dit en kod för nytt lösenord skickas, så den är
+                # lika känslig som lösenordet: egen, eller ägarens ensak.
+                if client.admin_user_id != user_id:
+                    self._require_owner(client)
+                self.identities.set_admin_user_email(user_id, str(payload["email"]))
+                self._record_user_change(client, "user.email_changed", user_id)
             if payload.get("role") is not None:
                 self._require_owner(client)
                 # Samma skäl som ovan: den som degraderar sig själv gör det av
@@ -4213,6 +4318,13 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     HTTPStatus.OK,
                     self.server.application.reissue_admin_setup(client, payload),
+                )
+                return
+            if path == "/v1/admin/password-reset":
+                # Inte inloggad: den som glömt lösenordet kan inte logga in.
+                self._send_json(
+                    HTTPStatus.ACCEPTED,
+                    self.server.application.request_password_reset(payload, self._event_stream_address()),
                 )
                 return
             if path == "/v1/admin/users/redeem":

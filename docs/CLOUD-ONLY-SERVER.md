@@ -44,6 +44,22 @@ felaktigt paket eller en hämtning från en koppling som under tiden ändrats f�
 inte ersätta den aktiva träffen. En annan träff får inte smygas in genom
 automatisk synkronisering.
 
+## E-post via Cloud: det enda som går uppåt
+
+Synken går bara Cloud → Server. Servern skickar aldrig upp konfiguration, träffdata
+eller historik. Ett undantag finns, och det är smalt: en kopplad server kan be
+Cloud skicka **en inbjudan** eller **en kod för nytt lösenord** till en av
+serverns användare (`POST /api/server-mail`, i `cloud_mail.py`).
+
+- Brevet bär bara mottagare, användarnamn, kod, serverns adress och språk
+  (`MAIL_FIELDS`). Cloud har avsändaren, mallarna och träffens och serverns
+  namn.
+- Nyckeln är serverns kopplingsnyckel och står i `Authorization`.
+- Utan koppling eller internet fungerar allt som förut: koden visas för ägaren
+  och lämnas över på plats, och `tmbox_gateway.recover` finns på serverdatorn.
+- `test_product_boundaries` vaktar både att synken bara läser och att
+  `cloud_mail.py` är den enda modul som skriver till Cloud.
+
 ## Säker aktivering
 
 Hämtning i sig skriver inte om träffklockan eller trafikläget. Ny config lagras

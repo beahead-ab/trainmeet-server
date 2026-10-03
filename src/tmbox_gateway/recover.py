@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         print(f"\n  Kod till {issued['username']}:  {issued['setup_code']}\n")
-        print("Öppna TrainMeet Server i en webbläsare, välj \"Jag har en inbjudningskod\"")
+        print("Öppna TrainMeet Server i en webbläsare, välj \"Jag har en kod\"")
         print("och sätt ett nytt lösenord. Koden gäller i sju dagar och bara en gång.")
         print("Det gamla lösenordet slutar gälla när koden löses in.")
         return 0
