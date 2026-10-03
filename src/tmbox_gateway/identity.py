@@ -1529,4 +1529,7 @@ def _normalize_device_code(code: str) -> str:
         return f"TMBOX-{compact[5:]}"
     if compact.startswith("TBX") and len(compact) > 3:
         return f"TBX-{compact[3:]}"
+    # The iPhone TMBox's own code, written like a box's: IOS-4F7A2C.
+    if compact.startswith("IOS") and len(compact) > 3:
+        return f"IOS-{compact[3:]}"
     return compact

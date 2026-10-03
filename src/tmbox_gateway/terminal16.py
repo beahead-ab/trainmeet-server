@@ -35,6 +35,25 @@ NAVIGATION_ACTIONS = frozenset({
     "tracks", "next_track", "previous_track",
 })
 
+# The few words a phone keypad prints under a key (iPhone TMBox). Keyed by the
+# Swedish source label of the button, so two buttons with the same action but
+# different meanings (Tillbaka / Stäng meddelande) keep their own word. The
+# word is translated like every other text; a label without one gets none.
+SHORT_LABELS = {
+    "Stäng meddelande": "STÄNG", "Tillbaka": "TILLBAKA", "OK": "OK",
+    "Visa väntande förfrågningar": "VISA KÖ", "Visa kommande tåg": "KOMMANDE",
+    "Föregående aktiva tåg": "FÖREG", "Föregående tåg": "FÖREG",
+    "Föregående förfrågan": "FÖREG", "Föregående spår": "FÖREG",
+    "Nästa aktiva tåg": "NÄSTA", "Nästa tåg": "NÄSTA", "Nästa förfrågan": "NÄSTA", "Nästa spår": "NÄSTA",
+    "Översikt utan trafikändring": "ÖVERSIKT", "Ge klart": "GE KLART", "Neka begäran…": "NEKA",
+    "Visa ankomster": "FILTER", "Visa avgångar": "FILTER", "Visa alla tåg": "FILTER",
+    "Välj tåg": "VÄLJ", "Behåll begäran eller klartecken": "BEHÅLL", "Bekräfta återtagning": "ÅTERTA",
+    "Tillbaka utan att neka": "TILLBAKA", "Bekräfta neka": "NEKA", "Ankommit på valt spår": "INNE",
+    "Reservera": "RESERVERA", "Begär klartecken": "BEGÄR", "Återta begäran…": "ÅTERTA",
+    "Rapportera avgång": "AVGÅTT", "Återta klartecken…": "ÅTERTA", "Rapportera ankomst": "INNE",
+    "Annat ankomstspår": "SPÅR", "Placera på spår": "PLACERA", "Placera på spår…": "PLACERA",
+}
+
 
 @dataclass
 class Terminal:
@@ -151,6 +170,59 @@ class Terminal16Lab:
             own = [key for key in matches if self.legs[key]["from_station_id"] == terminal.station]
             matches = own or matches
         return matches
+
+    @staticmethod
+    def _short(t, key, action, label, requests, active):
+        """The word under a key on a phone keypad; counts follow the long label."""
+        if key == "A":
+            return t("KÖ") + (f" {requests}" if requests else "")
+        if action == "active":
+            return t("AKTIVA") + (f" {active}" if active else "")
+        word = SHORT_LABELS.get(label)
+        return t(word) if word else ""
+
+    def station_timetable(self, device):
+        """The assigned station's trains today and where each one is now.
+
+        Read-only, for a client that shows the timetable beside the box (the
+        iPhone TMBox). The rows follow the station and side the box has, in
+        timetable order, and say only what the views already know: planned,
+        requested, cleared, departed or arrived. Nothing here can select or
+        change a train; the box's own keys still do that.
+        """
+        with self.lock:
+            terminal = self.terminals[device]
+            self._advance_receipts(terminal)
+            station = self.engine.config.stations[terminal.station]
+            labels = {track.id: track.display_label for track in self._tracks(terminal)}
+            movements = {item["id"]: item for item in self.publication["trains"]}
+            rows = []
+            for key, leg in self.legs.items():
+                if terminal.station not in {leg["from_station_id"], leg["to_station_id"]} or not self._on_side(terminal, leg):
+                    continue
+                schedule = self._schedule(terminal, leg)
+                outgoing = schedule["kind"] == "departure"
+                other = self.engine.config.stations[schedule["other"]]
+                movement = movements.get(leg["from_movement_id"] if outgoing else leg["to_movement_id"], {})
+                line = self._line(leg)
+                active = self._is_active(leg)
+                state = ("arrived" if key in self.completed else
+                         "requested" if active and line.state == State.REQUESTED else
+                         "cleared" if active and line.state == State.RESERVED else
+                         "departed" if active and line.state == State.OCCUPIED else "planned")
+                rows.append((schedule["order"], leg["train_number"], key, {
+                    "movement_id": key, "train_number": leg["train_number"],
+                    "kind": schedule["kind"], "time": schedule["time"],
+                    "station": {"code": other.code, "name": other.name},
+                    "side": self._side(terminal.station, other.id, leg["connection_id"]),
+                    "track": labels.get(movement.get("track_id")),
+                    "state": state, "selected": terminal.selected == key,
+                }))
+            clock = self.engine.meeting_clock()["time"]
+            return {"station": {"code": station.code, "name": station.name}, "side": terminal.side,
+                    "clock": clock if re.fullmatch(r"\d{2}:\d{2}", str(clock)) else None,
+                    "revision": self.engine.revision,
+                    "rows": [entry for _, _, _, entry in sorted(rows)]}
 
     def timetable(self, device):
         """Read-only test aid: keep the full schedule, including completed trains."""
@@ -567,13 +639,15 @@ class Terminal16Lab:
             "language": terminal.language,
             "keys": {key: {"label": t("Förfrågningskö ({count} väntar)", count=len(requests)) if key == "A" else
                       t("Aktiva tåg ({count})", count=len(active)) if action == "active" else t(label),
+                      "short": self._short(t, key, action, label, len(requests), len(active)),
                       "acts": action not in NAVIGATION_ACTIONS} for key, (action, label) in buttons.items()},
             "entry": {"context": f"{self.epoch}:{device}:{terminal.station}", "max_length": 5,
                       "lines": entry_lines, "lcd": encode_lcd(entry_lines),
                       "row": 0, "column": 5, "commit": "#", "cancel": "*", "erase": "B",
                       "shortcut": "A",
                       "labels": {"#": t("Sök tåg (begär direkt)"), "*": t("Avbryt inmatning"), "B": t("Sudda siffra"),
-                                 "A": t("Förfrågningskö (avbryt inmatning)")}},
+                                 "A": t("Förfrågningskö (avbryt inmatning)")},
+                      "short": {"#": t("SÖK"), "*": t("AVBRYT"), "B": t("SUDDA"), "A": t("KÖ")}},
             "requests": {"count": len(requests), "position": requests.index(terminal.selected) + 1 if terminal.selected in requests else 0,
                          "label": "A · " + t("Förfrågningskö ({count} väntar)", count=len(requests))},
             "active": {"count": len(active), "position": active_position if terminal.screen == "active" else 0,

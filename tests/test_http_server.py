@@ -214,6 +214,41 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(frame["station_code"], "CDA")
         self._public_refused("/v1/admin/users", token=token)
 
+    def test_iphone_registers_as_a_labelled_web_box_with_the_same_rights(self):
+        phone = self._public_client(client="ios", app_version="2.0.0 (3)")
+        self.assertRegex(phone["device_code"], r"^IOS-[0-9A-F]{6}$")
+        device = self.identities.discovered_device_or_none(phone["client_id"])
+        self.assertEqual((device.model, device.firmware_version), ("TMBox · iPhone", "2.0.0 (3)"))
+        current = self.identities.client(phone["client_id"])
+        self.assertEqual(current.kind, DeviceKind.ESP32_PANEL)
+        self.assertIsNone(current.station_id)
+        self._public_refused("/v1/admin/users", token=phone["access_token"])
+        self.assertTrue(self._public_client()["device_code"].startswith("WEB"))
+        self.identities.assign_discovered_device("ios-" + phone["device_code"][4:].lower(), station_id="station-a")
+        self.assertEqual(self.identities.client(phone["client_id"]).station_id, "station-a", "the code is typed as it is shown")
+        for extra in ({"client": "android"}, {"client": "ios", "workspace": "tkl"}, {"client": "ios", "app_version": "x" * 40}):
+            with self.subTest(extra=extra):
+                self._public_refused("/v1/browser-clients", {"workspace": "tmbox", **extra}, status=400)
+
+    def test_box_reads_its_station_timetable_and_short_key_labels(self):
+        phone = self._public_client(client="ios")
+        token = phone["access_token"]
+        waiting = self._json_request("/v1/tmbox/terminal/timetable", token=token)
+        self.assertEqual((waiting["station"], waiting["rows"]), (None, []))
+        self.application.assign_device(self.application.local_admin(), {"device_code": phone["device_code"], "station_id": "station-a"})
+        table = self._json_request("/v1/tmbox/terminal/timetable", token=token)
+        self.assertEqual(table["station"]["code"], "CDA")
+        self.assertEqual(table["side"], "both")
+        self.assertTrue(table["rows"])
+        for row in table["rows"]:
+            self.assertEqual(row["state"], "planned")
+            self.assertIn(row["kind"], {"departure", "arrival"})
+            self.assertEqual(set(row), {"movement_id", "train_number", "kind", "time", "station", "side", "track", "state", "selected"})
+        frame = self._json_request("/v1/tmbox/terminal", token=token)
+        self.assertEqual(frame["keys"]["A"]["short"], "KÖ")
+        self.assertEqual(frame["entry"]["short"]["#"], "SÖK")
+        self._public_refused("/v1/tmbox/terminal/timetable", status=401)
+
     def test_wifi_settings_are_admin_only_and_published_as_typed(self):
         # Only an administrator may change the meet's Wi-Fi. What is typed is
         # published to the participant view and the screens' QR as it is; the

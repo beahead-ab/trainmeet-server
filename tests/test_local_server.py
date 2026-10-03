@@ -66,12 +66,13 @@ class LocalServerStartupTests(unittest.TestCase):
         with patch("tmbox_gateway.local_server.shutil.which", return_value="/usr/bin/publish"):
             with patch("tmbox_gateway.local_server.subprocess.Popen", fake_popen):
                 self.assertIsNone(
-                    _start_discovery_advertiser(1883, server_id="charlottendal")
+                    _start_discovery_advertiser(1883, server_id="charlottendal", http_port=8787)
                 )
 
         self.assertIn("_tmbox._tcp", recorded["command"])
         self.assertIn("server_id=charlottendal", recorded["command"])
         self.assertIn("protocol=2", recorded["command"])
+        self.assertIn("http=8787", recorded["command"])
 
     def test_remote_reset_preserves_admin_session_and_server_name(self):
         with tempfile.TemporaryDirectory() as directory:

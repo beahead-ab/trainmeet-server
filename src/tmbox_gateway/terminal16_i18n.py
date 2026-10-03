@@ -100,6 +100,31 @@ ankomster|arrivals|ankomster|ankomster|Ankünfte
 avgångar|departures|afgange|avganger|Abfahrten
 Förfrågan {position}/{count} · |Request {position}/{count} · |Forespørgsel {position}/{count} · |Forespørsel {position}/{count} · |Anfrage {position}/{count} · 
 Ingen vald förfrågan. A öppnar kön; B visar översikten.|No request selected. A opens requests; B shows overview.|Ingen valgt forespørgsel. A åbner køen; B viser oversigt.|Ingen valgt forespørsel. A åpner køen; B viser oversikt.|Keine Anfrage gewählt. A öffnet Anfragen; B die Übersicht.
+STÄNG|CLOSE|LUK|LUKK|SCHLIESSEN
+TILLBAKA|BACK|TILBAGE|TILBAKE|ZURÜCK
+OK|OK|OK|OK|OK
+VISA KÖ|SHOW QUEUE|VIS KØ|VIS KØ|ANFRAGEN
+KOMMANDE|UPCOMING|KOMMENDE|KOMMENDE|KOMMENDE
+FÖREG|PREV|FORRIGE|FORRIGE|VORHER
+NÄSTA|NEXT|NÆSTE|NESTE|WEITER
+ÖVERSIKT|OVERVIEW|OVERSIGT|OVERSIKT|ÜBERSICHT
+GE KLART|APPROVE|GIV KLAR|GI KLART|FREIGEBEN
+NEKA|REFUSE|AFVIS|AVVIS|ABLEHNEN
+FILTER|FILTER|FILTER|FILTER|FILTER
+VÄLJ|SELECT|VÆLG|VELG|WÄHLEN
+BEHÅLL|KEEP|BEHOLD|BEHOLD|BEHALTEN
+ÅTERTA|WITHDRAW|TRÆK TILB.|TREKK TILB.|ZURÜCKNEHMEN
+INNE|ARRIVED|ANKOMMET|ANKOMMET|ANGEKOMMEN
+RESERVERA|RESERVE|RESERVÉR|RESERVER|RESERVIEREN
+BEGÄR|REQUEST|ANMOD|BE OM|ANFRAGEN
+AVGÅTT|DEPARTED|AFGÅET|AVGÅTT|ABGEFAHREN
+SPÅR|TRACK|SPOR|SPOR|GLEIS
+PLACERA|PLACE|PLACÉR|PLASSER|STELLEN
+KÖ|QUEUE|KØ|KØ|ANFRAGEN
+AKTIVA|ACTIVE|AKTIVE|AKTIVE|AKTIV
+SÖK|FIND|SØG|SØK|SUCHEN
+AVBRYT|CANCEL|ANNULLER|AVBRYT|ABBRECHEN
+SUDDA|ERASE|SLET|SLETT|LÖSCHEN
 Tåg {number} mottaget i {station}. Meddelandet försvinner automatiskt.|Train {number} arrived at {station}. This message closes automatically.|Tog {number} ankommet til {station}. Beskeden lukkes automatisk.|Tog {number} ankommet i {station}. Meldingen lukkes automatisk.|Zug {number} in {station} angekommen. Meldung schließt automatisch.
 """
 
