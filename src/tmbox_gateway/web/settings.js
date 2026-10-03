@@ -19,7 +19,7 @@
   const t = (source, values) => i18n().t(source, values);
   const SVGNS = "http://www.w3.org/2000/svg";
 
-  const SECTIONS = ["traff", "skarmar", "wifi", "server", "kod", "anvandare", "uppdatering", "sprak", "farozon"];
+  const SECTIONS = ["traff", "skarmar", "wifi", "obemannade", "server", "kod", "anvandare", "uppdatering", "sprak", "farozon"];
   const ALIASES = { anslutning: "kod", fynd: "traff", klocka: "skarmar", cloud: "traff", meet: "traff" };
 
   // ── Avsnitt och meny ───────────────────────────────────────────────────

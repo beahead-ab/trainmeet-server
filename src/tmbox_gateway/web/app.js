@@ -629,8 +629,85 @@ function setMode(mode) {
 
 function showSettings() {
   globalThis.TrainMeetSettings?.show();
-  Promise.allSettled([checkSoftwareUpdate(), refreshUsers(), refreshBackups(), refreshRuntime(), refreshDevices()]);
+  Promise.allSettled([checkSoftwareUpdate(), refreshUsers(), refreshBackups(), refreshRuntime(), refreshDevices(), refreshAutomatic()]);
 }
+
+// ── Obemannade stationer (issue #115) ─────────────────────────────────────
+let automaticState = null;
+const AUTOMATIC_MODES = {automatic: ["Automatisk", "ok"], manual: ["Manuell", ""], disconnected: ["Kontakt saknas – väntar", "off"]};
+
+async function refreshAutomatic() {
+  if (document.body.dataset.mode !== "installningar" || state.serverContext?.operating_region === "us") return;
+  try {
+    const response = await authorizedFetch("/v1/automatic-stations", {cache: "no-store"});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || t("Kunde inte läsa de obemannade stationerna"));
+    renderAutomatic(data);
+  } catch (error) { setMessage(document.querySelector("#automatic-message"), error.message, "error"); }
+}
+
+async function sendAutomatic(payload) {
+  const response = await authorizedFetch("/v1/automatic-stations", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)});
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || t("Inställningen kunde inte sparas."));
+  renderAutomatic(data);
+}
+
+function renderAutomatic(data) {
+  automaticState = data;
+  const form = document.querySelector("#automatic-form");
+  const enabled = document.querySelector("#automatic-enabled");
+  enabled.disabled = !data.supported || form.dataset.busy === "true";
+  if (!editorActive(form)) {
+    enabled.checked = Boolean(data.enabled);
+    globalThis.TrainMeetSettings?.rebase(form);
+  }
+  document.querySelector("#automatic-note").textContent = t(!data.supported ? "Koppla en EU-träff först."
+    : data.simulation ? "Pausad medan simuleringen körs." : data.enabled ? "Aktiv när träffklockan går." : "Avstängd.");
+  const host = document.querySelector("#automatic-stations");
+  host.replaceChildren(...(data.stations || []).map((station) => {
+    const row = document.createElement("div"); row.className = "kr-kv";
+    const name = document.createElement("span"); name.className = "kr-k"; name.textContent = station.name;
+    const [label, tone] = AUTOMATIC_MODES[station.mode] || [station.mode, ""];
+    const tag = document.createElement("span"); tag.className = `kr-tag ${tone}`.trim(); tag.textContent = t(label);
+    const who = document.createElement("span"); who.className = "kr-m"; who.textContent = station.operator || "";
+    row.append(name, tag, who);
+    if (station.mode !== "automatic") {
+      const button = document.createElement("button"); button.type = "button"; button.className = "kr-btn sm";
+      button.textContent = t("Lämna till automatiken");
+      button.addEventListener("click", () => changeAutomatic(button, {action: "automatic", station_id: station.id, confirmed: true},
+        t("Lämna {station} till automatiken? Stationen ger klart och anmäler tåg själv tills en TMBox eller TKL tar över.", {station: station.name})));
+      row.append(button);
+    } else for (const device of station.available_operators || []) {
+      const button = document.createElement("button"); button.type = "button"; button.className = "kr-btn sm";
+      button.textContent = t("Ge tillbaka till {device}", {device});
+      button.addEventListener("click", () => changeAutomatic(button, {action: "manual", station_id: station.id, device_id: device, confirmed: true}));
+      row.append(button);
+    }
+    return row;
+  }));
+}
+
+async function changeAutomatic(button, payload, question = "") {
+  if (question && !confirm(question)) return;
+  button.disabled = true;
+  try { await sendAutomatic(payload); setMessage(document.querySelector("#automatic-message"), ""); }
+  catch (error) { setMessage(document.querySelector("#automatic-message"), error.message, "error"); }
+  finally { button.disabled = false; }
+}
+
+document.querySelector("#automatic-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!beginModalAction(form)) return;
+  try {
+    await sendAutomatic({action: "enable", enabled: document.querySelector("#automatic-enabled").checked});
+    finishModal(form);
+  } catch (error) {
+    setMessage(form.querySelector(".form-message"), error.message, "error");
+  } finally { endModalAction(form); }
+});
 
 function applyWorkspaceRoute() {
   let route = location.hash.slice(1);
@@ -1660,6 +1737,7 @@ const refreshDevicesSerially = serially(() => refreshDevices());
 const refreshRuntimeSerially = serially(() => refreshRuntime());
 const refreshServerContextSerially = serially(() => refreshServerContext());
 const refreshSimulationSerially = serially(() => refreshSimulation());
+const refreshAutomaticSerially = serially(() => refreshAutomatic());
 
 // What changed on the server (/v1/events) is fetched again at once. The timer
 // is then only a fallback; while the stream is down it keeps five seconds.
@@ -1679,6 +1757,7 @@ function bindAdminLive() {
     if (any("traffic", "clock", "runtime", "simulation")) refreshLocalClockSerially();
     // The simulated trains move with the traffic.
     if (any("simulation", "runtime", "clock", "traffic")) refreshSimulationSerially();
+    if (any("simulation", "runtime", "devices", "traffic")) refreshAutomaticSerially();
   });
   live.onStatus(() => {
     scheduleSimulationRefresh();
@@ -1690,7 +1769,7 @@ function scheduleAdminRefresh() {
   clearTimeout(state.adminTimer);
   state.adminTimer = setTimeout(async () => {
     if (!state.authStatus?.authenticated) return;
-    await Promise.allSettled([refreshServerContextSerially(), refreshInfo(), refreshDevicesSerially(), refreshRuntimeSerially(), refreshAdminAccess(), refreshLocalClockSerially()]);
+    await Promise.allSettled([refreshServerContextSerially(), refreshInfo(), refreshDevicesSerially(), refreshRuntimeSerially(), refreshAdminAccess(), refreshLocalClockSerially(), refreshAutomaticSerially()]);
     scheduleAdminRefresh();
   }, globalThis.TrainMeetLive?.connected ? ADMIN_REFRESH_LIVE_MS : ADMIN_REFRESH_MS);
 }

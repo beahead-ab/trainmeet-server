@@ -30,6 +30,18 @@ PRESENCE_SECONDS = 45
 
 def build_plan(publication, day):
     """Resolve visits first. Never infer a route from a train number alone."""
+    legs, errors = plan_legs(publication, day)
+    if errors:
+        raise SimulationError("Kan inte starta simuleringen: " + " ".join(errors[:12]))
+    return legs
+
+
+def plan_legs(publication, day):
+    """Every complete leg of the day and what kept the others out.
+
+    The simulator refuses a plan with any error; automatic stations in normal
+    operation run the legs that are complete and leave the rest to people.
+    """
     payload = publication.payload
     movements = {str(m["id"]): m for m in payload["trains"] if matches_active_day(m["days"], day)}
     times = {}
@@ -88,9 +100,7 @@ def build_plan(publication, day):
             errors.append(f"Tågnummer {number} används i överlappande tåglopp.")
     if not legs:
         errors.append("Ingen komplett tågväg finns för den valda trafikdagen.")
-    if errors:
-        raise SimulationError("Kan inte starta simuleringen: " + " ".join(errors[:12]))
-    return legs
+    return legs, errors
 
 
 class TrafficSimulation:

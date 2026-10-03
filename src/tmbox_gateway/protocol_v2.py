@@ -98,6 +98,7 @@ class TMBoxStationService:
         self._cached_session_config: SessionConfig | None = None
         self.lifecycle = None
         self.simulation = None
+        self.automatic = None
         self._listeners: list[Callable[[], None]] = []
 
     def subscribe(self, listener: Callable[[], None]) -> None:
@@ -213,6 +214,8 @@ class TMBoxStationService:
     def observe_operator(self, device_id, station_id=None):
         if self.simulation:
             self.simulation.observe(device_id, station_id)
+        if self.automatic:
+            self.automatic.observe(device_id, station_id)
 
     def track_conflict(self, publication, day, station_id, movement_id, track_id):
         states = self.operations_store.tkl_station_state(publication.publication_id, day, station_id)["movements"]
@@ -556,6 +559,8 @@ class TMBoxStationService:
 
         if self.simulation:
             self.simulation.guard(device_id, station_id, action, payload.get("payload") or {})
+        if self.automatic:
+            self.automatic.guard(device_id, station_id)
 
         if action in CONFIG_ACTIONS:
             self._check_revision(payload, "config", station_id, self.config_version())
@@ -718,6 +723,8 @@ class TMBoxStationService:
             )
         if self.simulation:
             self.simulation.record_action(action, movement_id)
+        if self.automatic:
+            self.automatic.record_action(action, movement_id)
         result = {
             "revision": {
                 "scope": "movement",
@@ -977,6 +984,8 @@ class TMBoxStationService:
             crew_ready=bool(state.get("crewReady", False)), operator_note=None)
         if self.simulation:
             self.simulation.record_action("train." + value, movement_id)
+        if self.automatic:
+            self.automatic.record_action("train." + value, movement_id)
         return False
 
     def open_cases(self, station_id: str | None) -> list[dict[str, Any]]:
