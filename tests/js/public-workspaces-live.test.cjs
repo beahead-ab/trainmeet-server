@@ -19,7 +19,10 @@ const root = path.resolve(__dirname, '../..');
       readline.createInterface({input: fixture.stdout}).once('line', line => {clearTimeout(timer); resolve(JSON.parse(line));});
       fixture.once('exit', () => {clearTimeout(timer); reject(new Error(diagnostics));});
     });
-    browser = await chromium.launch({headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel: process.env.PLAYWRIGHT_CHANNEL} : {})});
+    // trainmeet.local reaches the same server as plain LAN HTTP: not a secure
+    // context, as at a meet, so the browser lacks crypto.randomUUID there.
+    browser = await chromium.launch({headless: true, args: ['--host-resolver-rules=MAP trainmeet.local 127.0.0.1'],
+      ...(process.env.PLAYWRIGHT_CHANNEL ? {channel: process.env.PLAYWRIGHT_CHANNEL} : {})});
     const visitor = await browser.newContext({locale: 'sv-SE', viewport: {width: 390, height: 844}});
     page = await visitor.newPage();
     const errors = [], posts = [], requests = [];
@@ -148,7 +151,12 @@ const root = path.resolve(__dirname, '../..');
     const lekContext = await browser.newContext({locale:'sv-SE'});
     const lek = await lekContext.newPage();
     lek.setDefaultTimeout(15000);
-    await lek.goto(urls.eu + '/tmbox/');
+    // LEK's box is opened as at a meet, http://trainmeet.local, where A, #
+    // and * once did nothing at all (Benny, 2026-10-03).
+    const lekErrors = [];
+    lek.on('pageerror', error => lekErrors.push(error.message));
+    await lek.goto(urls.eu.replace('127.0.0.1', 'trainmeet.local') + '/tmbox/');
+    assert.equal(await lek.evaluate(() => isSecureContext), false, 'LEK runs on plain LAN HTTP');
     await lek.locator('.box-code').getByText(/^WEB/).waitFor();
     const lekBox = await lek.evaluate(() => JSON.parse(localStorage.getItem('trainmeet.browser-tmbox')));
     assert.equal((await admin.request.post(urls.eu+'/v1/devices/assign',{data:{device_code:lekBox.device_code,station_id:'station-b'}})).status(),200);
@@ -161,6 +169,7 @@ const root = path.resolve(__dirname, '../..');
     await lcd(lek, '#Ja *Nej');
     await press(lek, '#');
     await lcd(page, '#Avg');
+    assert.deepEqual(lekErrors, [], 'a key on plain LAN HTTP reaches the server');
     // Drift's map, from the real traffic: LEK's clear is an outlined tag on
     // CDA–LEK, nearer CDA, its triangle towards LEK; departed, it is filled.
     const drift = await admin.newPage();

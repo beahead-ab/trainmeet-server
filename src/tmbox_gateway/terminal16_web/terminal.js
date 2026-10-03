@@ -54,7 +54,18 @@
     if (model.unansweredAt && now - model.unansweredAt < UNANSWERED_SHOWN_MS) return UNANSWERED_TEXT;
     return "";
   }
-  if (typeof module !== "undefined") module.exports = {EntryBuffer, screenChanged, guarded, overlay,
+  // randomUUID exists only on HTTPS and localhost. A meet's box is opened at
+  // http://trainmeet.local, where it is missing: every key that goes to the
+  // server then threw before it was sent, while digits and B, which stay
+  // here, still worked. getRandomValues is there everywhere.
+  function commandId(source = root.crypto) {
+    if (typeof source?.randomUUID === "function") return source.randomUUID();
+    const bytes = source.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  if (typeof module !== "undefined") module.exports = {EntryBuffer, screenChanged, guarded, overlay, commandId,
     times: {WAITING_SHOWN_MS, COMMAND_GIVE_UP_MS, UNANSWERED_SHOWN_MS, SILENCE_MS, POLL_MS}};
   if (typeof document === "undefined") return;
 
@@ -159,7 +170,7 @@
     const entry = model.entry.press(key, model.frame);
     if (entry.local) { message(model, ""); render(model); return; }
     if (!entry.train_number && !(key in model.frame.keys)) return;
-    const body = {device_id: model.frame.device_id, command_id: crypto.randomUUID(), view_token: model.frame.view_token, key};
+    const body = {device_id: model.frame.device_id, command_id: commandId(), view_token: model.frame.view_token, key};
     if (entry.train_number) Object.assign(body, {train_number: entry.train_number, entry_context: entry.entry_context});
     const context = model.frame.entry?.context;
     ++pollVersion;
