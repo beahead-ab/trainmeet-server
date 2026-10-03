@@ -468,6 +468,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await showTraffic([line('occupied')], parked(2));
     await routeDetail.locator('#overview-route-map .topology-train.on-line.selected[data-train-number="421"]').waitFor({ timeout: 2000 });
     assert.equal(await routeDetail.locator('#overview-route-map .topology-train').count(), 1);
+    // Banöversikten is redrawn on the next animation frame; count once it has its train.
+    await page.locator('#overview-topology .topology-train[data-train-number="421"]').waitFor({ timeout: 2000 });
     assert.equal(await page.locator('#overview-topology .topology-train').count(), 1);
     holdTrain = null; releaseTrain();
     // A call is a button: its station is lit, the train stays chosen. So
@@ -720,8 +722,9 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     region='us';
     await page.goto('http://127.0.0.1:9999/drift');
     await page.locator('#server-region').filter({hasText:'US'}).waitFor();
-    for (const id of ['drift-simulation', 'drift-map', 'drift-stations', 'drift-graph', 'overview-traffic', 'drift-stats', 'connect-terminals']) assert.equal(await page.locator('#' + id).isVisible(), false, id);
-    assert.equal(await page.locator('#us-runtime-summary').isVisible(), true);
+    // The shell shows the US summary at once; Drift hides its panels on its next drawing.
+    await page.locator('#us-runtime-summary').waitFor({state:'visible'});
+    for (const id of ['drift-simulation', 'drift-map', 'drift-stations', 'drift-graph', 'overview-traffic', 'drift-stats', 'connect-terminals']) await page.locator('#' + id).waitFor({state:'hidden', timeout: 2000});
     assert.equal(calls.some(c=>c[1].includes('local-configuration')||c[1]==='/v1/operating-mode'),false);
     assert.deepEqual(errors,[]);
     await screenshot('server-design');
