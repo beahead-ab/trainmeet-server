@@ -217,10 +217,10 @@ const root = path.resolve(__dirname, '../..');
       await drift.locator(selector).first().waitFor({state: 'visible', timeout: 5000});
       assert.ok(Date.now() - started < 1500, `${selector} after ${Date.now() - started} ms`);
     };
-    await within('#device-list .status-row span:text("· höger")', () =>
+    await within('#device-list tr .kr-code:text("höger")', () =>
       admin.request.post(urls.eu + '/v1/devices/assign', {data: {device_code: lekBox.device_code, station_id: 'station-b', side: 'right'}}));
     await within('#overview-clock-start', () => admin.request.post(urls.eu + '/v1/clock', {data: {action: 'stop'}}));
-    await within('#stop-local-clock', () => admin.request.post(urls.eu + '/v1/clock', {data: {action: 'start'}}));
+    await within('#overview-clock-stop', () => admin.request.post(urls.eu + '/v1/clock', {data: {action: 'start'}}));
     await guest.context().close();
     // The same tag on the TV's map, in its size.
     // It rides on the line, clear of the large names under it.
@@ -231,11 +231,11 @@ const root = path.resolve(__dirname, '../..');
     });
     assert.ok(ride.top < ride.line && ride.line < ride.bottom && ride.middle < ride.line - 5, JSON.stringify(ride));
     await tv.close();
-    await drift.locator('#drift-upcoming button.server-event[data-train-number="101"]').first().click();
+    await drift.locator('#drift-upcoming button.kr-ev[data-train-number="101"]').first().click();
     const trainPanel = drift.locator('#drift-train-detail');
-    await trainPanel.locator('.train-detail-now').getByText('Nu: På linjen CDA → LEK', {exact: false}).waitFor();
-    assert.deepEqual(await trainPanel.locator('.route-stop b').allTextContents(), ['CDA · Charlottendahl', 'LEK · Lekeberg']);
-    assert.equal(await trainPanel.locator('.train-detail-between').count(), 1);
+    await trainPanel.locator('.kr-aside__now').getByText('På linjen CDA → LEK', {exact: false}).waitFor();
+    assert.deepEqual(await trainPanel.locator('.kr-stop:not(.between) .kr-stoplink > span').allTextContents(), ['Charlottendahl', 'Lekeberg']);
+    assert.equal(await trainPanel.locator('.kr-stop.between').count(), 1);
     assert.ok(await drift.locator('#overview-topology .route-highlight').count() > 0, 'Banöversikten marks the train');
     assert.ok(await drift.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await drift.close();

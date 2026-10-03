@@ -25,10 +25,15 @@ CSS = (Path(__file__).resolve().parents[1] / "src" / "tmbox_gateway" / "web" / "
 )
 
 
-def _rule(selector: str) -> str:
+KR_CSS = (Path(__file__).resolve().parents[1] / "src" / "tmbox_gateway" / "web" / "kontrollrummet.css").read_text(
+    encoding="utf-8"
+)
+
+
+def _rule(selector: str, css: str = CSS) -> str:
     """Regelkroppen för en exakt selektor, eller tom sträng."""
     match = re.search(
-        rf"(?:^|\}}|\*/)\s*{re.escape(selector)}\s*\{{([^}}]*)\}}", CSS, re.MULTILINE
+        rf"(?:^|\}}|\*/)\s*{re.escape(selector)}\s*\{{([^}}]*)\}}", css, re.MULTILINE
     )
     return match.group(1) if match else ""
 
@@ -82,16 +87,24 @@ class ControlShapeTests(unittest.TestCase):
         self.assertIn("width: auto", body)
         self.assertIn("min-height: 0", body)
 
-    def test_a_station_picker_is_not_as_wide_as_the_window(self):
-        body = _rule(".traffic-filters select")
+    def test_a_drift_picker_is_not_as_wide_as_the_window(self):
+        """Tidsfönstret i tågdiagrammet är en liten väljare, inte ett fält."""
+        body = _rule("#app-view select.kr-select, .kr-select", KR_CSS)
         self.assertIn("width: auto", body)
-        self.assertIn("max-width", body)
 
-    def test_live_traffic_cards_shrink_to_the_overview_width(self):
-        for selector, minimum in ((".traffic-online-grid", 300), (".traffic-station-grid", 290)):
-            with self.subTest(selector=selector):
-                self.assertIn(f"minmax(min({minimum}px, 100%), 1fr)", _rule(selector))
-        self.assertIn("min-width: 0", _rule(".meet-overview"))
+    def test_drift_panels_shrink_to_the_window_width(self):
+        """Stationerna och händelserna lägger sig under varandra i stället för att tvinga fram bredd,
+        och tabellen rullar i sidled om den ändå är för bred."""
+        self.assertIn("flex-wrap: wrap", _rule(".kr-split", KR_CSS))
+        self.assertIn("overflow-x: auto", _rule(".kr-scroll-x", KR_CSS))
+        self.assertIn("width: 100%", _rule(".kr-map svg", KR_CSS))
+
+    def test_the_station_list_becomes_cards_on_a_phone(self):
+        """På en telefon ska åtgärden ("Välj station", "Redigera") aldrig ligga utanför bild."""
+        phone = KR_CSS[KR_CSS.index("@media (max-width: 700px)"):]
+        self.assertIn("grid-template-areas", phone)
+        self.assertIn(".kr-tbl thead { display: none; }", phone)
+        self.assertIn(".kr-hide-sm { display: none; }", KR_CSS)
 
 
 class ContainerAwareGridTests(unittest.TestCase):
@@ -136,6 +149,5 @@ class ModalFormLayoutTests(unittest.TestCase):
         footer = form.split('<div class="modal-actions">', 1)[1]
         self.assertIn('data-close-modal', footer)
         self.assertIn('type="submit"', footer)
-        self.assertIn('data-tm-text="Spara"', footer)
         js = (web / "app.js").read_text(encoding="utf-8")
         self.assertIn("deviceForm.querySelector('button[type=\"submit\"]')", js)

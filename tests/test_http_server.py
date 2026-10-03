@@ -516,7 +516,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="overview-graph"', html)
         self.assertIn('<h2><tm-text data-tm-text="Inloggning">Inloggning</tm-text></h2>', html)
         self.assertIn('data-language-picker', html)
-        for asset in ("i18n.js", "i18n-messages.js", "i18n-init.js", "server-ui.js", "server-ui.css", "server-design.css", "fonts/fonts.css", "fonts/jetbrains-mono-latin-700-normal.woff2"):
+        for asset in ("i18n.js", "i18n-messages.js", "i18n-init.js", "server-ui.js", "server-ui.css", "server-design.css", "fonts/fonts.css", "fonts/jetbrains-mono-latin-700-normal.woff2", "kontrollrummet.css", "kr-theme.js", "drift-model.js", "drift.js"):
             with urlopen(f"{self.base_url}/assets/{asset}", timeout=2) as response:
                 self.assertEqual(response.status, 200)
                 self.assertTrue(response.read())

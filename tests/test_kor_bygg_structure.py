@@ -17,7 +17,9 @@ class ShellStructureTests(unittest.TestCase):
         self.assertNotIn('run-tabs', self.css)
         for retired in ('RUN_TABS', 'RUN_PANELS', 'selectRunTab', 'trafficTimer', 'renderTrafficView'):
             self.assertNotIn(retired, self.js)
-        self.assertIn('renderTraffic(snapshot)', self.js)
+        # Trafiken ritas av Drift (drift.js); app.js äger data och matar den.
+        self.assertIn('pushDrift()', self.js)
+        self.assertIn('function renderEvents()', (WEB / "drift.js").read_text())
         self.assertNotIn('id="traffic-view"', self.html)
         self.assertIn('id="overview-traffic"', self.html)
         self.assertNotIn('data-build-step=', self.html)
@@ -122,15 +124,16 @@ class DesignTokenTests(unittest.TestCase):
     def test_times_and_numbers_are_monospace(self):
         """DEL 6: den enskilt viktigaste typografiska regeln - siffror som ska
         jämföras måste ligga i rad."""
-        # Exakt selektor, inte substräng: .traffic-time och .traffic-times är
-        # två olika regler och en substrängsökning hittar fel block.
-        for selector in (".app-clock", ".traffic-time", ".traffic-times",
-                         ".traffic-train-number", ".traffic-station-code"):
-            index = self.css.index(selector + " {")
-            block = self.css[index:index + 400]
+        # Exakt selektor, inte substräng: .kr-ev .t och .kr-stat b är olika regler.
+        kr = (WEB / "kontrollrummet.css").read_text()
+        for selector in (".kr-clock-time", ".kr-stat b", ".kr-ev .t", ".kr-badge", ".kr-trainno", ".kr-code"):
+            index = kr.index(selector + " {")
+            block = kr[index:index + 300]
             # Through the token, so every one of them is the shipped JetBrains Mono.
-            self.assertIn("var(--font-mono)", block, selector)
-        self.assertIn('--font-mono: "JetBrains Mono"', self.css)
+            self.assertIn("var(--kr-mono)", block, selector)
+        self.assertIn("#app-chrome .app-clock", kr)
+        self.assertIn('--kr-mono: "JetBrains Mono"', kr)
+        self.assertNotRegex(kr, r"font-family:\s*ui-monospace")
         self.assertNotRegex(self.css, r"font-family:\s*ui-monospace")
 
     def test_motion_is_only_where_it_means_something(self):

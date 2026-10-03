@@ -27,7 +27,8 @@ class CloudOnlyViewTests(unittest.TestCase):
         self.assertNotIn('id="runtime-activate-update"', HTML)
 
     def test_station_assignment_remains_a_runtime_action(self):
-        self.assertIn('data-admin-section="devices"', HTML)
+        # Stationerna och deras boxar är en panel i Drift; tilldelningen sker i en dialog.
+        self.assertIn('id="drift-stations"', HTML)
         self.assertIn('authorizedFetch("/v1/devices/assign"', JS)
         self.assertIn('id="device-form-modal"', HTML)
 
