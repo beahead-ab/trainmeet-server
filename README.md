@@ -914,7 +914,10 @@ Den separat installerade TKL-terminalen kopplas med en lokal kod:
   och onlineläge. **Ta bort** stänger ute det direkt, och terminalen ber då om
   koden igen.
 
-Före varje körning tar en namngiven operatör stationen i tjänst. Pågående trafikärenden överlever
+Ett anslutet ställverk är i tjänst för sin station, precis som en tilldelad TMBox:
+tågklarering och tågrörelser kräver inget trafikpass. Ett trafikpass är frivilligt och
+ger stationen en namngiven operatör och en överlämningsanteckning; utan pass registreras
+stegen under ställverkets eget namn. Pågående trafikärenden överlever
 överlämning, terminalbyte och serveromstart. Tågklarering, avgång och ankomst går
 via samma auktoritativa trafikmotor som de fysiska TMBoxarna.
 

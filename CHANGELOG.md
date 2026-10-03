@@ -5,6 +5,15 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Anslutet ställverk är i tjänst utan trafikpass
+
+En TKL-terminal behöver inte längre starta ett trafikpass för att begära,
+besvara och avsluta tågklarering eller anmäla tågrörelser, precis som en
+tilldelad TMBox. Utan pass registreras stegen under terminalens eget namn;
+ett aktivt pass ger fortfarande operatörens namn. Felet
+`tkl_shift_not_started` finns inte längre. Passen finns kvar för den som vill
+ha namngiven operatör och överlämning.
+
 ### Kontrollrummet: nya Drift, Inställningar, skärmar och deltagarvy
 
 Hela serverns gränssnitt är byggt om efter designen "Kontrollrummet", i
