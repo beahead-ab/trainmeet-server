@@ -64,9 +64,9 @@ function connectionStates() {
 
 const deviceRows = () => ([
   { device_id: 'esp-1a2b3c', device_code: 'TBX-1A2B3C', model: 'ESP8266', station_id: null, connection: { state: 'online', last_seen: '2026-10-03T05:12:00Z' }, language: 'sv' },
-  { device_id: 'web-iphone', device_code: 'WEB-K3M9', model: 'Virtuell · Caspers iPhone', station_id: null, connection: { state: 'online', last_seen: '2026-10-03T05:12:00Z' } },
+  { device_id: 'web-iphone', device_code: 'WEB-K3M9', model: 'Virtuell · Caspers iPhone', firmware_version: 'unknown', station_id: null, connection: { state: 'online', last_seen: '2026-10-03T05:12:00Z' } },
   { device_id: 'esp-9f02', device_code: 'TBX-9F02', model: 'ESP8266', station_id: 'cst', station_side: 'both', connection: { state: 'online', last_seen: '2026-10-03T05:12:00Z' }, language: 'sv' },
-  { device_id: 'esp-3c11', device_code: 'TBX-3C11', model: 'ESP8266', station_id: 'dev', station_side: 'both', connection: { state: 'online', last_seen: '2026-10-03T05:12:00Z' }, language: 'sv' },
+  { device_id: 'esp-3c11', device_code: 'TBX-3C11', model: 'ESP32', firmware_version: '0.7.5', station_id: 'dev', station_side: 'both', connection: { state: 'online', last_seen: '2026-10-03T05:12:00Z' }, language: 'sv' },
   { device_id: 'esp-77a0', device_code: 'TBX-77A0', model: 'ESP8266', station_id: 'lek', station_side: 'both', connection: { state: 'online', last_seen: '2026-10-03T05:12:00Z' }, language: 'sv' },
   { device_id: 'esp-1288', device_code: 'TBX-1288', model: 'ESP8266', station_id: 'cda', station_side: 'both', connection: { state: 'online', last_seen: '2026-10-03T05:12:00Z' }, language: 'sv' },
   { device_id: 'esp-5d5d', device_code: 'TBX-5D5D', model: 'ESP8266', station_id: 'vag', station_side: 'both', connection: { state: 'online', last_seen: '2026-10-03T05:12:00Z' }, language: 'sv' },

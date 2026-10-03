@@ -186,6 +186,11 @@ body[data-mode="kor"] #app-view { padding: 14px 20px 24px; max-width: none; }
 .kr-drift .form-message.error { color: var(--kr-red); }
 .kr-drift .form-message.success { color: var(--kr-green); }
 .kr-drift .form-message.notice { color: var(--kr-amber); }
+/* Directly in a panel the message is a row of the column, not a full-width item
+   in a wrapping row: flex-basis 100% there took the whole panel height and
+   squeezed the station list to a few rows until reload (#107). */
+.kr-drift .kr-panel > .form-message { flex: none; padding: 8px 16px; }
+.kr-drift .kr-panel > .form-message:empty { display: none; }
 
 /* Klockraden */
 .kr-clockrow { flex-direction: row; align-items: center; gap: 22px; padding: 12px 20px; flex-wrap: wrap; }
@@ -282,10 +287,10 @@ body[data-mode="kor"] #app-view { padding: 14px 20px 24px; max-width: none; }
 .nowt { fill: var(--kr-amber-ink); font: 700 12px var(--kr-mono); }
 
 /* Banöversiktens ritning: samma klasser som skärmarnas, nu i kontrollrummets färger */
-.kr-map .topology-track { stroke: var(--kr-track); stroke-width: 9; stroke-linecap: round; transition: opacity .2s ease, stroke .2s ease; }
+.kr-map .topology-track { stroke: var(--kr-track); stroke-width: 5; stroke-linecap: round; transition: opacity .2s ease, stroke .2s ease; }
 .kr-map .topology-track.double { stroke-width: 3.6; }
 .kr-map .topology-track.active { stroke: var(--kr-blue); }
-.kr-map .topology-track.route-highlight { stroke: var(--kr-blue); stroke-width: 13; opacity: 1; }
+.kr-map .topology-track.route-highlight { stroke: var(--kr-blue); stroke-width: 9; opacity: 1; }
 .kr-map .topology-track.double.route-highlight { stroke-width: 6; }
 .kr-map .topology-track.station-highlight { stroke: var(--kr-blue); opacity: 1; }
 .kr-map .topology-track.dimmed { opacity: .22; }

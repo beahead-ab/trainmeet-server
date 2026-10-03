@@ -33,3 +33,4 @@ jobs:
           node tests/js/public-workspaces-live.test.cjs
           node tests/js/terminal16-placement-live.test.cjs
           node tests/js/restore-last.test.cjs
+          node tests/js/drift-station-list.test.cjs
