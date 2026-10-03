@@ -296,6 +296,9 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     const showTraffic = async (channels, recorded) => {
       lineChannels = channels; positions = recorded;
       await page.evaluate(() => refreshLocalClock());
+      // Kontrollrummet draws the map on the next animation frame, and again when
+      // the map's width changes; measure only after that drawing.
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     };
     const line = (state, from = 'a', to = 'b') => ({ state, from_station_id: from, to_station_id: to, train_number: '421' });
     const parked = count => Array.from({ length: count }, (_, i) => ({ train_number: String(901 + i), status: 'station', station_id: 'a' }));
@@ -673,8 +676,9 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     region='us';
     await page.goto('http://127.0.0.1:9999/drift');
     await page.locator('#server-region').filter({hasText:'US'}).waitFor();
+    // Drift hides its panels and shows the US summary in one drawing, on the next frame.
+    await page.locator('#us-runtime-summary').waitFor({state:'visible'});
     for (const id of ['drift-simulation', 'drift-map', 'drift-stations', 'drift-graph', 'overview-traffic', 'drift-stats', 'connect-terminals']) assert.equal(await page.locator('#' + id).isVisible(), false, id);
-    assert.equal(await page.locator('#us-runtime-summary').isVisible(), true);
     assert.equal(calls.some(c=>c[1].includes('local-configuration')||c[1]==='/v1/operating-mode'),false);
     assert.deepEqual(errors,[]);
     await screenshot('server-design');
