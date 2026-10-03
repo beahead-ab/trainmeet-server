@@ -499,6 +499,13 @@ class TrainMeetHTTPApplication:
         self._browser_touch_at[client_id] = now
         self.identities.touch_discovered_device(client_id)
 
+    def terminal16_timetable(self, client):
+        """The box's station timetable with each train's current state (read-only)."""
+        self.note_device_seen(client.client_id)
+        self._require_box_access(client, client.client_id)
+        self._touch_browser_client(client.client_id)
+        return self.terminal16.timetable(client.client_id)
+
     @runtime_view
     def terminal16_command(self, client, payload):
         self.note_device_seen(client.client_id)
@@ -597,12 +604,23 @@ class TrainMeetHTTPApplication:
             if len(attempts) >= 20 or len(self._browser_enrollment_attempts) > 1024:
                 raise HTTPAPIError(HTTPStatus.TOO_MANY_REQUESTS, "too_many_clients", "För många nya klienter. Försök igen senare.")
             attempts.append(now)
+        # The iPhone TMBox registers like a web box and says so, so Klienter can
+        # tell the two apart. It is a label only: same kind, same rights.
+        app = payload.get("client")
+        if app not in {None, "web", "ios"} or (app == "ios" and workspace != "tmbox"):
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_client", "Okänd klienttyp.")
+        version = payload.get("app_version")
+        if version is not None and not (isinstance(version, str) and re.fullmatch(r"[0-9A-Za-z.+ ()-]{1,24}", version)):
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_app_version", "Ogiltig appversion.")
         client_id = f"browser-{workspace}-{uuid4().hex}"
         token = secrets.token_urlsafe(32)
         kind = DeviceKind.TKL_TERMINAL if workspace == "tkl" else DeviceKind.ESP32_PANEL
-        client = self.identities.register_client(client_id, f"Webb {workspace.upper()}", kind, token, (), browser_workspace=workspace)
-        self.identities.record_discovery(client_id, f"WEB-{uuid4().hex[:8].upper()}",
-                                         model=f"{'TKL' if workspace == 'tkl' else 'TMBox'} · webbläsare", protocol_version=2,
+        name = "iPhone TMBox" if app == "ios" else f"Webb {workspace.upper()}"
+        client = self.identities.register_client(client_id, name, kind, token, (), browser_workspace=workspace)
+        code = f"IOS-{uuid4().hex[:6].upper()}" if app == "ios" else f"WEB-{uuid4().hex[:8].upper()}"
+        model = "TMBox · iPhone" if app == "ios" else f"{'TKL' if workspace == 'tkl' else 'TMBox'} · webbläsare"
+        self.identities.record_discovery(client_id, code, model=model, protocol_version=2,
+                                         firmware_version=version or "unknown",
                                          display=DisplayCapability(rows=2, cols=16) if workspace == "tmbox" else DisplayCapability(rows=4, cols=20))
         return {**self.browser_client(client), "access_token": token}
 
@@ -3618,6 +3636,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/tmbox/terminal":
                 self._send_json(HTTPStatus.OK, self.server.application.terminal16_frame(self._authenticated_client()))
+                return
+            if path == "/v1/tmbox/terminal/timetable":
+                self._send_json(HTTPStatus.OK, self.server.application.terminal16_timetable(self._authenticated_client()))
                 return
             if path == "/v1/clock":
                 self._send_json(HTTPStatus.OK, self.server.application.clock_status(self._authenticated_client()))

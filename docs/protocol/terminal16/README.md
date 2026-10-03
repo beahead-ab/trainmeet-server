@@ -92,11 +92,13 @@ Exempel, fångade från mosquitto 2026-10-01 (bilden förkortad):
 - `profile` = `server-16x2`, `rows` = 2, `cols` = 16, `lines` = två rader text.
 - `lcd` = färdiga tecken för HD44780 (`hd44780-5x8-cgram-v1`), högst 8 egna
   tecken (`glyphs`).
-- `keys` = de tangenter som gör något just nu: `{label, acts}`. `acts` är sant
-  när tangenten ändrar trafiken. Efter ett skärmbyte väntar klienten
+- `keys` = de tangenter som gör något just nu: `{label, short, acts}`. `acts` är sant
+  när tangenten ändrar trafiken. `short` är ett ord på högst tolv tecken som en
+  telefon skriver under tangenten (KÖ 1, GE KLART, AVGÅTT); boxen bortser från det. Efter ett skärmbyte väntar klienten
   `input_guard_ms` innan en tangent med `acts` skickas; bläddring svarar direkt.
 - `entry` = inmatningen av tågnummer: `context`, `max_length`, `row`, `column`,
-  `commit` (`#`), `cancel` (`*`), `erase` (`B`), `shortcut` (`A`).
+  `commit` (`#`), `cancel` (`*`), `erase` (`B`), `shortcut` (`A`),
+  `labels` och `short` för samma fyra tangenter under inmatning.
 
 ## 7. Tidsgränser i boxen (firmware)
 
@@ -111,6 +113,29 @@ Provas i `trainmeet-tmbox`, inte här:
 Klienter visar *Online* högst `DEVICE_ONLINE_SECONDS` efter senaste meddelandet
 från en känd session, *Ingen kontakt* därefter och *Offline* efter
 `DEVICE_OFFLINE_SECONDS`.
+
+## 9. Över HTTP: webben och iPhone
+
+Webbklienten `/tmbox/` och iPhone-appen TrainMeet TMBox använder samma bild och
+samma tangentregler över HTTP i stället för MQTT. De får ingen egen trafiklogik.
+
+- `POST /v1/browser-clients` med `{"workspace": "tmbox"}` registrerar en klient
+  och svarar med `client_id`, `device_code` och `access_token`. iPhone skickar
+  även `"client": "ios"` och `"app_version"`; den får då en kod `IOS-XXXXXX` och
+  modellen *TMBox · iPhone* i Klienter. Rättigheterna är desamma som en webbox:
+  ingen station förrän administratören tilldelar den.
+- `GET /v1/tmbox/terminal` hämtar bilden, `POST /v1/tmbox/terminal` skickar ett
+  tangenttryck med `command_id`, `view_token`, `key` och vid inmatning
+  `train_number` och `entry_context`, precis som §5.
+- `GET /v1/tmbox/terminal/timetable` hämtar stationens tidtabell för boxens
+  station och sida: `station {code, name}`, `side`, `clock`, `revision` och
+  `rows`. Varje rad har `movement_id`, `train_number`, `kind`
+  (`departure`/`arrival`), `time`, `station {code, name}` (andra änden),
+  `side`, `track`, `state` och `selected`. `state` är `planned`, `requested`,
+  `cleared`, `departed` eller `arrived`. Läsningen ger ingen trafikrätt; utan
+  station är `rows` tom.
+- DNS-SD-posten `_tmbox._tcp` pekar på MQTT-porten. TXT `http=<port>` anger
+  webbporten, så att iPhone hittar samma server på träffens nät.
 
 ## Värden
 
