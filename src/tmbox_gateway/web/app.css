@@ -476,7 +476,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
    auto-fit räknar på den plats som faktiskt finns och lägger om till färre
    kolumner i stället. */
 .access-grid { grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); }
-.grow { min-width: 0; }
 .inline-form { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
 .inline-form > label { grid-column: 1; }
 .inline-form > button { grid-column: 2; grid-row: 1; }
@@ -643,8 +642,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .display-offline .display-live { display: inline-flex; }
 .display-back { color: var(--display-fg); text-decoration: none; font-size: .86rem; }
 .display-toolbar > strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.display-toolbar-actions { margin-left: auto; display: flex; align-items: center; gap: .55rem; }
-.display-toolbar button, .display-badge, .display-live, .display-select { border: 1px solid color-mix(in srgb, var(--display-fg) 16%, transparent); background: color-mix(in srgb, var(--display-fg) 8%, transparent); color: var(--display-fg); border-radius: 999px; min-height: 32px; padding: .35rem .75rem; font-size: .76rem; }
+.display-toolbar button, .display-live, .display-select { border: 1px solid color-mix(in srgb, var(--display-fg) 16%, transparent); background: color-mix(in srgb, var(--display-fg) 8%, transparent); color: var(--display-fg); border-radius: 999px; min-height: 32px; padding: .35rem .75rem; font-size: .76rem; }
 .display-select { width: auto; max-width: 150px; appearance: auto; }
 /* The popup is a separate surface and never sees the page behind it, so the
    translucent toolbar background above would leave it fully transparent. */
@@ -676,7 +674,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   pointer-events: none;
 }
 .graph-station-overlay svg { display: block; width: 70px; height: 100%; }
-.graph-station-label-bg { fill: var(--display-bg); fill-opacity: .96; }
 /* The timeline scrolls vertically once the graph is taller than the screen, so
    the hour axis is pinned to the bottom of the scrollport instead of living at
    the bottom of the drawing. It still scrolls sideways with the timeline. */
@@ -687,7 +684,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   pointer-events: none;
 }
 .graph-time-overlay svg { display: block; }
-.graph-time-label-bg { fill: var(--display-bg); fill-opacity: .96; }
 .topology-track { stroke: var(--display-line); stroke-width: 2.5; stroke-linecap: round; transition: opacity .25s ease, stroke .25s ease, stroke-width .25s ease; }
 .topology-track.active { stroke: var(--display-primary); }
 .topology-track.route-highlight { stroke: hsl(220 70% 48%); stroke-width: 4; opacity: 1; }
@@ -711,18 +707,11 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .topology-route-badge rect { fill: hsl(220 70% 48%); filter: drop-shadow(0 4px 8px rgba(20, 55, 125, .28)); }
 .topology-route-badge text { fill: #fff; font: 700 10px/1 var(--font-sans); }
 .graph-grid { stroke: color-mix(in srgb, var(--display-fg) 13%, transparent); stroke-width: 1; }
-.graph-grid-half { stroke: color-mix(in srgb, var(--display-fg) 8%, transparent); stroke-width: .5; stroke-dasharray: 2 4; }
-.graph-axis { stroke: color-mix(in srgb, var(--display-fg) 34%, transparent); stroke-width: 1.5; }
 .graph-label { fill: var(--display-muted); font: 11px/1 var(--font-mono); }
 .graph-station-label { fill: var(--display-muted); font: 11px/1 var(--font-sans); }
 .graph-train-group { cursor: pointer; opacity: .92; transition: opacity .2s ease; }
 .graph-train-group.dimmed { opacity: .1; }
 .graph-train-group.selected { opacity: 1; }
-.graph-train-line { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; transition: stroke-width .2s ease; }
-.graph-train-group.selected .graph-train-line { stroke-width: 4; }
-.graph-train-hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; }
-.graph-label-bg { fill: var(--display-bg); fill-opacity: .85; }
-.graph-train-label { font: 600 10px/1 var(--font-sans); }
 .graph-now { stroke: #ef4444; stroke-width: 2; stroke-dasharray: 5 5; }
 /* Bottom left, opposite the train/station panel, so the two never collide.
    Deliberately low-key: it only needs reading up close while pairing a box,
@@ -761,8 +750,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .clock-control-form .form-message { grid-column: 1; }
 .clock-control-actions { display: grid; grid-template-columns: 1fr 1fr; }
 .display-toolbar > strong, .display-live { display: none; }
-.display-toolbar-actions { gap: .3rem; }
-.display-toolbar button, .display-badge { padding: .3rem .55rem; }
+.display-toolbar button { padding: .3rem .55rem; }
 .display-stage { padding-left: 4px; padding-right: 4px; }
 .display-selection { right: 8px; bottom: 8px; width: calc(100vw - 16px); }
 .dashboard-view { grid-template-columns: 1fr; overflow: auto; }
@@ -805,25 +793,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .tmbox-v2-view .panel-picker { display: grid; gap: 6px; }
 .tmbox-v2-view .panel-picker input,
 .tmbox-v2-view .panel-picker select { min-height: 34px; }
-.tmbox-v2-hint { color: var(--muted); font-size: 11px; margin: 0 0 10px; }
-.tmbox-v2-assignment-state { margin: 0; font-weight: 600; }
-.tmbox-v2-assignment-state.ok { color: var(--ok, #1f7a4d); }
-.tmbox-v2-assignment-state.warn { color: var(--warn, #a05a00); }
-.tmbox-v2-movements,
-.tmbox-v2-cases { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.tmbox-v2-movement,
-.tmbox-v2-case {
-  border-radius: var(--radius);
-  background: var(--surface-alt, rgba(127, 127, 127, 0.07));
-  padding: 12px;
-  display: grid;
-  gap: 8px;
-}
-.tmbox-v2-movement-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
-.tmbox-v2-movement-head span { color: var(--muted); font-variant-numeric: tabular-nums; }
-.tmbox-v2-movement-facts { color: var(--muted); font-size: 11px; }
-.tmbox-v2-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.tmbox-v2-actions button { min-height: 32px; padding: 0 12px; font-size: 12px; }
 .tmbox-v2-ack {
   margin: 0;
   padding: 12px;
@@ -833,9 +802,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   line-height: 1.5;
   overflow-x: auto;
   white-space: pre;
-}
-@media (max-width: 720px) {
-.tmbox-v2-movement-head { flex-direction: column; gap: 2px; }
 }
 /* The attention banner. The box has no buzzer yet, so in the simulator this
    and the tone are the whole of what a signal looks like. It appears only when
@@ -1469,9 +1435,8 @@ body[data-mode="skarmar"] .server-admin-shell { padding: 16px 12px 32px; }
 #display-placement-fields { display: grid; gap: 14px; margin-bottom: 18px; }
 #display-placement-fields label { display: flex; flex-direction: column; gap: 6px; }
 #display-placement-fields select { width: 100%; min-height: 40px; }
-
 /* Rörelse respekterar användarens val: ingenting pulserar eller glider när
    systemet ber om mindre rörelse (DEL 7.7). */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+*, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }

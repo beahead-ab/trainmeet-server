@@ -44,10 +44,12 @@ const root = path.resolve(__dirname, '../..');
     const wifi = {screens: ['clock'], wifi_name: 'Träff; ÅÄÖ', wifi_password: 'test-only:secret'};
     assert.equal((await admin.request.post(urls.eu+'/v1/display/connection',{data:wifi})).status(),200);
     await page.reload();
+    await page.locator('#pv-connect-open').click();
     await page.locator('#pv-wifi').getByText(wifi.wifi_name, {exact:true}).waitFor();
     await page.locator('#pv-wifi').getByText(wifi.wifi_password, {exact:true}).waitFor();
     assert.match(await page.locator('#pv-wifi-note').innerText(), /som boxen frågar efter/);
     assert.equal(await page.locator('#pv-connect-card svg').count(), 0);
+    await page.locator('#pv-connect-close').click();
     const clockPage = await visitor.newPage();
     await clockPage.setViewportSize({width:1920,height:1080});
     await clockPage.goto(urls.eu+'/display/clock');
@@ -86,8 +88,8 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('#pv-clear-station').isVisible(), true);
     await page.locator('#pv-clear-station').click();
     assert.equal(await page.locator('#pv-clear-station').isVisible(), false);
-    // Phone widths show the login link in the foot, wider ones in the top row.
-    await page.locator('#pv-login:visible, #pv-foot-login:visible').first().click();
+    // The login link sits in the top row, on a phone as on a computer.
+    await page.locator('#pv-login').click();
     await page.locator('#login-form').waitFor({state: 'visible'});
     await page.locator('#login a[href="/"]').click();
     await page.locator('#participant-view').waitFor({state: 'visible'});

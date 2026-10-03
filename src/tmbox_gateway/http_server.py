@@ -3546,6 +3546,8 @@ class TrainMeetHTTPApplication:
             "/assets/settings.js": "settings.js",
             "/assets/kr-theme.js": "kr-theme.js",
             "/assets/kontrollrummet.css": "kontrollrummet.css",
+            "/assets/skarmar.css": "skarmar.css",
+            "/assets/deltagare.css": "deltagare.css",
             "/assets/participant.js": "participant.js",
             "/assets/participant-messages.js": "participant-messages.js",
             "/assets/qrcode.js": "qrcode.js",

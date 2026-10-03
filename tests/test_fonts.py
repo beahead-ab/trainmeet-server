@@ -20,7 +20,7 @@ FONTS = WEB / "fonts"
 # the box itself – LCD and keys – keeps the physical TMBox's look, fonts included.
 STYLESHEETS = [
     WEB / "app.css", WEB / "server-design.css", WEB / "server-ui.css", WEB / "meet-type.css",
-    WEB / "kontrollrummet.css", PACKAGE / "us_web" / "style.css",
+    WEB / "kontrollrummet.css", WEB / "skarmar.css", WEB / "deltagare.css", PACKAGE / "us_web" / "style.css",
 ]
 
 
@@ -87,7 +87,7 @@ class ShippedFontsTests(unittest.TestCase):
     def test_svg_text_uses_the_shipped_fonts(self):
         script = (WEB / "app.js").read_text(encoding="utf-8")
         self.assertNotIn('font-family="sans-serif"', script)
-        self.assertIn('class="clock-numeral"', script)
+        self.assertRegex(script, r'class="clock-numeral[ "]')
         self.assertIn(".clock-numeral { font-family: var(--font); }", (WEB / "server-ui.css").read_text(encoding="utf-8"))
 
     def test_scripts_do_not_pick_a_system_font(self):

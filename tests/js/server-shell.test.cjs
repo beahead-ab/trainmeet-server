@@ -151,9 +151,24 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#application-menu').isVisible(), false);
     assert.equal(await page.locator('#pv-meet-name').textContent(), 'Demo meet');
     assert.equal(await page.locator('#workspace-options').count(), 0);
-    // A box finds the server and needs no address or code; the card says so.
+    // The connect steps sit behind one button and open as a sheet from the
+    // bottom (Deltagare.dc). A box finds the server and needs no address or
+    // code; the sheet says so.
+    assert.equal(await page.locator('#pv-connect-card').isVisible(), false);
+    await page.locator('#pv-connect-open').click();
     await page.locator('#pv-connect-card').getByText('Boxen hittar servern själv').waitFor();
     assert.equal(await page.locator('#pv-connect-card').getByText(/parningskod/i).count(), 0);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#pv-connect-card').isVisible(), false);
+    // The summary under the map, and what comes next: a filled badge for a
+    // train on its way in, a hollow one for a departure (Deltagare.dc).
+    assert.equal(await page.locator('#pv-stat-line').textContent(), '0');
+    const events = await page.locator('#pv-events .pv-item--event').evaluateAll(rows => rows.map(row => ({ train: row.querySelector('.pv-badge-train').textContent, hollow: row.querySelector('.pv-badge-train').classList.contains('is-hollow') })));
+    assert.deepEqual(events.slice(0, 2), [{ train: '421', hollow: true }, { train: '421', hollow: false }]);
+    // Search in the timetable: a train number or a station.
+    await page.locator('#pv-timetable-search').fill('zzz-no-such-train');
+    await page.locator('#pv-timetable .pv-empty').waitFor();
+    await page.locator('#pv-timetable-search').fill('');
     assert.equal(await page.locator('#participant-view a[href="/tmbox/"]').count(), 1, 'One button starts a virtual TMBox');
     assert.equal(await page.locator('#pv-login').getAttribute('href'), '/login');
     // No stream here (503): the participant view keeps asking every five seconds.
@@ -367,21 +382,19 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       assert.ok(Math.abs(g.b.y - g.a.y) > Math.abs(g.b.x - g.a.x), 'portrait: the line is upright');
       assert.ok(pointsTowards(g, from, to), `upright, the triangle points at ${to}: ${JSON.stringify(g.points)}`);
     }
-    // Trains inside a station take a side free of names and lines.
+    // Trains inside a station are not drawn: the number after the station's code
+    // says how many stand there (SkarmBana: "siffran = tåg inne").
     for (const station of ['a', 'b']) {
       await showTraffic([], parked(4).map(train => ({ ...train, station_id: station })));
-      await page.locator('#overview-topology .topology-train[data-train-number="+2"]').waitFor();
-      const clash = await page.evaluate(() => {
-        const rects = selector => [...document.querySelectorAll(selector)].map(element => element.getBoundingClientRect());
-        const hit = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-        const tags = rects('#overview-topology .topology-train.at-station .topology-train-tag');
-        return tags.some(tag => rects('#overview-topology .topology-name, #overview-topology .topology-track').some(other => hit(tag, other)));
-      });
-      assert.equal(clash, false, `station ${station}: the row covers a name or a line`);
+      const name = station === 'a' ? 'Alpha' : 'Beta';
+      await page.waitForFunction(name => /· 4$/.test(document.querySelector(`#overview-topology .topology-node[aria-label^="${name}"] .topology-code`)?.textContent || ''), name);
+      assert.equal(await page.locator('#overview-topology .topology-train.at-station').count(), 0, `station ${station}: no row of tags`);
     }
     // Readable on a phone: the map's box grows with the upright line.
-    const smallest = await page.locator('#overview-topology .topology-name, #overview-topology .train-number').evaluateAll(texts => Math.min(...texts.map(text => text.getBoundingClientRect().height)));
-    assert.ok(smallest >= 7, `map text ${smallest} px high`);
+    await page.waitForFunction(() => { const texts = [...document.querySelectorAll('#overview-topology .topology-name')]; return texts.length > 0 && texts.every(text => text.getBoundingClientRect().height > 0); });
+    const heights = await page.locator('#overview-topology .topology-name, #overview-topology .train-number').evaluateAll(texts => texts.map(text => [text.textContent, text.getBoundingClientRect().height, getComputedStyle(text).display]));
+    const smallest = Math.min(...heights.map(([, height]) => height));
+    assert.ok(smallest >= 7, `map text ${smallest} px high: ${JSON.stringify(heights)}`);
     for (const heading of await page.locator('#overview-view .kr-ph a, #overview-view .kr-ph .kr-linkbtn').all()) {
       if (await heading.isVisible()) assert.ok((await heading.boundingBox()).height < 22, 'a heading link stays on one line');
     }
@@ -390,25 +403,18 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     // Older paths record only the line position; that is on the line too.
     await showTraffic([], [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: 'a', to_station_id: 'b' }]);
     await page.locator('#overview-topology .topology-train.on-line[data-train-number="421"]').waitFor();
-    // Inside a station: a pale tag above it, no triangle. With a clear for the
-    // next line it is that outlined tag instead, not both.
+    // Inside a station: no tag, only the number beside the code. With a clear
+    // for the next line the train is that outlined tag on the line instead.
     await showTraffic([], [{ train_number: '421', status: 'station', station_id: 'b' }]);
-    await page.locator('#overview-topology .topology-train.at-station[data-train-number="421"]').waitFor();
-    let g = await mapGeometry();
-    assert.equal(g.arrow, null);
-    assert.equal(await mapTrain.getAttribute('aria-label'), 'Tåg 421 vid B');
-    assert.ok(g.tag.y < g.b.y && Math.abs(g.tag.x - g.b.x) < 2, 'above its station');
+    await page.waitForFunction(() => /· 1$/.test(document.querySelector('#overview-topology .topology-node[aria-label^="Beta"] .topology-code')?.textContent || ''));
+    assert.equal(await mapTrain.count(), 0);
     await showTraffic([line('reserved', 'b', 'a')], [{ train_number: '421', status: 'station', station_id: 'b' }]);
     await page.locator('#overview-topology .topology-train.cleared[data-train-number="421"]').waitFor();
     assert.equal(await mapTrain.count(), 1);
-    // Three trains fit above a station; more show two and +N.
-    await showTraffic([], parked(3));
-    await page.locator('#overview-topology .topology-train.at-station[data-train-number="903"]').waitFor();
+    // Many trains inside one station: still only the number.
     await showTraffic([], parked(4));
-    await page.locator('#overview-topology .topology-train[data-train-number="+2"]').waitFor();
-    assert.deepEqual(await page.locator('#overview-topology .topology-train.at-station').evaluateAll(tags => tags.map(tag => tag.dataset.trainNumber)), ['901', '902', '+2']);
-    const row = await page.locator('#overview-topology .topology-train.at-station .topology-train-tag').evaluateAll(tags => tags.map(tag => tag.getBoundingClientRect().toJSON()));
-    assert.equal(overlaps(row[0], row[1]) || overlaps(row[1], row[2]), false, 'side by side');
+    await page.waitForFunction(() => [...document.querySelectorAll('#overview-topology .topology-code')].some(code => /· 4$/.test(code.textContent)));
+    assert.equal(await page.locator('#overview-topology .topology-train').count(), 0);
     // Clicking a train on the map lights its route and opens the train panel.
     await showTraffic([line('occupied')], [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: 'a', to_station_id: 'b' }]);
     await page.locator('#overview-topology .topology-train.on-line[data-train-number="421"]').click();
@@ -418,10 +424,10 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.locator('#overview-topology .topology-train.selected[data-train-number="421"]').waitFor();
     assert.ok(await page.locator('#overview-topology .route-highlight').count() > 0);
     assert.equal(await page.locator('#overview-graph .tr-line[data-train-number="421"] .pl.sel').count(), 1);
-    // The other trains step back, the parked ones and their +N too.
+    // The other trains step back; the ones standing inside a station are not drawn at all.
     await showTraffic([line('occupied')], parked(4));
-    await page.locator('#overview-topology .topology-train.dimmed[data-train-number="+2"]').waitFor();
-    assert.equal(await page.locator('#overview-topology .topology-train.dimmed[data-train-number="901"]').count(), 1);
+    await page.waitForFunction(() => document.querySelector('#overview-topology .topology-train.on-line') !== null);
+    assert.equal(await page.locator('#overview-topology .topology-train[data-train-number="901"]').count(), 0);
     assert.equal(await page.locator('#overview-topology .topology-train.dimmed[data-train-number="421"]').count(), 0);
     await trainPanel.getByRole('button', { name: 'Stäng tågpanelen' }).click();
     await showTraffic([], []);
@@ -450,13 +456,13 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await routeDetail.locator('.route-stop.done').count(), 1);
     assert.equal(await routeDetail.locator('.train-detail-between').textContent(), 'På linjen');
     assert.ok(await routeDetail.locator('#overview-route-map .topology-track.route-highlight').count() > 0, 'its route is lit');
-    // The small map has this train only; Banöversikten has them all.
+    // The small map has this train only; Banöversikten has the ones on the line (those inside a station are a number).
     // It moves with the line at once, not when /v1/train next answers.
     let releaseTrain; holdTrain = new Promise(resolve => { releaseTrain = resolve; });
     await showTraffic([line('occupied')], parked(2));
     await routeDetail.locator('#overview-route-map .topology-train.on-line.selected[data-train-number="421"]').waitFor({ timeout: 2000 });
     assert.equal(await routeDetail.locator('#overview-route-map .topology-train').count(), 1);
-    assert.equal(await page.locator('#overview-topology .topology-train').count(), 3);
+    assert.equal(await page.locator('#overview-topology .topology-train').count(), 1);
     holdTrain = null; releaseTrain();
     // A call is a button: its station is lit, the train stays chosen. So
     // does a station on the small map.

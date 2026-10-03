@@ -19,7 +19,8 @@ Drift, Inställningar, sidhuvudet och dialogerna som öppnas därifrån är bygg
 temat Kontrollrummet (mörkt och ljust, se
 [`GRAPHIC_IDENTITY.md`](GRAPHIC_IDENTITY.md)). Reglerna nedan om accentfärg,
 bakgrund och sidhuvudets utseende gäller tills vidare bara för de ytor som ännu
-inte flyttats över (Hjälp, inloggning, deltagarvyn, skärmarna). Följande gäller
+inte flyttats över (Hjälp och inloggning). Skärmarna och deltagarvyn har samma
+utseende som Drift. Följande gäller
 redan överallt:
 
 - Dialogreglerna längre ned (Avbryt först, Spara sist, osparade ändringar

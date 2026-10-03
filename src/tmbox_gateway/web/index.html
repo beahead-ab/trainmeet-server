@@ -15,6 +15,8 @@
     <link rel="stylesheet" href="/assets/server-design.css">
     <link rel="stylesheet" href="/assets/server-ui.css">
     <link rel="stylesheet" href="/assets/kontrollrummet.css">
+    <link rel="stylesheet" href="/assets/skarmar.css">
+    <link rel="stylesheet" href="/assets/deltagare.css">
     <script src="/assets/i18n.js" defer></script>
     <script src="/assets/shell-messages.js" defer></script>
     <script src="/assets/participant-messages.js" defer></script>
@@ -226,86 +228,81 @@
       <section id="app-view" class="app-view hidden">
         <p id="server-context-warning" class="form-message error context-warning hidden" role="alert"></p>
         <section id="participant-view" class="participant hidden" aria-label="Deltagarvyn" data-tm-aria-label="Deltagarvyn">
+          <!-- Deltagarvyn · Kontrollrummet (Deltagare.dc). Telefonen först: klockan, banan, nästa händelser och tidtabellen i en kolumn.
+               "Anslut din TMBox" ligger bakom en knapp, i ett ark som kommer upp underifrån. -->
           <header class="pv-top">
             <img class="brand-mark" src="/trainmeet-logo.png" alt="" width="26" height="26" data-tm-alt="">
-            <b id="pv-meet-name">TrainMeet Server</b><span id="pv-region" class="tm-badge"></span>
+            <b id="pv-meet-name">TrainMeet Server</b><span id="pv-region" class="pv-badge"></span>
             <span class="pv-spacer"></span>
-            <span id="pv-day" class="pv-muted"></span>
             <span id="pv-live" class="pv-live" title="Uppdateras direkt när något ändras" data-tm-title="Uppdateras direkt när något ändras"></span>
-            <a id="pv-login" class="tm-btn tm-btn--sm pv-login" href="/login">Logga in</a>
+            <a id="pv-login" class="pv-login" href="/login">Logga in</a>
           </header>
           <div class="pv-page">
-            <div class="pv-main">
-              <div class="pv-row">
-                <section class="tm-card pv-clock-card"><div class="pv-clock" id="pv-clock"></div></section>
-                <section class="tm-card" id="pv-timetable-card" data-pv-eu>
-                  <div class="tm-card__head"><span>Tidtabell</span><span class="c" id="pv-timetable-count"></span></div>
-                  <div class="tm-card__body">
-                    <input id="pv-timetable-search" class="tm-input" type="search" placeholder="Sök tågnummer eller station" data-tm-placeholder="Sök tågnummer eller station" aria-label="Sök i tidtabellen" data-tm-aria-label="Sök i tidtabellen">
-                    <div id="pv-timetable" class="pv-list"></div>
-                    <button id="pv-timetable-toggle" type="button" class="pv-link">Visa hela tidtabellen ↓</button>
-                  </div>
-                </section>
-                <section class="tm-card" data-pv-us hidden>
-                  <div class="tm-card__head"><span>Områdestavla</span></div>
-                  <div class="tm-card__body"><p class="pv-note">Körtillstånd och trafikområden visas på områdestavlan.</p><a class="tm-btn" href="/display/territories">Öppna områdestavlan ↗</a></div>
-                </section>
-              </div>
-              <section class="tm-card" id="pv-track-card" data-pv-eu>
-                <div class="tm-card__head"><span>På banan just nu</span><span class="c">uppdateras direkt</span></div>
-                <div class="pv-stats">
-                  <div class="tm-stat"><b id="pv-stat-line">–</b><span>tåg på linjen</span></div>
-                  <div class="tm-stat"><b id="pv-stat-station">–</b><span>inne på station</span></div>
-                  <div class="tm-stat tm-stat--ok"><b id="pv-stat-staffed">–</b><span id="pv-stat-staffed-label">bemannade</span></div>
-                </div>
-                <div class="pv-map"><div class="pv-map__scroll"><svg id="pv-topology" class="pv-topology" role="img" aria-label="Banöversikt" data-tm-aria-label="Banöversikt"></svg></div></div>
-                <p class="pv-map__hint">Dra i sidled för hela banan · tryck på en station för dess tåg</p>
+            <section class="pv-panel pv-clock-card" aria-label="Träffklockan" data-tm-aria-label="Träffklockan"><div class="pv-clock" id="pv-clock"></div></section>
+            <section class="pv-panel" id="pv-track-card" data-pv-eu aria-label="På banan nu" data-tm-aria-label="På banan nu">
+              <div class="pv-head"><span>På banan nu</span><span class="pv-spacer"></span><a href="/display/graph">Tågdiagram →</a></div>
+              <div class="pv-map kr-map"><svg id="pv-topology" class="pv-topology" role="img" aria-label="Banöversikt" data-tm-aria-label="Banöversikt"></svg></div>
+              <div class="pv-foot-row">
+                <span class="pv-chip"><b id="pv-stat-line">–</b><span>på linjen</span></span>
+                <span class="pv-chip"><b id="pv-stat-station">–</b><span>inne</span></span>
+                <span class="pv-chip pv-chip--dev" id="pv-stat-dev-chip"><b id="pv-stat-dev">–</b><span>avvikelser</span></span>
+                <span class="pv-spacer"></span>
+                <span class="pv-hint" id="pv-map-hint">dra i sidled</span>
                 <button id="pv-clear-station" class="pv-link" type="button" hidden>Visa alla stationer</button>
-                <div class="tm-card__body pv-track-lists">
-                  <div class="pv-section">På linjen</div>
-                  <div id="pv-on-line" class="pv-list"></div>
-                  <div class="pv-section">Nästa händelser</div>
-                  <div id="pv-events" class="pv-list"></div>
-                  <a class="tm-btn pv-btn-wide" href="/display/graph">Öppna tågdiagrammet ↗</a>
-                </div>
-              </section>
+              </div>
+            </section>
+            <section class="pv-panel" id="pv-events-card" data-pv-eu aria-label="Nästa händelser" data-tm-aria-label="Nästa händelser">
+              <div class="pv-head"><span>Nästa händelser</span><span id="pv-events-scope" class="pv-c">hela banan</span></div>
+              <div id="pv-events" class="pv-list"></div>
+            </section>
+            <section class="pv-panel" id="pv-timetable-card" data-pv-eu aria-label="Tidtabell" data-tm-aria-label="Tidtabell">
+              <div class="pv-head"><span>Tidtabell</span><span class="pv-c" id="pv-timetable-count"></span></div>
+              <div class="pv-search">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+                <input id="pv-timetable-search" type="search" placeholder="Tågnummer eller station" data-tm-placeholder="Tågnummer eller station" aria-label="Sök i tidtabellen" data-tm-aria-label="Sök i tidtabellen">
+              </div>
+              <div id="pv-timetable" class="pv-list"></div>
+              <div class="pv-foot-row"><button id="pv-timetable-toggle" type="button" class="pv-link">Hela tidtabellen ↓</button></div>
+            </section>
+            <section class="pv-panel" data-pv-us hidden>
+              <div class="pv-head"><span>Områdestavla</span></div>
+              <div class="pv-body"><p class="pv-note">Körtillstånd och trafikområden visas på områdestavlan.</p><a class="pv-btn" href="/display/territories">Öppna områdestavlan ↗</a></div>
+            </section>
+            <section class="pv-panel" data-pv-us hidden>
+              <div class="pv-head"><span>Conductor</span></div>
+              <div class="pv-body"><p class="pv-note">Conductorn öppnar sin klient här. Dispatchern tilldelar tåglopp.</p><a class="pv-btn" href="/us/conductor">Conductor</a></div>
+            </section>
+            <div class="pv-actions" data-pv-eu>
+              <button id="pv-connect-open" class="pv-btn pv-btn--primary" type="button">Anslut din TMBox</button>
+              <div class="pv-actions__row" id="pv-virtual-card">
+                <a class="pv-btn" href="/tmbox/">Starta virtuell TMBox</a>
+                <a class="pv-btn pv-btn--ghost" href="/tmbox-lab/">Provbänk</a>
+              </div>
             </div>
-            <aside class="pv-side">
-              <section class="tm-card" data-pv-us hidden>
-                <div class="tm-card__head"><span>Conductor</span></div>
-                <div class="tm-card__body"><p class="pv-note">Conductorn öppnar sin klient här. Dispatchern tilldelar tåglopp.</p><a class="tm-btn" href="/us/conductor">Conductor</a></div>
-              </section>
-              <section class="tm-card" id="pv-connect-card" data-pv-eu>
-                <div class="tm-card__head"><span>Anslut din TMBox</span><span class="c">tre steg, i den här ordningen</span></div>
-                <div class="pv-steps">
-                  <div class="pv-step"><div class="n">1</div><div>
-                    <div class="h">Koppla boxen till träffens Wi-Fi</div>
-                    <div id="pv-wifi" class="pv-values"></div>
-                    <p id="pv-wifi-note" class="pv-note"></p>
-                  </div></div>
-                  <div class="pv-step"><div class="n">2</div><div>
-                    <div class="h">Boxen hittar servern själv</div>
-                    <p class="pv-note">Ingen adress eller kod behövs. Boxen visar sin egen kod, till exempel TBX-1A2B3C, på displayen.</p>
-                  </div></div>
-                  <div class="pv-step"><div class="n">3</div><div>
-                    <div class="h">Trafikledningen tilldelar station</div>
-                    <p class="pv-note">Boxen dyker upp hos trafikledningen som ”väntar på station” och börjar arbeta direkt när den fått sin station.</p>
-                  </div></div>
-                </div>
-              </section>
-              <section class="tm-card" id="pv-virtual-card" data-pv-eu>
-                <div class="tm-card__head"><span>Kör en station i webbläsaren</span></div>
-                <div class="tm-card__body">
-                  <p class="pv-note">Ingen box till hands? Starta en virtuell TMBox här på mobilen, iPaden eller datorn. Den fungerar som en riktig box: trafikledningen ser den som ”väntar på station” och tilldelar den en station. Innan dess visar den bara – den kan inte påverka spelet. Kör servern en simulering tar du över en station som simulatorn annars sköter själv.</p>
-                  <a class="tm-btn tm-btn--primary pv-btn-wide pv-btn-lg" href="/tmbox/">Starta virtuell TMBox</a>
-                  <p id="pv-virtual-ttl" class="pv-note pv-muted"></p>
-                  <a class="tm-btn pv-btn-wide" href="/tmbox-lab/">Prova först i provbänken</a>
-                  <p class="pv-note">Tre boxar med testdata – helt skilda från träffen.</p>
-                </div>
-              </section>
-            </aside>
           </div>
-          <footer class="pv-foot"><span id="pv-foot-meta"></span><a id="pv-foot-login" href="/login">Logga in</a></footer>
+          <footer class="pv-foot"><span id="pv-foot-meta"></span></footer>
+          <dialog id="pv-connect-card" class="pv-sheet" aria-labelledby="pv-connect-title">
+            <div class="pv-head"><span id="pv-connect-title">Anslut din TMBox</span><span class="pv-c">tre steg, i den här ordningen</span><span class="pv-spacer"></span><button id="pv-connect-close" class="pv-x" type="button" aria-label="Stäng" data-tm-aria-label="Stäng">×</button></div>
+            <div class="pv-steps">
+              <div class="pv-step"><div class="n">1</div><div>
+                <div class="h">Koppla boxen till träffens Wi-Fi</div>
+                <div id="pv-wifi" class="pv-values"></div>
+                <p id="pv-wifi-note" class="pv-note"></p>
+              </div></div>
+              <div class="pv-step"><div class="n">2</div><div>
+                <div class="h">Boxen hittar servern själv</div>
+                <p class="pv-note">Ingen adress eller kod behövs. Boxen visar sin egen kod, till exempel TBX-1A2B3C, på displayen.</p>
+              </div></div>
+              <div class="pv-step"><div class="n">3</div><div>
+                <div class="h">Trafikledningen tilldelar station</div>
+                <p class="pv-note">Boxen dyker upp hos trafikledningen som ”väntar på station” och börjar arbeta direkt när den fått sin station.</p>
+              </div></div>
+            </div>
+            <div class="pv-sheet__foot">
+              <p class="pv-note">Ingen box till hands? Starta en virtuell TMBox på mobilen, iPaden eller datorn: trafikledningen ser den som ”väntar på station” och tilldelar den en station. Innan dess visar den bara – den kan inte påverka spelet.</p>
+              <p id="pv-virtual-ttl" class="pv-note"></p>
+            </div>
+          </dialog>
         </section>
         <div class="server-admin-shell">
 
@@ -1067,19 +1064,22 @@
         </form>
       </dialog>
       <section id="display-app" class="display-app hidden">
-        <header id="display-toolbar" class="display-toolbar">
-          <a href="/" class="display-back"><tm-text data-tm-text="← TrainMeet Server">← TrainMeet Server</tm-text></a>
-          <strong id="display-title"><tm-text data-tm-text="Lokal trafik">Lokal trafik</tm-text></strong>
-          <div class="display-toolbar-actions">
-            <span id="display-speed" class="display-badge hidden">1×</span>
-            <select id="display-clock-style" class="display-select hidden" aria-label="Klockstil på den här skärmen" data-tm-aria-label="Klockstil på den här skärmen"></select>
-            <select id="display-clock-seconds" class="display-select hidden" aria-label="Sekunder på den här skärmen" data-tm-aria-label="Sekunder på den här skärmen"></select>
-            <select id="display-train-select" class="display-select hidden" aria-label="Välj tåg" data-tm-aria-label="Välj tåg"><option value="" data-tm-text="Alla tåg">Alla tåg</option></select>
-            <span id="display-day" class="display-badge"><tm-text data-tm-text="Dagl">Dagl</tm-text></span>
-            <span id="display-live" class="display-live"><i></i><tm-text data-tm-text=" Ansluten"> Ansluten</tm-text></span>
-            <button id="display-theme" type="button"><tm-text data-tm-text="Ljust">Ljust</tm-text></button>
-            <button id="display-fullscreen" type="button"><tm-text data-tm-text="Helskärm">Helskärm</tm-text></button>
-          </div>
+        <header id="display-toolbar" class="display-toolbar tbbar">
+          <a href="/" class="kr-btn sm display-back"><tm-text data-tm-text="← Server">← Server</tm-text></a>
+          <strong id="display-title" class="tbbar__name"><tm-text data-tm-text="Lokal trafik">Lokal trafik</tm-text></strong>
+          <details id="display-switch" class="tbbar__switch">
+            <summary class="kr-btn sm"><tm-text data-tm-text="Byt skärm">Byt skärm</tm-text> ▾</summary>
+            <nav id="display-switch-list" aria-label="Byt skärm" data-tm-aria-label="Byt skärm"></nav>
+          </details>
+          <select id="display-clock-style" class="kr-btn sm display-select hidden" aria-label="Klockstil på den här skärmen" data-tm-aria-label="Klockstil på den här skärmen"></select>
+          <select id="display-clock-seconds" class="kr-btn sm display-select hidden" aria-label="Sekunder på den här skärmen" data-tm-aria-label="Sekunder på den här skärmen"></select>
+          <select id="display-graph-window" class="kr-btn sm display-select hidden" aria-label="Tidsfönster i tågdiagrammet" data-tm-aria-label="Tidsfönster i tågdiagrammet"></select>
+          <select id="display-train-select" class="kr-btn sm display-select hidden" aria-label="Välj tåg" data-tm-aria-label="Välj tåg"><option value="" data-tm-text="Alla tåg">Alla tåg</option></select>
+          <span class="kr-sp"></span>
+          <span id="display-day" class="kr-pill"><tm-text data-tm-text="Dagl">Dagl</tm-text></span>
+          <span id="display-live" class="kr-pill ok display-live"><i class="kr-dot"></i><tm-text data-tm-text=" Ansluten"> Ansluten</tm-text></span>
+          <select id="display-theme" class="kr-btn sm display-select" aria-label="Färgtema" data-tm-aria-label="Färgtema"></select>
+          <button id="display-fullscreen" type="button" class="kr-btn sm primary"><tm-text data-tm-text="Helskärm">Helskärm</tm-text> ⤢</button>
         </header>
         <div id="display-stage" class="display-stage" role="main">
           <div id="display-loading" class="display-loading"><tm-text data-tm-text="Ansluter till TrainMeet Server …">Ansluter till TrainMeet Server …</tm-text></div>

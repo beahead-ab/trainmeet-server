@@ -2893,7 +2893,8 @@ function orderedStations(snapshot) {
   return result;
 }
 
-function topologyLayout(snapshot) {
+// orientation "wide" ritar linjen i sidled även i ett stående fönster (telefonens karta rullar i sidled).
+function topologyLayout(snapshot, orientation = "") {
   const stations = snapshot.stations || [];
   const stationIDs = new Set(stations.map((station) => station.id));
   const branchIDs = new Set(snapshot.display?.topology_branch_station_ids
@@ -2918,7 +2919,7 @@ function topologyLayout(snapshot) {
   const connectedIDs = stations.map((station) => station.id).filter((id) => adjacency.get(id)?.size);
   if (!connectedIDs.length) {
     const positions = new Map(stations.map((station, index) => [station.id, { x: index * 100, y: 0 }]));
-    return topologyBounds(positions, edges);
+    return topologyBounds(positions, edges, orientation);
   }
 
   const bfsFarthest = (start, excluded) => {
@@ -2977,11 +2978,11 @@ function topologyLayout(snapshot) {
       isolatedX += 100;
     }
   }
-  return topologyBounds(positions, edges);
+  return topologyBounds(positions, edges, orientation);
 }
 
-function topologyBounds(sourcePositions, edges) {
-  const portrait = innerHeight > innerWidth * 1.2;
+function topologyBounds(sourcePositions, edges, orientation = "") {
+  const portrait = orientation !== "wide" && innerHeight > innerWidth * 1.2;
   const positions = new Map([...sourcePositions].map(([id, point]) => [
     id,
     portrait ? { x: point.y, y: point.x } : point,
@@ -3193,7 +3194,7 @@ function placeTopologyLabels(items, segments, viewBox, options = {}) {
 
 function renderTopology(snapshot, target = document.querySelector("#topology-svg"), options = {}) {
   if (!target) return;
-  let { positions, edges, viewBox } = topologyLayout(snapshot);
+  let { positions, edges, viewBox } = topologyLayout(snapshot, options.kr?.wide ? "wide" : "");
   // kr = Kontrollrummet: ritas i riktiga pixlar på rutans bredd, med egna storlekar.
   const kr = options.kr || null;
   target.classList.toggle("topology-tv", Boolean(options.tv) && !kr);
@@ -3300,12 +3301,16 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const name = svgElement("text", { x: point.x, y: point.y + (kr ? radius + 25 : options.tv ? radius + 34 : autonomous ? 16 : 20), class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name);
     group.append(name);
     let code = null;
-    if (kr) {
-      code = svgElement("text", { x: point.x, y: point.y + radius + 42, class: "topology-code" }, station.code || "");
+    // Siffran i kodraden är antalet tåg inne på stationen; själva tågen ritas
+    // inte, bara de som har klart och det valda tåget (se nedan).
+    const inside = (snapshot.train_positions || []).filter((p) => p.station_id === station.id && !p.connection_id).length;
+    if (kr?.noCode) {
+      // Telefonen visar bara namnet; siffran står i sammanfattningen under kartan.
+    } else if (kr) {
+      code = svgElement("text", { x: point.x, y: point.y + radius + 42, class: "topology-code" }, `${station.code || ""} · ${inside}`);
       group.append(code);
     } else if (options.tv) {
-      const count = (snapshot.train_positions || []).filter(p=>p.station_id===station.id && !p.connection_id).length;
-      code = svgElement("text", {x:point.x,y:point.y+radius+64,class:"topology-code"}, `${station.code || ""} · ${count} ${t("tåg")}`);
+      code = svgElement("text", {x:point.x,y:point.y+radius+64,class:"topology-code"}, options.compactCount ? `${station.code || ""} · ${inside}` : `${station.code || ""} · ${inside} ${t("tåg")}`);
       group.append(code);
     }
     labels.push({ point, radius, name, code });
@@ -3343,6 +3348,11 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   // the first instead of hiding it.
   const sameWay = new Map();
   const taken = []; // tags already drawn: a station's row never covers one
+  const names = labels.flatMap((label) => [label.name, label.code].filter(Boolean)).flatMap((text) => {
+    // A map not on screen has no measured text (and some browsers throw).
+    try { const box = text.getBBox(); return [{ x1: box.x, y1: box.y, x2: box.x + box.width, y2: box.y + box.height }]; } catch { return []; }
+  });
+  const overlaps = (box, list, margin = 0) => list.some((o) => box.x1 < o.x2 + margin && o.x1 - margin < box.x2 && box.y1 < o.y2 + margin && o.y1 - margin < box.y2);
   for (const train of trains.onLine) {
     const from = positions.get(train.from), to = positions.get(train.to);
     if (!from || !to) continue;
@@ -3363,7 +3373,24 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     // On a TV the names under the line are large: the tag rides on the line
     // rather than over them.
     const lift = options.tv && !kr && Math.abs(along.y) < 0.5 ? 12 : 0;
-    const at = { x: from.x + along.x * distance + side.x * across, y: from.y + along.y * distance + side.y * across - lift };
+    const spot = (d) => ({ x: from.x + along.x * d + side.x * across, y: from.y + along.y * d + side.y * across - lift });
+    const boxAt = (p) => ({ x1: p.x - size.width / 2, y1: p.y - size.height / 2, x2: p.x + size.width / 2, y2: p.y + size.height / 2 });
+    let at = spot(distance);
+    // Kontrollrummet och TV: sitter taggen över ett stationsnamn får den glida
+    // längs linjen till närmaste ställe som är fritt.
+    if ((kr || options.tv) && overlaps(boxAt(at), names, 2)) {
+      const low = Math.min(clear, length / 2), high = Math.max(length - clear, length / 2);
+      const covered = (box) => names.reduce((sum, o) => sum + Math.max(0, Math.min(box.x2, o.x2) - Math.max(box.x1, o.x1)) * Math.max(0, Math.min(box.y2, o.y2) - Math.max(box.y1, o.y1)), 0);
+      let best = { d: distance, area: covered(boxAt(at)) };
+      for (let step = 6; step <= length && best.area > 0; step += 6) {
+        for (const d of [distance + step, distance - step]) {
+          if (d < low || d > high) continue;
+          const area = covered(boxAt(spot(d)));
+          if (area < best.area) best = { d, area };
+        }
+      }
+      at = spot(best.d);
+    }
     taken.push({ x1: at.x - size.width / 2, y1: at.y - size.height / 2, x2: at.x + size.width / 2, y2: at.y + size.height / 2 });
     appendTopologyTrain(target, at, {
       ...train, heading: along,
@@ -3375,18 +3402,17 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   // the first side that covers neither a name nor a line: above, below, left,
   // right.
   const segments = edges.map((edge) => [positions.get(edge.from), positions.get(edge.to)]).filter(([from, to]) => from && to);
-  const names = labels.flatMap((label) => [label.name, label.code].filter(Boolean)).flatMap((text) => {
-    // A map not on screen has no measured text (and some browsers throw).
-    try { const box = text.getBBox(); return [{ x1: box.x, y1: box.y, x2: box.x + box.width, y2: box.y + box.height }]; } catch { return []; }
-  });
-  const overlaps = (box, list, margin = 0) => list.some((o) => box.x1 < o.x2 + margin && o.x1 - margin < box.x2 && box.y1 < o.y2 + margin && o.y1 - margin < box.y2);
   // Kontrollrummet ritar i riktiga pixlar: en tagg-rad får inte hamna utanför rutan.
   const [viewX, viewY, viewWidth, viewHeight] = viewBox.split(" ").map(Number);
   const inView = (box) => !kr || (box.x1 >= viewX + 2 && box.x2 <= viewX + viewWidth - 2 && box.y1 >= viewY && box.y2 <= viewY + viewHeight);
   const free = (box) => inView(box) && !overlaps(box, names) && !overlaps(box, taken, 4)
     && !segments.some((segment) => topologyCrosses(box, segment));
   const byStation = new Map();
-  for (const train of trains.atStation) byStation.set(train.station, [...(byStation.get(train.station) || []), train]);
+  const plainMap = !options.tv && !kr; // deltagarvyn och äldre kartor visar fortfarande raden vid stationen
+  for (const train of trains.atStation) {
+    if (!plainMap && train.trainNumber !== String(options.selectedTrainNumber)) continue;
+    byStation.set(train.station, [...(byStation.get(train.station) || []), train]);
+  }
   for (const [stationID, here] of byStation) {
     const point = positions.get(stationID);
     if (!point) continue;
@@ -3509,6 +3535,18 @@ function renderDisplaySelection(snapshot) {
   }
 }
 
+// Diagrammets tidsfönster: hela timmar, med "nu" ungefär en tredjedel in.
+function graphWindowBounds(snapshot) {
+  const now = currentClockSeconds(snapshot) / 60, span = displayGraphWindow();
+  const min = Math.floor((now - span / 3) / 60) * 60;
+  return { now, min, max: min + span, span };
+}
+function graphWindowRange(snapshot) {
+  const { min, max } = graphWindowBounds(snapshot);
+  const clock = (minute) => { const value = (Math.floor(minute) % 1440 + 1440) % 1440; return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`; };
+  return `${clock(min)}–${clock(max)}`;
+}
+
 function renderGraph(snapshot) {
   const svg = document.querySelector("#graph-svg");
   // Draw for the box the diagram really has, so 28 px text stays 28 px
@@ -3516,8 +3554,7 @@ function renderGraph(snapshot) {
   const box = svg.getBoundingClientRect();
   const width = 1840, left = 270, top = 65, bottom = 50;
   const height = box.width > 0 && box.height > 0 ? Math.max(600, Math.round(width * box.height / box.width)) : 850;
-  const now = currentClockSeconds(snapshot) / 60;
-  const min = now - 60, max = now + 120;
+  const { now, min, max, span } = graphWindowBounds(snapshot);
   const stations = orderedStations(snapshot);
   const stationIndex = new Map(stations.map((s, i) => [s.id, i]));
   const x = minute => left + (minute - min) / (max - min) * (width - left - 30);
@@ -3525,13 +3562,19 @@ function renderGraph(snapshot) {
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`); svg.removeAttribute("width"); svg.removeAttribute("height"); svg.replaceChildren();
   const defs = svgElement("defs"), clip = svgElement("clipPath", {id: "screen-graph-clip"});
   clip.append(svgElement("rect", {x: left, y: top - 24, width: width - left, height: height - top - bottom + 48})); defs.append(clip); svg.append(defs);
-  for (let minute = Math.ceil(min / 30) * 30; minute <= max; minute += 30) {
-    svg.append(svgElement("line", {x1:x(minute), x2:x(minute), y1:top - 24, y2:height - bottom, class:"graph-grid", "stroke-dasharray":minute%60?"6 8":"none"}));
+  // Det som redan hänt ligger i en skuggad yta; timmarna är heldragna och
+  // halvtimmarna prickade (hela dygnet: varannan timme, timmarna prickade).
+  svg.append(svgElement("rect", {x:left, y:top - 24, width:Math.max(0, x(now) - left), height:height - top - bottom + 24, class:"sc-graph-past"}));
+  const gridStep = span <= 360 ? 30 : 60, labelStep = span <= 360 ? 60 : 120;
+  for (let minute = Math.ceil(min / gridStep) * gridStep; minute <= max; minute += gridStep) {
+    const solid = minute % labelStep === 0;
+    svg.append(svgElement("line", {x1:x(minute), x2:x(minute), y1:top - 24, y2:height - bottom, class:`graph-grid graph-col${solid ? "" : " is-half"}`}));
+    if (!solid) continue;
     const normalized = (Math.floor(minute) % 1440 + 1440) % 1440;
-    svg.append(svgElement("text", {x:x(minute), y:height - 12, "text-anchor":"middle", class:"sc-graph-label"}, `${String(Math.floor(normalized/60)).padStart(2,"0")}:${String(normalized%60).padStart(2,"0")}`));
+    svg.append(svgElement("text", {x:x(minute), y:height - 12, "text-anchor":minute >= max ? "end" : "middle", class:"sc-graph-label"}, `${String(Math.floor(normalized/60)).padStart(2,"0")}:${String(normalized%60).padStart(2,"0")}`));
   }
   stations.forEach((station, i) => {
-    svg.append(svgElement("line", {x1:left, x2:width, y1:y(i), y2:y(i), class:"graph-grid"}));
+    svg.append(svgElement("line", {x1:left, x2:width, y1:y(i), y2:y(i), class:"graph-grid graph-row"}));
     // Name and code on the station's own line, as in the design; a name too
     // long to leave room for the code keeps the code on a row of its own.
     const long = String(station.name || "").length > 14;
@@ -3549,15 +3592,15 @@ function renderGraph(snapshot) {
     const centre = (points[0].minute + points.at(-1).minute) / 2;
     const shift = Math.round((now - centre) / 1440) * 1440;
     if (points.at(-1).minute + shift < min || points[0].minute + shift > max) continue;
-    const colour = active.has(String(service.train_number)) ? "#7fa3ea" : "#737373";
+    const isOut = active.has(String(service.train_number));
     const group = svgElement("g",{class:"graph-train-group",role:"button",tabindex:0,"aria-label":`Tåg ${service.train_number}`});
     group.dataset.trainNumber=String(service.train_number);
     const line = points.map(p=>`${x(p.minute+shift)},${y(p.station)}`).join(" ");
-    group.append(svgElement("polyline", {points:line, fill:"none", stroke:colour, "stroke-width":active.has(String(service.train_number))?6:3}));
+    group.append(svgElement("polyline", {points:line, class:`sc-graph-line${isOut ? " is-out" : ""}`}));
     group.append(svgElement("polyline",{points:line,fill:"none",stroke:"transparent","stroke-width":20}));
     const select=()=>{state.displaySelectedTrainNumber=state.displaySelectedTrainNumber===String(service.train_number)?null:String(service.train_number); document.querySelector("#display-train-select").value=state.displaySelectedTrainNumber||"";updateDisplayGraphSelection();renderDisplaySelection(snapshot);};
     group.addEventListener("click",select);group.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select();}});
-    drawn.push({group, service, points, shift, colour, select, out: active.has(String(service.train_number))});
+    drawn.push({group, service, points, shift, select, out: isOut});
     trains.append(group);
   }
   // Train numbers: never on top of each other. A train out on the line gets
@@ -3582,7 +3625,7 @@ function renderGraph(snapshot) {
         const b = {x1: px, x2: px + w, y1: ty - 22, y2: ty + 4};
         if (!free(b)) continue;
         placed.push(b);
-        layer(entry).append(svgElement("text", {x: px, y: ty, fill: entry.colour, class: "sc-graph-train"}, text));
+        layer(entry).append(svgElement("text", {x: px, y: ty, class: `sc-graph-train${entry.out ? " is-out" : ""}`}, text));
         return;
       }
     }
@@ -3605,136 +3648,11 @@ function renderGraph(snapshot) {
   };
   drawn.filter(entry => entry.out).forEach(tag);
   drawn.filter(entry => !entry.out).forEach(label);
-  svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top-24, y2:height-bottom, stroke:"#f2c230", "stroke-width":3}), labels);
+  svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top-24, y2:height-bottom, class:"sc-graph-now"}), labels);
   // The time on the now line, as a yellow tag like the design's.
   svg.append(svgElement("rect", {x:x(now)-48, y:top-60, width:96, height:36, rx:8, class:"sc-graph-now-tag"}),
     svgElement("text",{x:x(now),y:top-33,"text-anchor":"middle",class:"sc-graph-now-text"},currentClockTime(snapshot).slice(0,5)));
   updateDisplayGraphSelection();
-}
-
-function renderScrollableGraph(snapshot) {
-  const svg = document.querySelector("#graph-svg");
-  const canvas = document.querySelector("#graph-canvas");
-  const stationOverlay = document.querySelector("#graph-station-overlay");
-  const stationLabels = document.querySelector("#graph-station-labels");
-  const timeOverlay = document.querySelector("#graph-time-overlay");
-  const timeLabels = document.querySelector("#graph-time-labels");
-  const stations = orderedStations(snapshot);
-  const stationIndex = new Map(stations.map((station, index) => [station.id, index]));
-  const services = graphServices(snapshot).map((service) => ({ ...service, stops: [...service.stops].sort((a, b) => a.stop_order - b.stop_order) }));
-  const lines = services.map((service, index) => ({
-    service,
-    points: servicePoints(service, stationIndex),
-    color: trainPalette[index % trainPalette.length],
-  })).filter((line) => line.points.length >= 2);
-  const minutes = lines.flatMap((line) => line.points.map((point) => point.minute));
-  const minMinute = minutes.length ? Math.floor(Math.min(...minutes) / 60) * 60 : 0;
-  const maxMinute = minutes.length ? Math.max(minMinute + 60, Math.ceil(Math.max(...minutes) / 60) * 60) : 24 * 60;
-  const left = 70, right = 20, top = 30, bottom = 35;
-  const width = Math.max(1000, left + (maxMinute - minMinute) * 5 + right);
-  // Never fall below the CSS floor for .graph-canvas > .display-visual. A
-  // viewBox smaller than the rendered box makes the SVG scale and centre its
-  // own contents, which silently stretched the timeline off its minute grid.
-  const height = Math.max(600, innerHeight - 50, top + Math.max(stations.length, 1) * 60 + bottom);
-  const x = (minute) => left + (minute - minMinute) / (maxMinute - minMinute) * (width - left - right);
-  const y = (index) => top + index * 60;
-  let selectedStartX = null;
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-  stationOverlay.style.height = `${height}px`;
-  stationOverlay.style.marginTop = `-${height}px`;
-  stationLabels.setAttribute("viewBox", `0 0 ${left} ${height}`);
-  stationLabels.setAttribute("width", left);
-  stationLabels.setAttribute("height", height);
-  timeOverlay.style.width = `${width}px`;
-  timeOverlay.style.height = `${bottom}px`;
-  timeOverlay.style.marginTop = `-${bottom}px`;
-  timeLabels.setAttribute("viewBox", `0 0 ${width} ${bottom}`);
-  timeLabels.setAttribute("width", width);
-  timeLabels.setAttribute("height", bottom);
-  svg.replaceChildren();
-  stationLabels.replaceChildren();
-  timeLabels.replaceChildren();
-  stationLabels.append(svgElement("rect", { x: 0, y: 0, width: left, height, class: "graph-station-label-bg" }));
-  timeLabels.append(svgElement("rect", { x: 0, y: 0, width, height: bottom, class: "graph-time-label-bg" }));
-  for (let minute = minMinute + 30; minute < maxMinute; minute += 60) {
-    svg.append(svgElement("line", { x1: x(minute), y1: top - 5, x2: x(minute), y2: height - bottom, class: "graph-grid-half" }));
-  }
-  for (let minute = minMinute; minute <= maxMinute; minute += 60) {
-    const lineX = x(minute);
-    svg.append(svgElement("line", { x1: lineX, y1: top - 5, x2: lineX, y2: height - bottom, class: "graph-grid" }));
-    // Drawn in the pinned overlay, whose x axis matches the graph's own.
-    timeLabels.append(svgElement("text", { x: lineX, y: 18, "text-anchor": "middle", class: "graph-label" }, `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:00`));
-  }
-  stations.forEach((station, index) => {
-    const lineY = y(index);
-    svg.append(svgElement("line", { x1: left - 5, y1: lineY, x2: width - right, y2: lineY, class: "graph-axis" }));
-    stationLabels.append(svgElement("text", { x: left - 12, y: lineY + 5, "text-anchor": "end", class: "graph-station-label" }, station.code));
-  });
-  for (const { service, points: rawPoints, color } of lines) {
-    const points = rawPoints.map((point) => ({ x: x(point.minute), y: y(point.station) }));
-    const trainNumber = String(service.train_number);
-    const pointText = points.map((point) => `${point.x},${point.y}`).join(" ");
-    if (trainNumber === state.displaySelectedTrainNumber) selectedStartX = points[0]?.x ?? null;
-    const trainGroup = svgElement("g", {
-      class: "graph-train-group",
-      "data-train-number": trainNumber,
-      role: "button",
-      tabindex: "0",
-      "aria-label": `Tåg ${trainNumber}`,
-    });
-    trainGroup.dataset.trainNumber = trainNumber;
-    trainGroup.append(svgElement("polyline", { points: pointText, class: "graph-train-line", stroke: color }));
-    trainGroup.append(svgElement("polyline", { points: pointText, class: "graph-train-hit" }));
-    const first = points[0], second = points[1];
-    const labelX = first.x + (second.x - first.x) * .2;
-    const labelY = first.y + (second.y - first.y) * .2;
-    let angle = Math.atan2(second.y - first.y, second.x - first.x) * 180 / Math.PI;
-    if (angle > 90) angle -= 180;
-    if (angle < -90) angle += 180;
-    const label = String(service.train_number);
-    const labelGroup = svgElement("g", { transform: `translate(${labelX},${labelY}) rotate(${angle})` });
-    labelGroup.append(svgElement("rect", { x: -(label.length * 6 + 4) / 2, y: -12, width: label.length * 6 + 4, height: 12, rx: 2, class: "graph-label-bg" }));
-    labelGroup.append(svgElement("text", { x: 0, y: -2, "text-anchor": "middle", fill: color, class: "graph-train-label" }, label));
-    trainGroup.append(labelGroup);
-    const activate = (event) => {
-      event.stopPropagation();
-      state.displaySelectedTrainNumber = state.displaySelectedTrainNumber === trainNumber ? null : trainNumber;
-      state.displaySelectedStationID = null;
-      const selector = document.querySelector("#display-train-select");
-      if (selector) selector.value = state.displaySelectedTrainNumber || "";
-      updateDisplayGraphSelection();
-      renderDisplaySelection(snapshot);
-    };
-    trainGroup.addEventListener("mouseenter", () => { state.displayHoveredTrainNumber = trainNumber; updateDisplayGraphSelection(); });
-    trainGroup.addEventListener("mouseleave", () => { state.displayHoveredTrainNumber = null; updateDisplayGraphSelection(); });
-    trainGroup.addEventListener("click", activate);
-    trainGroup.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") activate(event); });
-    svg.append(trainGroup);
-  }
-  let current = minuteValue(snapshot.clock?.time);
-  if (current !== null && current < minMinute && current + 1440 <= maxMinute) current += 1440;
-  if (current !== null && current >= minMinute && current <= maxMinute) {
-    const currentX = x(current);
-    svg.append(svgElement("line", { x1: currentX, y1: top - 8, x2: currentX, y2: height - bottom, class: "graph-now" }));
-    svg.append(svgElement("circle", { cx: currentX, cy: top - 8, r: 5, fill: "#ef4444" }));
-    if (graphLastCenteredMinute === null || Math.abs(current - graphLastCenteredMinute) >= 5) {
-      const scroller = document.querySelector("#graph-scroll");
-      scroller.scrollTo({ left: Math.max(0, currentX - scroller.clientWidth / 2), behavior: graphLastCenteredMinute === null ? "auto" : "smooth" });
-      graphLastCenteredMinute = current;
-    }
-  }
-  if (selectedStartX !== null && graphLastCenteredSelection !== state.displaySelectedTrainNumber) {
-    const scroller = document.querySelector("#graph-scroll");
-    scroller.scrollTo({ left: Math.max(0, selectedStartX - scroller.clientWidth / 2), behavior: "smooth" });
-    graphLastCenteredSelection = state.displaySelectedTrainNumber;
-  }
-  if (!state.displaySelectedTrainNumber) graphLastCenteredSelection = null;
-  updateDisplayGraphSelection();
-  renderDisplaySelection(snapshot);
 }
 
 const clockStyleConfig = {
@@ -3761,38 +3679,36 @@ const clockStyleLabels = {
   italian: "Italiensk (FS)", american: "Amerikansk", digital: "Digital",
 };
 
+// Urtavlan ritas med klasser, inte färgattribut: färgerna kommer från
+// Kontrollrummets tokens (skarmar.css), så den följer mörkt och ljust läge.
+// Stationsuret har alltid ljus tavla (darkBackground false).
 function clockSVG(style, darkBackground, showSeconds, stopped) {
   const config = clockStyleConfig[style] || clockStyleConfig.swiss;
-  const faceColor = darkBackground ? "#1a1a1a" : "#fff";
-  const handColor = darkBackground ? "#e0e0e0" : "#1a1a1a";
-  const markerColor = darkBackground ? "#d0d0d0" : "#1a1a1a";
-  const bezelColor = darkBackground ? "#444" : "#333";
-  const numberColor = darkBackground ? "#ccc" : "#333";
   const marks = Array.from({ length: 60 }, (_, index) => {
     const major = index % 5 === 0;
     const length = major ? config.hourMarkerLength : config.minuteMarkerLength;
     const width = major ? config.hourMarkerWidth : config.minuteMarkerWidth;
     const start = 8 + config.bezelWidth;
-    return html`<line x1="100" y1="${start}" x2="100" y2="${start + length}" stroke="${markerColor}" stroke-width="${width}" transform="rotate(${index * 6} 100 100)"/>`;
+    return html`<line class="cf-mark" x1="100" y1="${start}" x2="100" y2="${start + length}" stroke-width="${width}" transform="rotate(${index * 6} 100 100)"/>`;
   }).join("");
   const numbers = config.hasNumbers ? Array.from({ length: 12 }, (_, index) => {
     const value = index === 0 ? 12 : index;
     const angle = (index * 30 - 90) * Math.PI / 180;
-    return html`<text x="${100 + 68 * Math.cos(angle)}" y="${100 + 68 * Math.sin(angle)}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="700" fill="${numberColor}" class="clock-numeral">${value}</text>`;
+    return html`<text x="${100 + 68 * Math.cos(angle)}" y="${100 + 68 * Math.sin(angle)}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="700" class="clock-numeral cf-num">${value}</text>`;
   }).join("") : "";
   const secondHand = showSeconds ? html`<g data-clock-hand="second" transform="rotate(0 100 100)">
     <line x1="100" y1="118" x2="100" y2="${100 - config.secondHandLength}" stroke="${config.secondHandColor}" stroke-width="${config.secondHandWidth}" stroke-linecap="round"/>
     ${config.secondBallRadius > 0 ? html`<circle cx="100" cy="${100 - config.secondBallOffset}" r="${config.secondBallRadius}" fill="${config.secondHandColor}"/>` : ""}
   </g>` : "";
-  return html`<svg class="clock-face${stopped ? " stopped" : ""}" viewBox="0 0 200 200">
-    <circle cx="100" cy="100" r="96" fill="none" stroke="${bezelColor}" stroke-width="${config.bezelWidth}"/>
-    <circle cx="100" cy="100" r="${94 - config.bezelWidth / 2}" fill="${faceColor}"/>
+  return html`<svg class="clock-face${darkBackground ? "" : " cf-light"}${stopped ? " stopped" : ""}" viewBox="0 0 200 200">
+    <circle class="cf-bezel" cx="100" cy="100" r="96" stroke-width="${config.bezelWidth}"/>
+    <circle class="cf-face" cx="100" cy="100" r="${94 - config.bezelWidth / 2}"/>
     ${marks}
     ${numbers}
-    <line data-clock-hand="hour" x1="100" y1="100" x2="100" y2="${100 - config.hourHandLength}" stroke="${handColor}" stroke-width="${config.hourHandWidth}" stroke-linecap="round" transform="rotate(0 100 100)"/>
-    <line data-clock-hand="minute" x1="100" y1="100" x2="100" y2="${100 - config.minuteHandLength}" stroke="${handColor}" stroke-width="${config.minuteHandWidth}" stroke-linecap="round" transform="rotate(0 100 100)"/>
+    <line class="cf-hand" data-clock-hand="hour" x1="100" y1="100" x2="100" y2="${100 - config.hourHandLength}" stroke-width="${config.hourHandWidth}" stroke-linecap="round" transform="rotate(0 100 100)"/>
+    <line class="cf-hand" data-clock-hand="minute" x1="100" y1="100" x2="100" y2="${100 - config.minuteHandLength}" stroke-width="${config.minuteHandWidth}" stroke-linecap="round" transform="rotate(0 100 100)"/>
     ${secondHand}
-    <circle cx="100" cy="100" r="${config.centerDotRadius}" fill="${handColor}"/>
+    <circle class="cf-hub" cx="100" cy="100" r="${config.centerDotRadius}"/>
   </svg>`;
 }
 
@@ -3924,50 +3840,69 @@ function renderClockToolbar(snapshot) {
   const signature = [globalThis.TrainMeetI18n?.getLanguage?.(), styles.join(","), serverStyle, serverSeconds].join("|");
   if (styleSelect.dataset.signature !== signature) {
     styleSelect.dataset.signature = signature;
+    // "Stil: Digital", "Sekunder: på": reglaget säger vad det styr och vad det står på.
     styleSelect.replaceChildren(
-      new Option(`${t("Som i inställningarna")}: ${serverStyle}`, ""),
-      ...styles.map(value => new Option(t(clockStyleLabels[value] || value), value)));
+      new Option(`${t("Stil")}: ${t("Som i inställningarna")} (${serverStyle})`, ""),
+      ...styles.map(value => new Option(`${t("Stil")}: ${t(clockStyleLabels[value] || value)}`, value)));
     secondsSelect.replaceChildren(
-      new Option(`${t("Som i inställningarna")}: ${serverSeconds ? t("med sekunder") : t("utan sekunder")}`, ""),
-      new Option(t("Med sekunder"), "on"),
-      new Option(t("Utan sekunder"), "off"));
+      new Option(`${t("Sekunder")}: ${t("Som i inställningarna")} (${serverSeconds ? t("på") : t("av")})`, ""),
+      new Option(`${t("Sekunder")}: ${t("på")}`, "on"),
+      new Option(`${t("Sekunder")}: ${t("av")}`, "off"));
   }
   styleSelect.value = styles.includes(preference.style) ? preference.style : "";
   secondsSelect.value = ["on", "off"].includes(preference.seconds) ? preference.seconds : "";
 }
 
+// Digitalklockan: timmar och minuter stora, sekunderna (och AM/PM) mindre intill,
+// så att sekunderna alltid får plats när de är på. Måtten ligger i skarmar.css.
+function clockDigitParts(time, us, showSeconds) {
+  const match = /^(\d\d):(\d\d)(?::(\d\d))?$/.exec(time);
+  if (!match) return { hm: "--:--", ss: showSeconds ? "--" : "", ap: "" };
+  let hour = Number(match[1]);
+  let ap = "";
+  if (us) { ap = hour >= 12 ? "PM" : "AM"; hour = hour % 12 || 12; }
+  return { hm: `${us ? hour : String(hour).padStart(2, "0")}:${match[2]}`, ss: showSeconds ? (match[3] ?? "00") : "", ap };
+}
+
 function renderClock(snapshot) {
   const target = document.querySelector("#clock-view");
-  target.dataset.us = String(snapshot.meet?.operating_region === "us");
+  const us = snapshot.meet?.operating_region === "us";
+  target.dataset.us = String(us);
   const { style, showSeconds } = resolveClockAppearance(snapshot);
   const digital = style === "digital";
   const seconds = currentClockSeconds(snapshot);
   const time = currentClockTime(snapshot);
-  let displayTime = showSeconds ? time : time.slice(0, 5);
-  if (snapshot.meet?.operating_region === "us" && /^\d\d:/.test(time)) {
-    const hour = Number(time.slice(0, 2)); displayTime = `${hour % 12 || 12}${displayTime.slice(2)} ${hour >= 12 ? "PM" : "AM"}`;
-  }
   const darkBackground = !document.querySelector("#display-app").classList.contains("light");
   const stopped = !snapshot.clock?.running;
   const externalMissing = snapshot.clock?.source === "fastclock" && !snapshot.clock.available;
   const reason = snapshot.clock?.stopped_reason || (externalMissing ? t("Senast mottagna tid visas") : "");
   const meta = `${Number(snapshot.clock?.speed || 1)}× · ${snapshot.clock?.source === "fastclock" ? "FastClock" : t("Intern klocka")}`;
-  const renderSignature = [style, darkBackground, showSeconds, stopped, externalMissing, reason, meta].join("|");
+  // Stoppad klocka står still: tiden den visar är tiden den stannade på.
+  const since = stopped && !externalMissing && /^\d\d:\d\d/.test(time) ? time.slice(0, 5) : "";
+  const renderSignature = [style, darkBackground, showSeconds, stopped, externalMissing, reason, meta, since, us, globalThis.TrainMeetI18n?.getLanguage?.()].join("|");
   if (target.dataset.clockSignature !== renderSignature) {
     target.dataset.clockSignature = renderSignature;
-    // A running face fills the screen on its own; the status line is only for
-    // digits (where it costs no size) and for a stopped or unreachable clock.
+    // Går klockan fyller siffrorna eller urtavlan skärmen själva; raden under
+    // finns bara för siffror (där den inte kostar storlek) och för en klocka som
+    // stannat eller tappat kontakten.
+    const detail = [since ? `${t("sedan")} <span class="mono">${escapeHTML(since)}</span>` : "", escapeHTML(reason)].filter(Boolean).join(" · ");
     const status = stopped || externalMissing
-      ? html`<div class="sc-stopped"><div><div class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan stoppad")}</div><div class="sc-stopped__reason">${escapeHTML(reason)}</div><div class="sc-stopped__meta">${escapeHTML(meta)}</div></div></div>`
+      ? html`<div class="sc-stopped"><span class="sc-stopped__dot"></span><span class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan är stoppad")}</span>${detail ? `<span class="sc-stopped__reason">${detail}</span>` : ""}<span class="sc-stopped__meta">${escapeHTML(meta)}</span></div>`
       : digital ? html`<div class="sc-run">${t("Klockan går")} · ${escapeHTML(meta)}</div>` : "";
     // One clock only: a face never has digits beside it, and digits never have a face.
     const clock = digital
-      ? html`<div class="clock-digital${stopped ? " stopped" : ""}" data-seconds="${showSeconds}"></div>`
+      ? html`<div class="clock-digital${stopped ? " stopped" : ""}" data-seconds="${showSeconds}"><span class="cd-hm"></span><span class="cd-side"><span class="cd-ap"></span><span class="cd-ss"></span></span></div>`
       : clockSVG(style, style === "stationsur" ? false : darkBackground, showSeconds, stopped);
     target.innerHTML = html`<div class="sc-clock-layout ${digital ? "sc-clock-layout--digital" : "sc-clock-layout--face"}${stopped || externalMissing ? " is-stopped" : ""}">${clock}${status}</div>`;
   }
   const digits = target.querySelector(".clock-digital");
-  if (digits && digits.textContent !== displayTime) digits.textContent = displayTime;
+  if (digits) {
+    const parts = clockDigitParts(time, us, showSeconds);
+    for (const [name, text] of [["cd-hm", parts.hm], ["cd-ap", parts.ap], ["cd-ss", parts.ss]]) {
+      const node = digits.querySelector(`.${name}`);
+      if (node.textContent !== text) node.textContent = text;
+    }
+  }
   if (!digital) updateAnalogClockHands(target, seconds, style, !stopped);
 }
 
@@ -3998,21 +3933,21 @@ function renderDashboard(snapshot) {
   const shownOnLine = onLine.length > 3 ? onLine.slice(0, 2) : onLine;
   const lineRows = shownOnLine.map((train) => html`<div class="server-event dash-row dash-row--line"><b>${escapeHTML(train.train)}</b><span class="dash-what">${escapeHTML(train.from)} → ${escapeHTML(train.to)}</span><span class="dash-in${train.late ? " is-late" : ""}">${train.due ? escapeHTML(t("ank {time}", { time: train.due })) : ""}</span></div>`).join("")
     + (onLine.length > shownOnLine.length ? html`<div class="server-event dash-row dash-row--more">${escapeHTML(t("och {n} till", { n: onLine.length - shownOnLine.length }))}</div>` : "");
-  const status = late.length ? (late.length === 1 ? t("1 sen ankomst") : t("{n} sena ankomster", { n: late.length })) : `${t("Inga sena ankomster")} · ${t("trafiken följer tidtabellen")}`;
+  const status = late.length ? (late.length === 1 ? t("1 sen ankomst") : t("{n} sena ankomster", { n: late.length })) : `${t("Inga avvikelser")} · ${t("trafiken följer tidtabellen")}`;
   target.innerHTML = html`<div class="dashboard-column">
     <section class="display-card dashboard-clock-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><div class="dashboard-clock-meta"><b>${escapeHTML(snapshot.meet?.name || "TrainMeet")}</b><span class="dashboard-run${snapshot.clock?.running ? "" : " is-stopped"}">${snapshot.clock?.running ? `${escapeHTML(t("Klockan går"))} · ${Number(snapshot.clock?.speed || 1)}×` : escapeHTML(t("Klockan är stoppad"))}</span><span class="dashboard-day">${escapeHTML(snapshot.active_day || "")}</span></div></section>
     <section class="display-card dashboard-stats">
       <div class="dashboard-stat"><b>${moving.length}</b><span>tåg på linjen</span></div>
       <div class="dashboard-stat"><b>${positions.filter(p=>p.station_id && !p.connection_id).length}</b><span>inne på stationerna</span></div>
       <div class="dashboard-stat"><b>${staffed == null ? (snapshot.stations?.length || 0) : `${staffed} / ${snapshot.stations?.length || 0}`}</b><span>${staffed == null ? "stationer" : "stationer bemannade"}</span></div>
-      <div class="dashboard-stat"><b>${late.length}</b><span>sena ankomster</span></div>
+      <div class="dashboard-stat${late.length ? " warn" : " ok"}"><b>${late.length}</b><span>avvikelser</span></div>
     </section>
   </div><section class="display-card"><svg id="dashboard-topology" class="display-visual" role="img" aria-label="Banöversikt"></svg></section>
   <div class="server-dashboard-bottom"><section class="display-card dash-card"><div class="dash-head"><h3>Nästa händelser</h3><span>de fyra närmaste</span></div>${upcoming.map(eventRow).join("") || html`<p class="dash-empty">Inga fler planerade händelser idag.</p>`}</section>
   <section class="display-card dash-card"><div class="dash-head"><h3>På linjen just nu</h3><span>tåg · sträcka · ankomst</span></div>${lineRows || html`<p class="dash-empty">Inget tåg är ute på linjen</p>`}<p class="dash-status${late.length ? " is-late" : ""}">${escapeHTML(status)}</p></section></div>`;
   // Draw for the height the card really has, so station names stay at their 30 px.
   const dashboardMap = document.querySelector("#dashboard-topology");
-  renderTopology(snapshot, dashboardMap, {tv:true, height: Math.max(300, Math.round(dashboardMap.clientHeight || 450))});
+  renderTopology(snapshot, dashboardMap, {tv:true, compactCount:true, height: Math.max(300, Math.round(dashboardMap.clientHeight || 450))});
 }
 
 // Trains out on the line, where they run and when they are due: the strip
@@ -4104,17 +4039,91 @@ function renderConnectionBadge(snapshot) {
   document.querySelector("#display-connection-code").textContent = connection.code;
 }
 
+// ── Skärmarnas verktygsrad ───────────────────────────────────────────────
+// Fönsterläge: raden står kvar. Helskärm (webbläsarens eller kioskens): raden
+// döljs efter fyra sekunder och kommer tillbaka vid musrörelse eller tryck.
+const DISPLAY_THEME_KEY = "trainmeet.displayTheme";
+const DISPLAY_GRAPH_WINDOW_KEY = "trainmeet.displayGraphWindow";
+const DISPLAY_GRAPH_WINDOWS = [120, 180, 360, 1440];
+const DISPLAY_TOOLBAR_HIDE_MS = 4000;
+
+function displayStored(key) { try { return localStorage.getItem(key) || ""; } catch { return ""; } }
+function displayStore(key, value) { try { localStorage.setItem(key, value); } catch { /* privat läge: gäller bara den här sidan */ } }
+function displayGraphWindow() {
+  const value = Number(displayStored(DISPLAY_GRAPH_WINDOW_KEY));
+  return DISPLAY_GRAPH_WINDOWS.includes(value) ? value : 180;
+}
+function displayTheme() {
+  const stored = displayStored(DISPLAY_THEME_KEY);
+  return stored === "light" || stored === "dark" ? stored : (document.documentElement.dataset.krTheme === "light" ? "light" : "dark");
+}
+function applyDisplayTheme(theme) {
+  const light = theme === "light";
+  document.querySelector("#display-app").classList.toggle("light", light);
+  document.documentElement.dataset.krTheme = light ? "light" : "dark";
+}
+function displayIsFullscreen() {
+  return Boolean(document.fullscreenElement)
+    || globalThis.matchMedia?.("(display-mode: fullscreen)").matches === true
+    || (innerWidth >= screen.width - 1 && innerHeight >= screen.height - 1);
+}
+function formatGraphWindow(minutes) {
+  return minutes >= 1440 ? t("Hela dygnet") : t("{n} timmar", { n: minutes / 60 });
+}
+
+function renderDisplayThemeChoice() {
+  const select = document.querySelector("#display-theme");
+  const signature = globalThis.TrainMeetI18n?.getLanguage?.() || "";
+  if (select.dataset.signature !== signature) {
+    select.dataset.signature = signature;
+    select.replaceChildren(new Option(t("Mörkt"), "dark"), new Option(t("Ljust"), "light"));
+  }
+  select.value = displayTheme();
+}
+
+function renderDisplayGraphWindow() {
+  const select = document.querySelector("#display-graph-window");
+  select.classList.toggle("hidden", displayKind !== "graph");
+  const signature = globalThis.TrainMeetI18n?.getLanguage?.() || "";
+  if (select.dataset.signature !== signature) {
+    select.dataset.signature = signature;
+    select.replaceChildren(...DISPLAY_GRAPH_WINDOWS.map((minutes) => new Option(`${t("Fönster")}: ${formatGraphWindow(minutes)}`, String(minutes))));
+  }
+  select.value = String(displayGraphWindow());
+}
+
+// "Byt skärm": de skärmar som finns för träffens region.
+function renderDisplaySwitch(snapshot) {
+  const list = document.querySelector("#display-switch-list");
+  const us = snapshot.meet?.operating_region === "us";
+  const kinds = us ? ["clock", "territories"] : ["clock", "dashboard", "topology", "graph"];
+  const names = { clock: "Träffklocka", dashboard: "Översikt", topology: "Banöversikt", graph: "Tågdiagram", territories: "Områdestavla" };
+  const signature = [kinds.join(","), displayKind, globalThis.TrainMeetI18n?.getLanguage?.()].join("|");
+  if (list.dataset.signature === signature) return;
+  list.dataset.signature = signature;
+  list.replaceChildren(...kinds.map((kind) => {
+    const link = document.createElement("a");
+    link.href = `/display/${kind}`;
+    link.textContent = t(names[kind]);
+    if (kind === displayKind) link.setAttribute("aria-current", "page");
+    return link;
+  }));
+}
+
 function renderDisplay(snapshot) {
   displaySnapshot = snapshot;
-  serverUI.display(snapshot, displayKind, currentClockTime(snapshot));
+  serverUI.display(snapshot, displayKind, currentClockTime(snapshot), { range: displayKind === "graph" ? graphWindowRange(snapshot) : "" });
   document.querySelector("#display-loading").classList.add("hidden");
-  document.querySelector("#display-title").textContent = `${snapshot.meet?.name || "TrainMeet"} · ${({ topology: t("Banöversikt"), graph: "Tågdiagram", clock: t("Träffklocka"), dashboard: t("Översikt"), territories: t("Områdestavla") })[displayKind]}`;
+  const screenNames = { topology: t("Banöversikt"), graph: t("Tågdiagram"), clock: t("Träffklocka"), dashboard: t("Översikt"), territories: t("Områdestavla") };
+  document.querySelector("#display-title").textContent = screenNames[displayKind];
+  document.title = `${screenNames[displayKind]} · ${snapshot.meet?.name || "TrainMeet"}`;
   document.querySelector("#display-day").textContent = snapshot.active_day || "Dagl";
   const isClock = displayKind === "clock";
-  document.querySelector("#display-speed").classList.toggle("hidden", !isClock);
-  document.querySelector("#display-speed").textContent = `${Number(snapshot.clock?.speed || 1)}×`;
   document.querySelector("#display-clock-style").classList.toggle("hidden", !isClock);
   document.querySelector("#display-clock-seconds").classList.toggle("hidden", !isClock);
+  renderDisplaySwitch(snapshot);
+  renderDisplayGraphWindow();
+  renderDisplayThemeChoice();
   const trainSelect = document.querySelector("#display-train-select");
   const trainSelectable = displayKind === "topology" || displayKind === "graph";
   const services = uniqueOverviewServices(snapshot);
@@ -4187,16 +4196,16 @@ async function initDisplay() {
   serverUI.initDisplay();
   const displayApp = document.querySelector("#display-app");
   displayApp.classList.remove("hidden");
-  const light = localStorage.getItem("trainmeet.displayTheme") === "light";
-  displayApp.classList.toggle("light", light);
-  document.querySelector("#display-theme").textContent = light ? "Mörkt" : "Ljust";
+  applyDisplayTheme(displayTheme());
   document.title = "TrainMeet · Skärm";
-  document.querySelector("#display-theme").addEventListener("click", () => {
-    displayApp.classList.toggle("light");
-    const isLight = displayApp.classList.contains("light");
-    localStorage.setItem("trainmeet.displayTheme", isLight ? "light" : "dark");
-    document.querySelector("#display-theme").textContent = isLight ? "Mörkt" : "Ljust";
+  document.querySelector("#display-theme").addEventListener("change", (event) => {
+    displayStore(DISPLAY_THEME_KEY, event.target.value);
+    applyDisplayTheme(event.target.value);
     if (displaySnapshot) renderDisplay(displaySnapshot);
+  });
+  document.querySelector("#display-graph-window").addEventListener("change", (event) => {
+    displayStore(DISPLAY_GRAPH_WINDOW_KEY, event.target.value);
+    if (displaySnapshot && displayKind === "graph") renderGraph(displaySnapshot);
   });
   document.querySelector("#display-train-select").addEventListener("change", (event) => {
     state.displaySelectedTrainNumber = event.target.value || null;
@@ -4216,26 +4225,45 @@ async function initDisplay() {
     saveDisplayClockPreference(DISPLAY_CLOCK_SECONDS_KEY, event.target.value);
     if (displaySnapshot) renderClock(displaySnapshot);
   });
-  document.querySelector("#display-fullscreen").addEventListener("click", async () => {
+  const fullscreenButton = document.querySelector("#display-fullscreen");
+  fullscreenButton.addEventListener("click", async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await displayApp.requestFullscreen();
     } catch {}
   });
+  const toolbar = document.querySelector("#display-toolbar"), stage = document.querySelector("#display-stage");
+  const setToolbar = (visible) => {
+    toolbar.classList.toggle("hidden-toolbar", !visible);
+    stage.classList.toggle("toolbar-hidden", !visible);
+  };
+  // I helskärm kommer raden tillbaka vid rörelse och döljs efter fyra sekunder;
+  // i fönster står den kvar.
   const showToolbar = () => {
     clearTimeout(displayToolbarTimer);
-    document.querySelector("#display-toolbar").classList.remove("hidden-toolbar");
-    document.querySelector("#display-stage").classList.remove("toolbar-hidden");
+    setToolbar(true);
+    if (displayApp.dataset.chrome !== "fullscreen") return;
     displayToolbarTimer = setTimeout(() => {
-      document.querySelector("#display-toolbar").classList.add("hidden-toolbar");
-      document.querySelector("#display-stage").classList.add("toolbar-hidden");
-    }, 4000);
+      // Raden står kvar medan pekaren är över den eller menyn är öppen.
+      if (toolbar.matches(":hover") || document.querySelector("#display-switch")?.open) { showToolbar(); return; }
+      setToolbar(false);
+    }, DISPLAY_TOOLBAR_HIDE_MS);
+  };
+  const updateChrome = () => {
+    const full = displayIsFullscreen();
+    displayApp.dataset.chrome = full ? "fullscreen" : "window";
+    fullscreenButton.querySelector("tm-text").textContent = t(full ? "Avsluta helskärm" : "Helskärm");
+    fullscreenButton.querySelector("tm-text").dataset.tmText = full ? "Avsluta helskärm" : "Helskärm";
+    showToolbar();
+    serverUI.resizeStage?.();
   };
   displayApp.addEventListener("mousemove", showToolbar);
   displayApp.addEventListener("click", showToolbar);
   displayApp.addEventListener("touchstart", showToolbar, {passive:true});
   document.addEventListener("keydown", showToolbar);
-  showToolbar();
+  window.addEventListener("resize", updateChrome);
+  document.addEventListener("fullscreenchange", updateChrome);
+  updateChrome();
   try { await navigator.wakeLock?.request("screen"); } catch {}
   const animateClock = () => {
     if (displaySnapshot && displayKind === "clock") renderClock(displaySnapshot);

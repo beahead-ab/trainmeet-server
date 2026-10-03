@@ -42,6 +42,42 @@ class ShellStructureTests(unittest.TestCase):
         self.assertIn('aria-label="Sök i tidtabellen"', self.html)
         self.assertIn('id="pv-topology"', self.html)
 
+    def test_participant_view_is_the_designs_mobile_column(self):
+        # Deltagare.dc: clock, the line right now, what comes next, the
+        # timetable with a search, then the buttons. "Anslut din TMBox" is a
+        # button that opens a sheet from the bottom, not a permanent card.
+        start = self.html.index('id="participant-view"')
+        view = self.html[start:self.html.index('class="server-admin-shell"', start)]
+        order = [view.index(marker) for marker in ('id="pv-clock"', 'id="pv-track-card"', 'id="pv-events-card"', 'id="pv-timetable-card"', 'id="pv-connect-open"')]
+        self.assertEqual(order, sorted(order))
+        self.assertIn('<dialog id="pv-connect-card" class="pv-sheet"', view)
+        self.assertNotIn(' style=', view)
+        self.assertNotIn('tm-card', view)
+        self.assertNotIn('pv-foot-login', self.html)
+        for link in ('/assets/kontrollrummet.css', '/assets/skarmar.css', '/assets/deltagare.css'):
+            self.assertIn(f'href="{link}"', self.html)
+        css = (WEB / "deltagare.css").read_text(encoding="utf-8")
+        self.assertNotRegex(css, r"#[0-9a-fA-F]{3,8}\b", "colours come from the --kr- tokens")
+        self.assertNotIn("participant-view", (WEB / "server-ui.css").read_text(encoding="utf-8"))
+        # The map runs sideways on a phone too, and shows no station codes there.
+        participant = (WEB / "participant.js").read_text(encoding="utf-8")
+        self.assertIn("wide: true", participant)
+        self.assertIn("noCode: true", participant)
+
+    def test_screens_share_one_toolbar_and_keep_their_own_choices(self):
+        self.assertIn('id="display-toolbar"', self.html)
+        self.assertIn('class="kr-btn sm display-back"', self.html)
+        for element in ("display-switch", "display-clock-style", "display-clock-seconds", "display-graph-window", "display-theme", "display-fullscreen"):
+            self.assertIn(f'id="{element}"', self.html)
+        self.assertLess(self.html.index('href="/assets/server-ui.css"'), self.html.index('href="/assets/skarmar.css"'))
+        # Helskärm hides the toolbar after four seconds; a window keeps it.
+        self.assertIn("const DISPLAY_TOOLBAR_HIDE_MS = 4000;", self.js)
+        self.assertIn("function displayIsFullscreen()", self.js)
+        for key in ("trainmeet.displayTheme", "trainmeet.displayGraphWindow", "trainmeet.displayClockStyle", "trainmeet.displayClockSeconds"):
+            self.assertIn(key, self.js)
+        self.assertIn("function clockDigitParts(", self.js)
+        self.assertNotIn("function renderScrollableGraph", self.js)
+
     def test_menu_is_single_settings_entry(self):
         self.assertEqual(1, self.html.count('id="open-settings"'))
         self.assertIn('id="application-menu"', self.html)

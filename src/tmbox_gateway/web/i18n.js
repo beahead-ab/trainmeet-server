@@ -91,6 +91,8 @@
       for (const attr of ['title', 'placeholder', 'aria-label', 'alt']) {
         const source = element.getAttribute(attr);
         if (!source || source.includes('__TM_ARG_') || !/[a-zåäöæøü]/i.test(source)) continue;
+        // Already marked: the attribute now holds the translation, not the source.
+        if (element.hasAttribute('data-tm-' + attr)) continue;
         element.setAttribute('data-tm-' + attr, source);
         element.setAttribute(attr, t(source));
       }

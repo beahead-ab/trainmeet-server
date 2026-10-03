@@ -127,12 +127,32 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#meet-clock-seconds').check();
     await page.locator('#clock-appearance-form [type=submit]').click();
     await page.waitForFunction(()=>!document.querySelector('#clock-appearance-form').dataset.dirty);
-    const screenContext=await browser.newContext({viewport:{width:1920,height:1080}});
+    // A 1920 × 1080 window on a 1920 × 1080 screen is a full screen; a smaller window is a window.
+    const screenContext=await browser.newContext({viewport:{width:1920,height:1080},screen:{width:1920,height:1080}});
     const clockScreen=await screenContext.newPage();
     clockScreen.on('pageerror',e=>errors.push(e.message));
     await clockScreen.goto(urls.eu+'/display/clock?style=swedish');
-    await clockScreen.locator('.clock-digital').filter({hasText:'14:26:00'}).waitFor();
+    // Hours and minutes large, the seconds small beside them, so that the seconds always fit.
+    await clockScreen.locator('.clock-digital .cd-hm').filter({hasText:'14:26'}).waitFor();
+    assert.equal((await clockScreen.locator('.clock-digital .cd-ss').textContent()).trim(),'00');
     assert.equal(await clockScreen.locator('.sc-stopped').isVisible(),true);
+    const digits=await clockScreen.locator('.clock-digital').boundingBox();
+    assert.ok(digits.x>=0&&digits.x+digits.width<=1920,'The digits with seconds fit the screen');
+    // The toolbar: a full screen hides it after four seconds and brings it back at a movement; a window keeps it.
+    assert.equal(await clockScreen.locator('#display-app').getAttribute('data-chrome'),'fullscreen');
+    await clockScreen.mouse.move(960,700);
+    await clockScreen.locator('#display-toolbar.hidden-toolbar').waitFor({timeout:9000});
+    await clockScreen.mouse.move(900,720);
+    await clockScreen.locator('#display-toolbar:not(.hidden-toolbar)').waitFor();
+    const windowContext=await browser.newContext({locale:'sv-SE',viewport:{width:1440,height:900},screen:{width:1920,height:1080}});
+    const windowScreen=await windowContext.newPage();
+    await windowScreen.goto(urls.eu+'/display/clock');
+    await windowScreen.locator('#display-loading').waitFor({state:'hidden'});
+    assert.equal(await windowScreen.locator('#display-app').getAttribute('data-chrome'),'window');
+    await windowScreen.waitForTimeout(4800);
+    assert.equal(await windowScreen.locator('#display-toolbar.hidden-toolbar').count(),0,'A window keeps its toolbar');
+    assert.match(await windowScreen.locator('#display-fullscreen').textContent(),/^\s*Helskärm/);
+    await windowContext.close();
     for(const style of ['analog','stationsur','swiss','digital']){
       await page.locator(`#clock-style-tiles [data-value="${style}"]`).click();
       await page.locator('#clock-appearance-form [type=submit]').click();
@@ -155,6 +175,16 @@ const root = path.resolve(__dirname, '../..');
         // As in the design: stations are rings, and the trains on the line are listed under the map.
         assert.ok(Number(await clockScreen.locator('#topology-svg .topology-station').first().getAttribute('r'))>=16,'TV stations are rings');
         assert.equal(await clockScreen.locator('#topology-online').isVisible(),true,'Banöversikt lists the trains on the line under the map');
+      }
+      if(path==='graph'){
+        // The diagram's time window is this screen's own choice, kept in this browser.
+        const windowSelect=clockScreen.locator('#display-graph-window');
+        assert.deepEqual(await windowSelect.locator('option').evaluateAll(options=>options.map(option=>option.value)),['120','180','360','1440']);
+        const before=await clockScreen.locator('#screen-meet .sc-subtitle').textContent();
+        await windowSelect.selectOption('1440');
+        await clockScreen.waitForFunction(before=>document.querySelector('#screen-meet .sc-subtitle').textContent!==before,before);
+        assert.equal(await clockScreen.evaluate(()=>localStorage.getItem('trainmeet.displayGraphWindow')),'1440');
+        await windowSelect.selectOption('180');
       }
       if(path==='dashboard'){
         assert.equal(await clockScreen.locator('.dash-status').isVisible(),true,'På linjen just nu says whether traffic keeps to the timetable');

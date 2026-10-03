@@ -134,13 +134,18 @@
     const qr = make("div", "sc-qr"); qr.id = "screen-qr"; qr.hidden = true;
     right.prepend(qr);
     stage.append(header, content, footer);
+    // Skärmen är en 1920 × 1080-duk som skalas in. I fönsterläge står
+    // verktygsraden kvar ovanför duken, och duken får det som blir över.
     const resize = () => {
-      const scale = Math.min(innerWidth / 1920, innerHeight / 1080);
+      const chrome = $("#display-app")?.dataset.chrome === "window" ? ($("#display-toolbar")?.offsetHeight || 0) : 0;
+      const scale = Math.min(innerWidth / 1920, (innerHeight - chrome) / 1080);
       stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
+      stage.style.marginTop = `${chrome / 2}px`;
     };
+    api.resizeStage = resize;
     window.addEventListener("resize", resize); resize();
   };
-  api.display = (snapshot, kind, time) => {
+  api.display = (snapshot, kind, time, extra = {}) => {
     const meet = $("#screen-meet"); if (!meet) return;
     const us = snapshot.meet?.operating_region === "us";
     // The meet's name only: EU or US is setup detail, not something the hall needs.
@@ -150,7 +155,8 @@
     // looks for first: how many trains are out on the line right now.
     const out = (snapshot.train_positions || []).filter(p => p.connection_id).length;
     const live = ["topology", "graph"].includes(kind) ? ` · ${t(out === 1 ? "1 tåg på linjen" : "{n} tåg på linjen", { n: out })}` : "";
-    if (kind !== "clock") meet.append(make("span", "sc-subtitle", t(labels[kind]) + live));
+    const range = kind === "graph" && extra.range ? ` · ${extra.range}` : "";
+    if (kind !== "clock") meet.append(make("span", "sc-subtitle", t(labels[kind]) + range + live));
     const hour = Number(time.slice(0,2));
     $("#screen-time").textContent = kind === "clock" ? "" : us ? `${hour%12||12}${time.slice(2,5)} ${hour>=12?"PM":"AM"}` : time.slice(0, 5);
     const run = $("#screen-run"), running = Boolean(snapshot.clock?.running);
@@ -173,7 +179,8 @@
     if (host.dataset.signature === signature) return;
     host.dataset.signature = signature;
     const item = (swatch, text) => { const span = make("span", "sc-legend__item"); span.append(make("i", `sc-legend__swatch sc-legend__swatch--${swatch}`), authored("span", "", text)); return span; };
-    if (kind === "topology") host.replaceChildren(authored("span", "", "Blå ring = tåg på stationen · fylld bricka = på linjen"));
+    if (kind === "topology") host.replaceChildren(authored("span", "", "Fylld bricka = på linjen, pilen är riktningen · ofylld = klart, inte avgått · siffran = tåg inne"));
+    else if (kind === "dashboard") host.replaceChildren(authored("span", "", "Siffran vid stationen = tåg inne"));
     else if (kind === "graph") host.replaceChildren(item("line", "på linjen nu"), item("plan", "planerat"), item("now", "nu"));
     else host.replaceChildren();
   };
@@ -196,14 +203,18 @@
     const signature = `${network}|${link}`;
     if (host.dataset.signature === signature) return;
     host.dataset.signature = signature;
-    const item = (payload, caption) => {
+    // Som i designen: siffran (1 Wi-Fi, 2 Träffen) över namnet, bredvid koden.
+    const item = (payload, number, name) => {
       const wrap = make("div", "sc-qr__item");
       const code = make("div", "sc-qr__code");
       code.innerHTML = api.qrSVG(payload);
-      wrap.append(code, authored("span", "sc-qr__text", caption));
+      const caption = make("span", "sc-qr__text");
+      if (number) caption.append(make("b", "", number));
+      caption.append(authored("span", "", name));
+      wrap.append(code, caption);
       return wrap;
     };
-    host.replaceChildren(...(network ? [item(network, "1 · Wi-Fi"), item(link, "2 · Träffen")] : [item(link, "Skanna – allt om träffen")]));
+    host.replaceChildren(...(network ? [item(network, "1", "Wi-Fi"), item(link, "2", "Träffen")] : [item(link, "", "Skanna – allt om träffen")]));
   };
   api.us = (data, screen = false) => {
     const host = screen ? $("#territories-view") : $("#us-runtime-summary");
