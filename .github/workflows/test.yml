@@ -36,3 +36,4 @@ jobs:
           node tests/js/drift-station-list.test.cjs
           node tests/js/login-look.test.cjs
           node tests/js/admin-start.test.cjs
+          node tests/js/participant-desktop.test.cjs

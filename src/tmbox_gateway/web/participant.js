@@ -79,11 +79,13 @@
 
   // The map is drawn by app.js, the way Drift draws it, in real pixels. The
   // line runs sideways even on a phone: it is 880 px wide and scrolls inside
-  // its panel, and the hint under it says so.
+  // its panel, and the hint under it says so. On a computer it is drawn to fit
+  // its column instead, so nothing has to be dragged.
+  const wide = matchMedia("(min-width: 1100px)");
   function drawMap(svg) {
     const host = svg.closest(".pv-map");
     const available = Math.max(280, (host?.clientWidth || 0) - 20);
-    renderTopology(snapshot, svg, { kr: { width: Math.max(available, 880), noCode: true, wide: true }, tv: true, showBadge: false, selectedStationID: selectedStation,
+    renderTopology(snapshot, svg, { kr: { width: wide.matches ? available : Math.max(available, 880), noCode: true, wide: true }, tv: true, showBadge: false, selectedStationID: selectedStation,
       onStationSelect: id => { selectedStation = selectedStation === id ? null : id; renderTrack(); renderTimetable(); },
       onClear: () => { selectedStation = null; renderTrack(); renderTimetable(); } });
     const [, , width, height] = svg.getAttribute("viewBox").split(" ").map(Number);
@@ -91,6 +93,13 @@
     svg.style.height = `${height}px`;
     $("#pv-map-hint").hidden = Boolean(selectedStation) || width <= available + 1;
   }
+
+  // A new window size redraws the map for its new column.
+  let resizeTimer = null;
+  addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (snapshot) drawMap($("#pv-topology")); }, 150);
+  });
 
   function renderTrack() {
     const positions = snapshot.train_positions || [];
