@@ -26,7 +26,7 @@ from uuid import uuid4
 from . import backup
 from .engine import TrafficEngine
 from .change_feed import ChangeFeed
-from .cloud_config import CloudConfiguration
+from .cloud_config import CloudConfiguration, MeetChangeRequired
 from .external_clock import ExternalClock, FastClockError, validate_settings as validate_clock_source
 from .lifecycle import SQLiteMeetLifecycle, MeetLifecycleError
 from .central_sync import (
@@ -3553,6 +3553,8 @@ class TrainMeetHTTPApplication:
         if self.cloud_config:
             try:
                 return self.cloud_config.connect(payload)
+            except MeetChangeRequired as error:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "meet_change_required", str(error)) from error
             except (CentralSyncError, RuntimePublicationError, USError) as error:
                 raise HTTPAPIError(HTTPStatus.CONFLICT, "cloud_connection_failed", str(error)) from error
         code = str(payload.get("sync_code", ""))

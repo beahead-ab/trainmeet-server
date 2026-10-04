@@ -1440,3 +1440,5 @@ body[data-mode="skarmar"] .server-admin-shell { padding: 16px 12px 32px; }
 @media (prefers-reduced-motion: reduce) {
 *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+/* #128: the switch confirmation the server asked for. */
+.admin-modal .switch-confirmation.needs-attention { outline: 2px solid var(--warn, #e0a33a); outline-offset: 4px; border-radius: 6px; }

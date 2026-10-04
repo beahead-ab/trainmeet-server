@@ -872,7 +872,9 @@ function openModal(id, trigger = document.activeElement) {
 }
 function cancelModal(dialog) {
   if (dialog.dataset.busy === "true") return;
-  if (modalChanged(dialog) && !window.confirm(t("Stäng utan att spara ändringarna?"))) return;
+  // A meet code is nothing to save: asking "close without saving?" there only
+  // made Avbryt look like it kept the dialog open (#128).
+  if (dialog.dataset.discardFreely !== "true" && modalChanged(dialog) && !window.confirm(t("Stäng utan att spara ändringarna?"))) return;
   for (const [input, value, checked] of modalValues.get(dialog) || []) { input.value = value; input.checked = checked; }
   // Restore derived validation too, without triggering the code fields' input
   // handlers (which move keyboard focus as digits are entered).
@@ -1193,6 +1195,7 @@ runtimeForm.addEventListener("submit", async (event) => {
   setMessage(runtimeMessage, "1/3 · Kontaktar Config-servern och kontrollerar träffkoden …");
   document.querySelector("#cloud-connection-state").textContent = t("Kopplar …");
   if (!beginModalAction(runtimeForm)) return;
+  let needsSwitch = false;
   try {
     const response = await authorizedFetch("/v1/runtime/sync", {
       method: "POST",
@@ -1204,6 +1207,10 @@ runtimeForm.addEventListener("submit", async (event) => {
       }),
     });
     const payload = await response.json();
+    // The code is for another meet: point at the box that confirms the switch.
+    const confirmSwitch = document.querySelector("#confirm-meet-change");
+    needsSwitch = payload.error === "meet_change_required";
+    confirmSwitch.closest("label").classList.toggle("needs-attention", needsSwitch);
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
     // Never print "undefined": an answer without a message still saved the link.
     setMessage(runtimeMessage, payload.message ? "3/3 · {message} Cloud-kopplingen är sparad på servern." : "3/3 · Cloud-kopplingen är sparad på servern.",
@@ -1213,9 +1220,12 @@ runtimeForm.addEventListener("submit", async (event) => {
     finishModal(runtimeForm);
   } catch (error) {
     setMessage(runtimeMessage, error.message, "error");
-    document.querySelector("#cloud-connection-state").textContent = t("Kopplingen misslyckades");
+    // A failed attempt leaves the existing link as it was; show that state
+    // rather than "Kopplingen misslyckades" (#128).
+    refreshRuntime().catch(() => { document.querySelector("#cloud-connection-state").textContent = t("Kopplingen misslyckades"); });
   } finally {
     endModalAction(runtimeForm);
+    if (needsSwitch) document.querySelector("#confirm-meet-change").focus();
   }
 });
 
