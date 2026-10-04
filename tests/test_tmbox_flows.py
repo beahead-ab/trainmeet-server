@@ -77,8 +77,8 @@ class TMBoxFlowsTest(unittest.TestCase):
         self.assertEqual(["MUN<55          ", "#Avg *Åter 12:34"], self.lines("hoppa-fram", 1, "CDA"))
         self.assertEqual(["          55◀CDA", "#In B:Sp   12:34"], self.lines("hoppa-fram", 2, "MUN"))
         self.assertEqual(" " * 16, self.lines("hoppa-fram", 2, "VA")[0])
-        # Never sent from MUN: placed on a track afterwards.
-        self.assertEqual(["MUN-93          ", "#In B:Sp   12:34"], self.lines("placera", 0, "CDA"))
+        # Never sent from MUN: the box asks to move it here (issue #115).
+        self.assertEqual(["FLYTTA 93 HIT?  ", "#Ja B:Sp   12:34"], self.lines("placera", 0, "CDA"))
         self.assertEqual("93 ANK SP2      ", self.lines("placera", -1, "CDA")[0])
         self.assertEqual("ANNAN SIDA      ", self.lines("tva-boxar", 0, "CDA-V")[0])
         self.assertEqual(" " * 16, self.lines("tva-boxar", -1, "CDA-V")[0])

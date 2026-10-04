@@ -5,6 +5,17 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### TMBox frågar "FLYTTA 93 HIT?" för ett tåg som inte syns komma (#115)
+
+Stationer glömmer ibland att klarera och skickar bara tåget. Skriver
+mottagaren tågnumret, eller väljer tåget i tidtabellen, frågar boxen nu
+**FLYTTA 93 HIT?** med `#Ja B:Sp`: `#` flyttar tåget hit på planerat spår,
+`B` väljer annat spår. Det gäller ett tåg som aldrig skickats, som förut
+hette "Placera på spår", och nu även ett tåg som är klarerat men aldrig
+anmält avgånget, som tidigare bara gick via spårväljaren. Avsändarens del
+räknas som gjord och sträckan blir fri. Frågan nås bara med ett skrivet
+eller valt nummer, så ett andra `#` efter Ge klart flyttar aldrig ett tåg.
+
 ### Anslutet ställverk är i tjänst utan trafikpass
 
 En TKL-terminal behöver inte längre starta ett trafikpass för att begära,
