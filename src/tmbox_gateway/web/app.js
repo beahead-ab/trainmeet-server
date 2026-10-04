@@ -3033,6 +3033,14 @@ let displayClockAnchorSpeed = null;
 let swissMinuteKey = null;
 let swissMinuteWobbleStartedAt = null;
 
+// "KOD · n": koden i monospace, antalet tåg inne i Inter med vanlig nolla (en tio ska inte läsas som en åtta).
+function codeLabel(attrs, code, count, suffix = "") {
+  const label = svgElement("text", { ...attrs, class: "topology-code" });
+  label.append(`${code || ""} · `, svgElement("tspan", { class: "topology-count" }, count));
+  if (suffix) label.append(` ${suffix}`);
+  return label;
+}
+
 function svgElement(name, attrs = {}, textValue = null) {
   const element = document.createElementNS(svgNS, name);
   for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, String(value));
@@ -3462,10 +3470,10 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     if (kr?.noCode) {
       // Telefonen visar bara namnet; siffran står i sammanfattningen under kartan.
     } else if (kr) {
-      code = svgElement("text", { x: point.x, y: point.y + radius + 42, class: "topology-code" }, `${station.code || ""} · ${inside}`);
+      code = codeLabel({ x: point.x, y: point.y + radius + 42 }, station.code, inside);
       group.append(code);
     } else if (options.tv) {
-      code = svgElement("text", {x:point.x,y:point.y+radius+64,class:"topology-code"}, options.compactCount ? `${station.code || ""} · ${inside}` : `${station.code || ""} · ${inside} ${t("tåg")}`);
+      code = codeLabel({ x: point.x, y: point.y + radius + 64 }, station.code, inside, options.compactCount ? "" : t("tåg"));
       group.append(code);
     }
     labels.push({ point, radius, name, code });
@@ -4040,7 +4048,7 @@ function renderClock(snapshot) {
     // Går klockan fyller siffrorna eller urtavlan skärmen själva; raden under
     // finns bara för siffror (där den inte kostar storlek) och för en klocka som
     // stannat eller tappat kontakten.
-    const detail = [since ? `${t("sedan")} <span class="mono">${escapeHTML(since)}</span>` : "", escapeHTML(reason)].filter(Boolean).join(" · ");
+    const detail = [since ? `${t("sedan")} <span class="kr-num">${escapeHTML(since)}</span>` : "", escapeHTML(reason)].filter(Boolean).join(" · ");
     const status = stopped || externalMissing
       ? html`<div class="sc-stopped"><span class="sc-stopped__dot"></span><span class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan är stoppad")}</span>${detail ? `<span class="sc-stopped__reason">${detail}</span>` : ""}<span class="sc-stopped__meta">${escapeHTML(meta)}</span></div>`
       : digital ? html`<div class="sc-run">${t("Klockan går")} · ${escapeHTML(meta)}</div>` : "";

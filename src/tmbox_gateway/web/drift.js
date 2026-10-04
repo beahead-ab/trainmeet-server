@@ -224,7 +224,7 @@
           ? h("td", {}, h("button", { type: "button", class: "kr-rowlink", on: { click: () => hooks.selectStation?.(row.station.id) } }, h("b", {}, row.station.name), h("span", { class: "kr-code" }, row.station.code)))
           : h("td", { class: "m" }, "—"),
         boxCell(row), h("td", {}, statusTag(row)), placementCell(row),
-        row.trains === null ? h("td", { class: "r m kr-hide-sm" }, "—") : h("td", { class: "r mono kr-hide-sm" }, String(row.trains)),
+        row.trains === null ? h("td", { class: "r m kr-hide-sm" }, "—") : h("td", { class: "r kr-num kr-hide-sm" }, String(row.trains)),
         actionCell(row));
       return tr;
     }));
