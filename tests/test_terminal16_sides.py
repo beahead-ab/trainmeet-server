@@ -113,10 +113,10 @@ class TwoSidedStationTests(unittest.TestCase):
         # Not "not requested yet" either: 404 arrives on the MUN side.
         self.assertEqual("ANNAN SIDA", self.send("cda-lek", "#", train_number="404")["frame"]["lines"][0].strip())
         self.send("cda-lek", "#")
-        # 404 from MUN, never sent: found on its side, to be placed (2.1.0).
+        # 404 from MUN, never sent: found on its side, to be moved here (#115).
         frame = self.send("cda-mun", "#", train_number="404")["frame"]
-        self.assertEqual("404-MUN", frame["lines"][0].strip())
-        self.assertEqual("Placera på spår", frame["keys"]["#"]["label"])
+        self.assertEqual("FLYTTA 404 HIT?", frame["lines"][0].strip())
+        self.assertEqual("Flytta hit", frame["keys"]["#"]["label"])
         self.send("cda-mun", "*")                          # back, without placing it
         self.assertEqual("INGET TÅG", self.send("cda-lek", "#", train_number="999")["frame"]["lines"][0].strip())
 

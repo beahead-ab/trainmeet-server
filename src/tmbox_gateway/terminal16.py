@@ -52,6 +52,7 @@ SHORT_LABELS = {
     "Reservera": "RESERVERA", "Begär klartecken": "BEGÄR", "Återta begäran…": "ÅTERTA",
     "Rapportera avgång": "AVGÅTT", "Återta klartecken…": "ÅTERTA", "Rapportera ankomst": "INNE",
     "Annat ankomstspår": "SPÅR", "Placera på spår": "PLACERA", "Placera på spår…": "PLACERA",
+    "Flytta hit": "FLYTTA",
 }
 
 #: How long a notice stays before the box goes back to its start screen by
@@ -391,6 +392,15 @@ class Terminal16Lab:
         cleared but not reported departed, or never sent at all (2.1.0)."""
         return not self._is_active(leg) or self._line(leg).state in {State.RESERVED, State.OCCUPIED}
 
+    def _movable(self, terminal, leg):
+        """A train for this station that the system does not see coming: never
+        sent, or cleared but never reported departed. Typed or picked here, the
+        box asks whether to move it here (issue #115): stations forget to clear
+        and just send the train, and the game goes on."""
+        if leg["to_station_id"] != terminal.station:
+            return False
+        return not self._is_active(leg) or self._line(leg).state == State.RESERVED
+
     def _line(self, leg):
         return self.engine.connections[leg["connection_id"]]
 
@@ -516,6 +526,12 @@ class Terminal16Lab:
             if not own and active and line.state == State.REQUESTED:
                 buttons["#"] = ("reject", "Bekräfta neka")
             return buttons
+        if terminal.screen == "move" and self._movable(terminal, leg):
+            # Reached only by typing or picking the train, so the # after a
+            # #Ja on a request can never move a train by mistake. Once the
+            # train is seen to come, the screen is its ordinary detail.
+            buttons.update({"#": ("arrive", "Flytta hit"), "B": ("tracks", "Annat ankomstspår")})
+            return buttons
         if terminal.screen == "tracks":
             if not own and self._can_take_in(leg):
                 buttons.update({"#": ("arrive_track", "Ankommit på valt spår"),
@@ -605,6 +621,11 @@ class Terminal16Lab:
         elif terminal.screen == "reject":
             first, hint = ((row(t("NEKA {number}?", number=selected['train_number'])), "#Ja *Nej") if "#" in buttons
                            else (row(t("LÄGET ÄNDRAT")), "*=Bak"))
+        elif terminal.screen == "move" and selected and self._movable(terminal, selected):
+            question = t("FLYTTA {number} HIT?", number=selected["train_number"])
+            if len(text_cells(question)) > 16:
+                question = t("FLYTTA {number}?", number=selected["train_number"])
+            first, hint = row(question), "#Ja B:Sp"
         elif terminal.screen == "tracks":
             tracks = self._tracks(terminal)
             label = tracks[terminal.track % len(tracks)].display_label
@@ -612,7 +633,7 @@ class Terminal16Lab:
         elif terminal.screen == "active" and not active_position:
             first = row(t("LÄGET ÄNDRAT" if active else "INGA AKTIVA TÅG"))
             hint = "C/D B:Öv"
-        elif terminal.screen in {"detail", "active"} and selected:
+        elif terminal.screen in {"detail", "active", "move"} and selected:
             label, side = self._label(terminal.station, selected)
             first = row(label) if side == "left" else row("", label)
             action = buttons.get("#", ("", ""))[0]
@@ -746,6 +767,8 @@ class Terminal16Lab:
             else:
                 terminal.selected, terminal.screen, terminal.notice = matches[0], "detail", ""
                 terminal.browse_filter = "all"
+                if self._movable(terminal, self.legs[matches[0]]):
+                    terminal.screen = "move"
                 # 93# is enough: a departure that can be asked for is asked for
                 # at once, and * takes it back until the receiver has answered
                 # (Casper, 2026-10-02). Anything else waits for its own key.
@@ -780,7 +803,7 @@ class Terminal16Lab:
             terminal.selected = None
             self._browse(terminal)
         elif action == "select":
-            terminal.screen = "detail"
+            terminal.screen = "move" if self._movable(terminal, self.legs[terminal.selected]) else "detail"
         elif action == "cancel_view":
             terminal.return_screen = terminal.screen
             terminal.screen = "cancel"

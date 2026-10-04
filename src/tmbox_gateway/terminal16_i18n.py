@@ -50,6 +50,10 @@ FLERA TÅG ADMIN|MULTIPLE - ADMIN|FLERE - ADMIN|FLERE - ADMIN|MEHRERE - ADMIN
 UPPT SPÅR|TRK BUSY|SPOR OPT|SPOR OPPT|GLEIS BES
 Placera på spår|Place on track|Placér på spor|Plasser på spor|Auf Gleis stellen
 Placera på spår…|Place on track…|Placér på spor…|Plasser på spor…|Auf Gleis stellen…
+FLYTTA {number} HIT?|MOVE {number} HERE?|FLYT {number} HERTIL?|FLYTT {number} HIT?|ZUG {number} HOLEN?
+FLYTTA {number}?|MOVE {number}?|FLYT {number}?|FLYTT {number}?|HOLEN {number}?
+#Ja B:Sp|#Yes B:Trk|#Ja B:Sp|#Ja B:Sp|#Ja B:Gl
+Flytta hit|Move here|Flyt hertil|Flytt hit|Hierher holen
 TÅG: _____|NO.: _____|TOG: _____|TOG: _____|ZUG: _____
 #Sök B:Del|#Find B:Del|#Søg B:Del|#Søk B:Del|#Such B:Del
 VÄNTAR PÅ ADMIN|WAITING ADMIN|VENTER PÅ ADMIN|VENTER PÅ ADMIN|WARTE AUF ADMIN
@@ -120,6 +124,7 @@ BEGÄR|REQUEST|ANMOD|BE OM|ANFRAGEN
 AVGÅTT|DEPARTED|AFGÅET|AVGÅTT|ABGEFAHREN
 SPÅR|TRACK|SPOR|SPOR|GLEIS
 PLACERA|PLACE|PLACÉR|PLASSER|STELLEN
+FLYTTA|MOVE|FLYT|FLYTT|HOLEN
 KÖ|QUEUE|KØ|KØ|ANFRAGEN
 AKTIVA|ACTIVE|AKTIVE|AKTIVE|AKTIV
 SÖK|FIND|SØG|SØK|SUCHEN
