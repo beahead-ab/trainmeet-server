@@ -71,8 +71,6 @@ body.participant-mode #app-view { padding: 0; max-width: none; }
 /* ── På banan nu ────────────────────────────────────────────────────── */
 .pv-map { padding: 8px 10px 2px; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
 .pv-map svg { display: block; width: auto; max-width: none; height: auto; overflow: visible; }
-.pv-map .topology-name { font-size: 14px; stroke-width: 7px; }
-.pv-map .topology-train .train-number { font-size: 14px; }
 .pv-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--kr-ink-2); }
 .pv-chip b { font: 700 14px var(--kr-mono); color: var(--kr-ink); }
 .pv-chip--dev { color: var(--kr-green); }

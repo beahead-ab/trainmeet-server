@@ -116,8 +116,9 @@ samma tokens som Drift.
 ## Deltagarvyn
 
 Det QR-koden på skärmarna leder till (`/`), utan inloggning och utan något att
-ändra. Telefonen först (390 px): klockan, "På banan nu" (banan rullar i sidled,
-med antal på linjen, inne och avvikelser under), "Nästa händelser" (fylld bricka
+ändra. Telefonen först (390 px): klockan, "På banan nu" (banan som i Drift, stående
+med stationernas kod och antal tåg när telefonen hålls upprätt, med antal på
+linjen, inne och avvikelser under), "Nästa händelser" (fylld bricka
 för ett tåg på väg in, ofylld för en avgång), tidtabellen med sök och
 "Hela tidtabellen". Längst ned "Anslut din TMBox", som öppnar ett ark underifrån
 med de tre stegen (Wi-Fi, boxen hittar servern, trafikledningen tilldelar

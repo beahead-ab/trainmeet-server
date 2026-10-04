@@ -77,15 +77,15 @@
     }
   }
 
-  // The map is drawn by app.js, the way Drift draws it, in real pixels. The
-  // line runs sideways even on a phone: it is 880 px wide and scrolls inside
-  // its panel, and the hint under it says so. On a computer it is drawn to fit
-  // its column instead, so nothing has to be dragged.
-  const wide = matchMedia("(min-width: 1100px)");
+  // The map is drawn by app.js with the same options as Drift, in real pixels
+  // on the width of its panel: on a phone held upright the line stands upright
+  // with each station's code and number of trains, and on a computer it runs
+  // across its column. Nothing has to be dragged; the hint under the map only
+  // shows if a drawing is ever wider than its panel.
   function drawMap(svg) {
     const host = svg.closest(".pv-map");
     const available = Math.max(280, (host?.clientWidth || 0) - 20);
-    renderTopology(snapshot, svg, { kr: { width: wide.matches ? available : Math.max(available, 880), noCode: true, wide: true }, tv: true, showBadge: false, selectedStationID: selectedStation,
+    renderTopology(snapshot, svg, { kr: { width: available }, tv: true, showBadge: false, selectedStationID: selectedStation,
       onStationSelect: id => { selectedStation = selectedStation === id ? null : id; renderTrack(); renderTimetable(); },
       onClear: () => { selectedStation = null; renderTrack(); renderTimetable(); } });
     const [, , width, height] = svg.getAttribute("viewBox").split(" ").map(Number);
