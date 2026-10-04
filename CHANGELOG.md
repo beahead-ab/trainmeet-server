@@ -5,6 +5,18 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Träffens land: SE, DK, DE, NO eller US
+
+TrainMeet Cloud (2.2 och senare) skickar träffens land i driftpaketet
+(`meet.country`). Servern visar landet i stället för "EU": i sidhuvudet, under
+Inställningar → Träff och Cloud, i deltagarvyn och på TMBox-sidan. Nya boxar får
+landets språk (svenska, danska, tyska, norska; engelska för US); en box som fått
+ett eget språk behåller det. Trafiken är densamma för alla europeiska länder, och
+inget lagrat ändras: träffvalet, klockans inställningar och säkerhetskopiorna
+gäller som förut. Ett paket utan land, från ett äldre Cloud, är en svensk träff;
+ett okänt land stoppar aldrig paketet. `/v1/server-context`, `/v1/workspaces` och
+`/v1/display` har fältet `country`.
+
 ### Typsnittet från #122 på de sista ställena
 
 Tågnumret i boxens tidtabell (provbänken), tågmärket på ruttkartan i "Tidtabell

@@ -61,9 +61,11 @@
   api.refreshHeader = () => {
     const context = api.context || {}, meet = context.selected_meet, update = context.cloud_update || {};
     const us = context.operating_region === "us"; document.body.dataset.region = us ? "us" : "eu";
+    // Landet från Cloud (SE, DK, DE, NO, US). En äldre server skickar inget land: EU är då svenskt.
+    const country = (context.country || meet?.country || (us ? "us" : "se")).toUpperCase();
     document.querySelectorAll("[data-eu-only]").forEach(n => { n.hidden = us; });
     document.querySelectorAll("[data-us-only]").forEach(n => { n.hidden = !us; });
-    $("#server-region").textContent = meet ? (us ? "US" : "EU") : "";
+    $("#server-region").textContent = meet ? country : "";
     $("#server-region").className = `tm-badge tm-badge--${us ? "us" : "eu"}`;
     // A publication UUID is not a human version number.
     const ordinal = meet?.version_number ?? meet?.publication_version;
@@ -82,7 +84,7 @@
     status.className = `tm-status tm-status--${newer ? "newer" : offline ? "offline" : "published"}`;
     $("#cloud-connection-meta").textContent = version;
     const region = $("#cloud-meet-region");
-    if (region) { region.textContent = meet ? (us ? "US" : "EU") : ""; region.className = `tm-badge tm-badge--${us ? "us" : "eu"}`; region.hidden = !meet; }
+    if (region) { region.textContent = meet ? country : ""; region.className = `tm-badge tm-badge--${us ? "us" : "eu"}`; region.hidden = !meet; }
     const runtime = api.info?.runtime || {};
     if ($("#cloud-meet-meta")) $("#cloud-meet-meta").textContent = runtime.station_count ? t("{stations} stationer · {day}", { stations: runtime.station_count, day: runtime.active_day || "" }) : "";
     const published = runtime.published_at ? new Date(runtime.published_at) : null;
