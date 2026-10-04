@@ -18,6 +18,11 @@ PAIRING_HASH_ITERATIONS = 210_000
 CLIENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{3,64}$")
 ADMIN_USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9._@+-]{3,64}$")
 ADMIN_SETUP_TTL = timedelta(days=7)
+# En kod för nytt lösenord skickas med e-post och kan begäras av vem som helst
+# som känner ett användarnamn. Den ska därför gälla kort.
+ADMIN_RESET_TTL = timedelta(minutes=30)
+ADMIN_EMAIL_PATTERN = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]+$")
+CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 ADMIN_SESSION_TTL = timedelta(hours=12)
 # A connection code printed on the meeting's screens has to keep working for as
 # long as it is on display, so it may be issued without an expiry.
@@ -231,8 +236,8 @@ class IdentityStore:
                 must_change_password INTEGER NOT NULL DEFAULT 0,
                 -- Ägaren skriver aldrig någon annans lösenord. Den som bjuds
                 -- in får en engångskod och väljer sitt eget. Koden lämnas över
-                -- på plats - servern har ingen e-post, och den som bjuder in
-                -- står ändå i samma lokal.
+                -- på plats, eller med e-post via TrainMeet Cloud när servern
+                -- är kopplad och kontot har en adress.
                 setup_code_digest BLOB,
                 setup_expires_at TEXT
             );
@@ -240,7 +245,16 @@ class IdentityStore:
         )
         self._add_missing_columns("admin_sessions", {"user_id": "TEXT"})
         self._add_missing_columns(
-            "admin_users", {"setup_code_digest": "BLOB", "setup_expires_at": "TEXT"}
+            "admin_users",
+            {
+                "setup_code_digest": "BLOB",
+                "setup_expires_at": "TEXT",
+                # Valfri. Finns den, och servern är kopplad till TrainMeet
+                # Cloud, kan en inbjudan och en kod för nytt lösenord skickas dit.
+                "email": "TEXT",
+                "reset_code_digest": "BLOB",
+                "reset_expires_at": "TEXT",
+            },
         )
         self._add_missing_columns(
             "admin_access",
@@ -1041,7 +1055,7 @@ class IdentityStore:
             rows = self._connection.execute(
                 "SELECT user_id, username, role, created_at, updated_at,"
                 " password_digest IS NOT NULL, must_change_password,"
-                " setup_code_digest IS NOT NULL, setup_expires_at"
+                " setup_code_digest IS NOT NULL, setup_expires_at, email"
                 " FROM admin_users ORDER BY role DESC, username COLLATE NOCASE"
             ).fetchall()
         return [
@@ -1055,6 +1069,7 @@ class IdentityStore:
                 "must_change_password": bool(row[6]),
                 "invitation_pending": bool(row[7]),
                 "invitation_expires_at": row[8],
+                "email": row[9] or "",
             }
             for row in rows
         ]
@@ -1064,15 +1079,15 @@ class IdentityStore:
             (user for user in self.list_admin_users() if user["user_id"] == user_id), None
         )
 
-    def invite_admin_user(self, username: str, role: str = "admin") -> dict[str, object]:
+    def invite_admin_user(self, username: str, role: str = "admin", email: str = "") -> dict[str, object]:
         """Skapa ett konto och en engångskod att lämna över.
 
         Ägaren sätter inte någon annans lösenord. Den inbjudne löser in koden
         och väljer sitt eget - då finns lösenordet aldrig hos någon annan, inte
         ens en kort stund.
 
-        Koden lämnas över på plats. Servern har ingen e-post, och behöver ingen:
-        den som bjuder in står i samma klubblokal som den som bjuds in.
+        Koden lämnas över på plats eller, om kontot har en e-postadress och
+        servern är kopplad till TrainMeet Cloud, med e-post via Cloud.
         """
 
         username = username.strip()
@@ -1082,12 +1097,10 @@ class IdentityStore:
             )
         if role not in {"owner", "admin"}:
             raise AdminAccessError("Rollen måste vara ägare eller administratör")
+        email = normalise_admin_email(email)
 
         now = datetime.now(timezone.utc)
-        code = "-".join(
-            "".join(secrets.choice("23456789ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(4))
-            for _ in range(2)
-        )
+        code = _new_account_code()
         user_id = secrets.token_hex(16)
         with self._lock:
             if self._connection.execute(
@@ -1098,11 +1111,11 @@ class IdentityStore:
                 """
                 INSERT INTO admin_users(
                     user_id, username, role, created_at, updated_at,
-                    must_change_password, setup_code_digest, setup_expires_at
-                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+                    must_change_password, setup_code_digest, setup_expires_at, email
+                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
                 """,
                 (user_id, username, role, now.isoformat(), now.isoformat(),
-                 _credential_digest(code), (now + ADMIN_SETUP_TTL).isoformat()),
+                 _credential_digest(code), (now + ADMIN_SETUP_TTL).isoformat(), email or None),
             )
         return {**(self.admin_user(user_id) or {}), "setup_code": code}
 
@@ -1110,10 +1123,7 @@ class IdentityStore:
         """En ny kod när den gamla gått ut eller kommit bort."""
 
         now = datetime.now(timezone.utc)
-        code = "-".join(
-            "".join(secrets.choice("23456789ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(4))
-            for _ in range(2)
-        )
+        code = _new_account_code()
         with self._lock:
             if self._connection.execute(
                 "SELECT 1 FROM admin_users WHERE user_id = ?", (user_id,)
@@ -1127,34 +1137,92 @@ class IdentityStore:
             )
         return {**(self.admin_user(user_id) or {}), "setup_code": code}
 
-    def redeem_admin_setup(self, username: str, code: str, password: str) -> dict[str, object]:
-        """Den inbjudne löser in koden och väljer sitt lösenord."""
+    def set_admin_user_email(self, user_id: str, email: str) -> dict[str, object]:
+        email = normalise_admin_email(email)
+        with self._lock:
+            if self._connection.execute(
+                "SELECT 1 FROM admin_users WHERE user_id = ?", (user_id,)
+            ).fetchone() is None:
+                raise AdminAccessError("Användaren finns inte")
+            self._connection.execute(
+                "UPDATE admin_users SET email = ?, updated_at = ? WHERE user_id = ?",
+                (email or None, datetime.now(timezone.utc).isoformat(), user_id),
+            )
+        return self.admin_user(user_id) or {}
+
+    def issue_admin_password_reset(
+        self, username: str, *, now: datetime | None = None
+    ) -> tuple[dict[str, object], str] | None:
+        """En kod för nytt lösenord, men bara till ett konto med e-postadress.
+
+        Svarar None för ett okänt konto och ett utan adress. Det lösenord som
+        finns slutar inte gälla förrän koden lösts in, så den som begär koder
+        åt någon annan kan inte låsa ute hen. En ny kod ersätter den förra.
+        """
+
+        username = str(username).strip()
+        if not ADMIN_USERNAME_PATTERN.fullmatch(username):
+            return None
+        now = now or datetime.now(timezone.utc)
+        code = _new_account_code()
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT user_id, email FROM admin_users WHERE username = ? COLLATE NOCASE",
+                (username,),
+            ).fetchone()
+            if row is None or not row[1]:
+                return None
+            self._connection.execute(
+                "UPDATE admin_users SET reset_code_digest = ?, reset_expires_at = ?"
+                " WHERE user_id = ?",
+                (_credential_digest(code), (now + ADMIN_RESET_TTL).isoformat(), row[0]),
+            )
+        return self.admin_user(str(row[0])) or {}, code
+
+    def redeem_admin_setup(
+        self, username: str, code: str, password: str, *, now: datetime | None = None
+    ) -> dict[str, object]:
+        """Löser in en inbjudan eller en kod för nytt lösenord.
+
+        Båda är engångskoder som leder till samma sak, ett lösenord som
+        användaren väljer själv. Efter inlösen gäller ingen av dem, och den som
+        satt inloggad med det gamla lösenordet loggas ut.
+        """
 
         if not 8 <= len(password) <= 256:
             raise AdminAccessError("Lösenordet måste vara 8–256 tecken")
-        now = datetime.now(timezone.utc)
+        now = now or datetime.now(timezone.utc)
         # Koden digererades i sin skrivna form när den utfärdades, så indata
         # förs tillbaka dit: streck, mellanslag eller ingenting blir samma kod.
         digest = _credential_digest(_display_code(str(code)))
         salt = secrets.token_bytes(16)
         with self._lock:
             row = self._connection.execute(
-                "SELECT user_id, setup_code_digest, setup_expires_at FROM admin_users"
+                "SELECT user_id, setup_code_digest, setup_expires_at,"
+                " reset_code_digest, reset_expires_at FROM admin_users"
                 " WHERE username = ? COLLATE NOCASE",
                 (str(username).strip(),),
             ).fetchone()
-            if row is None or row[1] is None:
+            if row is None:
                 raise AdminAccessError("Koden gäller inte")
-            if not hmac.compare_digest(bytes(row[1]), digest):
+            invitation = row[1] is not None and hmac.compare_digest(bytes(row[1]), digest)
+            reset = row[3] is not None and hmac.compare_digest(bytes(row[3]), digest)
+            if not invitation and not reset:
                 raise AdminAccessError("Koden gäller inte")
-            if row[2] and datetime.fromisoformat(row[2]) < now:
-                raise AdminAccessError("Koden har gått ut. Be ägaren om en ny.")
+            expires = row[2] if invitation else row[4]
+            if expires and datetime.fromisoformat(expires) < now:
+                raise AdminAccessError(
+                    "Koden har gått ut. Be ägaren om en ny." if invitation
+                    else "Koden har gått ut. Begär en ny."
+                )
             self._connection.execute(
                 "UPDATE admin_users SET password_salt = ?, password_digest = ?,"
                 " setup_code_digest = NULL, setup_expires_at = NULL,"
+                " reset_code_digest = NULL, reset_expires_at = NULL,"
                 " must_change_password = 0, updated_at = ? WHERE user_id = ?",
                 (salt, _admin_password_digest(password, salt), now.isoformat(), row[0]),
             )
+            self._connection.execute("DELETE FROM admin_sessions WHERE user_id = ?", (row[0],))
         return self.admin_user(str(row[0])) or {}
 
     def delete_admin_user(self, user_id: str) -> None:
@@ -1484,6 +1552,23 @@ def _normalize_code(code: str) -> str:
     """
 
     return "".join(character for character in code.upper() if character.isalnum())
+
+
+def _new_account_code() -> str:
+    """Åtta tecken i två grupper, utan tecken som går att förväxla (0/O, 1/I)."""
+
+    return "-".join("".join(secrets.choice(CODE_ALPHABET) for _ in range(4)) for _ in range(2))
+
+
+def normalise_admin_email(value: str) -> str:
+    """En e-postadress i gemener, eller tom sträng för ingen adress."""
+
+    email = str(value or "").strip().lower()
+    if not email:
+        return ""
+    if len(email) > 254 or not ADMIN_EMAIL_PATTERN.fullmatch(email):
+        raise AdminAccessError("E-postadressen ser inte ut som en e-postadress")
+    return email
 
 
 def _display_code(code: str) -> str:

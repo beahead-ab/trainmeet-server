@@ -377,18 +377,66 @@ loginForm.addEventListener("submit", async (event) => {
 // Inlösning av inbjudan. Den som har en kod har ännu inget lösenord och kan
 // alltså inte logga in för att sätta det - därför går det här utan session.
 const redeemForm = document.querySelector("#redeem-form");
+const forgotForm = document.querySelector("#forgot-form");
+
+// Rutan visar en sak i taget: inloggningen, glömt lösenord eller koden.
+function showLoginPane(pane) {
+  loginForm.classList.toggle("hidden", pane !== "login");
+  document.querySelector("#login-intro")?.classList.toggle("hidden", pane !== "login");
+  document.querySelector("#login-links")?.classList.toggle("hidden", pane !== "login");
+  redeemForm?.classList.toggle("hidden", pane !== "redeem");
+  document.querySelector("#redeem-intro")?.classList.toggle("hidden", pane !== "redeem");
+  forgotForm?.classList.toggle("hidden", pane !== "forgot");
+  document.querySelector("#forgot-intro")?.classList.toggle("hidden", pane !== "forgot");
+  if (pane === "redeem") document.querySelector("#redeem-username").focus();
+  if (pane === "forgot") document.querySelector("#forgot-username").focus();
+}
 
 function showRedeem(open) {
-  redeemForm?.classList.toggle("hidden", !open);
-  loginForm.classList.toggle("hidden", open);
-  document.querySelector("#login-intro")?.classList.toggle("hidden", open);
-  document.querySelector("#redeem-intro")?.classList.toggle("hidden", !open);
-  document.querySelector("#redeem-open")?.classList.toggle("hidden", open);
-  if (open) document.querySelector("#redeem-username").focus();
+  showLoginPane(open ? "redeem" : "login");
 }
 
 document.querySelector("#redeem-open")?.addEventListener("click", () => showRedeem(true));
 document.querySelector("#redeem-cancel")?.addEventListener("click", () => showRedeem(false));
+document.querySelector("#forgot-open")?.addEventListener("click", () => {
+  document.querySelector("#forgot-username").value = document.querySelector("#login-username").value;
+  setMessage(document.querySelector("#forgot-message"), "");
+  showLoginPane("forgot");
+});
+document.querySelector("#forgot-cancel")?.addEventListener("click", () => showLoginPane("login"));
+
+// Svaret säger aldrig om kontot finns, bara om servern kan skicka e-post.
+// Kan den det går rutan vidare till koden med användarnamnet ifyllt.
+forgotForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const message = document.querySelector("#forgot-message");
+  setMessage(message, "");
+  const button = forgotForm.querySelector("button.primary");
+  button.disabled = true;
+  const username = document.querySelector("#forgot-username").value.trim();
+  try {
+    const response = await fetch("/v1/admin/password-reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, language: document.documentElement.lang === "en" ? "en" : "sv" }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.message || "Det gick inte att begära en kod");
+    if (!payload.email_available) {
+      setMessage(message, "Servern är inte kopplad till TrainMeet Cloud och kan inte skicka e-post. Be en ägare om en ny kod, eller kör tmbox_gateway.recover på serverdatorn.", "error");
+      return;
+    }
+    document.querySelector("#redeem-username").value = username;
+    showLoginPane("redeem");
+    redeemCodeBoxes.reset();
+    document.querySelector("#redeem-code-boxes input")?.focus();
+    setMessage(document.querySelector("#redeem-message"), "Har kontot en e-postadress är en kod på väg. Ange den här med ett nytt lösenord.", "success");
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
 
 redeemForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -4755,8 +4803,9 @@ function bindTMBoxPanes() {
 //
 // Ägaren bjuder in; den inbjudne väljer sitt eget lösenord med en engångskod.
 // Ägaren känner alltså aldrig till någon annans lösenord - inte ens en kort
-// stund. Mönstret är be-a-legend-2:s, med koden överlämnad på plats i stället
-// för skickad med mejl, eftersom servern inte har någon e-post.
+// stund. Mönstret är be-a-legend-2:s. Koden visas alltid här och lämnas över
+// på plats; har den inbjudne en e-postadress och servern är kopplad till
+// TrainMeet Cloud skickas den också dit.
 //
 // En administratör ser listan men får inte ändra i den. Att veta vilka som har
 // tillgång är inte samma sak som att bestämma det.
@@ -4783,6 +4832,13 @@ function renderUsers() {
     const strong = document.createElement("b");
     strong.textContent = user.username;
     name.append(strong);
+    if (user.email) {
+      const email = document.createElement("div");
+      email.className = "kr-m users-email";
+      email.dataset.noI18n = "";
+      email.textContent = user.email;
+      name.append(email);
+    }
     tr.append(name);
 
     const role = document.createElement("td");
@@ -4827,6 +4883,19 @@ function showSetupCode(user) {
   usersEl("code-for").textContent = user.username;
   usersEl("code-value").textContent = user.setup_code;
   box.classList.remove("hidden");
+}
+
+// Vad som hände med e-posten. Koden visas alltid ändå, så ett brev som inte
+// gick iväg betyder bara att koden lämnas över på plats.
+function mailReceipt(name, mail) {
+  if (mail?.status === "sent") return [`${name} är inbjuden. Koden är också skickad till ${mail.to}.`, "success"];
+  if (mail?.status === "not_linked") return [`${name} är inbjuden. Servern är inte kopplad till TrainMeet Cloud, så lämna över koden.`, "success"];
+  if (mail?.status === "failed") return [`${name} är inbjuden, men e-posten gick inte iväg: ${mail.message} Lämna över koden.`, "error"];
+  return [`${name} är inbjuden. Lämna över koden.`, "success"];
+}
+
+function mailBody(body) {
+  return { ...body, server_url: location.origin, language: document.documentElement.lang === "en" ? "en" : "sv" };
 }
 
 async function refreshUsers() {
@@ -4879,20 +4948,24 @@ async function inviteUser(event) {
   event.preventDefault();
   const name = usersEl("invite-name").value.trim();
   const owner = usersEl("invite-owner").checked;
+  const email = usersEl("invite-email").value.trim();
   const result = await usersPost(
     "/v1/admin/users",
-    { username: name, role: owner ? "owner" : "admin" },
-    () => {
+    mailBody({ username: name, role: owner ? "owner" : "admin", email }),
+    (payload) => {
       usersEl("invite-name").value = "";
+      usersEl("invite-email").value = "";
       usersEl("invite-owner").checked = false;
-      setMessage(usersEl("message"), `${name} är inbjuden. Lämna över koden.`, "success");
+      setMessage(usersEl("message"), ...mailReceipt(name, payload.mail));
     },
   );
   if (result) { finishModal(usersEl("invite-form")); showSetupCode(result.user); }
 }
 
 async function reissueUserCode(user) {
-  const result = await usersPost("/v1/admin/users/reissue", { user_id: user.user_id });
+  const result = await usersPost("/v1/admin/users/reissue", mailBody({ user_id: user.user_id }), (payload) => {
+    setMessage(usersEl("message"), ...mailReceipt(user.username, payload.mail));
+  });
   if (result) { finishModal(document.querySelector("#user-edit-form")); showSetupCode(result.user); }
 }
 
@@ -4914,6 +4987,7 @@ function editUser(user) {
   users.editing = user;
   document.querySelector("#user-edit-name").textContent = user.username;
   document.querySelector("#user-edit-role").value = user.role;
+  document.querySelector("#user-edit-email").value = user.email || "";
   document.querySelector("#user-edit-password").value = "";
   document.querySelector("#user-edit-password-confirm").value = "";
   document.querySelector("#user-delete-confirm").checked = false;
@@ -4935,6 +5009,8 @@ function bindUsersSection() {
     const body = { user_id: users.editing.user_id };
     const role = document.querySelector("#user-edit-role").value;
     if (role !== users.editing.role) body.role = role;
+    const email = document.querySelector("#user-edit-email").value.trim();
+    if (email !== (users.editing.email || "")) body.email = email;
     if (password) body.password = password;
     const result = await usersPost("/v1/admin/users/update", body);
     if (result) { finishModal(form); setMessage(usersEl("message"), "Användaren är uppdaterad.", "success"); }

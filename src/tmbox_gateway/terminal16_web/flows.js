@@ -2045,7 +2045,7 @@ globalThis.TMBoxFlows = {
       "B"
      ],
      "wait": null,
-     "caption": "B filtrerar, först på ankomster. Även en ankomst som ingen har skickat går att välja och placera.",
+     "caption": "B filtrerar, först på ankomster. Även en ankomst som ingen har skickat går att välja och flytta hit.",
      "screens": [
       {
        "box": "CDA",
@@ -3063,9 +3063,9 @@ globalThis.TMBoxFlows = {
   },
   {
    "id": "placera",
-   "title": "Placera ett tåg i efterhand",
+   "title": "Flytta hit ett tåg som ingen skickat",
    "mode": "Med klartecken",
-   "intro": "Munkeröd skickade aldrig 93, men tåget kom till Charlottendal. Charlottendal placerar det på ett spår i efterhand, med tidtabellens spår som förslag, och spelet går vidare.",
+   "intro": "Munkeröd skickade aldrig 93, men tåget kom till Charlottendal. Charlottendal flyttar det hit i efterhand, med tidtabellens spår som förslag, och spelet går vidare.",
    "setup": null,
    "boxes": [
     {
@@ -3108,7 +3108,7 @@ globalThis.TMBoxFlows = {
       "#"
      ],
      "wait": null,
-     "caption": "Charlottendal skriver 93. Tåget visas ur tidtabellen med #In: placera på planerat spår.",
+     "caption": "Charlottendal skriver 93. Boxen frågar FLYTTA 93 HIT?: # flyttar det till planerat spår.",
      "screens": [
       {
        "box": "MUN",
@@ -3121,8 +3121,8 @@ globalThis.TMBoxFlows = {
       {
        "box": "CDA",
        "lines": [
-        "MUN-93          ",
-        "#In B:Sp   12:34"
+        "FLYTTA 93 HIT?  ",
+        "#Ja B:Sp   12:34"
        ],
        "changed": true
       }
@@ -3130,7 +3130,7 @@ globalThis.TMBoxFlows = {
      "meanings": [
       [
        "#",
-       "Placera på spår"
+       "Flytta hit"
       ],
       [
        "*",
@@ -3143,14 +3143,6 @@ globalThis.TMBoxFlows = {
       [
        "B",
        "Annat ankomstspår"
-      ],
-      [
-       "C",
-       "Föregående tåg"
-      ],
-      [
-       "D",
-       "Nästa tåg"
       ]
      ]
     },
@@ -3256,7 +3248,7 @@ globalThis.TMBoxFlows = {
       "#"
      ],
      "wait": null,
-     "caption": "# placerar 93 på det valda spåret. Munkeröds del räknas som gjord.",
+     "caption": "# flyttar 93 hit, på det valda spåret. Munkeröds del räknas som gjord.",
      "screens": [
       {
        "box": "MUN",

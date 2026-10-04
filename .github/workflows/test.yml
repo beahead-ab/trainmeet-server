@@ -37,3 +37,4 @@ jobs:
           node tests/js/login-look.test.cjs
           node tests/js/admin-start.test.cjs
           node tests/js/participant-desktop.test.cjs
+          node tests/js/account-mail-live.test.cjs

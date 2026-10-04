@@ -154,7 +154,8 @@ def _heartbeat(name: str | None, running_version: str | None) -> dict[str, str]:
     return {"name": (name or "").strip()[:80], "running_version": running_version or ""}
 
 
-def _read_json(request: Request, *, timeout: float) -> dict[str, Any]:
+def _read_json(request: Request, *, timeout: float,
+               failure: str = "Synkningen kunde inte hämtas") -> dict[str, Any]:
     try:
         with urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
@@ -163,7 +164,7 @@ def _read_json(request: Request, *, timeout: float) -> dict[str, Any]:
             detail = json.loads(error.read().decode("utf-8")).get("error")
         except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
             detail = None
-        raise CentralSyncError(detail or "Synkningen kunde inte hämtas") from error
+        raise CentralSyncError(detail or failure) from error
     except (URLError, TimeoutError) as error:
         raise CentralSyncError("TrainMeet kunde inte nås. Kontrollera internetanslutningen.") from error
     except (UnicodeDecodeError, json.JSONDecodeError) as error:

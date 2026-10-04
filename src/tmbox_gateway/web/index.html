@@ -181,9 +181,16 @@
         <!-- Egen rubrik: den som löser in en inbjudan loggar inte in, utan
              väljer sitt lösenord för första gången. -->
         <div id="redeem-intro" class="hidden">
-          <p class="eyebrow"><tm-text data-tm-text="INBJUDAN">INBJUDAN</tm-text></p>
+          <p class="eyebrow"><tm-text data-tm-text="KOD">KOD</tm-text></p>
           <h2><tm-text data-tm-text="Välj ditt lösenord">Välj ditt lösenord</tm-text></h2>
-          <p><tm-text data-tm-text="Du har fått en kod av den som bjöd in dig. Den gäller en gång, och sedan loggar du in som vanligt.">Du har fått en kod av den som bjöd in dig. Den gäller en gång, och sedan loggar du in som vanligt.</tm-text></p>
+          <p><tm-text data-tm-text="Du har fått en kod av den som bjöd in dig eller med e-post. Den gäller en gång, och sedan loggar du in som vanligt.">Du har fått en kod av den som bjöd in dig eller med e-post. Den gäller en gång, och sedan loggar du in som vanligt.</tm-text></p>
+        </div>
+        <!-- Glömt lösenord: koden går till kontots e-post via TrainMeet Cloud.
+             Svaret är detsamma oavsett om kontot finns. -->
+        <div id="forgot-intro" class="hidden">
+          <p class="eyebrow"><tm-text data-tm-text="NYTT LÖSENORD">NYTT LÖSENORD</tm-text></p>
+          <h2><tm-text data-tm-text="Få en kod med e-post">Få en kod med e-post</tm-text></h2>
+          <p><tm-text data-tm-text="Ange ditt användarnamn. Har kontot en e-postadress skickas en kod dit som gäller i 30 minuter.">Ange ditt användarnamn. Har kontot en e-postadress skickas en kod dit som gäller i 30 minuter.</tm-text></p>
         </div>
         <form id="login-form">
           <label for="login-username"><tm-text data-tm-text="Användarnamn">Användarnamn</tm-text></label>
@@ -196,16 +203,26 @@
         <!-- Den inbjudne har en kod men inget lösenord, och kan alltså inte
              logga in för att sätta det. Därför ligger inlösningen bredvid
              inloggningen och kräver ingen session - koden är beviset. -->
-        <button id="redeem-open" type="button" class="link-button"><tm-text data-tm-text="Jag har en inbjudningskod">Jag har en inbjudningskod</tm-text></button>
+        <div id="login-links" class="login-links">
+          <button id="forgot-open" type="button" class="link-button"><tm-text data-tm-text="Glömt lösenordet?">Glömt lösenordet?</tm-text></button>
+          <button id="redeem-open" type="button" class="link-button"><tm-text data-tm-text="Jag har en kod">Jag har en kod</tm-text></button>
+        </div>
+        <form id="forgot-form" class="hidden">
+          <label for="forgot-username"><tm-text data-tm-text="Användarnamn">Användarnamn</tm-text></label>
+          <input id="forgot-username" maxlength="64" autocomplete="username" required>
+          <button type="submit" class="primary"><tm-text data-tm-text="Skicka kod">Skicka kod</tm-text></button>
+          <button id="forgot-cancel" type="button" class="link-button"><tm-text data-tm-text="Tillbaka till inloggningen">Tillbaka till inloggningen</tm-text></button>
+          <p id="forgot-message" class="form-message" role="status"></p>
+        </form>
         <form id="redeem-form" class="hidden">
           <label for="redeem-username"><tm-text data-tm-text="Användarnamn">Användarnamn</tm-text></label>
           <input id="redeem-username" maxlength="64" autocomplete="username" required>
-          <label for="redeem-code-boxes"><tm-text data-tm-text="Inbjudningskod">Inbjudningskod</tm-text></label>
+          <label for="redeem-code-boxes"><tm-text data-tm-text="Kod">Kod</tm-text></label>
           <!-- Samma rutor som träffkoden, men åtta tecken i stället för sex och
                bokstäver tillåtna. Strecket står förtryckt: då syns både längden
                och var koden delas, utan att någon behöver fråga om det ska
                skrivas. Servern tar ändå emot koden hur den än skrivs. -->
-          <div class="code-boxes" id="redeem-code-boxes" role="group" data-code-alphabet="alnum" aria-label="Åttateckens inbjudningskod, ett tecken per fält" data-tm-aria-label="Åttateckens inbjudningskod, ett tecken per fält">
+          <div class="code-boxes" id="redeem-code-boxes" role="group" data-code-alphabet="alnum" aria-label="Åttateckens kod, ett tecken per fält" data-tm-aria-label="Åttateckens kod, ett tecken per fält">
             <input inputmode="text" maxlength="1" autocapitalize="characters" autocomplete="one-time-code" aria-label="Tecken 1 av 8" data-tm-aria-label="Tecken 1 av 8">
             <input inputmode="text" maxlength="1" autocapitalize="characters" autocomplete="one-time-code" aria-label="Tecken 2 av 8" data-tm-aria-label="Tecken 2 av 8">
             <input inputmode="text" maxlength="1" autocapitalize="characters" autocomplete="one-time-code" aria-label="Tecken 3 av 8" data-tm-aria-label="Tecken 3 av 8">
@@ -775,7 +792,7 @@
                   <code id="users-code-value" class="kr-bigcode">–</code>
                 </div>
                 <p id="users-message" class="form-message" role="status"></p>
-                <div class="kr-pf"><span>Glömt lösenord: <span class="kr-mono" data-no-i18n>tmbox_gateway.recover</span> i serverns terminal.</span></div>
+                <div class="kr-pf"><span>Glömt lösenord: <b>Glömt lösenordet?</b> på inloggningen skickar en kod med e-post när servern är kopplad till TrainMeet Cloud. Annars <span class="kr-mono" data-no-i18n>tmbox_gateway.recover</span> i serverns terminal.</span></div>
               </section>
               <section id="admin-access-settings" class="legacy-internal" hidden>
                 <span id="access-mode"></span><p id="access-password-state"></p>
@@ -901,6 +918,9 @@
               <label class="users-invite-name"><tm-text data-tm-text="Användarnamn
                 ">Användarnamn
                 </tm-text><input id="users-invite-name" maxlength="64" autocomplete="off" required>
+              </label>
+              <label class="users-invite-email"><tm-text data-tm-text="E-post (valfritt)">E-post (valfritt)</tm-text><input id="users-invite-email" type="email" maxlength="254" autocomplete="off">
+                <span class="kr-m"><tm-text data-tm-text="Är servern kopplad till TrainMeet Cloud skickas koden också dit.">Är servern kopplad till TrainMeet Cloud skickas koden också dit.</tm-text></span>
               </label>
               <label class="users-role-choice">
                 <input id="users-invite-owner" type="checkbox">
@@ -1078,6 +1098,7 @@
         <h2 id="user-edit-title">Redigera användare</h2>
         <form id="user-edit-form">
           <p id="user-edit-name"></p>
+          <label>E-post<input id="user-edit-email" type="email" maxlength="254" autocomplete="off"></label>
           <label>Roll<select id="user-edit-role"><option value="admin">Administratör</option><option value="owner">Ägare</option></select></label>
           <label>Nytt lösenord (valfritt)<input id="user-edit-password" type="password" minlength="8" autocomplete="new-password"></label>
           <label>Upprepa lösenord<input id="user-edit-password-confirm" type="password" minlength="8" autocomplete="new-password"></label>

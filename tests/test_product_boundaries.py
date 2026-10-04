@@ -112,6 +112,34 @@ class SyncGoesOneWayTests(unittest.TestCase):
             )
 
 
+class MailIsTheOnlyWriteTests(unittest.TestCase):
+    """Undantaget från D1, och hur smalt det är.
+
+    Servern får be Cloud skicka en inbjudan eller en kod för nytt lösenord
+    (cloud_mail.py). Det är det enda som går uppåt, och det bär bara ett brev:
+    inga träffdata, ingen konfiguration och ingen historik.
+    """
+
+    def test_one_request_in_one_module_writes_to_cloud(self):
+        writers = []
+        for path, text in _python_sources():
+            for node in ast.walk(ast.parse(text)):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Request"
+                        and {keyword.arg for keyword in node.keywords} & {"data", "method"}):
+                    writers.append(path.name)
+        # Inte Cloud: GitHub-releaser och klubbens egen snabbklocka på träffens nät.
+        not_cloud = {"software_update.py", "external_clock.py"}
+        self.assertEqual(["cloud_mail.py"], [name for name in writers if name not in not_cloud])
+
+    def test_the_letter_has_a_fixed_set_of_fields(self):
+        from tmbox_gateway.cloud_mail import MAIL_FIELDS
+
+        self.assertEqual({"kind", "to", "username", "code", "server_url", "language"}, set(MAIL_FIELDS))
+        text = (SOURCE / "cloud_mail.py").read_text(encoding="utf-8")
+        self.assertIn("if key in MAIL_FIELDS", text)
+        self.assertIn('"/api/server-mail"', text.replace("{path}", ""))
+
+
 class TimetableStaysEditableTests(unittest.TestCase):
     """BYGG steg 3 är redigerbart även när grundrevisionen kommer från Cloud.
 
