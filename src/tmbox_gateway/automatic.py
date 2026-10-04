@@ -160,6 +160,14 @@ class AutomaticStations:
             raise ValueError("Okänd station")
         return publication, day
 
+    def forget_meet(self) -> None:
+        """Träffen nollställdes: vem som arbetar var och när automatiken
+        började räknas om från början. Händelserna tas bort av
+        operations.reset_meet i samma databas."""
+        self.runtime._save_setting(STATE_SETTING, "{}")
+        self.blocked.clear()
+        self._acted = False
+
     # ------------------------------------------------------------- traffic
 
     def guard(self, actor, station) -> None:

@@ -8,6 +8,7 @@ import re
 import secrets
 import select
 import socket
+import sqlite3
 import threading
 import time
 from dataclasses import dataclass, replace
@@ -2317,6 +2318,93 @@ class TrainMeetHTTPApplication:
             "message": "TrainMeet Server startar om. Sidan ansluter igen automatiskt.",
         }
 
+    @runtime_command("eu")
+    def reset_meet(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Nollställ träffen: börja om från början med samma plan.
+
+        Klockan går tillbaka till planens starttid och står still, och allt
+        som hänt tas bort: klareringar, linjebesked, TKL-rörelser, tågens
+        lägen och automatikens tider. Träffen, Cloud-kopplingen, enheterna
+        och användarna står kvar. Ingen omstart: enheterna får den nya
+        generationen och hämtar läget på nytt.
+
+        Bekräftelsen är träffens namn, som vid återställning, och en
+        säkerhetskopia tas först. Går den inte att ta görs ingenting.
+        """
+
+        self._no_simulation()
+        self._require_admin(client)
+        if self.runtime_store is None or self.runtime_store.active() is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "runtime_not_configured", "Det finns ingen träff att nollställa.")
+        if self.lifecycle is None or self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Driftläget kan inte verifieras.")
+        publication = self.runtime_store.active()
+        selected = self.lifecycle.assert_selected("eu", publication_id=publication.publication_id)
+        name = self._current_meet_name()
+        if str(payload.get("confirmation", "")).strip().casefold() != name.strip().casefold():
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "meet_reset_not_confirmed",
+                               f"Skriv träffens namn, {name}, för att bekräfta.")
+        written = self._backup_before("nollställning")
+        ticket = self.lifecycle.begin_transition("eu", selected["meet_id"], selected["publication_id"],
+            meet_name=selected.get("meet_name", ""), expected_generation=selected["generation"])
+        try:
+            # Samma lås som varje kommando från en box, så att inget hinner in
+            # mellan att klareringarna tas bort och att motorn släpper dem.
+            with self.operations_store.command_lock:
+                removed = self.operations_store.reset_meet(publication)
+                if self.automatic:
+                    self.automatic.forget_meet()
+                # En box mitt i en inmatning börjar om. Linjerna är en vy av
+                # klareringarna, som nu är borta, och blir fria vid omläsningen.
+                for panel in self.engine.panels.values():
+                    panel.reset()
+                if self.engine.shared_traffic is not None:
+                    self.engine.shared_traffic.refresh()
+                self.runtime_store.bump_config_version()
+                self.runtime_store._save_setting("require_scoped_commands", "true")
+                self.engine.adopt_config(self.engine.config)
+        finally:
+            updated = self.lifecycle.complete_transition(ticket)
+        self.operations_store.record_audit_event(
+            correlation_id=f"meet-reset-{publication.publication_id}",
+            source="web-admin",
+            actor=client.admin_user_id or "konsol",
+            action="meet.reset",
+            outcome="ok",
+            detail={"by": client.display_name, "publication_id": publication.publication_id,
+                    "backup": written.name if written else None, "removed": removed},
+        )
+        self.changes.notify("runtime", "traffic", "clock")
+        if self.on_config_applied:
+            try:
+                self.on_config_applied()
+            except Exception:
+                LOGGER.warning("Träffen är nollställd; enheter hämtar läget vid nästa kontakt.", exc_info=True)
+        return {
+            "reset": True,
+            "meet_generation": updated["generation"],
+            "clock": self.clock_status(client),
+            "backup": written.name if written else None,
+        }
+
+    def _backup_before(self, reason: str) -> Path | None:
+        """En kopia av databasen före en åtgärd som inte går att ångra.
+
+        Kopian hamnar bland de andra, så att den går att lägga tillbaka under
+        Farozon → Återställ från säkerhetskopia. Är databasen tom finns inget
+        att kopiera; går kopieringen fel avbryts åtgärden.
+        """
+
+        # Databasen servern faktiskt har öppen, inte den den borde ha.
+        database = (Path(self.runtime_store.path) if self.runtime_store is not None
+                    else Path(self.config.state_dir) / "trainmeet.db")
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        try:
+            return backup.create_backup(database, self._backup_dir(), stamp)
+        except (backup.BackupError, OSError, sqlite3.Error) as error:
+            raise HTTPAPIError(HTTPStatus.INTERNAL_SERVER_ERROR, "backup_failed",
+                               f"Säkerhetskopian före {reason} gick inte att ta: {error}") from error
+
     def reset_operational_data(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._no_simulation()
         self._require_admin(client)
@@ -4396,6 +4484,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 # decided to restart.
                 self.server.request_restart()
                 self._send_json(HTTPStatus.ACCEPTED, response)
+                return
+            if path == "/v1/server/meet-reset":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.reset_meet(client, payload))
                 return
             if path == "/v1/server/operational-reset":
                 client = self._authenticated_client()

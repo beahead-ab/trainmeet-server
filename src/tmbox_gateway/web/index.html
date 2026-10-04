@@ -338,7 +338,7 @@
 
           <section id="drift-clock" class="kr-panel kr-clockrow" aria-label="Träffklockan">
             <div class="kr-clock-main">
-              <span id="overview-clock" class="kr-clock-time kr-mono">--:--</span>
+              <span id="overview-clock" class="kr-clock-time kr-num">--:--</span>
               <div class="kr-clock-state">
                 <span id="clock-state" class="kr-pill">Läser klockan …</span>
                 <span class="kr-meta">
@@ -762,7 +762,7 @@
                       <option value="168">7 dygn</option>
                     </select>
                     <span class="kr-m">en ny kod gäller nya klienter – de som redan är anslutna fortsätter</span></div>
-                  <div class="kr-kv"><label class="kr-k" for="web-client-ttl">Städning</label><span>Virtuella TMBoxar utan station tas bort efter</span><input id="web-client-ttl" class="kr-field mono kr-w-xs" type="number" min="5" max="240" step="5" value="30" required data-change-label="Städning"><span>minuter</span><span class="kr-m">tilldelade och fysiska boxar berörs aldrig</span></div>
+                  <div class="kr-kv"><label class="kr-k" for="web-client-ttl">Städning</label><span>Virtuella TMBoxar utan station tas bort efter</span><input id="web-client-ttl" class="kr-field kr-num kr-w-xs" type="number" min="5" max="240" step="5" value="30" required data-change-label="Städning"><span>minuter</span><span class="kr-m">tilldelade och fysiska boxar berörs aldrig</span></div>
                 </div>
                 <p id="connection-code-message" class="form-message" role="status"></p>
                 <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
@@ -850,6 +850,7 @@
               <div id="danger-banner" class="kr-state danger"><span class="kr-dot"></span><span id="danger-banner-text" class="kr-state__text">Inget här bör göras under en pågående träff.</span></div>
               <section id="server-system-settings" class="kr-panel kr-danger-panel" aria-label="Åtgärder">
                 <div class="kr-rows">
+                  <div class="kr-rowact"><span class="kr-k">Nollställ träffen</span><div class="kr-what"><span>Börjar om träffen med samma plan: klockan går tillbaka till starttiden och all trafik tas bort</span><span class="kr-m">Cloud-kopplingen, enheterna och användarna står kvar. En säkerhetskopia tas först.</span></div><button id="meet-reset-open" type="button" class="kr-btn sm danger" data-open-modal="meet-reset-modal">Nollställ…</button></div>
                   <div class="kr-rowact"><span class="kr-k">Återställ från säkerhetskopia</span><div class="kr-what"><span>Lägger tillbaka databasen som den var före en tidigare uppdatering</span><span class="kr-m">En kopia tas automatiskt före varje programuppdatering.</span><p id="restore-last-farozon" class="form-message" role="status"></p></div><button type="button" class="kr-btn sm danger" data-open-modal="restore-modal">Återställ…</button></div>
                   <div class="kr-rowact"><span class="kr-k">Nollställ träffdata</span><div class="kr-what"><span id="reset-what">Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och den aktiva webbinloggningen behålls.</span></div><button id="reset-mode-summary" type="button" class="kr-btn sm danger" data-open-modal="reset-modal">Nollställ…</button></div>
                 </div>
@@ -925,6 +926,17 @@
               <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary"><tm-text data-tm-text="Bjud in">Bjud in</tm-text></button></div>
 </form>
 </dialog>
+<dialog id="meet-reset-modal" class="admin-modal" aria-label="Nollställ träffen"><div class="reset-body">
+                <h3>Börja om träffen från början</h3>
+                <p>Klockan ställs på planens starttid och står still. Klareringar, linjebesked, tågens lägen, TKL:s anteckningar och automatikens tider tas bort. En box mitt i en inmatning börjar om.</p>
+                <p>Planen, Cloud-kopplingen, enheterna och deras stationer, användarna och klockans inställningar står kvar. En säkerhetskopia tas först och kan läggas tillbaka med Återställ från säkerhetskopia.</p>
+                <label for="meet-reset-confirmation">Skriv <b id="meet-reset-name">–</b> för att bekräfta</label>
+                <div class="factory-reset-row">
+                  <input id="meet-reset-confirmation" autocomplete="off" placeholder="Träffens namn">
+                </div>
+                <p id="meet-reset-message" class="form-message" role="status"></p>
+              </div>
+            <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button id="meet-reset-start" class="danger-action" type="button" disabled>Nollställ träffen</button></div></dialog>
 <dialog id="restore-modal" class="admin-modal" aria-label="Återställ från säkerhetskopia"><div class="reset-body">
                 <h3><tm-text data-tm-text="Ta tillbaka en tidigare version av servern">Ta tillbaka en tidigare version av servern</tm-text></h3>
                 <p><tm-text data-tm-text="En kopia tas automatiskt före varje programuppdatering. Att återställa byter ut ">En kopia tas automatiskt före varje programuppdatering. Att återställa byter ut </tm-text><b><tm-text data-tm-text="hela">hela</tm-text></b><tm-text data-tm-text=" serverns databas — träff, tidtabell, användare och parkopplade enheter blir de som fanns när kopian togs."> serverns databas — träff, tidtabell, användare och parkopplade enheter blir de som fanns när kopian togs.</tm-text></p>

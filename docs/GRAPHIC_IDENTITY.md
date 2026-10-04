@@ -53,7 +53,8 @@ principerna nedan.
   `app.js`.
 - Det som sällan behövs eller kräver ett eget beslut ligger kvar i dialog:
   bjud in och redigera användare, byt träff (Cloud-koppling), återställa från
-  säkerhetskopia och nollställa träffdata (med skriven bekräftelse), klockkälla
+  säkerhetskopia, nollställa träffen och nollställa träffdata (med skriven
+  bekräftelse), klockkälla
   och klockstyrning. Farozon visar bara vad som händer och öppnar dialogen.
 - Det som designen visade men servern inte kan göra (automatisk uppdatering
   av programvaran, loggvy, separat start/stopp-konto, serverns hårdvara,

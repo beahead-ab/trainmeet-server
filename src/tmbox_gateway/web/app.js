@@ -808,6 +808,7 @@ document.querySelector("#workspace-home").addEventListener("click", (event) => {
 });
 bindUsersSection();
 bindRestore();
+bindMeetReset();
 
 // Native dialog supplies focus trapping; every editor shares cancellation,
 // dirty-state protection and focus restoration. Background refresh never
@@ -1312,6 +1313,8 @@ async function refreshBackups() {
     restore.overwrites = payload.overwrites || "";
     restoreEl("overwrites").textContent = restore.overwrites || "–";
     restoreEl("confirmation").placeholder = restore.overwrites || "Namnet på det som skrivs över";
+    document.querySelector("#meet-reset-name").textContent = restore.overwrites || "–";
+    updateMeetResetButton();
     renderBackups(payload.backups || []);
     renderLastRestore(payload.last_restore || null);
     const latest = (payload.backups || []).map((item) => item.taken_at).filter(Boolean).sort().at(-1);
@@ -1369,6 +1372,49 @@ function bindRestore() {
     } finally {
       endModalAction(dialog);
       updateRestoreButton();
+    }
+  });
+}
+
+// Nollställ träffen: samma plan från början, utan omstart. Bekräftelsen är
+// träffens namn, samma som servern jämför med (/v1/server/backups ger det).
+function updateMeetResetButton() {
+  const typed = document.querySelector("#meet-reset-confirmation").value.trim().toLocaleLowerCase("sv-SE");
+  const expected = restore.overwrites.trim().toLocaleLowerCase("sv-SE");
+  document.querySelector("#meet-reset-start").disabled = !state.serverContext?.selected_meet || !expected || typed !== expected;
+}
+
+function bindMeetReset() {
+  const confirmation = document.querySelector("#meet-reset-confirmation");
+  const start = document.querySelector("#meet-reset-start");
+  const message = document.querySelector("#meet-reset-message");
+  confirmation.addEventListener("input", updateMeetResetButton);
+  confirmation.addEventListener("change", updateMeetResetButton);
+  start.addEventListener("click", async () => {
+    const dialog = document.querySelector("#meet-reset-modal");
+    if (dialog.dataset.busy === "true") return;
+    if (!window.confirm(t("Allt som hänt i {meet} tas bort och klockan går tillbaka till starttiden. Vill du fortsätta?",
+      { meet: restore.overwrites }))) return;
+    if (!beginModalAction(dialog)) return;
+    setMessage(message, "Nollställer träffen …", "notice");
+    try {
+      const response = await authorizedFetch("/v1/server/meet-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: confirmation.value }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message || t("Träffen kunde inte nollställas"));
+      endModalAction(dialog);
+      confirmation.value = "";
+      updateMeetResetButton();
+      finishModal(confirmation, t("Träffen är nollställd. Klockan står på {time}.",
+        { time: String(payload.clock?.time || "").slice(0, 5) }));
+      await Promise.allSettled([refreshServerContext(), refreshRuntime(), refreshLocalClock(), refreshBackups()]);
+    } catch (error) {
+      setMessage(message, error.message, "error");
+    } finally {
+      endModalAction(dialog);
     }
   });
 }

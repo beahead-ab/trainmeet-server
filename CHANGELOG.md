@@ -5,6 +5,33 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Typsnittet från #122 på de sista ställena
+
+Tågnumret i boxens tidtabell (provbänken), tågmärket på ruttkartan i "Tidtabell
+och tågrutter", milstolparna i US-diagrammet och minutfältet för städning står nu
+i Inter med tabellsiffror i stället för JetBrains Mono. Driftklockan hade kvar en
+`kr-mono`-klass som bara inte vann; den är bytt mot `kr-num`.
+
+### Webb-TMBoxen återansluter när telefonen vaknar
+
+En telefon som vaknar laddar ofta om sidan innan Wi-Fi är tillbaka. Webb-TMBoxen
+gav då upp vid första misslyckade kontakten och visade **Starta ny TMBox**, som
+skapade en ny box med ny enhetskod som trafikledningen fick tilldela på nytt.
+Nu är den sparade boxen fortfarande samma box: den används direkt och ansluter
+av sig själv när servern svarar, med samma enhetskod och station. Den frågar
+också genast när sidan syns igen eller nätet kommer tillbaka. Bara när servern
+säger att boxen inte finns längre (borttagen i Klienter) visas "Den här TMBoxen
+finns inte längre på servern" och knappen för en ny.
+
+### Nollställ träffen
+
+Ny rad först i **Farozon**: börja om träffen med samma plan. Klockan går
+tillbaka till planens starttid och står still, och klareringar, linjebesked,
+tågens lägen, TKL:s anteckningar och automatikens tider tas bort. Plan,
+Cloud-koppling, enheter, användare och klockans inställningar står kvar, och
+servern startar inte om. Bekräftas med träffens namn; en säkerhetskopia tas
+först och går att lägga tillbaka. `POST /v1/server/meet-reset`.
+
 ### Konton är namn, e-postadress och lösenord (version 3)
 
 Användarnamnen är borta. Ett konto har ett namn som visas, en e-postadress och

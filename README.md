@@ -570,6 +570,25 @@ Användare, där det står "Saknar e-post – kan inte logga in". En ägare utan
 adress använder återställningskommandot nedan med `--email`. Kontrollera därför
 före uppgraderingen att ägaren har en adress.
 
+### Nollställ träffen
+
+**Inställningar → Farozon → Nollställ träffen** börjar om träffen med samma
+plan, till exempel efter en provkörning kvällen före. Klockan ställs på planens
+starttid och står still, och allt som hänt tas bort: klareringar, linjebesked,
+tågens lägen, TKL:s anteckningar och pass, och automatikens tider. En box mitt i
+en inmatning börjar om.
+
+Planen, Cloud-kopplingen, enheterna och deras stationer, användarna och
+klockans hastighet och utseende står kvar. Servern startar inte om: boxar,
+skärmar och TKL får en ny träffgeneration och hämtar läget på nytt.
+
+Bekräftelsen är träffens namn. En säkerhetskopia tas först och hamnar bland de
+andra, så att nollställningen går att ångra med Återställ från säkerhetskopia;
+går kopian inte att ta görs ingenting. Läget före nollställningen arkiveras och
+granskningsloggen får en rad (`meet.reset`) med vem som gjorde det. Under en
+simulering går det inte. API: `POST /v1/server/meet-reset` med
+`{"confirmation": "<träffens namn>"}`, administratör.
+
 ### Återställ från säkerhetskopia
 
 En kopia av databasen tas automatiskt före varje programuppdatering och sparas i
