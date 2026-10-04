@@ -36,10 +36,10 @@ const root = path.resolve(__dirname, '../..');
     page.on('pageerror', error => errors.push(error.message));
     const shown = (selector) => page.locator(selector).isVisible();
     const shot = async (target, name) => { if (process.env.ACCOUNT_MAIL_SCREENSHOTS) await target.screenshot({ path: path.join(process.env.ACCOUNT_MAIL_SCREENSHOTS, name + '.png'), fullPage: true }); };
-    const login = async (base, username, password) => {
+    const login = async (base, email, password) => {
       await page.goto(base + '/login');
       await page.locator('#login-form').waitFor({ state: 'visible' });
-      await page.locator('#login-username').fill(username);
+      await page.locator('#login-email').fill(email);
       await page.locator('#login-password').fill(password);
       await page.locator('#login-form button[type="submit"]').click();
     };
@@ -47,21 +47,22 @@ const root = path.resolve(__dirname, '../..');
     // 1. Glömt lösenordet? på en kopplad server: koden går till kontots e-post.
     await page.goto(urls.linked + '/login');
     await page.locator('#login-form').waitFor({ state: 'visible' });
-    await page.locator('#login-username').fill('benny');
+    await page.locator('#login-email').fill('benny@example.se');
     await page.locator('#forgot-open').click();
     assert.deepEqual([await shown('#forgot-form'), await shown('#login-form'), await shown('#login-links')], [true, false, false]);
-    assert.equal(await page.locator('#forgot-username').inputValue(), 'benny', 'the name typed for login follows along');
+    assert.equal(await page.locator('#forgot-email').inputValue(), 'benny@example.se', 'the address typed for login follows along');
     await shot(page, 'forgot');
     await page.locator('#forgot-form button.primary').click();
     await page.locator('#redeem-form').waitFor({ state: 'visible' });
-    assert.equal(await page.locator('#redeem-username').inputValue(), 'benny');
+    assert.equal(await page.locator('#redeem-email').inputValue(), 'benny@example.se');
     assert.match(await page.locator('#redeem-message').innerText(), /kod på väg/);
     await shot(page, 'code');
     const [reset] = await waitForMails(1);
     assert.equal(reset.path, '/api/server-mail');
     assert.equal(reset.authorization, 'Bearer kopplingsnyckel-i-provet');
-    assert.deepEqual([reset.body.kind, reset.body.to, reset.body.username, reset.body.server_url],
-      ['password_reset', 'benny@example.se', 'benny', ''], 'no address from the request in a reset mail');
+    assert.deepEqual([reset.body.kind, reset.body.to, reset.body.server_url],
+      ['password_reset', 'benny@example.se', ''], 'no address from the request in a reset mail');
+    assert.equal('username' in reset.body, false, 'the account is the address; no username leaves the server');
     assert.match(reset.body.code, /^[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/);
 
     // 2. Koden och ett nytt lösenord, sedan inloggning med det.
@@ -71,9 +72,9 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#redeem-form button.primary').click();
     await page.locator('#login-form').waitFor({ state: 'visible' });
     assert.match(await page.locator('#login-error').innerText(), /Lösenordet är satt/);
-    await login(urls.linked, 'benny', 'bennys-losenord');
+    await login(urls.linked, 'benny@example.se', 'bennys-losenord');
     await page.locator('#login-error').getByText(/./).waitFor();
-    await login(urls.linked, 'benny', 'bennys-nya-losenord');
+    await login(urls.linked, 'Benny@Example.se', 'bennys-nya-losenord');
     await page.locator('#overview-view').waitFor({ state: 'visible' });
 
     // 3. Ett okänt konto ger samma besked och inget brev.
@@ -82,7 +83,7 @@ const root = path.resolve(__dirname, '../..');
     guest.on('pageerror', error => errors.push(error.message));
     await guest.goto(urls.linked + '/login');
     await guest.locator('#forgot-open').click();
-    await guest.locator('#forgot-username').fill('finns-inte');
+    await guest.locator('#forgot-email').fill('finns-inte@example.se');
     await guest.locator('#forgot-form button.primary').click();
     await guest.locator('#redeem-form').waitFor({ state: 'visible' });
     assert.match(await guest.locator('#redeem-message').innerText(), /kod på väg/);
@@ -92,7 +93,7 @@ const root = path.resolve(__dirname, '../..');
     // 4. Utan koppling säger rutan hur man annars kommer in.
     await guest.goto(urls.offline + '/login');
     await guest.locator('#forgot-open').click();
-    await guest.locator('#forgot-username').fill('benny');
+    await guest.locator('#forgot-email').fill('benny@example.se');
     await guest.locator('#forgot-form button.primary').click();
     await guest.locator('#forgot-message.error').waitFor();
     assert.match(await guest.locator('#forgot-message').innerText(), /inte kopplad till TrainMeet Cloud.*tmbox_gateway\.recover/);
@@ -105,13 +106,13 @@ const root = path.resolve(__dirname, '../..');
     // Ett eget fönster: benny är fortfarande inloggad i det första.
     await page.context().clearCookies();
     await page.setViewportSize({ width: 1280, height: 900 });
-    await login(urls.linked, 'casper', 'ett-langt-losenord');
+    await login(urls.linked, 'casper@example.se', 'ett-langt-losenord');
     await page.locator('#overview-view').waitFor({ state: 'visible' });
     await page.goto(urls.linked + '/installningar#anvandare');
     await page.waitForFunction(() => !document.getElementById('anvandare').hidden);
     await page.locator('#users-rows').getByText('benny@example.se').waitFor();
     await page.locator('#users-invite-open').click();
-    await page.locator('#users-invite-name').fill('lars');
+    await page.locator('#users-invite-name').fill('Lars i Lekby');
     await page.locator('#users-invite-email').fill('Lars@Example.se');
     await shot(page, 'invite');
     await page.locator('#users-invite-form button.primary').click();
@@ -119,13 +120,16 @@ const root = path.resolve(__dirname, '../..');
     const code = (await page.locator('#users-code-value').innerText()).trim();
     assert.match(await page.locator('#users-message').innerText(), /också skickad till lars@example\.se/);
     const invite = (await waitForMails(2))[1];
-    assert.deepEqual([invite.body.kind, invite.body.to, invite.body.username, invite.body.code, invite.body.server_url],
-      ['invite', 'lars@example.se', 'lars', code, urls.linked]);
+    assert.deepEqual([invite.body.kind, invite.body.to, invite.body.code, invite.body.server_url],
+      ['invite', 'lars@example.se', code, urls.linked]);
+    assert.equal('username' in invite.body, false);
+    assert.match(await page.locator('#users-code-for').innerText(), /Lars i Lekby/);
     await page.locator('#users-rows').getByText('lars@example.se').waitFor();
     await shot(page, 'users');
 
     // 6. Adressen går att ändra i Redigera.
-    await page.locator('#users-rows tr').filter({ hasText: 'lars' }).getByRole('button', { name: 'Redigera' }).click();
+    await page.locator('#users-rows tr').filter({ hasText: 'Lars i Lekby' }).getByRole('button', { name: 'Redigera' }).click();
+    assert.equal(await page.locator('#user-edit-display-name').inputValue(), 'Lars i Lekby');
     assert.equal(await page.locator('#user-edit-email').inputValue(), 'lars@example.se');
     await page.locator('#user-edit-email').fill('lars@annan.example');
     await page.locator('#user-edit-form button[type="submit"]').click();

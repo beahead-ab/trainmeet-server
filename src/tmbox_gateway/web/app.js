@@ -320,8 +320,6 @@ const restartButtons = ["#restart-server", "#software-restart"]
   .map((selector) => document.querySelector(selector))
   .filter(Boolean);
 const logoutButton = document.querySelector("#logout");
-const adminAccessForm = document.querySelector("#admin-access-form");
-const adminAccessMessage = document.querySelector("#admin-access-message");
 const serverIdentityForm = document.querySelector("#server-identity-form");
 const serverIdentityMessage = document.querySelector("#server-identity-message");
 const clockControlForm = document.querySelector("#clock-control-form");
@@ -348,7 +346,7 @@ loginForm.addEventListener("submit", async (event) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: document.querySelector("#login-username").value,
+        email: document.querySelector("#login-email").value,
         password: document.querySelector("#login-password").value,
       }),
     });
@@ -388,8 +386,8 @@ function showLoginPane(pane) {
   document.querySelector("#redeem-intro")?.classList.toggle("hidden", pane !== "redeem");
   forgotForm?.classList.toggle("hidden", pane !== "forgot");
   document.querySelector("#forgot-intro")?.classList.toggle("hidden", pane !== "forgot");
-  if (pane === "redeem") document.querySelector("#redeem-username").focus();
-  if (pane === "forgot") document.querySelector("#forgot-username").focus();
+  if (pane === "redeem") document.querySelector("#redeem-email").focus();
+  if (pane === "forgot") document.querySelector("#forgot-email").focus();
 }
 
 function showRedeem(open) {
@@ -399,26 +397,26 @@ function showRedeem(open) {
 document.querySelector("#redeem-open")?.addEventListener("click", () => showRedeem(true));
 document.querySelector("#redeem-cancel")?.addEventListener("click", () => showRedeem(false));
 document.querySelector("#forgot-open")?.addEventListener("click", () => {
-  document.querySelector("#forgot-username").value = document.querySelector("#login-username").value;
+  document.querySelector("#forgot-email").value = document.querySelector("#login-email").value;
   setMessage(document.querySelector("#forgot-message"), "");
   showLoginPane("forgot");
 });
 document.querySelector("#forgot-cancel")?.addEventListener("click", () => showLoginPane("login"));
 
 // Svaret säger aldrig om kontot finns, bara om servern kan skicka e-post.
-// Kan den det går rutan vidare till koden med användarnamnet ifyllt.
+// Kan den det går rutan vidare till koden med adressen ifylld.
 forgotForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = document.querySelector("#forgot-message");
   setMessage(message, "");
   const button = forgotForm.querySelector("button.primary");
   button.disabled = true;
-  const username = document.querySelector("#forgot-username").value.trim();
+  const email = document.querySelector("#forgot-email").value.trim();
   try {
     const response = await fetch("/v1/admin/password-reset", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, language: document.documentElement.lang === "en" ? "en" : "sv" }),
+      body: JSON.stringify({ email, language: document.documentElement.lang === "en" ? "en" : "sv" }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.message || "Det gick inte att begära en kod");
@@ -426,11 +424,11 @@ forgotForm?.addEventListener("submit", async (event) => {
       setMessage(message, "Servern är inte kopplad till TrainMeet Cloud och kan inte skicka e-post. Be en ägare om en ny kod, eller kör tmbox_gateway.recover på serverdatorn.", "error");
       return;
     }
-    document.querySelector("#redeem-username").value = username;
+    document.querySelector("#redeem-email").value = email;
     showLoginPane("redeem");
     redeemCodeBoxes.reset();
     document.querySelector("#redeem-code-boxes input")?.focus();
-    setMessage(document.querySelector("#redeem-message"), "Har kontot en e-postadress är en kod på väg. Ange den här med ett nytt lösenord.", "success");
+    setMessage(document.querySelector("#redeem-message"), "Finns det ett konto med adressen är en kod på väg. Ange den här med ett nytt lösenord.", "success");
   } catch (error) {
     setMessage(message, error.message, "error");
   } finally {
@@ -449,7 +447,7 @@ redeemForm?.addEventListener("submit", async (event) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: document.querySelector("#redeem-username").value,
+        email: document.querySelector("#redeem-email").value,
         code: document.querySelector("#redeem-code").value,
         password: document.querySelector("#redeem-password").value,
       }),
@@ -459,9 +457,9 @@ redeemForm?.addEventListener("submit", async (event) => {
     document.querySelector("#redeem-password").value = "";
     redeemCodeBoxes.reset();
     showRedeem(false);
-    // The username field is left alone here too: the browser's own password
+    // The address field is left alone here too: the browser's own password
     // manager may offer the account, and that is the user's choice.
-    document.querySelector("#login-username").focus();
+    document.querySelector("#login-email").focus();
     setMessage(loginError, "Lösenordet är satt. Logga in.", "success");
   } catch (error) {
     setMessage(message, error.message, "error");
@@ -487,7 +485,8 @@ setupAdminForm.addEventListener("submit", async (event) => {
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: document.querySelector("#setup-username").value,
+        display_name: document.querySelector("#setup-display-name").value,
+        email: document.querySelector("#setup-email").value,
         password,
       }),
     });
@@ -981,47 +980,6 @@ logoutButton.addEventListener("click", async () => {
   setConnection("offline", t("Ej ansluten"));
   appView.classList.add("hidden");
   await bootstrap();
-});
-
-adminAccessForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  setMessage(adminAccessMessage, "");
-  const password = document.querySelector("#admin-password").value;
-  const confirmation = document.querySelector("#admin-password-confirm").value;
-  if (password !== confirmation) {
-    setMessage(adminAccessMessage, "Lösenorden är inte likadana.", "error");
-    return;
-  }
-  if (!beginModalAction(adminAccessForm)) return;
-  try {
-    const response = await authorizedFetch("/v1/admin/access", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: document.querySelector("#admin-username").value,
-        password,
-      }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message || "Inloggningen kunde inte sparas");
-    document.querySelector("#admin-password").value = "";
-    document.querySelector("#admin-password-confirm").value = "";
-    setMessage(
-      adminAccessMessage,
-      payload.password_configured
-        ? "Extern admininloggning är klar."
-        : "Användarnamnet är sparat. Välj även ett lösenord för extern åtkomst.",
-      payload.password_configured ? "success" : "notice",
-    );
-    await refreshAuthStatus();
-    logoutButton.classList.toggle("hidden", !state.authStatus?.authenticated);
-    await refreshAdminAccess();
-    finishModal(adminAccessForm);
-  } catch (error) {
-    setMessage(adminAccessMessage, error.message, "error");
-  } finally {
-    endModalAction(adminAccessForm);
-  }
 });
 
 serverIdentityForm.addEventListener("submit", async (event) => {
@@ -1739,7 +1697,6 @@ async function openApplication() {
     }
     await Promise.all([
       refreshInfo(),
-      refreshAdminAccess(),
       refreshDevices(),
       refreshRuntime(),
       refreshLocalClock(),
@@ -1817,7 +1774,7 @@ function scheduleAdminRefresh() {
   clearTimeout(state.adminTimer);
   state.adminTimer = setTimeout(async () => {
     if (!state.authStatus?.authenticated) return;
-    await Promise.allSettled([refreshServerContextSerially(), refreshInfo(), refreshDevicesSerially(), refreshRuntimeSerially(), refreshAdminAccess(), refreshLocalClockSerially(), refreshAutomaticSerially()]);
+    await Promise.allSettled([refreshServerContextSerially(), refreshInfo(), refreshDevicesSerially(), refreshRuntimeSerially(), refreshLocalClockSerially(), refreshAutomaticSerially()]);
     scheduleAdminRefresh();
   }, globalThis.TrainMeetLive?.connected ? ADMIN_REFRESH_LIVE_MS : ADMIN_REFRESH_MS);
 }
@@ -1840,29 +1797,6 @@ async function refreshInfo() {
   updateRuntimeNavigation(Boolean(state.serverContext?.selected_meet));
   updateRestartButton(Boolean(info.restart_required));
 }
-
-async function refreshAdminAccess() {
-  const response = await authorizedFetch("/v1/admin/access");
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || "Åtkomstinställningen kunde inte läsas");
-  if (!adminAccessForm.closest("dialog").open) document.querySelector("#admin-username").value = payload.username || "";
-
-  // Chippet svarade förr på "hur är jag inne", och svaret var alltid samma
-  // sak som var man stod. Nu kräver servern inloggning överallt, så frågan
-  // som återstår är var den här webbläsaren står - det avgör om
-  // fabriksåterställningen är hela servern eller bara träffdata.
-  const atTheMachine = state.authStatus?.at_the_machine === true;
-  const badge = document.querySelector("#access-mode");
-  badge.textContent = atTheMachine ? t("Vid servern") : t("Över nätet");
-  badge.classList.toggle("active", !atTheMachine);
-
-  const passwordState = document.querySelector("#access-password-state");
-  passwordState.textContent = payload.password_configured
-    ? "Ett lösenord är satt, så andra enheter kan logga in."
-    : "Inget lösenord är satt än, så inloggning utifrån är avstängd.";
-  passwordState.classList.toggle("is-missing", !payload.password_configured);
-}
-
 
 async function restartServer() {
   if (state.restarting || !state.restartRequired) return;
@@ -2857,7 +2791,7 @@ async function refreshAuthStatus() {
   // halvfärdig installation: efter en återställning stod "Tillbaka till
   // träffen" kvar över inloggningsrutan. Uppmätt i en riktig omstart.
   document.body.dataset.signedIn = state.authStatus?.authenticated ? "yes" : "no";
-  // The username field is left alone. The application never fills it in -
+  // The address field is left alone. The application never fills it in -
   // the browser's own password manager may still offer a saved login, which
   // is the user's choice rather than ours.
   configureResetMode();
@@ -4838,15 +4772,21 @@ function renderUsers() {
 
     const name = document.createElement("td");
     const strong = document.createElement("b");
-    strong.textContent = user.username;
+    strong.textContent = user.display_name;
     name.append(strong);
+    const email = document.createElement("div");
+    email.className = "kr-m users-email";
     if (user.email) {
-      const email = document.createElement("div");
-      email.className = "kr-m users-email";
       email.dataset.noI18n = "";
       email.textContent = user.email;
-      name.append(email);
+    } else {
+      // Kontot är adressen. Ett konto utan adress, till exempel ett från före
+      // version 3, kommer inte in förrän ägaren ger det en under Redigera.
+      email.classList.add("users-no-email");
+      email.dataset.tmText = "Saknar e-post – kan inte logga in";
+      email.textContent = t("Saknar e-post – kan inte logga in");
     }
+    name.append(email);
     tr.append(name);
 
     const role = document.createElement("td");
@@ -4888,7 +4828,7 @@ function usersButton(label, onClick, kind = "") {
 function showSetupCode(user) {
   const box = usersEl("invite-code");
   if (!box || !user?.setup_code) return;
-  usersEl("code-for").textContent = user.username;
+  usersEl("code-for").textContent = user.display_name;
   usersEl("code-value").textContent = user.setup_code;
   box.classList.remove("hidden");
 }
@@ -4959,7 +4899,7 @@ async function inviteUser(event) {
   const email = usersEl("invite-email").value.trim();
   const result = await usersPost(
     "/v1/admin/users",
-    mailBody({ username: name, role: owner ? "owner" : "admin", email }),
+    mailBody({ display_name: name, role: owner ? "owner" : "admin", email }),
     (payload) => {
       usersEl("invite-name").value = "";
       usersEl("invite-email").value = "";
@@ -4972,28 +4912,29 @@ async function inviteUser(event) {
 
 async function reissueUserCode(user) {
   const result = await usersPost("/v1/admin/users/reissue", mailBody({ user_id: user.user_id }), (payload) => {
-    setMessage(usersEl("message"), ...mailReceipt(user.username, payload.mail));
+    setMessage(usersEl("message"), ...mailReceipt(user.display_name, payload.mail));
   });
   if (result) { finishModal(document.querySelector("#user-edit-form")); showSetupCode(result.user); }
 }
 
 async function setUserRole(user, role) {
   await usersPost("/v1/admin/users/update", { user_id: user.user_id, role }, () => {
-    setMessage(usersEl("message"), `${user.username} är nu ${role === "owner" ? "ägare" : "administratör"}`, "success");
+    setMessage(usersEl("message"), `${user.display_name} är nu ${role === "owner" ? "ägare" : "administratör"}`, "success");
   });
 }
 
 async function removeUser(user) {
   if (!document.querySelector("#user-delete-confirm").checked) return;
   const result = await usersPost("/v1/admin/users/delete", { user_id: user.user_id }, () => {
-    setMessage(usersEl("message"), `${user.username} är borttagen`, "success");
+    setMessage(usersEl("message"), `${user.display_name} är borttagen`, "success");
   });
-  if (result) finishModal(document.querySelector("#user-edit-form"), `${user.username} är borttagen`);
+  if (result) finishModal(document.querySelector("#user-edit-form"), `${user.display_name} är borttagen`);
 }
 
 function editUser(user) {
   users.editing = user;
-  document.querySelector("#user-edit-name").textContent = user.username;
+  document.querySelector("#user-edit-name").textContent = user.email || t("Saknar e-post – kan inte logga in");
+  document.querySelector("#user-edit-display-name").value = user.display_name || "";
   document.querySelector("#user-edit-role").value = user.role;
   document.querySelector("#user-edit-email").value = user.email || "";
   document.querySelector("#user-edit-password").value = "";
@@ -5017,6 +4958,8 @@ function bindUsersSection() {
     const body = { user_id: users.editing.user_id };
     const role = document.querySelector("#user-edit-role").value;
     if (role !== users.editing.role) body.role = role;
+    const displayName = document.querySelector("#user-edit-display-name").value.trim();
+    if (displayName !== (users.editing.display_name || "")) body.display_name = displayName;
     const email = document.querySelector("#user-edit-email").value.trim();
     if (email !== (users.editing.email || "")) body.email = email;
     if (password) body.password = password;

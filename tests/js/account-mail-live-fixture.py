@@ -62,9 +62,9 @@ with tempfile.TemporaryDirectory(prefix="trainmeet-account-mail-") as directory:
             identities = IdentityStore(Path(directory) / f"{name}-identity.db")
             runtime = SQLiteRuntimeStore(Path(directory) / f"{name}-runtime.db")
             closers += [identities.close, runtime.close]
-            identities.configure_admin_access("casper", "ett-langt-losenord")
-            invited = identities.invite_admin_user("benny", "admin", "benny@example.se")
-            identities.redeem_admin_setup("benny", str(invited["setup_code"]), "bennys-losenord")
+            identities.create_first_owner("Casper", "casper@example.se", "ett-langt-losenord")
+            invited = identities.invite_admin_user("Benny", "benny@example.se", "admin")
+            identities.redeem_admin_setup("benny@example.se", str(invited["setup_code"]), "bennys-losenord")
             runtime.save_server_name(f"Prov {name}")
             runtime.complete_installation()
             if name == "linked":

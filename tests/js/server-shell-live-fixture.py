@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix="trainmeet-browser-smoke-") as directory
             if region == "us":
                 fixture.offered = us_package()
             fixture.connect()
-            fixture.identities.configure_admin_access("smoke-admin", "isolated-browser-test")
+            fixture.identities.create_first_owner("Smoke", "smoke-admin@example.se", "isolated-browser-test")
             fixture.runtime.save_server_name("Isolated browser " + region.upper())
             fixture.runtime.complete_installation()
             if region == "eu":

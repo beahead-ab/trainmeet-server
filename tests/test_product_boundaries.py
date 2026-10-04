@@ -134,7 +134,8 @@ class MailIsTheOnlyWriteTests(unittest.TestCase):
     def test_the_letter_has_a_fixed_set_of_fields(self):
         from tmbox_gateway.cloud_mail import MAIL_FIELDS
 
-        self.assertEqual({"kind", "to", "username", "code", "server_url", "language"}, set(MAIL_FIELDS))
+        # Inget användarnamn: kontot är mottagarens adress.
+        self.assertEqual({"kind", "to", "code", "server_url", "language"}, set(MAIL_FIELDS))
         text = (SOURCE / "cloud_mail.py").read_text(encoding="utf-8")
         self.assertIn("if key in MAIL_FIELDS", text)
         self.assertIn('"/api/server-mail"', text.replace("{path}", ""))

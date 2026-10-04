@@ -43,13 +43,13 @@ class AdminUserTests(unittest.TestCase):
         self.addCleanup(self._dir.cleanup)
         self.identities = IdentityStore(Path(self._dir.name) / "identity.db")
         self.addCleanup(self.identities.close)
-        self.identities.configure_admin_access("casper", "ett-langt-losenord")
+        self.identities.create_first_owner("Casper", "casper@example.se", "ett-langt-losenord")
 
     def _invite(self, username: str, password: str, role: str = "admin") -> dict:
         """Bjud in och lös in koden — det är så ett konto blir användbart."""
 
-        invited = self.identities.invite_admin_user(username, role)
-        self.identities.redeem_admin_setup(username, str(invited["setup_code"]), password)
+        invited = self.identities.invite_admin_user(username.capitalize(), f"{username.lower()}@example.se", role)
+        self.identities.redeem_admin_setup(f"{username.lower()}@example.se", str(invited["setup_code"]), password)
         return invited
 
     def _session_count(self) -> int:
@@ -64,18 +64,21 @@ class AdminUserTests(unittest.TestCase):
 
     # --------------------------------------------------------- migrering
 
-    def test_the_existing_administrator_becomes_the_first_owner(self) -> None:
-        """Det farligaste i hela ändringen: ingen får låsas ute."""
-
+    def test_the_first_owner_survives_reopening(self) -> None:
         store = IdentityStore(Path(self._dir.name) / "identity.db")
         self.addCleanup(store.close)
 
         owners = [user for user in store.list_admin_users() if user["role"] == "owner"]
-        self.assertEqual(1, len(owners))
-        self.assertEqual("casper", owners[0]["username"])
+        self.assertEqual(["casper@example.se"], [owner["email"] for owner in owners])
+        self.assertEqual("Casper", owners[0]["display_name"])
 
-    def test_the_adopted_owner_can_still_sign_in(self) -> None:
-        self.assertIsNotNone(self.identities.create_admin_session("casper", "ett-langt-losenord"))
+    def test_the_owner_signs_in_with_the_address(self) -> None:
+        self.assertIsNotNone(self.identities.create_admin_session("Casper@Example.se", "ett-langt-losenord"))
+        self.assertIsNone(self.identities.create_admin_session("Casper", "ett-langt-losenord"))
+
+    def test_a_second_first_owner_is_refused(self) -> None:
+        with self.assertRaises(AdminAccessError):
+            self.identities.create_first_owner("Någon", "nagon@example.se", "ett-annat-losenord")
 
     def test_an_unfinished_installation_gets_no_owner(self) -> None:
         """Utan lösenord finns ingen att adoptera - och ingen att låsa ute."""
@@ -95,7 +98,7 @@ class AdminUserTests(unittest.TestCase):
         som bjuder in står ändå i samma klubblokal.
         """
 
-        invited = self.identities.invite_admin_user("lars")
+        invited = self.identities.invite_admin_user("Lars", "lars@example.se")
 
         self.assertEqual("admin", invited["role"])
         self.assertTrue(invited["setup_code"], "en kod att lämna över")
@@ -104,65 +107,65 @@ class AdminUserTests(unittest.TestCase):
         self.assertEqual(2, len(self.identities.list_admin_users()))
 
     def test_an_invited_user_cannot_sign_in_until_the_code_is_redeemed(self) -> None:
-        self.identities.invite_admin_user("lars")
+        self.identities.invite_admin_user("Lars", "lars@example.se")
 
-        self.assertIsNone(self.identities.create_admin_session("lars", "vilket-losenord-som-helst"))
+        self.assertIsNone(self.identities.create_admin_session("lars@example.se", "vilket-losenord-som-helst"))
 
     def test_redeeming_the_code_lets_the_invited_choose_their_own_password(self) -> None:
-        invited = self.identities.invite_admin_user("lars")
+        invited = self.identities.invite_admin_user("Lars", "lars@example.se")
 
-        self.identities.redeem_admin_setup("lars", str(invited["setup_code"]), "mitt-eget-losenord")
+        self.identities.redeem_admin_setup("lars@example.se", str(invited["setup_code"]), "mitt-eget-losenord")
 
-        self.assertIsNotNone(self.identities.create_admin_session("lars", "mitt-eget-losenord"))
-        lars = next(u for u in self.identities.list_admin_users() if u["username"] == "lars")
+        self.assertIsNotNone(self.identities.create_admin_session("lars@example.se", "mitt-eget-losenord"))
+        lars = next(u for u in self.identities.list_admin_users() if u["email"] == "lars@example.se")
         self.assertFalse(lars["invitation_pending"], "koden ska vara förbrukad")
 
     def test_a_code_works_only_once(self) -> None:
-        invited = self.identities.invite_admin_user("lars")
-        self.identities.redeem_admin_setup("lars", str(invited["setup_code"]), "mitt-eget-losenord")
+        invited = self.identities.invite_admin_user("Lars", "lars@example.se")
+        self.identities.redeem_admin_setup("lars@example.se", str(invited["setup_code"]), "mitt-eget-losenord")
 
         with self.assertRaises(AdminAccessError):
-            self.identities.redeem_admin_setup("lars", str(invited["setup_code"]), "ett-annat-forsok")
+            self.identities.redeem_admin_setup("lars@example.se", str(invited["setup_code"]), "ett-annat-forsok")
 
     def test_a_wrong_code_is_refused(self) -> None:
-        self.identities.invite_admin_user("lars")
+        self.identities.invite_admin_user("Lars", "lars@example.se")
 
         with self.assertRaises(AdminAccessError):
-            self.identities.redeem_admin_setup("lars", "FEL-KOD1", "mitt-eget-losenord")
+            self.identities.redeem_admin_setup("lars@example.se", "FEL-KOD1", "mitt-eget-losenord")
 
     def test_an_expired_code_is_refused_and_says_what_to_do(self) -> None:
         from datetime import datetime, timedelta, timezone
 
-        invited = self.identities.invite_admin_user("lars")
+        invited = self.identities.invite_admin_user("Lars", "lars@example.se")
         past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         self.identities._connection.execute(
-            "UPDATE admin_users SET setup_expires_at = ? WHERE username = 'lars'", (past,)
+            "UPDATE admin_users SET setup_expires_at = ? WHERE email = 'lars@example.se'", (past,)
         )
 
         with self.assertRaises(AdminAccessError) as caught:
-            self.identities.redeem_admin_setup("lars", str(invited["setup_code"]), "mitt-eget-losenord")
+            self.identities.redeem_admin_setup("lars@example.se", str(invited["setup_code"]), "mitt-eget-losenord")
 
         self.assertIn("ny", str(caught.exception).lower())
 
     def test_a_new_code_can_be_issued(self) -> None:
         """Koden kommer bort, eller går ut. Då ska det inte krävas ett nytt konto."""
 
-        invited = self.identities.invite_admin_user("lars")
+        invited = self.identities.invite_admin_user("Lars", "lars@example.se")
         again = self.identities.reissue_admin_setup(str(invited["user_id"]))
 
         self.assertNotEqual(invited["setup_code"], again["setup_code"])
-        self.identities.redeem_admin_setup("lars", str(again["setup_code"]), "mitt-eget-losenord")
-        self.assertIsNotNone(self.identities.create_admin_session("lars", "mitt-eget-losenord"))
+        self.identities.redeem_admin_setup("lars@example.se", str(again["setup_code"]), "mitt-eget-losenord")
+        self.assertIsNotNone(self.identities.create_admin_session("lars@example.se", "mitt-eget-losenord"))
 
         with self.assertRaises(AdminAccessError):
-            self.identities.redeem_admin_setup("lars", str(invited["setup_code"]), "gamla-koden")
+            self.identities.redeem_admin_setup("lars@example.se", str(invited["setup_code"]), "gamla-koden")
 
     def test_an_added_user_can_sign_in(self) -> None:
         self._invite("lars", "ett-annat-losenord")
 
-        self.assertIsNotNone(self.identities.create_admin_session("lars", "ett-annat-losenord"))
+        self.assertIsNotNone(self.identities.create_admin_session("lars@example.se", "ett-annat-losenord"))
 
-    def test_a_username_is_not_case_sensitive_and_cannot_be_taken_twice(self) -> None:
+    def test_an_address_is_not_case_sensitive_and_cannot_be_taken_twice(self) -> None:
         self._invite("lars", "ett-annat-losenord")
 
         with self.assertRaises(AdminAccessError):
@@ -193,24 +196,24 @@ class AdminUserTests(unittest.TestCase):
         self.identities.set_admin_user_role(str(self._owner()["user_id"]), "admin")
 
         owners = [user for user in self.identities.list_admin_users() if user["role"] == "owner"]
-        self.assertEqual(["lars"], [user["username"] for user in owners])
+        self.assertEqual(["Lars"], [user["display_name"] for user in owners])
 
     def test_an_administrator_can_be_removed(self) -> None:
         lars = self._invite("lars", "ett-annat-losenord")
 
         self.identities.delete_admin_user(str(lars["user_id"]))
 
-        self.assertEqual(["casper"], [u["username"] for u in self.identities.list_admin_users()])
+        self.assertEqual(["Casper"], [u["display_name"] for u in self.identities.list_admin_users()])
 
     # -------------------------------------------------------- sessionerna
 
     def test_a_session_knows_who_it_belongs_to(self) -> None:
         self._invite("lars", "ett-annat-losenord")
-        token = self.identities.create_admin_session("lars", "ett-annat-losenord")
+        token = self.identities.create_admin_session("lars@example.se", "ett-annat-losenord")
 
         user = self.identities.admin_session_user(str(token))
 
-        self.assertEqual("lars", user["username"])
+        self.assertEqual("Lars", user["display_name"])
         self.assertEqual("admin", user["role"])
 
     def test_removing_someone_ends_their_session(self) -> None:
@@ -222,7 +225,7 @@ class AdminUserTests(unittest.TestCase):
         """
 
         lars = self._invite("lars", "ett-annat-losenord")
-        token = self.identities.create_admin_session("lars", "ett-annat-losenord")
+        token = self.identities.create_admin_session("lars@example.se", "ett-annat-losenord")
 
         self.identities.delete_admin_user(str(lars["user_id"]))
 
@@ -231,18 +234,18 @@ class AdminUserTests(unittest.TestCase):
 
     def test_a_new_password_ends_the_old_sessions(self) -> None:
         lars = self._invite("lars", "ett-annat-losenord")
-        token = self.identities.create_admin_session("lars", "ett-annat-losenord")
+        token = self.identities.create_admin_session("lars@example.se", "ett-annat-losenord")
 
         self.identities.set_admin_user_password(str(lars["user_id"]), "ett-nytt-losenord")
 
         self.assertIsNone(self.identities.admin_session_user(str(token)))
-        self.assertIsNotNone(self.identities.create_admin_session("lars", "ett-nytt-losenord"))
+        self.assertIsNotNone(self.identities.create_admin_session("lars@example.se", "ett-nytt-losenord"))
 
     def test_a_wrong_password_never_signs_anyone_in(self) -> None:
         self._invite("lars", "ett-annat-losenord")
 
-        self.assertIsNone(self.identities.create_admin_session("lars", "fel-losenord"))
-        self.assertIsNone(self.identities.create_admin_session("lars", "ett-langt-losenord"))
+        self.assertIsNone(self.identities.create_admin_session("lars@example.se", "fel-losenord"))
+        self.assertIsNone(self.identities.create_admin_session("lars@example.se", "ett-langt-losenord"))
 
 
 if __name__ == "__main__":
@@ -263,14 +266,14 @@ class RoleEnforcementTests(unittest.TestCase):
         self.addCleanup(self._dir.cleanup)
         self.identities = IdentityStore(Path(self._dir.name) / "identity.db")
         self.addCleanup(self.identities.close)
-        self.identities.configure_admin_access("casper", "ett-langt-losenord")
+        self.identities.create_first_owner("Casper", "casper@example.se", "ett-langt-losenord")
         self.lars = self._invite("lars", "ett-annat-losenord")
 
     def _invite(self, username: str, password: str, role: str = "admin") -> dict:
         """Bjud in och lös in koden — det är så ett konto blir användbart."""
 
-        invited = self.identities.invite_admin_user(username, role)
-        self.identities.redeem_admin_setup(username, str(invited["setup_code"]), password)
+        invited = self.identities.invite_admin_user(username.capitalize(), f"{username.lower()}@example.se", role)
+        self.identities.redeem_admin_setup(f"{username.lower()}@example.se", str(invited["setup_code"]), password)
         return invited
 
     def _client(self, username: str) -> object:
@@ -278,7 +281,7 @@ class RoleEnforcementTests(unittest.TestCase):
 
         from tmbox_gateway.identity import DeviceKind, PairedClient
 
-        user = next(u for u in self.identities.list_admin_users() if u["username"] == username)
+        user = next(u for u in self.identities.list_admin_users() if u["email"] == f"{username}@example.se")
         return PairedClient(
             client_id="local-web-admin", display_name=username,
             kind=DeviceKind.WEB_ADMIN, panel_ids=(),
@@ -290,13 +293,13 @@ class RoleEnforcementTests(unittest.TestCase):
         self.assertEqual("owner", self._client("casper").admin_role)
 
     def test_a_session_gives_the_role_the_user_has(self) -> None:
-        token = self.identities.create_admin_session("lars", "ett-annat-losenord")
+        token = self.identities.create_admin_session("lars@example.se", "ett-annat-losenord")
 
         self.assertEqual("admin", self.identities.admin_session_user(str(token))["role"])
 
     def test_a_promoted_user_gets_the_owner_role_on_the_next_session(self) -> None:
         self.identities.set_admin_user_role(str(self.lars["user_id"]), "owner")
-        token = self.identities.create_admin_session("lars", "ett-annat-losenord")
+        token = self.identities.create_admin_session("lars@example.se", "ett-annat-losenord")
 
         self.assertEqual("owner", self.identities.admin_session_user(str(token))["role"])
 
@@ -330,7 +333,7 @@ class OwnerGateTests(unittest.TestCase):
         self.addCleanup(self._dir.cleanup)
         self.identities = IdentityStore(Path(self._dir.name) / "identity.db")
         self.addCleanup(self.identities.close)
-        self.identities.configure_admin_access("casper", "ett-langt-losenord")
+        self.identities.create_first_owner("Casper", "casper@example.se", "ett-langt-losenord")
         self.lars = self._invite("lars", "ett-annat-losenord")
 
         engine = TrafficEngine(sample_session(DispatchMode.CLEARANCE))
@@ -344,12 +347,12 @@ class OwnerGateTests(unittest.TestCase):
     def _invite(self, username: str, password: str, role: str = "admin") -> dict:
         """Bjud in och lös in koden — det är så ett konto blir användbart."""
 
-        invited = self.identities.invite_admin_user(username, role)
-        self.identities.redeem_admin_setup(username, str(invited["setup_code"]), password)
+        invited = self.identities.invite_admin_user(username.capitalize(), f"{username.lower()}@example.se", role)
+        self.identities.redeem_admin_setup(f"{username.lower()}@example.se", str(invited["setup_code"]), password)
         return invited
 
     def _as(self, username: str) -> PairedClient:
-        user = next(u for u in self.identities.list_admin_users() if u["username"] == username)
+        user = next(u for u in self.identities.list_admin_users() if u["email"] == f"{username}@example.se")
         return PairedClient(
             client_id="local-web-admin", display_name=username,
             kind=DeviceKind.WEB_ADMIN, panel_ids=(),
@@ -359,26 +362,35 @@ class OwnerGateTests(unittest.TestCase):
     def test_an_administrator_may_not_add_a_user(self) -> None:
         with self.assertRaises(HTTPAPIError) as caught:
             self.application.create_admin_user(
-                self._as("lars"), {"username": "nyan", "password": "ett-langt-losenord"}
+                self._as("lars"), {"display_name": "Nyan", "email": "nyan@example.se"}
             )
 
         self.assertEqual(403, int(caught.exception.status))
 
     def test_an_administrator_may_not_take_over_the_owners_login(self) -> None:
-        """Den gamla vägen för en enda inloggning skriver över ägarens konto.
+        """Ägarens namn, adress och lösenord är ägarens eller en annan ägares.
 
-        Förut räckte administratörsrollen: lars kunde sätta ett eget namn och
-        lösenord på ägarens konto och logga in som ägare.
+        Den gamla vägen för en enda inloggning, /v1/admin/access, lät en
+        administratör skriva över ägarens konto. Den finns inte längre, och
+        samma sak går inte heller genom användarlistan.
         """
 
-        with self.assertRaises(HTTPAPIError) as caught:
-            self.application.configure_admin_access(
-                self._as("lars"), {"username": "lars-ager", "password": "lars-tar-over-servern"}
-            )
+        owner = next(u for u in self.identities.list_admin_users() if u["role"] == "owner")
+        for change in ({"email": "lars-ager@example.se"}, {"password": "lars-tar-over-servern"},
+                       {"display_name": "Lars"}):
+            with self.subTest(change=change), self.assertRaises(HTTPAPIError) as caught:
+                self.application.update_admin_user(self._as("lars"), {"user_id": str(owner["user_id"]), **change})
+            self.assertEqual(403, int(caught.exception.status))
+        self.assertFalse(hasattr(self.application, "configure_admin_access"))
+        self.assertIsNotNone(self.identities.create_admin_session("casper@example.se", "ett-langt-losenord"))
+        self.assertIsNone(self.identities.create_admin_session("lars-ager@example.se", "lars-tar-over-servern"))
 
-        self.assertEqual(403, int(caught.exception.status))
-        self.assertIsNotNone(self.identities.create_admin_session("casper", "ett-langt-losenord"))
-        self.assertIsNone(self.identities.create_admin_session("lars-ager", "lars-tar-over-servern"))
+    def test_an_administrator_may_rename_themselves(self) -> None:
+        result = self.application.update_admin_user(
+            self._as("lars"), {"user_id": str(self.lars["user_id"]), "display_name": "Lars i Lekby"}
+        )
+
+        self.assertEqual("Lars i Lekby", result["user"]["display_name"])
 
     def test_an_administrator_may_not_remove_a_user(self) -> None:
         with self.assertRaises(HTTPAPIError) as caught:
@@ -402,9 +414,9 @@ class OwnerGateTests(unittest.TestCase):
             {"user_id": str(self.lars["user_id"]), "password": "ett-helt-nytt-losenord"},
         )
 
-        self.assertEqual("lars", result["user"]["username"])
+        self.assertEqual("lars@example.se", result["user"]["email"])
         self.assertIsNotNone(
-            self.identities.create_admin_session("lars", "ett-helt-nytt-losenord")
+            self.identities.create_admin_session("lars@example.se", "ett-helt-nytt-losenord")
         )
 
     def test_an_administrator_may_not_change_someone_elses_password(self) -> None:
@@ -422,12 +434,12 @@ class OwnerGateTests(unittest.TestCase):
 
         result = self.application.admin_users(self._as("lars"))
 
-        self.assertEqual({"casper", "lars"}, {u["username"] for u in result["users"]})
+        self.assertEqual({"Casper", "Lars"}, {u["display_name"] for u in result["users"]})
         self.assertEqual("admin", result["role"])
 
     def test_the_owner_may_do_all_of_it(self) -> None:
         added = self.application.create_admin_user(
-            self._as("casper"), {"username": "nyan", "password": "ett-langt-losenord"}
+            self._as("casper"), {"display_name": "Nyan", "email": "nyan@example.se"}
         )
         self.application.update_admin_user(
             self._as("casper"), {"user_id": str(added["user"]["user_id"]), "role": "owner"}
@@ -436,7 +448,7 @@ class OwnerGateTests(unittest.TestCase):
             self._as("casper"), {"user_id": str(self.lars["user_id"])}
         )
 
-        self.assertEqual({"casper", "nyan"}, {u["username"] for u in remaining["users"]})
+        self.assertEqual({"Casper", "Nyan"}, {u["display_name"] for u in remaining["users"]})
 
     def test_an_owner_cannot_remove_themselves(self) -> None:
         """Mönstret från be-a-legend-2: den som tar bort sig själv gör det av
@@ -469,23 +481,23 @@ class OwnerGateTests(unittest.TestCase):
             self._as("casper"), {"user_id": str(self.lars["user_id"])}
         )
 
-        self.assertEqual(["casper"], [u["username"] for u in remaining["users"]])
+        self.assertEqual(["Casper"], [u["display_name"] for u in remaining["users"]])
 
     def test_the_invitation_flow_needs_no_login(self) -> None:
         """Den inbjudne har inget konto att logga in med förrän koden är
         inlöst. Koden är hela beviset."""
 
         invited = self.application.create_admin_user(
-            self._as("casper"), {"username": "nyan"}
+            self._as("casper"), {"display_name": "Nyan", "email": "nyan@example.se"}
         )
 
         self.application.redeem_admin_setup({
-            "username": "nyan",
+            "email": "nyan@example.se",
             "code": str(invited["user"]["setup_code"]),
             "password": "mitt-eget-losenord",
         })
 
-        self.assertIsNotNone(self.identities.create_admin_session("nyan", "mitt-eget-losenord"))
+        self.assertIsNotNone(self.identities.create_admin_session("nyan@example.se", "mitt-eget-losenord"))
 
 
 class UserRoutesOverHTTPTests(unittest.TestCase):
@@ -509,7 +521,7 @@ class UserRoutesOverHTTPTests(unittest.TestCase):
         self.addCleanup(self._dir.cleanup)
         self.identities = IdentityStore(Path(self._dir.name) / "identity.db")
         self.addCleanup(self.identities.close)
-        self.identities.configure_admin_access("casper", "ett-langt-losenord")
+        self.identities.create_first_owner("Casper", "casper@example.se", "ett-langt-losenord")
 
         engine = TrafficEngine(sample_session(DispatchMode.CLEARANCE))
         application = TrainMeetHTTPApplication(
@@ -531,7 +543,7 @@ class UserRoutesOverHTTPTests(unittest.TestCase):
         """Servern kräver inloggning även på maskinen själv, så provet loggar
         in på riktigt i stället för att luta sig mot var det står."""
 
-        token = self.identities.create_admin_session(username, password)
+        token = self.identities.create_admin_session(f"{username}@example.se", password)
         assert token is not None
         return f"trainmeet_admin={token}"
 
@@ -549,7 +561,7 @@ class UserRoutesOverHTTPTests(unittest.TestCase):
             return error.code, json.loads(error.read().decode("utf-8"))
 
     def test_every_user_route_answers_instead_of_hanging(self) -> None:
-        status, listed = self._post("/v1/admin/users", {"username": "benny", "role": "admin"})
+        status, listed = self._post("/v1/admin/users", {"display_name": "Benny", "email": "benny@example.se", "role": "admin"})
         self.assertEqual(201, status)
         code = listed["user"]["setup_code"]
         user_id = listed["user"]["user_id"]
@@ -560,7 +572,7 @@ class UserRoutesOverHTTPTests(unittest.TestCase):
 
         status, _ = self._post(
             "/v1/admin/users/redeem",
-            {"username": "benny", "code": reissued["user"]["setup_code"], "password": "ett-langt-nog"},
+            {"email": "benny@example.se", "code": reissued["user"]["setup_code"], "password": "ett-langt-nog"},
         )
         self.assertEqual(200, status)
 
@@ -569,7 +581,7 @@ class UserRoutesOverHTTPTests(unittest.TestCase):
 
         status, remaining = self._post("/v1/admin/users/delete", {"user_id": user_id})
         self.assertEqual(200, status)
-        self.assertNotIn("benny", [user["username"] for user in remaining["users"]])
+        self.assertNotIn("benny", [user["display_name"] for user in remaining["users"]])
 
     def test_the_list_is_readable_over_http_too(self) -> None:
         request = Request(f"{self.base}/v1/admin/users", headers={"Cookie": self.cookie})
@@ -593,19 +605,19 @@ class UsableOwnerTests(unittest.TestCase):
         self.addCleanup(self._dir.cleanup)
         self.identities = IdentityStore(Path(self._dir.name) / "identity.db")
         self.addCleanup(self.identities.close)
-        self.identities.configure_admin_access("casper", "ett-langt-losenord")
+        self.identities.create_first_owner("Casper", "casper@example.se", "ett-langt-losenord")
         self.casper = next(
-            user for user in self.identities.list_admin_users() if user["username"] == "casper"
+            user for user in self.identities.list_admin_users() if user["email"] == "casper@example.se"
         )
 
     def test_an_invited_owner_does_not_hold_the_last_owner_open(self) -> None:
-        self.identities.invite_admin_user("lars", "owner")
+        self.identities.invite_admin_user("Lars", "lars@example.se", "owner")
         with self.assertRaises(AdminAccessError):
             self.identities.delete_admin_user(str(self.casper["user_id"]))
-        self.assertIn("casper", [u["username"] for u in self.identities.list_admin_users()])
+        self.assertIn("Casper", [u["display_name"] for u in self.identities.list_admin_users()])
 
     def test_an_invited_owner_does_not_allow_the_last_owner_to_step_down(self) -> None:
-        self.identities.invite_admin_user("lars", "owner")
+        self.identities.invite_admin_user("Lars", "lars@example.se", "owner")
         with self.assertRaises(AdminAccessError):
             self.identities.set_admin_user_role(str(self.casper["user_id"]), "admin")
 
@@ -617,15 +629,15 @@ class UsableOwnerTests(unittest.TestCase):
         kvar. Fångat i en genomklickning: knappen gjorde ingenting.
         """
 
-        invited = self.identities.invite_admin_user("lars", "owner")
+        invited = self.identities.invite_admin_user("Lars", "lars@example.se", "owner")
         self.identities.set_admin_user_role(str(invited["user_id"]), "admin")
-        lars = next(u for u in self.identities.list_admin_users() if u["username"] == "lars")
+        lars = next(u for u in self.identities.list_admin_users() if u["email"] == "lars@example.se")
         self.assertEqual("admin", lars["role"])
 
     def test_a_pending_owner_can_be_removed_too(self) -> None:
-        invited = self.identities.invite_admin_user("lars", "owner")
+        invited = self.identities.invite_admin_user("Lars", "lars@example.se", "owner")
         self.identities.delete_admin_user(str(invited["user_id"]))
-        self.assertEqual(["casper"], [u["username"] for u in self.identities.list_admin_users()])
+        self.assertEqual(["Casper"], [u["display_name"] for u in self.identities.list_admin_users()])
 
     def test_an_unfinished_installation_is_not_blocked_by_the_guard(self) -> None:
         """Utan någon inloggningsbar ägare finns ingenting att förlora, och en
@@ -633,17 +645,17 @@ class UsableOwnerTests(unittest.TestCase):
 
         empty = IdentityStore(Path(self._dir.name) / "empty.db")
         self.addCleanup(empty.close)
-        invited = empty.invite_admin_user("lars", "owner")
+        invited = empty.invite_admin_user("Lars", "lars@example.se", "owner")
         empty.delete_admin_user(str(invited["user_id"]))
         self.assertEqual([], empty.list_admin_users())
 
     def test_once_the_invitation_is_redeemed_the_seat_is_free(self) -> None:
         """Spärren ska skydda mot att bli utelåst, inte hindra ett överlämnande."""
 
-        invited = self.identities.invite_admin_user("lars", "owner")
-        self.identities.redeem_admin_setup("lars", str(invited["setup_code"]), "ett-annat-losenord")
+        invited = self.identities.invite_admin_user("Lars", "lars@example.se", "owner")
+        self.identities.redeem_admin_setup("lars@example.se", str(invited["setup_code"]), "ett-annat-losenord")
         self.identities.delete_admin_user(str(self.casper["user_id"]))
-        self.assertEqual(["lars"], [u["username"] for u in self.identities.list_admin_users()])
+        self.assertEqual(["Lars"], [u["display_name"] for u in self.identities.list_admin_users()])
 
 
 class RemovedUsersStayOutTests(unittest.TestCase):
@@ -665,20 +677,30 @@ class RemovedUsersStayOutTests(unittest.TestCase):
         self.addCleanup(self._dir.cleanup)
         self.identities = IdentityStore(Path(self._dir.name) / "identity.db")
         self.addCleanup(self.identities.close)
-        self.identities.configure_admin_access("casper", "det-gamla-losenordet")
-        invited = self.identities.invite_admin_user("lars", "owner")
-        self.identities.redeem_admin_setup("lars", str(invited["setup_code"]), "lars-eget-losenord")
+        self.identities.create_first_owner("Casper", "casper@example.se", "det-gamla-losenordet")
+        invited = self.identities.invite_admin_user("Lars", "lars@example.se", "owner")
+        self.identities.redeem_admin_setup("lars@example.se", str(invited["setup_code"]), "lars-eget-losenord")
         self.casper = next(
-            user for user in self.identities.list_admin_users() if user["username"] == "casper"
+            user for user in self.identities.list_admin_users() if user["email"] == "casper@example.se"
+        )
+        # En server som funnits ett tag bär den gamla enda inloggningen i sin
+        # databas, med namn och lösenord. Den skrivs här som en äldre version
+        # skrev den.
+        from tmbox_gateway.identity import _admin_password_digest
+
+        salt = b"0123456789abcdef"
+        self.identities._connection.execute(  # noqa: SLF001 - härmar en äldre version
+            "UPDATE admin_access SET username = 'casper', password_salt = ?, password_digest = ? WHERE singleton = 1",
+            (salt, _admin_password_digest("det-gamla-losenordet", salt)),
         )
 
     def test_the_removed_owner_cannot_sign_in_afterwards(self) -> None:
         self.identities.delete_admin_user(str(self.casper["user_id"]))
-        self.assertIsNone(self.identities.create_admin_session("casper", "det-gamla-losenordet"))
+        self.assertIsNone(self.identities.create_admin_session("casper@example.se", "det-gamla-losenordet"))
 
     def test_the_remaining_owner_still_can(self) -> None:
         self.identities.delete_admin_user(str(self.casper["user_id"]))
-        self.assertIsNotNone(self.identities.create_admin_session("lars", "lars-eget-losenord"))
+        self.assertIsNotNone(self.identities.create_admin_session("lars@example.se", "lars-eget-losenord"))
 
     def test_the_server_does_not_look_uninstalled_afterwards(self) -> None:
         """Installationsluckan öppnar sig om servern ser ut att sakna lösenord.
@@ -687,7 +709,7 @@ class RemovedUsersStayOutTests(unittest.TestCase):
         self.identities.delete_admin_user(str(self.casper["user_id"]))
         summary = self.identities.admin_access_summary()
         self.assertTrue(summary["password_configured"])
-        self.assertEqual("lars", summary["username"])
+        self.assertNotIn("username", summary)
 
     def test_a_ghost_left_by_an_older_version_is_refused_too(self) -> None:
         """Servrar som redan uppdaterats bär spöket i sin databas.
@@ -708,12 +730,14 @@ class RemovedUsersStayOutTests(unittest.TestCase):
 
         reopened = IdentityStore(Path(self._dir.name) / "identity.db")
         self.addCleanup(reopened.close)
-        self.assertEqual(["lars"], [u["username"] for u in reopened.list_admin_users()])
+        self.assertEqual(["Lars"], [u["display_name"] for u in reopened.list_admin_users()])
+        self.assertIsNone(reopened.create_admin_session("casper@example.se", "det-gamla-losenordet"))
         self.assertIsNone(reopened.create_admin_session("casper", "det-gamla-losenordet"))
 
     def test_the_old_row_is_no_longer_a_way_in_once_the_list_exists(self) -> None:
         """Även utan borttagning: listan är sanningen så snart den finns."""
 
         self.identities.set_admin_user_password(str(self.casper["user_id"]), "ett-nytt-losenord")
+        self.assertIsNone(self.identities.create_admin_session("casper@example.se", "det-gamla-losenordet"))
         self.assertIsNone(self.identities.create_admin_session("casper", "det-gamla-losenordet"))
-        self.assertIsNotNone(self.identities.create_admin_session("casper", "ett-nytt-losenord"))
+        self.assertIsNotNone(self.identities.create_admin_session("casper@example.se", "ett-nytt-losenord"))

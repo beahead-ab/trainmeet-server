@@ -68,12 +68,21 @@ class UsersViewTests(unittest.TestCase):
         self.assertRegex(view, r'invite-open.*classList\.toggle\("hidden", !owner\)')
         self.assertIn("if (owner) {", view)
 
+    def test_an_account_without_an_address_is_marked(self) -> None:
+        """Kontot är adressen. Ett konto utan, från före version 3, kommer inte
+        in, och det ska ägaren se i listan."""
+
+        view = SCRIPT[SCRIPT.index("function renderUsers()"): SCRIPT.index("function usersButton(")]
+        self.assertIn('"Saknar e-post – kan inte logga in"', view)
+        self.assertIn("No email address – cannot sign in|Saknar e-post – kan inte logga in",
+                      (Path(__file__).resolve().parent.parent / "translations" / "ui.txt").read_text(encoding="utf-8"))
+
     def test_removing_a_user_asks_first(self) -> None:
         remove = SCRIPT[SCRIPT.index("async function removeUser("):]
         remove = remove[: remove.index("\nfunction ")]
         self.assertIn('#user-delete-confirm").checked', remove)
         self.assertIn('id="user-edit-modal"', MARKUP)
-        self.assertIn("${user.username}", remove)
+        self.assertIn("${user.display_name}", remove)
 
 
 class RedeemViewTests(unittest.TestCase):
@@ -106,7 +115,7 @@ class RedeemViewTests(unittest.TestCase):
         redeem = redeem[: redeem.index("\nsetupAdminForm")]
         self.assertIn('await fetch("/v1/admin/users/redeem"', redeem)
         self.assertNotIn("authorizedFetch", redeem)
-        for field in ("username", "code", "password"):
+        for field in ("email", "code", "password"):
             self.assertIn(f"#redeem-{field}", redeem)
 
     def test_the_redeem_route_is_open_on_the_server_too(self) -> None:

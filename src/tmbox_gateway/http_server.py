@@ -683,16 +683,12 @@ class TrainMeetHTTPApplication:
     def local_admin(self, user: dict[str, object] | None = None) -> PairedClient:
         return PairedClient(
             client_id="local-web-admin",
-            display_name=str(user["username"]) if user else "Lokal administratör",
+            display_name=str(user.get("display_name") or user.get("email") or "") if user else "Lokal administratör",
             kind=DeviceKind.WEB_ADMIN,
             panel_ids=tuple(sorted(self.engine.config.panels)),
             admin_user_id=str(user["user_id"]) if user and user.get("user_id") else None,
             admin_role=str(user["role"]) if user else "owner",
         )
-
-    def admin_access(self, client: PairedClient) -> dict[str, object]:
-        self._require_admin(client)
-        return self.identities.admin_access_summary()
 
     # ------------------------------------------------------- användare
 
@@ -720,13 +716,13 @@ class TrainMeetHTTPApplication:
         self._require_owner(client)
         try:
             user = self.identities.invite_admin_user(
-                str(payload.get("username") or ""),
-                str(payload.get("role") or "admin"),
+                str(payload.get("display_name") or ""),
                 str(payload.get("email") or ""),
+                str(payload.get("role") or "admin"),
             )
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
-        self._record_user_change(client, "user.invited", str(user.get("username")))
+        self._record_user_change(client, "user.invited", str(user.get("display_name")))
         return {"user": user, "mail": self._mail_account_code("invite", user, payload)}
 
     def reissue_admin_setup(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
@@ -735,14 +731,14 @@ class TrainMeetHTTPApplication:
             user = self.identities.reissue_admin_setup(str(payload.get("user_id") or ""))
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
-        self._record_user_change(client, "user.invitation_reissued", str(user.get("username")))
+        self._record_user_change(client, "user.invitation_reissued", str(user.get("display_name")))
         return {"user": user, "mail": self._mail_account_code("invite", user, payload)}
 
     # ---------------------------------------------- e-post via TrainMeet Cloud
 
-    #: Glömt lösenord: högst så här många begäranden per konto och per adress
-    #: och timme. Fler ger samma svar men inget brev.
-    RESET_PER_USERNAME = 3
+    #: Glömt lösenord: högst så här många begäranden per konto och per
+    #: nätadress och timme. Fler ger samma svar men inget brev.
+    RESET_PER_ACCOUNT = 3
     RESET_PER_ADDRESS = 12
     RESET_WINDOW_SECONDS = 3600
 
@@ -779,14 +775,16 @@ class TrainMeetHTTPApplication:
         if link is None:
             return {"status": "not_linked"}
         try:
+            # Inget användarnamn: kontot är adressen, och Cloud skriver den i
+            # brevet som det man loggar in med.
             self.server_mailer(link[0], link[1], {
-                "kind": kind, "to": email, "username": str(user.get("username") or ""),
+                "kind": kind, "to": email,
                 "code": str(user.get("setup_code") or ""),
                 "server_url": self._server_url(payload.get("server_url")),
                 "language": str(payload.get("language") or "sv"),
             })
         except CentralSyncError as error:
-            LOGGER.warning("E-post till %s via TrainMeet Cloud gick inte: %s", user.get("username"), error)
+            LOGGER.warning("E-post till %s via TrainMeet Cloud gick inte: %s", user.get("display_name"), error)
             return {"status": "failed", "message": str(error)}
         return {"status": "sent", "to": email}
 
@@ -803,26 +801,26 @@ class TrainMeetHTTPApplication:
     def request_password_reset(self, payload: dict[str, Any], remote: str) -> dict[str, Any]:
         """Glömt lösenord. Utan inloggning, och alltid samma svar.
 
-        Svaret säger aldrig om kontot finns eller har en e-postadress, bara om
-        servern alls kan skicka e-post. Koden går till kontots egen adress via
-        TrainMeet Cloud och gäller 30 minuter. Utan koppling återstår en ny kod
-        från ägaren eller `tmbox_gateway.recover` på serverdatorn.
+        Svaret säger aldrig om det finns ett konto med adressen, bara om
+        servern alls kan skicka e-post. Koden går till adressen via TrainMeet
+        Cloud och gäller 30 minuter. Utan koppling återstår en ny kod från
+        ägaren eller `tmbox_gateway.recover` på serverdatorn.
         """
-        username = str(payload.get("username") or "").strip()[:64]
+        email = str(payload.get("email") or payload.get("username") or "").strip().lower()[:254]
         language = "en" if payload.get("language") == "en" else "sv"
         linked = self._cloud_mail_link() is not None
-        if linked and username and self._reset_allowed(f"ip:{remote}", self.RESET_PER_ADDRESS) \
-                and self._reset_allowed(f"user:{username.lower()}", self.RESET_PER_USERNAME):
-            self.run_in_background(lambda: self._send_password_reset(username, language))
+        if linked and email and self._reset_allowed(f"ip:{remote}", self.RESET_PER_ADDRESS) \
+                and self._reset_allowed(f"account:{email}", self.RESET_PER_ACCOUNT):
+            self.run_in_background(lambda: self._send_password_reset(email, language))
         return {"email_available": linked}
 
-    def _send_password_reset(self, username: str, language: str) -> None:
-        issued = self.identities.issue_admin_password_reset(username)
+    def _send_password_reset(self, email: str, language: str) -> None:
+        issued = self.identities.issue_admin_password_reset(email)
         if issued is None:
             return
         user, code = issued
         result = self._mail_account_code("password_reset", {**user, "setup_code": code}, {"language": language})
-        LOGGER.info("Kod för nytt lösenord till %s: %s", user.get("username"), result["status"])
+        LOGGER.info("Kod för nytt lösenord till %s: %s", user.get("display_name"), result["status"])
 
     def redeem_admin_setup(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Utan inloggning, med flit: den inbjudne har inget konto att logga in
@@ -830,7 +828,7 @@ class TrainMeetHTTPApplication:
 
         try:
             user = self.identities.redeem_admin_setup(
-                str(payload.get("username") or ""),
+                str(payload.get("email") or ""),
                 str(payload.get("code") or ""),
                 str(payload.get("password") or ""),
             )
@@ -864,7 +862,7 @@ class TrainMeetHTTPApplication:
                 "cannot_remove_self",
                 "Du kan inte ta bort ditt eget konto. Be en annan ägare göra det.",
             )
-        target = (self.identities.admin_user(user_id) or {}).get("username", user_id)
+        target = (self.identities.admin_user(user_id) or {}).get("display_name", user_id)
         try:
             self.identities.delete_admin_user(user_id)
         except AdminAccessError as error:
@@ -873,12 +871,17 @@ class TrainMeetHTTPApplication:
         return {"users": self.identities.list_admin_users()}
 
     def update_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        """Roll och lösenord. Rollen är ägarens ensak; lösenordet får var och
-        en byta på sig själv."""
+        """Namn, adress, roll och lösenord. Rollen är ägarens ensak; det egna
+        namnet, adressen och lösenordet får var och en ändra själv."""
 
         self._require_admin(client)
         user_id = str(payload.get("user_id") or "")
         try:
+            if payload.get("display_name") is not None:
+                if client.admin_user_id != user_id:
+                    self._require_owner(client)
+                self.identities.set_admin_user_display_name(user_id, str(payload["display_name"]))
+                self._record_user_change(client, "user.renamed", user_id)
             if payload.get("email") is not None:
                 # Adressen är dit en kod för nytt lösenord skickas, så den är
                 # lika känslig som lösenordet: egen, eller ägarens ensak.
@@ -907,29 +910,6 @@ class TrainMeetHTTPApplication:
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
         return {"user": self.identities.admin_user(user_id)}
-
-    def configure_admin_access(
-        self,
-        client: PairedClient,
-        payload: dict[str, Any],
-    ) -> dict[str, object]:
-        # Den här vägen skriver över ägarens namn och lösenord. Räckte
-        # administratörsrollen kunde vem som helst som bjudits in ta över
-        # ägarkontot och låsa ute ägaren.
-        self._require_owner(client)
-        password_value = payload.get("password")
-        password = None if password_value in {None, ""} else str(password_value)
-        try:
-            return self.identities.configure_admin_access(
-                str(payload.get("username", "")),
-                password,
-            )
-        except AdminAccessError as error:
-            raise HTTPAPIError(
-                HTTPStatus.BAD_REQUEST,
-                "invalid_admin_access",
-                str(error),
-            ) from error
 
     def installation_status(self) -> dict[str, Any]:
         access = self.identities.admin_access_summary()
@@ -974,11 +954,11 @@ class TrainMeetHTTPApplication:
                 "admin_already_configured",
                 "Administratören är redan skapad",
             )
-        password = str(payload.get("password", ""))
         try:
-            return self.identities.configure_admin_access(
-                str(payload.get("username", "")),
-                password,
+            return self.identities.create_first_owner(
+                str(payload.get("display_name", "")),
+                str(payload.get("email", "")),
+                str(payload.get("password", "")),
             )
         except AdminAccessError as error:
             raise HTTPAPIError(
@@ -3924,13 +3904,6 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.admin_users(client))
                 return
-            if path == "/v1/admin/access":
-                client = self._authenticated_client()
-                self._send_json(
-                    HTTPStatus.OK,
-                    self.server.application.admin_access(client),
-                )
-                return
             if path == "/v1/info":
                 client = self._optional_authenticated_client()
                 if client is None:
@@ -4129,10 +4102,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                         "Den första administratören måste skapas från servern eller dess lokala nätverk",
                     )
                 configured = self.server.application.create_initial_admin(payload)
-                password = str(payload.get("password", ""))
                 token = self.server.application.identities.create_admin_session(
-                    str(configured["username"]),
-                    password,
+                    str(configured["email"]),
+                    str(payload.get("password", "")),
                 )
                 if token is None:
                     raise HTTPAPIError(
@@ -4154,15 +4126,18 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                         "admin_password_not_configured",
                         "Extern inloggning är inte konfigurerad. Öppna servern lokalt och välj ett lösenord först.",
                     )
+                # E-postadressen är kontot. Nyckeln "username" tas emot med
+                # samma innehåll, så att en äldre TKL eller en sida i cachen
+                # får ett begripligt fel i stället för ett tomt fält.
                 token = self.server.application.identities.create_admin_session(
-                    str(payload.get("username", "")),
+                    str(payload.get("email") or payload.get("username") or ""),
                     str(payload.get("password", "")),
                 )
                 if token is None:
                     raise HTTPAPIError(
                         HTTPStatus.UNAUTHORIZED,
                         "invalid_login",
-                        "Fel användarnamn eller lösenord",
+                        "Fel e-postadress eller lösenord",
                     )
                 self._send_json(
                     HTTPStatus.OK,
@@ -4182,24 +4157,6 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     {"authenticated": False},
                     headers={"Set-Cookie": self._admin_cookie("", max_age=0)},
-                )
-                return
-            if path == "/v1/admin/access":
-                client = self._authenticated_client()
-                configured = self.server.application.configure_admin_access(client, payload)
-                response_headers: dict[str, str] = {}
-                password = str(payload.get("password", ""))
-                if password and not self._is_direct_local_request():
-                    token = self.server.application.identities.create_admin_session(
-                        str(configured["username"]),
-                        password,
-                    )
-                    if token:
-                        response_headers["Set-Cookie"] = self._admin_cookie(token)
-                self._send_json(
-                    HTTPStatus.OK,
-                    configured,
-                    headers=response_headers,
                 )
                 return
             if path == "/v1/setup/server":

@@ -276,16 +276,18 @@ class IdentityTests(unittest.TestCase):
 
     def test_admin_password_creates_a_temporary_session(self):
         before = self.store.admin_access_summary()
-        self.assertEqual(before["username"], "")
+        self.assertNotIn("username", before)
         self.assertFalse(before["password_configured"])
 
-        configured = self.store.configure_admin_access("traffadmin", "lokalt-losenord")
+        configured = self.store.create_first_owner("Trafikledningen", "traffadmin@example.se", "lokalt-losenord")
         self.assertTrue(configured["password_configured"])
-        self.assertIsNone(self.store.create_admin_session("traffadmin", "felaktigt"))
+        self.assertTrue(self.store.admin_access_summary()["password_configured"])
+        self.assertIsNone(self.store.create_admin_session("traffadmin@example.se", "felaktigt"))
+        self.assertIsNone(self.store.create_admin_session("Trafikledningen", "lokalt-losenord"))
 
         now = datetime(2026, 8, 11, 10, 0, tzinfo=timezone.utc)
         token = self.store.create_admin_session(
-            "traffadmin",
+            "traffadmin@example.se",
             "lokalt-losenord",
             now=now,
             ttl=timedelta(minutes=30),

@@ -80,8 +80,13 @@ class HTTPServerTests(unittest.TestCase):
         self._public_refused("/v1/clock/source", status=401)
         self._public_refused("/v1/clock/source", payload, status=401)
 
+    def _ensure_owner(self):
+        """Ett konto som kan logga in stänger installationen. Det skapas en gång."""
+        if not self.identities.admin_access_summary()["password_configured"]:
+            self.identities.create_first_owner("Admin", "admin@example.se", "test-password")
+
     def _public_client(self, workspace="tmbox", **extra):
-        self.identities.configure_admin_access("admin", "test-password")
+        self._ensure_owner()
         return self._json_request("/v1/browser-clients", {"workspace": workspace, **extra}, expected_status=201)
 
     def _public_refused(self, path, payload=None, token=None, status=403, headers=None):
@@ -92,7 +97,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, status)
 
     def test_public_picker_does_not_unlock_administration(self):
-        self.identities.configure_admin_access("admin", "test-password")
+        self._ensure_owner()
         context = self._json_request("/v1/workspaces")
         self.assertEqual(context["available_workspaces"], ["administration", "tkl", "tmbox"])
         self.assertTrue(context["public_clients_enabled"])
@@ -164,7 +169,7 @@ class HTTPServerTests(unittest.TestCase):
             self.application._require_station_access(stale, "station-a")
 
     def test_unidentified_tkl_cannot_access_live_traffic(self):
-        self.identities.configure_admin_access("admin", "test-password")
+        self._ensure_owner()
         self._public_refused("/v1/tkl/context?station_id=station-a", status=401)
         for path in ("shift/start", "movement", "line"):
             self._public_refused("/v1/tkl/" + path, {"station_id": "station-a"}, status=401)
@@ -256,7 +261,7 @@ class HTTPServerTests(unittest.TestCase):
         box = self._public_client()
         self._public_refused("/v1/display/connection", status=401)
         self._public_refused("/v1/display/connection", token=box["access_token"])
-        self._json_request("/v1/auth/login", {"username": "admin", "password": "test-password"})
+        self._json_request("/v1/auth/login", {"email": "admin@example.se", "password": "test-password"})
         self._json_request("/v1/display/connection", {"wifi_name": "Träffen", "wifi_password": "test-only-secret"})
         self.assertEqual(self._json_request("/v1/display/connection")["wifi"]["password"], "test-only-secret")
         public = self._json_request("/v1/display")["connection"]["wifi"]
@@ -289,7 +294,7 @@ class HTTPServerTests(unittest.TestCase):
         from http.cookiejar import CookieJar
         from urllib.request import build_opener, HTTPCookieProcessor
         before = self.application.engine.export_state()
-        self.identities.configure_admin_access("admin", "test-password")
+        self._ensure_owner()
         self._public_refused("/tmbox-lab/api/state", status=401)
         first, second = (build_opener(HTTPCookieProcessor(CookieJar())) for _ in range(2))
         for browser in (first, second):
@@ -339,7 +344,7 @@ class HTTPServerTests(unittest.TestCase):
 
     def test_public_client_origin_is_explicit_and_does_not_unlock_admin(self):
         from dataclasses import replace
-        self.identities.configure_admin_access("admin", "test-password")
+        self._ensure_owner()
         self.application.config = replace(self.application.config, force_external_auth=True,
             public_client_origin="https://test.trainmeet.app")
         headers={"Host":"test.trainmeet.app", "Origin":"https://test.trainmeet.app", "X-Forwarded-Proto":"https", "Content-Type":"application/json"}
@@ -371,7 +376,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(refused.exception.code, "station_not_assigned")
 
     def test_remove_requires_admin_and_known_device(self):
-        self.identities.configure_admin_access("admin", "test-password")
+        self._ensure_owner()
         self.identities.record_discovery("box-one", "TBX-ONE")
         self.identities.register_client("box-one", "Box", DeviceKind.ESP32_PANEL, "box-token", ())
         self.identities.register_client("admin-remove", "Admin", DeviceKind.WEB_ADMIN, "admin-token", ())
@@ -514,7 +519,9 @@ class HTTPServerTests(unittest.TestCase):
         self.assertNotIn('id="runtime-import-file"', html)
         self.assertNotIn("Nytt lokalt utkast", html)
         self.assertIn('id="overview-graph"', html)
-        self.assertIn('id="admin-access-form-modal"', html)
+        # Den gamla enda inloggningen är borta; kontona sköts under Användare.
+        self.assertNotIn('id="admin-access-form-modal"', html)
+        self.assertIn('id="users-invite-form-modal"', html)
         self.assertIn('id="language-form"', html)
         self.assertIn('id="language-tiles"', html)
         for asset in ("i18n.js", "i18n-messages.js", "i18n-init.js", "server-ui.js", "server-ui.css", "server-design.css", "fonts/fonts.css", "fonts/jetbrains-mono-latin-700-normal.woff2", "kontrollrummet.css", "skarmar.css", "deltagare.css", "kr-theme.js", "drift-model.js", "drift.js", "settings.js"):
@@ -604,7 +611,7 @@ class HTTPServerTests(unittest.TestCase):
 
         created = self._json_request(
             "/v1/setup/admin",
-            {"username": "trafikledare", "password": "ett-eget-losenord"},
+            {"display_name": "Trafikledare", "email": "trafikledare@example.se", "password": "ett-eget-losenord"},
             expected_status=201,
         )
         self.assertTrue(created["authenticated"])
@@ -922,12 +929,7 @@ class HTTPServerTests(unittest.TestCase):
         local = self._json_request("/v1/server-context")
         self.assertEqual(local["selected_meet"]["publication_id"], "fixture-initial")
 
-        access = self._json_request(
-            "/v1/admin/access",
-            {"username": "traffadmin", "password": "enkel-lokal-kod"},
-        )
-        self.assertEqual(access["username"], "traffadmin")
-        self.assertTrue(access["password_configured"])
+        self.identities.create_first_owner("Trafikledningen", "traffadmin@example.se", "enkel-lokal-kod")
 
         self.application.config = HTTPServerConfig(
             local_development=True,
@@ -941,29 +943,35 @@ class HTTPServerTests(unittest.TestCase):
             self._json_request("/v1/server-context")
         self.assertEqual(denied.exception.code, 401)
 
-        with self.assertRaises(HTTPError) as invalid:
-            self._json_request(
-                "/v1/auth/login",
-                {"username": "traffadmin", "password": "fel-losenord"},
-            )
-        self.assertEqual(invalid.exception.code, 401)
+        for wrong in ({"email": "traffadmin@example.se", "password": "fel-losenord"},
+                      {"username": "Trafikledningen", "password": "enkel-lokal-kod"}):
+            with self.subTest(wrong=wrong), self.assertRaises(HTTPError) as invalid:
+                self._json_request("/v1/auth/login", wrong)
+            self.assertEqual(invalid.exception.code, 401)
+            self.assertIn("Fel e-postadress eller lösenord", invalid.exception.read().decode("utf-8"))
 
-        request = Request(
-            f"{self.base_url}/v1/auth/login",
-            data=json.dumps(
-                {"username": "traffadmin", "password": "enkel-lokal-kod"}
-            ).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        with urlopen(request, timeout=2) as response:
-            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
-        authenticated = Request(
-            f"{self.base_url}/v1/admin/access",
-            headers={"Cookie": cookie, "Accept": "application/json"},
-        )
-        with urlopen(authenticated, timeout=2) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        self.assertEqual(payload["username"], "traffadmin")
+        # En äldre TKL skickar fältet "username". Står adressen där räcker det.
+        for body in ({"email": "Traffadmin@Example.se", "password": "enkel-lokal-kod"},
+                     {"username": "traffadmin@example.se", "password": "enkel-lokal-kod"}):
+            request = Request(
+                f"{self.base_url}/v1/auth/login",
+                data=json.dumps(body).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+            )
+            with urlopen(request, timeout=2) as response:
+                cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+            authenticated = Request(
+                f"{self.base_url}/v1/admin/users",
+                headers={"Cookie": cookie, "Accept": "application/json"},
+            )
+            with urlopen(authenticated, timeout=2) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(["traffadmin@example.se"], [user["email"] for user in payload["users"]])
+
+        # Den gamla vägen för en enda inloggning finns inte längre.
+        with self.assertRaises(HTTPError) as gone:
+            self._json_request("/v1/admin/access", {"username": "x", "password": "y"})
+        self.assertEqual(gone.exception.code, 404)
 
     def test_swift_admin_gets_automatic_http_token_but_no_mqtt_password(self):
         paired = self._json_request(

@@ -5,6 +5,34 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Konton är namn, e-postadress och lösenord (version 3)
+
+Användarnamnen är borta. Ett konto har ett namn som visas, en e-postadress och
+ett lösenord, och man loggar in med e-postadressen. Adressen är unik och kan
+bytas men inte tas bort; namnet behöver inte vara unikt.
+
+- **Installationen** frågar efter namn, e-postadress och lösenord för ägaren.
+- **Inloggning, Glömt lösenordet? och Jag har en kod** tar e-postadressen.
+- **Användare:** inbjudan och redigering har Namn och E-postadress. Ett konto
+  utan adress märks "Saknar e-post – kan inte logga in".
+- **Brevet via TrainMeet Cloud** bär inget användarnamn längre. Det kräver
+  TrainMeet Cloud 1.15 eller senare, som visar adressen i brevet.
+- **Återställningskommandot** listar konton med nummer, namn och adress, och tar
+  `--konto <nummer eller e-post>` och `--email <adress>`. `--user` finns inte
+  längre.
+- **Den gamla enda inloggningen** (`/v1/admin/access` och "Ändra inloggning")
+  är borttagen.
+- `/v1/auth/login`, `/v1/setup/admin`, `/v1/admin/password-reset` och
+  `/v1/admin/users/redeem` tar `email`. Inloggningen tar också emot fältet
+  `username` om det innehåller adressen, för äldre TKL.
+
+**Vid uppgradering från version 2:** ett konto behåller sitt gamla användarnamn
+som namn. Ett konto utan e-postadress kan inte logga in förrän ägaren ger det
+en. En ägare utan adress kör `python -m tmbox_gateway.recover --state-dir …
+--konto 1 --email <adress>` på serverdatorn. Hade två konton samma adress
+behåller ägaren eller den äldsta administratören den, och de andra får en ny av
+ägaren.
+
 ### Nollan har ingen prick längre: tider och nummer i Inter
 
 JetBrains Monos nolla har en prick i mitten, och på avstånd går den ihop med en

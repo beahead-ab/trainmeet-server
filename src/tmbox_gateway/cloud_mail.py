@@ -4,9 +4,10 @@ Det här är serverns enda anrop som skickar något *till* Cloud. Synken går
 fortfarande bara Cloud → Server (central_sync.py läser, och
 test_product_boundaries vaktar det). Här skickas ingen träffdata, ingen
 konfiguration och ingen historik, bara ett brev att lägga i Clouds kö:
-mottagare, användarnamn, kod, serverns adress och språk
-(`MAIL_FIELDS`). Cloud har avsändaren, mallarna och träffens och serverns
-namn. Servern har ingen egen e-post och ingen Resend-nyckel.
+mottagare, kod, serverns adress och språk (`MAIL_FIELDS`). Kontot är
+mottagarens adress, så inget användarnamn följer med. Cloud har avsändaren,
+mallarna och träffens och serverns namn. Servern har ingen egen e-post och
+ingen Resend-nyckel.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from urllib.request import Request
 from .central_sync import CentralSyncError, _read_json, canonical_runtime_url
 
 #: Det enda ett brev får bära. Allt annat stannar på servern.
-MAIL_FIELDS = frozenset({"kind", "to", "username", "code", "server_url", "language"})
+MAIL_FIELDS = frozenset({"kind", "to", "code", "server_url", "language"})
 
 
 def server_mail_url(endpoint_url: str) -> str:

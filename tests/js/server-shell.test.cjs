@@ -56,7 +56,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       stations: [{station_id: 'a', code: 'A', name: 'Alpha', connections: [
         {connection_id: 'a-b', other_station_code: 'B', other_station_name: 'Beta', default_side: 'left', side: placementSide, overridden: placementOverride}]},
         ...Array.from({length: extraPlacementStations}, (_, i) => ({station_id: `x${i}`, code: `X${i}`, name: `Extra ${i}`, connections: []}))]});
-    const user = { user_id: 'u-1', username: 'admin', role: 'owner', invitation_pending: false };
+    const user = { user_id: 'u-1', display_name: 'Admin', email: 'admin@example.se', role: 'owner', invitation_pending: false };
     const runtime = { configured: true, linked: true, cloud_auto_sync: true, meet_name: 'Demo meet', active_day: 'Dagl', publication_id: 'pub-1', server_name: 'Demo server', central_url: 'https://cloud.trainmeet.app/config' };
     const clock = () => ({ configured: true, running, time: '06:00:00', speed: 4, source: clockSettings.source,
       external_name: clockSettings.clock_name, available: true, can_control: Boolean(clockSettings.user) });
@@ -68,7 +68,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
         let data = {};
         switch (url.pathname) {
           case '/v1/setup': case '/v1/setup/status': data = { required: false, admin_configured: true, runtime }; break;
-          case '/v1/auth/status': data = signedIn ? { authenticated: true, at_the_machine: false, username: 'admin' } : { authenticated: false }; break;
+          case '/v1/auth/status': data = signedIn ? { authenticated: true, at_the_machine: false } : { authenticated: false }; break;
           case '/v1/workspaces': data = { selected_meet: { id: 'meet-1', name: runtime.meet_name, publication_id: runtime.publication_id, operating_region: region, generation: 7 }, operating_region: region, available_workspaces: ['administration', 'tmbox'], public_clients_enabled: true }; break;
           case '/v1/browser-clients': case '/v1/browser-clients/self': data = { client_id: 'browser-tmbox-test', workspace: 'tmbox', device_code: 'WEB-TEST', access_token: 'test-only' }; break;
           case '/v1/tmbox-v2/assignment': data = { status: 'unassigned' }; break;
@@ -93,7 +93,6 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
             if (identityFails) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Test: kunde inte spara' }) });
             serverName = JSON.parse(request.postData()).server_name;
             data = { server_name: serverName }; break;
-          case '/v1/admin/access': data = { username: 'admin', password_configured: true }; break;
           case '/v1/devices': data = { devices, terminals, stations: [{ id: 'a', code: 'A', name: 'Alpha' }] }; break;
           case '/v1/display/connection': data = connection(); break;
           case '/v1/display/connection/code': renewals += 1; connectionCode = '777-111'; codeState = 'valid'; data = connection(); break;
