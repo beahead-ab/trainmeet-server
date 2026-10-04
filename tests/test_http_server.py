@@ -534,6 +534,35 @@ class HTTPServerTests(unittest.TestCase):
             self.assertEqual(response.headers.get_content_type(), "image/png")
         self.assertTrue(logo.startswith(b"\x89PNG\r\n\x1a\n"))
 
+    def test_every_icon_the_page_names_is_served_and_is_the_meeting_track(self):
+        """Favicon och hemskärmsikon pekar på filer som finns, med rätt typ.
+
+        Hemskärmsikonen är kvadratisk utan genomskinlighet (iOS rundar själv
+        och lägger svart bakom genomskinliga hörn), och märket är logotypen
+        Mötesspåret: blå platta, orange tåg.
+        """
+        import re
+        import struct
+        with urlopen(f"{self.base_url}/login", timeout=2) as response:
+            html = response.read().decode("utf-8")
+        links = re.findall(r'<link rel="(icon|apple-touch-icon)"([^>]*)href="([^"]+)"', html)
+        self.assertEqual({"icon", "apple-touch-icon"}, {rel for rel, _, _ in links})
+        for rel, attributes, href in links:
+            with urlopen(f"{self.base_url}{href}", timeout=2) as response:
+                body = response.read()
+                kind = response.headers.get_content_type()
+            if href.endswith(".svg"):
+                self.assertEqual("image/svg+xml", kind)
+                self.assertIn(b'fill="#1D4ED8"', body)
+                self.assertIn(b'fill="#F7931E"', body)
+            else:
+                self.assertEqual("image/png", kind)
+                width, height = struct.unpack(">II", body[16:24])
+                if rel == "apple-touch-icon":
+                    self.assertEqual((180, 180, 2), (width, height, body[25]), "square, RGB, no alpha")
+                else:
+                    self.assertEqual(width, height)
+
     def test_all_runtime_pages_serve_their_scripts_and_styles_locally(self):
         class Assets(HTMLParser):
             def __init__(self):
