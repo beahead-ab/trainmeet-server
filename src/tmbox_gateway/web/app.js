@@ -735,6 +735,32 @@ function renderAutomatic(data) {
     }
     return row;
   }));
+  // Why the automation is holding a train, and trains it cannot run at all
+  // (#130): a station that only says "Automatisk" while nothing happens
+  // leaves the operator guessing.
+  const names = Object.fromEntries((data.stations || []).map((station) => [station.id, station.name]));
+  const waiting = (data.trains || []).filter((train) => train.reason && train.reason !== "På väg");
+  const rows = [];
+  if (waiting.length || (data.plan_errors || []).length) {
+    const head = document.createElement("div"); head.className = "kr-ph";
+    const title = document.createElement("span"); title.textContent = t("Tåg som väntar");
+    head.append(title); rows.push(head);
+  }
+  for (const train of waiting) {
+    const row = document.createElement("div"); row.className = "kr-kv";
+    const name = document.createElement("span"); name.className = "kr-k"; name.textContent = t("Tåg {number}", {number: train.train_number});
+    const tag = document.createElement("span"); tag.className = "kr-tag"; tag.textContent = t(train.reason);
+    const route = document.createElement("span"); route.className = "kr-m";
+    route.textContent = `${names[train.from_station_id] || train.from_station_id} → ${names[train.to_station_id] || train.to_station_id}`;
+    row.append(name, tag, route); rows.push(row);
+  }
+  for (const error of data.plan_errors || []) {
+    const row = document.createElement("div"); row.className = "kr-kv";
+    const name = document.createElement("span"); name.className = "kr-k"; name.textContent = t("Automatiken kan inte köra");
+    const detail = document.createElement("span"); detail.className = "kr-m"; detail.textContent = error;
+    row.append(name, detail); rows.push(row);
+  }
+  document.querySelector("#automatic-waiting").replaceChildren(...rows);
 }
 
 async function changeAutomatic(button, payload, question = "") {
@@ -883,7 +909,7 @@ function cancelModal(dialog) {
     restore.chosen = dialog.querySelector('input[name="restore-backup"]:checked')?.value || null;
     updateRestoreButton();
   }
-  if (dialog.id === "reset-modal") factoryResetButton.disabled = factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL";
+  if (dialog.id === "reset-modal") factoryResetButton.disabled = !factoryResetConfirmed();
   dialog.close();
 }
 let modalResultTimer;
@@ -1429,14 +1455,23 @@ function bindMeetReset() {
   });
 }
 
+// The word to type is shown in the user's language (RESET, NULSTIL, ...); either
+// that word or the Swedish NOLLSTÄLL unlocks the button. The server is always
+// sent NOLLSTÄLL.
+function factoryResetConfirmed() {
+  const typed = factoryResetConfirmation.value.trim().toUpperCase();
+  const shown = document.querySelector('label[for="factory-reset-confirmation"] b')?.textContent.trim().toUpperCase();
+  return typed === "NOLLSTÄLL" || (!!shown && typed === shown);
+}
+
 factoryResetConfirmation.addEventListener("input", () => {
-  factoryResetButton.disabled = factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL";
+  factoryResetButton.disabled = !factoryResetConfirmed();
 });
 
 factoryResetButton.addEventListener("click", async () => {
   const dialog = document.querySelector("#reset-modal");
   if (dialog.dataset.busy === "true") return;
-  if (factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL") return;
+  if (!factoryResetConfirmed()) return;
   const localFactoryReset = state.authStatus?.at_the_machine === true;
   const question = localFactoryReset
     ? "All lokal TrainMeet-data och administratören tas bort. Vill du fabriksåterställa nu?"

@@ -17,6 +17,30 @@ träffkod är inget att spara. Ett misslyckat försök visar Cloud-kopplingen so
 efter ett byte står det "Servern kör nu {träff}." i stället för att pågående drift
 har bevarats. Dialogens rubrik, ingress och kryssruta finns nu på alla fem språken.
 API:et svarar `meet_change_required` när bytet inte är bekräftat.
+### Obemannad station svarar på TAM (#130)
+
+En obemannad station gav aldrig klart till en TMBox när ett annat tåg samma dag
+var planerat på mottagningsspåret, vilket på en mötesstation nästan alltid är
+fallet. Automatiken räknade varje rad i dagens tidtabell på spåret som om tåget
+stod där, även tåg som kommer senare. Nu räknas bara verklig beläggning, så som
+simuleringen redan gjorde: tåg som har ankommit eller står uppställda på spåret.
+Bemannade stationer kontrolleras som förut.
+
+Under Inställningar → Obemannade stationer syns nu också vilka tåg automatiken
+väntar med och varför, till exempel "Mottagningsspåret är upptaget", och tåg som
+automatiken inte kan köra alls.
+### Nollställ träffen fungerar på en uppdaterad Raspberry Pi (#129)
+
+Uppdateraren skapade mappen `backups` som root, och servern, som kör som
+`trainmeet-server`, fick inte skriva i den. Nollställ träffen tar alltid en
+säkerhetskopia först och stoppade därför med "unable to open database file". Nu
+ger installationen mappen och det den innehåller till servern vid varje
+uppdatering, så en Pi som redan har uppdaterats rättas av nästa uppdatering. Går
+mappen ändå inte att skriva i säger felet var den ligger och hur det rättas.
+
+"Nollställ träffdata" ber om ordet på användarens språk (RESET, NULSTIL,
+NULLSTILL, ZURÜCKSETZEN), men knappen låstes bara upp av NOLLSTÄLL. Nu låser det
+visade ordet upp knappen, och NOLLSTÄLL gör det fortfarande.
 
 ### Träffens land: SE, DK, DE, NO eller US
 
