@@ -18,8 +18,14 @@ principerna nedan.
   bakgrund `#0d0f13`, paneler `#15181e`, blått för det som är aktivt. Valet
   mörkt/ljust sparas per webbläsare (`trainmeet.theme`) och sätts av
   `web/kr-theme.js` innan sidan målas, så att den inte blinkar till.
-- Typsnitten är desamma som ovan, via `--kr-sans` (Inter) och `--kr-mono`
-  (JetBrains Mono). `tests/test_fonts.py` håller fast vid det.
+- Typsnitten är desamma som ovan, via `--kr-sans` (Inter), `--kr-num` (Inter
+  med tabellsiffror, för tider och nummer) och `--kr-mono` (JetBrains Mono,
+  för koder och adresser). `tests/test_fonts.py` håller fast vid det.
+- Tider och nummer (klockor, tågnummer, tider i listor och diagram, antal) har
+  vanlig nolla: JetBrains Monos prickade nolla går på håll ihop med en åtta.
+  `font-variant-numeric: tabular-nums` ger lika breda siffror, så kolumner och
+  klockor ligger kvar i rad. Stationskoder, adresser, lösenord och koder att
+  skriva in behåller monospace, där pricken skiljer en nolla från ett O.
 - Beräkningarna bakom Drift (var tågen är, stationsrader, nästa händelser,
   diagrammets fönster, sökning) ligger i `web/drift-model.js` som rena
   funktioner med enhetstester i `tests/js/drift-model.test.cjs`. `web/drift.js`
@@ -61,7 +67,8 @@ principerna nedan.
 - Primärfärgen är `#c96442` och accentytan `#f7efe9`. Den varma accenten
   används konsekvent i serverns administrativa gränssnitt.
 - Brödtext och kontroller använder Inter eller närmaste systemfont. Tider och
-  tekniska värden använder en monospace-font.
+  nummer använder Inter med tabellsiffror (`--kr-num`); tekniska värden som
+  koder och adresser använder en monospace-font.
 - Fullskärmsvyer använder samma mörka presentation som TrainMeet: mörk
   bakgrund, ljus information, tunna linjer och gul markering för aktuell tid
   (se Skärmarna ovan).
@@ -145,8 +152,9 @@ Utan eget val följer vyn enhetens ljus eller mörker; väljaren finns i Drift.
   används; webbläsaren ska inte behöva syntetisera mellanvikter.
 - DM Sans 600/700 används enbart för TrainMeet-namnet och kompakta
   varumärkesmärken. Sid-, kort- och formulärrubriker använder Inter.
-- Tekniska värden och tider använder serverns monospace-stack. Stationsnamn,
-  tågetiketter och övrig diagramtext använder Inter.
+- Koder och adresser använder serverns monospace-stack; tider och nummer
+  använder Inter med tabellsiffror. Stationsnamn, tågetiketter och övrig
+  diagramtext använder Inter.
 - Administrationsgränssnittet har 14 px som kompakt grundstorlek och 1,5 i
   radavstånd. Mikrorubriker är 12 px, semibold, versala och har 0,1 em
   teckenmellanrum.

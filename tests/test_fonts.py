@@ -56,7 +56,7 @@ class ShippedFontsTests(unittest.TestCase):
             css = sheet.read_text(encoding="utf-8")
             for match in re.finditer(r"font(?:-family)?\s*:[^;{}]+;", css):
                 declaration = match.group(0)
-                if "var(--font" in declaration or "var(--kr-sans)" in declaration or "var(--kr-mono)" in declaration or "inherit" in declaration:
+                if "var(--font" in declaration or "var(--kr-sans)" in declaration or "var(--kr-mono)" in declaration or "var(--kr-num)" in declaration or "inherit" in declaration:
                     continue
                 family = first_family(declaration)
                 if not family:
@@ -65,10 +65,10 @@ class ShippedFontsTests(unittest.TestCase):
                     self.assertIn(family, {"inter", "jetbrains mono"})
 
     def test_kontrollrummet_font_tokens_start_with_the_shipped_fonts(self):
-        # Kontrollrummet sets every font through two tokens; if a token started
+        # Kontrollrummet sets every font through three tokens; if a token started
         # with a system font, every rule that uses it would too.
         css = (WEB / "kontrollrummet.css").read_text(encoding="utf-8")
-        for token, family in {"--kr-sans": "inter", "--kr-mono": "jetbrains mono"}.items():
+        for token, family in {"--kr-sans": "inter", "--kr-mono": "jetbrains mono", "--kr-num": "inter"}.items():
             with self.subTest(token=token):
                 match = re.search(rf"{token}\s*:\s*([^;]+);", css)
                 self.assertIsNotNone(match)

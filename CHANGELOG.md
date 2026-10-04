@@ -5,6 +5,21 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Nollan har ingen prick längre: tider och nummer i Inter
+
+JetBrains Monos nolla har en prick i mitten, och på avstånd går den ihop med en
+åtta: 08:30 kunde läsas som 08:80 och tåg 4720 som 4728, särskilt på en TV
+över rummet.
+
+- Klockorna (Drift, Träffklockan, Banöversikt, Tågdiagram, Översikt och
+  deltagarvyn), tågnummer, tider i listor och i tågdiagrammet, antal och
+  "om 3 min" visas nu i Inter med tabellsiffror: vanlig nolla, och siffrorna är
+  lika breda så att kolumner och klockor ligger kvar i rad.
+- Antalet tåg bredvid stationskoden på kartorna är en egen del av etiketten
+  (koden i monospace, siffran i Inter).
+- Stationskoder, adresser, lösenord, anslutningskoder och versionsnummer behåller
+  JetBrains Mono, där pricken hjälper att skilja en nolla från ett O.
+
 ### Obemannade stationer sköts automatiskt (#115)
 
 En station utan TMBox eller TKL svarade aldrig på en tåganmälan, så tåget kunde

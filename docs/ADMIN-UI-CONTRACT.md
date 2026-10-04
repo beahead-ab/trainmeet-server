@@ -33,8 +33,8 @@ redan överallt:
   fråga eftersom det bara återställer panelen. Det som är riskabelt (återställ,
   nollställ, byt träff) är fortfarande en dialog med bekräftelse.
 - Rutt, enhetsnamn och status visas som text och form, inte bara med färg.
-- Siffror och tider är i monospace och får plats i tabellcellen på alla fem
-  språk; rubriker och status får radbrytas hellre än att tabellen växer.
+- Siffror och tider är i Inter med tabellsiffror (vanlig nolla, lika breda) och
+  får plats i tabellcellen på alla fem språk; rubriker och status får radbrytas hellre än att tabellen växer.
 
 ## Regler
 
@@ -45,8 +45,10 @@ användarflöde:
 - Radie 12 px för kort, 8 px för fält och knappar, 999 px för chip.
 - Apphuvud 56 px, vitt, med 1 px botten-border. Servern har inget byggläge;
   träffkonfigurationen redigeras och publiceras i Cloud.
-- Inter för all normal UI-text, serverad lokalt. Monospace för alla tider,
-  tågnummer, stationssignaturer, boxkoder och IP-adresser.
+- Inter för all normal UI-text, serverad lokalt. Tider och tågnummer i Inter
+  med tabellsiffror (`--kr-num`): JetBrains Monos prickade nolla går på håll
+  ihop med en åtta. Monospace för stationssignaturer, boxkoder och
+  IP-adresser, där pricken hjälper.
 - Varm dokumentbakgrund `#faf9f5`, vita kort, tunna neutrala kanter.
 - Semantiska tokens; råa färger reserveras för TMBox v2-lådan.
 - Täta adminlistor och tabeller utan egna inre scrollcontainrar för formulär.

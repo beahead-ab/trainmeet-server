@@ -58,7 +58,7 @@ body.server-display { background: var(--kr-bg); }
 .sc-top { min-height: 104px; }
 .sc-top__meet { gap: 20px; font-size: 36px; font-weight: 700; }
 .sc-subtitle { color: var(--kr-mute); font-size: 28px; font-weight: 500; }
-.sc-top__clock { color: var(--kr-ink); font: 700 64px/1 var(--kr-mono); letter-spacing: -.02em; }
+.sc-top__clock { color: var(--kr-ink); font: 700 64px/1 var(--kr-num); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .sc-top__run { color: var(--kr-green); font-size: 26px; }
 .sc-top__run.is-stopped { color: var(--kr-amber); }
 .light .sc-top__run, .light .sc-top__run.is-stopped { color: inherit; }
@@ -103,7 +103,7 @@ body.server-display { background: var(--kr-bg); }
  * är räknade så att allt ryms på 1840 px även med sekunder: 520 px siffror
  * (5 tecken à 0,56 em) och 208 px sekunder (2 tecken) är ca 1 710 px. Utan
  * sekunder är det plats för 640 px. */
-.sc-clock-layout .clock-digital { display: flex; align-items: flex-end; justify-content: center; gap: 24px; width: 100%; font-family: var(--kr-mono); font-weight: 700; line-height: .9; letter-spacing: -.04em; color: var(--kr-ink); white-space: nowrap; }
+.sc-clock-layout .clock-digital { display: flex; align-items: flex-end; justify-content: center; gap: 24px; width: 100%; font-family: var(--kr-num); font-weight: 700; line-height: .9; letter-spacing: -.04em; color: var(--kr-ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .clock-digital .cd-hm { font-size: 640px; }
 .clock-digital .cd-side { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 0; }
 .clock-digital .cd-ss { font-size: 256px; line-height: .9; }
@@ -175,20 +175,20 @@ body.server-display { background: var(--kr-bg); }
 .graph-grid.graph-col.is-half { stroke: var(--kr-line); stroke-dasharray: 4 7; }
 .sc-graph-label { font: 600 26px var(--kr-sans); fill: var(--kr-ink); }
 .sc-graph-code { font: 22px var(--kr-mono); fill: var(--kr-mute); }
-text.sc-graph-label[text-anchor] { font: 24px var(--kr-mono); fill: var(--kr-mute); }
+text.sc-graph-label[text-anchor] { font: 24px var(--kr-num); fill: var(--kr-mute); font-variant-numeric: tabular-nums; }
 .sc-graph-line { fill: none; stroke: var(--kr-faint); stroke-width: 3; stroke-linejoin: round; }
 .sc-graph-line.is-out { stroke: var(--kr-blue); stroke-width: 6; }
 .graph-train-group.selected .sc-graph-line { stroke: var(--kr-ink); }
 .graph-train-group.selected .sc-graph-line.is-out { stroke: var(--kr-blue); stroke-width: 9; }
-.sc-graph-train { font: 700 22px var(--kr-mono); fill: var(--kr-mute); stroke: var(--kr-panel); }
+.sc-graph-train { font: 700 22px var(--kr-num); fill: var(--kr-mute); stroke: var(--kr-panel); font-variant-numeric: tabular-nums; }
 .sc-graph-train.is-out { fill: var(--kr-blue); }
 .sc-graph-tag { fill: var(--kr-blue); }
-.sc-graph-tag-text { font: 700 24px var(--kr-mono); fill: var(--kr-blue-ink); }
+.sc-graph-tag-text { font: 700 24px var(--kr-num); fill: var(--kr-blue-ink); font-variant-numeric: tabular-nums; }
 .light .sc-graph-tag { fill: var(--kr-blue); }
 .light .sc-graph-tag-text { fill: var(--kr-blue-ink); }
 .sc-graph-now { stroke: var(--kr-amber); stroke-width: 4; }
 .sc-graph-now-tag { fill: var(--kr-amber); }
-.sc-graph-now-text { font: 700 22px var(--kr-mono); fill: var(--kr-amber-ink); }
+.sc-graph-now-text { font: 700 22px var(--kr-num); fill: var(--kr-amber-ink); font-variant-numeric: tabular-nums; }
 
 /* ── Översikt ───────────────────────────────────────────────────────── */
 #dashboard-view .display-card { background: var(--kr-panel); border: 1px solid var(--kr-line); border-radius: 20px; }
@@ -201,7 +201,7 @@ text.sc-graph-label[text-anchor] { font: 24px var(--kr-mono); fill: var(--kr-mut
 .light #dashboard-view .dashboard-run.is-stopped { color: var(--kr-amber); }
 #dashboard-view .dashboard-day { color: var(--kr-mute); }
 #dashboard-view .dashboard-stat { border: 1px solid var(--kr-line); border-radius: 20px; background: var(--kr-panel); }
-#dashboard-view .dashboard-stat b { font-family: var(--kr-mono); letter-spacing: -.02em; }
+#dashboard-view .dashboard-stat b { font-family: var(--kr-num); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 #dashboard-view .dashboard-stat span { color: var(--kr-mute); }
 #dashboard-view .dashboard-stat.ok b { color: var(--kr-green); }
 #dashboard-view .dashboard-stat.warn b { color: var(--kr-amber); }
@@ -232,3 +232,6 @@ text.sc-graph-label[text-anchor] { font: 24px var(--kr-mono); fill: var(--kr-mut
 #dashboard-view .dashboard-stat { padding: 14px 20px; gap: 2px; }
 #dashboard-view .dashboard-stat b { font-size: 64px; }
 #dashboard-view .dashboard-stat span { font-size: 21px; line-height: 1.15; }
+
+/* Översiktens klocka, tågnummer och tider kommer från den äldre server-ui.css i monospace: samma siffror som övriga skärmar. */
+#dashboard-view .dashboard-clock, #dashboard-view .dash-time, #dashboard-view .dash-row b, #dashboard-view .dash-in, #display-app .topology-tv .topology-train .train-number, #display-app .sc-online__line b { font-family: var(--kr-num); font-variant-numeric: tabular-nums; }
