@@ -82,6 +82,11 @@ install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/50-trainmeet-server-update.r
 install -m 0755 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server-browser" /usr/local/bin/trainmeet-server-browser
 rm -f /etc/sudoers.d/trainmeet-server-update
 install -d -o trainmeet-server -g trainmeet-server -m 0750 "$STATE_DIR"
+# The server writes its own safety copy here before a meet reset (#129). The
+# updater creates the folder as root to back up before installing, so hand the
+# folder and what it holds to the server, also on an installation updated before.
+install -d -o trainmeet-server -g trainmeet-server -m 0750 "$STATE_DIR/backups"
+chown -R trainmeet-server:trainmeet-server "$STATE_DIR/backups"
 
 BROWSER_ENABLED=false
 if [ -z "$DESKTOP_USER" ] || [ "$DESKTOP_USER" = root ]; then

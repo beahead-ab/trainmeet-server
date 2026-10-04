@@ -91,6 +91,23 @@ const root = path.resolve(__dirname, '../..');
     const after = await get('/v1/server/backups');
     assert.equal(after.backups.length, backups.backups.length + 1, 'en säkerhetskopia togs först');
     assert.ok((await get('/v1/server-context')).selected_meet.generation > generation, 'enheterna får en ny generation');
+    // Nollställ träffdata på tyska: ordet som visas låser upp knappen (#129),
+    // och NOLLSTÄLL gör det fortfarande. Knappen trycks inte.
+    await page.evaluate(() => localStorage.setItem('trainmeet.language', 'de'));
+    await page.reload();
+    await page.locator('#reset-mode-summary').click();
+    const factory = page.locator('#reset-modal');
+    await factory.waitFor({ state: 'visible' });
+    const word = (await factory.locator('label[for="factory-reset-confirmation"] b').innerText()).trim();
+    assert.notEqual(word.toUpperCase(), 'NOLLSTÄLL', 'ordet står på tyska');
+    const factoryButton = page.locator('#factory-reset-server');
+    await factory.locator('#factory-reset-confirmation').fill('fel');
+    assert.equal(await factoryButton.isDisabled(), true, 'fel ord låser inte upp');
+    await factory.locator('#factory-reset-confirmation').fill(word.toLowerCase());
+    assert.equal(await factoryButton.isDisabled(), false, 'det visade ordet låser upp');
+    await factory.locator('#factory-reset-confirmation').fill('NOLLSTÄLL');
+    assert.equal(await factoryButton.isDisabled(), false, 'NOLLSTÄLL gäller på alla språk');
+
     assert.deepEqual(errors, []);
     console.log('meet reset live: ok');
   } finally {

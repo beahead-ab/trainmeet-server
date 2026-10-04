@@ -91,7 +91,8 @@ status installing "Installerar ${VERSION:-$BUILD}"
 # installations that are still on an older version.
 PYTHON="$INSTALL_DIR/venv/bin/python"
 [ -x "$PYTHON" ] || PYTHON=python3
-mkdir -p "$BACKUP_DIR"
+# Owned by the server, which writes its own copies here before a meet reset.
+install -d -o trainmeet-server -g trainmeet-server -m 0750 "$BACKUP_DIR"
 # An installation from before the TMBox rename still holds tambox.db; the
 # server renames it on its next start, so back up whichever one is there.
 for CANDIDATE in trainmeet.db tambox.db; do

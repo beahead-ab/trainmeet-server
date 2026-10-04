@@ -907,7 +907,7 @@ function cancelModal(dialog) {
     restore.chosen = dialog.querySelector('input[name="restore-backup"]:checked')?.value || null;
     updateRestoreButton();
   }
-  if (dialog.id === "reset-modal") factoryResetButton.disabled = factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL";
+  if (dialog.id === "reset-modal") factoryResetButton.disabled = !factoryResetConfirmed();
   dialog.close();
 }
 let modalResultTimer;
@@ -1445,14 +1445,23 @@ function bindMeetReset() {
   });
 }
 
+// The word to type is shown in the user's language (RESET, NULSTIL, ...); either
+// that word or the Swedish NOLLSTÄLL unlocks the button. The server is always
+// sent NOLLSTÄLL.
+function factoryResetConfirmed() {
+  const typed = factoryResetConfirmation.value.trim().toUpperCase();
+  const shown = document.querySelector('label[for="factory-reset-confirmation"] b')?.textContent.trim().toUpperCase();
+  return typed === "NOLLSTÄLL" || (!!shown && typed === shown);
+}
+
 factoryResetConfirmation.addEventListener("input", () => {
-  factoryResetButton.disabled = factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL";
+  factoryResetButton.disabled = !factoryResetConfirmed();
 });
 
 factoryResetButton.addEventListener("click", async () => {
   const dialog = document.querySelector("#reset-modal");
   if (dialog.dataset.busy === "true") return;
-  if (factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL") return;
+  if (!factoryResetConfirmed()) return;
   const localFactoryReset = state.authStatus?.at_the_machine === true;
   const question = localFactoryReset
     ? "All lokal TrainMeet-data och administratören tas bort. Vill du fabriksåterställa nu?"
