@@ -338,7 +338,7 @@
 
           <section id="drift-clock" class="kr-panel kr-clockrow" aria-label="Träffklockan">
             <div class="kr-clock-main">
-              <span id="overview-clock" class="kr-clock-time kr-mono">--:--</span>
+              <span id="overview-clock" class="kr-clock-time kr-num">--:--</span>
               <div class="kr-clock-state">
                 <span id="clock-state" class="kr-pill">Läser klockan …</span>
                 <span class="kr-meta">
@@ -762,7 +762,7 @@
                       <option value="168">7 dygn</option>
                     </select>
                     <span class="kr-m">en ny kod gäller nya klienter – de som redan är anslutna fortsätter</span></div>
-                  <div class="kr-kv"><label class="kr-k" for="web-client-ttl">Städning</label><span>Virtuella TMBoxar utan station tas bort efter</span><input id="web-client-ttl" class="kr-field mono kr-w-xs" type="number" min="5" max="240" step="5" value="30" required data-change-label="Städning"><span>minuter</span><span class="kr-m">tilldelade och fysiska boxar berörs aldrig</span></div>
+                  <div class="kr-kv"><label class="kr-k" for="web-client-ttl">Städning</label><span>Virtuella TMBoxar utan station tas bort efter</span><input id="web-client-ttl" class="kr-field kr-num kr-w-xs" type="number" min="5" max="240" step="5" value="30" required data-change-label="Städning"><span>minuter</span><span class="kr-m">tilldelade och fysiska boxar berörs aldrig</span></div>
                 </div>
                 <p id="connection-code-message" class="form-message" role="status"></p>
                 <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>

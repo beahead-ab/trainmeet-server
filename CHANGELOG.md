@@ -5,6 +5,13 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Typsnittet från #122 på de sista ställena
+
+Tågnumret i boxens tidtabell (provbänken), tågmärket på ruttkartan i "Tidtabell
+och tågrutter", milstolparna i US-diagrammet och minutfältet för städning står nu
+i Inter med tabellsiffror i stället för JetBrains Mono. Driftklockan hade kvar en
+`kr-mono`-klass som bara inte vann; den är bytt mot `kr-num`.
+
 ### Webb-TMBoxen återansluter när telefonen vaknar
 
 En telefon som vaknar laddar ofta om sidan innan Wi-Fi är tillbaka. Webb-TMBoxen

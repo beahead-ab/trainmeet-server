@@ -303,7 +303,7 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 /* Trains on the map (appendTopologyTrain in app.js), all maps: filled on the
    line, outlined with a clear but not departed, pale inside a station. */
 .topology-train-tag { fill: #2256c3; stroke: #2256c3; stroke-width: 1.2; }
-.topology-train .train-number { fill: #fff; font: 700 10px/1 var(--font-mono); text-anchor: middle; }
+.topology-train .train-number { fill: #fff; font: 700 10px/1 var(--font); font-variant-numeric: tabular-nums; text-anchor: middle; }
 .topology-train-arrow { fill: #fff; }
 .topology-train.cleared .topology-train-tag { fill: #fff; }
 .topology-train.cleared .train-number { fill: #2256c3; }
@@ -348,7 +348,7 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .us-diagram-track { stroke: #525252; stroke-width: 4; }
 .us-diagram-node { stroke: #2256c3; stroke-width: 4; fill: white; }
 .us-diagram-label { font: 22px var(--font); fill: currentColor; }
-.us-diagram-meta { font: 18px var(--font-mono); fill: #737373; }
+.us-diagram-meta { font: 18px var(--font); font-variant-numeric: tabular-nums; fill: #737373; }
 .sc-territories { width: 100%; height: 100%; overflow: hidden; }
 .sc-territories .server-us-infra, .sc-territories .server-us-card { color: var(--display-fg); background: var(--display-card); border-color: #333; padding: 20px 24px; border-radius: 14px; }
 .sc-territories h3 { font-size: 28px; }

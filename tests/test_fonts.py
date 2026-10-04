@@ -97,5 +97,36 @@ class ShippedFontsTests(unittest.TestCase):
         self.assertRegex(banner, r"font:\s*600 15px Inter,")
 
 
+
+class NumbersTests(unittest.TestCase):
+    """Tider och nummer står i Inter med tabellsiffror, inte i JetBrains Mono (#122).
+
+    Monospace-nollan med prick går på håll ihop med en åtta. Koder, adresser
+    och tangenter behåller monospace; det här gäller det man läser som tal.
+    """
+
+    RULES = [
+        (PACKAGE / "terminal16_web" / "style.css", ".box-timetable tbody th {"),  # tågnumret i boxens tidtabell
+        (WEB / "server-ui.css", ".topology-train .train-number {"),               # tågmärket på ruttkartan
+        (WEB / "server-ui.css", ".us-diagram-meta {"),                            # milstolparna i US-diagrammet
+    ]
+
+    def test_train_numbers_and_mileposts(self):
+        for sheet, selector in self.RULES:
+            css = sheet.read_text(encoding="utf-8")
+            body = css[css.index(selector): css.index("}", css.index(selector))]
+            with self.subTest(selector=selector):
+                self.assertNotIn("mono", body)
+                self.assertIn("var(--font)", body)
+                self.assertIn("tabular-nums", body)
+
+    def test_the_drift_clock_and_the_minutes_field(self):
+        markup = (WEB / "index.html").read_text(encoding="utf-8")
+        for element in ('id="overview-clock"', 'id="web-client-ttl"'):
+            tag = markup[markup.index(element): markup.index(">", markup.index(element))]
+            with self.subTest(element=element):
+                self.assertIn("kr-num", tag)
+                self.assertNotRegex(tag, r"class=\"[^\"]*\b(kr-mono|mono)\b")
+
 if __name__ == "__main__":
     unittest.main()

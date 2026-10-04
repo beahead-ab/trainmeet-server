@@ -201,7 +201,7 @@ knappsatsen aldrig flyttar sig när text tillkommer eller försvinner:
 | `.tmbox-case` | **Oförändrad.** |
 | `.key-hints` | Chips i stället för lös text: varje `span` blir `display:inline-flex; gap:6px; font-size:12px; color:var(--text-2); background:var(--card); border:1px solid var(--border); border-radius:6px; padding:3px 8px`. Tangenten (`b`) i JetBrains Mono 700 `var(--text)`. Behållaren `display:flex; flex-wrap:wrap; gap:6px; align-content:flex-start; min-height:5.5em; overflow:auto; margin-top:10px`. |
 | `.box-message` | 12 px, `var(--muted)`, `min-height: 3em`, `overflow: auto`. `.error` → `var(--danger-text)`. |
-| `.box-timetable` | Visas bara i provbänken (live-klienten får ingen tidtabell). Tabell enligt `tm-table`: rubrikrad 11.5 px 600 `var(--text-3)` på `var(--row-alt)`, celler 12.5 px, tågnummer i JetBrains Mono 700, tid `var(--muted)`. `caption` 12 px 700 vänsterställd. Avgränsas uppåt med `border-top: 1px solid var(--border-soft)`. |
+| `.box-timetable` | Visas bara i provbänken (live-klienten får ingen tidtabell). Tabell enligt `tm-table`: rubrikrad 11.5 px 600 `var(--text-3)` på `var(--row-alt)`, celler 12.5 px, tågnummer i Inter 700 med tabellsiffror (#122), tid `var(--muted)`. `caption` 12 px 700 vänsterställd. Avgränsas uppåt med `border-top: 1px solid var(--border-soft)`. |
 
 `.box:focus-within` byter till UI-kitets fokus: `border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft)`.
 

@@ -495,6 +495,7 @@ body[data-mode="help"] #app-view { padding: 20px; }
 #app-view .kr-field.kr-field { font: 13px/18px var(--kr-sans); min-height: 34px; height: 34px; padding: 0 10px; border-radius: var(--kr-r-sm); background: var(--kr-panel-2); border: 1px solid var(--kr-line-2); color: var(--kr-ink); box-shadow: none; }
 #app-view label.kr-lbl.kr-lbl, #app-view label.kr-k.kr-k { font: 600 13px/1.3 var(--kr-sans); color: var(--kr-ink-2); gap: 0; }
 #app-view .kr-field.kr-field.mono { font-family: var(--kr-mono); }
+#app-view .kr-field.kr-field.kr-num { font-family: var(--kr-num); font-variant-numeric: tabular-nums; }
 #app-view select.kr-field { padding-right: 26px; }
 #app-view .kr-w-lg { width: 320px; max-width: 100%; } #app-view .kr-w-md { width: 280px; max-width: 100%; }
 #app-view .kr-w-sm { width: 180px; max-width: 100%; } #app-view .kr-w-xs { width: 74px; }
@@ -508,6 +509,7 @@ body[data-mode="help"] #app-view { padding: 20px; }
 .kr-field { box-sizing: border-box; height: 34px; min-height: 34px; padding: 0 10px; border: 1px solid var(--kr-line-2); border-radius: var(--kr-r-sm); background: var(--kr-panel-2); color: var(--kr-ink); font: 13px var(--kr-sans); min-width: 0; box-shadow: none; }
 .kr-field:focus-visible, .kr-nav:focus-visible { outline: 2px solid var(--kr-blue); outline-offset: 1px; }
 .kr-field.mono { font-family: var(--kr-mono); }
+.kr-field.kr-num { font-family: var(--kr-num); font-variant-numeric: tabular-nums; }
 .kr-field:disabled { opacity: .5; }
 select.kr-field { padding-right: 26px; }
 .kr-w-lg { width: 320px; max-width: 100%; } .kr-w-md { width: 280px; max-width: 100%; } .kr-w-sm { width: 180px; max-width: 100%; } .kr-w-xs { width: 74px; }
