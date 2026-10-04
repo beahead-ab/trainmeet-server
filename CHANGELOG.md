@@ -5,6 +5,18 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Obemannad station svarar på TAM (#130)
+
+En obemannad station gav aldrig klart till en TMBox när ett annat tåg samma dag
+var planerat på mottagningsspåret, vilket på en mötesstation nästan alltid är
+fallet. Automatiken räknade varje rad i dagens tidtabell på spåret som om tåget
+stod där, även tåg som kommer senare. Nu räknas bara verklig beläggning, så som
+simuleringen redan gjorde: tåg som har ankommit eller står uppställda på spåret.
+Bemannade stationer kontrolleras som förut.
+
+Under Inställningar → Obemannade stationer syns nu också vilka tåg automatiken
+väntar med och varför, till exempel "Mottagningsspåret är upptaget", och tåg som
+automatiken inte kan köra alls.
 ### Nollställ träffen fungerar på en uppdaterad Raspberry Pi (#129)
 
 Uppdateraren skapade mappen `backups` som root, och servern, som kör som

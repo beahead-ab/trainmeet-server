@@ -17,14 +17,14 @@ def at(hours, minutes, seconds=0):
     return hours * 3600 + minutes * 60 + seconds
 
 
-class AutomaticStationTests(unittest.TestCase):
+class AutomaticFixture(unittest.TestCase):
     """Train 101 runs CDA (station-a) 09:20 → LEK (station-b) 09:35."""
 
     def setUp(self):
         self.temp = TemporaryDirectory()
         self.path = Path(self.temp.name) / "server.db"
         self.runtime = SQLiteRuntimeStore(self.path)
-        self.pub = self.runtime.install(runtime_package_v3())
+        self.pub = self.runtime.install(self.package())
         self.ops = SQLiteOperationsStore(self.path)
         self.ids = IdentityStore(self.path)
         self.app = TrainMeetHTTPApplication(TrafficEngine(self.pub.session_config()), self.ids,
@@ -35,6 +35,9 @@ class AutomaticStationTests(unittest.TestCase):
         self.admin = self.app.local_admin()
         self.time = 1000.0
         self.auto.now = lambda: self.time
+
+    def package(self):
+        return runtime_package_v3()
 
     def tearDown(self):
         self.ops.close()
@@ -60,6 +63,8 @@ class AutomaticStationTests(unittest.TestCase):
     def movement(self, station, movement_id):
         return self.ops.tkl_station_state(self.pub.publication_id, self.pub.active_day, station)["movements"].get(movement_id, {})
 
+
+class AutomaticStationTests(AutomaticFixture):
     def test_two_unmanned_stations_run_the_timetable(self):
         self.advance(at(9, 17))
         self.assertEqual([], self.service.open_cases(None), "nothing before two minutes ahead")
@@ -166,6 +171,40 @@ class AutomaticStationTests(unittest.TestCase):
         self.assertFalse(status["enabled"])
         with self.assertRaises(HTTPAPIError):
             self.app.control_automatic_stations(self.admin, {"action": "automatic", "station_id": "station-b"})
+
+
+class AutomaticReceiverTrackTests(AutomaticFixture):
+    """#130: a later train planned on the receiving track does not hold it."""
+
+    def package(self):
+        package = runtime_package_v3()
+        row = dict(next(r for r in package["trains"] if r["id"] == "movement-101-b"))
+        row.update(id="movement-105-b", train_number="105", arrival_time="11:00", departure_time="11:05",
+                   arrival_from=None, departure_to=None, sort_time="11:00")
+        package["trains"].append(row)
+        return package
+
+    def tam_from_a_box(self):
+        """What the Alvesta TMBox sends: TAM through the terminal view."""
+        box = self.box("box-a", "station-a")
+        views = self.app.terminal16._views(box)
+        terminal = views.terminals[box]
+        terminal.selected = "movement-101-a"
+        self.assertEqual("", views._traffic(box, terminal, "request"))
+
+    def test_a_later_train_planned_on_the_track_does_not_hold_the_answer(self):
+        self.advance(at(9, 17))
+        self.tam_from_a_box()
+        self.advance(at(9, 18))
+        self.assertEqual("approved", self.service.open_cases(None)[0]["status"])
+
+    def test_a_train_actually_on_the_track_still_does(self):
+        self.advance(at(9, 17))
+        self.service.execute_station_command(ACTOR, "station-b", "train.position.set", {"movement_id": "movement-105-b"})
+        self.tam_from_a_box()
+        self.advance(at(9, 18))
+        self.assertEqual("waiting", self.service.open_cases(None)[0]["status"])
+        self.assertEqual("Mottagningsspåret är upptaget", self.auto.blocked["movement-101-a"])
 
 
 if __name__ == "__main__":
