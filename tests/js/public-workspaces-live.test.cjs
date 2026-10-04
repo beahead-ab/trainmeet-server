@@ -262,7 +262,10 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#pv-virtual-card a[href="/tmbox/"]').click();
     await page.locator('.box h2').getByText('Charlottendahl',{exact:true}).waitFor();
     await admin.request.post(urls.eu + '/v1/devices/remove', {data: {device_id: box.client_id}});
-    await page.waitForFunction(()=>document.querySelector('#connection').textContent.includes('inte ansluten'));
+    // The server no longer knows the box: it says so, and offers a new one
+    // without making it.
+    await page.waitForFunction(()=>document.querySelector('#connection').textContent.includes('finns inte längre på servern'));
+    assert.equal(await page.locator('#start-client').isVisible(), true);
     assert.equal(posts.filter(path => path === '/v1/browser-clients').length, 1, 'Revoked box does not recreate itself automatically');
     const revoked = posts.length;
     for (const value of ['#', '1', '*']) await page.locator(`.keypad [data-key="${value}"]`).click();

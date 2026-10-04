@@ -288,44 +288,86 @@
     if (events.readyState === EventSource.CLOSED) { heard(); lost(); }
     else silence ??= setTimeout(() => { silence = null; lost(); }, SILENCE_MS);
   };
+  // A phone that wakes up often reloads the page before its Wi-Fi is back.
+  // The saved box is still this box: use it at once and keep asking until
+  // the server answers. Only the server saying it no longer knows the box
+  // (401) means a new one is needed, and that is made when someone asks.
+  const SAVED = "trainmeet.browser-tmbox";
+  function forgotten() {
+    identity = null; ++pollVersion; lost();
+    try { localStorage.removeItem(SAVED); } catch {}
+    document.querySelector("#connection").textContent = "Den här TMBoxen finns inte längre på servern.";
+    document.querySelector("#start-client").hidden = false;
+  }
   async function startLive() {
     document.querySelector("#start-client").hidden = true;
+    let saved; try { saved = JSON.parse(localStorage.getItem(SAVED)); } catch {}
+    if (saved?.access_token) {
+      identity = saved;
+      confirmLive(saved.access_token);
+      return;
+    }
     try {
-      let saved; try { saved = JSON.parse(localStorage.getItem("trainmeet.browser-tmbox")); } catch {}
-      const response = await fetch(saved?.access_token ? "/v1/browser-clients/self" : "/v1/browser-clients", {
-        method: saved?.access_token ? "GET" : "POST", credentials: "omit", cache: "no-store",
-        headers: saved?.access_token ? {Authorization: `Bearer ${saved.access_token}`} : {"Content-Type":"application/json"},
-        body: saved?.access_token ? undefined : JSON.stringify({workspace:"tmbox"}), signal:AbortSignal.timeout(5000)});
+      const response = await fetch("/v1/browser-clients", {method:"POST", credentials:"omit", cache:"no-store",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({workspace:"tmbox"}), signal:AbortSignal.timeout(5000)});
       const result = await response.json();
       if (!response.ok || result.workspace !== "tmbox") throw Error(result.message || "Klienten kan inte anslutas.");
-      identity = {...result,access_token: saved?.access_token || result.access_token};
-      localStorage.setItem("trainmeet.browser-tmbox", JSON.stringify(identity));
+      identity = result;
+      localStorage.setItem(SAVED, JSON.stringify(identity));
     } catch (error) {
       document.querySelector("#connection").textContent = error.message;
       document.querySelector("#start-client").hidden = false;
     }
   }
-  // The box is sent every change; the browser fetches as often as the server
-  // checks for them, and keeps doing so while a command waits.
-  async function pollLive() {
-    if (identity && !document.hidden) {
-      const version = pollVersion;
-      let response;
-      try {
-        response = await fetch("/v1/tmbox/terminal", {credentials:"omit",cache:"no-store",headers:{Authorization:`Bearer ${identity.access_token}`},signal:AbortSignal.timeout(5000)});
-        if (response.status >= 500) throw Error();
-        const frame = await response.json();
-        lastContact = performance.now();
-        if (!response.ok) lost();
-        else if (version === pollVersion) update({frames:[frame],audit:[],text:{title:"TMBox",subtitle:location.host,
-          session:`Enhetskod: ${identity.device_code} · Station tilldelas av administratören`,ready:"Ansluten till servern",offline:"Servern är inte ansluten.",entry:"Siffrorna stannar här tills du trycker #."}});
-      } catch { if (response && response.status < 500) lost(); else silent(); }
+  // The saved box asks who it is (station, code) until the server answers.
+  async function confirmLive(token) {
+    let response;
+    try {
+      response = await fetch("/v1/browser-clients/self", {credentials:"omit", cache:"no-store",
+        headers:{Authorization:`Bearer ${token}`}, signal:AbortSignal.timeout(5000)});
+      if (response.status === 401) return identity?.access_token === token && forgotten();
+      if (!response.ok) throw Error();
+      const result = await response.json();
+      if (result.workspace !== "tmbox" || identity?.access_token !== token) return;
+      identity = {...result, access_token: token};
+      try { localStorage.setItem(SAVED, JSON.stringify(identity)); } catch {}
+    } catch {
+      if (identity?.access_token === token) setTimeout(() => confirmLive(token), 2000);
     }
-    setTimeout(pollLive,POLL_MS);
+  }
+  // The box is sent every change; the browser fetches as often as the server
+  // checks for them, and keeps doing so while a command waits. Coming back to
+  // the page, or the network coming back, asks at once instead of waiting.
+  let pollTimer = null, polling = false;
+  async function pollLive() {
+    clearTimeout(pollTimer); pollTimer = null;
+    if (polling) return;
+    polling = true;
+    try {
+      if (identity && !document.hidden) {
+        const version = pollVersion, token = identity.access_token;
+        let response;
+        try {
+          response = await fetch("/v1/tmbox/terminal", {credentials:"omit",cache:"no-store",headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(5000)});
+          if (response.status >= 500) throw Error();
+          const frame = await response.json();
+          lastContact = performance.now();
+          if (response.status === 401 && identity?.access_token === token) forgotten();
+          else if (!response.ok) lost();
+          else if (version === pollVersion) update({frames:[frame],audit:[],text:{title:"TMBox",subtitle:location.host,
+            session:`Enhetskod: ${identity.device_code} · Station tilldelas av administratören`,ready:"Ansluten till servern",offline:"Servern är inte ansluten.",entry:"Siffrorna stannar här tills du trycker #."}});
+        } catch { if (response && response.status < 500) lost(); else silent(); }
+      }
+    } finally {
+      polling = false;
+      pollTimer = setTimeout(pollLive, POLL_MS);
+    }
   }
   if (live) {
-    document.querySelector("#start-client").addEventListener("click",()=>{localStorage.removeItem("trainmeet.browser-tmbox");startLive();});
-    document.addEventListener("visibilitychange",()=>{if(document.hidden){++pollVersion;lost();}});
+    document.querySelector("#start-client").addEventListener("click",()=>{try { localStorage.removeItem(SAVED); } catch {} startLive();});
+    document.addEventListener("visibilitychange",()=>{if(document.hidden){++pollVersion;lost();} else pollLive();});
+    addEventListener("pageshow", event => { if (event.persisted) pollLive(); });
+    addEventListener("online", () => pollLive());
     startLive().then(pollLive);
   }
   loadChrome();

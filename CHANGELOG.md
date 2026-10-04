@@ -5,6 +5,17 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Webb-TMBoxen återansluter när telefonen vaknar
+
+En telefon som vaknar laddar ofta om sidan innan Wi-Fi är tillbaka. Webb-TMBoxen
+gav då upp vid första misslyckade kontakten och visade **Starta ny TMBox**, som
+skapade en ny box med ny enhetskod som trafikledningen fick tilldela på nytt.
+Nu är den sparade boxen fortfarande samma box: den används direkt och ansluter
+av sig själv när servern svarar, med samma enhetskod och station. Den frågar
+också genast när sidan syns igen eller nätet kommer tillbaka. Bara när servern
+säger att boxen inte finns längre (borttagen i Klienter) visas "Den här TMBoxen
+finns inte längre på servern" och knappen för en ny.
+
 ### Nollställ träffen
 
 Ny rad först i **Farozon**: börja om träffen med samma plan. Klockan går

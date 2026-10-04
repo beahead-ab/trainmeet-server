@@ -34,6 +34,7 @@ jobs:
           node tests/js/terminal16-placement-live.test.cjs
           node tests/js/restore-last.test.cjs
           node tests/js/meet-reset-live.test.cjs
+          node tests/js/tmbox-wake-live.test.cjs
           node tests/js/drift-station-list.test.cjs
           node tests/js/login-look.test.cjs
           node tests/js/admin-start.test.cjs
