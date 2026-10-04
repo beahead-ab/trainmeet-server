@@ -17,6 +17,10 @@ from .runtime import RuntimePublication, RuntimePublicationError
 from .us import USError, validate_package
 
 
+
+class MeetChangeRequired(CentralSyncError):
+    """The code is for another meet and the switch was not confirmed."""
+
 class CloudConfiguration:
     def __init__(self, application):
         self.app = application
@@ -120,10 +124,15 @@ class CloudConfiguration:
             with self.app.lifecycle.lock:
                 if self.app.lifecycle.selected() != before:
                     raise CentralSyncError("Träffen ändrades under hämtningen. Försök igen.")
+                first_link = not self.store.link_token()
                 result = self._deliver(download.package, allow_switch=payload.get("confirm_meet_change") is True)
                 self.store.save_central_url(url)
                 self.store.save_link_token(download.link_token)
-                self.store.set_cloud_auto_sync(True)
+                # Automatic fetching starts on with the first link. Coupling
+                # again, to switch meet for instance, keeps the administrator's
+                # choice (#128).
+                if first_link:
+                    self.store.set_cloud_auto_sync(True)
                 if self.store.server_name():
                     self.store.complete_installation()
                 self.last_checked_at = datetime.now(timezone.utc).isoformat()
@@ -206,7 +215,8 @@ class CloudConfiguration:
         ambiguous = bool(not previous and app.lifecycle_error)
         switching = ambiguous or bool(previous and (previous["region"], previous["meet_id"]) != (region, meet_id))
         if switching and not allow_switch:
-            raise CentralSyncError("Det här är en annan träff. Bekräfta Byt träff; servern kan bara representera en träff.")
+            raise MeetChangeRequired("Koden gäller en annan träff än den servern kör nu. Kryssa i rutan för "
+                                     "att byta träff, överst i dialogen, och tryck Koppla och hämta igen.")
         if app.lifecycle.transition():
             raise CentralSyncError("En tidigare configaktivering avbröts. Servern behöver återställas från säkerhetskopia innan ny aktivering.")
         if region == "us":
@@ -294,7 +304,11 @@ class CloudConfiguration:
         self.store._save_setting("cloud_pending_id", "")
         self.store._save_setting("cloud_pending_region", "")
         self.store.clear_pending()
-        self._report("current", "Config för {name} är uppdaterad. Pågående drift har bevarats.", name=name)
+        if switching:
+            # A different meet starts from its own plan; nothing was kept (#128).
+            self._report("current", "Servern kör nu {name}.", name=name)
+        else:
+            self._report("current", "Config för {name} är uppdaterad. Pågående drift har bevarats.", name=name)
         return {"pending": False, "activated": True, "publication_id": publication_id,
                 "operating_region": region, "message": self.message, "restart_required": False,
                 "message_template": self.message_template, "message_values": self.message_values}

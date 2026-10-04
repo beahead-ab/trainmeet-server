@@ -140,6 +140,23 @@ class CloudOnlyDeliveryTests(unittest.TestCase):
         with self.assertRaises(HTTPAPIError):
             self.connect()
 
+    def test_switching_meet_by_hand_says_how_and_keeps_the_fetch_choice(self):
+        """#128: the refusal named a "Byt träff" nobody could find, a second
+        link quietly turned automatic fetching back on, and the receipt said
+        the ongoing traffic was kept for a meet that had none."""
+        self.connect()
+        self.app.configure_cloud_auto_sync(self.admin, {"enabled": False})
+        self.offered = runtime_package_v3(publication_id="other")
+        self.offered["meet"]["id"] = "other-meet"
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.connect()
+        self.assertEqual("meet_change_required", refused.exception.code)
+        self.assertIn("Kryssa i rutan för att byta träff", str(refused.exception))
+        result = self.connect(confirm_meet_change=True)
+        self.assertEqual("other", self.runtime.active().publication_id)
+        self.assertNotIn("bevarats", result["message"])
+        self.assertFalse(self.runtime.cloud_auto_sync_enabled(), "the administrator's pause stands")
+
     def test_explicit_switch_keeps_box_identity_admin_login_and_history(self):
         self.connect()
         self.identities.create_first_owner("admin", "admin@example.se", "password")

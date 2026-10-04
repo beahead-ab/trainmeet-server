@@ -5,6 +5,18 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Byta träff går att förstå (#128)
+
+En kod för en annan träff gav "Bekräfta Byt träff", men ingen knapp hette så; det
+som behövs är kryssrutan överst i dialogen. Nu säger meddelandet det, och rutan
+markeras och får fokus. Krysset och Avbryt stänger dialogen direkt: frågan "Stäng
+utan att spara ändringarna?" fick Avbryt att se ut att hålla kvar en, och en
+träffkod är inget att spara. Ett misslyckat försök visar Cloud-kopplingen som den
+är, i stället för "Kopplingen misslyckades". Att koppla igen slår inte längre på
+"Hämta publicerade versioner automatiskt" om administratören har stängt av det, och
+efter ett byte står det "Servern kör nu {träff}." i stället för att pågående drift
+har bevarats. Dialogens rubrik, ingress och kryssruta finns nu på alla fem språken.
+API:et svarar `meet_change_required` när bytet inte är bekräftat.
 ### Obemannad station svarar på TAM (#130)
 
 En obemannad station gav aldrig klart till en TMBox när ett annat tåg samma dag
