@@ -13,10 +13,19 @@ const { open } = require('./kr-fixture.cjs');
       await page.goto('http://127.0.0.1:9999' + route, { waitUntil: 'commit' });
       const seen = [];
       for (let i = 0; i < 80; i++) {
-        const frame = await page.evaluate(() => document.body ? {
-          mode: document.body.dataset.mode, shown: getComputedStyle(document.querySelector('#app-view') || document.body).visibility === 'visible'
-            && !document.querySelector('#app-view')?.classList.contains('hidden'),
-          bg: getComputedStyle(document.documentElement).backgroundColor } : null).catch(() => null);
+        // Bara bilder som ritas räknas. requestAnimationFrame körs inte medan
+        // stilmallarna i <head> laddas, och det läget målas aldrig. Ett prov
+        // direkt efter 'commit' kunde annars se en genomskinlig botten.
+        const frame = await page.evaluate(() => new Promise((resolve) => {
+          const timer = setTimeout(() => resolve(null), 1000);
+          requestAnimationFrame(() => {
+            clearTimeout(timer);
+            resolve(document.body ? {
+              mode: document.body.dataset.mode, shown: getComputedStyle(document.querySelector('#app-view') || document.body).visibility === 'visible'
+                && !document.querySelector('#app-view')?.classList.contains('hidden'),
+              bg: getComputedStyle(document.documentElement).backgroundColor } : null);
+          });
+        })).catch(() => null);
         if (frame) seen.push(frame);
         if (frame?.mode === mode && frame.shown) break;
         await page.waitForTimeout(40);
