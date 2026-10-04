@@ -7,13 +7,20 @@ German (`de`). A language picker is also available before sign-in.
 
 ## Scope and remaining translation work
 
-This is the **first localization pass, not a completely translated release**.
-Navigation, common controls, sign-in, terminal onboarding, shift controls and
-the US authority actions are translated. Several detailed EU/Cloud help paragraphs, import
-progress messages, dynamic summaries and backend errors still use their
-original text. Previously existing dictionary entries without a requested
-translation fall back to English; unknown messages retain their source text.
-Do not deploy or describe this as complete five-language coverage yet.
+Every developer-authored text in the Server pages (Drift, Inställningar,
+displays, participant view), the US pages, the virtual TMBox, the TMBox test
+bench and flows page, and TKL exists in all five languages.
+`node tools/i18n-audit.mjs` checks this (`--list` names each gap with file and
+line); `tests/js/i18n-coverage.test.cjs` fails on any gap, and TKL runs the same
+rules in `npm test` (`scripts/i18n-audit.mjs`). The TMBox's own LCD texts are
+checked in `tests/test_tmbox_language.py`: every key the firmware looks up, in
+all five languages, within its 16-character line.
+
+Deliberately still in their source language: messages written by the server's
+API (shown as sent unless the same text has a row), the generated walkthroughs
+on the TMBox flows page (pictures of a box set to Swedish, as the page says)
+and the in-app TMBox client and documentation view, which no route opens.
+Unknown messages keep their source text.
 
 No runtime network translation, external font service or Cloud connection is
 required. The language choice is an operator/browser preference, not a meet
@@ -47,10 +54,17 @@ The generator checks that interpolation parameters match in all five languages;
 uppercase headings preserve parameter names. Source aliases share catalog rows
 to avoid repeating the same five translations throughout the bundle.
 
+`translations/participant.txt` (participant view) and `translations/tmbox.txt`
+(virtual TMBox, test bench, flows page) are Server-only rows with the same
+format, built into `participant-messages.js` and `tmbox-messages.js`; they are
+not vendored. US-only rows live in `us_web/workspace-messages.js`, TKL-only rows
+in TKL's `src/i18n/workspace-messages.js`.
+
 ```sh
 node tools/build-i18n.mjs
 node tools/sync-i18n.mjs
-node --test tests/js/i18n.test.cjs
+node tools/i18n-audit.mjs
+node --test tests/js/i18n.test.cjs tests/js/i18n-coverage.test.cjs
 ```
 
 The sync script expects sibling Cloud and TKL checkouts. It vendors identical

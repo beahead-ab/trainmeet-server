@@ -1,4 +1,145 @@
 # English|Svenska|Dansk|Norsk bokmål|Deutsch
+# Added for the five-language audit (tools/i18n-audit.mjs). Kept first so that an
+# English source text already used elsewhere keeps its existing row.
+Paused|Pausad|Sat på pause|Satt på pause|Pausiert
+the automation continues from the current traffic state. The connected client can no longer control the station.|automatiken fortsätter från nuvarande trafikläge. Den anslutna klienten kan inte längre styra stationen.|automatikken fortsætter fra den nuværende trafiksituation. Den tilsluttede klient kan ikke længere styre stationen.|automatikken fortsetter fra nåværende trafikksituasjon. Den tilkoblede klienten kan ikke lenger styre stasjonen.|die Automatik macht ab der aktuellen Verkehrslage weiter. Der verbundene Client kann den Bahnhof nicht mehr steuern.
+Let a client take over|Låt klient ta över|Lad en klient overtage|La en klient ta over|Einen Client übernehmen lassen
+Hand over to an operator|Lämna till operatör|Overlad til en operatør|Overlat til en operatør|An einen Bediener übergeben
+Arrived|Ankommet|Ankommet|Ankommet|Angekommen
+min extra station work|min extra stationsarbete|min. ekstra stationsarbejde|min ekstra stasjonsarbeid|Min. zusätzliche Bahnhofsarbeit
+Could not read the simulation|Kunde inte läsa simuleringen|Kunne ikke læse simuleringen|Kunne ikke lese simuleringen|Die Simulation konnte nicht gelesen werden
+The simulation could not be changed|Simuleringen kunde inte ändras|Simuleringen kunne ikke ændres|Simuleringen kunne ikke endres|Die Simulation konnte nicht geändert werden
+End simulation|Avsluta simulering|Afslut simulering|Avslutt simulering|Simulation beenden
+All clients return to the saved normal game with the clock paused. Connections and station assignments are kept. The simulation's data is stored separately.|Alla klienter återgår till det sparade vanliga spelet med pausad klocka. Anslutningar och stationstilldelningar behålls. Simuleringens data sparas separat.|Alle klienter vender tilbage til det gemte normale spil med uret på pause. Forbindelser og stationstildelinger bevares. Simuleringens data gemmes separat.|Alle klienter går tilbake til det lagrede vanlige spillet med klokken på pause. Tilkoblinger og stasjonstildelinger beholdes. Simuleringens data lagres separat.|Alle Clients kehren zum gespeicherten normalen Spiel mit angehaltener Uhr zurück. Verbindungen und Bahnhofszuweisungen bleiben erhalten. Die Daten der Simulation werden getrennt gespeichert.
+The simulation was updated.|Simuleringen uppdaterades.|Simuleringen blev opdateret.|Simuleringen ble oppdatert.|Die Simulation wurde aktualisiert.
+The code could not be redeemed|Koden gick inte att lösa in|Koden kunne ikke indløses|Koden kunne ikke løses inn|Der Code konnte nicht eingelöst werden
+The password is set. Sign in.|Lösenordet är satt. Logga in.|Adgangskoden er angivet. Log ind.|Passordet er satt. Logg inn.|Das Passwort ist gesetzt. Melde dich an.
+The passwords do not match.|Lösenorden är inte likadana.|Adgangskoderne er ikke ens.|Passordene er ikke like.|Die Passwörter stimmen nicht überein.
+The administrator could not be created|Administratören kunde inte skapas|Administratoren kunne ikke oprettes|Administratoren kunne ikke opprettes|Der Administrator konnte nicht angelegt werden
+The server name could not be saved|Servernamnet kunde inte sparas|Servernavnet kunne ikke gemmes|Servernavnet kunne ikke lagres|Der Servername konnte nicht gespeichert werden
+Enter all six digits of the meet code.|Fyll i alla sex siffror i träffkoden.|Udfyld alle seks cifre i træfkoden.|Fyll inn alle seks sifrene i treffkoden.|Gib alle sechs Ziffern des Treffencodes ein.
+Fetching the meet …|Hämtar träffen …|Henter træffet …|Henter treffet …|Treffen wird geladen …
+The meet could not be fetched|Träffen kunde inte hämtas|Træffet kunne ikke hentes|Treffet kunne ikke hentes|Das Treffen konnte nicht geladen werden
+Setup could not be completed|Installationen kunde inte slutföras|Installationen kunne ikke fuldføres|Installasjonen kunne ikke fullføres|Die Einrichtung konnte nicht abgeschlossen werden
+Restarting|Startar om|Genstarter|Starter på nytt|Neustart läuft
+The server could not be restarted|Servern kunde inte startas om|Serveren kunne ikke genstartes|Serveren kunne ikke startes på nytt|Der Server konnte nicht neu gestartet werden
+The server name is now {name}.|Servernamnet är nu {name}.|Servernavnet er nu {name}.|Servernavnet er nå {name}.|Der Servername lautet jetzt {name}.
+Enter a speed greater than zero, for example 4.3.|Ange en hastighet större än noll, till exempel 4,3.|Angiv en hastighed større end nul, for eksempel 4,3.|Angi en hastighet større enn null, for eksempel 4,3.|Gib eine Geschwindigkeit größer als null ein, zum Beispiel 4,3.
+The clock could not be updated|Klockan kunde inte uppdateras|Uret kunne ikke opdateres|Klokken kunne ikke oppdateres|Die Uhr konnte nicht aktualisiert werden
+The language could not be saved.|Språket kunde inte sparas.|Sproget kunne ikke gemmes.|Språket kunne ikke lagres.|Die Sprache konnte nicht gespeichert werden.
+The language is saved. The box gets it now or at its next connection.|Språket är sparat. Boxen får det nu eller vid nästa anslutning.|Sproget er gemt. Boksen får det nu eller ved næste forbindelse.|Språket er lagret. Boksen får det nå eller ved neste tilkobling.|Die Sprache ist gespeichert. Die Box erhält sie jetzt oder bei der nächsten Verbindung.
+The TMBox could not be assigned|TMBoxen kunde inte kopplas|TMBox kunne ikke tilknyttes|TMBoxen kunne ikke kobles til|Die TMBox konnte nicht zugeordnet werden
+The TMBox is assigned and fetches its station at the next contact.|TMBoxen är kopplad och hämtar sin station vid nästa kontakt.|TMBox er tilknyttet og henter sin station ved næste kontakt.|TMBoxen er koblet til og henter stasjonen sin ved neste kontakt.|Die TMBox ist zugeordnet und lädt ihren Bahnhof beim nächsten Kontakt.
+1/3 · Contacting the Config server and checking the meet code …|1/3 · Kontaktar Config-servern och kontrollerar träffkoden …|1/3 · Kontakter Config-serveren og kontrollerer træfkoden …|1/3 · Kontakter Config-serveren og kontrollerer treffkoden …|1/3 · Config-Server wird kontaktiert und der Treffencode geprüft …
+3/3 · {message} The Cloud connection is saved on the server.|3/3 · {message} Cloud-kopplingen är sparad på servern.|3/3 · {message} Cloud-forbindelsen er gemt på serveren.|3/3 · {message} Cloud-tilkoblingen er lagret på serveren.|3/3 · {message} Die Cloud-Verbindung ist auf dem Server gespeichert.
+3/3 · The Cloud connection is saved on the server.|3/3 · Cloud-kopplingen är sparad på servern.|3/3 · Cloud-forbindelsen er gemt på serveren.|3/3 · Cloud-tilkoblingen er lagret på serveren.|3/3 · Die Cloud-Verbindung ist auf dem Server gespeichert.
+unknown date|okänt datum|ukendt dato|ukjent dato|unbekanntes Datum
+the copy cannot be used|kopian går inte att använda|kopien kan ikke bruges|kopien kan ikke brukes|die Kopie ist nicht verwendbar
+unknown error|okänt fel|ukendt fejl|ukjent feil|unbekannter Fehler
+The backups could not be read|Säkerhetskopiorna kunde inte läsas|Sikkerhedskopierne kunne ikke læses|Sikkerhetskopiene kunne ikke leses|Die Sicherungen konnten nicht gelesen werden
+The server will be restored and restarted. Everything that happened after the copy is lost, {name} included.|Servern återställs och startar om. Allt som hänt efter kopian försvinner, {name} inkluderat.|Serveren gendannes og genstartes. Alt, hvad der er sket efter kopien, forsvinder, også {name}.|Serveren gjenopprettes og startes på nytt. Alt som har skjedd etter kopien, forsvinner, også {name}.|Der Server wird wiederhergestellt und neu gestartet. Alles, was nach der Kopie geschehen ist, geht verloren, auch {name}.
+The restore could not be started|Återställningen gick inte att starta|Gendannelsen kunne ikke startes|Gjenopprettingen kunne ikke startes|Die Wiederherstellung konnte nicht gestartet werden
+The server is being restored and restarts.|Servern återställs och startar om.|Serveren gendannes og genstarter.|Serveren gjenopprettes og starter på nytt.|Der Server wird wiederhergestellt und startet neu.
+Restoring and restarting|Återställer och startar om|Gendanner og genstarter|Gjenoppretter og starter på nytt|Wiederherstellung und Neustart
+Factory resetting the server and starting the first-time setup …|Fabriksåterställer servern och startar första installationen …|Nulstiller serveren til fabriksindstillinger og starter førstegangsopsætningen …|Tilbakestiller serveren til fabrikkinnstillinger og starter førstegangsoppsettet …|Der Server wird auf Werkseinstellungen zurückgesetzt und die Ersteinrichtung gestartet …
+Resetting meet data and keeping your sign-in …|Nollställer träffdata och behåller din inloggning …|Nulstiller træfdata og bevarer dit login …|Tilbakestiller treffdata og beholder innloggingen din …|Treffendaten werden zurückgesetzt, deine Anmeldung bleibt erhalten …
+The server could not be reset|Servern kunde inte nollställas|Serveren kunne ikke nulstilles|Serveren kunne ikke tilbakestilles|Der Server konnte nicht zurückgesetzt werden
+Resetting|Nollställer|Nulstiller|Tilbakestiller|Wird zurückgesetzt
+The update backs up the database and restarts the server. Ongoing traffic is interrupted. Continue?|Uppdateringen säkerhetskopierar databasen och startar om servern. Pågående trafik avbryts. Fortsätta?|Opdateringen sikkerhedskopierer databasen og genstarter serveren. Igangværende trafik afbrydes. Fortsæt?|Oppdateringen tar sikkerhetskopi av databasen og starter serveren på nytt. Pågående trafikk avbrytes. Fortsette?|Das Update sichert die Datenbank und startet den Server neu. Laufender Verkehr wird unterbrochen. Fortfahren?
+Starting the update …|Startar uppdateringen …|Starter opdateringen …|Starter oppdateringen …|Update wird gestartet …
+The update could not be started|Uppdateringen kunde inte startas|Opdateringen kunne ikke startes|Oppdateringen kunne ikke startes|Das Update konnte nicht gestartet werden
+Updating in the background. The page reconnects after the restart.|Uppdaterar i bakgrunden. Sidan ansluter igen efter omstart.|Opdaterer i baggrunden. Siden forbinder igen efter genstarten.|Oppdaterer i bakgrunnen. Siden kobler til igjen etter omstarten.|Update läuft im Hintergrund. Die Seite verbindet sich nach dem Neustart wieder.
+The update failed|Uppdateringen misslyckades|Opdateringen mislykkedes|Oppdateringen mislyktes|Das Update ist fehlgeschlagen
+The update is taking longer than expected. Reload the page in a while.|Uppdateringen tar längre tid än väntat. Ladda om sidan om en stund.|Opdateringen tager længere tid end ventet. Genindlæs siden om lidt.|Oppdateringen tar lengre tid enn ventet. Last inn siden på nytt om en stund.|Das Update dauert länger als erwartet. Lade die Seite gleich neu.
+unknown|okänd|ukendt|ukjent|unbekannt
+Update in progress|Uppdateringen pågår|Opdateringen er i gang|Oppdateringen pågår|Update läuft
+The server has the latest version.|Servern har senaste versionen.|Serveren har den nyeste version.|Serveren har siste versjon.|Der Server hat die neueste Version.
+The version check failed|Versionskontrollen misslyckades|Versionskontrollen mislykkedes|Versjonskontrollen mislyktes|Die Versionsprüfung ist fehlgeschlagen
+Restart TrainMeet Server and start using the activated station plan?|Starta om TrainMeet Server och börja använda den aktiverade stationsplanen?|Genstart TrainMeet Server og begynd at bruge den aktiverede stationsplan?|Start TrainMeet Server på nytt og begynn å bruke den aktiverte stasjonsplanen?|TrainMeet Server neu starten und den aktivierten Bahnhofsplan verwenden?
+Restarting TrainMeet Server …|Startar om TrainMeet Server …|Genstarter TrainMeet Server …|Starter TrainMeet Server på nytt …|TrainMeet Server wird neu gestartet …
+Check the server|Kontrollera servern|Kontrollér serveren|Kontroller serveren|Server prüfen
+The server has not come back yet. Check power and network.|Servern har inte kommit tillbaka ännu. Kontrollera ström och nätverk.|Serveren er ikke kommet tilbage endnu. Kontrollér strøm og netværk.|Serveren har ikke kommet tilbake ennå. Kontroller strøm og nettverk.|Der Server ist noch nicht zurück. Prüfe Strom und Netzwerk.
+Could not assign the station|Kunde inte tilldela station|Kunne ikke tildele stationen|Kunne ikke tildele stasjonen|Der Bahnhof konnte nicht zugewiesen werden
+Assign box|Tilldela box|Tildel boks|Tildel boks|Box zuweisen
+The clock is running – nothing here should be done during a running meet|Klockan går – inget här bör göras under en pågående träff|Uret kører – intet her bør gøres under et igangværende træf|Klokken går – ingenting her bør gjøres under et pågående treff|Die Uhr läuft – hier sollte während eines laufenden Treffens nichts getan werden
+The actions here cannot be undone.|Åtgärderna här går inte att ångra.|Handlingerne her kan ikke fortrydes.|Handlingene her kan ikke angres.|Die Aktionen hier können nicht rückgängig gemacht werden.
+Valid for {hours} hours|Gäller i {hours} timmar|Gælder i {hours} timer|Gjelder i {hours} timer|Gültig für {hours} Stunden
+Reconnecting|Återansluter|Genopretter forbindelsen|Kobler til igjen|Verbindung wird wiederhergestellt
+The server's access mode could not be read|Serverns åtkomstläge kunde inte läsas|Serverens adgangstilstand kunne ikke læses|Serverens tilgangsmodus kunne ikke leses|Der Zugriffsmodus des Servers konnte nicht gelesen werden
+Factory reset the server|Fabriksåterställ servern|Nulstil serveren til fabriksindstillinger|Tilbakestill serveren til fabrikkinnstillinger|Server auf Werkseinstellungen zurücksetzen
+Start over with a completely clean TrainMeet Server|Börja om från en helt ren TrainMeet Server|Start forfra med en helt ren TrainMeet Server|Start på nytt med en helt ren TrainMeet Server|Mit einem völlig leeren TrainMeet Server neu beginnen
+Removes the administrator, meet configuration, local traffic history, Cloud connection and paired devices. The first-time setup opens after the restart.|Tar bort administratör, träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Första installationen öppnas efter omstarten.|Fjerner administrator, træfkonfiguration, lokal trafikhistorik, Cloud-forbindelse og parrede enheder. Førstegangsopsætningen åbnes efter genstarten.|Fjerner administrator, treffkonfigurasjon, lokal trafikkhistorikk, Cloud-tilkobling og parede enheter. Førstegangsoppsettet åpnes etter omstarten.|Entfernt Administrator, Treffenkonfiguration, lokalen Verkehrsverlauf, Cloud-Verbindung und gekoppelte Geräte. Nach dem Neustart öffnet sich die Ersteinrichtung.
+The setup state could not be read|Installationsläget kunde inte läsas|Installationsstatus kunne ikke læses|Installasjonsstatusen kunne ikke leses|Der Einrichtungsstatus konnte nicht gelesen werden
+Sign-in required|Inloggning krävs|Login påkrævet|Innlogging kreves|Anmeldung erforderlich
+Sign in to continue the setup you started.|Logga in för att fortsätta den påbörjade installationen.|Log ind for at fortsætte den påbegyndte installation.|Logg inn for å fortsette installasjonen du har begynt på.|Melde dich an, um die begonnene Einrichtung fortzusetzen.
+The server is not responding|Servern svarar inte|Serveren svarer ikke|Serveren svarer ikke|Der Server antwortet nicht
+No timetable entries|Inga tidtabellslag|Ingen køreplansposter|Ingen ruteoppføringer|Keine Fahrplaneinträge
+Showing the last received time|Senast mottagna tid visas|Senest modtagne tid vises|Sist mottatte tid vises|Zuletzt empfangene Zeit wird angezeigt
+No contact|Kontakt saknas|Ingen kontakt|Ingen kontakt|Kein Kontakt
+No contact|Ingen kontakt|Ingen kontakt|Ingen kontakt|Kein Kontakt
+The server did not respond|Servern svarade inte|Serveren svarede ikke|Serveren svarte ikke|Der Server hat nicht geantwortet
+Invited — has not chosen a password|Inbjuden — har inte valt lösenord|Inviteret — har ikke valgt adgangskode|Invitert — har ikke valgt passord|Eingeladen — hat noch kein Passwort gewählt
+The users could not be read|Användarna kunde inte läsas|Brugerne kunne ikke læses|Brukerne kunne ikke leses|Die Benutzer konnten nicht gelesen werden
+The action could not be carried out|Åtgärden gick inte att utföra|Handlingen kunne ikke udføres|Handlingen kunne ikke utføres|Die Aktion konnte nicht ausgeführt werden
+{name} is now owner|{name} är nu ägare|{name} er nu ejer|{name} er nå eier|{name} ist jetzt Eigentümer
+{name} is now administrator|{name} är nu administratör|{name} er nu administrator|{name} er nå administrator|{name} ist jetzt Administrator
+{name} has been removed|{name} är borttagen|{name} er fjernet|{name} er fjernet|{name} wurde entfernt
+Planned track is occupied|Planerat spår är upptaget|Planlagt spor er optaget|Planlagt spor er opptatt|Geplantes Gleis ist belegt
+The train is not ready|Tåget är inte färdigt|Toget er ikke klar|Toget er ikke klart|Der Zug ist nicht bereit
+The station is manually staffed|Stationen är manuellt bemannad|Stationen er manuelt bemandet|Stasjonen er manuelt bemannet|Der Bahnhof ist manuell besetzt
+In progress|Pågår|I gang|Pågår|Läuft
+Swedish (SJ)|Svensk (SJ)|Svensk (SJ)|Svensk (SJ)|Schwedisch (SJ)
+Norwegian (NSB)|Norsk (NSB)|Norsk (NSB)|Norsk (NSB)|Norwegisch (NSB)
+Danish (DSB)|Dansk (DSB)|Dansk (DSB)|Dansk (DSB)|Dänisch (DSB)
+German (DB)|Tysk (DB)|Tysk (DB)|Tysk (DB)|Deutsch (DB)
+Finnish (VR)|Finsk (VR)|Finsk (VR)|Finsk (VR)|Finnisch (VR)
+Polish (PKP)|Polsk (PKP)|Polsk (PKP)|Polsk (PKP)|Polnisch (PKP)
+Dutch (NS)|Nederländsk (NS)|Nederlandsk (NS)|Nederlandsk (NS)|Niederländisch (NS)
+French (SNCF)|Fransk (SNCF)|Fransk (SNCF)|Fransk (SNCF)|Französisch (SNCF)
+Italian (FS)|Italiensk (FS)|Italiensk (FS)|Italiensk (FS)|Italienisch (FS)
+American|Amerikansk|Amerikansk|Amerikansk|Amerikanisch
+All local TrainMeet data and the administrator will be removed. Factory reset now?|All lokal TrainMeet-data och administratören tas bort. Vill du fabriksåterställa nu?|Alle lokale TrainMeet-data og administratoren fjernes. Vil du nulstille til fabriksindstillinger nu?|Alle lokale TrainMeet-data og administratoren fjernes. Vil du tilbakestille til fabrikkinnstillinger nå?|Alle lokalen TrainMeet-Daten und der Administrator werden entfernt. Jetzt auf Werkseinstellungen zurücksetzen?
+Meet data and connections will be removed. Your administrator sign-in is kept. Continue?|Träffdata och anslutningar tas bort. Din administratörsinloggning behålls. Vill du fortsätta?|Træfdata og forbindelser fjernes. Dit administratorlogin bevares. Vil du fortsætte?|Treffdata og tilkoblinger fjernes. Administratorinnloggingen din beholdes. Vil du fortsette?|Treffendaten und Verbindungen werden entfernt. Deine Administratoranmeldung bleibt erhalten. Fortfahren?
+Installed build|Installerad build|Installeret build|Installert build|Installierter Build
+Available build|Tillgänglig build|Tilgængelig build|Tilgjengelig build|Verfügbarer Build
+Failed at step|Fel i steget|Fejl i trinnet|Feil i trinnet|Fehler im Schritt
+{name} is invited. The code has also been sent to {email}.|{name} är inbjuden. Koden är också skickad till {email}.|{name} er inviteret. Koden er også sendt til {email}.|{name} er invitert. Koden er også sendt til {email}.|{name} ist eingeladen. Der Code wurde auch an {email} gesendet.
+{name} is invited. The server is not connected to TrainMeet Cloud, so hand over the code.|{name} är inbjuden. Servern är inte kopplad till TrainMeet Cloud, så lämna över koden.|{name} er inviteret. Serveren er ikke forbundet med TrainMeet Cloud, så giv koden videre.|{name} er invitert. Serveren er ikke koblet til TrainMeet Cloud, så gi koden videre.|{name} ist eingeladen. Der Server ist nicht mit TrainMeet Cloud verbunden, gib den Code also persönlich weiter.
+{name} is invited, but the email could not be sent: {problem} Hand over the code.|{name} är inbjuden, men e-posten gick inte iväg: {problem} Lämna över koden.|{name} er inviteret, men e-mailen kunne ikke sendes: {problem} Giv koden videre.|{name} er invitert, men e-posten kunne ikke sendes: {problem} Gi koden videre.|{name} ist eingeladen, aber die E-Mail konnte nicht gesendet werden: {problem} Gib den Code persönlich weiter.
+{name} is invited. Hand over the code.|{name} är inbjuden. Lämna över koden.|{name} er inviteret. Giv koden videre.|{name} er invitert. Gi koden videre.|{name} ist eingeladen. Gib den Code persönlich weiter.
+{count} box awaiting a station|{count} box väntar på station|{count} boks afventer station|{count} boks venter på stasjon|{count} Box wartet auf einen Bahnhof
+1 run by the simulator|1 sköts av simulatorn|1 styres af simulatoren|1 styres av simulatoren|1 vom Simulator gesteuert
+No stations in the meet.|Inga stationer i träffen.|Ingen stationer i træffet.|Ingen stasjoner i treffet.|Keine Bahnhöfe im Treffen.
+{count} deviation|{count} avvikelse|{count} afvigelse|{count} avvik|{count} Abweichung
+{count} deviations|{count} avvikelser|{count} afvigelser|{count} avvik|{count} Abweichungen
+a train is later than the timetable|något tåg är senare än tidtabellen|et tog er senere end køreplanen|et tog er senere enn ruteplanen|ein Zug ist später als der Fahrplan
+station|station|station|stasjon|Bahnhof
+Ready to depart|Klart att avgå|Klar til afgang|Klar til avgang|Abfahrbereit
+At the station|På station|På stationen|På stasjonen|Im Bahnhof
+running version {n}|kör version {n}|kører version {n}|kjører versjon {n}|läuft mit Version {n}
+Published|Publicerad|Udgivet|Publisert|Veröffentlicht
+Type|Typ|Type|Type|Typ
+Message|Meddelande|Besked|Melding|Meldung
+Ready|Redo|Klar|Klar|Bereit
+Unsaved changes|Osparade ändringar|Ikke gemte ændringer|Ulagrede endringer|Ungespeicherte Änderungen
+SIMULATION · Running · Normal operating data is not affected|SIMULERING · Pågår · Vanlig driftdata påverkas inte|SIMULERING · I gang · Normale driftsdata påvirkes ikke|SIMULERING · Pågår · Vanlige driftsdata påvirkes ikke|SIMULATION · Läuft · Normale Betriebsdaten bleiben unberührt
+SIMULATION · Paused · Normal operating data is not affected|SIMULERING · Pausad · Vanlig driftdata påverkas inte|SIMULERING · På pause · Normale driftsdata påvirkes ikke|SIMULERING · På pause · Vanlige driftsdata påvirkes ikke|SIMULATION · Pausiert · Normale Betriebsdaten bleiben unberührt
+SIMULATION · No contact with the server|SIMULERING · Kontakt med servern saknas|SIMULERING · Ingen kontakt med serveren|SIMULERING · Ingen kontakt med serveren|SIMULATION · Keine Verbindung zum Server
+Searching for an update|Söker efter uppdatering|Søger efter opdatering|Søker etter oppdatering|Suche nach Update
+Downloading|Hämtar|Henter|Henter|Wird geladen
+Verifying|Verifierar|Verificerer|Verifiserer|Wird geprüft
+Installing|Installerar|Installerer|Installerer|Wird installiert
+Checking that the service works|Kontrollerar att tjänsten fungerar|Kontrollerer, at tjenesten virker|Kontrollerer at tjenesten fungerer|Prüfe, ob der Dienst läuft
+Train {number} · {count} stops|Tåg {number} · {count} stopp|Tog {number} · {count} stop|Tog {number} · {count} stopp|Zug {number} · {count} Halte
+Train {number}|Tåg {number}|Tog {number}|Tog {number}|Zug {number}
+off|avstängd|slået fra|slått av|aus
+shown|visas|vises|vises|angezeigt
+hidden|dolda|skjult|skjult|ausgeblendet
+# Cloud config status lines from the server (cloud_config.py)
+The server uses the latest published config.|Servern använder senaste publicerade config.|Serveren bruger den seneste udgivne config.|Serveren bruker siste publiserte config.|Der Server verwendet die zuletzt veröffentlichte Config.
+The selected config is already in use.|Den valda configen används redan.|Den valgte config bruges allerede.|Den valgte configen er allerede i bruk.|Die ausgewählte Config wird bereits verwendet.
+New config fetched – waiting: {blockers}|Ny config hämtad – väntar: {blockers}|Ny config hentet – venter: {blockers}|Ny config hentet – venter: {blockers}|Neue Config geladen – wartet: {blockers}
+The config for {name} is updated. Ongoing operations have been kept.|Config för {name} är uppdaterad. Pågående drift har bevarats.|Config for {name} er opdateret. Igangværende drift er bevaret.|Config for {name} er oppdatert. Pågående drift er beholdt.|Die Config für {name} ist aktualisiert. Der laufende Betrieb wurde beibehalten.
 {count} train movements|{count} tågrörelser|{count} togbevægelser|{count} togbevegelser|{count} Zugbewegungen
 {count} tracks|{count} spår|{count} spor|{count} spor|{count} Gleise
 {count} sections|{count} sträckor|{count} strækninger|{count} strekninger|{count} Strecken

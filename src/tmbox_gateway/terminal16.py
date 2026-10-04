@@ -242,9 +242,12 @@ class Terminal16Lab:
                 schedule = self._schedule(terminal, leg)
                 outgoing = schedule["kind"] == "departure"
                 other = self.engine.config.stations[schedule["other"]]
+                # time/route are the Swedish text; kind, clock and station let
+                # the test bench page say it in the reader's language.
                 entry = {"train_number": leg["train_number"],
                          "time": ("Avg " if outgoing else "Ank ") + schedule["time"],
-                         "route": ("Till " if outgoing else "Från ") + other.name}
+                         "route": ("Till " if outgoing else "Från ") + other.name,
+                         "kind": schedule["kind"], "clock": schedule["time"], "station": other.name}
                 entries.append((schedule["order"], leg["train_number"], key, entry))
             return {"title": "Tidtabell · testdata", "columns": ["Tåg", "Tid", "Från / till"],
                     "rows": [entry for _, _, _, entry in sorted(entries)],

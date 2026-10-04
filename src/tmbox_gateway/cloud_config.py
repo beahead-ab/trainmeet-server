@@ -24,8 +24,15 @@ class CloudConfiguration:
         self.last_checked_at = None
         self.state = "idle"
         self.message = ""
+        self.message_template, self.message_values = "", {}
         self.notifications_supported = False
         self._stopping = threading.Event()
+
+    def _report(self, state, template, **values):
+        """The status line in Swedish, plus its template and values so a page
+        can show it in the reader's language (translations/ui.txt)."""
+        self.state, self.message = state, template.format(**values)
+        self.message_template, self.message_values = template, values
 
     def request_stop(self):
         """Let in-flight network requests finish, but start no new adoption."""
@@ -39,6 +46,7 @@ class CloudConfiguration:
         selected = self.app.lifecycle.selected()
         return {
             "state": self.state, "message": self.message,
+            "message_template": self.message_template, "message_values": self.message_values,
             "current_publication_id": selected.get("publication_id") if selected else None,
             "pending_publication_id": self.store._setting("cloud_pending_id") or None,
             "auto_sync": self.store.cloud_auto_sync_enabled(),
@@ -153,7 +161,7 @@ class CloudConfiguration:
                         self.store._save_setting("cloud_pending_id", "")
                         self.store._save_setting("cloud_pending_region", "")
                         self.store.clear_pending()
-                        self.state, self.message = "current", "Servern använder senaste publicerade config."
+                        self._report("current", "Servern använder senaste publicerade config.")
                         self.last_checked_at = datetime.now(timezone.utc).isoformat()
                         return {"checked": True, "pending": False, "update_available": False, **self.status()}
                 download = self.app.linked_runtime_fetcher(token, url, False)
@@ -177,6 +185,7 @@ class CloudConfiguration:
                 return {"checked": True, "update_available": result.get("pending", False), **result, **self.status()}
             except (CentralSyncError, RuntimePublicationError, USError) as error:
                 self.state, self.message = "error", str(error)
+                self.message_template, self.message_values = "", {}
                 raise
 
     def _engine_blockers(self):
@@ -210,9 +219,10 @@ class CloudConfiguration:
             # changed. Predictable config errors must not leave a transition.
             TrafficEngine(self.store.publication(publication_id).session_config())
         if previous and previous["publication_id"] == publication_id and not switching:
-            self.state, self.message = "current", "Den valda configen används redan."
+            self._report("current", "Den valda configen används redan.")
             # Every answer carries its message: the admin page prints it.
-            return {"pending": False, "publication_id": publication_id, "operating_region": region, "message": self.message}
+            return {"pending": False, "publication_id": publication_id, "operating_region": region, "message": self.message,
+                    "message_template": self.message_template, "message_values": self.message_values}
         blockers = self._engine_blockers() if not previous or previous["region"] == "eu" else []
         if getattr(app, "simulation", None) and app.simulation.active:
             blockers.append("Avsluta simuleringen innan ny config eller annan träff aktiveras.")
@@ -236,8 +246,9 @@ class CloudConfiguration:
                 raise CentralSyncError("Träffbytet väntar: " + " ".join(dict.fromkeys(blockers)))
             self.store._save_setting("cloud_pending_id", publication_id)
             self.store._save_setting("cloud_pending_region", region)
-            self.state, self.message = "waiting", "Ny config hämtad – väntar: " + " ".join(dict.fromkeys(blockers))
-            return {"pending": True, "publication_id": publication_id, "message": self.message}
+            self._report("waiting", "Ny config hämtad – väntar: {blockers}", blockers=" ".join(dict.fromkeys(blockers)))
+            return {"pending": True, "publication_id": publication_id, "message": self.message,
+                    "message_template": self.message_template, "message_values": self.message_values}
         ticket = app.lifecycle.begin_transition(region, meet_id, publication_id, meet_name=name, allow_switch=allow_switch)
         # A failure after this point leaves the durable marker in place. Do not
         # claim rollback across separate SQLite connections or accept traffic.
@@ -283,6 +294,7 @@ class CloudConfiguration:
         self.store._save_setting("cloud_pending_id", "")
         self.store._save_setting("cloud_pending_region", "")
         self.store.clear_pending()
-        self.state, self.message = "current", f"Config för {name} är uppdaterad. Pågående drift har bevarats."
+        self._report("current", "Config för {name} är uppdaterad. Pågående drift har bevarats.", name=name)
         return {"pending": False, "activated": True, "publication_id": publication_id,
-                "operating_region": region, "message": self.message, "restart_required": False}
+                "operating_region": region, "message": self.message, "restart_required": False,
+                "message_template": self.message_template, "message_values": self.message_values}

@@ -175,9 +175,10 @@ main { max-width: 1320px; margin: auto; padding: 36px 28px 40px; }
 /* Hopfällbara kort: rubriken är en summary i kortets huvud. */
 .tm-help > summary { padding: 9px 12px; font-size: 13px; font-weight: 700; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; }
 .tm-help > summary::-webkit-details-marker { display: none; }
-.tm-help > summary::after { content: "Visa"; margin-left: auto; font-size: 12px; font-weight: 500; color: var(--muted); }
+/* The words come from terminal.js in the reader's language (data-show, data-hide). */
+.tm-help > summary::after { content: attr(data-show); margin-left: auto; font-size: 12px; font-weight: 500; color: var(--muted); }
 .tm-help[open] > summary { border-bottom: 1px solid #eee; }
-.tm-help[open] > summary::after { content: "Dölj"; }
+.tm-help[open] > summary::after { content: attr(data-hide); }
 .krow { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
 .krow:last-child { border-bottom: 0; }
 .krow b { font-family: var(--font-mono); font-size: 13px; color: var(--text); }

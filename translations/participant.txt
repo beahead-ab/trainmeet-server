@@ -155,3 +155,5 @@ Could not remove the signal box|Kunde inte ta bort ställverket|Kunne ikke fjern
 {count} stops|{count} stopp|{count} stop|{count} stopp|{count} Halte
 no time given|tid saknas|tid mangler|tid mangler|keine Zeit angegeben
 Train {number} on the line|Tåg {number} på banan|Tog {number} på banen|Tog {number} på banen|Zug {number} auf der Strecke
+1 train|1 tåg|1 tog|1 tog|1 Zug
+{count} trains|{count} tåg|{count} tog|{count} tog|{count} Züge

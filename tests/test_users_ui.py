@@ -82,7 +82,9 @@ class UsersViewTests(unittest.TestCase):
         remove = remove[: remove.index("\nfunction ")]
         self.assertIn('#user-delete-confirm").checked', remove)
         self.assertIn('id="user-edit-modal"', MARKUP)
-        self.assertIn("${user.display_name}", remove)
+        # The receipt names the person, as a translated message with a value.
+        self.assertIn('"{name} är borttagen"', remove)
+        self.assertIn("name: user.display_name", remove)
 
 
 class RedeemViewTests(unittest.TestCase):

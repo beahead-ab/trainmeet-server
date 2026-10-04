@@ -4,7 +4,8 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TMBox · 16 × 2 · Provbänk</title>
   <link rel="icon" type="image/svg+xml" href="/assets/ikon/trainmeet-ikon.svg">
-  <link rel="stylesheet" href="/assets/server-design.css"><link rel="stylesheet" href="./style.css"><script src="./lcd.js" defer></script><script src="./terminal.js" defer></script>
+  <link rel="stylesheet" href="/assets/server-design.css"><link rel="stylesheet" href="./style.css">
+  <script src="/assets/i18n-messages.js" defer></script><script src="/assets/tmbox-messages.js" defer></script><script src="/assets/i18n.js" defer></script><script src="./lcd.js" defer></script><script src="./terminal.js" defer></script>
 </head>
 <body data-terminal="lab">
   <header class="tm-top">
@@ -46,11 +47,11 @@
         <section class="tm-card" aria-labelledby="try-title">
           <div class="tm-card__head"><span id="try-title">Prova en hel tågrörelse</span><span class="c">exempel, inte er riktiga tidtabell</span></div>
           <div class="tm-card__body tm-steps">
-            <div class="tm-step"><span class="n">1</span><span>På <strong>Charlottendal</strong>: börja skriva <b>39</b>. <b>#</b> väljer tåget; nästa <b>#</b> begär klartecken.</span></div>
-            <div class="tm-step"><span class="n">2</span><span>På <strong>Vagnsta</strong> visas förfrågan automatiskt om boxen står i översikten. <b>#</b> ger klart. <b>*</b> öppnar ”Neka?”; <b>#</b> bekräftar. <b>A</b> hittar alltid tillbaka till förfrågningskön.</span></div>
-            <div class="tm-step"><span class="n">3</span><span>Tillbaka på <strong>Charlottendal</strong>: <b>#</b> rapporterar faktisk avgång.</span></div>
-            <div class="tm-step"><span class="n">4</span><span>På <strong>Vagnsta</strong>: <b>#</b> tar emot på spår 1. För annat spår: <b>B → D → #</b>.</span></div>
-            <div class="tm-step"><span class="n">5</span><span>Avsändaren får <b>39 MOTTAGET</b> med mottagarens kod. Beskedet försvinner efter fem sekunder utan kvittering, och det färdiga tåget lämnar avsändarens display. Annat pågående arbete avbryts inte; beskedet väntar tills översikten visas.</span></div>
+            <div class="tm-step"><span class="n">1</span><span>På <strong data-no-i18n>Charlottendal</strong>: börja skriva <b>39</b>. <b>#</b> väljer tåget; nästa <b>#</b> begär klartecken.</span></div>
+            <div class="tm-step"><span class="n">2</span><span>På <strong data-no-i18n>Vagnsta</strong> visas förfrågan automatiskt om boxen står i översikten. <b>#</b> ger klart. <b>*</b> öppnar ”Neka?”; <b>#</b> bekräftar. <b>A</b> hittar alltid tillbaka till förfrågningskön.</span></div>
+            <div class="tm-step"><span class="n">3</span><span>Tillbaka på <strong data-no-i18n>Charlottendal</strong>: <b>#</b> rapporterar faktisk avgång.</span></div>
+            <div class="tm-step"><span class="n">4</span><span>På <strong data-no-i18n>Vagnsta</strong>: <b>#</b> tar emot på spår 1. För annat spår: <b>B → D → #</b>.</span></div>
+            <div class="tm-step"><span class="n">5</span><span>Avsändaren får <b data-no-i18n>39 MOTTAGET</b> med mottagarens kod. Beskedet försvinner efter fem sekunder utan kvittering, och det färdiga tåget lämnar avsändarens display. Annat pågående arbete avbryts inte; beskedet väntar tills översikten visas.</span></div>
           </div>
           <div class="tm-card__body"><p class="tm-prose"><b>17</b> går från Charlottendal till Munkeröd. <b>93</b> går från Munkeröd till Charlottendal och <b>94</b> från Vagnsta till Charlottendal. Begär 93 och 94 från respektive avsändare för att prova två samtidiga förfrågningar. Displayens tecken: <b>?</b> begärt, <b>›</b> klartecken, <b>▶</b> avgånget.</p></div>
         </section>
@@ -75,7 +76,7 @@
           <summary>Alla regler i detalj</summary>
           <div class="tm-card__body">
             <p class="tm-prose"><b>A = förfrågningskö</b> i alla vyer, även om du tappat bort dig. Räknaren <b>1/2</b> betyder första av två väntande förfrågningar. <b>C/D</b> bläddrar bara i kön när den är öppen. <b>#</b> ger klart för tåget som visas; <b>B</b> går till översikten utan att svara. Efter ett svar ligger det tåget kvar; <b>A</b> öppnar återstående förfrågningar. Ny förfrågan avbryter inte ett pågående tågval eller inmatning. Trycker du själv <b>A</b> under inmatning lämnas det oskickade numret och kön öppnas.</p>
-            <p class="tm-prose"><b>B = aktiva tåg</b> från översikten. <b>B:Akt2</b> visar att två tåg pågår, även om båda ligger på samma sida och inte ryms samtidigt. <b>C/D</b> växlar direkt mellan dem; <b>1/2</b> visar vilket tåg du ser. Klarerade avgångar visas först, därefter inkommande tåg som kan tas emot och övrig pågående trafik. <b>#</b> utför åtgärden för just det visade tåget, utan ett extra tågval. Efter avgång ligger samma tåg kvar, utan avgångsknapp. Välj nästa uttryckligen med <b>C/D</b>. I aktivvyn visar <b>B</b> översikten, utom vid ankomst där B väljer annat spår och * går tillbaka.</p>
+            <p class="tm-prose"><b>B = aktiva tåg</b> från översikten. <b data-no-i18n>B:Akt2</b> visar att två tåg pågår, även om båda ligger på samma sida och inte ryms samtidigt. <b>C/D</b> växlar direkt mellan dem; <b>1/2</b> visar vilket tåg du ser. Klarerade avgångar visas först, därefter inkommande tåg som kan tas emot och övrig pågående trafik. <b>#</b> utför åtgärden för just det visade tåget, utan ett extra tågval. Efter avgång ligger samma tåg kvar, utan avgångsknapp. Välj nästa uttryckligen med <b>C/D</b>. I aktivvyn visar <b>B</b> översikten, utom vid ankomst där B väljer annat spår och * går tillbaka.</p>
             <p class="tm-prose"><b>C / D</b> från översikten öppnar aktiva tåg när sådana finns, annars tidtabellen. <b>#</b> från översikten öppnar tidtabellen, eller väntande förfrågningar om kön inte är tom. Du kan alltid börja skriva ett nytt tågnummer direkt. En framtida ankomst blir valbar först när avsändaren begärt eller reserverat tåget. I tidtabellen visas <b>ANK / AVG</b> och planerad tid; <b>#</b> väljer och <b>B</b> filtrerar. Tidtabellen under boxen är en referens och visar även framtida ankomster.</p>
             <p class="tm-prose"><b>#</b> bekräftar, <b>*</b> avbryter eller går tillbaka. När du skriver tömmer <b>*</b> numret lokalt. Vid egen begäran eller eget klartecken öppnar <b>*</b> ”Återta?”; vid inkommande begäran öppnar den ”Neka?”. Först <b>#</b> i frågan ändrar trafiken; <b>*</b> i frågan behåller läget. <b>B</b> visar då översikten utan att ändra trafiken. Efter faktisk avgång kan tåget inte återtas. Klockan längst ned är alltid den aktuella träffklockan.</p>
           </div>
