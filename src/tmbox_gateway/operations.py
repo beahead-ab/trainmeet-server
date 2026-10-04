@@ -255,6 +255,72 @@ class SQLiteOperationsStore:
                 raise RuntimePublicationError(" ".join(blockers))
             self._initialize_publication(publication, carry_previous=False)
 
+    def reset_meet(self, publication: RuntimePublication) -> dict[str, int]:
+        """Börja om träffen från början, med samma plan.
+
+        Allt som har hänt i den här publikationen tas bort, för alla
+        trafikdagar: klareringar, linjebesked, TKL-rörelser och anteckningar,
+        tågens klarmeddelanden, tågens lägen och automatikens tider. Klockan
+        står stilla på planens starttid. TKL-pass avslutas, så att den som
+        arbetar börjar ett nytt.
+
+        Planen, Cloud-kopplingen, enheterna och användarna rörs inte, och
+        granskningsloggen står kvar: den säger att träffen nollställdes och av
+        vem. Klockan och lägena före nollställningen sparas i arkivet, som vid
+        ett träffbyte.
+        """
+
+        publication_id = publication.publication_id
+        removed: dict[str, int] = {}
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    "INSERT INTO runtime_meet_archives VALUES(?,?,?,?,?)",
+                    (str(uuid4()), publication_id, json.dumps(self.clock_status()),
+                     json.dumps(self.positions()), _now_iso()),
+                )
+                removed["clearance_events"] = self._connection.execute(
+                    "DELETE FROM clearance_events WHERE clearance_id IN"
+                    " (SELECT clearance_id FROM clearances WHERE publication_id=?)", (publication_id,)
+                ).rowcount
+                for table in ("clearances", "line_available_messages", "tkl_movement_states",
+                              "tkl_events", "train_readiness"):
+                    removed[table] = self._connection.execute(
+                        f"DELETE FROM {table} WHERE publication_id=?", (publication_id,)
+                    ).rowcount
+                if self._connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='automatic_events'"
+                ).fetchone():
+                    removed["automatic_events"] = self._connection.execute(
+                        "DELETE FROM automatic_events WHERE publication_id=?", (publication_id,)
+                    ).rowcount
+                removed["tkl_shifts"] = self._connection.execute(
+                    "UPDATE tkl_shifts SET status='closed', ended_at=?, updated_at=?"
+                    " WHERE publication_id=? AND status!='closed'",
+                    (_now_iso(), _now_iso(), publication_id),
+                ).rowcount
+                removed["train_positions"] = self._connection.execute("DELETE FROM train_positions").rowcount
+                # Svaren på redan skickade kommandon. Efter nollställningen
+                # betyder ett gammalt kommando-id ingenting.
+                self._connection.execute("DELETE FROM device_commands")
+                # Klockan till planens starttid och stoppad, som när träffen
+                # startades första gången. Hastigheten och hur klockan visas
+                # är serverns inställning, inte något som hänt, och står kvar.
+                self._connection.execute(
+                    "UPDATE runtime_clock SET publication_id=?, base_seconds=?, base_recorded_at=?,"
+                    " running=0, stopped_reason=NULL WHERE singleton = 1",
+                    (publication_id, _plan_start_seconds(publication), _now_iso()),
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        # Fanns ingen klocka än skapas den, och rörelsernas identiteter skrivs.
+        self._initialize_publication(publication, carry_previous=True)
+        return removed
+
     def start_meet_blockers(self, publication: RuntimePublication) -> list[str]:
         """Read-only preflight before the coordinator starts a transition.
 
@@ -280,12 +346,7 @@ class SQLiteOperationsStore:
                 return
             previous_publication = str(row[0]) if row is not None else None
             clock = publication.payload.get("clock", {})
-            start_time = str(
-                clock.get("start_time")
-                or publication.payload.get("meet", {}).get("clock_time")
-                or "12:00"
-            )
-            base_seconds = _time_to_seconds(start_time)
+            base_seconds = _plan_start_seconds(publication)
             speed = max(float(clock.get("speed", 1)), 0.01)
             show_seconds = bool(clock.get("show_seconds", True))
             styles = clock.get("available_styles") or list(AVAILABLE_CLOCK_STYLES)
@@ -1831,6 +1892,17 @@ def _clearance_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
         "expires_at": row[11],
         "settled_at": row[12],
     }
+
+
+def _plan_start_seconds(publication: RuntimePublication) -> int:
+    """Klockslaget träffen börjar på enligt planen, i sekunder efter midnatt."""
+
+    clock = publication.payload.get("clock", {})
+    return _time_to_seconds(str(
+        clock.get("start_time")
+        or publication.payload.get("meet", {}).get("clock_time")
+        or "12:00"
+    ))
 
 
 def _time_to_seconds(value: str | None) -> float:

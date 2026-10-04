@@ -5,6 +5,15 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Nollställ träffen
+
+Ny rad först i **Farozon**: börja om träffen med samma plan. Klockan går
+tillbaka till planens starttid och står still, och klareringar, linjebesked,
+tågens lägen, TKL:s anteckningar och automatikens tider tas bort. Plan,
+Cloud-koppling, enheter, användare och klockans inställningar står kvar, och
+servern startar inte om. Bekräftas med träffens namn; en säkerhetskopia tas
+först och går att lägga tillbaka. `POST /v1/server/meet-reset`.
+
 ### Konton är namn, e-postadress och lösenord (version 3)
 
 Användarnamnen är borta. Ett konto har ett namn som visas, en e-postadress och
