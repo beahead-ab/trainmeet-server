@@ -116,7 +116,7 @@ class ShellStructureTests(unittest.TestCase):
         self.assertNotIn("SETTINGS_SECTIONS", self.js)
 
     def test_admin_forms_are_real_dialogs(self):
-        for name in ("admin-access-form", "users-invite-form",
+        for name in ("users-invite-form",
                      "device-form", "runtime-sync-form", "clock-control-form"):
             start = self.html.index(f'<dialog id="{name}-modal"')
             end = self.html.index("</dialog>", start)

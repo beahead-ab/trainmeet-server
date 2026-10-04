@@ -40,7 +40,7 @@ const root = path.resolve(__dirname, '../..');
     assert.equal((await page.request.get(urls.eu + '/v1/devices')).status(), 401);
     await screenshot('participant');
     const admin = await browser.newContext({locale:'sv-SE'});
-    assert.equal((await admin.request.post(urls.eu+'/v1/auth/login',{data:{username:'smoke-admin',password:'isolated-browser-test'}})).status(),200);
+    assert.equal((await admin.request.post(urls.eu+'/v1/auth/login',{data:{email:'smoke-admin@example.se',password:'isolated-browser-test'}})).status(),200);
     // The participant view shows the typed Wi-Fi as text, never as a QR: the
     // reader is already on the network and a TMBox cannot scan. The Wi-Fi QR,
     // with the password in it, belongs on the screens.

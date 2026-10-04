@@ -56,7 +56,7 @@ class RestoreOverHTTPTests(unittest.TestCase):
         self.runtime_store.install(runtime_package())
         self.identities = IdentityStore(self.database)
         self.addCleanup(self.identities.close)
-        self.identities.configure_admin_access("casper", "ett-langt-losenord")
+        self.identities.create_first_owner("casper", "casper@example.se", "ett-langt-losenord")
 
         self.copy = backup.create_backup(self.database, self.backups, "20260825-101500")
         assert self.copy is not None
@@ -78,7 +78,7 @@ class RestoreOverHTTPTests(unittest.TestCase):
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
         self.base = f"http://127.0.0.1:{self.server.server_port}"
-        token = self.identities.create_admin_session("casper", "ett-langt-losenord")
+        token = self.identities.create_admin_session("casper@example.se", "ett-langt-losenord")
         self.cookie = f"trainmeet_admin={token}"
 
     def _call(self, path: str, body: dict | None = None) -> tuple[int, dict]:
@@ -256,9 +256,9 @@ class RestoreOverHTTPTests(unittest.TestCase):
         Att ändra vilka som har tillgång är ägarens ensak, och en återställning
         gör precis det på omvägen."""
 
-        invited = self.identities.invite_admin_user("benny", "admin")
-        self.identities.redeem_admin_setup("benny", str(invited["setup_code"]), "benny-losenord")
-        self.cookie = f"trainmeet_admin={self.identities.create_admin_session('benny', 'benny-losenord')}"
+        invited = self.identities.invite_admin_user("Benny", "benny@example.se", "admin")
+        self.identities.redeem_admin_setup("benny@example.se", str(invited["setup_code"]), "benny-losenord")
+        self.cookie = f"trainmeet_admin={self.identities.create_admin_session('benny@example.se', 'benny-losenord')}"
 
         status, _ = self._call("/v1/server/backups")
         self.assertEqual(200, status, "en administratör ska få se listan")

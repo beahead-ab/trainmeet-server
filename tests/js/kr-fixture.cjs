@@ -121,7 +121,7 @@ async function open(opts = {}) {
       let data = {};
       switch (url.pathname) {
         case '/v1/setup': case '/v1/setup/status': data = { required: false, admin_configured: true, runtime }; break;
-        case '/v1/auth/status': data = o.loggedOut ? { authenticated: false, at_the_machine: false, password_configured: true } : { authenticated: true, at_the_machine: false, username: 'admin' }; break;
+        case '/v1/auth/status': data = o.loggedOut ? { authenticated: false, at_the_machine: false, password_configured: true } : { authenticated: true, at_the_machine: false }; break;
         case '/v1/workspaces': case '/v1/server-context': data = ctx(); break;
         case '/v1/runtime': data = runtime; break;
         case '/v1/cloud/presentation': data = presentation(findings); break;
@@ -129,7 +129,7 @@ async function open(opts = {}) {
         case '/v1/devices': data = { devices: st.devices, terminals: [], stations, languages: [{ code: 'sv', name: 'Svenska' }, { code: 'en', name: 'English' }] }; break;
         case '/v1/devices/assign': { const b = JSON.parse(request.postData()); const d = st.devices.find(x => x.device_code === b.device_code); if (d) { d.station_id = b.station_id; d.station_side = b.side || 'both'; } data = { assigned: true }; break; }
         case '/v1/display/connection': data = { host: '192.168.1.20', port: 8787, code: '262-617', code_state: 'valid', screens: [], validity_hours: 0, wifi: { name: 'Grimslov2027', password: 'tagen2027' }, web_client_ttl_minutes: 30 }; break;
-        case '/v1/admin/users': data = { role: 'owner', users: [{ user_id: 'u-1', username: 'admin', role: 'owner', invitation_pending: false }], user: { user_id: 'u-1', username: 'admin', role: 'owner' } }; break;
+        case '/v1/admin/users': data = { role: 'owner', users: [{ user_id: 'u-1', role: 'owner', invitation_pending: false }], user: { user_id: 'u-1', role: 'owner' } }; break;
         case '/v1/clock': if (request.method() === 'POST') { const b = JSON.parse(request.postData() || '{}'); if (b.action === 'start') st.running = true; if (b.action === 'stop') st.running = false; } data = clock(); break;
         case '/v1/clock/source': data = { source: 'internal', clock_name: '', user: '', has_password: false, poll_interval: 2 }; break;
         case '/v1/display': data = { clock: clock(), meet: { id: 'meet-1', name: 'Grimslöv 2027' }, active_day: 'Dagl', publication_id: 'pub-9', stations, connections, routes, services, train_positions: positions(), connection_states: connectionStates(), connection: { screens: [] }, display: {} }; break;

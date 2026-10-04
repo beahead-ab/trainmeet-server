@@ -142,8 +142,8 @@ class CloudOnlyDeliveryTests(unittest.TestCase):
 
     def test_explicit_switch_keeps_box_identity_admin_login_and_history(self):
         self.connect()
-        self.identities.configure_admin_access("admin", "password")
-        session = self.identities.create_admin_session("admin", "password")
+        self.identities.create_first_owner("admin", "admin@example.se", "password")
+        session = self.identities.create_admin_session("admin@example.se", "password")
         self.identities.register_client("box-id", "Benny", DeviceKind.ESP32_PANEL, "box-secret", ("panel-a",), station_id="station-a")
         self.offered = us_package()
         result = self.connect(confirm_meet_change=True)

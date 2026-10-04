@@ -72,8 +72,8 @@ class InvitationCodeTests(unittest.TestCase):
     def _fresh(self) -> tuple[IdentityStore, str]:
         store = IdentityStore(Path(tempfile.mkdtemp()) / "identity.db")
         self.addCleanup(store.close)
-        store.configure_admin_access("casper", "ett-langt-losenord")
-        code = str(store.invite_admin_user("benny", "admin")["setup_code"])
+        store.create_first_owner("casper", "casper@example.se", "ett-langt-losenord")
+        code = str(store.invite_admin_user("Benny", "benny@example.se", "admin")["setup_code"])
         return store, code
 
     def test_every_way_of_writing_it_is_accepted(self) -> None:
@@ -83,13 +83,13 @@ class InvitationCodeTests(unittest.TestCase):
                 # samma butik vore att pröva fel sak: en inlöst kod är förbrukad.
                 store, code = self._fresh()
                 variant = _variants(code)[name]
-                store.redeem_admin_setup("benny", variant, "ett-nytt-losenord")
-                self.assertIsNotNone(store.create_admin_session("benny", "ett-nytt-losenord"))
+                store.redeem_admin_setup("benny@example.se", variant, "ett-nytt-losenord")
+                self.assertIsNotNone(store.create_admin_session("benny@example.se", "ett-nytt-losenord"))
 
     def test_a_wrong_code_is_still_wrong(self) -> None:
         store, _ = self._fresh()
         with self.assertRaises(AdminAccessError):
-            store.redeem_admin_setup("benny", "AAAA-BBBB", "ett-nytt-losenord")
+            store.redeem_admin_setup("benny@example.se", "AAAA-BBBB", "ett-nytt-losenord")
 
     def test_the_issued_code_carries_its_dash(self) -> None:
         """Toleransen gäller inmatningen. Det som visas ska ha formen."""

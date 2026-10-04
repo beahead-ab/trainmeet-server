@@ -17,11 +17,13 @@ när den första administratören skapas.
 
 from __future__ import annotations
 
+import io
 import json
 import tempfile
 import threading
 import unittest
 from http import HTTPStatus
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -80,8 +82,8 @@ class LocalLoginTests(unittest.TestCase):
         except HTTPError as error:
             return error.code, json.loads(error.read().decode("utf-8"))
 
-    def _cookie(self, username: str, password: str) -> str:
-        token = self.identities.create_admin_session(username, password)
+    def _cookie(self, email: str, password: str) -> str:
+        token = self.identities.create_admin_session(email, password)
         self.assertIsNotNone(token, "inloggningen misslyckades")
         return f"trainmeet_admin={token}"
 
@@ -96,33 +98,71 @@ class LocalLoginTests(unittest.TestCase):
         self.assertEqual("local", payload["access_mode"])
 
         created, _ = self._call(
-            "/v1/setup/admin", {"username": "casper", "password": "ett-langt-losenord"}
+            "/v1/setup/admin",
+            {"display_name": "Casper", "email": "casper@example.se", "password": "ett-langt-losenord"},
         )
         self.assertEqual(HTTPStatus.CREATED, created)
+
+    def test_the_first_account_needs_a_name_an_address_and_a_password(self) -> None:
+        """Installationen skapar ägaren med namn, e-post och lösenord. Utan
+        adress finns inget att logga in med efteråt."""
+
+        for missing in ("display_name", "email", "password"):
+            body = {"display_name": "Casper", "email": "casper@example.se", "password": "ett-langt-losenord"}
+            body.pop(missing)
+            with self.subTest(missing=missing):
+                status, payload = self._call("/v1/setup/admin", body)
+                self.assertEqual(HTTPStatus.BAD_REQUEST, status)
+                self.assertEqual("local", self._call("/v1/auth/status")[1]["access_mode"], "installationen är fortfarande öppen")
+        refused, _ = self._call("/v1/setup/admin", {"username": "casper", "password": "ett-langt-losenord"})
+        self.assertEqual(HTTPStatus.BAD_REQUEST, refused, "ett användarnamn räcker inte längre")
+
+        created, _ = self._call(
+            "/v1/setup/admin",
+            {"display_name": "Casper", "email": "Casper@Example.se", "password": "ett-langt-losenord"},
+        )
+        self.assertEqual(HTTPStatus.CREATED, created)
+        signed_in, _ = self._call("/v1/auth/login", {"email": "casper@example.se", "password": "ett-langt-losenord"})
+        self.assertEqual(200, signed_in)
 
     # ── efter installationen ────────────────────────────────────────────
 
     def test_the_console_needs_a_login_once_a_password_exists(self) -> None:
-        self.identities.configure_admin_access("casper", "ett-langt-losenord")
+        """På serverdatorn själv: utan inloggning kan man titta, inte ändra.
+
+        Deltagarvyn och skärmarna läser /v1/display utan inloggning. Allt som
+        ändrar något kräver att man loggat in, också vid maskinen.
+        """
+
+        self.identities.create_first_owner("Casper", "casper@example.se", "ett-langt-losenord")
 
         status, payload = self._call("/v1/auth/status")
         self.assertFalse(payload["authenticated"])
         self.assertEqual("external", payload["access_mode"])
+        self.assertTrue(payload["at_the_machine"])
 
+        looked, _ = self._call("/v1/display")
+        self.assertEqual(200, looked, "deltagarvyn och skärmarna syns utan inloggning")
         denied, _ = self._call("/v1/admin/users")
         self.assertEqual(HTTPStatus.UNAUTHORIZED, denied)
+        changed, _ = self._call("/v1/admin/users", {"display_name": "Nyan", "email": "nyan@example.se"})
+        self.assertEqual(HTTPStatus.UNAUTHORIZED, changed)
 
         allowed, listed = self._call(
-            "/v1/admin/users", cookie=self._cookie("casper", "ett-langt-losenord")
+            "/v1/admin/users", cookie=self._cookie("casper@example.se", "ett-langt-losenord")
         )
         self.assertEqual(200, allowed)
-        self.assertEqual(["casper"], [user["username"] for user in listed["users"]])
+        self.assertEqual(["casper@example.se"], [user["email"] for user in listed["users"]])
+        self.assertNotIn("username", listed["users"][0])
 
     def test_the_open_installation_closes_with_the_first_administrator(self) -> None:
         """Öppningen är ett tillstånd, inte en inställning: den upphör i samma
         anrop som skapar den första administratören."""
 
-        self._call("/v1/setup/admin", {"username": "casper", "password": "ett-langt-losenord"})
+        self._call(
+            "/v1/setup/admin",
+            {"display_name": "Casper", "email": "casper@example.se", "password": "ett-langt-losenord"},
+        )
         denied, _ = self._call("/v1/admin/users")
         self.assertEqual(HTTPStatus.UNAUTHORIZED, denied)
 
@@ -132,8 +172,8 @@ class LocalLoginTests(unittest.TestCase):
         """Platsen avgör inte längre vem man är, men den avgör fortfarande vad
         man får göra. Nollställningen kräver numera båda delarna."""
 
-        self.identities.configure_admin_access("casper", "ett-langt-losenord")
-        cookie = self._cookie("casper", "ett-langt-losenord")
+        self.identities.create_first_owner("Casper", "casper@example.se", "ett-langt-losenord")
+        cookie = self._cookie("casper@example.se", "ett-langt-losenord")
 
         status, payload = self._call("/v1/auth/status", cookie=cookie)
         self.assertTrue(payload["at_the_machine"])
@@ -144,8 +184,8 @@ class LocalLoginTests(unittest.TestCase):
         self.assertEqual(HTTPStatus.ACCEPTED, accepted)
 
     def test_the_same_login_cannot_factory_reset_from_the_network(self) -> None:
-        self.identities.configure_admin_access("casper", "ett-langt-losenord")
-        cookie = self._cookie("casper", "ett-langt-losenord")
+        self.identities.create_first_owner("Casper", "casper@example.se", "ett-langt-losenord")
+        cookie = self._cookie("casper@example.se", "ett-langt-losenord")
         self.server.shutdown()
         self.server.server_close()
         self._start(
@@ -180,37 +220,79 @@ class RecoveryTests(unittest.TestCase):
         # installation hittade kommandot då ingenting.
         self.database = local_server._database_path(self.state)
         store = IdentityStore(self.database)
-        store.configure_admin_access("casper", "det-gamla-losenordet")
+        store.create_first_owner("Casper", "casper@example.se", "det-gamla-losenordet")
         store.close()
 
-    def _run(self, *arguments: str) -> int:
-        return recover.main(["--state-dir", str(self.state), *arguments])
+    def _run(self, *arguments: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = recover.main(["--state-dir", str(self.state), *arguments])
+        return code, out.getvalue(), err.getvalue()
 
-    def test_without_a_user_it_lists_the_accounts(self) -> None:
-        self.assertEqual(0, self._run())
+    def _store(self) -> IdentityStore:
+        store = IdentityStore(self.database)
+        self.addCleanup(store.close)
+        return store
 
-    def test_an_unknown_user_is_refused(self) -> None:
-        self.assertEqual(1, self._run("--user", "ingen"))
+    def test_without_an_account_it_lists_the_accounts(self) -> None:
+        code, out, _ = self._run()
+        self.assertEqual(0, code)
+        self.assertIn("1. Casper  <casper@example.se>  (ägare, aktiv)", out)
+
+    def test_an_unknown_account_is_refused(self) -> None:
+        self.assertEqual(1, self._run("--konto", "ingen@example.se")[0])
+        self.assertEqual(1, self._run("--konto", "7")[0])
+        self.assertEqual(1, self._run("--konto", "casper")[0], "ett gammalt användarnamn hittar inget konto")
 
     def test_a_missing_installation_is_said_out_loud(self) -> None:
         with self.assertRaises(SystemExit):
             recover.main(["--state-dir", str(self.state / "finns-inte")])
 
     def test_the_issued_code_sets_a_new_password_and_retires_the_old(self) -> None:
-        self.assertEqual(0, self._run("--user", "casper"))
+        code, out, _ = self._run("--konto", "casper@example.se")
+        self.assertEqual(0, code)
+        self.assertIn("Kod till Casper <casper@example.se>", out)
 
-        store = IdentityStore(self.database)
-        self.addCleanup(store.close)
-        user = next(u for u in store.list_admin_users() if u["username"] == "casper")
+        store = self._store()
+        user = next(u for u in store.list_admin_users() if u["email"] == "casper@example.se")
         self.assertTrue(user["invitation_pending"], "ingen kod utfärdades")
 
         # Koden syns bara i terminalen. Provet läser den ur databasen via en ny
         # utfärdning, vilket också visar att en ny kod ersätter den gamla.
         issued = store.reissue_admin_setup(str(user["user_id"]))
-        store.redeem_admin_setup("casper", str(issued["setup_code"]), "ett-nytt-losenord")
+        store.redeem_admin_setup("casper@example.se", str(issued["setup_code"]), "ett-nytt-losenord")
 
-        self.assertIsNone(store.create_admin_session("casper", "det-gamla-losenordet"))
-        self.assertIsNotNone(store.create_admin_session("casper", "ett-nytt-losenord"))
+        self.assertIsNone(store.create_admin_session("casper@example.se", "det-gamla-losenordet"))
+        self.assertIsNotNone(store.create_admin_session("casper@example.se", "ett-nytt-losenord"))
+
+    def test_an_owner_without_an_address_gets_one_and_a_code(self) -> None:
+        """En ägare från före version 3 kan sakna adress och kommer då inte in.
+        Kommandot ger kontot en adress och en kod på samma gång."""
+
+        store = self._store()
+        store._connection.execute("UPDATE admin_users SET email = NULL")  # noqa: SLF001 - ett gammalt konto
+        self.assertIsNone(store.create_admin_session("casper@example.se", "det-gamla-losenordet"))
+
+        code, out, _ = self._run()
+        self.assertIn("saknar e-post, kan inte logga in", out)
+        code, _, err = self._run("--konto", "1")
+        self.assertEqual(1, code)
+        self.assertIn("--email", err)
+
+        code, out, _ = self._run("--konto", "1", "--email", "Casper@Example.se")
+        self.assertEqual(0, code)
+        self.assertIn("<casper@example.se>", out)
+        user = store.list_admin_users()[0]
+        issued = store.reissue_admin_setup(str(user["user_id"]))
+        store.redeem_admin_setup("casper@example.se", str(issued["setup_code"]), "ett-nytt-losenord")
+        self.assertIsNotNone(store.create_admin_session("casper@example.se", "ett-nytt-losenord"))
+
+    def test_an_address_another_account_has_is_refused(self) -> None:
+        store = self._store()
+        store.invite_admin_user("Lars", "lars@example.se")
+        code, _, err = self._run("--konto", "casper@example.se", "--email", "lars@example.se")
+        self.assertEqual(1, code)
+        self.assertIn("redan ett konto", err)
 
 
 class SignedOutChromeTests(unittest.TestCase):

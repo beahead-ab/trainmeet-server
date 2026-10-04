@@ -418,8 +418,8 @@ helm upgrade --install trainmeet ./deploy/helm/trainmeet-server \
 För ett centralt kluster bör bara webbgränssnittet exponeras via Ingress. Den
 lösenordsfria MQTT-porten är avsedd för träffens lokala nät, inte internet.
 När Ingress aktiveras slår Helm-chartet automatiskt på externt inloggningsläge,
-så att proxyns interna IP-adress aldrig ger automatisk adminbehörighet. Konfigurera
-först användarnamn och lösenord via lokal åtkomst eller `kubectl port-forward`,
+så att proxyns interna IP-adress aldrig ger automatisk adminbehörighet. Skapa
+först ägarkontot (namn, e-postadress och lösenord) via lokal åtkomst eller `kubectl port-forward`,
 och aktivera sedan Ingress. Använd TLS för all extern trafik.
 
 Automatisk mDNS/Bonjour-upptäckt går inte genom ett vanligt container- eller
@@ -548,12 +548,27 @@ vid tangentbordet. Två frågor skiljs numera åt: **vem du är** avgörs av
 inloggningen, **var du står** avgör vad du får göra - fabriksåterställning av
 hela servern kräver fortfarande att webbläsaren körs på maskinen.
 
+Utan inloggning kan man titta men inte ändra: deltagarvyn (`/`) och skärmarna
+(`/display/…`) syns för alla på träffens nät. Allt som ändrar något kräver
+inloggning, också vid maskinen.
+
+**Ett konto är ett namn, en e-postadress och ett lösenord.** Man loggar in med
+e-postadressen. Namnet är det som visas i listor och loggar och behöver inte
+vara unikt; adressen är unik. Det finns inga användarnamn sedan version 3.
+
 Ett undantag finns kvar, och det stänger sig självt: en installation som ännu
-inte satt sitt lösenord släpper in från serverns privata nätverk, eftersom det
-inte finns någon att logga in som. Öppningen upphör i samma anrop som skapar
-den första administratören. Det finns inget förvalt användarnamn eller
-lösenord. Lösenordet lagras saltat och hashat; webbläsare får en tidsbegränsad
-HttpOnly-session efter inloggning.
+inte har något konto släpper in från serverns privata nätverk, eftersom det
+inte finns någon att logga in som. Första steget i installationen skapar
+ägaren med namn, e-postadress och lösenord, och öppningen upphör i samma anrop.
+Det finns inga förvalda inloggningsuppgifter. Lösenordet lagras saltat och
+hashat; webbläsare får en tidsbegränsad HttpOnly-session efter inloggning.
+
+**Uppgradering från version 2.** Kontona binds till e-postadressen. Ett konto
+behåller sitt gamla användarnamn som namn. Ett konto som saknar e-postadress
+kan inte logga in förrän ägaren har gett det en under Inställningar →
+Användare, där det står "Saknar e-post – kan inte logga in". En ägare utan
+adress använder återställningskommandot nedan med `--email`. Kontrollera därför
+före uppgraderingen att ägaren har en adress.
 
 ### Återställ från säkerhetskopia
 
@@ -589,13 +604,14 @@ lades tillbaka, eller i rött med skälet och att databasen är som före förs�
 **Med e-post.** Servern har ingen egen e-post, men en server som är kopplad
 till en träff i TrainMeet Cloud kan be Cloud skicka två brev:
 
-- **En inbjudan.** Under Inställningar → Användare kan ägaren ange en
-  e-postadress för den som bjuds in. Koden skickas då dit och visas ändå på
-  skärmen, som förut.
-- **En kod för nytt lösenord.** Har kontot en e-postadress skickas en kod dit
-  när någon väljer **Glömt lösenordet?** på inloggningen och anger
-  användarnamnet. Koden gäller i 30 minuter och en gång. Användaren anger den
-  sedan under **Jag har en kod**, tillsammans med ett nytt lösenord.
+- **En inbjudan.** Under Inställningar → Användare anger ägaren namn och
+  e-postadress för den som bjuds in. Koden skickas dit och visas ändå på
+  skärmen, så att den kan lämnas över på plats.
+- **En kod för nytt lösenord.** När någon väljer **Glömt lösenordet?** på
+  inloggningen och anger sin e-postadress skickas en kod dit, om det finns ett
+  konto med adressen. Koden gäller i 30 minuter och en gång. Användaren anger
+  den sedan under **Jag har en kod**, tillsammans med e-postadressen och ett
+  nytt lösenord.
 
 Hur det fungerar:
 
@@ -608,23 +624,30 @@ Hur det fungerar:
   `--public-client-origin`, eller till ingen alls. Den tas aldrig ur
   begäran.
 - **Cloud står för avsändare och mallar.** Servern skickar bara mottagare,
-  användarnamn, kod och adress, med sin kopplingsnyckel. Det beskrivs i
-  `docs/EPOST-OCH-KONTON.md` §10 i Cloud-repot.
+  kod och serverns adress, med sin kopplingsnyckel. Det beskrivs i
+  `docs/EPOST-OCH-KONTON.md` §10 i Cloud-repot, och kräver TrainMeet Cloud
+  1.15 eller senare.
 
-Var och en kan ändra sin egen adress, och ägaren allas.
+Var och en kan ändra sitt eget namn, sin adress och sitt lösenord, och ägaren
+allas. En adress kan bytas men inte tas bort.
 
 **Utan koppling eller internet.** Beviset är i stället fysisk åtkomst till
 maskinen:
 
 ```bash
 sudo -u trainmeet-server /opt/trainmeet-server/venv/bin/python -m tmbox_gateway.recover \
-  --state-dir /var/lib/trainmeet-server --user <användarnamn>
+  --state-dir /var/lib/trainmeet-server --konto <nummer eller e-post>
 ```
 
 Kommandot sätter inget lösenord. Det skriver ut en engångskod - samma sort som
 en inbjudan - och den som får koden väljer sitt eget lösenord under "Jag har en
-kod" på inloggningssidan. Koden gäller i sju dagar och en gång. Utan
-`--user` listar kommandot kontona på servern.
+kod" på inloggningssidan, med e-postadressen och koden. Koden gäller i sju
+dagar och en gång. Utan `--konto` listar kommandot kontona på servern,
+numrerade, med namn och e-postadress.
+
+Saknar kontot e-postadress, till exempel en ägare från före version 3, ger man
+det en samtidigt: `--konto 1 --email casper@example.se`. Adressen får inte
+redan finnas på ett annat konto.
 
 Bakom en reverse proxy eller Kubernetes Ingress ska servern startas med
 `--force-external-auth` eller `TRAINMEET_FORCE_EXTERNAL_AUTH=true`. Annars ser

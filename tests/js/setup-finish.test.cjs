@@ -28,7 +28,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
           case '/v1/setup': case '/v1/setup/status':
             data = installed ? { required: false, admin_configured: true, runtime } : { required: true, admin_configured: true, step: 'finish', server_name: 'Bennys Pi', runtime };
             break;
-          case '/v1/auth/status': data = { authenticated: true, at_the_machine: false, username: 'admin' }; break;
+          case '/v1/auth/status': data = { authenticated: true, at_the_machine: false }; break;
           case '/v1/setup/complete': installed = true; data = { message: 'Installationen är klar.' }; break;
           case '/v1/server/restart': restarts += 1; data = { message: 'Servern startar om.' }; break;
           case '/v1/info': infoCalls += 1; data = { protocol_version: 1, gateway_id: 'Bennys Pi', authentication_required: true }; break;

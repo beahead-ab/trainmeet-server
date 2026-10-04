@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import sqlite3
@@ -14,14 +15,18 @@ from pathlib import Path
 from typing import Any
 
 
+LOGGER = logging.getLogger(__name__)
+
 PAIRING_HASH_ITERATIONS = 210_000
 CLIENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{3,64}$")
-ADMIN_USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9._@+-]{3,64}$")
 ADMIN_SETUP_TTL = timedelta(days=7)
 # En kod för nytt lösenord skickas med e-post och kan begäras av vem som helst
-# som känner ett användarnamn. Den ska därför gälla kort.
+# som känner en adress. Den ska därför gälla kort.
 ADMIN_RESET_TTL = timedelta(minutes=30)
 ADMIN_EMAIL_PATTERN = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]+$")
+# Visningsnamnet är bara ett namn: det loggar inte in någon och behöver inte
+# vara unikt. Två Lars på samma server skiljs åt av sina adresser.
+ADMIN_NAME_MAX = 100
 CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 ADMIN_SESSION_TTL = timedelta(hours=12)
 # A connection code printed on the meeting's screens has to keep working for as
@@ -249,11 +254,13 @@ class IdentityStore:
             {
                 "setup_code_digest": "BLOB",
                 "setup_expires_at": "TEXT",
-                # Valfri. Finns den, och servern är kopplad till TrainMeet
-                # Cloud, kan en inbjudan och en kod för nytt lösenord skickas dit.
+                # Kontot är adressen: den loggar in, och dit går en inbjudan
+                # och en kod för nytt lösenord när servern är kopplad till
+                # TrainMeet Cloud. Ett konto utan adress kan inte logga in.
                 "email": "TEXT",
                 "reset_code_digest": "BLOB",
                 "reset_expires_at": "TEXT",
+                "display_name": "TEXT NOT NULL DEFAULT ''",
             },
         )
         self._add_missing_columns(
@@ -285,6 +292,7 @@ class IdentityStore:
             (now,),
         )
         self._adopt_singleton_admin_as_owner(now)
+        self._bind_accounts_to_email()
 
     def _adopt_singleton_admin_as_owner(self, now: str) -> None:
         """Den befintliga administratören blir den första ägaren.
@@ -315,6 +323,54 @@ class IdentityStore:
             """,
             (secrets.token_hex(16), str(row[0]).strip(), row[1], row[2], now, now, int(row[3] or 0)),
         )
+
+    def _bind_accounts_to_email(self) -> None:
+        """Kontona binds till e-postadressen, och användarnamnet blir ett namn.
+
+        Kolumnen `username` ligger kvar, eftersom SQLite inte kan ta bort en
+        kolumn med UNIQUE utan att bygga om tabellen, men den läses aldrig mer.
+        Nya konton får sitt eget id där.
+
+        Ett gammalt konto behåller sitt användarnamn som visningsnamn. Har det
+        ingen adress kan det inte logga in förrän ägaren ger det en, och en
+        ägare utan adress använder `tmbox_gateway.recover` på maskinen.
+
+        Adressen blir unik. Hade två konton samma adress behåller den äldsta
+        ägaren eller administratören med lösenord den, och de andra blir utan
+        tills ägaren rättar dem. Det skrivs i loggen.
+        """
+
+        connection = self._connection
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            connection.execute("UPDATE admin_users SET display_name = username WHERE display_name = ''")
+            connection.execute("UPDATE admin_users SET email = NULL WHERE trim(email) = ''")
+            duplicates = connection.execute(
+                "SELECT email FROM admin_users WHERE email IS NOT NULL GROUP BY email HAVING COUNT(*) > 1"
+            ).fetchall()
+            for (email,) in duplicates:
+                keeper = connection.execute(
+                    "SELECT user_id FROM admin_users WHERE email = ?"
+                    " ORDER BY role = 'owner' DESC, password_digest IS NOT NULL DESC, created_at LIMIT 1",
+                    (email,),
+                ).fetchone()[0]
+                others = connection.execute(
+                    "SELECT display_name FROM admin_users WHERE email = ? AND user_id != ?", (email, keeper)
+                ).fetchall()
+                connection.execute("UPDATE admin_users SET email = NULL WHERE email = ? AND user_id != ?", (email, keeper))
+                LOGGER.warning(
+                    "Flera konton hade samma e-postadress. Den står kvar på ett av dem; %s saknar nu adress"
+                    " och kan inte logga in förrän ägaren ger dem en.",
+                    ", ".join(str(row[0]) for row in others),
+                )
+            connection.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS admin_users_email ON admin_users(email) WHERE email IS NOT NULL"
+            )
+            connection.execute("COMMIT")
+        except Exception:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
 
     def _add_missing_columns(self, table: str, columns: dict[str, str]) -> None:
         existing = {
@@ -938,130 +994,74 @@ class IdentityStore:
                 raise
 
     def admin_access_summary(self) -> dict[str, object]:
+        """Har servern ett konto som kan logga in?
+
+        Frågan avgör om installationen är öppen, och den gäller hela servern.
+        Den namnger ingen: svaret ges innan någon har loggat in.
+        """
+
         with self._lock:
             row = self._connection.execute(
-                """
-                SELECT username, password_digest IS NOT NULL, updated_at, must_change_password
-                FROM admin_access WHERE singleton = 1
-                """
+                "SELECT 1 FROM admin_users WHERE password_digest IS NOT NULL LIMIT 1"
             ).fetchone()
-            # Frågan "har servern ett lösenord?" avgör om installationen är
-            # öppen, och den ska gälla hela servern. Räknades bara singleton-
-            # raden skulle en server vars ursprungliga ägare tagits bort se
-            # oinstallerad ut och släppa in vem som helst på nätet igen.
-            listed = self._connection.execute(
-                "SELECT username FROM admin_users WHERE password_digest IS NOT NULL"
-                " ORDER BY role DESC, created_at LIMIT 1"
-            ).fetchone()
-        return {
-            # Formen är oförändrad när ingen lista finns: tom sträng betyder
-            # "ingen administratör än", och det svaret ska inte bli None.
-            "username": row[0] or (listed[0] if listed else row[0]),
-            "password_configured": bool(row[1]) or listed is not None,
-            "updated_at": row[2],
-            "must_change_password": bool(row[3]),
-        }
+        # must_change_password finns kvar i svaret för klienter som läser det,
+        # men ingenting sätter det längre: var och en väljer sitt lösenord själv.
+        return {"password_configured": row is not None, "must_change_password": False}
 
-    def initialize_admin_access(self, username: str, password: str) -> dict[str, object]:
-        """Create installation credentials once, without replacing an existing password."""
-        if self.admin_access_summary()["password_configured"]:
-            return self.admin_access_summary()
-        return self.configure_admin_access(username, password, must_change_password=True)
+    def create_first_owner(self, display_name: str, email: str, password: str) -> dict[str, object]:
+        """Installationens första konto, ägaren. Bara när inget konto kan logga in."""
 
-    def configure_admin_access(
-        self,
-        username: str,
-        password: str | None = None,
-        *,
-        now: datetime | None = None,
-        must_change_password: bool = False,
-    ) -> dict[str, object]:
-        username = username.strip()
-        if not ADMIN_USERNAME_PATTERN.fullmatch(username):
-            raise AdminAccessError(
-                "Användarnamnet måste vara 3–64 tecken och får innehålla bokstäver, siffror, punkt, bindestreck och @"
-            )
-        if password is not None and not 8 <= len(password) <= 256:
-            raise AdminAccessError("Lösenordet måste vara 8–256 tecken")
-
-        now = now or datetime.now(timezone.utc)
-        salt = secrets.token_bytes(16) if password is not None else None
-        digest = _admin_password_digest(password, salt) if password is not None else None
+        display_name = clean_admin_display_name(display_name)
+        email = required_admin_email(email)
+        _check_admin_password(password)
+        now = datetime.now(timezone.utc).isoformat()
+        salt = secrets.token_bytes(16)
+        user_id = secrets.token_hex(16)
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                if password is None:
-                    self._connection.execute(
-                        """
-                        UPDATE admin_access
-                        SET username = ?, updated_at = ?
-                        WHERE singleton = 1
-                        """,
-                        (username, now.isoformat()),
-                    )
-                else:
-                    self._connection.execute(
-                        """
-                        UPDATE admin_access
-                        SET username = ?, password_salt = ?, password_digest = ?, updated_at = ?,
-                            must_change_password = ?
-                        WHERE singleton = 1
-                        """,
-                        (username, salt, digest, now.isoformat(), int(must_change_password)),
-                    )
-                # Singleton-raden är ägarens uppgifter. Användarlistan ska
-                # spegla den, annars finns ägaren bara på ett av två ställen
-                # och listan blir fel så fort lösenordet sätts eller byts.
-                self._sync_owner_from_singleton_locked(now.isoformat())
+                if self._connection.execute(
+                    "SELECT 1 FROM admin_users WHERE password_digest IS NOT NULL LIMIT 1"
+                ).fetchone():
+                    raise AdminAccessError("Administratören är redan skapad")
+                self._assert_email_free_locked(email)
+                self._connection.execute(
+                    """
+                    INSERT INTO admin_users(
+                        user_id, username, display_name, email, password_salt, password_digest,
+                        role, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'owner', ?, ?)
+                    """,
+                    (user_id, user_id, display_name, email, salt,
+                     _admin_password_digest(password, salt), now, now),
+                )
                 self._connection.execute("COMMIT")
             except Exception:
                 if self._connection.in_transaction:
                     self._connection.execute("ROLLBACK")
                 raise
-        return self.admin_access_summary()
+        return self.admin_user(user_id) or {}
 
-    def _sync_owner_from_singleton_locked(self, now: str) -> None:
-        row = self._connection.execute(
-            "SELECT username, password_salt, password_digest, must_change_password"
-            " FROM admin_access WHERE singleton = 1"
-        ).fetchone()
-        if row is None or not str(row[0] or "").strip() or row[2] is None:
-            return
-        username = str(row[0]).strip()
-        existing = self._connection.execute(
-            "SELECT user_id FROM admin_users WHERE role = 'owner' ORDER BY created_at LIMIT 1"
-        ).fetchone()
-        if existing is None:
-            self._connection.execute(
-                """
-                INSERT INTO admin_users(
-                    user_id, username, password_salt, password_digest,
-                    role, created_at, updated_at, must_change_password
-                ) VALUES (?, ?, ?, ?, 'owner', ?, ?, ?)
-                """,
-                (secrets.token_hex(16), username, row[1], row[2], now, now, int(row[3] or 0)),
-            )
-            return
-        self._connection.execute(
-            "UPDATE admin_users SET username = ?, password_salt = ?, password_digest = ?,"
-            " updated_at = ?, must_change_password = ? WHERE user_id = ?",
-            (username, row[1], row[2], now, int(row[3] or 0), existing[0]),
-        )
+    def _assert_email_free_locked(self, email: str, user_id: str | None = None) -> None:
+        if self._connection.execute(
+            "SELECT 1 FROM admin_users WHERE email = ? AND user_id IS NOT ?", (email, user_id)
+        ).fetchone():
+            raise AdminAccessError("Det finns redan ett konto med den e-postadressen")
 
     # ---------------------------------------------------------- användare
 
     def list_admin_users(self) -> list[dict[str, object]]:
         with self._lock:
             rows = self._connection.execute(
-                "SELECT user_id, username, role, created_at, updated_at,"
+                "SELECT user_id, display_name, role, created_at, updated_at,"
                 " password_digest IS NOT NULL, must_change_password,"
                 " setup_code_digest IS NOT NULL, setup_expires_at, email"
-                " FROM admin_users ORDER BY role DESC, username COLLATE NOCASE"
+                " FROM admin_users ORDER BY role DESC, display_name COLLATE NOCASE, email"
             ).fetchall()
         return [
             {
                 "user_id": row[0],
-                "username": row[1],
+                "display_name": row[1],
                 "role": row[2],
                 "created_at": row[3],
                 "updated_at": row[4],
@@ -1079,43 +1079,36 @@ class IdentityStore:
             (user for user in self.list_admin_users() if user["user_id"] == user_id), None
         )
 
-    def invite_admin_user(self, username: str, role: str = "admin", email: str = "") -> dict[str, object]:
+    def invite_admin_user(self, display_name: str, email: str, role: str = "admin") -> dict[str, object]:
         """Skapa ett konto och en engångskod att lämna över.
 
         Ägaren sätter inte någon annans lösenord. Den inbjudne löser in koden
-        och väljer sitt eget - då finns lösenordet aldrig hos någon annan, inte
-        ens en kort stund.
+        med sin e-postadress och väljer sitt eget - då finns lösenordet aldrig
+        hos någon annan, inte ens en kort stund.
 
-        Koden lämnas över på plats eller, om kontot har en e-postadress och
-        servern är kopplad till TrainMeet Cloud, med e-post via Cloud.
+        Koden lämnas över på plats eller, när servern är kopplad till
+        TrainMeet Cloud, med e-post till adressen.
         """
 
-        username = username.strip()
-        if not ADMIN_USERNAME_PATTERN.fullmatch(username):
-            raise AdminAccessError(
-                "Användarnamnet måste vara 3–64 tecken och får innehålla bokstäver, siffror, punkt, bindestreck och @"
-            )
+        display_name = clean_admin_display_name(display_name)
+        email = required_admin_email(email)
         if role not in {"owner", "admin"}:
             raise AdminAccessError("Rollen måste vara ägare eller administratör")
-        email = normalise_admin_email(email)
 
         now = datetime.now(timezone.utc)
         code = _new_account_code()
         user_id = secrets.token_hex(16)
         with self._lock:
-            if self._connection.execute(
-                "SELECT 1 FROM admin_users WHERE username = ? COLLATE NOCASE", (username,)
-            ).fetchone():
-                raise AdminAccessError("Användarnamnet är upptaget")
+            self._assert_email_free_locked(email)
             self._connection.execute(
                 """
                 INSERT INTO admin_users(
-                    user_id, username, role, created_at, updated_at,
+                    user_id, username, display_name, role, created_at, updated_at,
                     must_change_password, setup_code_digest, setup_expires_at, email
-                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
                 """,
-                (user_id, username, role, now.isoformat(), now.isoformat(),
-                 _credential_digest(code), (now + ADMIN_SETUP_TTL).isoformat(), email or None),
+                (user_id, user_id, display_name, role, now.isoformat(), now.isoformat(),
+                 _credential_digest(code), (now + ADMIN_SETUP_TTL).isoformat(), email),
             )
         return {**(self.admin_user(user_id) or {}), "setup_code": code}
 
@@ -1138,39 +1131,58 @@ class IdentityStore:
         return {**(self.admin_user(user_id) or {}), "setup_code": code}
 
     def set_admin_user_email(self, user_id: str, email: str) -> dict[str, object]:
-        email = normalise_admin_email(email)
+        """Byt kontots adress. Den kan inte tas bort, bara bytas: utan adress
+        kan kontot inte logga in."""
+
+        email = required_admin_email(email)
+        with self._lock:
+            if self._connection.execute(
+                "SELECT 1 FROM admin_users WHERE user_id = ?", (user_id,)
+            ).fetchone() is None:
+                raise AdminAccessError("Användaren finns inte")
+            self._assert_email_free_locked(email, user_id)
+            self._connection.execute(
+                "UPDATE admin_users SET email = ?, updated_at = ? WHERE user_id = ?",
+                (email, datetime.now(timezone.utc).isoformat(), user_id),
+            )
+        return self.admin_user(user_id) or {}
+
+    def set_admin_user_display_name(self, user_id: str, display_name: str) -> dict[str, object]:
+        display_name = clean_admin_display_name(display_name)
         with self._lock:
             if self._connection.execute(
                 "SELECT 1 FROM admin_users WHERE user_id = ?", (user_id,)
             ).fetchone() is None:
                 raise AdminAccessError("Användaren finns inte")
             self._connection.execute(
-                "UPDATE admin_users SET email = ?, updated_at = ? WHERE user_id = ?",
-                (email or None, datetime.now(timezone.utc).isoformat(), user_id),
+                "UPDATE admin_users SET display_name = ?, updated_at = ? WHERE user_id = ?",
+                (display_name, datetime.now(timezone.utc).isoformat(), user_id),
             )
         return self.admin_user(user_id) or {}
 
     def issue_admin_password_reset(
-        self, username: str, *, now: datetime | None = None
+        self, email: str, *, now: datetime | None = None
     ) -> tuple[dict[str, object], str] | None:
-        """En kod för nytt lösenord, men bara till ett konto med e-postadress.
+        """En kod för nytt lösenord till kontot med den här adressen.
 
-        Svarar None för ett okänt konto och ett utan adress. Det lösenord som
-        finns slutar inte gälla förrän koden lösts in, så den som begär koder
-        åt någon annan kan inte låsa ute hen. En ny kod ersätter den förra.
+        Svarar None för en adress som inget konto har. Det lösenord som finns
+        slutar inte gälla förrän koden lösts in, så den som begär koder åt
+        någon annan kan inte låsa ute hen. En ny kod ersätter den förra.
         """
 
-        username = str(username).strip()
-        if not ADMIN_USERNAME_PATTERN.fullmatch(username):
+        try:
+            email = normalise_admin_email(email)
+        except AdminAccessError:
+            return None
+        if not email:
             return None
         now = now or datetime.now(timezone.utc)
         code = _new_account_code()
         with self._lock:
             row = self._connection.execute(
-                "SELECT user_id, email FROM admin_users WHERE username = ? COLLATE NOCASE",
-                (username,),
+                "SELECT user_id FROM admin_users WHERE email = ?", (email,)
             ).fetchone()
-            if row is None or not row[1]:
+            if row is None:
                 return None
             self._connection.execute(
                 "UPDATE admin_users SET reset_code_digest = ?, reset_expires_at = ?"
@@ -1180,7 +1192,7 @@ class IdentityStore:
         return self.admin_user(str(row[0])) or {}, code
 
     def redeem_admin_setup(
-        self, username: str, code: str, password: str, *, now: datetime | None = None
+        self, email: str, code: str, password: str, *, now: datetime | None = None
     ) -> dict[str, object]:
         """Löser in en inbjudan eller en kod för nytt lösenord.
 
@@ -1189,8 +1201,11 @@ class IdentityStore:
         satt inloggad med det gamla lösenordet loggas ut.
         """
 
-        if not 8 <= len(password) <= 256:
-            raise AdminAccessError("Lösenordet måste vara 8–256 tecken")
+        _check_admin_password(password)
+        try:
+            email = normalise_admin_email(email)
+        except AdminAccessError:
+            raise AdminAccessError("Koden gäller inte") from None
         now = now or datetime.now(timezone.utc)
         # Koden digererades i sin skrivna form när den utfärdades, så indata
         # förs tillbaka dit: streck, mellanslag eller ingenting blir samma kod.
@@ -1200,10 +1215,10 @@ class IdentityStore:
             row = self._connection.execute(
                 "SELECT user_id, setup_code_digest, setup_expires_at,"
                 " reset_code_digest, reset_expires_at FROM admin_users"
-                " WHERE username = ? COLLATE NOCASE",
-                (str(username).strip(),),
+                " WHERE email = ?",
+                (email,),
             ).fetchone()
-            if row is None:
+            if row is None or not email:
                 raise AdminAccessError("Koden gäller inte")
             invitation = row[1] is not None and hmac.compare_digest(bytes(row[1]), digest)
             reset = row[3] is not None and hmac.compare_digest(bytes(row[3]), digest)
@@ -1234,7 +1249,7 @@ class IdentityStore:
 
         with self._lock:
             row = self._connection.execute(
-                "SELECT role, username FROM admin_users WHERE user_id = ?", (user_id,)
+                "SELECT role FROM admin_users WHERE user_id = ?", (user_id,)
             ).fetchone()
             if row is None:
                 raise AdminAccessError("Användaren finns inte")
@@ -1244,15 +1259,6 @@ class IdentityStore:
                 )
             self._connection.execute("DELETE FROM admin_users WHERE user_id = ?", (user_id,))
             self._connection.execute("DELETE FROM admin_sessions WHERE user_id = ?", (user_id,))
-            # Singleton-raden är den gamla installationens ägare. Namnger den
-            # den som just togs bort ska den inte fortsätta göra det - varken i
-            # gränssnittets sammanfattning eller som väg in.
-            self._connection.execute(
-                "UPDATE admin_access SET username = '', password_salt = NULL,"
-                " password_digest = NULL, updated_at = ?"
-                " WHERE singleton = 1 AND username = ? COLLATE NOCASE",
-                (datetime.now(timezone.utc).isoformat(), row[1]),
-            )
 
     def set_admin_user_role(self, user_id: str, role: str) -> dict[str, object]:
         if role not in {"owner", "admin"}:
@@ -1276,8 +1282,7 @@ class IdentityStore:
         return self.admin_user(user_id) or {}
 
     def set_admin_user_password(self, user_id: str, password: str) -> dict[str, object]:
-        if not 8 <= len(password) <= 256:
-            raise AdminAccessError("Lösenordet måste vara 8–256 tecken")
+        _check_admin_password(password)
         salt = secrets.token_bytes(16)
         with self._lock:
             if self._connection.execute(
@@ -1326,61 +1331,41 @@ class IdentityStore:
 
     def create_admin_session(
         self,
-        username: str,
+        email: str,
         password: str,
         *,
         now: datetime | None = None,
         ttl: timedelta = ADMIN_SESSION_TTL,
     ) -> str | None:
-        username = str(username).strip()
-        if not ADMIN_USERNAME_PATTERN.fullmatch(username) or len(password) > 256:
+        """Logga in med e-postadress och lösenord.
+
+        Adressen är kontot. Ett konto utan adress kommer inte in förrän ägaren
+        har gett det en, och ett gammalt användarnamn öppnar ingenting.
+        """
+
+        try:
+            email = normalise_admin_email(email)
+        except AdminAccessError:
+            return None
+        if not email or len(password) > 256:
             return None
         now = now or datetime.now(timezone.utc)
         with self._lock:
-            # Användarlistan först. Singleton-raden finns kvar som ägarens
-            # uppgifter och som väg in för en installation som ännu inte
-            # migrerats - men den är inte längre den enda som kan logga in.
             row = self._connection.execute(
-                "SELECT user_id, username, password_salt, password_digest"
-                " FROM admin_users WHERE username = ? COLLATE NOCASE",
-                (username,),
+                "SELECT user_id, password_salt, password_digest FROM admin_users WHERE email = ?",
+                (email,),
             ).fetchone()
-            user_id = None
-            if row is not None and row[2] is not None and row[3] is not None:
-                if not hmac.compare_digest(_admin_password_digest(password, row[2]), row[3]):
-                    return None
-                user_id = str(row[0])
-            elif self._connection.execute(
-                "SELECT 1 FROM admin_users WHERE password_digest IS NOT NULL LIMIT 1"
-            ).fetchone():
-                # Finns det konton som kan logga in är listan sanningen, och den
-                # som inte står i den kommer inte in. Utan den här spärren levde
-                # en borttagen ägare kvar i singleton-raden och kunde logga in
-                # med sitt gamla lösenord - listan visade en person, servern
-                # släppte in två.
+            if row is None or row[1] is None or row[2] is None:
                 return None
-            else:
-                legacy = self._connection.execute(
-                    """
-                    SELECT username, password_salt, password_digest
-                    FROM admin_access WHERE singleton = 1
-                    """
-                ).fetchone()
-                if (
-                    legacy is None
-                    or legacy[1] is None
-                    or legacy[2] is None
-                    or not hmac.compare_digest(username.encode("utf-8"), legacy[0].encode("utf-8"))
-                    or not hmac.compare_digest(_admin_password_digest(password, legacy[1]), legacy[2])
-                ):
-                    return None
+            if not hmac.compare_digest(_admin_password_digest(password, row[1]), row[2]):
+                return None
             token = secrets.token_urlsafe(32)
             self._connection.execute(
                 """
                 INSERT INTO admin_sessions(session_digest, expires_at, created_at, user_id)
                 VALUES (?, ?, ?, ?)
                 """,
-                (_credential_digest(token), (now + ttl).isoformat(), now.isoformat(), user_id),
+                (_credential_digest(token), (now + ttl).isoformat(), now.isoformat(), str(row[0])),
             )
         return token
 
@@ -1410,8 +1395,8 @@ class IdentityStore:
     def admin_session_user(self, token: str, *, now: datetime | None = None) -> dict[str, object] | None:
         """Vem sessionen tillhör, eller None om den inte gäller.
 
-        En session utan användare kommer från singleton-raden och räknas som
-        ägaren: det är vad den var innan listan fanns.
+        En session utan användare kom från den gamla enda inloggningen. Den
+        finns inte längre, så en sådan session gäller inte.
         """
 
         if not self.authenticate_admin_session(token, now=now):
@@ -1421,10 +1406,8 @@ class IdentityStore:
                 "SELECT user_id FROM admin_sessions WHERE session_digest = ?",
                 (_credential_digest(token),),
             ).fetchone()
-        if row is None:
+        if row is None or row[0] is None:
             return None
-        if row[0] is None:
-            return {"user_id": None, "username": str(self.admin_access_summary()["username"]), "role": "owner"}
         return self.admin_user(str(row[0]))
 
     def revoke_admin_session(self, token: str) -> None:
@@ -1558,6 +1541,29 @@ def _new_account_code() -> str:
     """Åtta tecken i två grupper, utan tecken som går att förväxla (0/O, 1/I)."""
 
     return "-".join("".join(secrets.choice(CODE_ALPHABET) for _ in range(4)) for _ in range(2))
+
+
+def clean_admin_display_name(value: object) -> str:
+    """Ett namn att visa: blanksteg i följd blir ett, och 1–100 tecken."""
+
+    name = " ".join(str(value or "").split())
+    if not 1 <= len(name) <= ADMIN_NAME_MAX:
+        raise AdminAccessError(f"Ange ett namn, högst {ADMIN_NAME_MAX} tecken")
+    return name
+
+
+def required_admin_email(value: str) -> str:
+    """Kontots adress. Den krävs: utan den kan kontot inte logga in."""
+
+    email = normalise_admin_email(value)
+    if not email:
+        raise AdminAccessError("Ange en e-postadress")
+    return email
+
+
+def _check_admin_password(password: str) -> None:
+    if not 8 <= len(password) <= 256:
+        raise AdminAccessError("Lösenordet måste vara 8–256 tecken")
 
 
 def normalise_admin_email(value: str) -> str:

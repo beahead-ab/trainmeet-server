@@ -43,7 +43,7 @@ const root = path.resolve(__dirname, '../..');
         await screenshot('login-failure');
         throw error;
       });
-      await page.locator('#login-username').fill('smoke-admin');
+      await page.locator('#login-email').fill('smoke-admin@example.se');
       await page.locator('#login-password').fill('isolated-browser-test');
       await page.locator('#login-form button[type="submit"]').click();
       await page.locator('#overview-view').waitFor({ state: 'visible' });

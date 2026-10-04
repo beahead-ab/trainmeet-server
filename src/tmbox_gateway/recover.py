@@ -14,8 +14,13 @@ uttrycklig handling som lämnar en rad i journalen, i stället för en tyst
 Kommandot sätter inget lösenord. Det utfärdar en engångskod, samma sort som en
 inbjudan, och den som får koden väljer sitt eget lösenord i webbläsaren.
 
-    python -m tmbox_gateway.recover --state-dir /var/lib/trainmeet
-    python -m tmbox_gateway.recover --state-dir /var/lib/trainmeet --user casper
+Kontot är e-postadressen. Ett konto som saknar adress, till exempel ett från
+före version 3, kan inte logga in förrän det har fått en. Här ger man den med
+--email, samtidigt som koden utfärdas.
+
+    python -m tmbox_gateway.recover --state-dir /var/lib/trainmeet-server
+    python -m tmbox_gateway.recover --state-dir /var/lib/trainmeet-server --konto casper@example.se
+    python -m tmbox_gateway.recover --state-dir /var/lib/trainmeet-server --konto 1 --email casper@example.se
 """
 
 from __future__ import annotations
@@ -44,7 +49,14 @@ def main(argv: list[str] | None = None) -> int:
         description="Utfärda en engångskod för att sätta ett nytt lösenord på TrainMeet Server",
     )
     parser.add_argument("--state-dir", default="data/local", help="Serverns datamapp")
-    parser.add_argument("--user", help="Användarnamn. Utelämnas det listas kontona i stället.")
+    parser.add_argument(
+        "--konto",
+        help="Kontots nummer i listan eller dess e-postadress. Utelämnas det listas kontona i stället.",
+    )
+    parser.add_argument(
+        "--email",
+        help="Ny e-postadress för kontot. Krävs när kontot saknar adress, eftersom adressen är det man loggar in med.",
+    )
     arguments = parser.parse_args(argv)
 
     store = _store(Path(arguments.state_dir))
@@ -54,33 +66,46 @@ def main(argv: list[str] | None = None) -> int:
             print("Servern har inga konton än. Öppna webbgränssnittet och gör installationen.")
             return 1
 
-        if not arguments.user:
+        if not arguments.konto:
             print("Konton på den här servern:\n")
-            for user in users:
+            for number, user in enumerate(users, start=1):
                 role = "ägare" if user["role"] == "owner" else "administratör"
                 state = "inbjuden" if user["invitation_pending"] else "aktiv"
-                print(f"  {user['username']}  ({role}, {state})")
-            print("\nKör igen med --user <användarnamn> för att få en engångskod.")
+                email = user["email"] or "saknar e-post, kan inte logga in"
+                print(f"  {number}. {user['display_name']}  <{email}>  ({role}, {state})")
+            print("\nKör igen med --konto <nummer eller e-post> för att få en engångskod.")
+            print("Saknar kontot e-post anger du en med --email <adress>.")
             return 0
 
-        match = next(
-            (user for user in users if str(user["username"]).lower() == arguments.user.lower()),
-            None,
-        )
+        wanted = arguments.konto.strip()
+        if wanted.isdigit():
+            index = int(wanted) - 1
+            match = users[index] if 0 <= index < len(users) else None
+        else:
+            match = next((user for user in users if user["email"] and user["email"] == wanted.lower()), None)
         if match is None:
-            print(f"Ingen användare heter {arguments.user}.", file=sys.stderr)
+            print(f"Hittar inget konto {wanted}. Kör utan --konto för att se listan.", file=sys.stderr)
             return 1
 
         try:
+            if arguments.email:
+                store.set_admin_user_email(str(match["user_id"]), arguments.email)
+            elif not match["email"]:
+                print(
+                    f"{match['display_name']} saknar e-postadress och kan inte logga in utan en."
+                    " Kör igen med --email <adress>.",
+                    file=sys.stderr,
+                )
+                return 1
             issued = store.reissue_admin_setup(str(match["user_id"]))
         except AdminAccessError as error:
             print(str(error), file=sys.stderr)
             return 1
 
-        print(f"\n  Kod till {issued['username']}:  {issued['setup_code']}\n")
-        print("Öppna TrainMeet Server i en webbläsare, välj \"Jag har en kod\"")
-        print("och sätt ett nytt lösenord. Koden gäller i sju dagar och bara en gång.")
-        print("Det gamla lösenordet slutar gälla när koden löses in.")
+        print(f"\n  Kod till {issued['display_name']} <{issued['email']}>:  {issued['setup_code']}\n")
+        print("Öppna TrainMeet Server i en webbläsare, välj \"Jag har en kod\" och ange")
+        print("e-postadressen, koden och ett nytt lösenord. Koden gäller i sju dagar och")
+        print("bara en gång. Det gamla lösenordet slutar gälla när koden löses in.")
         return 0
     finally:
         store.close()

@@ -79,12 +79,13 @@ class RecoveryInstructionTests(unittest.TestCase):
         from tmbox_gateway import recover
 
         self.assertIn("python -m tmbox_gateway.recover", self.readme)
-        for flag in ("--state-dir", "--user"):
+        for flag in ("--state-dir", "--konto", "--email"):
             self.assertIn(flag, self.readme)
+        self.assertNotIn("--user", self.readme)
 
         with tempfile.TemporaryDirectory() as empty:
             with self.assertRaises(SystemExit) as missing:
-                recover.main(["--state-dir", empty, "--user", "casper"])
+                recover.main(["--state-dir", empty, "--konto", "casper@example.se", "--email", "casper@example.se"])
             self.assertIn("Hittar ingen installation", str(missing.exception))
 
     def test_the_paths_are_the_ones_the_installation_uses(self) -> None:

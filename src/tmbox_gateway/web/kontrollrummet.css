@@ -671,6 +671,8 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
 #login :is(#redeem-form, #forgot-form) .link-button { margin-top: 8px; padding-top: 8px; border-top: 0; color: var(--kr-mute); }
 /* Användarens e-post under namnet i Inställningar → Användare. */
 .users-email { margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--kr-mute); overflow-wrap: anywhere; }
+/* Utan adress kan kontot inte logga in. Det ska synas för ägaren, som ger det en under Redigera. */
+.users-email.users-no-email { color: var(--kr-amber); font-weight: 600; }
 /* Glömt lösenordet? och Jag har en kod på samma rad under inloggningen. */
 #login .login-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; margin: 20px 0 0; padding: 14px 0 0; border-top: 1px solid var(--kr-line); }
 #login .login-links .link-button { width: auto; margin: 0; padding: 0; border-top: 0; }

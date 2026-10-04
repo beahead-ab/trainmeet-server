@@ -56,7 +56,7 @@ const root = path.resolve(__dirname, '../..');
       if (process.env.SERVER_SHELL_SCREENSHOTS) await page.screenshot({path: path.join(process.env.SERVER_SHELL_SCREENSHOTS, `placement-${suffix}.png`)});
     };
     const admin = await browser.newContext();
-    assert.equal((await admin.request.post(urls.eu + '/v1/auth/login', {data: {username: 'smoke-admin', password: 'isolated-browser-test'}})).status(), 200);
+    assert.equal((await admin.request.post(urls.eu + '/v1/auth/login', {data: {email: 'smoke-admin@example.se', password: 'isolated-browser-test'}})).status(), 200);
     const presentation = async () => (await admin.request.get(urls.eu + '/v1/cloud/presentation')).json();
     const realBefore = await presentation();
     await page.goto(labURL);
