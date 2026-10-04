@@ -65,6 +65,7 @@ from .protocol_v2 import TMBoxStationService, find_track_conflict
 from .train_routes import _visits
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
+    COUNTRY_LANGUAGES,
     DEFAULT_WEB_CLIENT_TTL_MINUTES,
     DISPLAY_SCREENS,
     RuntimePublication,
@@ -585,9 +586,20 @@ class TrainMeetHTTPApplication:
                 path.chmod(0o640)
         self.config = replace(self.config, connection_code=code)
 
+    def _meet_country(self) -> str | None:
+        """Den valda träffens land: SE, DK, DE, NO eller US. Inget utan träff."""
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        if not selected:
+            return None
+        if selected["region"] == "us":
+            return "us"
+        publication = self.runtime_store.active() if self.runtime_store else None
+        return publication.country if publication else "se"
+
     def server_context(self, client: PairedClient) -> dict[str, Any]:
         selected = self.lifecycle.selected() if self.lifecycle else None
         region = selected["region"] if selected else None
+        country = self._meet_country()
         admin = client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}
         workspaces = ["administration"] if admin else []
         if region == "eu" and (admin or client.kind == DeviceKind.TKL_TERMINAL):
@@ -602,8 +614,8 @@ class TrainMeetHTTPApplication:
         return {
             "selected_meet": ({"id": selected["meet_id"], "name": selected.get("meet_name", ""),
                                "publication_id": selected["publication_id"], "operating_region": region,
-                               "generation": selected["generation"]} if selected else None),
-            "operating_region": region, "available_workspaces": workspaces,
+                               "country": country, "generation": selected["generation"]} if selected else None),
+            "operating_region": region, "country": country, "available_workspaces": workspaces,
             "cloud_update": self.cloud_config.status() if self.cloud_config and admin else {},
             "config_authority": "cloud", "local_editing": False,
             "simulation": {"active": bool(self.simulation and self.simulation.active)},
@@ -625,11 +637,12 @@ class TrainMeetHTTPApplication:
         """Navigation is public; no credentials, Cloud link or admin data."""
         selected = self.lifecycle.selected() if self.lifecycle else None
         region = selected["region"] if selected else None
+        country = self._meet_country()
         return {
             "selected_meet": ({"id": selected["meet_id"], "name": selected.get("meet_name", ""),
                                "publication_id": selected["publication_id"], "operating_region": region,
-                               "generation": selected["generation"]} if selected else None),
-            "operating_region": region,
+                               "country": country, "generation": selected["generation"]} if selected else None),
+            "operating_region": region, "country": country,
             "available_workspaces": ["administration"] + (["tkl", "tmbox"] if region == "eu" else ["dispatcher", "conductor"] if region == "us" else []),
         }
 
@@ -1314,8 +1327,8 @@ class TrainMeetHTTPApplication:
 
     def _device_ui(self, device_id: str) -> dict:
         from .device_ui import ui_payload
-        selected = self.lifecycle.selected() if self.lifecycle else None
-        default = "en" if selected and selected.get("region") == "us" else "sv"
+        # Boxens eget språkval gäller; annars träffens lands språk.
+        default = COUNTRY_LANGUAGES[self._meet_country() or "se"]
         return ui_payload(self.identities.device_language(device_id, default))
 
     def tmbox_v2_stations(self, client: PairedClient) -> dict[str, Any]:
@@ -1490,7 +1503,7 @@ class TrainMeetHTTPApplication:
             connections = publication.payload["connections"]
             autonomous_links = publication.payload.get("autonomous_links", [])
             display = publication.payload.get("display", {})
-            meet = publication.payload["meet"]
+            meet = {**publication.payload["meet"], "country": publication.country}
             publication_id = publication.publication_id
         else:
             active_day = "Dagl"
@@ -1537,7 +1550,7 @@ class TrainMeetHTTPApplication:
         selected = self.lifecycle.selected() if self.lifecycle else None
         if selected and selected["region"] == "us":
             clock = self.clock_status(self.local_admin())
-            meet = {"id": selected["meet_id"], "name": selected.get("meet_name", ""), "operating_region": "us"}
+            meet = {"id": selected["meet_id"], "name": selected.get("meet_name", ""), "operating_region": "us", "country": "us"}
             publication_id = selected["publication_id"]
             positions = []
         clock = self._clock_display(clock)

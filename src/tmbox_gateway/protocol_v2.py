@@ -233,9 +233,15 @@ class TMBoxStationService:
 
     def device_ui(self, device_id: str) -> dict[str, Any]:
         from .device_ui import ui_payload
+        # Boxens eget språkval gäller; annars träffens lands språk.
+        from .runtime import COUNTRY_LANGUAGES
         selected = self.lifecycle.selected() if self.lifecycle else None
-        default = "en" if selected and selected.get("region") == "us" else "sv"
-        return ui_payload(self.identities.device_language(device_id, default))
+        if selected and selected.get("region") == "us":
+            country = "us"
+        else:
+            publication = self.runtime_store.active() if self.runtime_store else None
+            country = publication.country if publication else "se"
+        return ui_payload(self.identities.device_language(device_id, COUNTRY_LANGUAGES[country]))
 
     def assignment_payload(self, device_id: str) -> dict[str, Any]:
         device = self.identities.client(device_id)

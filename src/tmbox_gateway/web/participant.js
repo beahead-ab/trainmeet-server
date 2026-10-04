@@ -34,7 +34,7 @@
     const meet = snapshot.meet || {};
     const us = meet.operating_region === "us";
     $("#pv-meet-name").textContent = meet.name || "TrainMeet Server";
-    $("#pv-region").textContent = us ? "US · TWC" : "EU";
+    $("#pv-region").textContent = us ? "US · TWC" : String(meet.country || "se").toUpperCase();
     const authenticated = typeof state !== "undefined" && Boolean(state?.authStatus?.authenticated);
     const link = $("#pv-login");
     link.href = authenticated ? "/drift" : "/login";

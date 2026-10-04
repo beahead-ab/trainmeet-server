@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
 import threading
 from dataclasses import dataclass
@@ -22,6 +23,20 @@ from .models import (
 
 
 RUNTIME_SCHEMA_VERSION = 3
+LOGGER = logging.getLogger("tmbox_gateway.runtime")
+
+#: Träffens land, från TrainMeet Cloud (meet.country), och det språk nya boxar
+#: får. De europeiska länderna kör EU-trafikspelet; USA kör US-flödet och har
+#: sitt eget paket. Ett paket utan land, från ett äldre Cloud, är en svensk träff.
+COUNTRY_LANGUAGES = {"se": "sv", "dk": "da", "de": "de", "no": "nb", "us": "en"}
+EU_COUNTRIES = ("se", "dk", "de", "no")
+
+
+def meet_country(meet: Any) -> str:
+    """Landet i en EU-träffs meet-block. Saknas det, eller är det okänt, är
+    träffen svensk: ett okänt land får aldrig stoppa ett paket."""
+    value = meet.get("country") if isinstance(meet, dict) else None
+    return value if value in EU_COUNTRIES else "se"
 AVAILABLE_CLOCK_STYLES = (
     "swiss",
     "swedish",
@@ -74,6 +89,10 @@ class RuntimePublication:
     checksum: str
     payload: dict[str, Any]
 
+    @property
+    def country(self) -> str:
+        return meet_country(self.payload.get("meet"))
+
     @classmethod
     def parse(cls, payload: dict[str, Any]) -> "RuntimePublication":
         schema_version = payload.get("schema_version")
@@ -94,6 +113,8 @@ class RuntimePublication:
         meet_name = _required_text(meet, "name")
         active_day = _required_text(meet, "active_day")
         timezone = str(meet.get("timezone") or "Europe/Stockholm")
+        if "country" in meet and meet.get("country") not in EU_COUNTRIES:
+            LOGGER.warning("Okänt land %r i driftpaketet; träffen visas som svensk", meet.get("country"))
 
         stations = _required_list(payload, "stations")
         station_ids = _unique_ids(stations, "station")

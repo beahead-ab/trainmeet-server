@@ -70,6 +70,111 @@
     "da": "Skift af visning ændrer eller stopper ikke en kørsel.",
     "nb": "Bytte av visning endrer eller stopper ikke en kjøring.",
     "de": "Ein Ansichtswechsel ändert oder stoppt keine Betriebssitzung."
+  },
+  {
+    "en": "Country",
+    "sv": "Land",
+    "da": "Land",
+    "nb": "Land",
+    "de": "Land"
+  },
+  {
+    "en": "Sweden",
+    "sv": "Sverige",
+    "da": "Sverige",
+    "nb": "Sverige",
+    "de": "Schweden"
+  },
+  {
+    "en": "Denmark",
+    "sv": "Danmark",
+    "da": "Danmark",
+    "nb": "Danmark",
+    "de": "Dänemark"
+  },
+  {
+    "en": "Germany",
+    "sv": "Tyskland",
+    "da": "Tyskland",
+    "nb": "Tyskland",
+    "de": "Deutschland"
+  },
+  {
+    "en": "Norway",
+    "sv": "Norge",
+    "da": "Norge",
+    "nb": "Norge",
+    "de": "Norwegen"
+  },
+  {
+    "en": "USA",
+    "sv": "USA",
+    "da": "USA",
+    "nb": "USA",
+    "de": "USA"
+  },
+  {
+    "en": "Operating session in {country}",
+    "sv": "Tågträff i {country}",
+    "da": "Togtræf i {country}",
+    "nb": "Togtreff i {country}",
+    "de": "Betriebstreffen in {country}"
+  },
+  {
+    "en": "Swedish · left-hand traffic",
+    "sv": "Svenska · vänstertrafik",
+    "da": "Svensk · venstrekørsel",
+    "nb": "Svensk · venstretrafikk",
+    "de": "Schwedisch · Linksverkehr"
+  },
+  {
+    "en": "Danish · right-hand traffic",
+    "sv": "Danska · högertrafik",
+    "da": "Dansk · højrekørsel",
+    "nb": "Dansk · høyretrafikk",
+    "de": "Dänisch · Rechtsverkehr"
+  },
+  {
+    "en": "German · right-hand traffic",
+    "sv": "Tyska · högertrafik",
+    "da": "Tysk · højrekørsel",
+    "nb": "Tysk · høyretrafikk",
+    "de": "Deutsch · Rechtsverkehr"
+  },
+  {
+    "en": "Norwegian · left-hand traffic",
+    "sv": "Norska · vänstertrafik",
+    "da": "Norsk · venstrekørsel",
+    "nb": "Norsk · venstretrafikk",
+    "de": "Norwegisch · Linksverkehr"
+  },
+  {
+    "en": "English · Track Warrant Control",
+    "sv": "Engelska · Track Warrant Control",
+    "da": "Engelsk · Track Warrant Control",
+    "nb": "Engelsk · Track Warrant Control",
+    "de": "Englisch · Track Warrant Control"
+  },
+  {
+    "en": "Sweden, Denmark, Germany and Norway run the same traffic and can be switched at any time. The USA runs the separate US flow.",
+    "sv": "Sverige, Danmark, Tyskland och Norge kör samma trafikspel och kan bytas när som helst. USA kör det separata US-flödet.",
+    "da": "Sverige, Danmark, Tyskland og Norge kører samme trafikspil og kan skiftes når som helst. USA kører det separate US-flow.",
+    "nb": "Sverige, Danmark, Tyskland og Norge kjører samme trafikkspill og kan byttes når som helst. USA kjører den separate US-flyten.",
+    "de": "Schweden, Dänemark, Deutschland und Norwegen nutzen denselben Betrieb und können jederzeit gewechselt werden. Die USA nutzen den separaten US-Ablauf."
+  },
+  {
+    "en": "Switching to or from the USA is only possible on an empty meet.",
+    "sv": "Byte till eller från USA går bara på en tom träff.",
+    "da": "Skift til eller fra USA er kun muligt på et tomt træf.",
+    "nb": "Bytte til eller fra USA går bare på et tomt treff.",
+    "de": "Ein Wechsel zu oder von den USA ist nur bei einem leeren Treffen möglich."
+  },
+  {
+    "en": "Choose the country when creating the meet.",
+    "sv": "Välj land när du skapar träffen.",
+    "da": "Vælg land, når du opretter træffet.",
+    "nb": "Velg land når du oppretter treffet.",
+    "de": "Wählen Sie das Land beim Erstellen des Treffens."
   }
 ];
   globalThis.TrainMeetMessages ||= {};

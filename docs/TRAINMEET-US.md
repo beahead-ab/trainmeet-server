@@ -196,10 +196,12 @@ verkliga banor/regelprofiler, historisk TT&TO, avancerade villkor/ersättningar,
 returarkiv till Cloud och full fysisk terminaltest. Dessa ingår inte i den
 första vertikala pilotleveransen.
 
-## Val av EU eller US
+## Land och trafik
 
-Överst i Server finns **EU-tågträff / US-tågträff**. US öppnar Dispatcher,
-med Conductor som egen vy. EU återgår till den befintliga servervyn med TKL.
-Länkarna öppnas i samma flik och ändrar inte sessioner, klocka eller tillstånd.
-En inloggning/parkoppling krävs fortfarande enligt respektive vys behörigheter.
-US behåller engelska som förvalt språk, separat från EU:s språkval.
+Landet väljs i TrainMeet Cloud: Sverige, Danmark, Tyskland, Norge eller USA.
+Servern väljer trafik efter paketet den får: ett US-paket öppnar Dispatcher, med
+Conductor som egen vy; ett paket från något av de europeiska länderna ger den
+befintliga servervyn med TKL och TMBox. Servern visar landet (SE, DK, DE, NO, US)
+i sidhuvudet. Det finns inget val mellan EU och US i Servern. En inloggning eller
+parkoppling krävs fortfarande enligt respektive vys behörigheter. US behåller
+engelska som förvalt språk; nya boxar i en europeisk träff får landets språk.

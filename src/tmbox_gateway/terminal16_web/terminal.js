@@ -234,7 +234,7 @@
       if (meet?.name) document.querySelector("#meet-name").textContent = meet.name;
       const region = document.querySelector("#meet-region");
       if (meet?.operating_region) {
-        region.textContent = meet.operating_region.toUpperCase();
+        region.textContent = (meet.country || (meet.operating_region === "us" ? "us" : "se")).toUpperCase();
         region.className = `tm-badge tm-badge--${meet.operating_region === "us" ? "us" : "eu"}`;
         region.hidden = false;
       }
