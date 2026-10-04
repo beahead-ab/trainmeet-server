@@ -913,7 +913,10 @@ class TrainMeetHTTPApplication:
         client: PairedClient,
         payload: dict[str, Any],
     ) -> dict[str, object]:
-        self._require_admin(client)
+        # Den här vägen skriver över ägarens namn och lösenord. Räckte
+        # administratörsrollen kunde vem som helst som bjudits in ta över
+        # ägarkontot och låsa ute ägaren.
+        self._require_owner(client)
         password_value = payload.get("password")
         password = None if password_value in {None, ""} else str(password_value)
         try:
