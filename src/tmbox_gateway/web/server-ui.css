@@ -124,7 +124,6 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 }
 @media (max-width: 900px) {
 #app-chrome { height: auto; min-height: 52px; flex-wrap: wrap; padding: 10px 16px; gap: 8px; }
-#app-chrome .topbar-right { width: 100%; justify-content: flex-end; }
 #app-chrome .tm-switch { border: 0; padding: 0; }
 #app-view { padding: 12px; }
 .server-grid-two { grid-template-columns: 1fr; }
@@ -408,7 +407,6 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .sc-online.has-more { grid-template-columns: repeat(var(--count, 3), minmax(0, 1fr)) auto; }
 .sc-online__more { white-space: nowrap; }
 @media (max-width: 600px) {
-#app-chrome .topbar-right { flex-wrap: wrap; }
 #header-cloud-status { max-width: 165px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 /* Farozon is the last card on the page, under both columns. */

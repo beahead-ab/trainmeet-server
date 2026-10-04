@@ -419,8 +419,6 @@ dialog.admin-modal .form-message.success { color: var(--kr-green); }
 .kr-dialog-extra button.danger-action { margin-left: auto; }
 
 @media (max-width: 900px) {
-  #app-chrome { height: auto; min-height: 56px; padding: 8px 12px; flex-wrap: wrap; row-gap: 8px; }
-  #app-chrome .kr-search { order: 20; flex: 1 1 100%; min-width: 0; }
   body[data-mode="kor"] #app-view { padding: 10px 12px 20px; }
   .kr-clockrow { gap: 14px; padding: 12px 14px; }
   .kr-vsep { display: none; }
@@ -673,3 +671,57 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
 #login .login-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; margin: 20px 0 0; padding: 14px 0 0; border-top: 1px solid var(--kr-line); }
 #login .login-links .link-button { width: auto; margin: 0; padding: 0; border-top: 0; }
 #login .link-button:hover { text-decoration: underline; }
+
+/* ── Sidhuvudet på smal skärm ──────────────────────────────────────────
+ * Två rader, inte fyra eller fem: loggan, träffen och knapparna överst,
+ * klockan, kontrolluppgifterna och sökfältet under. .topbar-right blir
+ * display: contents så att dess klocka och knappar kan ordnas en och en, och
+ * ::after bryter raden mellan de två grupperna. Menyn "Öppna på skärm" mäts
+ * mot sidhuvudet, inte mot knappen, så att den inte hamnar utanför skärmens
+ * vänsterkant. På en telefon blir knappen en ikon och loggan står utan text. */
+#app-chrome .screen-menu__icon { display: none; }
+/* Mellan 900 och 1200 px trängdes träffens namn ihop till ingenting under
+ * versionsmärket. Sökfältet ger nu efter först, och namnet behåller en bredd. */
+@media (min-width: 901px) {
+  #app-chrome .tm-switch { flex: 0 0 auto; min-width: 96px; max-width: 30vw; }
+  #app-chrome #app-meet-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #app-chrome .kr-search { flex: 0 4 240px; min-width: 140px; }
+}
+/* Där raden är full säger statusmärket bara något när det finns en nyare
+ * version eller ingen kontakt, som på telefonen. "Version 9" får vika. */
+@media (min-width: 901px) and (max-width: 1200px) {
+  #app-chrome #header-cloud-status.tm-status--published { display: none; }
+}
+@media (max-width: 900px) {
+  #app-chrome { position: relative; height: auto; min-height: 56px; padding: 8px 12px; flex-wrap: wrap; column-gap: 6px; row-gap: 0; }
+  /* Radbrytningen är en egen tom rad; dess höjd är avståndet mellan raderna. */
+  #app-chrome::after { content: ""; order: 9; flex-basis: 100%; height: 8px; }
+  #app-chrome .topbar-right { display: contents; }
+  #app-chrome .tm-header__spacer { display: none; }
+  #app-chrome .brand-lockup { order: 1; margin-right: 6px; }
+  #app-chrome .tm-switch { order: 2; flex: 1 1 0; min-width: 0; }
+  #app-chrome #app-meet-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #app-chrome .screen-menu { order: 3; position: static; }
+  #app-chrome .screen-menu nav { left: auto; right: 12px; top: 48px; }
+  #app-chrome #header-settings { order: 4; }
+  #app-chrome #header-help { order: 5; }
+  #app-chrome #kr-theme-toggle { order: 6; }
+  #app-chrome #logout { order: 7; }
+  #app-chrome #app-clock { order: 10; }
+  #app-chrome #header-cloud-status { order: 11; }
+  #app-chrome #header-findings { order: 12; }
+  #app-chrome .kr-search { order: 13; flex: 1 1 160px; min-width: 0; }
+  #app-chrome .kr-search input { text-overflow: ellipsis; }
+}
+@media (max-width: 600px) {
+  body:not([data-signed-in="no"]) #app-chrome .tm-logo__lines { display: none; }
+  body:not([data-signed-in="no"]) #app-chrome .brand-lockup { min-width: 0; margin-right: 2px; }
+  body:not([data-signed-in="no"]) #app-chrome .tm-switch { border-left: 0; padding-left: 4px; }
+  #app-chrome #app-meet-name { font-size: 14px; }
+  #app-chrome { column-gap: 4px; }
+  #app-chrome .screen-menu summary { width: 32px; height: 32px; min-height: 32px; padding: 0; justify-content: center; }
+  #app-chrome :is(.tm-icon-btn, button.tm-icon-btn) { width: 32px; height: 32px; min-height: 32px; }
+  #app-chrome .screen-menu summary::after { display: none; }
+  #app-chrome .screen-menu__icon { display: block; flex-shrink: 0; }
+  #app-chrome .screen-menu__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+}
