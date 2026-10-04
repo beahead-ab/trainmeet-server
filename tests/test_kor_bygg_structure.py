@@ -183,20 +183,42 @@ class DesignTokenTests(unittest.TestCase):
         self.assertIn("--radius-sm: 8px;", self.css)    # fält och knappar
         self.assertIn("--radius-inner: 10px;", self.css)
 
-    def test_times_and_numbers_are_monospace(self):
-        """DEL 6: den enskilt viktigaste typografiska regeln - siffror som ska
-        jämföras måste ligga i rad."""
-        # Exakt selektor, inte substräng: .kr-ev .t och .kr-stat b är olika regler.
+    def test_times_and_numbers_have_a_plain_zero(self):
+        """JetBrains Mono har en prick i nollan som på håll går ihop med en åtta
+        (en 4720 blir en 4728, en 08:30 en 08:80). Tider och nummer ligger
+        därför i Inter med tabellsiffror: vanlig nolla, och siffrorna är lika
+        breda så att kolumner och klockor fortfarande ligger i rad. Koder och
+        adresser behåller monospace, där pricken hjälper mot en bokstav O."""
         kr = (WEB / "kontrollrummet.css").read_text()
-        for selector in (".kr-clock-time", ".kr-stat b", ".kr-ev .t", ".kr-badge", ".kr-trainno", ".kr-code"):
+        # Exakt selektor, inte substräng: .kr-ev .t och .kr-stat b är olika regler.
+        for selector in (".kr-clock-time", ".kr-stat b", ".kr-ev .t", ".kr-ev .in", ".kr-badge", ".kr-trainno", ".tbt", ".tbht", ".nowt", ".kr-num"):
             index = kr.index(selector + " {")
-            block = kr[index:index + 300]
-            # Through the token, so every one of them is the shipped JetBrains Mono.
-            self.assertIn("var(--kr-mono)", block, selector)
+            block = kr[index:index + 320]
+            self.assertIn("var(--kr-num)", block, selector)
+            self.assertIn("font-variant-numeric: tabular-nums", block, selector)
+            self.assertNotIn("var(--kr-mono)", block.split("}")[0], selector)
+        for selector in (".kr-code", ".kr-graph .cnt", ".kr-map .topology-code"):
+            block = kr[kr.index(selector + " {"):][:320]
+            self.assertIn("var(--kr-mono)", block.split("}")[0], selector)
         self.assertIn("#app-chrome .app-clock", kr)
         self.assertIn('--kr-mono: "JetBrains Mono"', kr)
+        self.assertIn('--kr-num: "Inter"', kr)
         self.assertNotRegex(kr, r"font-family:\s*ui-monospace")
         self.assertNotRegex(self.css, r"font-family:\s*ui-monospace")
+        # Skärmarna och deltagarvyn: klockorna, tågnummer och tider i samma siffror.
+        screens = (WEB / "skarmar.css").read_text()
+        for selector in (".sc-top__clock", ".sc-clock-layout .clock-digital", ".sc-graph-train", ".sc-graph-tag-text"):
+            block = screens[screens.index(selector):][:360].split("}")[0]
+            self.assertIn("var(--kr-num)", block, selector)
+        self.assertIn("#dashboard-view .dashboard-clock, #dashboard-view .dash-time", screens)
+        participant = (WEB / "deltagare.css").read_text()
+        for selector in (".pv-clock__time", ".pv-item .t", ".pv-item .no", ".pv-badge-train"):
+            block = participant[participant.index(selector + " {"):][:360].split("}")[0]
+            self.assertIn("var(--kr-num)", block, selector)
+        # Antalet tåg bredvid stationskoden är en egen del av etiketten: koden
+        # i monospace, siffran i Inter.
+        self.assertIn(".topology-count { font-family: var(--kr-num)", kr)
+        self.assertIn('svgElement("tspan", { class: "topology-count" }', (WEB / "app.js").read_text(encoding="utf-8"))
 
     def test_motion_is_only_where_it_means_something(self):
         """DEL 7.7: blinkar allt betyder blinkandet ingenting."""
