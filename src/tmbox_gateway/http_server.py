@@ -3791,6 +3791,7 @@ class TrainMeetHTTPApplication:
             "/assets/deltagare.css": "deltagare.css",
             "/assets/participant.js": "participant.js",
             "/assets/participant-messages.js": "participant-messages.js",
+            "/assets/tmbox-messages.js": "tmbox-messages.js",
             "/assets/qrcode.js": "qrcode.js",
             "/assets/server-ui.css": "server-ui.css",
             "/assets/server-design.css": "server-design.css",

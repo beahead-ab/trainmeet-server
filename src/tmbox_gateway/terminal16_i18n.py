@@ -130,6 +130,8 @@ AKTIVA|ACTIVE|AKTIVE|AKTIVE|AKTIV
 SÖK|FIND|SØG|SØK|SUCHEN
 AVBRYT|CANCEL|ANNULLER|AVBRYT|ABBRECHEN
 SUDDA|ERASE|SLET|SLETT|LÖSCHEN
+SIMULERING|SIMULATION|SIMULERING|SIMULERING|SIMULATION
+Administratören tilldelar station i Inställningar.|The administrator assigns the station in Settings.|Administratoren tildeler stationen under Indstillinger.|Administratoren tildeler stasjonen under Innstillinger.|Der Administrator weist den Bahnhof in den Einstellungen zu.
 Tåg {number} mottaget i {station}. Meddelandet försvinner automatiskt.|Train {number} arrived at {station}. This message closes automatically.|Tog {number} ankommet til {station}. Beskeden lukkes automatisk.|Tog {number} ankommet i {station}. Meldingen lukkes automatisk.|Zug {number} in {station} angekommen. Meldung schließt automatisch.
 """
 

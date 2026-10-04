@@ -174,14 +174,14 @@ class Terminal16Service:
                 frame.update(profile="server-16x2", **self.service.runtime_scope())
                 if self.service.simulation and self.service.simulation.active:
                     frame["simulation"] = True
-                    frame["status"] = "SIMULERING · " + frame.get("status", "")
+                    frame["status"] = text(frame.get("language", "sv"), "SIMULERING") + " · " + frame.get("status", "")
                 return frame
             info = self.service.identities.discovered_device_or_none(device)
             language = self.service.device_ui(device)["language"]
             lines = [row(text(language, "VÄNTAR PÅ ADMIN")), row(info.device_code[:16] if info else text(language, "ANSLUTER"))]
             return {"profile": "server-16x2", "device_id": device, "rows": 2, "cols": 16,
                     "lines": lines, "lcd": encode_lcd(lines), "keys": {}, "entry": None,
-                    "view_token": "", "status": "Administratören tilldelar station i Inställningar."}
+                    "view_token": "", "status": text(language, "Administratören tilldelar station i Inställningar.")}
 
     def timetable(self, device):
         """The station timetable beside the box; empty until a station is assigned."""

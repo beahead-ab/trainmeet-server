@@ -7,7 +7,11 @@
   banner.hidden = true;
   banner.style.cssText = "position:sticky;top:0;z-index:100;background:#6e3c10;color:#fff;padding:10px 16px;text-align:center;font:600 15px Inter, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif";
   document.body.prepend(banner);
-  let active = false, timer = null;
+  // Pages without the localization runtime (the per-browser lab) show the Swedish source.
+  const t = (source) => globalThis.TrainMeetI18n?.t ? globalThis.TrainMeetI18n.t(source) : source;
+  let active = false, timer = null, message = "";
+  const show = (source) => { message = source; banner.textContent = source ? t(source) : ""; };
+  globalThis.TrainMeetI18n?.subscribe?.(() => show(message));
   async function refresh() {
     clearTimeout(timer);
     try {
@@ -16,10 +20,10 @@
       const data = await response.json();
       active = Boolean(data.clock?.simulation);
       banner.hidden = !active;
-      banner.textContent = active ? `SIMULERING · ${data.clock.running ? "Pågår" : "Pausad"} · Vanlig driftdata påverkas inte` : "";
+      show(!active ? "" : data.clock.running ? "SIMULERING · Pågår · Vanlig driftdata påverkas inte" : "SIMULERING · Pausad · Vanlig driftdata påverkas inte");
     } catch {
       // Never silently remove the warning on a dropped connection.
-      if (active) banner.textContent = "SIMULERING · Kontakt med servern saknas";
+      if (active) show("SIMULERING · Kontakt med servern saknas");
     } finally { clearTimeout(timer); timer = setTimeout(refresh, globalThis.TrainMeetLive?.connected ? 10000 : 2000); }
   }
   // Listens when the page has a stream open anyway; opens none of its own, so

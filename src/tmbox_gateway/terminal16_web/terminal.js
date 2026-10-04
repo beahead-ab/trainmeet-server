@@ -42,6 +42,16 @@
   // search answer at once; a key without the flag counts as acting.
   const WAITING_SHOWN_MS = 1500, COMMAND_GIVE_UP_MS = 30000, UNANSWERED_SHOWN_MS = 3000, SILENCE_MS = 15000, POLL_MS = 500;
   const WAITING_TEXT = "VANTAR PA SVAR", UNANSWERED_TEXT = "INGET SVAR";
+  // The same two lines in the box's own language, as device_ui.py sends them
+  // to a physical box (tests/test_tmbox_language.py keeps the two equal).
+  const BOX_TEXT = {
+    sv: {"VANTAR PA SVAR": "VANTAR PA SVAR", "INGET SVAR": "INGET SVAR"},
+    en: {"VANTAR PA SVAR": "AWAITING REPLY", "INGET SVAR": "NO REPLY"},
+    da: {"VANTAR PA SVAR": "AFVENTER SVAR", "INGET SVAR": "INTET SVAR"},
+    nb: {"VANTAR PA SVAR": "VENTER PA SVAR", "INGET SVAR": "INGEN SVAR"},
+    de: {"VANTAR PA SVAR": "WARTE AUF ANTW.", "INGET SVAR": "KEINE ANTWORT"},
+  };
+  const boxText = (text, language) => BOX_TEXT[language]?.[text] ?? text;
   function screenChanged(before, after) {
     return !before || before.view_token !== after.view_token || JSON.stringify(before.keys) !== JSON.stringify(after.keys);
   }
@@ -65,9 +75,19 @@
     const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
-  if (typeof module !== "undefined") module.exports = {EntryBuffer, screenChanged, guarded, overlay, commandId,
+  if (typeof module !== "undefined") module.exports = {EntryBuffer, screenChanged, guarded, overlay, commandId, boxText, BOX_TEXT,
     times: {WAITING_SHOWN_MS, COMMAND_GIVE_UP_MS, UNANSWERED_SHOWN_MS, SILENCE_MS, POLL_MS}};
   if (typeof document === "undefined") return;
+
+  // The page around the box follows the reader's language (i18n.js, loaded
+  // first); what the box itself shows - frames, key labels, status - arrives
+  // from Server in the language set for that box and is never translated here.
+  const i18n = root.TrainMeetI18n;
+  const t = (source, values = {}) => i18n ? i18n.t(source, values)
+    : String(source).replace(/\{(\w+)\}/g, (match, name) => name in values ? String(values[name]) : match);
+  i18n?.annotate(document.body);
+  const helpWords = () => { for (const summary of document.querySelectorAll(".tm-help > summary")) Object.assign(summary.dataset, {show: t("Visa"), hide: t("Dölj")}); };
+  helpWords();
 
   const boxes = new Map();
   const live = document.body.dataset.terminal === "live";
@@ -104,11 +124,13 @@
     if (signature === model.timetableSignature) return;
     model.timetableSignature = signature;
     const table = document.createElement("table");
-    const caption = document.createElement("caption"); caption.textContent = timetable.title;
+    const caption = document.createElement("caption"); caption.textContent = t(timetable.title);
     const head = document.createElement("thead"), heading = document.createElement("tr");
     for (const label of timetable.columns) {
-      const cell = document.createElement("th"); cell.scope = "col"; cell.textContent = label; heading.append(cell);
+      const cell = document.createElement("th"); cell.scope = "col"; cell.textContent = t(label); heading.append(cell);
     }
+    // Rows carry the kind, the time and the other station, so the words around them follow the page's language.
+    const words = {departure: ["Avg {time}", "Till {station}"], arrival: ["Ank {time}", "Från {station}"]};
     head.append(heading);
     const body = document.createElement("tbody");
     for (const row of timetable.rows) {
@@ -116,13 +138,15 @@
       for (const key of ["train_number", "time", "route"]) {
         const cell = document.createElement(key === "train_number" ? "th" : "td");
         if (key === "train_number") cell.scope = "row";
-        cell.textContent = row[key]; line.append(cell);
+        const [time, route] = words[row.kind] || [];
+        cell.textContent = key === "time" && time ? t(time, {time: row.clock}) : key === "route" && route ? t(route, {station: row.station}) : row[key];
+        line.append(cell);
       }
       body.append(line);
     }
     if (!timetable.rows.length) {
       const line = document.createElement("tr"), cell = document.createElement("td");
-      cell.colSpan = timetable.columns.length; cell.textContent = timetable.empty; line.append(cell); body.append(line);
+      cell.colSpan = timetable.columns.length; cell.textContent = t(timetable.empty); line.append(cell); body.append(line);
     }
     table.append(caption, head, body);
     model.card.querySelector(".box-timetable").replaceChildren(table);
@@ -131,9 +155,9 @@
     const {card, frame, entry} = model;
     const lines = [...entry.lines(frame)];
     const shown = overlay(model, performance.now());
-    if (shown) lines[1] = shown.padEnd(16);
+    if (shown) lines[1] = boxText(shown, frame.language).padEnd(16);
     drawLCD(card.querySelector(".lcd"), lines);
-    card.querySelector("h2").textContent = frame.station || "Väntar på station";
+    card.querySelector("h2").textContent = frame.station || t("Väntar på station");
     card.querySelector(".box-code").textContent = live ? identity?.device_code || frame.device_id : frame.device_id;
     card.querySelector(".box-status").textContent = frame.status;
     const queue = card.querySelector(".box-queue");
@@ -149,7 +173,7 @@
       button.setAttribute("aria-label", labels[key] ? `${key} · ${labels[key]}` : key);
     }
     const status = card.querySelector(".box-message");
-    status.textContent = model.uiMessage || (entry.digits ? text.entry : "");
+    status.textContent = model.uiMessage || (entry.digits ? t(text.entry) : "");
     status.classList.toggle("error", model.uiError);
   }
   function apply(frame) {
@@ -186,7 +210,8 @@
       if (model.frame.entry?.context !== context) return;
       if (result.status === "accepted" || result.status === "duplicate") model.entry.clear();
       if (result.frame) apply(result.frame);
-      message(model, result.message, !response.ok);
+      // Server's answers are a fixed Swedish set (terminal16.py, terminal16_runtime.py); tmbox.txt translates them.
+      message(model, result.message ? t(result.message) : "", !response.ok);
     } catch {
       model.unansweredAt = performance.now();
       setTimeout(() => render(model), UNANSWERED_SHOWN_MS + 10);
@@ -206,13 +231,13 @@
     if (!state || !identity) return;
     const assigned = Boolean(frame.station);
     state.classList.toggle("tm-state--ok", assigned);
-    document.querySelector("#box-state-text").textContent = assigned ? `Tilldelad station: ${frame.station}` : "Väntar på station";
+    document.querySelector("#box-state-text").textContent = assigned ? t("Tilldelad station: {station}", {station: frame.station}) : t("Väntar på station");
     const code = document.querySelector("#box-identity");
     code.hidden = false; code.classList.toggle("is-big", !assigned);
     document.querySelector("#box-identity-code").textContent = identity.device_code || "";
     document.querySelector("#box-note").textContent = assigned
-      ? "Boxen arbetar mot träffens riktiga trafik. Trafikledningen kan flytta den till en annan station eller ta bort den under Inställningar → TMBoxar. Språket väljer trafikledningen i TrainMeet Server."
-      : "Visa koden för trafikledningen, som tilldelar din station under Inställningar → TMBoxar. Boxen börjar arbeta direkt när den är tilldelad – du behöver inte ladda om sidan.";
+      ? t("Boxen arbetar mot träffens riktiga trafik. Trafikledningen kan flytta den till en annan station eller ta bort den under Inställningar → TMBoxar. Språket väljer trafikledningen i TrainMeet Server.")
+      : t("Visa koden för trafikledningen, som tilldelar din station under Inställningar → TMBoxar. Boxen börjar arbeta direkt när den är tilldelad – du behöver inte ladda om sidan.");
   }
   // Page chrome for both pages: key help, how often the browser asks and which
   // server version answers. The test bench asks its own health check, so the
@@ -221,7 +246,7 @@
     const help = document.querySelector("#key-help");
     if (help && matchMedia("(min-width: 901px)").matches) help.open = true;
     const rate = document.querySelector("#connection-rate");
-    if (rate) rate.textContent = ` · uppdateras ${1000 / POLL_MS} gånger i sekunden`;
+    if (rate) rate.textContent = ` · ${t("uppdateras {n} gånger i sekunden", {n: 1000 / POLL_MS})}`;
     try {
       const response = await fetch(live ? "/healthz" : "./healthz", {credentials: "omit", cache: "no-store", signal: AbortSignal.timeout(5000)});
       const health = response.ok ? await response.json() : null;
@@ -240,14 +265,16 @@
       }
     } catch {}
   }
+  let lastState = null;
   function update(state) {
-    connected = true; text = state.text;
+    connected = true; text = state.text; lastState = state;
     if (state.placement) placement = state.placement;
     resetButtons();
-    document.querySelector("h1").textContent = text.title;
-    document.querySelector("#subtitle").textContent = text.subtitle;
-    document.querySelector("#connection").textContent = text.ready;
-    document.querySelector("#session-info").textContent = text.session || "";
+    // The test bench's server sends these in Swedish; they are fixed page copy.
+    document.querySelector("h1").textContent = t(text.title);
+    document.querySelector("#subtitle").textContent = live ? text.subtitle : t(text.subtitle);
+    document.querySelector("#connection").textContent = t(text.ready);
+    document.querySelector("#session-info").textContent = text.session ? t(text.session, text.values) : "";
     showConnection(true);
     for (const frame of state.frames) apply(frame);
     if (live && state.frames.length) renderIdentity(state.frames[0]);
@@ -260,17 +287,17 @@
       const title = document.createElement("h3"); title.textContent = sample.label;
       const bezel = document.createElement("div"); bezel.className = "lcd-frame";
       const lcd = document.createElement("div"); lcd.className = "lcd"; lcd.lang = sample.language; lcd.setAttribute("role", "img"); drawLCD(lcd, sample.lines);
-      const note = document.createElement("p"); note.textContent = `${sample.lcd.glyphs.length}/8 egna LCD-tecken i denna bild`;
+      const note = document.createElement("p"); note.textContent = t("{count}/8 egna LCD-tecken i denna bild", {count: sample.lcd.glyphs.length});
       bezel.append(lcd); card.append(title, bezel, note); samples.append(card);
     }
-    document.querySelector("#mode").textContent = state.mode === "direct" ? "Testläge: direkttrafik, fortfarande med reservation och faktisk avgång." : "Testläge: mottagarens klartecken krävs före avgång.";
-    document.querySelector("#event-count").textContent = `${state.audit.length} trafikåtgärder`;
+    document.querySelector("#mode").textContent = t(state.mode === "direct" ? "Testläge: direkttrafik, fortfarande med reservation och faktisk avgång." : "Testläge: mottagarens klartecken krävs före avgång.");
+    document.querySelector("#event-count").textContent = t(state.audit.length === 1 ? "{count} trafikåtgärd" : "{count} trafikåtgärder", {count: state.audit.length});
     const events = document.querySelector("#events"); events.replaceChildren();
     for (const event of state.audit) { const li = document.createElement("li"); li.textContent = `${event.revision}. ${event.station_id.toUpperCase()} · ${event.action} · ${event.connection_id}`; events.append(li); }
   }
   function lost() {
     // As when the box's session ends: typed digits go with it.
-    connected = false; resetButtons(); document.querySelector("#connection").textContent = text.offline || (live ? "Servern är inte ansluten." : "Testservern är inte ansluten."); showConnection(false);
+    connected = false; resetButtons(); document.querySelector("#connection").textContent = t(text.offline || (live ? "Servern är inte ansluten." : "Testservern är inte ansluten.")); showConnection(false);
     for (const model of boxes.values()) { model.entry.clear(); render(model); }
   }
   // No answer is not a lost server: like the box, give up only after 15 s
@@ -296,7 +323,7 @@
   function forgotten() {
     identity = null; ++pollVersion; lost();
     try { localStorage.removeItem(SAVED); } catch {}
-    document.querySelector("#connection").textContent = "Den här TMBoxen finns inte längre på servern.";
+    document.querySelector("#connection").textContent = t("Den här TMBoxen finns inte längre på servern.");
     document.querySelector("#start-client").hidden = false;
   }
   async function startLive() {
@@ -311,7 +338,7 @@
       const response = await fetch("/v1/browser-clients", {method:"POST", credentials:"omit", cache:"no-store",
         headers:{"Content-Type":"application/json"}, body:JSON.stringify({workspace:"tmbox"}), signal:AbortSignal.timeout(5000)});
       const result = await response.json();
-      if (!response.ok || result.workspace !== "tmbox") throw Error(result.message || "Klienten kan inte anslutas.");
+      if (!response.ok || result.workspace !== "tmbox") throw Error(result.message || t("Klienten kan inte anslutas."));
       identity = result;
       localStorage.setItem(SAVED, JSON.stringify(identity));
     } catch (error) {
@@ -355,7 +382,7 @@
           if (response.status === 401 && identity?.access_token === token) forgotten();
           else if (!response.ok) lost();
           else if (version === pollVersion) update({frames:[frame],audit:[],text:{title:"TMBox",subtitle:location.host,
-            session:`Enhetskod: ${identity.device_code} · Station tilldelas av administratören`,ready:"Ansluten till servern",offline:"Servern är inte ansluten.",entry:"Siffrorna stannar här tills du trycker #."}});
+            session:"Enhetskod: {code} · Station tilldelas av administratören",values:{code:identity.device_code},ready:"Ansluten till servern",offline:"Servern är inte ansluten.",entry:"Siffrorna stannar här tills du trycker #."}});
         } catch { if (response && response.status < 500) lost(); else silent(); }
       }
     } finally {
@@ -371,6 +398,14 @@
     startLive().then(pollLive);
   }
   loadChrome();
+  // A language chosen in another tab: draw the page's own words again.
+  i18n?.subscribe(() => {
+    helpWords();
+    for (const model of boxes.values()) model.timetableSignature = null;
+    if (lastState) update(lastState);
+    const rate = document.querySelector("#connection-rate");
+    if (rate) rate.textContent = ` · ${t("uppdateras {n} gånger i sekunden", {n: 1000 / POLL_MS})}`;
+  });
   function resetButtons() {
     for (const id of ["reset-all", "reset-clearance", "reset-direct"]) document.getElementById(id).disabled = !connected || resetting;
     const open = document.querySelector("#placement-open");
@@ -391,7 +426,7 @@
           const label = document.createElement("label"), title = document.createElement("span"), select = document.createElement("select");
           title.textContent = connection.other_station_name;
           select.dataset.station = station.station_id; select.dataset.connection = connection.connection_id;
-          for (const [value, name] of [["default", `Standard (${connection.default_side === "left" ? "vänster" : "höger"})`], ["left", "Vänster"], ["right", "Höger"]]) {
+          for (const [value, name] of [["default", t(connection.default_side === "left" ? "Standard (vänster)" : "Standard (höger)")], ["left", t("Vänster")], ["right", t("Höger")]]) {
             const option = document.createElement("option"); option.value = value; option.textContent = name; select.append(option);
           }
           select.value = connection.overridden ? connection.side : "default";
@@ -418,10 +453,10 @@
       try {
         const response = await fetch("./api/display-placement", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body), signal: AbortSignal.timeout(5000)});
         const result = await response.json();
-        if (!response.ok) throw new Error(result.message || "Placeringen kunde inte sparas.");
+        if (!response.ok) throw new Error(result.message || t("Placeringen kunde inte sparas."));
         update(result); placementDialog.close();
-        document.querySelector("#placement-status").textContent = "Testplaceringen är sparad. Träffens inställningar är oförändrade.";
-      } catch (failure) { error.textContent = failure.message; }
+        document.querySelector("#placement-status").textContent = t("Testplaceringen är sparad. Träffens inställningar är oförändrade.");
+      } catch (failure) { error.textContent = t(failure.message); }
       finally {
         resetting = false; resetButtons();
         for (const control of form.querySelectorAll("button, select")) control.disabled = false;
@@ -435,14 +470,14 @@
     const status = document.querySelector("#reset-status");
     resetting = true; resetButtons();
     for (const model of boxes.values()) render(model);
-    status.classList.remove("error"); status.textContent = "Nollställer provbänken…";
+    status.classList.remove("error"); status.textContent = t("Nollställer provbänken…");
     try {
       const response = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body), signal:AbortSignal.timeout(5000)});
       if (!response.ok) throw new Error();
       update(await response.json());
-      status.textContent = success;
+      status.textContent = t(success);
     } catch {
-      status.classList.add("error"); status.textContent = "Nollställningen kunde inte bekräftas. Kontrollera displayerna innan du försöker igen.";
+      status.classList.add("error"); status.textContent = t("Nollställningen kunde inte bekräftas. Kontrollera displayerna innan du försöker igen.");
     } finally {
       resetting = false; resetButtons();
       for (const model of boxes.values()) render(model);

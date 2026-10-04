@@ -28,6 +28,10 @@
     ['The selected config is not ready yet. Check Cloud connection in Server settings.','Vald config är inte klar ännu. Kontrollera Cloud-kopplingen i serverns inställningar.','Den valgte config er ikke klar endnu. Kontrollér Cloud-forbindelsen i serverens indstillinger.','Valgt config er ikke klar ennå. Kontroller Cloud-tilkoblingen i serverinnstillingene.','Die ausgewählte Config ist noch nicht bereit. Cloud-Verbindung in den Servereinstellungen prüfen.'],
     ['The session clock starts paused. This server runs one selected meet.','Träffklockan startar pausad. Servern kör en enda vald träff.','Træfuret starter på pause. Serveren kører ét valgt træf.','Treffklokken starter på pause. Serveren kjører ett valgt treff.','Die Modellzeituhr startet angehalten. Dieser Server betreibt genau ein ausgewähltes Treffen.'],
     ['Source instructions','Instruktioner från underlaget','Instruktioner fra kildematerialet','Instruksjoner fra kildematerialet','Anweisungen aus den Unterlagen'],
+    ['Train Meet US · TWC pilot','Train Meet US · TWC-pilot','Train Meet US · TWC-pilot','Train Meet US · TWC-pilot','Train Meet US · TWC-Pilot'],
+    ['Back to the meet page','Tillbaka till träffens sida','Tilbage til træffets side','Tilbake til treffets side','Zurück zur Seite des Treffens'],
+    // A US train symbol: railroad data, the same in every language.
+    ['Extra 401 East','Extra 401 East','Extra 401 East','Extra 401 East','Extra 401 East'],
     ['Read-only config. Changes are published in Cloud and applied safely by the server.','Config är skrivskyddad här. Ändringar publiceras i Cloud och tillämpas säkert av servern.','Config kan kun læses her. Ændringer publiceres i Cloud og anvendes sikkert af serveren.','Config er skrivebeskyttet her. Endringer publiseres i Cloud og tas i bruk trygt av serveren.','Config ist hier schreibgeschützt. Änderungen werden in Cloud veröffentlicht und vom Server sicher übernommen.']
   ];
   globalThis.TrainMeetMessages ||= {};

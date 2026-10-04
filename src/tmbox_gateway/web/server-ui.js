@@ -79,7 +79,7 @@
     const status = $("#header-cloud-status");
     const offline = update.linked && update.state === "error" && (!update.last_checked_at || Date.now() - Date.parse(update.last_checked_at) > 600000);
     status.textContent = newer ? t("Ny version finns i Cloud")
-      : offline ? (hasVersion ? `${t("Cloud inte nådd")} · ${t("kör")} ${version.toLowerCase()}` : t("Cloud inte nådd"))
+      : offline ? (hasVersion ? `${t("Cloud inte nådd")} · ${t("kör version {n}", { n: ordinal })}` : t("Cloud inte nådd"))
       : (hasVersion ? version : t("Publicerad"));
     status.className = `tm-status tm-status--${newer ? "newer" : offline ? "offline" : "published"}`;
     $("#cloud-connection-meta").textContent = version;

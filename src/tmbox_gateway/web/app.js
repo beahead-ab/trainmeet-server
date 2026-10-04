@@ -20,7 +20,8 @@ function renderSimulation(data) {
   const summary = document.querySelector("#simulation-summary");
   summary.textContent = data.active
     ? `${clock.running ? t("Går") : t("Pausad")} · ${clock.speed}×`
-    : t(data.supported ? "av" : "Koppla en EU-träff från Cloud");
+    // "av" alone is the preposition "of" in the catalogue; the state has its own word.
+    : t(data.supported ? "avstängd" : "Koppla en EU-träff från Cloud");
   summary.title = data.active ? "" : t(data.supported ? "Starten pausar spelet och sparar trafikläget." : "Koppla en EU-träff från Cloud för att simulera stationsarbetet.");
   document.querySelector("#simulation-meta").textContent = data.active
     ? `${t("Trafikdag")} ${data.day} · ${t("Scenario")} ${data.seed}${data.notice ? " · " + data.notice : ""}`
@@ -995,7 +996,7 @@ serverIdentityForm.addEventListener("submit", async (event) => {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Servernamnet kunde inte sparas");
-    setMessage(serverIdentityMessage, `Servernamnet är nu ${payload.server_name}.`, "success");
+    setMessage(serverIdentityMessage, "Servernamnet är nu {name}.", "success", { name: payload.server_name });
     await refreshInfo();
     finishModal(serverIdentityForm);
   } catch (error) {
@@ -1190,7 +1191,7 @@ runtimeForm.addEventListener("submit", async (event) => {
     return;
   }
   setMessage(runtimeMessage, "1/3 · Kontaktar Config-servern och kontrollerar träffkoden …");
-  document.querySelector("#cloud-connection-state").textContent = "Kopplar …";
+  document.querySelector("#cloud-connection-state").textContent = t("Kopplar …");
   if (!beginModalAction(runtimeForm)) return;
   try {
     const response = await authorizedFetch("/v1/runtime/sync", {
@@ -1205,13 +1206,14 @@ runtimeForm.addEventListener("submit", async (event) => {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
     // Never print "undefined": an answer without a message still saved the link.
-    setMessage(runtimeMessage, `3/3 · ${payload.message ? `${payload.message} ` : ""}Cloud-kopplingen är sparad på servern.`, payload.restart_required ? "notice" : "success");
+    setMessage(runtimeMessage, payload.message ? "3/3 · {message} Cloud-kopplingen är sparad på servern." : "3/3 · Cloud-kopplingen är sparad på servern.",
+      payload.restart_required ? "notice" : "success", payload.message ? { message: payload.message } : undefined);
     runtimeSyncCodeBoxes.reset();
     await Promise.all([refreshServerContext(), refreshRuntime(), refreshInfo()]);
     finishModal(runtimeForm);
   } catch (error) {
     setMessage(runtimeMessage, error.message, "error");
-    document.querySelector("#cloud-connection-state").textContent = "Kopplingen misslyckades";
+    document.querySelector("#cloud-connection-state").textContent = t("Kopplingen misslyckades");
   } finally {
     endModalAction(runtimeForm);
   }
@@ -1233,11 +1235,11 @@ function restoreEl(name) {
 }
 
 function restoreClock(value) {
-  if (!value) return "okänt datum";
+  if (!value) return t("okänt datum");
   const when = new Date(value);
   return Number.isNaN(when.getTime())
-    ? "okänt datum"
-    : when.toLocaleString("sv-SE", { dateStyle: "medium", timeStyle: "short" });
+    ? t("okänt datum")
+    : when.toLocaleString(globalThis.TrainMeetI18n.getLocale(), { dateStyle: "medium", timeStyle: "short" });
 }
 
 function restoreSize(bytes) {
@@ -1269,7 +1271,7 @@ function renderBackups(backups) {
     const what = document.createElement("small");
     what.textContent = item.usable
       ? `${item.meet_name || t("Ingen aktiv träff")} · ${restoreSize(item.size_bytes)}`
-      : item.problem || "kopian går inte att använda";
+      : item.problem || t("kopian går inte att använda");
     text.append(when, what);
     row.append(text);
     return row;
@@ -1293,7 +1295,7 @@ function renderLastRestore(record) {
     } else {
       // Skälet är serverns egen text och översätts inte, som item.problem i listan.
       setMessage(element, "Senaste återställningen {when} misslyckades: {problem}. Databasen är som före försöket.", "error",
-        { ...values, problem: record.problem || "okänt fel" });
+        { ...values, problem: record.problem || t("okänt fel") });
     }
   }
 }
@@ -1312,7 +1314,7 @@ async function refreshBackups() {
     if (document.querySelector("#restore-modal").open) return;
     restore.overwrites = payload.overwrites || "";
     restoreEl("overwrites").textContent = restore.overwrites || "–";
-    restoreEl("confirmation").placeholder = restore.overwrites || "Namnet på det som skrivs över";
+    restoreEl("confirmation").placeholder = restore.overwrites || t("Namnet på det som skrivs över");
     document.querySelector("#meet-reset-name").textContent = restore.overwrites || "–";
     updateMeetResetButton();
     renderBackups(payload.backups || []);
@@ -1331,9 +1333,7 @@ function bindRestore() {
     const message = restoreEl("message");
     const dialog = document.querySelector("#restore-modal");
     if (dialog.dataset.busy === "true") return;
-    if (!window.confirm(
-      `Servern återställs och startar om. Allt som hänt efter kopian försvinner, ${restore.overwrites} inkluderat.`,
-    )) return;
+    if (!window.confirm(t("Servern återställs och startar om. Allt som hänt efter kopian försvinner, {name} inkluderat.", { name: restore.overwrites }))) return;
     if (!beginModalAction(dialog)) return;
     try {
       const response = await authorizedFetch("/v1/server/restore", {
@@ -1431,7 +1431,7 @@ factoryResetButton.addEventListener("click", async () => {
   const question = localFactoryReset
     ? "All lokal TrainMeet-data och administratören tas bort. Vill du fabriksåterställa nu?"
     : "Träffdata och anslutningar tas bort. Din administratörsinloggning behålls. Vill du fortsätta?";
-  if (!window.confirm(question)) return;
+  if (!window.confirm(t(question))) return;
   if (!beginModalAction(dialog)) return;
   setMessage(factoryResetMessage, localFactoryReset
     ? "Fabriksåterställer servern och startar första installationen …"
@@ -1471,7 +1471,8 @@ runtimeCheckUpdate.addEventListener("click", async () => {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "Configuppdateringen kunde inte kontrolleras.");
-    setMessage(document.querySelector("#cloud-update-message"), payload.message || "Kontrollen är klar. Uppdateringar används när det är säkert.", "success");
+    setMessage(document.querySelector("#cloud-update-message"), payload.message_template || payload.message || "Kontrollen är klar. Uppdateringar används när det är säkert.",
+      "success", payload.message_template ? payload.message_values : undefined);
     await Promise.all([refreshServerContext(), refreshRuntime(), refreshLocalClock()]);
   } catch (error) {
     setMessage(document.querySelector("#cloud-update-message"), error.message, "error");
@@ -1507,7 +1508,9 @@ function renderCloudStatus() {
   document.querySelector("#cloud-auto-status").textContent = t(update.linked
     ? (update.auto_sync ? "Automatisk configuppdatering är aktiv." : "Automatisk configuppdatering är pausad.")
     : "Automatisk uppdatering aktiveras när servern kopplas till Cloud.");
-  document.querySelector("#cloud-version-state").textContent = update.message || t(
+  // The server's status line comes as a Swedish template with values (cloud_config.py).
+  document.querySelector("#cloud-version-state").textContent = update.message_template ? t(update.message_template, update.message_values || {})
+    : update.message ? t(update.message) : t(
     update.pending_publication_id ? "Ny config hämtad – väntar på säker aktivering." :
     "Senaste fungerande config används även utan internet.");
   runtimeCheckUpdate.disabled = !update.linked;
@@ -1526,7 +1529,7 @@ function renderCloudStatus() {
 
 softwareCheck.addEventListener("click", checkSoftwareUpdate);
 softwareInstall.addEventListener("click", async () => {
-  if (!confirm("Uppdateringen säkerhetskopierar databasen och startar om servern. Pågående trafik avbryts. Fortsätta?")) return;
+  if (!confirm(t("Uppdateringen säkerhetskopierar databasen och startar om servern. Pågående trafik avbryts. Fortsätta?"))) return;
   softwareInstall.disabled = true;
   setMessage(softwareUpdateMessage, "Startar uppdateringen …", "notice");
   try {
@@ -1606,10 +1609,11 @@ function renderUpdateProgress(payload) {
     item.className = `update-step ${step.state}`;
     const label = document.createElement("span");
     label.className = "update-step-label";
-    label.textContent = step.label;
+    // The server's stage labels are a fixed Swedish set (update_contract.py STAGE_LABELS).
+    label.textContent = t(step.label);
     const word = document.createElement("span");
     word.className = "update-step-state";
-    word.textContent = UPDATE_STATE_WORDS[step.state] || "";
+    word.textContent = t(UPDATE_STATE_WORDS[step.state] || "");
     item.append(label, word);
     return item;
   }));
@@ -1623,26 +1627,26 @@ function renderVersionMove(payload) {
   if (!show) return;
   softwareVersionMove.replaceChildren();
   const installed = document.createElement("span");
-  installed.textContent = "Installerad version ";
+  installed.textContent = `${t("Installerad version")} `;
   const from = document.createElement("b");
   from.textContent = payload.installed_version;
   const arrow = document.createElement("span");
   arrow.className = "arrow";
   arrow.textContent = "→";
   const available = document.createElement("span");
-  available.textContent = "Tillgänglig version ";
+  available.textContent = `${t("Tillgänglig version")} `;
   const to = document.createElement("b");
   to.textContent = payload.latest_version;
   softwareVersionMove.append(installed, from, arrow, available, to);
 }
 
 function renderTechnicalDetails(payload) {
-  const rows = [["Installerad build", payload.installed_build || "okänd"]];
+  const rows = [["Installerad build", payload.installed_build || t("okänd")]];
   if (payload.latest_build) rows.push(["Tillgänglig build", payload.latest_build]);
   if (payload.failed_stage) rows.push(["Fel i steget", payload.failed_stage]);
   softwareTechnical.replaceChildren(...rows.flatMap(([label, value]) => {
     const term = document.createElement("dt");
-    term.textContent = label;
+    term.textContent = t(label);
     const definition = document.createElement("dd");
     definition.textContent = value;
     return [term, definition];
@@ -1846,7 +1850,7 @@ async function refreshInfo() {
 
 async function restartServer() {
   if (state.restarting || !state.restartRequired) return;
-  if (!window.confirm("Starta om TrainMeet Server och börja använda den aktiverade stationsplanen?")) return;
+  if (!window.confirm(t("Starta om TrainMeet Server och börja använda den aktiverade stationsplanen?"))) return;
   state.restarting = true;
   setRestartButtonsDisabled(true);
   setMessage(softwareUpdateMessage, "Startar om TrainMeet Server …", "notice");
@@ -3598,7 +3602,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   }
   if (selectedService && options.showBadge !== false) {
     const [boxX, boxY, boxWidth, boxHeight] = viewBox.split(" ").map(Number);
-    const label = `Tåg ${selectedService.train_number} · ${routeStops.length} stopp`;
+    const label = t("Tåg {number} · {count} stopp", { number: selectedService.train_number, count: routeStops.length });
     const badgeWidth = Math.max(118, label.length * 6.5 + 24);
     const badge = svgElement("g", { class: "topology-route-badge", transform: `translate(${boxX + boxWidth / 2},${boxY + boxHeight - 24})` });
     badge.append(svgElement("rect", { x: -badgeWidth / 2, y: -13, width: badgeWidth, height: 26, rx: 13 }));
@@ -3674,7 +3678,7 @@ function renderDisplaySelection(snapshot) {
   } else if (station) {
     const rows = stationTrafficRows(snapshot, station.id);
     const connected = (snapshot.connections || []).filter((connection) => connection.station_a_id === station.id || connection.station_b_id === station.id).length;
-    panel.innerHTML = html`<p>STATION</p><b>${escapeHTML(station.name)}</b><span>${escapeHTML(station.code || "–")} · ${rows.length} tåg · ${connected} sträckor</span><small>${rows.slice(0, 4).map((row) => `${escapeHTML(row.trainNumber)} ${escapeHTML(row.kind)} ${escapeHTML(row.time)}`).join(" · ") || "Inga tidtabellslag"}</small>`;
+    panel.innerHTML = html`<p>STATION</p><b>${escapeHTML(station.name)}</b><span>${escapeHTML(station.code || "–")} · ${rows.length} tåg · ${connected} sträckor</span><small>${rows.slice(0, 4).map((row) => `${escapeHTML(row.trainNumber)} ${escapeHTML(row.kind)} ${escapeHTML(row.time)}`).join(" · ") || t("Inga tidtabellslag")}</small>`;
   }
 }
 
@@ -3736,7 +3740,7 @@ function renderGraph(snapshot) {
     const shift = Math.round((now - centre) / 1440) * 1440;
     if (points.at(-1).minute + shift < min || points[0].minute + shift > max) continue;
     const isOut = active.has(String(service.train_number));
-    const group = svgElement("g",{class:"graph-train-group",role:"button",tabindex:0,"aria-label":`Tåg ${service.train_number}`});
+    const group = svgElement("g",{class:"graph-train-group",role:"button",tabindex:0,"aria-label":t("Tåg {number}", { number: service.train_number })});
     group.dataset.trainNumber=String(service.train_number);
     const line = points.map(p=>`${x(p.minute+shift)},${y(p.station)}`).join(" ");
     group.append(svgElement("polyline", {points:line, class:`sc-graph-line${isOut ? " is-out" : ""}`}));
@@ -3983,14 +3987,14 @@ function renderClockToolbar(snapshot) {
   const signature = [globalThis.TrainMeetI18n?.getLanguage?.(), styles.join(","), serverStyle, serverSeconds].join("|");
   if (styleSelect.dataset.signature !== signature) {
     styleSelect.dataset.signature = signature;
-    // "Stil: Digital", "Sekunder: på": reglaget säger vad det styr och vad det står på.
+    // "Stil: Digital", "Sekunder: visas": reglaget säger vad det styr och vad det står på.
     styleSelect.replaceChildren(
       new Option(`${t("Stil")}: ${t("Som i inställningarna")} (${serverStyle})`, ""),
       ...styles.map(value => new Option(`${t("Stil")}: ${t(clockStyleLabels[value] || value)}`, value)));
     secondsSelect.replaceChildren(
-      new Option(`${t("Sekunder")}: ${t("Som i inställningarna")} (${serverSeconds ? t("på") : t("av")})`, ""),
-      new Option(`${t("Sekunder")}: ${t("på")}`, "on"),
-      new Option(`${t("Sekunder")}: ${t("av")}`, "off"));
+      new Option(`${t("Sekunder")}: ${t("Som i inställningarna")} (${serverSeconds ? t("visas") : t("dolda")})`, ""),
+      new Option(`${t("Sekunder")}: ${t("visas")}`, "on"),
+      new Option(`${t("Sekunder")}: ${t("dolda")}`, "off"));
   }
   styleSelect.value = styles.includes(preference.style) ? preference.style : "";
   secondsSelect.value = ["on", "off"].includes(preference.seconds) ? preference.seconds : "";
@@ -4317,13 +4321,13 @@ async function pollDisplay() {
     syncDisplayClock(payload, displaySnapshotReceivedAt);
     live.classList.remove("offline");
     document.querySelector("#display-app").classList.remove("display-offline");
-    live.lastChild.textContent = " Ansluten";
+    live.lastChild.textContent = ` ${t("Ansluten")}`;
     renderDisplay(payload);
   } catch {
     if (displayRequest !== request) return;
     live.classList.add("offline");
     document.querySelector("#display-app").classList.add("display-offline");
-    live.lastChild.textContent = " Återansluter";
+    live.lastChild.textContent = ` ${t("Återansluter")}`;
   } finally {
     clearTimeout(deadline);
     // A resumed tab may have started a newer request; an old response must
@@ -4340,7 +4344,7 @@ async function initDisplay() {
   const displayApp = document.querySelector("#display-app");
   displayApp.classList.remove("hidden");
   applyDisplayTheme(displayTheme());
-  document.title = "TrainMeet · Skärm";
+  document.title = `TrainMeet · ${t("Skärm")}`;
   document.querySelector("#display-theme").addEventListener("change", (event) => {
     displayStore(DISPLAY_THEME_KEY, event.target.value);
     applyDisplayTheme(event.target.value);
@@ -4882,10 +4886,11 @@ function showSetupCode(user) {
 // Vad som hände med e-posten. Koden visas alltid ändå, så ett brev som inte
 // gick iväg betyder bara att koden lämnas över på plats.
 function mailReceipt(name, mail) {
-  if (mail?.status === "sent") return [`${name} är inbjuden. Koden är också skickad till ${mail.to}.`, "success"];
-  if (mail?.status === "not_linked") return [`${name} är inbjuden. Servern är inte kopplad till TrainMeet Cloud, så lämna över koden.`, "success"];
-  if (mail?.status === "failed") return [`${name} är inbjuden, men e-posten gick inte iväg: ${mail.message} Lämna över koden.`, "error"];
-  return [`${name} är inbjuden. Lämna över koden.`, "success"];
+  // [message, kind, values] for setMessage, which translates and keeps the values for a language change.
+  if (mail?.status === "sent") return ["{name} är inbjuden. Koden är också skickad till {email}.", "success", { name, email: mail.to }];
+  if (mail?.status === "not_linked") return ["{name} är inbjuden. Servern är inte kopplad till TrainMeet Cloud, så lämna över koden.", "success", { name }];
+  if (mail?.status === "failed") return ["{name} är inbjuden, men e-posten gick inte iväg: {problem} Lämna över koden.", "error", { name, problem: mail.message }];
+  return ["{name} är inbjuden. Lämna över koden.", "success", { name }];
 }
 
 function mailBody(body) {
@@ -4965,16 +4970,16 @@ async function reissueUserCode(user) {
 
 async function setUserRole(user, role) {
   await usersPost("/v1/admin/users/update", { user_id: user.user_id, role }, () => {
-    setMessage(usersEl("message"), `${user.display_name} är nu ${role === "owner" ? "ägare" : "administratör"}`, "success");
+    setMessage(usersEl("message"), role === "owner" ? "{name} är nu ägare" : "{name} är nu administratör", "success", { name: user.display_name });
   });
 }
 
 async function removeUser(user) {
   if (!document.querySelector("#user-delete-confirm").checked) return;
   const result = await usersPost("/v1/admin/users/delete", { user_id: user.user_id }, () => {
-    setMessage(usersEl("message"), `${user.display_name} är borttagen`, "success");
+    setMessage(usersEl("message"), "{name} är borttagen", "success", { name: user.display_name });
   });
-  if (result) finishModal(document.querySelector("#user-edit-form"), `${user.display_name} är borttagen`);
+  if (result) finishModal(document.querySelector("#user-edit-form"), t("{name} är borttagen", { name: user.display_name }));
 }
 
 function editUser(user) {

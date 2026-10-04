@@ -149,7 +149,7 @@
       : services;
     const upcoming = matches.filter((row) => minutes(row.arrival || row.departure) >= now);
     const rows = fullTimetable || needle ? matches : (upcoming.length ? upcoming.slice(0, 4) : matches.slice(-4));
-    $("#pv-timetable-count").textContent = `${services.length} ${t("tåg")} · ${snapshot.active_day || ""}`;
+    $("#pv-timetable-count").textContent = `${t(services.length === 1 ? "1 tåg" : "{count} tåg", { count: services.length })} · ${snapshot.active_day || ""}`;
     const list = $("#pv-timetable");
     list.replaceChildren();
     if (!rows.length) list.append(Object.assign(document.createElement("p"), { className: "pv-empty", textContent: needle ? t("Inget tåg matchar sökningen.") : t("Ingen tidtabell för dagen.") }));

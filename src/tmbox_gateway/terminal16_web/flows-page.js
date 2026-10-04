@@ -4,6 +4,13 @@
 (function () {
   "use strict";
   const data = globalThis.TMBoxFlows, {drawLCD} = globalThis.TMBoxLCD;
+  // The page's own words follow the reader's language. The flows themselves
+  // (titles, captions and the frames) are the engine's Swedish box, as the
+  // page says; scripts/tmbox_flows.py writes them in Swedish only.
+  const i18n = globalThis.TrainMeetI18n;
+  const t = (source, values = {}) => i18n ? i18n.t(source, values)
+    : String(source).replace(/\{(\w+)\}/g, (match, name) => name in values ? String(values[name]) : match);
+  i18n?.annotate(document.body);
   function make(tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -29,19 +36,19 @@
     const line = make("div", "flow-step__head");
     line.append(make("span", "n", String(number)));
     if (step.wait) {
-      line.append(make("span", "flow-wait", `Väntar ${step.wait} s`));
+      line.append(make("span", "flow-wait", t("Väntar {n} s", {n: step.wait})));
       return line;
     }
     line.append(make("span", "flow-actor", flow.boxes.find(box => box.id === step.box).label));
     const keys = make("span", "flow-keys");
-    keys.setAttribute("aria-label", "Tryck " + step.keys.join(" "));
+    keys.setAttribute("aria-label", t("Tryck {keys}", {keys: step.keys.join(" ")}));
     for (const key of step.keys) keys.append(make("kbd", "", key));
     line.append(keys);
     return line;
   }
   function meanings(flow, step) {
     const list = make("p", "flow-meanings");
-    list.append(make("span", "flow-meanings__lead", `Nu på ${flow.boxes.find(box => box.id === step.box).label}:`));
+    list.append(make("span", "flow-meanings__lead", t("Nu på {box}:", {box: flow.boxes.find(box => box.id === step.box).label})));
     for (const [key, label] of step.meanings) {
       const item = make("span"); item.append(make("b", "", key), " " + label); list.append(item);
     }
@@ -64,8 +71,8 @@
     body.append(make("p", "tm-prose", flow.intro));
     const start = make("li", "flow-step flow-step--start");
     const text = make("div", "flow-step__text");
-    const startHead = make("div", "flow-step__head"); startHead.append(make("span", "n", "0"), make("span", "flow-wait", "Utgångsläge"));
-    text.append(startHead, make("p", "flow-step__caption", flow.setup || "Alla boxar står i översikten. Inget tåg är på gång."));
+    const startHead = make("div", "flow-step__head"); startHead.append(make("span", "n", "0"), make("span", "flow-wait", t("Utgångsläge")));
+    text.append(startHead, make("p", "flow-step__caption", flow.setup || t("Alla boxar står i översikten. Inget tåg är på gång.")));
     start.append(text, screens(flow, flow.start));
     const steps = make("ol", "flow-steps"); steps.append(start);
     flow.steps.forEach((step, index) => steps.append(stepItem(flow, step, index + 1)));

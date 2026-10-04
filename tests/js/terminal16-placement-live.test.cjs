@@ -20,7 +20,8 @@ const root = path.resolve(__dirname, '../..');
       fixture.once('exit', () => {clearTimeout(timer); reject(Error(diagnostics));});
     });
     browser = await chromium.launch({headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel: process.env.PLAYWRIGHT_CHANNEL} : {})});
-    const context = await browser.newContext({viewport: {width: 1280, height: 1000}});
+    // The test bench now follows the browser's language; these checks read its Swedish.
+    const context = await browser.newContext({locale: 'sv-SE', viewport: {width: 1280, height: 1000}});
     page = await context.newPage();
     // Lets the test break the test bench's event stream the way a network
     // drop does (the browser then reconnects by itself), or close it for
@@ -55,7 +56,7 @@ const root = path.resolve(__dirname, '../..');
       if (suffix.startsWith('active-')) await settle();
       if (process.env.SERVER_SHELL_SCREENSHOTS) await page.screenshot({path: path.join(process.env.SERVER_SHELL_SCREENSHOTS, `placement-${suffix}.png`)});
     };
-    const admin = await browser.newContext();
+    const admin = await browser.newContext({locale: 'sv-SE'});
     assert.equal((await admin.request.post(urls.eu + '/v1/auth/login', {data: {email: 'smoke-admin@example.se', password: 'isolated-browser-test'}})).status(), 200);
     const presentation = async () => (await admin.request.get(urls.eu + '/v1/cloud/presentation')).json();
     const realBefore = await presentation();
