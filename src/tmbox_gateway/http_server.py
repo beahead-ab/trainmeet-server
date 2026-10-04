@@ -4,6 +4,7 @@ import json
 import ipaddress
 import logging
 import mimetypes
+import os
 import re
 import secrets
 import select
@@ -2415,6 +2416,14 @@ class TrainMeetHTTPApplication:
         try:
             return backup.create_backup(database, self._backup_dir(), stamp)
         except (backup.BackupError, OSError, sqlite3.Error) as error:
+            folder = self._backup_dir()
+            # SQLite only says "unable to open database file". On a Raspberry Pi
+            # updated by an older installer the folder belongs to root (#129); say so.
+            if folder.is_dir() and not os.access(folder, os.W_OK | os.X_OK):
+                raise HTTPAPIError(HTTPStatus.INTERNAL_SERVER_ERROR, "backup_failed",
+                                   f"Säkerhetskopian före {reason} gick inte att ta: servern får inte skriva i "
+                                   f"{folder}. Uppdatera servern, eller kör på servern: sudo chown -R "
+                                   f"trainmeet-server:trainmeet-server {folder}") from error
             raise HTTPAPIError(HTTPStatus.INTERNAL_SERVER_ERROR, "backup_failed",
                                f"Säkerhetskopian före {reason} gick inte att ta: {error}") from error
 

@@ -5,6 +5,19 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Nollställ träffen fungerar på en uppdaterad Raspberry Pi (#129)
+
+Uppdateraren skapade mappen `backups` som root, och servern, som kör som
+`trainmeet-server`, fick inte skriva i den. Nollställ träffen tar alltid en
+säkerhetskopia först och stoppade därför med "unable to open database file". Nu
+ger installationen mappen och det den innehåller till servern vid varje
+uppdatering, så en Pi som redan har uppdaterats rättas av nästa uppdatering. Går
+mappen ändå inte att skriva i säger felet var den ligger och hur det rättas.
+
+"Nollställ träffdata" ber om ordet på användarens språk (RESET, NULSTIL,
+NULLSTILL, ZURÜCKSETZEN), men knappen låstes bara upp av NOLLSTÄLL. Nu låser det
+visade ordet upp knappen, och NOLLSTÄLL gör det fortfarande.
+
 ### Träffens land: SE, DK, DE, NO eller US
 
 TrainMeet Cloud (2.2 och senare) skickar träffens land i driftpaketet

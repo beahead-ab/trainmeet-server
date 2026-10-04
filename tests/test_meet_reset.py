@@ -6,7 +6,9 @@ planen, Cloud-kopplingen, enheterna och var de sitter, användarna och
 klockans inställningar. En säkerhetskopia tas först, och går den inte att ta
 görs ingenting.
 """
+import os
 from pathlib import Path
+import sqlite3
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
@@ -187,6 +189,21 @@ class MeetResetTests(unittest.TestCase):
         self.assertEqual("backup_failed", raised.exception.code)
         self.assertEqual("occupied", self.lines()["connection-a-b"])
         self.assertEqual("10:40", self.ops.clock_status()["time"][:5])
+
+    def test_a_backup_folder_the_server_may_not_write_is_named(self):
+        # #129: a Raspberry Pi updater left the folder owned by root.
+        self.play_for_a_while()
+        folder = self.app._backup_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        real_access = os.access
+        with patch.object(backup, "create_backup", side_effect=sqlite3.OperationalError("unable to open database file")), \
+                patch("tmbox_gateway.http_server.os.access", lambda path, mode: False if Path(path) == folder else real_access(path, mode)), \
+                self.assertRaises(HTTPAPIError) as raised:
+            self.reset()
+        self.assertEqual("backup_failed", raised.exception.code)
+        self.assertIn(f"servern får inte skriva i {folder}", str(raised.exception))
+        self.assertIn("sudo chown -R trainmeet-server:trainmeet-server", str(raised.exception))
+        self.assertEqual("occupied", self.lines()["connection-a-b"], "ingenting togs bort")
 
     def test_only_an_administrator_and_never_during_a_simulation(self):
         self.play_for_a_while()
