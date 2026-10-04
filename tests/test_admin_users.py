@@ -364,6 +364,22 @@ class OwnerGateTests(unittest.TestCase):
 
         self.assertEqual(403, int(caught.exception.status))
 
+    def test_an_administrator_may_not_take_over_the_owners_login(self) -> None:
+        """Den gamla vägen för en enda inloggning skriver över ägarens konto.
+
+        Förut räckte administratörsrollen: lars kunde sätta ett eget namn och
+        lösenord på ägarens konto och logga in som ägare.
+        """
+
+        with self.assertRaises(HTTPAPIError) as caught:
+            self.application.configure_admin_access(
+                self._as("lars"), {"username": "lars-ager", "password": "lars-tar-over-servern"}
+            )
+
+        self.assertEqual(403, int(caught.exception.status))
+        self.assertIsNotNone(self.identities.create_admin_session("casper", "ett-langt-losenord"))
+        self.assertIsNone(self.identities.create_admin_session("lars-ager", "lars-tar-over-servern"))
+
     def test_an_administrator_may_not_remove_a_user(self) -> None:
         with self.assertRaises(HTTPAPIError) as caught:
             self.application.delete_admin_user(

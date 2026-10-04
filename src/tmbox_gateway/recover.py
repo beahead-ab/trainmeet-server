@@ -25,10 +25,13 @@ import sys
 from pathlib import Path
 
 from .identity import AdminAccessError, IdentityStore
+from .local_server import _database_path
 
 
 def _store(state_dir: Path) -> IdentityStore:
-    database = state_dir / "identity.db"
+    # Samma fil som servern läser kontona ur. Kommandot letade förut efter en
+    # identity.db som ingen installation har, och hittade då ingenting.
+    database = _database_path(state_dir)
     if not database.exists():
         raise SystemExit(
             f"Hittar ingen installation i {state_dir}. Kontrollera sökvägen till serverns datamapp."

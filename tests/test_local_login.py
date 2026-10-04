@@ -35,7 +35,7 @@ from tmbox_gateway.http_server import (
 )
 from tmbox_gateway.identity import IdentityStore, PairingService
 from tmbox_gateway.models import DispatchMode
-from tmbox_gateway import recover
+from tmbox_gateway import local_server, recover
 
 
 class LocalLoginTests(unittest.TestCase):
@@ -175,7 +175,11 @@ class RecoveryTests(unittest.TestCase):
         self._dir = tempfile.TemporaryDirectory()
         self.addCleanup(self._dir.cleanup)
         self.state = Path(self._dir.name)
-        store = IdentityStore(self.state / "identity.db")
+        # Kontona ligger där servern själv lägger dem. Förut skapade provet en
+        # egen identity.db, som bara kommandot letade i, och på en riktig
+        # installation hittade kommandot då ingenting.
+        self.database = local_server._database_path(self.state)
+        store = IdentityStore(self.database)
         store.configure_admin_access("casper", "det-gamla-losenordet")
         store.close()
 
@@ -195,7 +199,7 @@ class RecoveryTests(unittest.TestCase):
     def test_the_issued_code_sets_a_new_password_and_retires_the_old(self) -> None:
         self.assertEqual(0, self._run("--user", "casper"))
 
-        store = IdentityStore(self.state / "identity.db")
+        store = IdentityStore(self.database)
         self.addCleanup(store.close)
         user = next(u for u in store.list_admin_users() if u["username"] == "casper")
         self.assertTrue(user["invitation_pending"], "ingen kod utfärdades")
