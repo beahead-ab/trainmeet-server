@@ -11,6 +11,10 @@ const { open } = require('./kr-fixture.cjs');
   page.setDefaultTimeout(10000);
   try {
     await page.waitForFunction(() => document.querySelectorAll('#device-list tr').length > 3);
+    // The list can be drawn before the route is ready, while #app-view is still
+    // hidden, and innerText of hidden text is empty.
+    await page.locator('body[data-route-ready]').waitFor({ state: 'attached' });
+    await page.locator('#device-list').waitFor({ state: 'visible' });
     const list = () => page.evaluate(() => {
       const scroll = document.querySelector('#drift-stations .kr-scroll-x');
       const table = document.querySelector('#drift-station-table');
