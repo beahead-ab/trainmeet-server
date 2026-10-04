@@ -104,7 +104,7 @@ class ShellStructureTests(unittest.TestCase):
         sections = re.search(r"const SECTIONS = \[([^\]]*)\]", (WEB / "settings.js").read_text())
         self.assertIsNotNone(sections)
         names = re.findall(r'"(\w+)"', sections.group(1))
-        self.assertEqual(names, ["traff", "skarmar", "wifi", "server", "kod", "anvandare", "uppdatering", "sprak", "farozon"])
+        self.assertEqual(names, ["traff", "skarmar", "wifi", "obemannade", "server", "kod", "anvandare", "uppdatering", "sprak", "farozon"])
         for name in names:
             self.assertIn(f'<section id="{name}" class="kr-setsec" data-section="{name}"', self.html)
             self.assertIn(f'href="/installningar#{name}"', self.html)
@@ -128,7 +128,7 @@ class ShellStructureTests(unittest.TestCase):
         """Inställningar: varje panel som går att ändra är ett eget formulär med
         Avbryt och Spara, släckta tills något skiljer sig från det sparade."""
         forms = re.findall(r'<form id="([\w-]+)" class="kr-panel kr-setform"', self.html)
-        self.assertEqual(forms, ["cloud-auto-form", "clock-appearance-form", "connection-wifi-form",
+        self.assertEqual(forms, ["cloud-auto-form", "automatic-form", "clock-appearance-form", "connection-wifi-form",
                                  "connection-badge-form", "server-identity-form", "connection-code-form", "language-form"])
         for name in forms:
             start = self.html.index(f'<form id="{name}"')

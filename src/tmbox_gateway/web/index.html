@@ -602,6 +602,7 @@
             <a class="kr-nav" href="/installningar#traff" data-section="traff" data-group="traffen">Träff och Cloud</a>
             <a class="kr-nav" href="/installningar#skarmar" data-section="skarmar" data-group="traffen">Skärmar och klocka</a>
             <a class="kr-nav" href="/installningar#wifi" data-section="wifi" data-group="traffen">Wi-Fi och QR-koder</a>
+            <a class="kr-nav" href="/installningar#obemannade" data-section="obemannade" data-group="traffen">Obemannade stationer</a>
             <span class="kr-grp" data-group="servern">Den här servern</span>
             <a class="kr-nav" href="/installningar#server" data-section="server" data-group="servern">Namn och nätverk</a>
             <a class="kr-nav" href="/installningar#kod" data-section="kod" data-group="servern">Anslutningskod</a>
@@ -641,6 +642,24 @@
                 <div class="kr-ph"><span>Tidtabellens kontrolluppgifter</span><span id="published-findings-summary" class="kr-pill"></span><span class="kr-c">från den körande versionen · rättas i Cloud</span></div>
                 <ul id="published-findings-list" class="kr-findings-list"></ul>
                 <div class="kr-pf"><span>Observationer stoppar varken publicering eller trafik. Detta är inte en kontroll av pågående trafik.</span></div>
+              </section>
+            </section>
+
+            <!-- Obemannade stationer (issue #115) -->
+            <section id="obemannade" class="kr-setsec" data-section="obemannade" aria-labelledby="obemannade-title" hidden>
+              <div class="kr-sectitle"><h1 id="obemannade-title">Obemannade stationer</h1><span>sköts automatiskt när klockan går</span></div>
+              <form id="automatic-form" class="kr-panel kr-setform" aria-label="Obemannade stationer" novalidate>
+                <div class="kr-rows">
+                  <div class="kr-kv"><span class="kr-k">Automatik</span><label class="kr-switch"><input id="automatic-enabled" type="checkbox" data-change-label="Automatik"><span>Stationer utan TMBox eller TKL sköts automatiskt</span></label></div>
+                </div>
+                <p class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+              <section class="kr-panel" aria-label="Stationernas läge">
+                <div class="kr-ph"><span>Stationernas läge</span><span id="automatic-note" class="kr-c"></span></div>
+                <div id="automatic-stations" class="kr-rows"></div>
+                <p id="automatic-message" class="form-message" role="status"></p>
+                <div class="kr-pf"><span>En station utan TMBox eller TKL ger klart, begär och anmäler avgång och ankomst enligt tidtabellen. Den första TMBox eller TKL som arbetar med stationen gör den manuell. Tappar den kontakten väntar stationen på sin operatör; lämna den till automatiken här om ingen kommer tillbaka.</span></div>
               </section>
             </section>
 

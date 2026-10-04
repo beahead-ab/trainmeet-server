@@ -5,6 +5,18 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Obemannade stationer sköts automatiskt (#115)
+
+En station utan TMBox eller TKL svarade aldrig på en tåganmälan, så tåget kunde
+inte skickas. Nu sköts varje sådan station automatiskt när träffklockan går, med
+simulatorns regler men i vanlig drift: den ger klart när mottagningsspåret är
+ledigt, begär och anmäler avgång för sina egna tåg och anmäler ankomst när
+tidtabellens gångtid har gått sedan avgången. Den första TMBox eller TKL som
+arbetar med stationen gör den manuell. Tappar den kontakten väntar stationen;
+admin kan lämna den till automatiken under **Inställningar → Obemannade
+stationer**, där automatiken också kan stängas av. Se
+[docs/automatic-stations.md](docs/automatic-stations.md).
+
 ### TMBox frågar "FLYTTA 93 HIT?" för ett tåg som inte syns komma (#115)
 
 Stationer glömmer ibland att klarera och skickar bara tåget. Skriver

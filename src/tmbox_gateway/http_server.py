@@ -337,6 +337,7 @@ class TrainMeetHTTPApplication:
         self.on_terminal_tick = None
         self._terminal16 = None
         self.simulation = None
+        self.automatic = None
         from .terminal16_public import SessionStore
         self.lab_sessions = SessionStore()
         self.external_clock = ExternalClock()
@@ -392,6 +393,10 @@ class TrainMeetHTTPApplication:
                     self.operations_store.ensure_publication(active)
                 from .shared_traffic import SharedPanelTraffic
                 SharedPanelTraffic(self.engine, self.station_service)
+                # Before the simulator: its events table belongs in the normal
+                # operations database, which a selected simulation swaps out.
+                from .automatic import AutomaticStations
+                self.automatic = AutomaticStations(self.station_service)
                 from .simulation import TrafficSimulation
                 self.simulation = TrafficSimulation(self.station_service)
 
@@ -416,6 +421,37 @@ class TrainMeetHTTPApplication:
                 "active_day": self.runtime_store.active_day() if self.runtime_store else None,
                 "clock": self.clock_status(client),
                 "supported": bool(self.station_service.publication()) if self.simulation else False}
+
+    @runtime_view
+    def automatic_stations_status(self, client):
+        self._require_admin(client)
+        if not self.automatic:
+            return {"enabled": False, "simulation": False, "stations": [], "trains": [], "plan_errors": [],
+                    "supported": False}
+        return {**self.automatic.status(), "supported": True}
+
+    @announces("simulation", "runtime")
+    @runtime_command("eu")
+    def control_automatic_stations(self, client, payload):
+        """Automatic stations in normal operation (issue #115)."""
+        self._require_admin(client)
+        if not self.automatic:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "automatic_unavailable", "Koppla en EU-träff först.")
+        action = payload.get("action")
+        try:
+            if action == "enable":
+                self.automatic.set_enabled(bool(payload.get("enabled")))
+            elif action == "automatic" and payload.get("confirmed") is True:
+                self.automatic.hand_back(str(payload.get("station_id") or ""))
+            elif action == "manual" and payload.get("confirmed") is True:
+                self.automatic.take_over(str(payload.get("station_id") or ""), str(payload.get("device_id") or ""))
+            else:
+                raise ValueError("Ogiltig åtgärd eller bekräftelse saknas.")
+        except ValueError as error:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "automatic_rejected", str(error)) from error
+        if self.on_config_applied:
+            self.on_config_applied()
+        return self.automatic_stations_status(client)
 
     @announces("simulation", "runtime")
     @runtime_command("eu")
@@ -1726,7 +1762,8 @@ class TrainMeetHTTPApplication:
             snapshot["active_day"],
             station_id,
         )
-        if state["shift"]:
+        # A signal box polling its station works it, shift or not.
+        if state["shift"] or client.kind == DeviceKind.TKL_TERMINAL:
             self.station_service.observe_operator(client.client_id, station_id)
         return {
             "protocol_version": 1,
@@ -1754,7 +1791,18 @@ class TrainMeetHTTPApplication:
             "previous_shift": state["previous_shift"],
             "movements": state["movements"],
             "connection_states": connection_states,
+            # Who answers at the other end of each line: automatic, manual or
+            # disconnected (issue #115). Additive; older terminals ignore it.
+            "station_modes": self._neighbour_modes(snapshot, station_id),
         }
+
+    def _neighbour_modes(self, snapshot: dict[str, Any], station_id: str) -> dict[str, str]:
+        if not self.automatic or not self.automatic.running():
+            return {}
+        neighbours = {connection["station_b_id"] if connection["station_a_id"] == station_id else connection["station_a_id"]
+                      for connection in snapshot["connections"]
+                      if station_id in {connection["station_a_id"], connection["station_b_id"]}}
+        return {neighbour: self.automatic.mode(neighbour) for neighbour in sorted(neighbours)}
 
     @runtime_command("eu")
     def start_tkl_shift(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
@@ -3763,6 +3811,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/simulation":
                 self._send_json(HTTPStatus.OK, self.server.application.simulation_status(self._authenticated_client()))
                 return
+            if path == "/v1/automatic-stations":
+                self._send_json(HTTPStatus.OK, self.server.application.automatic_stations_status(self._authenticated_client()))
+                return
             if path == "/v1/clock/source":
                 self._send_json(HTTPStatus.OK, self.server.application.clock_source_settings(self._authenticated_client()))
                 return
@@ -4181,6 +4232,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/simulation":
                 self._send_json(HTTPStatus.OK, self.server.application.control_simulation(self._authenticated_client(), payload))
+                return
+            if path == "/v1/automatic-stations":
+                self._send_json(HTTPStatus.OK, self.server.application.control_automatic_stations(self._authenticated_client(), payload))
                 return
             if path == "/v1/tkl/shift/start":
                 client = self._authenticated_client()

@@ -403,6 +403,11 @@ def _external_clock_loop(application, stop):
         except Exception:
             LOGGER.warning("Simuleringen pausades efter ett simulatorfel")
         try:
+            if application.automatic:
+                application.automatic.tick()
+        except Exception:
+            LOGGER.exception("De automatiska stationerna kunde inte köras; försöker igen")
+        try:
             if application.on_terminal_tick:
                 application.on_terminal_tick()
         except Exception:
