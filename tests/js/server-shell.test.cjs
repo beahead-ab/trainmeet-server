@@ -577,8 +577,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     const nav = page.locator('#settings-nav');
     assert.equal(await nav.locator('a[href="/installningar#kod"]').textContent(), 'Anslutningskod');
     assert.deepEqual(await nav.locator('a.kr-nav').evaluateAll(links => links.map(link => link.getAttribute('href').split('#')[1])),
-      ['traff', 'skarmar', 'wifi', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'farozon']);
-    assert.equal(await page.locator('#admin-view .kr-setsec').count(), 9);
+      ['traff', 'skarmar', 'wifi', 'obemannade', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'farozon']);
+    assert.equal(await page.locator('#admin-view .kr-setsec').count(), 10);
     assert.equal(await page.locator('#admin-view .kr-setsec:not([hidden])').count(), 1, 'one section at a time');
     await nav.locator('a[href="/installningar#kod"]').click();
     await page.locator('#connection-code-form').waitFor({state:'visible'});
