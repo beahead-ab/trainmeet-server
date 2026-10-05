@@ -16,6 +16,8 @@ run identically in CI, on a laptop, and in a test.
   version.py sync                    rewrite the derived files from VERSION
   version.py check                   exit 1 if any derived file disagrees
   version.py decide --range A..B     read commits and print major|minor|patch|skip
+  version.py notes --range A..B      record the headings of A..B under the current version
+  version.py notes --backfill        rebuild RELEASES.json from the robot's version commits
 """
 
 from __future__ import annotations
@@ -61,6 +63,18 @@ NON_SHIPPING = (
 
 LEVELS = ("major", "minor", "patch")
 
+#: What went into each version, newest first: one entry per version with the
+#: headings of the changes that minted it - on these repos, the PR titles,
+#: which a squash merge turns into commit subjects. The app shows them under
+#: its update page, so a user can read what each update did.
+RELEASES_FILE = ROOT / "RELEASES.json"
+#: Where each app reads its copy, written by `sync` like a derived version.
+#: Only the ones whose folder exists in this repo are written.
+RELEASE_COPIES = ("src/tmbox_gateway/releases.json", "public/releases.json")
+_MARKER = re.compile(r"\s*\[(?:major|minor|patch|skip version)\]", re.IGNORECASE)
+_PR_NUMBER = re.compile(r"\s*\(#\d+\)\s*$")
+_ROBOT_SUBJECT = re.compile(r"^Version (\S+) \[skip version\]$")
+
 
 def read_version() -> tuple[int, int, int]:
     raw = VERSION_FILE.read_text(encoding="utf-8").strip()
@@ -104,6 +118,7 @@ def sync(version: str) -> list[str]:
         path.write_text(text, encoding="utf-8")
         touched.append(name)
 
+    touched += copy_releases()
     return touched
 
 
@@ -151,6 +166,95 @@ def advance_build_number() -> str | None:
     return nxt
 
 
+def heading(subject: str) -> str:
+    """A commit subject as a user reads it: no version markers, no PR number."""
+    return _PR_NUMBER.sub("", _MARKER.sub("", subject)).strip()
+
+
+def read_releases() -> list[dict]:
+    if not RELEASES_FILE.exists():
+        return []
+    return json.loads(RELEASES_FILE.read_text(encoding="utf-8"))
+
+
+def _releases_text(entries: list[dict]) -> str:
+    return json.dumps(entries, ensure_ascii=False, indent=2) + "\n"
+
+
+def copy_releases() -> list[str]:
+    """Write RELEASES.json to every app copy whose folder exists."""
+    if not RELEASES_FILE.exists():
+        return []
+    text = RELEASES_FILE.read_text(encoding="utf-8")
+    touched = []
+    for name in RELEASE_COPIES:
+        path = ROOT / name
+        if not path.parent.is_dir():
+            continue
+        if path.exists() and path.read_text(encoding="utf-8") == text:
+            continue
+        path.write_text(text, encoding="utf-8")
+        touched.append(name)
+    return touched
+
+
+def record_notes(commit_range: str) -> dict:
+    """Put the headings of `commit_range` under the current version."""
+    version = VERSION_FILE.read_text(encoding="utf-8").strip()
+    notes, date = [], ""
+    for line in _git("log", "--no-merges", "--format=%ae%x09%cs%x09%s", commit_range).splitlines():
+        author, day, subject = (line.split("\t", 2) + ["", ""])[:3]
+        if author == ROBOT_EMAIL or not subject.strip():
+            continue
+        date = date or day
+        title = heading(subject)
+        if title and title not in notes:
+            notes.append(title)
+    entries = read_releases()
+    entry = next((item for item in entries if item.get("version") == version), None)
+    if entry is None:
+        entry = {"version": version, "date": date, "notes": []}
+        entries.insert(0, entry)
+    entry["notes"] += [title for title in reversed(notes) if title not in entry["notes"]]
+    RELEASES_FILE.write_text(_releases_text(entries), encoding="utf-8")
+    copy_releases()
+    return entry
+
+
+def backfill() -> list[dict]:
+    """Rebuild the notes from history: every robot "Version X" commit closes a
+    version, and the commits on main since the one before are what it holds.
+    Changes before the first robot commit predate versioning and are left out."""
+    entries: list[dict] = []
+    pending: list[str] = []
+    # The commit that introduced VERSION starts the first version's notes.
+    started = set(_git("log", "--diff-filter=A", "--format=%H", "--", "VERSION").split())
+    # One record per commit; a GitHub merge commit carries the PR title as the
+    # first line of its body rather than as its subject.
+    log = _git("log", "--first-parent", "--reverse", "--format=%H%x09%ae%x09%cs%x09%s%x09%b%x1e")
+    for record in log.split("\x1e"):
+        commit, author, day, subject, body = (record.strip("\n").split("\t", 4) + [""] * 4)[:5]
+        if not commit:
+            continue
+        if subject.startswith("Merge pull request") and body.strip():
+            subject = body.strip().splitlines()[0]
+        if commit in started:
+            pending = []
+        robot = _ROBOT_SUBJECT.match(subject) if author == ROBOT_EMAIL else None
+        if robot:
+            # A version with nothing of its own (a re-sync) is not news.
+            if pending:
+                entries.insert(0, {"version": robot.group(1), "date": day, "notes": pending})
+            pending = []
+        elif author != ROBOT_EMAIL and subject and not subject.startswith("Merge "):
+            title = heading(subject)
+            if title and title not in pending:
+                pending.append(title)
+    RELEASES_FILE.write_text(_releases_text(entries), encoding="utf-8")
+    copy_releases()
+    return entries
+
+
 def check() -> int:
     version = VERSION_FILE.read_text(encoding="utf-8").strip()
     problems = []
@@ -162,6 +266,12 @@ def check() -> int:
             if match.group(1) != version:
                 problems.append(f"{name} säger {match.group(1)}, VERSION säger {version}")
                 break
+    if RELEASES_FILE.exists():
+        notes = RELEASES_FILE.read_text(encoding="utf-8")
+        for name in RELEASE_COPIES:
+            path = ROOT / name
+            if path.parent.is_dir() and (not path.exists() or path.read_text(encoding="utf-8") != notes):
+                problems.append(f"{name} är inte en kopia av RELEASES.json")
     for problem in problems:
         print(problem, file=sys.stderr)
     return 1 if problems else 0
@@ -242,6 +352,10 @@ def main() -> int:
         item.add_argument("level", choices=LEVELS)
     decide_parser = sub.add_parser("decide")
     decide_parser.add_argument("--range", required=True, dest="commit_range")
+    notes_parser = sub.add_parser("notes")
+    notes_how = notes_parser.add_mutually_exclusive_group(required=True)
+    notes_how.add_argument("--range", dest="commit_range")
+    notes_how.add_argument("--backfill", action="store_true")
 
     args = parser.parse_args()
     if args.command == "current":
@@ -266,6 +380,12 @@ def main() -> int:
         return check()
     elif args.command == "decide":
         print(decide(args.commit_range))
+    elif args.command == "notes":
+        if args.backfill:
+            print(f"{len(backfill())} versioner", file=sys.stderr)
+        else:
+            entry = record_notes(args.commit_range)
+            print(f"{entry['version']}: {len(entry['notes'])} rubriker", file=sys.stderr)
     return 0
 
 

@@ -105,3 +105,22 @@ python3 scripts/version.py bump minor
 `sync` går att köra hur många gånger som helst; `bump` gör det inte, eftersom
 den också räknar upp iPhone-byggnumret — TestFlight vägrar ett byggnummer den
 redan sett.
+
+## Vad är nytt
+
+Varje version får sina rubriker i `RELEASES.json` i repots rot, nyaste först:
+versionen, datumet och titlarna på det som gav versionen. På de här repona är
+det PR-titlarna, som en squash-merge gör till commitens ämnesrad. Markörer som
+`[patch]` och PR-numret tas bort.
+
+Roboten skriver dem själv när den höjer versionen (`version.py notes --range`),
+i samma commit som det nya numret. `sync` kopierar filen dit appen läser den,
+`src/tmbox_gateway/releases.json` i servern och `public/releases.json` i Cloud
+och TKL, och testsviten faller om kopian glider isär från originalet. Appen
+visar rubrikerna under sin uppdateringssida. Servern hämtar också `main`s fil
+och visar vad en tillgänglig uppdatering innehåller.
+
+`version.py notes --backfill` bygger om filen ur historiken: varje
+`Version X [skip version]` från roboten avslutar en version, och committerna på
+`main` sedan den förra är vad den innehåller. Skriv PR-titeln så att en
+användare förstår den – den är rubriken de läser.

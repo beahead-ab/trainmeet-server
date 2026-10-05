@@ -78,6 +78,8 @@ from .software_update import (
     installed_build,
     installed_version,
     latest_version,
+    newer_release_notes,
+    release_notes,
     read_update_status,
     start_update,
 )
@@ -2579,6 +2581,7 @@ class TrainMeetHTTPApplication:
             "supported": self.config.allow_software_update,
             "installed_version": installed_version(),
             "installed_build": installed_build(),
+            "releases": release_notes(),
             **read_update_status(Path(self.config.state_dir)),
         }
         if self.config.allow_software_update:
@@ -2591,6 +2594,8 @@ class TrainMeetHTTPApplication:
                 # stay put across several fixes and an operator still wants
                 # to be able to take them.
                 result["update_available"] = latest["build"] != result["installed_build"]
+                if result["update_available"]:
+                    result["new_releases"] = newer_release_notes(result["installed_version"])
             except SoftwareUpdateError as error:
                 result["check_error"] = str(error)
         return result

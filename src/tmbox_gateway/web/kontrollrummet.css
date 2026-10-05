@@ -733,3 +733,11 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
   #app-chrome .screen-menu__icon { display: block; flex-shrink: 0; }
   #app-chrome .screen-menu__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 }
+/* Programuppdatering → Vad är nytt: a version per block, its headings below. */
+.kr-releases { display: grid; }
+.kr-release { padding: 12px 18px; border-top: 1px solid var(--kr-line); }
+.kr-release:first-child { border-top: 0; }
+.kr-release__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.kr-release ul { margin: 6px 0 0; padding-left: 18px; color: var(--kr-ink-2); font-size: 13.5px; line-height: 1.55; }
+.kr-releases-more { padding: 10px 18px 14px; }
+.kr-releases-more:has(button[hidden]) { display: none; }
