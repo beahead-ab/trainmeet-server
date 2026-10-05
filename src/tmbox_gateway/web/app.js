@@ -2159,6 +2159,19 @@ function renderCloudPresentation() {
   summary.className = `kr-pill${Array.isArray(findings) && findings.some((item) => item.level === "conflict") ? " warn" : ""}`;
   summary.textContent = !Array.isArray(findings) ? t("Den här Cloud-versionen innehåller inga kontrolluppgifter.")
     : findings.length ? t("{count} noterade uppgifter", {count: findings.length}) : t("Inga konflikter eller observationer noterade.");
+  // A small flag on Träff och Cloud in the settings menu says there is a
+  // conflict to look at; nothing outside Inställningar shows it, since a
+  // meet often runs with a known conflict all day.
+  const conflicts = Array.isArray(findings) ? findings.filter((item) => item.level === "conflict").length : 0;
+  const nav = document.querySelector('.kr-nav[data-section="traff"]');
+  let flag = nav?.querySelector(".kr-navflag");
+  if (nav && !flag) { flag = document.createElement("span"); flag.className = "kr-navflag"; nav.append(flag); }
+  if (flag) {
+    flag.hidden = !conflicts;
+    flag.textContent = String(conflicts);
+    const label = conflicts === 1 ? t("1 konflikt i tidtabellen") : t("{count} konflikter i tidtabellen", {count: conflicts});
+    flag.title = label; flag.setAttribute("aria-label", label);
+  }
   const list = document.querySelector("#published-findings-list"); list.replaceChildren();
   for (const finding of findings || []) {
     const li = document.createElement("li");
@@ -2705,7 +2718,6 @@ if (globalThis.TrainMeetDrift) {
     editBox: openDeviceEditor,
     editPlacement: editDisplayPlacement,
     simulationDetails: (trigger) => globalThis.TrainMeetDrift.openDialog("drift-simulation-dialog", trigger),
-    showFindings: () => { history.pushState(null, "", "/installningar#fynd"); applyWorkspaceRoute(); },
     dialogOpened: (id) => { if (id === "drift-timetable-dialog") renderRouteExplorer(); },
   });
 }
