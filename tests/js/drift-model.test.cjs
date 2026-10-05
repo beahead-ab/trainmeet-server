@@ -254,14 +254,6 @@ test('search finds trains by number and stations by name or code, trains first',
   assert.equal(model.search(snap, 'a', {limit: 2}).length, 2);
 });
 
-test('findings counts the cloud’s control notes, and says nothing without any', () => {
-  assert.equal(model.findings(null), null);
-  assert.equal(model.findings({supported: false, findings: []}), null);
-  assert.equal(model.findings({supported: true}), null);
-  assert.deepEqual(model.findings({supported: true, findings: [{level: 'conflict'}, {level: 'observation'}, {level: 'observation'}]}), {conflicts: 1, observations: 2, total: 3});
-  assert.deepEqual(model.findings({supported: true, findings: []}), {conflicts: 0, observations: 0, total: 0});
-});
-
 test('nothing breaks on an empty or missing picture', () => {
   for (const empty of [null, undefined, {}]) {
     assert.deepEqual(model.trains(empty), {onLine: [], atStation: []});

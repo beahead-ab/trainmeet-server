@@ -12,6 +12,14 @@ datumet och rubrikerna, de tio senaste och resten bakom en knapp. Finns en
 uppdatering visas först vad den innehåller. Rubrikerna skrivs av versionsroboten
 när versionen höjs, ur PR-titlarna, till `RELEASES.json`; historiken sedan 1.0.1
 är ifylld i efterhand. Samma mekanism används av Cloud och TKL.
+### Tidtabellens konflikter bara under Träff och Cloud
+
+Clouds kontrolluppgifter för tidtabellen, konflikter och observationer, visades
+som ett märke i sidhuvudet på varje sida, också i driften. Nu finns de bara under
+Inställningar → Träff och Cloud, där configen hämtas från Cloud och där de rättas.
+En liten flagga med antalet konflikter vid Träff och Cloud i inställningsmenyn
+säger att det finns något att titta på; en träff körs ofta hela dagen med en känd
+konflikt, och då ska den inte synas överallt.
 
 ### Byta träff går att förstå (#128)
 
