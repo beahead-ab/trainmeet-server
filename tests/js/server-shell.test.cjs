@@ -267,6 +267,16 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await summary.getByText('1 noterade uppgifter', {exact: true}).waitFor();
     assert.match(await summary.getAttribute('class'), /warn/);
     assert.equal(await page.locator('#published-findings-list img').count(), 0);
+    // A small flag on the menu item says a conflict waits there; none without one.
+    const flag = page.locator('.kr-nav[data-section="traff"] .kr-navflag');
+    assert.equal(await flag.textContent(), '1');
+    assert.equal(await flag.getAttribute('aria-label'), '1 konflikt i tidtabellen');
+    findings = [{level: 'observation'}];
+    await page.evaluate(() => refreshCloudPresentation());
+    await flag.waitFor({state: 'hidden'});
+    findings = imported;
+    await page.evaluate(() => refreshCloudPresentation());
+    await flag.waitFor({state: 'visible'});
     assert.match(await page.locator('#published-findings-list').textContent(), /<img/);
     await page.locator('#app-chrome a[href="/drift"]').first().click();
     await page.locator('#app-chrome a[href="/drift"]').first().click();

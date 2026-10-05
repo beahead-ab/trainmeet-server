@@ -10,6 +10,9 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 Clouds kontrolluppgifter för tidtabellen, konflikter och observationer, visades
 som ett märke i sidhuvudet på varje sida, också i driften. Nu finns de bara under
 Inställningar → Träff och Cloud, där configen hämtas från Cloud och där de rättas.
+En liten flagga med antalet konflikter vid Träff och Cloud i inställningsmenyn
+säger att det finns något att titta på; en träff körs ofta hela dagen med en känd
+konflikt, och då ska den inte synas överallt.
 
 ### Byta träff går att förstå (#128)
 
