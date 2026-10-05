@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -177,3 +178,28 @@ class UpdateBackendTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReleaseNotesTests(unittest.TestCase):
+    """Vad är nytt: the installed package's headings, and what main adds."""
+
+    def test_the_installed_package_carries_its_notes_newest_first(self):
+        from tmbox_gateway.software_update import release_notes, version_key
+        notes = release_notes()
+        self.assertTrue(notes, "src/tmbox_gateway/releases.json ships with the package")
+        self.assertEqual(sorted(notes, key=lambda entry: version_key(entry["version"]), reverse=True), notes)
+        self.assertTrue(all(entry["notes"] for entry in notes), "a version without headings is left out")
+
+    @patch("tmbox_gateway.software_update.urlopen")
+    def test_only_versions_after_the_installed_one_are_offered(self, open_url):
+        from tmbox_gateway.software_update import newer_release_notes
+        payload = json.dumps([{"version": "3.4.0", "date": "2026-10-06", "notes": ["Ny"]},
+                              {"version": "3.3.10", "date": "2026-10-05", "notes": ["Tio"]},
+                              {"version": "3.3.3", "date": "2026-10-04", "notes": ["Gammal"]}]).encode()
+        open_url.return_value.__enter__.return_value.read.return_value = payload
+        self.assertEqual(["3.4.0", "3.3.10"], [entry["version"] for entry in newer_release_notes("3.3.3")])
+
+    @patch("tmbox_gateway.software_update.urlopen", side_effect=URLError("offline"))
+    def test_an_unreachable_list_offers_nothing_rather_than_failing(self, _open_url):
+        from tmbox_gateway.software_update import newer_release_notes
+        self.assertEqual([], newer_release_notes("3.3.3"))

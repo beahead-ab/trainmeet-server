@@ -1,6 +1,12 @@
 # English|Svenska|Dansk|Norsk bokmål|Deutsch
 # Added for the five-language audit (tools/i18n-audit.mjs). Kept first so that an
 # English source text already used elsewhere keeps its existing row.
+Installed|Installerad|Installeret|Installert|Installiert
+What's new|Vad är nytt|Nyheder|Nyheter|Neuigkeiten
+what each version did · headings only|vad varje version gjorde · på rubriknivå|hvad hver version gjorde · kun overskrifter|hva hver versjon gjorde · bare overskrifter|was jede Version gebracht hat · nur Überschriften
+Comes with the update|Kommer med uppdateringen|Følger med opdateringen|Følger med oppdateringen|Kommt mit dem Update
+Show fewer|Visa färre|Vis færre|Vis færre|Weniger anzeigen
+Show older versions ({count})|Visa äldre versioner ({count})|Vis ældre versioner ({count})|Vis eldre versjoner ({count})|Ältere Versionen anzeigen ({count})
 1 conflict in the timetable|1 konflikt i tidtabellen|1 konflikt i køreplanen|1 konflikt i ruteplanen|1 Konflikt im Fahrplan
 {count} conflicts in the timetable|{count} konflikter i tidtabellen|{count} konflikter i køreplanen|{count} konflikter i ruteplanen|{count} Konflikte im Fahrplan
 The server represents a single meet. A switch keeps the server's users and network, but old station assignments do not carry over.|Servern representerar en enda träff. Ett byte bevarar serverns användare och nätverk, men gamla stationstilldelningar följer inte med.|Serveren repræsenterer ét træf. Et skift bevarer serverens brugere og netværk, men gamle stationstildelinger følger ikke med.|Serveren representerer ett enkelt treff. Et bytte beholder serverens brukere og nettverk, men gamle stasjonstildelinger følger ikke med.|Der Server steht für ein einziges Treffen. Ein Wechsel behält die Benutzer und das Netzwerk des Servers, aber alte Bahnhofszuweisungen werden nicht übernommen.

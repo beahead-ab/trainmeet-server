@@ -11,6 +11,9 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .update_contract import normalise
+
+RELEASE_NOTES = Path(__file__).resolve().parent / "releases.json"
+RELEASES_URL = "https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/RELEASES.json"
 from .version import build_identifier, product_version, user_agent
 
 
@@ -110,6 +113,42 @@ def _latest_product_version() -> str:
         # version number makes the offer vaguer, not wrong.
         return ""
     return value
+
+
+def _notes(text: str) -> list[dict[str, Any]]:
+    try:
+        entries = json.loads(text)
+    except ValueError:
+        return []
+    return [{"version": str(entry["version"]), "date": str(entry.get("date", "")),
+             "notes": [str(note) for note in entry.get("notes", [])]}
+            for entry in entries if isinstance(entry, dict) and entry.get("version")] if isinstance(entries, list) else []
+
+
+def version_key(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in re.findall(r"\d+", version)[:3])
+
+
+def release_notes() -> list[dict[str, Any]]:
+    """What each version up to the installed one did, newest first: the
+    headings `scripts/version.py notes` wrote when the version was minted."""
+    try:
+        return _notes(RELEASE_NOTES.read_text(encoding="utf-8"))
+    except OSError:
+        return []
+
+
+def newer_release_notes(installed: str) -> list[dict[str, Any]]:
+    """The headings of the versions on `main` that this server does not have.
+    Never fatal: without them the offer is vaguer, not wrong."""
+    request = Request(RELEASES_URL, headers={"Accept": "application/json", "User-Agent": user_agent()})
+    try:
+        with urlopen(request, timeout=10) as response:
+            entries = _notes(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, UnicodeDecodeError):
+        return []
+    floor = version_key(installed)
+    return [entry for entry in entries if version_key(entry["version"]) > floor]
 
 
 def read_update_status(state_dir: Path) -> dict[str, Any]:

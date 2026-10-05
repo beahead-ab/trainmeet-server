@@ -5,6 +5,13 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Vad är nytt under Programuppdatering
+
+Programuppdatering visar vad varje version gjorde, på rubriknivå: versionen,
+datumet och rubrikerna, de tio senaste och resten bakom en knapp. Finns en
+uppdatering visas först vad den innehåller. Rubrikerna skrivs av versionsroboten
+när versionen höjs, ur PR-titlarna, till `RELEASES.json`; historiken sedan 1.0.1
+är ifylld i efterhand. Samma mekanism används av Cloud och TKL.
 ### Tidtabellens konflikter bara under Träff och Cloud
 
 Clouds kontrolluppgifter för tidtabellen, konflikter och observationer, visades

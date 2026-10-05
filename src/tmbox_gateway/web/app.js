@@ -1698,6 +1698,37 @@ function renderTechnicalDetails(payload) {
   }));
 }
 
+// Vad är nytt: the headings of each version, newest first, written by
+// scripts/version.py when the version was minted. What an available update
+// brings comes first; ten installed versions, the rest behind a button.
+let releaseNotesExpanded = false;
+function renderReleaseNotes(payload) {
+  const panel = document.querySelector("#software-releases");
+  const installed = Array.isArray(payload.releases) ? payload.releases : [];
+  const coming = Array.isArray(payload.new_releases) ? payload.new_releases : [];
+  panel.hidden = !installed.length && !coming.length;
+  const version = (entry, tag) => {
+    const item = document.createElement("article"); item.className = "kr-release";
+    const head = document.createElement("div"); head.className = "kr-release__head";
+    const number = document.createElement("span"); number.className = "kr-mono"; number.textContent = entry.version;
+    head.append(number);
+    if (tag) { const pill = document.createElement("span"); pill.className = `kr-pill${tag === "Kommer med uppdateringen" ? " warn" : ""}`; pill.textContent = t(tag); head.append(pill); }
+    if (entry.date) { const day = document.createElement("span"); day.className = "kr-c"; day.textContent = entry.date; head.append(day); }
+    const list = document.createElement("ul");
+    for (const note of entry.notes || []) { const li = document.createElement("li"); li.textContent = note; list.append(li); }
+    item.append(head, list);
+    return item;
+  };
+  const shown = releaseNotesExpanded ? installed : installed.slice(0, 10);
+  document.querySelector("#software-releases-list").replaceChildren(
+    ...coming.map((entry) => version(entry, "Kommer med uppdateringen")),
+    ...shown.map((entry, index) => version(entry, index === 0 && entry.version === payload.installed_version ? "Installerad" : "")));
+  const more = document.querySelector("#software-releases-more");
+  more.hidden = installed.length <= 10;
+  more.textContent = releaseNotesExpanded ? t("Visa färre") : t("Visa äldre versioner ({count})", {count: installed.length - 10});
+  more.onclick = () => { releaseNotesExpanded = !releaseNotesExpanded; renderReleaseNotes(payload); };
+}
+
 function renderSoftwareUpdate(payload) {
   // The version comes first because that is what a person reads; the rest of
   // the commit metadata is under "Teknisk information". The package puts the
@@ -1714,6 +1745,7 @@ function renderSoftwareUpdate(payload) {
   // stå och säga olika saker om vilken programvara som kör.
 
   renderUpdateProgress(payload);
+  renderReleaseNotes(payload);
   renderVersionMove(payload);
   renderTechnicalDetails(payload);
 
