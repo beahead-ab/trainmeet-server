@@ -717,7 +717,6 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
   #app-chrome #logout { order: 7; }
   #app-chrome #app-clock { order: 10; }
   #app-chrome #header-cloud-status { order: 11; }
-  #app-chrome #header-findings { order: 12; }
   #app-chrome .kr-search { order: 13; flex: 1 1 160px; min-width: 0; }
   #app-chrome .kr-search input { text-overflow: ellipsis; }
 }

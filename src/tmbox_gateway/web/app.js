@@ -2705,7 +2705,6 @@ if (globalThis.TrainMeetDrift) {
     editBox: openDeviceEditor,
     editPlacement: editDisplayPlacement,
     simulationDetails: (trigger) => globalThis.TrainMeetDrift.openDialog("drift-simulation-dialog", trigger),
-    showFindings: () => { history.pushState(null, "", "/installningar#fynd"); applyWorkspaceRoute(); },
     dialogOpened: (id) => { if (id === "drift-timetable-dialog") renderRouteExplorer(); },
   });
 }

@@ -318,13 +318,6 @@
     return result.sort((a, b) => a.rank - b.rank || (a.kind === b.kind ? 0 : a.kind === "train" ? -1 : 1) || compare(a.label, b.label)).slice(0, limit);
   }
 
-  /** Clouds kontrolluppgifter för den körande versionen, som antal. null = inga uppgifter lämnade. */
-  function findings(presentation) {
-    const list = presentation?.findings;
-    if (!presentation?.supported || !Array.isArray(list)) return null;
-    return { conflicts: list.filter((item) => item.level === "conflict").length, observations: list.filter((item) => item.level === "observation").length, total: list.length };
-  }
-
   return { compare, minutes, hhmm, services, orderedStops, stationMap, trains, trainStates, stationCounts, lateTrains,
-    placement, connectionTone, stationRows, stats, events, stationOrder, routePoints, graph, search, findings };
+    placement, connectionTone, stationRows, stats, events, stationOrder, routePoints, graph, search };
 });

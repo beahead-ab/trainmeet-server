@@ -257,31 +257,18 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await page.locator('#topology-head-meta').textContent(), '2 stationer · 1 sträcka · tryck på en station för att filtrera');
     // The timetable is a dialog away; its head says what is inside.
     assert.equal(await page.locator('#timetable-summary-meta').textContent(), '1 tåg · sök tåg · tågrutter · stationer');
-    // Cloud's check findings are a chip in the header, the count by kind;
-    // it opens the timetable dialog, which lists them. Imported text is never HTML.
-    const findingsChip = page.locator('#header-findings');
-    await findingsChip.getByText('1 konflikt', {exact: true}).waitFor();
-    assert.match(await findingsChip.getAttribute('class'), /warn/);
-    for (const [rows, text, warn] of [
-      [[...imported, imported[0], {level: 'observation'}], '2 konflikter · 1 observation', true],
-      [[{level: 'observation'}, {level: 'observation'}], '2 observationer', false]]) {
-      findings = rows;
-      await page.evaluate(() => refreshCloudPresentation());
-      await findingsChip.getByText(text, {exact: true}).waitFor();
-      assert.equal(/warn/.test(await findingsChip.getAttribute('class')), warn);
-    }
-    for (const rows of [[], null]) {
-      findings = rows;
-      await page.evaluate(() => refreshCloudPresentation());
-      await findingsChip.waitFor({state: 'hidden'});
-    }
-    findings = imported;
-    await page.evaluate(() => refreshCloudPresentation());
-    await findingsChip.click();
+    // Cloud's check findings belong under Inställningar → Träff och Cloud,
+    // where configurations are fetched, and nowhere else: no chip in the
+    // header on any page. Imported text is never HTML.
+    assert.equal(await page.locator('#header-findings').count(), 0, 'no findings in the header');
+    await page.evaluate(() => { history.pushState(null, '', '/installningar#fynd'); applyWorkspaceRoute(); });
     await page.locator('#published-findings').waitFor({state: 'visible'});
-    assert.equal(new URL(page.url()).pathname + new URL(page.url()).hash, '/installningar#fynd');
+    const summary = page.locator('#published-findings-summary');
+    await summary.getByText('1 noterade uppgifter', {exact: true}).waitFor();
+    assert.match(await summary.getAttribute('class'), /warn/);
     assert.equal(await page.locator('#published-findings-list img').count(), 0);
     assert.match(await page.locator('#published-findings-list').textContent(), /<img/);
+    await page.locator('#app-chrome a[href="/drift"]').first().click();
     await page.locator('#app-chrome a[href="/drift"]').first().click();
     await page.locator('#overview-graph').waitFor({state: 'visible'});
     // The diagram is as tall as its stations and meets their names: never
