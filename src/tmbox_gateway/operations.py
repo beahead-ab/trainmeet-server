@@ -456,6 +456,63 @@ class SQLiteOperationsStore:
                     reasons.append("Config tar bort ett spår med registrerat trafikläge.")
         return list(dict.fromkeys(reasons))
 
+    def local_edit_blockers(self, publication_id: str, *, changed_movements: dict[str, str],
+                            removed_movements: dict[str, str], changed_connections: dict[str, str]) -> list[str]:
+        """Det som hindrar en lokal ändring just nu, bara för det som ändras.
+
+        config_update_blockers stoppar på vad som helst som pågår någonstans,
+        för en hel ny config. En lokal ändring rör ett par rader mitt under
+        träffen, och då får tågen på de andra sträckorna gå vidare. Rörelserna
+        ges som {rörelse-id: tågnummer}, sträckorna som {sträck-id: namn}.
+        Läser bara; ändrar inget för att få ändringen att se säker ut.
+        """
+        reasons: list[str] = []
+        open_case = "(status='waiting' OR (status='approved' AND settled_at IS NULL))"
+        with self._lock:
+            for movement_id, train in {**changed_movements, **removed_movements}.items():
+                if self._connection.execute("SELECT 1 FROM train_positions WHERE train_number=? AND status='connection' LIMIT 1", (train,)).fetchone():
+                    reasons.append(f"Tåg {train} är ute på linjen.")
+                if self._connection.execute(f"SELECT 1 FROM clearances WHERE publication_id=? AND movement_id=? AND {open_case} LIMIT 1",
+                                            (publication_id, movement_id)).fetchone():
+                    reasons.append(f"Tåg {train} har ett öppet körtillstånd.")
+                if self._connection.execute("SELECT 1 FROM line_available_messages WHERE publication_id=? AND movement_id=? AND status='delivered_to_device' LIMIT 1",
+                                            (publication_id, movement_id)).fetchone():
+                    reasons.append(f"Tåg {train} väntar på kvittens av ett linjebesked.")
+            for movement_id, train in removed_movements.items():
+                for table in ("tkl_movement_states", "train_readiness", "tkl_events"):
+                    if self._connection.execute(f"SELECT 1 FROM {table} WHERE publication_id=? AND movement_id=? LIMIT 1",
+                                                (publication_id, movement_id)).fetchone():
+                        reasons.append(f"Tåg {train} har registrerade driftuppgifter och kan inte tas bort.")
+                        break
+            for connection_id, name in changed_connections.items():
+                if self._connection.execute(f"SELECT 1 FROM clearances WHERE publication_id=? AND connection_id=? AND {open_case} LIMIT 1",
+                                            (publication_id, connection_id)).fetchone():
+                    reasons.append(f"Sträckan {name} har ett öppet körtillstånd.")
+                if self._connection.execute("SELECT 1 FROM train_positions WHERE connection_id=? AND status='connection' LIMIT 1", (connection_id,)).fetchone():
+                    reasons.append(f"Ett tåg är ute på sträckan {name}.")
+        return list(dict.fromkeys(reasons))
+
+    def refresh_movement_identity(self, publication: RuntimePublication) -> None:
+        """Identiteterna ur det paket som gäller nu, under samma publicerings-id.
+
+        _initialize_publication skriver dem en gång per id. En lokal ändring
+        behåller id:t men kan byta tågnummer eller besöksordning på en rad,
+        och nästa Cloud-version bär över TKL-läget med just de uppgifterna.
+        """
+        identities = _movement_identities(publication.payload)
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute("DELETE FROM movement_identity WHERE publication_id=?", (publication.publication_id,))
+                self._connection.executemany(
+                    "INSERT INTO movement_identity (publication_id, movement_id, train_number, station_id, stop_index) VALUES (?, ?, ?, ?, ?)",
+                    [(publication.publication_id, movement_id, train, station, index) for movement_id, train, station, index in identities],
+                )
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+
     def adopt_publication(self, previous: RuntimePublication,
                           publication: RuntimePublication) -> None:
         """Explicit same-meet adoption, retaining the exact live clock anchor.

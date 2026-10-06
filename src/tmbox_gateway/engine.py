@@ -134,6 +134,35 @@ class TrafficEngine:
                 self.config, self.config_fingerprint = old_config, old_fingerprint
                 raise
 
+    def apply_connection_rules(self, config: SessionConfig, connection_ids: set[str]) -> None:
+        """Byt spårtyp på fria sträckor medan tågen går på de andra.
+
+        adopt_config kräver att hela banan är fri. En sträcka som blir
+        dubbelspår mitt under träffen rör bara sig själv: samma sträckor och
+        paneler, de ändrade sträckorna fria och ingen panel vid dem mitt i en
+        inmatning. Trafiken, kvittona och valen på resten står kvar.
+        """
+        with self._lock:
+            if set(config.connections) != set(self.config.connections) or set(config.panels) != set(self.config.panels):
+                raise ValueError("Sträckor och paneler ändras i Cloud, inte här")
+            for connection_id in sorted(connection_ids):
+                if self.connections[connection_id].state != ConnectionState.FREE:
+                    raise ValueError("Sträckan är upptagen")
+            for panel_id, panel in self.config.panels.items():
+                touched = connection_ids & {value for value in panel.slots.values() if value}
+                if touched and self.panels[panel_id].mode != InteractionMode.IDLE:
+                    raise ValueError("En TMBox vid sträckan är mitt i en inmatning")
+            validated = TrafficEngine(config)
+            checkpoint = self._checkpoint()
+            old_config, old_fingerprint = self.config, self.config_fingerprint
+            self.config, self.config_fingerprint = config, validated.config_fingerprint
+            self.revision += 1
+            try:
+                self._persist_or_rollback(checkpoint)
+            except Exception:
+                self.config, self.config_fingerprint = old_config, old_fingerprint
+                raise
+
     @_shared_command
     def perform(
         self,
