@@ -267,3 +267,24 @@ class InstallLogTests(unittest.TestCase):
         self.assertEqual(lines[0], tail[0])
         self.assertEqual("…", tail[1])
         self.assertEqual("rad 199", tail[-1])
+
+
+class UpdateStatusTimestampTests(unittest.TestCase):
+    """Försök igen compares the status before and after it is pressed, so the
+    status has to say when it was written."""
+
+    def test_the_status_carries_when_the_updater_wrote_it(self):
+        from tmbox_gateway.software_update import read_update_status
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            (state / "update-status.json").write_text(json.dumps(
+                {"status": "failed", "failed_stage": "installing", "message": "Installationen misslyckades",
+                 "updated_at": "2026-10-06T01:35:12Z"}), encoding="utf-8")
+            self.assertEqual("2026-10-06T01:35:12Z", read_update_status(state)["updated_at"])
+
+    def test_no_status_file_has_no_timestamp(self):
+        from tmbox_gateway.software_update import read_update_status
+        with tempfile.TemporaryDirectory() as directory:
+            result = read_update_status(Path(directory))
+            self.assertEqual("idle", result["status"])
+            self.assertNotIn("updated_at", result)
