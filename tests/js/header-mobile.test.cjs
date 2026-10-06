@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const { open } = require('./kr-fixture.cjs');
 
 const ITEMS = ['#workspace-home', '#app-chrome .tm-switch', '#header-cloud-status', '#app-chrome .kr-search',
-  '#app-clock', '#app-chrome .screen-menu', '#header-settings', '#header-help', '#kr-theme-toggle', '#logout'];
+  '#app-clock', '#app-chrome .screen-menu', '#header-data', '#header-settings', '#header-help', '#kr-theme-toggle', '#logout'];
 
 const measure = (page) => page.evaluate((items) => {
   const boxes = {};

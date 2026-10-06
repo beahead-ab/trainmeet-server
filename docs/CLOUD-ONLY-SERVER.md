@@ -118,6 +118,34 @@ gäller nu och vilka lokala ändringar som försvinner. Admin väljer med
 Kastas de lokala ändringarna medan en version väntar tas den som vanligt så fort
 banan är fri. Utan lokala ändringar fungerar allt som förut.
 
+### Sidan Tidtabell (`/tidtabell`)
+
+Admin ändrar på sidan Tidtabell, som nås med tabellikonen i sidhuvudet och
+från Inställningar → Träff och Cloud (på en telefon bara därifrån). Sidan är
+Clouds egen Data-vy, samma kod som i Cloud: `web/data-workspace.js` byggs i
+Cloud med `vite.embed.config.ts` och kopieras hit med Clouds
+`scripts/vendor-data-workspace.mjs`, som också skriver `data-workspace.json`
+med Clouds version, sha256 och storlek. Ett prov låser filen mot den. Vyn ritas
+i en shadow root med Clouds stilar som konstruerade stilmallar, så serverns CSP
+(`style-src 'self'`, ingen `eval`) räcker och sidornas stilar inte påverkar
+varandra. Det som bara finns i Cloud är avstängt: import, källfiler,
+stationsredigering och Clouds `/api/`, som inte finns på servern. Filen är en
+halv megabyte och hämtas först när sidan öppnas.
+
+Celler som är ändrade lokalt är markerade (`local_changes` i
+`GET /v1/meet-data`). Raden överst säger hur många lokala ändringar som finns,
+med en lista och **Återgå till Cloud-versionen**. Sidan sparar alltid mot den
+revision vyn utgick från: har någon annan sparat under tiden svarar servern
+409, och vyn ber admin trycka Avbryt och göra om ändringen i den nya
+tidtabellen, så att ingen ändring skrivs över. Ny data ges till vyn bara när
+inget är osparat.
+
+När en ny Cloud-version väntar på admins val meddelar servern sidorna direkt
+(`/v1/events`, ämnet `runtime`). Tidtabell visar då rutan **Ny version finns i
+Cloud** med vad Cloud-versionen ändrar och vilka lokala ändringar som då
+försvinner, och knapparna **Behåll mina ändringar** och **Ta Cloud-versionen**.
+Under Inställningar → Träff och Cloud står en länk **Välj under Tidtabell**.
+
 ## Arbetsytor och navigation
 
 Efter inloggning väljer användaren arbetsyta utifrån behörighet och träff:

@@ -168,6 +168,23 @@ class MeetDataTests(CloudDeliveryFixture):
         [event] = self.operations.audit_trail("meet-data-cloud-first")
         self.assertEqual(("meet_data.saved", 1), (event["action"], event["detail"]["revision"]))
 
+    def test_the_page_is_told_which_cells_changed_locally(self):
+        before = self.get()
+        self.assertEqual({"trains": {}, "connections": {}}, before["local_changes"])
+        draft = before["draft"]
+        self.row(draft, "movement-101-a")["departure_time"] = "09:30"
+        self.row(draft, "movement-101-a")["note"] = "Väntar på 102"
+        connection = next(c for c in draft["connections"] if c["id"] == "connection-a-b")
+        connection["track_type"] = "double" if connection["track_type"] == "single" else "single"
+        status, body = self.post(draft)
+        self.assertEqual(HTTPStatus.OK, status, body)
+        # Sorttiden är härledd och syns inte som en egen cell.
+        expected = {"trains": {"movement-101-a": ["departure_time", "note"]}, "connections": {"connection-a-b": ["track_type"]}}
+        self.assertEqual(expected, body["local_changes"])
+        self.assertEqual(expected, self.get()["local_changes"])
+        status, body = dispatch_request(self.application, self.client, "/v1/meet-data/discard", {"expected_revision": 1})
+        self.assertEqual((HTTPStatus.OK, {"trains": {}, "connections": {}}), (status, body["local_changes"]))
+
     def test_saving_the_same_rows_changes_nothing(self):
         before = self.get()
         status, body = self.post(before["draft"])

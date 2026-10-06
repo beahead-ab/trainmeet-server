@@ -66,6 +66,7 @@
             <a href="/tmbox-lab/" target="_blank" rel="noopener" data-eu-only><tm-text data-tm-text="Provbänk med testdata">Provbänk med testdata</tm-text></a>
             <a href="/tmbox-lab/floden" target="_blank" rel="noopener" data-eu-only><tm-text data-tm-text="Flöden">Flöden</tm-text></a>
           </nav></details>
+          <a class="tm-icon-btn" id="header-data" href="/tidtabell" aria-label="Tidtabell" title="Tidtabell" data-eu-only><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 10h18M9 10v10M15 10v10"></path></svg></a>
           <a class="tm-icon-btn" id="header-settings" href="/installningar" aria-label="Inställningar" title="Inställningar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg></a>
           <a class="tm-icon-btn" id="header-help" href="/hjalp" aria-label="Hjälp" title="Hjälp"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"></path></svg></a>
           <button class="tm-icon-btn kr-only" id="kr-theme-toggle" type="button" aria-label="Byt till ljust läge" title="Byt till ljust läge"><svg class="kr-ico-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg><svg class="kr-ico-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg></button>
@@ -623,6 +624,7 @@
                 <span class="kr-dot"></span>
                 <span id="cloud-version-state" class="kr-state__text" role="status"></span>
                 <span class="kr-state__note">byts när det är säkert för trafiken</span>
+                <a id="cloud-local-link" class="kr-btn sm" href="/tidtabell" hidden>Välj under Tidtabell</a>
                 <button id="runtime-check-update" class="kr-btn sm" type="button">Sök configuppdatering</button>
               </div>
               <p id="cloud-update-message" class="form-message" role="status"></p>
@@ -631,6 +633,7 @@
                   <div class="kr-kv"><span class="kr-k">Träff</span><b id="cloud-connection-meet">Ingen träff vald</b><span id="cloud-meet-region" class="kr-eu" hidden></span><span id="cloud-meet-meta" class="kr-m"></span></div>
                   <div class="kr-kv"><span class="kr-k">Kör version</span><span id="cloud-connection-meta" class="kr-pill ok"></span><span id="cloud-published-at" class="kr-m"></span></div>
                   <div class="kr-kv"><span class="kr-k">Cloud</span><span id="cloud-connection-state" class="kr-tag off">Inte kopplad</span><span id="cloud-auto-status" class="kr-m"></span></div>
+                  <div class="kr-kv" data-eu-only><span class="kr-k">Tidtabell</span><a class="kr-btn sm" href="/tidtabell">Öppna tidtabellen</a><span class="kr-m">justera tider, spår och sträckor här, direkt i driften</span></div>
                   <div class="kr-kv"><span class="kr-k">Automatiskt</span><label class="kr-switch"><input id="cloud-auto-enabled" type="checkbox" data-change-label="Hämta automatiskt"><span>Hämta publicerade versioner automatiskt</span></label></div>
                   <div class="kr-kv"><span class="kr-k">Byt träff</span><button type="button" class="kr-btn sm" data-open-modal="runtime-sync-form-modal">Byt träff…</button><span class="kr-m">användare och nätverk behålls · stationstilldelningarna följer inte med</span></div>
                 </div>
@@ -984,6 +987,28 @@
 </dialog>
         </section>
 
+        <section id="data-view" class="view-panel kr-data hidden" aria-labelledby="data-title">
+          <div class="kr-sectitle"><h1 id="data-title">Tidtabell</h1><span>från Cloud · justeras här för den här träffen</span></div>
+          <section id="data-choice" class="kr-panel kr-data-choice" aria-labelledby="data-choice-title" hidden>
+            <div class="kr-ph"><span id="data-choice-title">Ny version finns i Cloud</span><span class="kr-c">du har lokala ändringar · välj vad som ska gälla</span></div>
+            <div class="kr-data-choice__body">
+              <div><h2>Om du tar Cloud-versionen ändras</h2><ul id="data-choice-changes"></ul></div>
+              <div><h2>Lokala ändringar som då försvinner</h2><ul id="data-choice-local"></ul></div>
+            </div>
+            <p id="data-choice-message" class="form-message" role="status"></p>
+            <div class="kr-pf"><span id="data-choice-note"></span><span class="kr-sp"></span><button id="data-keep" class="kr-btn sm" type="button">Behåll mina ändringar</button><button id="data-take" class="kr-btn sm primary" type="button">Ta Cloud-versionen</button></div>
+          </section>
+          <div id="data-local" class="kr-state ok" hidden>
+            <span class="kr-dot"></span>
+            <span id="data-local-state" class="kr-state__text" role="status"></span>
+            <span id="data-local-note" class="kr-state__note"></span>
+            <button id="data-discard" class="kr-btn sm" type="button" hidden>Återgå till Cloud-versionen</button>
+          </div>
+          <details id="data-local-lines" class="kr-data-lines" hidden><summary>Visa de lokala ändringarna</summary><ul></ul></details>
+          <p id="data-message" class="form-message" role="status"></p>
+          <div id="data-workspace" class="kr-data-workspace"></div>
+        </section>
+
         <section id="tmbox-v2-view" class="view-panel tmbox-v2-view hidden" aria-live="polite">
           <div class="simulator-intro">
             <div>
@@ -1154,7 +1179,8 @@
     <script src="/assets/drift.js" defer></script>
     <script src="/assets/server-ui.js" defer></script>
     <script src="/assets/settings.js" defer></script>
-    <script src="/assets/app.js?v=20260927-6" defer></script>
+    <script src="/assets/data-page.js" defer></script>
+    <script src="/assets/app.js?v=20261006-1" defer></script>
     <script src="/assets/participant.js" defer></script>
   </body>
 </html>

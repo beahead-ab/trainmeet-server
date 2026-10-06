@@ -290,6 +290,22 @@ class HTTPServerTests(unittest.TestCase):
                 urlopen(self.base_url + path, timeout=2)
             self.assertEqual(caught.exception.code, 404)
 
+    def test_clouds_api_in_the_data_view_reaches_nothing_here(self):
+        """Data-vyn har Clouds anrop för källfiler och åtgärder kvar i koden.
+
+        På servern är de avstängda (SERVER_DATA), och skulle ett ändå gå iväg
+        finns det inget bakom /api/ här.
+        """
+        import re
+        code = (Path(__file__).resolve().parents[1] / "src/tmbox_gateway/web/data-workspace.js").read_text(encoding="utf-8")
+        paths = {re.sub(r"\$\{[^}]*\}", "x", match) for match in re.findall(r"`(/api/[^`]*)`", code)}
+        self.assertTrue(paths, "the Cloud calls are no longer where this test looks")
+        for path in sorted(paths):
+            for data in (None, b"{}"):
+                with self.subTest(path=path, method="POST" if data else "GET"), self.assertRaises(HTTPError) as caught:
+                    urlopen(Request(self.base_url + path.split("#")[0], data=data, headers={"Content-Type": "application/json"}), timeout=2)
+                self.assertIn(caught.exception.code, {401, 403, 404})
+
     def test_embedded_lab_has_separate_sessions_and_cannot_reset_live_traffic(self):
         from http.cookiejar import CookieJar
         from urllib.request import build_opener, HTTPCookieProcessor
@@ -524,11 +540,11 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="users-invite-form-modal"', html)
         self.assertIn('id="language-form"', html)
         self.assertIn('id="language-tiles"', html)
-        for asset in ("i18n.js", "i18n-messages.js", "i18n-init.js", "server-ui.js", "server-ui.css", "server-design.css", "fonts/fonts.css", "fonts/jetbrains-mono-latin-700-normal.woff2", "kontrollrummet.css", "skarmar.css", "deltagare.css", "kr-theme.js", "drift-model.js", "drift.js", "settings.js"):
+        for asset in ("i18n.js", "i18n-messages.js", "i18n-init.js", "server-ui.js", "server-ui.css", "server-design.css", "fonts/fonts.css", "fonts/jetbrains-mono-latin-700-normal.woff2", "kontrollrummet.css", "skarmar.css", "deltagare.css", "kr-theme.js", "drift-model.js", "drift.js", "settings.js", "data-page.js", "data-workspace.js"):
             with urlopen(f"{self.base_url}/assets/{asset}", timeout=2) as response:
                 self.assertEqual(response.status, 200)
                 self.assertTrue(response.read())
-        for path in ("/drift", "/installningar", "/hjalp", "/login", "/setup", "/display/territories"):
+        for path in ("/drift", "/installningar", "/tidtabell", "/hjalp", "/login", "/setup", "/display/territories"):
             with urlopen(f"{self.base_url}{path}", timeout=2) as response:
                 self.assertEqual(response.status, 200)
                 self.assertIn(b"server-ui.js", response.read())
