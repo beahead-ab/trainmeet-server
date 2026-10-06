@@ -462,7 +462,7 @@ class SimulationTests(unittest.TestCase):
     def test_direct_dispatch_respects_the_same_clock_and_arrival_chain(self):
         from tmbox_gateway.runtime import RuntimePublication
         p = runtime_package_v3()
-        p["connections"][0]["dispatch_mode_override"] = "direct"
+        p["meet"]["default_dispatch_mode"] = "direct"
         self.pub = RuntimePublication.parse(p)
         self.service.runtime_store.active = lambda: self.pub
         self.start()

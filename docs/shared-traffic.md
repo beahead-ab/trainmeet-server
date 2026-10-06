@@ -28,7 +28,7 @@ alltid in stationsservicen innan HTTP/MQTT börjar ta emot kommandon.
 2. Mottagaren svarar från valfri tilldelad klient. Båda stationerna uppdateras.
 3. Avgång kan registreras först med beviljad klarering.
 4. Ankomst frigör sträckan och uppdaterar samma tågrörelse som TKL visar.
-5. Vid direktklarering godkänner servern automatiskt samma slags ärende.
+5. Vid direktklarering godkänner servern automatiskt samma slags ärende. Trafikläget gäller hela trafikspelet; en sträcka har inget eget.
 6. Dubbeltryck/återsändning får inte skapa ett andra ärende.
 7. Omstart återläser ärendena. Tillfällig inmatning och bekräftelser återställs.
 

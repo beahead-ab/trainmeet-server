@@ -546,8 +546,7 @@ class Terminal16Lab:
         # its way in, and sent on once cleared: if the system has not seen it
         # come, it jumps here with the departure (Casper, 2026-10-02).
         if own and line.state == State.FREE:
-            direct = (self.engine.config.connections[leg["connection_id"]].dispatch_mode_override
-                      or self.engine.config.default_dispatch_mode) == DispatchMode.DIRECT
+            direct = self.engine.config.default_dispatch_mode == DispatchMode.DIRECT
             buttons["#"] = ("request", "Reservera" if direct else "Begär klartecken")
         elif active and line.state == State.REQUESTED:
             buttons["B"] = ("home", "Översikt utan trafikändring")

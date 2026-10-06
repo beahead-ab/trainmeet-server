@@ -716,7 +716,7 @@ class TrafficEngine:
         if line.state != ConnectionState.FREE:
             return False, "connection_busy"
         connection = self.config.connections[connection_id]
-        mode = connection.dispatch_mode_override or self.config.default_dispatch_mode
+        mode = self.config.default_dispatch_mode
 
         line.from_station_id = station_id
         line.to_station_id = connection.other_station(station_id)

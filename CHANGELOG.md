@@ -5,6 +5,16 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Ett trafikläge för hela trafikspelet
+
+Trafikläget gäller nu hela trafikspelet: grannstationen godkänner varje tåg
+(`clearance`), eller sträckan tas direkt om den är ledig (`direct`). En sträcka
+har inget eget läge längre. TKL läste redan bara träffens läge, så TKL, boxarna
+och servern säger nu samma sak. Paket som Cloud redan har publicerat med ordet
+`automatic`, eller med `""` på en sträcka, avvisades förut med "Driftpaketet
+innehåller ogiltigt …"; nu installeras de, och `automatic` läses som `direct`.
+TMBox v2 får samma `dispatch_mode` på alla sträckor.
+
 ### Vad är nytt under Programuppdatering
 
 Programuppdatering visar vad varje version gjorde, på rubriknivå: versionen,

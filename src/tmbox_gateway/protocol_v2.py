@@ -316,9 +316,8 @@ class TMBoxStationService:
                     "connection_id": connection.id,
                     "other_station_code": other.code[:3].upper() if other else "",
                     "track_type": connection.track_type.value,
-                    "dispatch_mode": (
-                        connection.dispatch_mode_override or config.default_dispatch_mode
-                    ).value,
+                    # Samma läge för alla sträckor: trafikspelet har ett.
+                    "dispatch_mode": config.default_dispatch_mode.value,
                     "display_row": order,
                     "panel_slots": ports,
                     "display_side": side,
@@ -807,7 +806,7 @@ class TMBoxStationService:
                 requested_by=device_id,
                 ttl_seconds=CLEARANCE_TTL_SECONDS,
             )
-            if (connection.dispatch_mode_override or config.default_dispatch_mode) == DispatchMode.DIRECT:
+            if config.default_dispatch_mode == DispatchMode.DIRECT:
                 case = self.operations_store.settle_clearance(case["clearance_id"], "approved", device_id)
             return {
                 "revision": {

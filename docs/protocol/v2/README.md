@@ -322,6 +322,11 @@ frigöra en reservation innan avgång registrerats. Avsändaren får återkalla
 en beviljad klarering fram till avgång, aldrig efteråt. Direktklarering
 skapar samma ärende men godkänner det automatiskt på servern.
 
+Trafikläget gäller hela trafikspelet (2026-10): `clearance`, där
+grannstationen godkänner varje tåg, eller `direct`, där sträckan tas direkt
+om den är ledig. `connections[].dispatch_mode` i config är därför samma för
+alla sträckor. Fältet finns kvar eftersom schemat kräver det.
+
 Kanalen hålls tills tåget är inne: mottagarstationens `train.arrived` för
 samma tågnummer frigör den. Ett
 `rejected`, `cancelled`, `expired` eller `invalidated_by_revision` frigör den

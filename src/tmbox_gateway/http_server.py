@@ -2788,8 +2788,6 @@ class TrainMeetHTTPApplication:
                     "track_type": str(
                         connection.get("track_type") or TrackType.SINGLE.value
                     ),
-                    "dispatch_mode_override": connection.get("dispatch_mode_override")
-                    or None,
                 }
                 for connection in payload.get("connections") or []
             ],
