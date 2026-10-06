@@ -15,6 +15,28 @@ i driften använder den än; den behövs när tidtabellen ska kunna ändras loka
 på servern och ge exakt de tåg som Cloud skulle ha gett. Ett prov visar att
 kopian bygger om tjänsterna och rutterna i ett riktigt Cloud-paket exakt.
 
+
+### Programuppdatering säger varför installationen gick fel
+
+En uppdatering som stannade i steget Installerar sa bara "Installationen
+misslyckades, återställde föregående version" – orsaken fanns bara i journalen
+på serverdatorn. Nu sparar installationen det den skriver i
+`update-install.log` bredvid statusfilen, och Programuppdatering visar de
+sista raderna under Teknisk information som **Installationslogg**. Loggen
+skrivs av det nyss hämtade paketet, så den finns redan vid nästa försök på en
+installation vars uppdaterare är den gamla.
+
+Tre orsaker som förut fällde en uppdatering utan att synas är också borta.
+`apt-get update` körs bara när ett systempaket faktiskt saknas – på en
+uppdatering finns alla redan, och ett nätverksfel mot spegeln eller ett apt
+som var upptaget med systemets egna uppdateringar behöver inte stoppa något
+(och apt väntar nu på låset i stället för att ge upp direkt). Startkontrollen
+väntar in att servern svarar på `/healthz`, upp till en minut, i stället för
+att titta en gång efter två sekunder – `Restart=always` gjorde att en server
+som kraschade vid start kunde se startad ut och en långsam se stoppad ut; går
+starten fel skrivs tjänstens status och journalens sista rader i loggen.
+Sammanfattningen sist i installationen kan inte längre fälla en installation
+som redan kör, till exempel över en saknad `connection-code.txt`.
 ### Versionsnummer i Inter med tabellsiffror
 
 Programuppdatering visade den installerade versionen, versionerna under Vad är

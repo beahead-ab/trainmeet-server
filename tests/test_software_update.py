@@ -203,3 +203,67 @@ class ReleaseNotesTests(unittest.TestCase):
     def test_an_unreachable_list_offers_nothing_rather_than_failing(self, _open_url):
         from tmbox_gateway.software_update import newer_release_notes
         self.assertEqual([], newer_release_notes("3.3.3"))
+
+
+class InstallLogTests(unittest.TestCase):
+    """Installing failed - and then what? The installer's own output is the
+    answer, kept beside the status file and shown under Teknisk information."""
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.state = Path(temporary.name)
+
+    def _failed(self, stage: str = "installing") -> None:
+        (self.state / "update-status.json").write_text(json.dumps(
+            {"status": "failed", "failed_stage": stage,
+             "message": "Installationen misslyckades, återställde föregående version"}), encoding="utf-8")
+
+    def test_a_failure_while_installing_carries_the_installers_last_lines(self):
+        import os
+        from tmbox_gateway.software_update import read_update_status
+        (self.state / "update-install.log").write_text(
+            "TrainMeet Server: installerar build 4e4593bf, 2026-10-06T01:35:00Z\n"
+            "Installerar TrainMeet Server …\n"
+            "E: Could not get lock /var/lib/apt/lists/lock\n", encoding="utf-8")
+        self._failed()
+        # The log is finished a moment before the updater writes the status.
+        now = (self.state / "update-status.json").stat().st_mtime
+        os.utime(self.state / "update-install.log", (now - 8, now - 8))
+        result = read_update_status(self.state)
+        self.assertEqual("installing", result["failed_stage"])
+        self.assertIn("Could not get lock", result["install_log"])
+        self.assertTrue(result["install_log"].startswith("TrainMeet Server: installerar build 4e4593bf"))
+
+    def test_a_log_from_an_earlier_attempt_is_not_passed_off_as_this_ones(self):
+        import os
+        from tmbox_gateway.software_update import read_update_status
+        (self.state / "update-install.log").write_text("gammalt fel\n", encoding="utf-8")
+        self._failed()
+        now = (self.state / "update-status.json").stat().st_mtime
+        os.utime(self.state / "update-install.log", (now - 2 * 3600, now - 2 * 3600))
+        self.assertNotIn("install_log", read_update_status(self.state))
+
+    def test_other_stages_and_other_outcomes_carry_no_log(self):
+        from tmbox_gateway.software_update import read_update_status
+        (self.state / "update-install.log").write_text("något\n", encoding="utf-8")
+        self._failed("downloading")
+        self.assertNotIn("install_log", read_update_status(self.state))
+        (self.state / "update-status.json").write_text(
+            json.dumps({"status": "complete", "message": "Klart"}), encoding="utf-8")
+        self.assertNotIn("install_log", read_update_status(self.state))
+        # A failure without any log at all stays as it was: the status alone.
+        (self.state / "update-install.log").unlink()
+        self._failed()
+        self.assertNotIn("install_log", read_update_status(self.state))
+
+    def test_a_long_log_keeps_its_first_line_and_its_end(self):
+        from tmbox_gateway.software_update import INSTALL_LOG_LINES, install_log_tail
+        lines = ["TrainMeet Server: installerar build abc12345, 2026-10-06T01:35:00Z"]
+        lines += [f"rad {index}" for index in range(200)]
+        (self.state / "update-install.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        tail = install_log_tail(self.state).splitlines()
+        self.assertEqual(INSTALL_LOG_LINES, len(tail))
+        self.assertEqual(lines[0], tail[0])
+        self.assertEqual("…", tail[1])
+        self.assertEqual("rad 199", tail[-1])

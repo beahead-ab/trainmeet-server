@@ -151,13 +151,65 @@ def newer_release_notes(installed: str) -> list[dict[str, Any]]:
     return [entry for entry in entries if version_key(entry["version"]) > floor]
 
 
-def read_update_status(state_dir: Path) -> dict[str, Any]:
-    """What the updater script last wrote, in the shared contract's shape."""
+#: What the installer printed on its last run, written by the installer itself
+#: on a Raspberry Pi and by the updater on a Mac. Both put it beside the
+#: status file.
+INSTALL_LOG = "update-install.log"
+INSTALL_LOG_LINES = 40
+INSTALL_LOG_CHARS = 6000
+#: How much older than the status the log may be and still be about the same
+#: attempt. A whole attempt - download, backup, install, rollback - is
+#: minutes; an earlier attempt's log is from before the operator pressed the
+#: button again.
+INSTALL_LOG_MAX_AGE_SECONDS = 3600
+
+
+def install_log_tail(state_dir: Path, status_file: Path | None = None) -> str:
+    """The last lines of the installer's output, or "" when there is none that
+    belongs to the status the operator is looking at.
+
+    "Installationen misslyckades" says that it broke; this says why - an apt
+    lock, a full disk, a server that would not start - without a terminal.
+    """
+    log = state_dir / INSTALL_LOG
     try:
-        value = json.loads((state_dir / "update-status.json").read_text(encoding="utf-8"))
+        written = log.stat().st_mtime
+        if status_file is not None:
+            age = status_file.stat().st_mtime - written
+            if age > INSTALL_LOG_MAX_AGE_SECONDS:
+                return ""
+        text = log.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+    if len(lines) > INSTALL_LOG_LINES:
+        # The first line names the build and the time; it stays so an operator
+        # can tell which attempt they are reading about.
+        lines = [lines[0], "…", *lines[-(INSTALL_LOG_LINES - 2):]]
+    tail = "\n".join(lines)
+    if len(tail) > INSTALL_LOG_CHARS:
+        tail = "…" + tail[-INSTALL_LOG_CHARS:]
+    return tail
+
+
+def read_update_status(state_dir: Path) -> dict[str, Any]:
+    """What the updater script last wrote, in the shared contract's shape.
+
+    A failure in `installing` also carries the installer's last lines as
+    `install_log`: that is the one stage where a script of ours prints the
+    reason, and the status file only has room to say that it failed.
+    """
+    status_file = state_dir / "update-status.json"
+    try:
+        value = json.loads(status_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         value = {"status": "idle", "message": "Ingen uppdatering pågår"}
-    return normalise(value if isinstance(value, dict) else None)
+    result = normalise(value if isinstance(value, dict) else None)
+    if result["status"] == "failed" and result["failed_stage"] == "installing":
+        tail = install_log_tail(state_dir, status_file)
+        if tail:
+            result["install_log"] = tail
+    return result
 
 
 def start_update() -> None:

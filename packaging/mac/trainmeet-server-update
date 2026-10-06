@@ -98,8 +98,13 @@ rm -rf "$INSTALL_BACKUP"
 cp -a "$INSTALL_DIR" "$INSTALL_BACKUP"
 
 # install-mac.command stops the launchd agent, so this script must already be
-# detached from the server process that started it.
-if ! TRAINMEET_INSTALL_BUILD="$BUILD" "$SOURCE/scripts/install-mac.command" >/dev/null 2>&1; then
+# detached from the server process that started it. What it prints goes to
+# the same log the Raspberry Pi installer writes, and Programuppdatering
+# shows its last lines when installing fails - a failure that said nothing
+# but "misslyckades" was the alternative.
+INSTALL_LOG="$STATE_DIR/update-install.log"
+rm -f "$INSTALL_LOG"
+if ! TRAINMEET_INSTALL_BUILD="$BUILD" "$SOURCE/scripts/install-mac.command" > "$INSTALL_LOG" 2>&1; then
   fail_at installing "Installationen misslyckades, återställde föregående version"
 fi
 
