@@ -222,7 +222,7 @@ test('graph: stations follow the shown order, then the rest', () => {
   assert.deepEqual(model.graph(snap).stations.map((station) => station.id), ['c', 'a', 'b']);
 });
 
-test('graph: a night train that passes midnight keeps counting upwards', () => {
+test('graph: a night train that passes midnight stays continuous around the clock', () => {
   const night = snapshot({
     clock: {time: '00:10:00'},
     services: [{train_number: '900', stops: [
@@ -232,9 +232,40 @@ test('graph: a night train that passes midnight keeps counting upwards', () => {
     ]}],
   });
   const graph = model.graph(night, {windowMinutes: 180});
+  // The clock is time of day; the train is moved to the occurrence around it.
   const points = graph.lines[0].points.map((point) => point.minute);
-  assert.deepEqual(points, [1420, 1460, 1465, 1490]);
-  assert.equal(graph.now, 10 + 1440);
+  assert.deepEqual(points, [-20, 20, 25, 50]);
+  assert.equal(graph.now, 10);
+  assert.ok(graph.start <= graph.now && graph.now <= graph.end);
+  // The whole day shows the timetable as it is, with the clock among the night train's points.
+  const day = model.graph(night, {windowMinutes: 0});
+  assert.deepEqual(day.lines[0].points.map((point) => point.minute), [1420, 1460, 1465, 1490]);
+  assert.equal(day.now, 10 + 1440);
+});
+
+test('graph: before the first train the window shows this morning, not the night train tomorrow (#137)', () => {
+  // After Nollställ träffen the clock stands at the plan's start, before the
+  // first train, while a night train is still out at that hour next morning.
+  const early = snapshot({
+    clock: {time: '05:00:00'},
+    services: [
+      {train_number: '1', stops: [stop('a', 1, null, '05:30:00'), stop('b', 2, '06:00:00', null)]},
+      {train_number: '2', stops: [stop('b', 1, null, '07:00:00'), stop('c', 2, '07:30:00', null)]},
+      {train_number: '9', stops: [stop('a', 1, null, '22:00:00'), stop('c', 2, '06:00:00', null, {service_day_offset: 1})]},
+    ],
+  });
+  for (const windowMinutes of [120, 180, 360]) {
+    const graph = model.graph(early, {windowMinutes});
+    assert.equal(graph.now, 5 * 60, `${windowMinutes} min`);
+    assert.ok(graph.start <= 5 * 60 && 5 * 60 < graph.end, `${windowMinutes} min`);
+    const byNumber = Object.fromEntries(graph.lines.map((line) => [line.number, line.points.map((point) => point.minute)]));
+    assert.deepEqual(byNumber['1'], [330, 360]);
+    assert.deepEqual(byNumber['2'], [420, 450]);
+    // Last night's night train, arriving at 06:00 this morning.
+    assert.deepEqual(byNumber['9'], [22 * 60 - 1440, 6 * 60]);
+  }
+  const day = model.graph(early, {windowMinutes: 0});
+  assert.equal(day.now, 5 * 60);
 });
 
 test('graph: a train with fewer than two points on the diagram is left out', () => {
