@@ -5,6 +5,16 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Samma tidtabellskod som Cloud
+
+Servern har nu Clouds egen kod för tidtabellen: tjänster och rutter ur
+tågraderna, trafikdagar, spår, kontrollen och rimlighetskontrollen. Den ligger
+som en byte-identisk kopia i `src/tmbox_gateway/timetable_core/`, låst med samma
+digest som i Cloud, och kopieras med `node tools/sync-timetable-core.mjs`. Inget
+i driften använder den än; den behövs när tidtabellen ska kunna ändras lokalt
+på servern och ge exakt de tåg som Cloud skulle ha gett. Ett prov visar att
+kopian bygger om tjänsterna och rutterna i ett riktigt Cloud-paket exakt.
+
 ### Ett trafikläge för hela trafikspelet
 
 Trafikläget gäller nu hela trafikspelet: grannstationen godkänner varje tåg
