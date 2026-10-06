@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.6.0",
+    "date": "2026-10-06",
+    "notes": [
+      "Tidtabellen kan ändras på plats, och Cloud frågar innan den ersätts"
+    ]
+  },
+  {
     "version": "3.5.3",
     "date": "2026-10-06",
     "notes": [
