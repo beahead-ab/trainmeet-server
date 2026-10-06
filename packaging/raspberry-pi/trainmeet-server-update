@@ -77,6 +77,11 @@ SOURCE=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -n 1)
 VERSION=$(tr -d '[:space:]' < "$SOURCE/VERSION" 2>/dev/null || true)
 
 status installing "Installerar ${VERSION:-$BUILD}"
+# The installer writes what it prints to this log, and Programuppdatering
+# shows the last lines when installing fails. Clear it first so that a
+# failure before the installer runs - the backup, say - cannot be explained
+# by a log from an earlier attempt.
+rm -f "$STATE_DIR/update-install.log"
 
 # The database is copied with SQLite's own backup API rather than with `cp`.
 # Every store in this server runs in WAL mode, so on a running server the

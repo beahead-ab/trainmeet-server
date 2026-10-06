@@ -601,6 +601,8 @@ a.kr-btn { text-decoration: none; }
 .kr-rows + .kr-steps5 { border-top: 1px solid var(--kr-line); }
 .kr-dl { margin: 0; padding: 4px 18px 10px; display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 6px 12px; font-size: 13px; }
 .kr-dl dt { color: var(--kr-ink-2); font-weight: 600; } .kr-dl dd { margin: 0; font-family: var(--kr-mono); }
+/* Installationsloggen: det installationen skrev när den gick fel, i sin helhet läsbart på en telefon. */
+.kr-dl .kr-log { margin: 0; padding: 10px 12px; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--kr-mono); color: var(--kr-ink); background: var(--kr-panel-2); border: 1px solid var(--kr-line); border-radius: var(--kr-r-sm); }
 .kr-danger-panel { border-color: var(--kr-red); }
 .kr-rowact { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--kr-line); flex-wrap: wrap; }
 .kr-rowact:last-child { border-bottom: 0; }
