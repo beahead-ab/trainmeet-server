@@ -309,7 +309,7 @@ def unmanned_package(publication_id="unmanned-103", track="track-station-a-2", d
     package["panels"].append({"id": "panel-c", "station_id": "station-c", "name": "VA",
                               "slots": {"A": "connection-a-c", "B": None, "C": None, "D": None}})
     if direct:
-        package["connections"][0]["dispatch_mode_override"] = "direct"
+        package["meet"]["default_dispatch_mode"] = "direct"
     stops = [("station-c", "VA", None, "09:40", "track-station-c-1"), ("station-a", "CDA", "09:50", "09:55", track),
              ("station-b", "LEK", "10:05", None, "track-station-b-2")]
     package["services"].append({"id": "service-103-Dagl", "train_number": "103", "days": "Dagl", "train_type": "person",

@@ -116,12 +116,8 @@ def validate_local_configuration(
             TrackType,
             "spårtyp",
         )
-        override = connection.get("dispatch_mode_override")
-        connection["dispatch_mode_override"] = (
-            _enum_value(override, DispatchMode, "trafikläge på sträckan")
-            if override
-            else None
-        )
+        # Trafikläget gäller hela trafikspelet; en sträcka har inget eget.
+        connection.pop("dispatch_mode_override", None)
         connection["display_side_a"] = _display_side(connection.get("display_side_a"), "right")
         connection["display_side_b"] = _display_side(connection.get("display_side_b"), "left")
         connection["display_order_a"] = _non_negative_int(connection.get("display_order_a", 0))
@@ -420,7 +416,6 @@ def build_from_station_order(configuration: dict[str, Any]) -> dict[str, Any]:
             "station_a_id": str(before["id"]),
             "station_b_id": str(after["id"]),
             "track_type": TrackType.SINGLE.value,
-            "dispatch_mode_override": None,
             "display_side_a": "right",
             "display_side_b": "left",
             "display_order_a": 0,
@@ -510,7 +505,6 @@ def local_configuration_from_publication(payload: dict[str, Any]) -> dict[str, A
             "station_a_id": str(connection.get("station_a_id") or ""),
             "station_b_id": str(connection.get("station_b_id") or ""),
             "track_type": str(connection.get("track_type") or TrackType.SINGLE.value),
-            "dispatch_mode_override": connection.get("dispatch_mode_override") or None,
             "display_side_a": connection.get("display_side_a") or "right",
             "display_side_b": connection.get("display_side_b") or "left",
             "display_order_a": connection.get("display_order_a") or 0,

@@ -917,14 +917,11 @@ råkar visa.
 
 Viktiga API:er:
 
-- `GET/POST /v1/local-configuration`
 - `GET /v1/setup`
 - `POST /v1/setup/admin`
 - `POST /v1/setup/server`
 - `POST /v1/setup/complete`
-- `POST /v1/local-configuration/activate`
 - `POST /v1/server/restart`
-- `POST /v1/runtime/install`
 - `POST /v1/runtime/sync`
 - `GET /healthz`
 - `GET/POST /v1/runtime/update`

@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .models import dispatch_mode
 from .runtime import matches_active_day
 
 
@@ -118,7 +119,7 @@ def resolve_departure(payload: dict, active_day: str, station_id: str, movement_
         "to_station_code": stations[0]["code"], "to_station_name": stations[0]["name"],
         "to_movement_id": str(receivers[0]["id"]), "to_stop_order": _order(target["stop_order"]),
         "connection_id": str(link["id"]), "track_type": link["track_type"],
-        "dispatch_mode": link.get("dispatch_mode_override") or payload.get("meet", {}).get("default_dispatch_mode", "clearance"),
+        "dispatch_mode": dispatch_mode(payload.get("meet", {}).get("default_dispatch_mode")).value,
     }
 
 

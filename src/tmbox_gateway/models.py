@@ -14,8 +14,24 @@ class UnknownTrackError(ValueError):
 
 
 class DispatchMode(StrEnum):
+    """Trafikspelets trafikläge, ett för hela trafikspelet.
+
+    clearance: grannstationen godkänner varje tåg. direct: sträckan tas
+    direkt om den är ledig. En sträcka har inget eget läge.
+    """
     CLEARANCE = "clearance"
     DIRECT = "direct"
+
+
+#: Clouds äldre ord, före 2026-10: "automatic" betydde direct.
+_DISPATCH_ALIASES = {"automatic": DispatchMode.DIRECT.value}
+
+
+def dispatch_mode(value: Any) -> DispatchMode:
+    """Trafikspelets läge ur ett paket. Tomt är clearance; ett okänt ord är ValueError."""
+    if value in (None, ""):
+        return DispatchMode.CLEARANCE
+    return DispatchMode(_DISPATCH_ALIASES.get(value, value))
 
 
 class TrackType(StrEnum):
@@ -62,7 +78,6 @@ class ConnectionConfig:
     station_a_id: str
     station_b_id: str
     track_type: TrackType = TrackType.SINGLE
-    dispatch_mode_override: DispatchMode | None = None
 
     def other_station(self, station_id: str) -> str:
         if station_id == self.station_a_id:

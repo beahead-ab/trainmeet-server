@@ -13,12 +13,12 @@ from uuid import uuid4
 
 from .models import (
     ConnectionConfig,
-    DispatchMode,
     PanelConfig,
     SessionConfig,
     StationConfig,
     TrackType,
     TrackConfig,
+    dispatch_mode,
 )
 
 
@@ -161,9 +161,8 @@ class RuntimePublication:
                 station_b_id,
             }
             _enum_value(connection.get("track_type", "single"), TrackType, "track_type")
-            override = connection.get("dispatch_mode_override")
-            if override is not None:
-                _enum_value(override, DispatchMode, "dispatch_mode_override")
+            # Trafikläget gäller hela trafikspelet. En sträckas eget läge, som
+            # äldre Cloud-paket kan ha ("automatic" eller ""), läses inte.
 
         panels = _required_list(payload, "panels")
         _unique_ids(panels, "panel")
@@ -319,8 +318,7 @@ class RuntimePublication:
             if _required_text(link, "related_station_id") not in station_ids:
                 raise RuntimePublicationError("En autonom koppling hänvisar till en okänd station")
 
-        default_mode = meet.get("default_dispatch_mode", DispatchMode.CLEARANCE.value)
-        _enum_value(default_mode, DispatchMode, "default_dispatch_mode")
+        _enum_value(meet.get("default_dispatch_mode"), dispatch_mode, "default_dispatch_mode")
 
         canonical = json.dumps(
             payload,
@@ -370,11 +368,6 @@ class RuntimePublication:
                 station_a_id=value["station_a_id"],
                 station_b_id=value["station_b_id"],
                 track_type=TrackType(value.get("track_type", TrackType.SINGLE.value)),
-                dispatch_mode_override=(
-                    DispatchMode(value["dispatch_mode_override"])
-                    if value.get("dispatch_mode_override")
-                    else None
-                ),
             )
             for value in self.payload["connections"]
         }
@@ -393,9 +386,7 @@ class RuntimePublication:
             # version can never be restored into it by accident.
             id=self.publication_id,
             name=self.meet_name,
-            default_dispatch_mode=DispatchMode(
-                meet.get("default_dispatch_mode", DispatchMode.CLEARANCE.value)
-            ),
+            default_dispatch_mode=dispatch_mode(meet.get("default_dispatch_mode")),
             stations=stations,
             connections=connections,
             panels=panels,

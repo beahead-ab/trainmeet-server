@@ -244,7 +244,7 @@ class SharedTrafficTests(unittest.TestCase):
 
     def test_direct_dispatch_uses_same_approval_on_all_clients(self):
         package = runtime_package_v3()
-        package["connections"][0]["dispatch_mode_override"] = "direct"
+        package["meet"]["default_dispatch_mode"] = "direct"
         package["publication_id"] = "direct-test"
         self.install(package)
         self.request_v1()

@@ -124,7 +124,7 @@ class TrainRouteTests(unittest.TestCase):
         self.assertEqual(self.resolve("movement-101-a-later")["to_movement_id"], "movement-101-b-later")
 
     def test_published_direct_mode_is_read_from_server_configuration(self):
-        self.package["connections"][0]["dispatch_mode_override"] = "direct"
+        self.package["meet"]["default_dispatch_mode"] = "direct"
         self.assertEqual(self.resolve()["dispatch_mode"], "direct")
         self.assertNotIn("departed", self.resolve().values())
 

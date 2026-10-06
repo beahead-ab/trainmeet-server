@@ -27,9 +27,9 @@ globalThis.TMBoxGuide = [
     "På redo tåg öppnar A motstationsväljaren. C väljer granne, A skickar begäran.",
     "Mottagaren öppnar klareringskorgen med #, C bläddrar, A ger klart och B nekar.",
     "Avsändaren ska sedan kunna bekräfta Avgått. Idag erbjuds både clearance.request och train.departed, men klientens prioritet väljer fortfarande Begär. En lyckad enskild kommandofixtur bevisar därför inte hela flödet."]},
-  {title: "Skicka utan klartecken", status: "Saknas som fullständigt ESP32-flöde", steps: [
-    "Serverconfig kan ange direkttrafik, men dagens V2 clearance.request skapar fortfarande ett väntande ärende.",
-    "Det måste ersättas med serverstyrd reservation utan mottagarbeslut, följt av explicit Avgått. V1/ESP8266 har detta flöde idag."]},
+  {title: "Skicka utan klartecken", status: "Finns på servern; ESP32-tangentflödet inte omprövat", steps: [
+    "Trafikläget gäller hela trafikspelet och väljs i Cloud. Med \"Sträckan tas direkt om den är ledig\" godkänner servern en V2 clearance.request direkt när sträckan är ledig (2026-10).",
+    "Avsändaren bekräftar sedan Avgått som efter ett klartecken. V1/ESP8266 har samma flöde."]},
   {title: "Återta före avgång", status: "Saknas i ESP32-knappsatsen", steps: [
     "Servern har clearance.cancel för väntande ärenden, men navigationen har ingen tangent för detta.",
     "Återtagning efter klartecken före avgång behöver också samordnas; dagens V2-server kräver status waiting.",
