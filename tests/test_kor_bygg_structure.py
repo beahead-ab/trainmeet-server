@@ -191,7 +191,7 @@ class DesignTokenTests(unittest.TestCase):
         adresser behåller monospace, där pricken hjälper mot en bokstav O."""
         kr = (WEB / "kontrollrummet.css").read_text()
         # Exakt selektor, inte substräng: .kr-ev .t och .kr-stat b är olika regler.
-        for selector in (".kr-clock-time", ".kr-stat b", ".kr-ev .t", ".kr-ev .in", ".kr-badge", ".kr-trainno", ".tbt", ".tbht", ".nowt", ".kr-num"):
+        for selector in (".kr-clock-time", ".kr-stat b", ".kr-ev .t", ".kr-ev .in", ".kr-badge", ".kr-trainno", ".tbt", ".tbht", ".nowt", ".kr-num", ".kr-navver"):
             index = kr.index(selector + " {")
             block = kr[index:index + 320]
             self.assertIn("var(--kr-num)", block, selector)
