@@ -1696,6 +1696,18 @@ function renderTechnicalDetails(payload) {
     definition.textContent = value;
     return [term, definition];
   }));
+  // What the installer printed when installing failed: the server keeps the
+  // last lines so the reason is on this page, not only in a terminal.
+  if (payload.install_log) {
+    const term = document.createElement("dt");
+    term.textContent = t("Installationslogg");
+    const definition = document.createElement("dd");
+    const log = document.createElement("pre");
+    log.className = "kr-log";
+    log.textContent = payload.install_log;
+    definition.append(log);
+    softwareTechnical.append(term, definition);
+  }
 }
 
 // Vad är nytt: the headings of each version, newest first, written by
