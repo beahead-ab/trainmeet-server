@@ -5,6 +5,20 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Cloud frågar innan den ersätter lokala ändringar
+
+En ny Cloud-version aktiverades förut automatiskt så fort banan var fri. Med
+lokala ändringar i tidtabellen hade de då försvunnit utan att någon frågats.
+Nu hämtas versionen men väntar, och Cloud-statusen säger att ett val behövs.
+`GET /v1/runtime/pending` visar vad Cloud ändrar och vilka lokala ändringar
+som försvinner, och admin väljer **Ta Cloud-versionen** eller **Behåll mina
+ändringar** med `POST /v1/cloud/local-decision`. Ta tar en säkerhetskopia
+först och går sedan samma väg som en automatisk aktivering, med samma spärrar;
+hindrar trafiken väntar den tills banan är fri. Behåll gäller bara just den
+versionen: servern hämtar den inte igen, och frågan kommer tillbaka när Cloud
+publicerar en nyare. Utan lokala ändringar fungerar allt som förut. Knapparna
+kommer med sidan för tidtabellen i nästa steg.
+
 ### Tidtabellen kan ändras på plats, ovanpå Clouds version
 
 Admin kan nu flytta en tid, byta spår, ändra dagar, från och till, ta bort

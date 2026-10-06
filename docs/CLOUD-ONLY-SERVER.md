@@ -103,6 +103,21 @@ revision med samma övergångsmärke som en aktivering, och en sida som ligger
 efter får inte spara. API:et är `GET /v1/meet-data`, `POST /v1/meet-data` och
 `POST /v1/meet-data/discard`, bara för admin.
 
+När Cloud publicerar en ny version medan lokala ändringar finns aktiveras den
+inte automatiskt. Den hämtas och kontrolleras, och Cloud-statusen blir
+`local_changes`. `GET /v1/runtime/pending` visar vad Cloud ändrar mot det som
+gäller nu och vilka lokala ändringar som försvinner. Admin väljer med
+`POST /v1/cloud/local-decision {decision, publication_id, expected_revision}`:
+
+- **Ta Cloud-versionen** (`take`): en säkerhetskopia tas, sedan samma väg som en
+  automatisk aktivering med samma spärrar. Hindrar trafiken väntar den, valet
+  står kvar, och de lokala ändringarna gäller tills banan är fri.
+- **Behåll mina ändringar** (`keep`): servern hämtar inte den versionen igen.
+  Frågan kommer tillbaka först när Cloud publicerar en nyare version.
+
+Kastas de lokala ändringarna medan en version väntar tas den som vanligt så fort
+banan är fri. Utan lokala ändringar fungerar allt som förut.
+
 ## Arbetsytor och navigation
 
 Efter inloggning väljer användaren arbetsyta utifrån behörighet och träff:

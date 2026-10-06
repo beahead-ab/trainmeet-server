@@ -3287,6 +3287,9 @@ class TrainMeetHTTPApplication:
         if pending is None:
             return {"pending": False}
         active = self.runtime_store.active()
+        layer = self.runtime_store.local_edits(active.publication_id) if active else None
+        base = self.runtime_store.publication(active.publication_id) if layer else None
+        decision = self.runtime_store.local_decision(pending.publication_id)
         return {
             "pending": True,
             "publication_id": pending.publication_id,
@@ -3294,8 +3297,57 @@ class TrainMeetHTTPApplication:
             "published_at": pending.published_at,
             "active_publication_id": active.publication_id if active else None,
             "local_revisions": self.runtime_store.local_revisions(),
+            # Mot det som gäller nu, de lokala ändringarna inräknade.
             "changes": _revision_changes(active, pending),
+            # Det som försvinner om Cloud-versionen tas.
+            "local_edits": ({**self.runtime_store.local_edits_summary(active),
+                             "lines": local_edits.describe(layer["edits"], base.payload)} if layer and base else None),
+            "decision": decision["decision"] if decision else None,
         }
+
+    def decide_local_changes(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Ta Cloud-versionen eller Behåll mina ändringar, när en ny Cloud-version väntar.
+
+        Valet gäller just den väntande versionen och just den revision av de
+        lokala ändringarna som sidan visade. Ta Cloud-versionen tar en
+        säkerhetskopia först och går sedan samma väg som en automatisk
+        aktivering, med samma spärrar.
+        """
+        self._no_simulation()
+        self._require_admin(client)
+        if self.runtime_store is None or self.cloud_config is None or self.lifecycle is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Lokal lagring saknas")
+        decision = payload.get("decision")
+        if decision not in {"keep", "take"}:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_decision", "Välj Ta Cloud-versionen eller Behåll mina ändringar.")
+        with self.lifecycle.lock:
+            pending = self.runtime_store.pending_publication()
+            if pending is None or str(payload.get("publication_id") or "") != pending.publication_id:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "pending_revision_changed",
+                                   "En annan Cloud-version väntar nu. Läs om vad den ändrar innan du väljer.")
+            active = self.runtime_store.active()
+            layer = self.runtime_store.local_edits(active.publication_id) if active else None
+            if layer is None or payload.get("expected_revision") != layer["revision"]:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_local_edits",
+                                   "De lokala ändringarna har ändrats. Läs in sidan igen innan du väljer.")
+        actor = client.admin_user_id or "konsol"
+        backup = self._backup_before("Cloud-versionen tas") if decision == "take" else None
+        self.runtime_store.save_local_decision(pending.publication_id, decision, actor=actor)
+        if self.operations_store is not None:
+            self.operations_store.record_audit_event(
+                correlation_id=f"meet-data-{active.publication_id}", source="web-admin", actor=actor,
+                action="meet_data.replaced_by_cloud" if decision == "take" else "meet_data.kept", outcome="ok",
+                detail={"by": client.display_name, "cloud_publication_id": pending.publication_id,
+                        "revision": layer["revision"], "backup": str(backup) if backup else None})
+        if decision == "keep":
+            result = self.cloud_config._local_changes_waiting(pending.publication_id, self.runtime_store.local_edits_summary(active)["count"])
+        else:
+            try:
+                result = self.cloud_config.take_pending(pending.publication_id)
+            except (CentralSyncError, RuntimePublicationError, USError) as error:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "config_update_failed", str(error)) from error
+        self.changes.notify("runtime")
+        return {**result, "decision": decision, "backup": str(backup) if backup else None, **self.cloud_config.status()}
 
     def activate_pending_revision(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         """Activate the waiting revision, because somebody said so.
@@ -4697,6 +4749,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/meet-data/discard":
                 self._send_json(HTTPStatus.OK, self.server.application.discard_meet_data(self._authenticated_client(), payload))
+                return
+            if path == "/v1/cloud/local-decision":
+                self._send_json(HTTPStatus.OK, self.server.application.decide_local_changes(self._authenticated_client(), payload))
                 return
             if path == "/v1/cloud/display-placement":
                 self._send_json(HTTPStatus.OK, self.server.application.save_display_placement(self._authenticated_client(), payload))

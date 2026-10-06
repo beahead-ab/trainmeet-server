@@ -6,7 +6,7 @@ import logging
 import sqlite3
 import threading
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -712,6 +712,37 @@ class SQLiteRuntimeStore:
                 self._connection.execute("ROLLBACK")
                 raise
             self._parsed = None
+
+    LOCAL_DECISION_KEY = "cloud_local_decision"
+
+    def local_decision(self, publication_id: str | None = None) -> dict[str, Any] | None:
+        """Admins val för en väntande Cloud-version när lokala ändringar finns.
+
+        Med id: bara om valet gäller just den versionen. Ett val gäller aldrig
+        en nyare version; då ska frågan ställas igen.
+        """
+        raw = self._setting(self.LOCAL_DECISION_KEY)
+        if not raw:
+            return None
+        try:
+            decision = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        if publication_id is not None and decision.get("publication_id") != publication_id:
+            return None
+        return decision
+
+    def save_local_decision(self, publication_id: str, decision: str, *, actor: str) -> dict[str, Any]:
+        if decision not in {"keep", "take"}:
+            raise RuntimePublicationError("Välj Ta Cloud-versionen eller Behåll mina ändringar")
+        value = {"publication_id": publication_id, "decision": decision, "actor": actor,
+                 "decided_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}
+        self._save_setting(self.LOCAL_DECISION_KEY, json.dumps(value, ensure_ascii=False))
+        return value
+
+    def clear_local_decision(self) -> None:
+        with self._lock:
+            self._connection.execute("DELETE FROM runtime_settings WHERE key = ?", (self.LOCAL_DECISION_KEY,))
 
     def reinstate_local_edits(self, base_publication_id: str, revision: int, *, drop: int | None = None) -> None:
         """Återställning när motorn inte kunde ta en sparning eller ett kast.
