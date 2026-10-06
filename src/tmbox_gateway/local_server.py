@@ -145,10 +145,15 @@ def main() -> None:
     except MeetLifecycleError as error:
         LOGGER.error("Trafik spärrad: %s", error)
         selected = None
-    session_config = (
-        runtime_store.session_config(active_publication)
+    eu_publication = (
+        active_publication
         if active_publication is not None and selected and selected["region"] == "eu"
             and selected["publication_id"] == active_publication.publication_id
+        else None
+    )
+    session_config = (
+        runtime_store.session_config(eu_publication)
+        if eu_publication is not None
         else unconfigured_session()
     )
     state_store = SQLiteStateStore(database_path)
@@ -159,6 +164,9 @@ def main() -> None:
     engine = TrafficEngine(
         session_config,
         state_store=state_store,
+        legacy_dispatch_overrides=(
+            eu_publication.legacy_dispatch_overrides() if eu_publication is not None else None
+        ),
     )
     pairing = PairingService(
         identities,

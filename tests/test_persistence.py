@@ -70,6 +70,45 @@ class PersistenceTests(unittest.TestCase):
                 finally:
                     store.close()
 
+    def test_run_saved_before_350_restores_after_the_connection_mode_was_removed(self):
+        # 3.5.0 removed ConnectionConfig.dispatch_mode_override. Every run an
+        # older version saved hashed it per connection, so the server refused
+        # to start after the upgrade.
+        config = sample_session(DispatchMode.CLEARANCE)
+        for overrides in ({}, {'connection-a-b': 'direct'}):
+            for explicit_defaults in (False, True):
+                with self.subTest(overrides=overrides, explicit_defaults=explicit_defaults), tempfile.TemporaryDirectory() as directory:
+                    store = SQLiteStateStore(Path(directory) / 'trainmeet.db')
+                    try:
+                        engine = TrafficEngine(config)
+                        for sequence, key in enumerate(['A', '3', '9', '#'], start=1):
+                            press(engine, 'panel-a', key, sequence)
+                        # Exactly what 3.4.0 hashed for this configuration.
+                        value = asdict(config)
+                        for panel in value['panels'].values():
+                            panel.pop('display_positions')
+                            if not explicit_defaults:
+                                panel.pop('slot_layout')
+                        for connection_id, connection in value['connections'].items():
+                            connection['dispatch_mode_override'] = overrides.get(connection_id)
+                        fingerprint = hashlib.sha256(json.dumps(value, ensure_ascii=False, separators=(',', ':'), sort_keys=True).encode()).hexdigest()
+                        store.save(config.id, fingerprint, engine.revision, engine.export_state())
+                        before = store._connection.execute('SELECT * FROM engine_state').fetchall()
+
+                        restored = TrafficEngine(config, state_store=store, legacy_dispatch_overrides=overrides)
+
+                        self.assertEqual(restored.export_state(), engine.export_state())
+                        self.assertEqual(store._connection.execute('SELECT * FROM engine_state').fetchall(), before)
+                        # Another configuration is still refused, and a mode the
+                        # publication does not vouch for is never guessed.
+                        with self.assertRaises(ConfigurationMismatchError):
+                            TrafficEngine(replace(config, name='changed'), state_store=store, legacy_dispatch_overrides=overrides)
+                        if overrides:
+                            with self.assertRaises(ConfigurationMismatchError):
+                                TrafficEngine(config, state_store=store)
+                    finally:
+                        store.close()
+
     def test_nondefault_display_layout_still_changes_configuration_identity(self):
         original = sample_session(DispatchMode.CLEARANCE)
         changed = replace(original, panels={key: replace(panel, slot_layout='columns') for key, panel in original.panels.items()})

@@ -394,6 +394,18 @@ class RuntimePublication:
             clock_time=str(meet.get("clock_time") or "12:00")[:5],
         )
 
+    def legacy_dispatch_overrides(self) -> dict[str, str | None]:
+        """Sträckornas egna trafiklägen, som paket före 3.5.0 kunde bära.
+
+        Trafiken läser dem inte; trafikläget gäller hela trafikspelet. De
+        behövs bara för att känna igen en körning som en äldre version
+        sparade, eftersom den räknade in dem i configens fingeravtryck.
+        """
+        return {
+            value["id"]: str(value["dispatch_mode_override"]) if value.get("dispatch_mode_override") else None
+            for value in self.payload["connections"]
+        }
+
     def timetable(self, *, active_day: str, station_id: str | None = None) -> dict[str, Any]:
         # Rows reference the catalogue by id. The catalogue travels with them
         # so a client can render a label without deriving a second, divergent

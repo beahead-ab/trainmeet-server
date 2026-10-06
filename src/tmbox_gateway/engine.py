@@ -4,7 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from functools import wraps
 from threading import RLock
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 from uuid import uuid4
 
 from .display import allowed_keys, render_panel
@@ -21,7 +21,13 @@ from .models import (
     RequestStatus,
     SessionConfig,
 )
-from .storage import ConfigurationMismatchError, CorruptStateError, StateStore, session_config_fingerprint
+from .storage import (
+    ConfigurationMismatchError,
+    CorruptStateError,
+    StateStore,
+    legacy_session_config_fingerprints,
+    session_config_fingerprint,
+)
 
 
 def _shared_command(method):
@@ -48,7 +54,13 @@ class TrafficEngine:
     command plus one or more complete snapshots, matching the MQTT contract.
     """
 
-    def __init__(self, config: SessionConfig, *, state_store: StateStore | None = None):
+    def __init__(
+        self,
+        config: SessionConfig,
+        *,
+        state_store: StateStore | None = None,
+        legacy_dispatch_overrides: Mapping[str, str | None] | None = None,
+    ):
         self.config = config
         self.state_store = state_store
         self.config_fingerprint = session_config_fingerprint(config)
@@ -75,13 +87,19 @@ class TrafficEngine:
             try:
                 state = self.state_store.load(self.config.id, self.config_fingerprint)
             except ConfigurationMismatchError:
-                # 1.9.0 briefly hashed explicit default layout fields. Accept
-                # only that exact encoding of THIS config, never arbitrary old
-                # configuration or reset state. Startup does not rewrite data.
-                explicit = session_config_fingerprint(config, explicit_panel_layout_defaults=True)
-                if explicit == self.config_fingerprint:
+                # A software upgrade must not lose the run: 1.9.0 hashed
+                # explicit default layouts, and before 3.5.0 every connection
+                # had its own dispatch mode. Accept only those exact encodings
+                # of THIS config, never arbitrary old configuration or reset
+                # state. Startup does not rewrite data.
+                for legacy in legacy_session_config_fingerprints(config, legacy_dispatch_overrides):
+                    try:
+                        state = self.state_store.load(self.config.id, legacy)
+                        break
+                    except ConfigurationMismatchError:
+                        continue
+                else:
                     raise
-                state = self.state_store.load(self.config.id, explicit)
             if state is not None:
                 self._restore_state(state)
 
