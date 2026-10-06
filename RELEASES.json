@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.5.2",
+    "date": "2026-10-06",
+    "notes": [
+      "Programuppdatering säger varför installationen gick fel"
+    ]
+  },
+  {
     "version": "3.5.1",
     "date": "2026-10-06",
     "notes": [
