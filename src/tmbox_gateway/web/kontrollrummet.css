@@ -598,6 +598,7 @@ a.kr-btn { text-decoration: none; }
 .kr-kv #software-version-move b { flex: 0 0 auto; overflow-wrap: normal; }
 .kr-kv:has(> #software-version-move.hidden) { display: none; }
 .kr-steps5 { padding: 14px 18px; display: flex; align-items: center; gap: 12px 22px; flex-wrap: wrap; margin: 0; list-style: none; }
+.kr-rows + .kr-steps5 { border-top: 1px solid var(--kr-line); }
 .kr-dl { margin: 0; padding: 4px 18px 10px; display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 6px 12px; font-size: 13px; }
 .kr-dl dt { color: var(--kr-ink-2); font-weight: 600; } .kr-dl dd { margin: 0; font-family: var(--kr-mono); }
 .kr-danger-panel { border-color: var(--kr-red); }
