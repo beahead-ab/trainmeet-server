@@ -1,0 +1,632 @@
+[
+  {
+    "version": "3.4.0",
+    "date": "2026-10-05",
+    "notes": [
+      "Vad är nytt under Programuppdatering"
+    ]
+  },
+  {
+    "version": "3.3.4",
+    "date": "2026-10-05",
+    "notes": [
+      "Tidtabellens konflikter bara under Träff och Cloud"
+    ]
+  },
+  {
+    "version": "3.3.3",
+    "date": "2026-10-04",
+    "notes": [
+      "Byta träff går att förstå"
+    ]
+  },
+  {
+    "version": "3.3.2",
+    "date": "2026-10-04",
+    "notes": [
+      "Obemannad station svarar på TAM"
+    ]
+  },
+  {
+    "version": "3.3.1",
+    "date": "2026-10-04",
+    "notes": [
+      "Nollställ träffen fungerar på en uppdaterad Raspberry Pi"
+    ]
+  },
+  {
+    "version": "3.3.0",
+    "date": "2026-10-04",
+    "notes": [
+      "Alla texter på engelska, svenska, danska, tyska och norska"
+    ]
+  },
+  {
+    "version": "3.2.0",
+    "date": "2026-10-04",
+    "notes": [
+      "Träffens land från Cloud: SE, DK, DE, NO eller US"
+    ]
+  },
+  {
+    "version": "3.1.0",
+    "date": "2026-10-04",
+    "notes": [
+      "Nollställ träffen, webb-TMBoxen återansluter efter sömn, och typsnittet på de sista ställena"
+    ]
+  },
+  {
+    "version": "3.0.0",
+    "date": "2026-10-04",
+    "notes": [
+      "Konton är namn, e-postadress och lösenord: inga användarnamn"
+    ]
+  },
+  {
+    "version": "2.8.4",
+    "date": "2026-10-04",
+    "notes": [
+      "Återställningskommandot läser rätt databas, och bara ägaren ändrar ägarens inloggning"
+    ]
+  },
+  {
+    "version": "2.8.3",
+    "date": "2026-10-04",
+    "notes": [
+      "Tider och nummer i Inter: nollan har ingen prick"
+    ]
+  },
+  {
+    "version": "2.8.2",
+    "date": "2026-10-04",
+    "notes": [
+      "Deltagarvyn: samma karta som Drift på mobil"
+    ]
+  },
+  {
+    "version": "2.8.1",
+    "date": "2026-10-04",
+    "notes": [
+      "Sidhuvudet på smal skärm: två rader i stället för fyra eller fem"
+    ]
+  },
+  {
+    "version": "2.8.0",
+    "date": "2026-10-04",
+    "notes": [
+      "Obemannade stationer sköts automatiskt i vanlig drift"
+    ]
+  },
+  {
+    "version": "2.7.1",
+    "date": "2026-10-04",
+    "notes": [
+      "Ny logotyp: Mötesspåret som favicon, hemskärmsikon och märke"
+    ]
+  },
+  {
+    "version": "2.7.0",
+    "date": "2026-10-04",
+    "notes": [
+      "TMBox frågar \"FLYTTA 93 HIT?\" för ett tåg som inte syns komma"
+    ]
+  },
+  {
+    "version": "2.6.0",
+    "date": "2026-10-03",
+    "notes": [
+      "Konton: inbjudan och glömt lösenord med e-post via TrainMeet Cloud"
+    ]
+  },
+  {
+    "version": "2.5.0",
+    "date": "2026-10-03",
+    "notes": [
+      "Anslutet ställverk är i tjänst utan trafikpass"
+    ]
+  },
+  {
+    "version": "2.4.1",
+    "date": "2026-10-03",
+    "notes": [
+      "Deltagarvyn: två kolumner på en dator, och kartan ryms utan att dras"
+    ]
+  },
+  {
+    "version": "2.4.0",
+    "date": "2026-10-03",
+    "notes": [
+      "TMBox: återtagning syns på båda stationerna, och inga besked väntar på #OK"
+    ]
+  },
+  {
+    "version": "2.3.4",
+    "date": "2026-10-03",
+    "notes": [
+      "Admin: inloggningen i Kontrollrummets stil och inget blink vid start"
+    ]
+  },
+  {
+    "version": "2.3.3",
+    "date": "2026-10-03",
+    "notes": [
+      "Kontrollrummet: tunnare enkelspår, hel stationslista och firmwareversion per box"
+    ]
+  },
+  {
+    "version": "2.3.2",
+    "date": "2026-10-03",
+    "notes": [
+      "Webb-TMBox: A, # och * fungerar på träffens nät (http://trainmeet.local)"
+    ]
+  },
+  {
+    "version": "2.3.1",
+    "date": "2026-10-03",
+    "notes": [
+      "Återställning: Kontrollrummet visar hur den senaste gick"
+    ]
+  },
+  {
+    "version": "2.3.0",
+    "date": "2026-10-03",
+    "notes": [
+      "Kontrollrummet: nytt gränssnitt – Drift, Inställningar, skärmar och deltagarvy"
+    ]
+  },
+  {
+    "version": "2.2.1",
+    "date": "2026-10-03",
+    "notes": [
+      "Återställning: servern säger efter omstarten hur det gick"
+    ]
+  },
+  {
+    "version": "2.2.0",
+    "date": "2026-10-03",
+    "notes": [
+      "iPhone TMBox: stationens tidtabell och korta ord under tangenterna"
+    ]
+  },
+  {
+    "version": "2.1.0",
+    "date": "2026-10-02",
+    "notes": [
+      "TMBox: 93# skickar direkt, tåget hoppar fram och kan placeras i efterhand"
+    ]
+  },
+  {
+    "version": "2.0.4",
+    "date": "2026-10-02",
+    "notes": [
+      "Avgång kräver ankomst för genomgående tåg, från alla klienter"
+    ]
+  },
+  {
+    "version": "2.0.3",
+    "date": "2026-10-02",
+    "notes": [
+      "Genomgående tåg på TMBox: begäran före ankomst, alltid svar, snabbt svar"
+    ]
+  },
+  {
+    "version": "2.0.2",
+    "date": "2026-10-02",
+    "notes": [
+      "Flöden på TMBox: varje bild direkt ur 16×2-motorn"
+    ]
+  },
+  {
+    "version": "2.0.1",
+    "date": "2026-10-01",
+    "notes": [
+      "Helskärmsvyerna i designens form"
+    ]
+  },
+  {
+    "version": "2.0.0",
+    "date": "2026-10-01",
+    "notes": [
+      "tambox/v1 och tmbox/v2 ut ur MQTT: servern talar bara 16×2-protokollet"
+    ]
+  },
+  {
+    "version": "1.23.3",
+    "date": "2026-10-01",
+    "notes": [
+      "Helskärmsvyerna: QR-koderna i ramen"
+    ]
+  },
+  {
+    "version": "1.23.2",
+    "date": "2026-10-01",
+    "notes": [
+      "Drift på telefon: tågmärket under kartan och adressen hel"
+    ]
+  },
+  {
+    "version": "1.23.1",
+    "date": "2026-10-01",
+    "notes": [
+      "Designkorrektur av Drift och Inställningar"
+    ]
+  },
+  {
+    "version": "1.23.0",
+    "date": "2026-10-01",
+    "notes": [
+      "Tågrutter med karta, ett gemensamt tågval och inget hopfällt på Drift"
+    ]
+  },
+  {
+    "version": "1.22.0",
+    "date": "2026-10-01",
+    "notes": [
+      "TKL ansluts till Servern: koden i Drift, ställverk i Klienter"
+    ]
+  },
+  {
+    "version": "1.21.0",
+    "date": "2026-10-01",
+    "notes": [
+      "Allt uppdateras direkt: servern säger till när något ändras"
+    ]
+  },
+  {
+    "version": "1.20.0",
+    "date": "2026-10-01",
+    "notes": [
+      "Drift som en helhet: tågdiagrammet, kontrolluppgifterna och tåg med pil"
+    ]
+  },
+  {
+    "version": "1.19.1",
+    "date": "2026-10-01",
+    "notes": [
+      "Normtext för TMBox 16×2-profilen"
+    ]
+  },
+  {
+    "version": "1.19.0",
+    "date": "2026-10-01",
+    "notes": [
+      "Klicka på ett tåg i Kommande enligt tidtabell: sträckning och läge"
+    ]
+  },
+  {
+    "version": "1.18.0",
+    "date": "2026-10-01",
+    "notes": [
+      "Flera TMBoxar per station, var och en för sin sida"
+    ]
+  },
+  {
+    "version": "1.17.5",
+    "date": "2026-10-01",
+    "notes": [
+      "TMBox i drift: onlineläge, återanslutning och ingen språkmeny på boxen"
+    ]
+  },
+  {
+    "version": "1.17.4",
+    "date": "2026-10-01",
+    "notes": [
+      "Klienter och TMBox-placering i två tydliga kort"
+    ]
+  },
+  {
+    "version": "1.17.3",
+    "date": "2026-10-01",
+    "notes": [
+      "Provbänken lätt att hitta, i samma mall och med boxar som riktiga TMBoxar"
+    ]
+  },
+  {
+    "version": "1.17.2",
+    "date": "2026-10-01",
+    "notes": [
+      "TMBox i webben svarar direkt och beter sig som boxen"
+    ]
+  },
+  {
+    "version": "1.17.1",
+    "date": "2026-09-30",
+    "notes": [
+      "Version 1.17.0",
+      "Boxarna faller inte när servern är långsam"
+    ]
+  },
+  {
+    "version": "1.16.6",
+    "date": "2026-09-30",
+    "notes": [
+      "Gatewayen tappar inte mäklaren när servern har tungt att göra"
+    ]
+  },
+  {
+    "version": "1.16.5",
+    "date": "2026-09-29",
+    "notes": [
+      "Slutför installationen utan skriptfel och testa omstart i CI"
+    ]
+  },
+  {
+    "version": "1.16.4",
+    "date": "2026-09-29",
+    "notes": [
+      "Servern startar igen efter att en Cloud-config har aktiverats"
+    ]
+  },
+  {
+    "version": "1.16.3",
+    "date": "2026-09-28",
+    "notes": [
+      "Inställningar i fyra delar, menyer som stängs, fasta mobilmarginaler"
+    ]
+  },
+  {
+    "version": "1.16.2",
+    "date": "2026-09-27",
+    "notes": [
+      "Inloggad hamnar man i Drift, skärmarna utan EU/US"
+    ]
+  },
+  {
+    "version": "1.16.1",
+    "date": "2026-09-27",
+    "notes": [
+      "Typsnitt, Wi-Fi och läsbara stationsnamn"
+    ]
+  },
+  {
+    "version": "1.16.0",
+    "date": "2026-09-27",
+    "notes": [
+      "Virtuell TMBox och provbänk i Serverns UI-kit"
+    ]
+  },
+  {
+    "version": "1.15.0",
+    "date": "2026-09-27",
+    "notes": [
+      "Deltagarvy och klockskärmar"
+    ]
+  },
+  {
+    "version": "1.14.1",
+    "date": "2026-09-27",
+    "notes": [
+      "fix: fit all four upcoming events on the TV dashboard"
+    ]
+  },
+  {
+    "version": "1.14.0",
+    "date": "2026-09-27",
+    "notes": [
+      "feat: apply Claude Server design to drift, settings and displays"
+    ]
+  },
+  {
+    "version": "1.13.0",
+    "date": "2026-09-27",
+    "notes": [
+      "Add active TMBox navigation and server-owned display placement"
+    ]
+  },
+  {
+    "version": "1.12.1",
+    "date": "2026-09-26",
+    "notes": [
+      "Confirm simulation takeover while preserving connected operators and normal traffic"
+    ]
+  },
+  {
+    "version": "1.12.0",
+    "date": "2026-09-26",
+    "notes": [
+      "Timetable simulation with automatic and human station operators"
+    ]
+  },
+  {
+    "version": "1.11.1",
+    "date": "2026-09-26",
+    "notes": [
+      "Simplify discovered-client assignment and persist server discovery identity"
+    ]
+  },
+  {
+    "version": "1.11.0",
+    "date": "2026-09-21",
+    "notes": [
+      "Publish portable containers from the exact version tag",
+      "US: independent mileposts and explicit runtime v2 paths"
+    ]
+  },
+  {
+    "version": "1.10.0",
+    "date": "2026-09-20",
+    "notes": [
+      "Shared server-driven TMBox 16x2 runtime and test bench"
+    ]
+  },
+  {
+    "version": "1.9.3",
+    "date": "2026-09-20",
+    "notes": [
+      "fix: make connected TMBox client list readable"
+    ]
+  },
+  {
+    "version": "1.9.2",
+    "date": "2026-09-20",
+    "notes": [
+      "Add per-TMBox language selection and administrator language push"
+    ]
+  },
+  {
+    "version": "1.9.1",
+    "date": "2026-09-19",
+    "notes": [
+      "fix: preserve saved traffic through display layout upgrades"
+    ]
+  },
+  {
+    "version": "1.9.0",
+    "date": "2026-09-19",
+    "notes": [
+      "Public clients, shared clocks and reliable TMBox sync"
+    ]
+  },
+  {
+    "version": "1.8.1",
+    "date": "2026-09-19",
+    "notes": [
+      "Fix standalone clock recovery, Settings and TMBox documentation"
+    ]
+  },
+  {
+    "version": "1.8.0",
+    "date": "2026-09-19",
+    "notes": [
+      "Gemensam träffklocka, samlad översikt och lokal TMBox-inmatning"
+    ]
+  },
+  {
+    "version": "1.7.0",
+    "date": "2026-09-19",
+    "notes": [
+      "En Cloud-hanterad träff och tydliga arbetsytor på Server"
+    ]
+  },
+  {
+    "version": "1.6.2",
+    "date": "2026-09-18",
+    "notes": [
+      "Godkänn ESP8266 med lokal anslutningskod utan att ändra station"
+    ]
+  },
+  {
+    "version": "1.6.1",
+    "date": "2026-09-18",
+    "notes": [
+      "fix: serve US Cloud language bundle"
+    ]
+  },
+  {
+    "version": "1.6.0",
+    "date": "2026-09-18",
+    "notes": [
+      "Connect US Cloud packages to local Server sessions"
+    ]
+  },
+  {
+    "version": "1.5.2",
+    "date": "2026-09-18",
+    "notes": [
+      "Add explicit EU and US operating session navigation"
+    ]
+  },
+  {
+    "version": "1.5.1",
+    "date": "2026-09-18",
+    "notes": [
+      "fix: prevent restart failure when publication shifts collide"
+    ]
+  },
+  {
+    "version": "1.5.0",
+    "date": "2026-09-18",
+    "notes": [
+      "Isolated US TWC pilot and five-language UI"
+    ]
+  },
+  {
+    "version": "1.4.2",
+    "date": "2026-09-18",
+    "notes": [
+      "Bundle TKL fix for disappearing train state"
+    ]
+  },
+  {
+    "version": "1.4.1",
+    "date": "2026-09-17",
+    "notes": [
+      "Resolve station-only assignments for NodeMCU and other MQTT v1 boxes"
+    ]
+  },
+  {
+    "version": "1.4.0",
+    "date": "2026-08-25",
+    "notes": [
+      "Återställ från säkerhetskopia i webbgränssnittet"
+    ]
+  },
+  {
+    "version": "1.3.6",
+    "date": "2026-08-25",
+    "notes": [
+      "docs: paketera publik dokumentation",
+      "Tidtabellsvy, operatörsändringar som överlever Cloud, flera användare och inloggning överallt"
+    ]
+  },
+  {
+    "version": "1.3.5",
+    "date": "2026-08-23",
+    "notes": [
+      "Fix stale runtime update after activation"
+    ]
+  },
+  {
+    "version": "1.3.3",
+    "date": "2026-08-23",
+    "notes": [
+      "Docs for 1.3.2, and a menu name that no longer exists"
+    ]
+  },
+  {
+    "version": "1.3.2",
+    "date": "2026-08-23",
+    "notes": [
+      "Server 1.3.1: give KÖR the whole window",
+      "Inställningar as its own mode"
+    ]
+  },
+  {
+    "version": "1.3.0",
+    "date": "2026-08-22",
+    "notes": [
+      "Say 1.2.0, which is what actually shipped",
+      "Tag a version somebody set by hand, not only one the robot bumped",
+      "KÖR/BYGG structure, no silent Cloud activation, editable timetable"
+    ]
+  },
+  {
+    "version": "1.0.4",
+    "date": "2026-08-22",
+    "notes": [
+      "Serve the fonts from the server instead of asking Google"
+    ]
+  },
+  {
+    "version": "1.0.3",
+    "date": "2026-08-22",
+    "notes": [
+      "Lock editing while Cloud is the editor, and show what going back costs (D3+D4)"
+    ]
+  },
+  {
+    "version": "1.0.2",
+    "date": "2026-08-22",
+    "notes": [
+      "Let the server edit the package Cloud published (D2)"
+    ]
+  },
+  {
+    "version": "1.0.1",
+    "date": "2026-08-22",
+    "notes": [
+      "A version, seven real update steps, and an empty login field",
+      "Guard the version loop by identity, not by text"
+    ]
+  }
+]

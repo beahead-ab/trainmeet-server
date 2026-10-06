@@ -473,20 +473,6 @@
     });
   }
 
-  // ── Kontrolluppgifter i sidhuvudet ────────────────────────────────────
-  function renderFindings() {
-    const el = $("#header-findings"); if (!el) return;
-    const f = ctx.us ? null : model.findings(ctx.presentation);
-    el.hidden = !f || !f.total;
-    if (!f || !f.total) return;
-    const parts = [];
-    if (f.conflicts) parts.push(plural(f.conflicts, "{count} konflikt", "{count} konflikter"));
-    if (f.observations) parts.push(plural(f.observations, "{count} observation", "{count} observationer"));
-    el.className = `kr-pill kr-only${f.conflicts ? " warn" : ""}`;
-    el.textContent = parts.join(" · ");
-    el.title = t("Tidtabellens kontrolluppgifter från Cloud");
-  }
-
   // ── Dialoger och popover ──────────────────────────────────────────────
   function openDialog(id, trigger) {
     const dialog = doc.getElementById(id); if (!dialog || dialog.open || doc.querySelector("dialog[open]")) return;
@@ -530,7 +516,6 @@
     $("#kr-theme-toggle")?.addEventListener("click", () => { theme.toggle(); scheduleRender(); });
     theme.set(theme.get(), false);
     $("#drift-events-clear")?.addEventListener("click", () => hooks.clear?.());
-    $("#header-findings")?.addEventListener("click", (event) => { hooks.showFindings?.(event.currentTarget); });
     const select = $("#drift-graph-window");
     if (select) {
       select.value = String(ctx.graphWindow);
@@ -557,7 +542,7 @@
 
   // ── Samlad uppritning ─────────────────────────────────────────────────
   function render() {
-    renderClock(); renderFindings();
+    renderClock();
     // US-träffar har ingen bana, inga stationer och inget diagram i Drift: bara klockan och trafiken i Dispatcher.
     for (const selector of ["#drift-simulation", "#drift-map", ".kr-split", "#drift-graph", "#drift-stats"]) { const el = $(selector); if (el) el.hidden = ctx.us; }
     $("#us-runtime-summary")?.classList.toggle("hidden", !ctx.us);

@@ -4,6 +4,7 @@ import json
 import ipaddress
 import logging
 import mimetypes
+import os
 import re
 import secrets
 import select
@@ -26,7 +27,7 @@ from uuid import uuid4
 from . import backup
 from .engine import TrafficEngine
 from .change_feed import ChangeFeed
-from .cloud_config import CloudConfiguration
+from .cloud_config import CloudConfiguration, MeetChangeRequired
 from .external_clock import ExternalClock, FastClockError, validate_settings as validate_clock_source
 from .lifecycle import SQLiteMeetLifecycle, MeetLifecycleError
 from .central_sync import (
@@ -77,6 +78,8 @@ from .software_update import (
     installed_build,
     installed_version,
     latest_version,
+    newer_release_notes,
+    release_notes,
     read_update_status,
     start_update,
 )
@@ -2415,6 +2418,14 @@ class TrainMeetHTTPApplication:
         try:
             return backup.create_backup(database, self._backup_dir(), stamp)
         except (backup.BackupError, OSError, sqlite3.Error) as error:
+            folder = self._backup_dir()
+            # SQLite only says "unable to open database file". On a Raspberry Pi
+            # updated by an older installer the folder belongs to root (#129); say so.
+            if folder.is_dir() and not os.access(folder, os.W_OK | os.X_OK):
+                raise HTTPAPIError(HTTPStatus.INTERNAL_SERVER_ERROR, "backup_failed",
+                                   f"Säkerhetskopian före {reason} gick inte att ta: servern får inte skriva i "
+                                   f"{folder}. Uppdatera servern, eller kör på servern: sudo chown -R "
+                                   f"trainmeet-server:trainmeet-server {folder}") from error
             raise HTTPAPIError(HTTPStatus.INTERNAL_SERVER_ERROR, "backup_failed",
                                f"Säkerhetskopian före {reason} gick inte att ta: {error}") from error
 
@@ -2570,6 +2581,7 @@ class TrainMeetHTTPApplication:
             "supported": self.config.allow_software_update,
             "installed_version": installed_version(),
             "installed_build": installed_build(),
+            "releases": release_notes(),
             **read_update_status(Path(self.config.state_dir)),
         }
         if self.config.allow_software_update:
@@ -2582,6 +2594,8 @@ class TrainMeetHTTPApplication:
                 # stay put across several fixes and an operator still wants
                 # to be able to take them.
                 result["update_available"] = latest["build"] != result["installed_build"]
+                if result["update_available"]:
+                    result["new_releases"] = newer_release_notes(result["installed_version"])
             except SoftwareUpdateError as error:
                 result["check_error"] = str(error)
         return result
@@ -3553,6 +3567,8 @@ class TrainMeetHTTPApplication:
         if self.cloud_config:
             try:
                 return self.cloud_config.connect(payload)
+            except MeetChangeRequired as error:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "meet_change_required", str(error)) from error
             except (CentralSyncError, RuntimePublicationError, USError) as error:
                 raise HTTPAPIError(HTTPStatus.CONFLICT, "cloud_connection_failed", str(error)) from error
         code = str(payload.get("sync_code", ""))

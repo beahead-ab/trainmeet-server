@@ -46,6 +46,7 @@ jobs:
           fi
           LEVEL=$(python3 scripts/version.py decide --range "$BEFORE..HEAD")
           echo "level=$LEVEL" >> "$GITHUB_OUTPUT"
+          echo "before=$BEFORE" >> "$GITHUB_OUTPUT"
           echo "Nivå: $LEVEL (från $BEFORE..HEAD)"
 
       - name: Bump if needed, sync always, commit and tag
@@ -56,6 +57,9 @@ jobs:
           LEVEL='${{ steps.decide.outputs.level }}'
           if [ "$LEVEL" != 'skip' ]; then
             VERSION=$(python3 scripts/version.py bump "$LEVEL")
+            # What went into this version, as headings the app shows under
+            # its update page (RELEASES.json and the app's copy).
+            python3 scripts/version.py notes --range '${{ steps.decide.outputs.before }}..HEAD'
           else
             # Still sync. A merge that set VERSION by hand skips the bump, and
             # without this its derived files would sit on the old number -

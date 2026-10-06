@@ -5,7 +5,7 @@
 const assert = require('node:assert/strict');
 const { open } = require('./kr-fixture.cjs');
 
-const ITEMS = ['#workspace-home', '#app-chrome .tm-switch', '#header-cloud-status', '#header-findings', '#app-chrome .kr-search',
+const ITEMS = ['#workspace-home', '#app-chrome .tm-switch', '#header-cloud-status', '#app-chrome .kr-search',
   '#app-clock', '#app-chrome .screen-menu', '#header-settings', '#header-help', '#kr-theme-toggle', '#logout'];
 
 const measure = (page) => page.evaluate((items) => {
@@ -51,8 +51,6 @@ const sameRow = (a, b) => Math.abs(a.middle - b.middle) <= 12;
       assert.ok(sameRow(b['#workspace-home'], b['#logout']) && sameRow(b['#workspace-home'], b['#app-chrome .screen-menu']),
         `${where}: logo, screens menu and log out share the first row`);
       assert.ok(b['#app-chrome .kr-search'].top > b['#logout'].bottom, `${where}: the search is on the second row`);
-      if (b['#header-findings']) assert.ok(sameRow(b['#header-findings'], b['#app-chrome .kr-search']) && b['#header-findings'].right <= b['#app-chrome .kr-search'].left,
-        `${where}: the findings sit before the search`);
       if (b['#app-clock']) assert.ok(sameRow(b['#app-clock'], b['#app-chrome .kr-search']) && b['#app-clock'].right <= b['#app-chrome .kr-search'].left,
         `${where}: the clock sits first on the second row`);
       const summary = page.locator('#app-chrome .screen-menu summary');

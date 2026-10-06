@@ -1,6 +1,26 @@
 # English|Svenska|Dansk|Norsk bokmål|Deutsch
 # Added for the five-language audit (tools/i18n-audit.mjs). Kept first so that an
 # English source text already used elsewhere keeps its existing row.
+Installed|Installerad|Installeret|Installert|Installiert
+What's new|Vad är nytt|Nyheder|Nyheter|Neuigkeiten
+what each version did · headings only|vad varje version gjorde · på rubriknivå|hvad hver version gjorde · kun overskrifter|hva hver versjon gjorde · bare overskrifter|was jede Version gebracht hat · nur Überschriften
+Comes with the update|Kommer med uppdateringen|Følger med opdateringen|Følger med oppdateringen|Kommt mit dem Update
+Show fewer|Visa färre|Vis færre|Vis færre|Weniger anzeigen
+Show older versions ({count})|Visa äldre versioner ({count})|Vis ældre versioner ({count})|Vis eldre versjoner ({count})|Ältere Versionen anzeigen ({count})
+1 conflict in the timetable|1 konflikt i tidtabellen|1 konflikt i køreplanen|1 konflikt i ruteplanen|1 Konflikt im Fahrplan
+{count} conflicts in the timetable|{count} konflikter i tidtabellen|{count} konflikter i køreplanen|{count} konflikter i ruteplanen|{count} Konflikte im Fahrplan
+The server represents a single meet. A switch keeps the server's users and network, but old station assignments do not carry over.|Servern representerar en enda träff. Ett byte bevarar serverns användare och nätverk, men gamla stationstilldelningar följer inte med.|Serveren repræsenterer ét træf. Et skift bevarer serverens brugere og netværk, men gamle stationstildelinger følger ikke med.|Serveren representerer ett enkelt treff. Et bytte beholder serverens brukere og nettverk, men gamle stasjonstildelinger følger ikke med.|Der Server steht für ein einziges Treffen. Ein Wechsel behält die Benutzer und das Netzwerk des Servers, aber alte Bahnhofszuweisungen werden nicht übernommen.
+I want to switch the server's selected meet if the code is for a different meet.|Jag vill byta serverns valda träff om koden gäller en annan träff.|Jeg vil skifte serverens valgte træf, hvis koden gælder et andet træf.|Jeg vil bytte serverens valgte treff hvis koden gjelder et annet treff.|Ich möchte das ausgewählte Treffen des Servers wechseln, wenn der Code für ein anderes Treffen gilt.
+The code is for a different meet than the one the server runs now. Tick the box to switch meet, at the top of the dialog, and press Connect and download again.|Koden gäller en annan träff än den servern kör nu. Kryssa i rutan för att byta träff, överst i dialogen, och tryck Koppla och hämta igen.|Koden gælder et andet træf end det, serveren kører nu. Sæt kryds i feltet for at skifte træf øverst i dialogen, og tryk på Forbind og hent igen.|Koden gjelder et annet treff enn det serveren kjører nå. Kryss av i boksen for å bytte treff øverst i dialogen, og trykk Koble til og hent igjen.|Der Code gilt für ein anderes Treffen als das, das der Server gerade ausführt. Setze oben im Dialog das Häkchen zum Wechseln des Treffens und drücke erneut Verbinden und herunterladen.
+The server now runs {name}.|Servern kör nu {name}.|Serveren kører nu {name}.|Serveren kjører nå {name}.|Der Server führt jetzt {name} aus.
+Waiting for the receiver's arrival|Väntar på mottagarens ankomst|Venter på modtagerens ankomst|Venter på mottakerens ankomst|Wartet auf die Ankunftsmeldung des Empfängers
+On the way|På väg|På vej|På vei|Unterwegs
+Waiting for the previous arrival|Väntar på föregående ankomst|Venter på forrige ankomst|Venter på forrige ankomst|Wartet auf die vorherige Ankunft
+Request refused – needs an operator|Begäran nekad – kräver operatörsåtgärd|Anmodning afvist – kræver en operatør|Forespørsel avvist – krever en operatør|Anfrage abgelehnt – erfordert einen Bediener
+The receiving track is occupied|Mottagningsspåret är upptaget|Modtagesporet er optaget|Mottakssporet er opptatt|Das Empfangsgleis ist besetzt
+Waiting for the all clear|Väntar på klartecken|Venter på klarmelding|Venter på klarsignal|Wartet auf die Freigabe
+Trains waiting|Tåg som väntar|Tog der venter|Tog som venter|Wartende Züge
+The automation cannot run|Automatiken kan inte köra|Automatikken kan ikke køre|Automatikken kan ikke kjøre|Die Automatik kann nicht fahren
 Paused|Pausad|Sat på pause|Satt på pause|Pausiert
 the automation continues from the current traffic state. The connected client can no longer control the station.|automatiken fortsätter från nuvarande trafikläge. Den anslutna klienten kan inte längre styra stationen.|automatikken fortsætter fra den nuværende trafiksituation. Den tilsluttede klient kan ikke længere styre stationen.|automatikken fortsetter fra nåværende trafikksituasjon. Den tilkoblede klienten kan ikke lenger styre stasjonen.|die Automatik macht ab der aktuellen Verkehrslage weiter. Der verbundene Client kann den Bahnhof nicht mehr steuern.
 Let a client take over|Låt klient ta över|Lad en klient overtage|La en klient ta over|Einen Client übernehmen lassen

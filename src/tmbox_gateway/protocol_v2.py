@@ -217,13 +217,18 @@ class TMBoxStationService:
         if self.automatic:
             self.automatic.observe(device_id, station_id)
 
-    def track_conflict(self, publication, day, station_id, movement_id, track_id):
+    def track_conflict(self, publication, day, station_id, movement_id, track_id, actual=False):
         states = self.operations_store.tkl_station_state(publication.publication_id, day, station_id)["movements"]
         rows = publication.payload["trains"]
-        if self.simulation and self.simulation.active:
-            # A simulation represents actual occupation, not every future row
-            # sharing a planned track. Stabled terminal trains are off the line.
-            released = {self.simulation.legs[k]["to_movement_id"] for k in self.simulation.run.get("stabled", {})}
+        simulating = bool(self.simulation and self.simulation.active)
+        if simulating or actual:
+            # A simulation, and an automatic station (#130), go by actual
+            # occupation, not every row of the day sharing a planned track: at
+            # an unmanned passing station nearly every train is planned on the
+            # same track, and a later one would block the receiver for ever.
+            # Stabled terminal trains in a simulation are off the line.
+            released = ({self.simulation.legs[k]["to_movement_id"] for k in self.simulation.run.get("stabled", {})}
+                        if simulating else set())
             rows = [r for r in rows if r["id"] not in released and (
                 states.get(r["id"], {}).get("arrival") == "arrived" or
                 states.get(r["id"], {}).get("departure") in {"positioned", "ready"})]

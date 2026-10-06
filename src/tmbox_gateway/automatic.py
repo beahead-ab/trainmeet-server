@@ -291,7 +291,7 @@ class AutomaticStations:
             result = self._act(sender, "clearance.request", movement_id=key, connection_id=leg["connection_id"])
             case = self.store.clearance(result["revision"]["key"])
         if case and case["status"] == "waiting" and self.mode(receiver, state) == "automatic":
-            if self.service.track_conflict(publication, day, receiver, leg["to_movement_id"], leg["track_id"]):
+            if self.service.track_conflict(publication, day, receiver, leg["to_movement_id"], leg["track_id"], actual=True):
                 return "Mottagningsspåret är upptaget"
             self._act(receiver, "clearance.response", clearance_id=case["clearance_id"], approved=True)
             case = self.store.clearance(case["clearance_id"])

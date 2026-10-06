@@ -735,6 +735,32 @@ function renderAutomatic(data) {
     }
     return row;
   }));
+  // Why the automation is holding a train, and trains it cannot run at all
+  // (#130): a station that only says "Automatisk" while nothing happens
+  // leaves the operator guessing.
+  const names = Object.fromEntries((data.stations || []).map((station) => [station.id, station.name]));
+  const waiting = (data.trains || []).filter((train) => train.reason && train.reason !== "På väg");
+  const rows = [];
+  if (waiting.length || (data.plan_errors || []).length) {
+    const head = document.createElement("div"); head.className = "kr-ph";
+    const title = document.createElement("span"); title.textContent = t("Tåg som väntar");
+    head.append(title); rows.push(head);
+  }
+  for (const train of waiting) {
+    const row = document.createElement("div"); row.className = "kr-kv";
+    const name = document.createElement("span"); name.className = "kr-k"; name.textContent = t("Tåg {number}", {number: train.train_number});
+    const tag = document.createElement("span"); tag.className = "kr-tag"; tag.textContent = t(train.reason);
+    const route = document.createElement("span"); route.className = "kr-m";
+    route.textContent = `${names[train.from_station_id] || train.from_station_id} → ${names[train.to_station_id] || train.to_station_id}`;
+    row.append(name, tag, route); rows.push(row);
+  }
+  for (const error of data.plan_errors || []) {
+    const row = document.createElement("div"); row.className = "kr-kv";
+    const name = document.createElement("span"); name.className = "kr-k"; name.textContent = t("Automatiken kan inte köra");
+    const detail = document.createElement("span"); detail.className = "kr-m"; detail.textContent = error;
+    row.append(name, detail); rows.push(row);
+  }
+  document.querySelector("#automatic-waiting").replaceChildren(...rows);
 }
 
 async function changeAutomatic(button, payload, question = "") {
@@ -872,7 +898,9 @@ function openModal(id, trigger = document.activeElement) {
 }
 function cancelModal(dialog) {
   if (dialog.dataset.busy === "true") return;
-  if (modalChanged(dialog) && !window.confirm(t("Stäng utan att spara ändringarna?"))) return;
+  // A meet code is nothing to save: asking "close without saving?" there only
+  // made Avbryt look like it kept the dialog open (#128).
+  if (dialog.dataset.discardFreely !== "true" && modalChanged(dialog) && !window.confirm(t("Stäng utan att spara ändringarna?"))) return;
   for (const [input, value, checked] of modalValues.get(dialog) || []) { input.value = value; input.checked = checked; }
   // Restore derived validation too, without triggering the code fields' input
   // handlers (which move keyboard focus as digits are entered).
@@ -881,7 +909,7 @@ function cancelModal(dialog) {
     restore.chosen = dialog.querySelector('input[name="restore-backup"]:checked')?.value || null;
     updateRestoreButton();
   }
-  if (dialog.id === "reset-modal") factoryResetButton.disabled = factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL";
+  if (dialog.id === "reset-modal") factoryResetButton.disabled = !factoryResetConfirmed();
   dialog.close();
 }
 let modalResultTimer;
@@ -1193,6 +1221,7 @@ runtimeForm.addEventListener("submit", async (event) => {
   setMessage(runtimeMessage, "1/3 · Kontaktar Config-servern och kontrollerar träffkoden …");
   document.querySelector("#cloud-connection-state").textContent = t("Kopplar …");
   if (!beginModalAction(runtimeForm)) return;
+  let needsSwitch = false;
   try {
     const response = await authorizedFetch("/v1/runtime/sync", {
       method: "POST",
@@ -1204,6 +1233,10 @@ runtimeForm.addEventListener("submit", async (event) => {
       }),
     });
     const payload = await response.json();
+    // The code is for another meet: point at the box that confirms the switch.
+    const confirmSwitch = document.querySelector("#confirm-meet-change");
+    needsSwitch = payload.error === "meet_change_required";
+    confirmSwitch.closest("label").classList.toggle("needs-attention", needsSwitch);
     if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
     // Never print "undefined": an answer without a message still saved the link.
     setMessage(runtimeMessage, payload.message ? "3/3 · {message} Cloud-kopplingen är sparad på servern." : "3/3 · Cloud-kopplingen är sparad på servern.",
@@ -1213,9 +1246,12 @@ runtimeForm.addEventListener("submit", async (event) => {
     finishModal(runtimeForm);
   } catch (error) {
     setMessage(runtimeMessage, error.message, "error");
-    document.querySelector("#cloud-connection-state").textContent = t("Kopplingen misslyckades");
+    // A failed attempt leaves the existing link as it was; show that state
+    // rather than "Kopplingen misslyckades" (#128).
+    refreshRuntime().catch(() => { document.querySelector("#cloud-connection-state").textContent = t("Kopplingen misslyckades"); });
   } finally {
     endModalAction(runtimeForm);
+    if (needsSwitch) document.querySelector("#confirm-meet-change").focus();
   }
 });
 
@@ -1419,14 +1455,23 @@ function bindMeetReset() {
   });
 }
 
+// The word to type is shown in the user's language (RESET, NULSTIL, ...); either
+// that word or the Swedish NOLLSTÄLL unlocks the button. The server is always
+// sent NOLLSTÄLL.
+function factoryResetConfirmed() {
+  const typed = factoryResetConfirmation.value.trim().toUpperCase();
+  const shown = document.querySelector('label[for="factory-reset-confirmation"] b')?.textContent.trim().toUpperCase();
+  return typed === "NOLLSTÄLL" || (!!shown && typed === shown);
+}
+
 factoryResetConfirmation.addEventListener("input", () => {
-  factoryResetButton.disabled = factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL";
+  factoryResetButton.disabled = !factoryResetConfirmed();
 });
 
 factoryResetButton.addEventListener("click", async () => {
   const dialog = document.querySelector("#reset-modal");
   if (dialog.dataset.busy === "true") return;
-  if (factoryResetConfirmation.value.trim().toUpperCase() !== "NOLLSTÄLL") return;
+  if (!factoryResetConfirmed()) return;
   const localFactoryReset = state.authStatus?.at_the_machine === true;
   const question = localFactoryReset
     ? "All lokal TrainMeet-data och administratören tas bort. Vill du fabriksåterställa nu?"
@@ -1653,6 +1698,37 @@ function renderTechnicalDetails(payload) {
   }));
 }
 
+// Vad är nytt: the headings of each version, newest first, written by
+// scripts/version.py when the version was minted. What an available update
+// brings comes first; ten installed versions, the rest behind a button.
+let releaseNotesExpanded = false;
+function renderReleaseNotes(payload) {
+  const panel = document.querySelector("#software-releases");
+  const installed = Array.isArray(payload.releases) ? payload.releases : [];
+  const coming = Array.isArray(payload.new_releases) ? payload.new_releases : [];
+  panel.hidden = !installed.length && !coming.length;
+  const version = (entry, tag) => {
+    const item = document.createElement("article"); item.className = "kr-release";
+    const head = document.createElement("div"); head.className = "kr-release__head";
+    const number = document.createElement("span"); number.className = "kr-mono"; number.textContent = entry.version;
+    head.append(number);
+    if (tag) { const pill = document.createElement("span"); pill.className = `kr-pill${tag === "Kommer med uppdateringen" ? " warn" : ""}`; pill.textContent = t(tag); head.append(pill); }
+    if (entry.date) { const day = document.createElement("span"); day.className = "kr-c"; day.textContent = entry.date; head.append(day); }
+    const list = document.createElement("ul");
+    for (const note of entry.notes || []) { const li = document.createElement("li"); li.textContent = note; list.append(li); }
+    item.append(head, list);
+    return item;
+  };
+  const shown = releaseNotesExpanded ? installed : installed.slice(0, 10);
+  document.querySelector("#software-releases-list").replaceChildren(
+    ...coming.map((entry) => version(entry, "Kommer med uppdateringen")),
+    ...shown.map((entry, index) => version(entry, index === 0 && entry.version === payload.installed_version ? "Installerad" : "")));
+  const more = document.querySelector("#software-releases-more");
+  more.hidden = installed.length <= 10;
+  more.textContent = releaseNotesExpanded ? t("Visa färre") : t("Visa äldre versioner ({count})", {count: installed.length - 10});
+  more.onclick = () => { releaseNotesExpanded = !releaseNotesExpanded; renderReleaseNotes(payload); };
+}
+
 function renderSoftwareUpdate(payload) {
   // The version comes first because that is what a person reads; the rest of
   // the commit metadata is under "Teknisk information". The package puts the
@@ -1669,6 +1745,7 @@ function renderSoftwareUpdate(payload) {
   // stå och säga olika saker om vilken programvara som kör.
 
   renderUpdateProgress(payload);
+  renderReleaseNotes(payload);
   renderVersionMove(payload);
   renderTechnicalDetails(payload);
 
@@ -2114,6 +2191,19 @@ function renderCloudPresentation() {
   summary.className = `kr-pill${Array.isArray(findings) && findings.some((item) => item.level === "conflict") ? " warn" : ""}`;
   summary.textContent = !Array.isArray(findings) ? t("Den här Cloud-versionen innehåller inga kontrolluppgifter.")
     : findings.length ? t("{count} noterade uppgifter", {count: findings.length}) : t("Inga konflikter eller observationer noterade.");
+  // A small flag on Träff och Cloud in the settings menu says there is a
+  // conflict to look at; nothing outside Inställningar shows it, since a
+  // meet often runs with a known conflict all day.
+  const conflicts = Array.isArray(findings) ? findings.filter((item) => item.level === "conflict").length : 0;
+  const nav = document.querySelector('.kr-nav[data-section="traff"]');
+  let flag = nav?.querySelector(".kr-navflag");
+  if (nav && !flag) { flag = document.createElement("span"); flag.className = "kr-navflag"; nav.append(flag); }
+  if (flag) {
+    flag.hidden = !conflicts;
+    flag.textContent = String(conflicts);
+    const label = conflicts === 1 ? t("1 konflikt i tidtabellen") : t("{count} konflikter i tidtabellen", {count: conflicts});
+    flag.title = label; flag.setAttribute("aria-label", label);
+  }
   const list = document.querySelector("#published-findings-list"); list.replaceChildren();
   for (const finding of findings || []) {
     const li = document.createElement("li");
@@ -2660,7 +2750,6 @@ if (globalThis.TrainMeetDrift) {
     editBox: openDeviceEditor,
     editPlacement: editDisplayPlacement,
     simulationDetails: (trigger) => globalThis.TrainMeetDrift.openDialog("drift-simulation-dialog", trigger),
-    showFindings: () => { history.pushState(null, "", "/installningar#fynd"); applyWorkspaceRoute(); },
     dialogOpened: (id) => { if (id === "drift-timetable-dialog") renderRouteExplorer(); },
   });
 }

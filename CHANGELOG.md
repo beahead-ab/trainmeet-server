@@ -5,6 +5,59 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Vad är nytt under Programuppdatering
+
+Programuppdatering visar vad varje version gjorde, på rubriknivå: versionen,
+datumet och rubrikerna, de tio senaste och resten bakom en knapp. Finns en
+uppdatering visas först vad den innehåller. Rubrikerna skrivs av versionsroboten
+när versionen höjs, ur PR-titlarna, till `RELEASES.json`; historiken sedan 1.0.1
+är ifylld i efterhand. Samma mekanism används av Cloud och TKL.
+### Tidtabellens konflikter bara under Träff och Cloud
+
+Clouds kontrolluppgifter för tidtabellen, konflikter och observationer, visades
+som ett märke i sidhuvudet på varje sida, också i driften. Nu finns de bara under
+Inställningar → Träff och Cloud, där configen hämtas från Cloud och där de rättas.
+En liten flagga med antalet konflikter vid Träff och Cloud i inställningsmenyn
+säger att det finns något att titta på; en träff körs ofta hela dagen med en känd
+konflikt, och då ska den inte synas överallt.
+
+### Byta träff går att förstå (#128)
+
+En kod för en annan träff gav "Bekräfta Byt träff", men ingen knapp hette så; det
+som behövs är kryssrutan överst i dialogen. Nu säger meddelandet det, och rutan
+markeras och får fokus. Krysset och Avbryt stänger dialogen direkt: frågan "Stäng
+utan att spara ändringarna?" fick Avbryt att se ut att hålla kvar en, och en
+träffkod är inget att spara. Ett misslyckat försök visar Cloud-kopplingen som den
+är, i stället för "Kopplingen misslyckades". Att koppla igen slår inte längre på
+"Hämta publicerade versioner automatiskt" om administratören har stängt av det, och
+efter ett byte står det "Servern kör nu {träff}." i stället för att pågående drift
+har bevarats. Dialogens rubrik, ingress och kryssruta finns nu på alla fem språken.
+API:et svarar `meet_change_required` när bytet inte är bekräftat.
+### Obemannad station svarar på TAM (#130)
+
+En obemannad station gav aldrig klart till en TMBox när ett annat tåg samma dag
+var planerat på mottagningsspåret, vilket på en mötesstation nästan alltid är
+fallet. Automatiken räknade varje rad i dagens tidtabell på spåret som om tåget
+stod där, även tåg som kommer senare. Nu räknas bara verklig beläggning, så som
+simuleringen redan gjorde: tåg som har ankommit eller står uppställda på spåret.
+Bemannade stationer kontrolleras som förut.
+
+Under Inställningar → Obemannade stationer syns nu också vilka tåg automatiken
+väntar med och varför, till exempel "Mottagningsspåret är upptaget", och tåg som
+automatiken inte kan köra alls.
+### Nollställ träffen fungerar på en uppdaterad Raspberry Pi (#129)
+
+Uppdateraren skapade mappen `backups` som root, och servern, som kör som
+`trainmeet-server`, fick inte skriva i den. Nollställ träffen tar alltid en
+säkerhetskopia först och stoppade därför med "unable to open database file". Nu
+ger installationen mappen och det den innehåller till servern vid varje
+uppdatering, så en Pi som redan har uppdaterats rättas av nästa uppdatering. Går
+mappen ändå inte att skriva i säger felet var den ligger och hur det rättas.
+
+"Nollställ träffdata" ber om ordet på användarens språk (RESET, NULSTIL,
+NULLSTILL, ZURÜCKSETZEN), men knappen låstes bara upp av NOLLSTÄLL. Nu låser det
+visade ordet upp knappen, och NOLLSTÄLL gör det fortfarande.
+
 ### Träffens land: SE, DK, DE, NO eller US
 
 TrainMeet Cloud (2.2 och senare) skickar träffens land i driftpaketet

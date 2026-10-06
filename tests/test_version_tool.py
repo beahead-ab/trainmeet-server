@@ -297,3 +297,70 @@ class IdempotenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReleaseNotesTests(unittest.TestCase):
+    """RELEASES.json: what each version holds, as headings a user can read."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.repo = _Repo(self.directory.name)
+        self.repo.write("VERSION", "1.0.0\n")
+        self.repo.write("src/a.txt", "start\n")
+        self.start = self.repo.commit("start")
+
+    def tearDown(self):
+        self.directory.cleanup()
+
+    def robot(self, version: str) -> None:
+        self.repo.write("VERSION", version + "\n")
+        self.repo._git("add", "-A")
+        self.repo._git("-c", "user.email=version@trainmeet.app", "commit", "-q", "-m", f"Version {version} [skip version]")
+
+    def notes(self) -> list[dict]:
+        return json.loads(self.repo.read("RELEASES.json"))
+
+    def test_a_bump_records_the_pr_titles_without_markers_or_numbers(self):
+        self.repo.write("src/a.txt", "one\n")
+        self.repo.commit("Obemannad station svarar på TAM [patch] (#132)")
+        self.repo.write("src/a.txt", "two\n")
+        self.repo.commit("Byta träff går att förstå [minor]")
+        self.repo.tool("bump", "minor")
+        self.repo.tool("notes", "--range", f"{self.start}..HEAD")
+        entry = self.notes()[0]
+        self.assertEqual("1.1.0", entry["version"])
+        self.assertEqual(["Obemannad station svarar på TAM", "Byta träff går att förstå"], entry["notes"])
+
+    def test_recording_twice_does_not_repeat_a_heading(self):
+        self.repo.write("src/a.txt", "one\n")
+        self.repo.commit("En rättelse")
+        self.repo.tool("notes", "--range", f"{self.start}..HEAD")
+        self.repo.tool("notes", "--range", f"{self.start}..HEAD")
+        self.assertEqual([{"version": "1.0.0", "date": self.notes()[0]["date"], "notes": ["En rättelse"]}], self.notes())
+
+    def test_the_app_copy_follows_and_check_catches_a_drifted_one(self):
+        self.repo.write("public/index.html", "<!doctype html>\n")
+        self.repo.write("src/a.txt", "one\n")
+        self.repo.commit("En rättelse")
+        self.repo.tool("notes", "--range", f"{self.start}..HEAD")
+        self.assertEqual(self.repo.read("RELEASES.json"), self.repo.read("public/releases.json"))
+        self.repo.write("public/releases.json", "[]\n")
+        _, problems = self.repo.run("check")
+        self.assertIn("public/releases.json", problems)
+        self.repo.tool("sync")
+        self.assertEqual(self.repo.read("RELEASES.json"), self.repo.read("public/releases.json"))
+
+    def test_backfill_reads_each_version_off_the_robot_commits(self):
+        self.repo.write("src/a.txt", "one\n")
+        self.repo.commit("Första ändringen (#1)")
+        self.robot("1.0.1")
+        self.repo.write("src/a.txt", "two\n")
+        self.repo.commit("Andra ändringen [minor]")
+        self.repo.write("src/a.txt", "three\n")
+        self.repo.commit("Tredje ändringen")
+        self.robot("1.1.0")
+        self.robot("1.1.1")          # a re-sync with nothing of its own
+        # "start" introduced VERSION, so it opens the first version.
+        self.repo.tool("notes", "--backfill")
+        self.assertEqual([("1.1.0", ["Andra ändringen", "Tredje ändringen"]), ("1.0.1", ["start", "Första ändringen"])],
+                         [(entry["version"], entry["notes"]) for entry in self.notes()])
