@@ -240,6 +240,14 @@ def edit_count(edits: dict[str, Any]) -> int:
     return len(edits.get("trains") or {}) + len(edits.get("removed_trains") or []) + len(edits.get("connections") or {})
 
 
+def changed_fields(edits: dict[str, Any]) -> dict[str, dict[str, list[str]]]:
+    """Fälten som är ändrade lokalt, per rad och sträcka: det Data-vyn markerar."""
+    return {
+        "trains": {row_id: [key for key in changed if key != "sort_time"] for row_id, changed in (edits.get("trains") or {}).items()},
+        "connections": {connection_id: list(changed) for connection_id, changed in (edits.get("connections") or {}).items()},
+    }
+
+
 FIELD_NAMES = {"train_number": "tågnummer", "days": "dagar", "track_id": "spår", "arrival_time": "ankomst", "departure_time": "avgång",
                "arrival_from": "från", "departure_to": "till", "no_stop": "ej uppehåll", "note": "anmärkning", "sort_time": "sorttid"}
 

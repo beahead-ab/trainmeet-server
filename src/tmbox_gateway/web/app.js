@@ -594,6 +594,7 @@ setupFinishForm.addEventListener("submit", async (event) => {
 // Server workspaces select an interface, never a different meet or engine.
 const WORKSPACE_PANELS = {
   kor: "#overview-view", installningar: "#admin-view",
+  tidtabell: "#data-view",
   tmbox: "#tmbox-v2-view",
   help: "#help-view",
 };
@@ -666,6 +667,8 @@ function setMode(mode) {
   }
   document.querySelector("#application-menu").open = false;
   if (next !== "tmbox") stopTMBoxV2();
+  if (next === "tidtabell") globalThis.TrainMeetDataPage?.show({ fetch: authorizedFetch });
+  else globalThis.TrainMeetDataPage?.hide();
   if (next === "tmbox") {
     startTMBoxV2();
   } else if (next === "installningar") showSettings();
@@ -794,7 +797,7 @@ function applyWorkspaceRoute() {
     applyWorkspaceRoute();
     return;
   }
-  const protectedMode = {"/drift": "kor", "/installningar": "installningar", "/hjalp": "help", "/login": "kor"}[path];
+  const protectedMode = {"/drift": "kor", "/installningar": "installningar", "/tidtabell": "tidtabell", "/hjalp": "help", "/login": "kor"}[path];
   if (protectedMode) {
     if (!state.authStatus?.authenticated) { showLogin(); return; }
     setup.classList.add("hidden"); login.classList.add("hidden"); appView.classList.remove("hidden");
@@ -1560,6 +1563,13 @@ function renderCloudStatus() {
     "Senaste fungerande config används även utan internet.");
   runtimeCheckUpdate.disabled = !update.linked;
   const newer = Boolean(update.pending_publication_id || update.available_publication_id);
+  // Lokala ändringar i tidtabellen: valet mellan dem och en ny Cloud-version görs under Tidtabell.
+  const localLink = document.querySelector("#cloud-local-link");
+  const choosing = ["local_changes", "local_changes_kept"].includes(update.state);
+  localLink.hidden = !update.local_changes;
+  localLink.textContent = t(choosing ? "Välj under Tidtabell" : "Lokala ändringar under Tidtabell");
+  // Versionen byts när admin väljer, inte när trafiken tillåter.
+  document.querySelector("#cloud-banner .kr-state__note").hidden = choosing;
   document.querySelector("#cloud-banner").className = `kr-state${newer || (update.linked && update.state === "error") ? "" : " ok"}`;
   const cloudAutoForm = document.querySelector("#cloud-auto-form");
   document.querySelector("#cloud-auto-enabled").disabled = !update.linked || cloudAutoForm.dataset.busy === "true";

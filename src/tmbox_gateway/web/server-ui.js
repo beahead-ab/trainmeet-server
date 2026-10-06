@@ -105,7 +105,7 @@
   };
   api.mode = mode => {
     $("#help-view").classList.toggle("hidden", mode !== "help");
-    for (const [id, page] of [["#header-settings", "installningar"], ["#header-help", "help"]]) {
+    for (const [id, page] of [["#header-data", "tidtabell"], ["#header-settings", "installningar"], ["#header-help", "help"]]) {
       if (mode === page) $(id)?.setAttribute("aria-current", "page"); else $(id)?.removeAttribute("aria-current");
     }
   };

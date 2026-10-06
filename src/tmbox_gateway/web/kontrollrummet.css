@@ -453,9 +453,9 @@ dialog.admin-modal .form-message.success { color: var(--kr-green); }
  * En sidomeny och ett avsnitt i taget. Varje panel som går att ändra är ett
  * eget formulär med sin egen Avbryt/Spara, och de är släckta tills något är
  * ändrat (web/settings.js räknar). */
-html:has(> body:is([data-mode="installningar"], [data-mode="help"])), body:is([data-mode="installningar"], [data-mode="help"]) { background: var(--kr-bg); }
-body:is([data-mode="installningar"], [data-mode="help"]) { color: var(--kr-ink); color-scheme: dark; }
-:root[data-kr-theme="light"] body:is([data-mode="installningar"], [data-mode="help"]) { color-scheme: light; }
+html:has(> body:is([data-mode="installningar"], [data-mode="tidtabell"], [data-mode="help"])), body:is([data-mode="installningar"], [data-mode="tidtabell"], [data-mode="help"]) { background: var(--kr-bg); }
+body:is([data-mode="installningar"], [data-mode="tidtabell"], [data-mode="help"]) { color: var(--kr-ink); color-scheme: dark; }
+:root[data-kr-theme="light"] body:is([data-mode="installningar"], [data-mode="tidtabell"], [data-mode="help"]) { color-scheme: light; }
 body[data-mode="installningar"] .server-admin-shell, body[data-mode="installningar"] .server-workspace,
 body[data-mode="installningar"] #app-view { width: 100%; max-width: none; margin: 0; padding: 0; }
 body[data-mode="help"] #app-view { padding: 20px; }
@@ -716,7 +716,7 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
   #app-chrome #app-meet-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #app-chrome .screen-menu { order: 3; position: static; }
   #app-chrome .screen-menu nav { left: auto; right: 12px; top: 48px; }
-  #app-chrome #header-settings { order: 4; }
+  #app-chrome #header-data, #app-chrome #header-settings { order: 4; }
   #app-chrome #header-help { order: 5; }
   #app-chrome #kr-theme-toggle { order: 6; }
   #app-chrome #logout { order: 7; }
@@ -733,6 +733,8 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
   #app-chrome { column-gap: 4px; }
   #app-chrome .screen-menu summary { width: 32px; height: 32px; min-height: 32px; padding: 0; justify-content: center; }
   #app-chrome :is(.tm-icon-btn, button.tm-icon-btn) { width: 32px; height: 32px; min-height: 32px; }
+  /* Träffens namn går före: på telefonen nås Tidtabell från Inställningar → Träff och Cloud. */
+  #app-chrome #header-data { display: none; }
   #app-chrome .screen-menu summary::after { display: none; }
   #app-chrome .screen-menu__icon { display: block; flex-shrink: 0; }
   #app-chrome .screen-menu__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
@@ -745,3 +747,26 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
 .kr-release ul { margin: 6px 0 0; padding-left: 18px; color: var(--kr-ink-2); font-size: 13.5px; line-height: 1.55; }
 .kr-releases-more { padding: 10px 18px 14px; }
 .kr-releases-more:has(button[hidden]) { display: none; }
+
+/* ── Tidtabell (/tidtabell) ────────────────────────────────────────────
+ * Clouds Data-vy i en shadow root (#data-workspace), med serverns rad om
+ * lokala ändringar och valet när Cloud har en ny version ovanför. */
+body[data-mode="tidtabell"] .server-admin-shell, body[data-mode="tidtabell"] .server-workspace { max-width: none; }
+body[data-mode="tidtabell"] #app-view { padding: 20px 24px 28px; max-width: none; }
+#data-view { display: flex; flex-direction: column; gap: 12px; min-width: 0; font-family: var(--kr-sans); color: var(--kr-ink); }
+#data-view.hidden { display: none; }
+#data-view > .form-message { margin: 0; }
+#data-view > .form-message:empty { display: none; }
+.kr-data-choice { border-color: var(--kr-amber); }
+.kr-data-choice__body { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 24px; padding: 12px 16px; }
+.kr-data-choice__body h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--kr-mute); }
+.kr-data-choice ul, .kr-data-lines ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; color: var(--kr-ink-2); }
+.kr-data-choice > .form-message { margin: 0; padding: 0 16px 8px; }
+.kr-data-choice > .form-message:empty { display: none; }
+.kr-data-lines { font-size: 13px; color: var(--kr-mute); }
+.kr-data-lines summary { cursor: pointer; width: max-content; max-width: 100%; }
+.kr-data-lines ul { margin-top: 8px; }
+.kr-data-workspace { min-height: 320px; min-width: 0; }
+@media (max-width: 720px) {
+  body[data-mode="tidtabell"] #app-view { padding: 12px 12px 20px; }
+}

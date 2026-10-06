@@ -67,7 +67,13 @@ class CloudConfiguration:
         }
 
     def _local_changes_waiting(self, publication_id, count):
-        """En ny Cloud-version väntar på att admin väljer, eftersom lokala ändringar finns."""
+        """En ny Cloud-version väntar på att admin väljer, eftersom lokala ändringar finns.
+
+        Sidorna får veta det direkt (/v1/events), första gången just den här
+        versionen väntar: Tidtabell visar valet och Inställningar länken dit.
+        Varje ny hämtning av samma version säger inget nytt.
+        """
+        before = (self.state, self.store._setting("cloud_pending_id"))
         self.store._save_setting("cloud_pending_id", publication_id)
         self.store._save_setting("cloud_pending_region", "eu")
         if (self.store.local_decision(publication_id) or {}).get("decision") == "keep":
@@ -75,6 +81,8 @@ class CloudConfiguration:
         else:
             self._report("local_changes", "Ny Cloud-version hämtad. {count} lokala ändringar finns: välj Ta Cloud-versionen eller Behåll mina ändringar.",
                          count=count)
+        if (self.state, publication_id) != before:
+            self.app.changes.notify("runtime")
         return {"pending": True, "local_changes": True, "publication_id": publication_id, "message": self.message,
                 "message_template": self.message_template, "message_values": self.message_values}
 
