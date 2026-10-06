@@ -118,6 +118,11 @@ async function open(opts = {}) {
     const url = new URL(request.url());
     if (url.pathname.startsWith('/v1/')) {
       if (o.apiDelay) await new Promise(resolve => setTimeout(resolve, o.apiDelay));
+      // A test can answer one path itself, status code and all.
+      if (o.api && o.api[url.pathname]) {
+        const answer = await o.api[url.pathname](request, url);
+        return route.fulfill({ status: answer.status || 200, contentType: 'application/json', body: JSON.stringify(answer.data ?? {}) });
+      }
       let data = {};
       switch (url.pathname) {
         case '/v1/setup': case '/v1/setup/status': data = { required: false, admin_configured: true, runtime }; break;

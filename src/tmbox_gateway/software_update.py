@@ -205,6 +205,12 @@ def read_update_status(state_dir: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         value = {"status": "idle", "message": "Ingen uppdatering pågår"}
     result = normalise(value if isinstance(value, dict) else None)
+    # When the updater wrote this. A page that starts an update keeps reading
+    # the failure it was pressed on until the updater writes its first step;
+    # this is how it tells the two apart. Kept out of the shared contract,
+    # which says what a status means, not when it was written.
+    if isinstance(value, dict) and value.get("updated_at"):
+        result["updated_at"] = str(value["updated_at"])
     if result["status"] == "failed" and result["failed_stage"] == "installing":
         tail = install_log_tail(state_dir, status_file)
         if tail:

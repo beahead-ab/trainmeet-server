@@ -1573,9 +1573,23 @@ function renderCloudStatus() {
 }
 
 softwareCheck.addEventListener("click", checkSoftwareUpdate);
-softwareInstall.addEventListener("click", async () => {
+
+// The last status the page drew. Starting an update compares against it, so
+// the failure the button was pressed on is not read back as this attempt's.
+let lastSoftwareStatus = null;
+
+// "Installera och starta om" and "Försök igen" start an update the same way,
+// through this one function. Försök igen used to post with no body; the
+// server reads every POST as JSON and answered 400, which the button never
+// looked at, so it re-read the old failure and the buttons only blinked - and
+// with Installera hidden while the status says failed, there was no way out
+// of the page (Casper, 2026-10-06).
+async function startSoftwareUpdate() {
   if (!confirm(t("Uppdateringen säkerhetskopierar databasen och startar om servern. Pågående trafik avbryts. Fortsätta?"))) return;
+  const previous = lastSoftwareStatus?.updated_at || "";
   softwareInstall.disabled = true;
+  softwareRetry.disabled = true;
+  softwareCheck.disabled = true;
   setMessage(softwareUpdateMessage, "Startar uppdateringen …", "notice");
   try {
     const response = await authorizedFetch("/v1/server/update", {
@@ -1583,19 +1597,29 @@ softwareInstall.addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });
-    const payload = await response.json();
+    const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.message || "Uppdateringen kunde inte startas");
+    // The old failure stays on screen until the updater writes its first
+    // step; the banner says what is happening now instead.
+    document.querySelector("#update-banner").className = "kr-state";
+    softwareRetry.classList.add("hidden");
     setMessage(softwareUpdateMessage, "Uppdaterar i bakgrunden. Sidan ansluter igen efter omstart.", "notice");
-    await waitForSoftwareUpdate();
+    await waitForSoftwareUpdate(previous);
     await checkSoftwareUpdate();
   } catch (error) {
     setMessage(softwareUpdateMessage, error.message, "error");
   } finally {
     softwareInstall.disabled = false;
+    softwareRetry.disabled = false;
+    softwareCheck.disabled = false;
   }
-});
+}
 
-async function waitForSoftwareUpdate() {
+softwareInstall.addEventListener("click", startSoftwareUpdate);
+
+class SoftwareUpdateFailure extends Error {}
+
+async function waitForSoftwareUpdate(previous = "") {
   // Poll the stage rather than guess from symptoms. The old version of this
   // watched for the server going away and the version string changing, which
   // was the best it could do when the only statuses were downloading,
@@ -1604,22 +1628,32 @@ async function waitForSoftwareUpdate() {
   // passed - not merely that files were copied.
   for (let attempt = 0; attempt < 240; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
+    let payload;
     try {
       const response = await authorizedFetch("/v1/server/update");
       if (!response.ok) continue;
-      const payload = await response.json();
-      renderSoftwareUpdate(payload);
-      if (payload.status === "failed") {
-        throw new Error(payload.message || "Uppdateringen misslyckades");
-      }
-      if (payload.status === "complete") {
-        window.location.reload();
-        return;
-      }
-    } catch (error) {
+      payload = await response.json();
+    } catch {
       // The server is unreachable while it restarts, which is a stage, not a
-      // failure. A real failure carries a message and is rethrown.
-      if (error.message && /misslyckades/i.test(error.message)) throw error;
+      // failure.
+      continue;
+    }
+    // Until the updater writes its first step, the status file still holds
+    // the failure the button was pressed on. That is not this attempt's
+    // answer - unless nothing replaces it, and then the updater never ran.
+    if (payload.status === "failed" && (payload.updated_at || "") === previous) {
+      if (attempt >= 30) {
+        throw new SoftwareUpdateFailure("Uppdateringen startade inte: uppdateringstjänsten på servern svarade inte.");
+      }
+      continue;
+    }
+    renderSoftwareUpdate(payload);
+    if (payload.status === "failed") {
+      throw new SoftwareUpdateFailure(payload.message || "Uppdateringen misslyckades");
+    }
+    if (payload.status === "complete") {
+      window.location.reload();
+      return;
     }
   }
   throw new Error("Uppdateringen tar längre tid än väntat. Ladda om sidan om en stund.");
@@ -1743,6 +1777,7 @@ function renderReleaseNotes(payload) {
 }
 
 function renderSoftwareUpdate(payload) {
+  lastSoftwareStatus = payload;
   // The version comes first because that is what a person reads; the rest of
   // the commit metadata is under "Teknisk information". The package puts the
   // build id on the same line - "1.2.0 · build 4bd9c9a" - because it is what
@@ -1810,17 +1845,7 @@ async function checkSoftwareUpdate() {
   }
 }
 
-softwareRetry.addEventListener("click", async () => {
-  softwareRetry.disabled = true;
-  try {
-    await authorizedFetch("/v1/server/update", { method: "POST" });
-    await checkSoftwareUpdate();
-  } catch (error) {
-    setMessage(softwareUpdateMessage, error.message, "error");
-  } finally {
-    softwareRetry.disabled = false;
-  }
-});
+softwareRetry.addEventListener("click", startSoftwareUpdate);
 
 restartButtons.forEach((button) => button.addEventListener("click", restartServer));
 

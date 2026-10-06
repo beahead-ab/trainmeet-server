@@ -5,6 +5,21 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Försök igen fungerar
+
+När en uppdatering hade misslyckats blinkade knapparna till och ingenting
+hände. **Försök igen** skickade sin begäran utan innehåll; servern läser varje
+POST som JSON och svarade 400, och knappen tittade aldrig på svaret utan läste
+bara om det gamla "misslyckades". Eftersom **Installera och starta om** göms så
+länge statusen säger misslyckades fanns det ingen väg ut ur vyn. Nu startar
+båda knapparna uppdateringen på samma sätt – frågar först, skickar en riktig
+begäran, säger till om servern nekar – och sidan följer stegen fram till den
+nya versionen. Statusen bär `updated_at`, så det gamla felet som ligger kvar
+tills uppdateraren skrivit sitt första steg inte läses som det nya försökets
+svar; skriver uppdateraren ingenting på 30 sekunder står det att uppdateringen
+inte startade. Gäller från versionen efter den här: en server som kör en
+äldre version har kvar den gamla knappen tills den uppdaterats en gång.
+
 ### Programuppdatering säger varför installationen gick fel
 
 En uppdatering som stannade i steget Installerar sa bara "Installationen
