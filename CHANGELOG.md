@@ -5,6 +5,21 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Uppdateringen från 3.4 startar servern med den pågående körningen
+
+En server som körde 3.4 eller äldre kom inte upp på 3.5: tjänsten stannade
+direkt med `ConfigurationMismatchError: The persisted run uses another
+published configuration`, och uppdateraren återställde den gamla versionen.
+Den sparade körningen bär ett fingeravtryck av configen, och 3.5.0 tog bort
+sträckans eget trafikläge (`dispatch_mode_override`) ur configen. Därmed fick
+samma config ett nytt avtryck, och servern trodde att körningen hörde till en
+annan. Nu känner servern också igen avtrycket som en äldre version skrev för
+exakt den här configen, med sträckornas lägen så som publiceringen bär dem,
+precis som den redan gjorde för 1.9.0:s layoutfält. En annan config vägras
+fortfarande, och ett läge som publiceringen inte har gissas aldrig.
+Sträckornas läge – begäran, klartecken och tåg på linjen – följer med genom
+uppdateringen.
+
 ### Sidan Tidtabell: Clouds Data-vy på servern
 
 Admin har nu en sida för tidtabellen på servern, `/tidtabell`, med
@@ -72,7 +87,6 @@ digest som i Cloud, och kopieras med `node tools/sync-timetable-core.mjs`. Det
 är den som bygger om tjänster och rutter när tidtabellen ändras på plats, så
 att tågen blir exakt de Cloud skulle ha gett. Ett prov visar att kopian bygger
 om tjänsterna och rutterna i ett riktigt Cloud-paket exakt.
-
 
 ### Försök igen fungerar
 
