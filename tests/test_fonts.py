@@ -122,11 +122,26 @@ class NumbersTests(unittest.TestCase):
 
     def test_the_drift_clock_and_the_minutes_field(self):
         markup = (WEB / "index.html").read_text(encoding="utf-8")
-        for element in ('id="overview-clock"', 'id="web-client-ttl"'):
+        for element in ('id="overview-clock"', 'id="web-client-ttl"', 'id="software-version"'):
             tag = markup[markup.index(element): markup.index(">", markup.index(element))]
             with self.subTest(element=element):
                 self.assertIn("kr-num", tag)
                 self.assertNotRegex(tag, r"class=\"[^\"]*\b(kr-mono|mono)\b")
+
+    def test_version_numbers_under_programuppdatering(self):
+        # Programuppdatering: 3.4.0 och versionerna under Vad är nytt är tal.
+        # Byggets id (26ac80b3) är en kod som läses upp och behåller monospace.
+        app_js = (WEB / "app.js").read_text(encoding="utf-8")
+        self.assertIn('number.className = "kr-num"; number.textContent = entry.version;', app_js)
+        self.assertNotIn('number.className = "kr-mono"', app_js)
+        self.assertIn('buildId.className = "kr-mono"', app_js)
+        settings_js = (WEB / "settings.js").read_text(encoding="utf-8")
+        self.assertIn('setVersion: (version, build = "")', settings_js)
+        css = (WEB / "kontrollrummet.css").read_text(encoding="utf-8")
+        navver = css[css.index(".kr-navver {"):][:240].split("}")[0]
+        self.assertIn("var(--kr-num)", navver)
+        self.assertIn("tabular-nums", navver)
+        self.assertNotIn("kr-mono", navver)
 
 if __name__ == "__main__":
     unittest.main()

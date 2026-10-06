@@ -5,6 +5,14 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Versionsnummer i Inter med tabellsiffror
+
+Programuppdatering visade den installerade versionen, versionerna under Vad är
+nytt och versionsraden i sidomenyn i JetBrains Mono, fast tal står i Inter med
+tabellsiffror sedan #122. Nu är de det: 3.4.0 och listan i samma siffror som
+klockan och tågnumren. Byggets id (26ac80b3) är en kod som läses upp och
+behåller monospace, där den prickade nollan skiljer sig från en bokstav.
+
 ### Ett trafikläge för hela trafikspelet
 
 Trafikläget gäller nu hela trafikspelet: grannstationen godkänner varje tåg

@@ -1710,7 +1710,8 @@ function renderReleaseNotes(payload) {
   const version = (entry, tag) => {
     const item = document.createElement("article"); item.className = "kr-release";
     const head = document.createElement("div"); head.className = "kr-release__head";
-    const number = document.createElement("span"); number.className = "kr-mono"; number.textContent = entry.version;
+    // Versionsnumret är ett tal: Inter med tabellsiffror, som andra nummer (GRAPHIC_IDENTITY.md).
+    const number = document.createElement("span"); number.className = "kr-num"; number.textContent = entry.version;
     head.append(number);
     if (tag) { const pill = document.createElement("span"); pill.className = `kr-pill${tag === "Kommer med uppdateringen" ? " warn" : ""}`; pill.textContent = t(tag); head.append(pill); }
     if (entry.date) { const day = document.createElement("span"); day.className = "kr-c"; day.textContent = entry.date; head.append(day); }
@@ -1734,13 +1735,15 @@ function renderSoftwareUpdate(payload) {
   // the commit metadata is under "Teknisk information". The package puts the
   // build id on the same line - "1.2.0 · build 4bd9c9a" - because it is what
   // an operator reads back over the phone.
+  // The version is a number and stands in Inter with tabular figures; the build
+  // id is a code read aloud, so it keeps monospace, where a dotted zero helps.
   const build = payload.installed_build || "";
-  softwareVersion.textContent = build
-    ? `${payload.installed_version} · build ${build}`
-    : `${payload.installed_version}`;
+  const versionNumber = document.createElement("span"); versionNumber.textContent = payload.installed_version;
+  softwareVersion.replaceChildren(versionNumber);
+  if (build) { const buildId = document.createElement("span"); buildId.className = "kr-mono"; buildId.textContent = build; softwareVersion.append(" · build ", buildId); }
   softwareVersion.dataset.version = payload.installed_version;
   softwareVersion.dataset.build = build;
-  globalThis.TrainMeetSettings?.setVersion(build ? `${payload.installed_version} · ${build.slice(0, 8)}` : payload.installed_version);
+  globalThis.TrainMeetSettings?.setVersion(payload.installed_version, build ? build.slice(0, 8) : "");
   // Stegräckan visar samma version som kortet, ur samma svar - annars kan de
   // stå och säga olika saker om vilken programvara som kör.
 

@@ -472,7 +472,7 @@ body[data-mode="help"] #app-view { padding: 20px; }
 .kr-nav[hidden], .kr-grp[hidden] { display: none; }
 .kr-navflag { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--kr-amber); color: var(--kr-amber-ink); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
 .kr-navflag[hidden] { display: none; }
-.kr-navver { padding: 10px 10px 4px; font-size: 11.5px; color: var(--kr-mute); font-family: var(--kr-mono); }
+.kr-navver { padding: 10px 10px 4px; font-size: 11.5px; color: var(--kr-mute); font-family: var(--kr-num); font-variant-numeric: tabular-nums; }
 .kr-setmain { flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 36px 36px; max-width: 1016px; display: flex; flex-direction: column; gap: 16px; }
 .kr-setsec { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .kr-setsec[hidden] { display: none; }
