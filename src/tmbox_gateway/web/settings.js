@@ -328,7 +328,8 @@
 
   globalThis.TrainMeetSettings = {
     show, rebase, saved, refresh, renderQr, currentSection, sections: SECTIONS,
-    setVersion: (text) => { const node = $("#settings-version"); if (node) node.textContent = text || ""; },
+    // Versionen i Inter med tabellsiffror (.kr-navver); byggets id i monospace som en kod.
+    setVersion: (version, build = "") => { const node = $("#settings-version"); if (!node) return; node.replaceChildren(version || ""); if (build) { const id = document.createElement("span"); id.className = "kr-mono"; id.textContent = build; node.append(" · ", id); } },
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 })();

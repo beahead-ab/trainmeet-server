@@ -15,6 +15,22 @@ i driften använder den än; den behövs när tidtabellen ska kunna ändras loka
 på servern och ge exakt de tåg som Cloud skulle ha gett. Ett prov visar att
 kopian bygger om tjänsterna och rutterna i ett riktigt Cloud-paket exakt.
 
+### Versionsnummer i Inter med tabellsiffror
+
+Programuppdatering visade den installerade versionen, versionerna under Vad är
+nytt och versionsraden i sidomenyn i JetBrains Mono, fast tal står i Inter med
+tabellsiffror sedan #122. Nu är de det: 3.4.0 och listan i samma siffror som
+klockan och tågnumren. Byggets id (26ac80b3) är en kod som läses upp och
+behåller monospace, där den prickade nollan skiljer sig från en bokstav.
+
+### Uppdateringens steg där man väljer att uppdatera
+
+Räckan av steg för en pågående uppdatering (söker, hämtar, verifierar,
+installerar, startar om, kontrollerar, klart) stod i en egen ruta under Vad är
+nytt, långt ner på sidan. Nu står den i versionsrutan, under Installerad →
+Tillgänglig, där uppdateringen startas, och syns bara medan en uppdatering
+pågår eller har misslyckats.
+
 ### Ett trafikläge för hela trafikspelet
 
 Trafikläget gäller nu hela trafikspelet: grannstationen godkänner varje tåg
