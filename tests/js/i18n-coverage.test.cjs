@@ -26,6 +26,8 @@ test('every page script is audited or has a reason not to be', async () => {
   const reasons = {
     'i18n.js': 'the runtime itself', 'i18n-init.js': 'calls initializeStatic', 'qrcode.js': 'a QR encoder, no text',
     'us-cloud-messages.js': 'a catalogue', 'tmbox-messages.js': 'a catalogue',
+    // Built in Cloud, where its texts are audited (scripts/i18n-audit.mjs); it brings the rows the page lacks.
+    'data-workspace.js': "Cloud's Data view",
     // The in-app TMBox client (#tmbox-v2-view) cannot be reached: #tmbox redirects to /tmbox/.
     'tmbox-fixtures.js': 'unreachable in-app TMBox view', 'tmbox-legacy-catalog.js': 'unreachable in-app TMBox view',
     'tmbox-guide.js': 'unreachable in-app TMBox view', 'tmbox-render.js': 'unreachable in-app TMBox view',

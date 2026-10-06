@@ -62,6 +62,23 @@ class CloudGateTests(CloudDeliveryFixture):
         self.assertIn("avgång 09:20 → 09:30", pending["local_edits"]["lines"][0])
         self.assertEqual(self.application.server_context(self.client)["cloud_update"]["state"], "local_changes")
 
+    def test_the_pages_hear_at_once_that_a_version_waits_but_not_on_every_poll(self):
+        """Tidtabell visar valet och Inställningar länken dit så fort Cloud har
+        en ny version, utan att sidan laddas om (/v1/events). Varje ny hämtning
+        av samma version säger inget nytt, så sidorna läser inte om i onödan."""
+        self.edit()
+        feed = self.application.changes
+        seen = feed.seq
+        self.application.auto_sync_cloud_runtime()
+        seq, topics = feed.wait(seen, 0)
+        self.assertIn("runtime", topics)
+        for _ in range(2):
+            self.application.auto_sync_cloud_runtime()
+        self.assertEqual(seq, feed.seq, "the same waiting version is not news")
+        self.offered = cloud_package("cloud-third")
+        self.application.auto_sync_cloud_runtime()
+        self.assertIn("runtime", feed.wait(seq, 0)[1], "a newer version is")
+
     def test_keep_stops_downloading_and_only_a_newer_version_asks_again(self):
         self.edit()
         self.application.auto_sync_cloud_runtime()

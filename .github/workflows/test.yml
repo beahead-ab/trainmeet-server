@@ -43,3 +43,4 @@ jobs:
           node tests/js/account-mail-live.test.cjs
           node tests/js/header-mobile.test.cjs
           node tests/js/software-retry.test.cjs
+          node tests/js/data-page.test.cjs

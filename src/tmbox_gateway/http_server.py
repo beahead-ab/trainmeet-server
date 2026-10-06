@@ -3110,6 +3110,7 @@ class TrainMeetHTTPApplication:
             "local_edits": {**self.runtime_store.local_edits_summary(publication),
                             "lines": local_edits.describe(layer["edits"], base.payload) if layer and base else []},
             "review": layer["findings"] if layer else None,
+            "local_changes": local_edits.changed_fields(layer["edits"] if layer else {}),
             **(extra or {}),
         }
 
@@ -4013,7 +4014,7 @@ class TrainMeetHTTPApplication:
             )
 
     def static_asset(self, path: str) -> tuple[bytes, str] | None:
-        if path in {"/drift", "/installningar", "/hjalp", "/login", "/setup", "/display/territories"}:
+        if path in {"/drift", "/installningar", "/tidtabell", "/hjalp", "/login", "/setup", "/display/territories"}:
             path = "/index.html"
         if path.startswith("/assets/fonts/"):
             name = path.removeprefix("/assets/fonts/")
@@ -4040,6 +4041,8 @@ class TrainMeetHTTPApplication:
             "/assets/drift.js": "drift.js",
             "/assets/drift-model.js": "drift-model.js",
             "/assets/settings.js": "settings.js",
+            "/assets/data-page.js": "data-page.js",
+            "/assets/data-workspace.js": "data-workspace.js",
             "/assets/kr-theme.js": "kr-theme.js",
             "/assets/kontrollrummet.css": "kontrollrummet.css",
             "/assets/skarmar.css": "skarmar.css",

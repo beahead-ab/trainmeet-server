@@ -5,6 +5,24 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Sidan Tidtabell: Clouds Data-vy på servern
+
+Admin har nu en sida för tidtabellen på servern, `/tidtabell`, med
+tabellikonen i sidhuvudet och en rad under Inställningar → Träff och Cloud.
+Sidan är Clouds egen Data-vy, samma kod som i Cloud (2.12.0), med serverns
+tidtabell: dubbelklicka en cell, ändra och spara, så gäller ändringen direkt i
+driften. Lokalt ändrade celler är markerade, och raden överst säger hur många
+lokala ändringar som finns, med **Återgå till Cloud-versionen**. Har någon
+annan sparat medan du ändrade skrivs ingenting över: vyn ber dig trycka
+Avbryt och göra om ändringen i den nya tidtabellen.
+
+När Cloud publicerar en ny version medan lokala ändringar finns visas det
+direkt på sidan, utan omladdning: vad Cloud-versionen ändrar, vilka lokala
+ändringar som då försvinner, och knapparna **Behåll mina ändringar** och
+**Ta Cloud-versionen**. Under Inställningar står en länk **Välj under
+Tidtabell**. Vyn hämtas först när sidan öppnas, så deltagarvyn och Drift
+laddar den aldrig, och den följer serverns ljusa eller mörka läge.
+
 ### Cloud frågar innan den ersätter lokala ändringar
 
 En ny Cloud-version aktiverades förut automatiskt så fort banan var fri. Med
@@ -16,8 +34,8 @@ som försvinner, och admin väljer **Ta Cloud-versionen** eller **Behåll mina
 först och går sedan samma väg som en automatisk aktivering, med samma spärrar;
 hindrar trafiken väntar den tills banan är fri. Behåll gäller bara just den
 versionen: servern hämtar den inte igen, och frågan kommer tillbaka när Cloud
-publicerar en nyare. Utan lokala ändringar fungerar allt som förut. Knapparna
-kommer med sidan för tidtabellen i nästa steg.
+publicerar en nyare. Utan lokala ändringar fungerar allt som förut. Valet görs
+på sidan Tidtabell.
 
 ### Tidtabellen kan ändras på plats, ovanpå Clouds version
 
