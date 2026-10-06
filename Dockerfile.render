@@ -9,6 +9,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY VERSION /opt/trainmeet-server/VERSION
 RUN python -m pip install --no-cache-dir '.[mqtt]'
 COPY deploy/render /app/deploy/render
 EXPOSE 10000
