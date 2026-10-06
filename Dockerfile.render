@@ -1,0 +1,15 @@
+FROM python:3.11-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends mosquitto gosu \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 trainmeet \
+    && useradd --system --uid 10001 --gid trainmeet --home-dir /var/lib/trainmeet-server trainmeet
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN python -m pip install --no-cache-dir '.[mqtt]'
+COPY deploy/render /app/deploy/render
+EXPOSE 10000
+ENTRYPOINT ["/bin/sh", "/app/deploy/render/entrypoint.sh"]
