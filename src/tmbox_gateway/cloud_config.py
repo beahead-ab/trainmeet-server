@@ -48,16 +48,49 @@ class CloudConfiguration:
 
     def status(self):
         selected = self.app.lifecycle.selected()
+        pending_id = self.store._setting("cloud_pending_id") or None
+        active = self.store.active() if selected and selected.get("region") == "eu" else None
+        local = self.store.local_edits_summary(active) if active else {"active": False, "revision": 0, "count": 0}
+        decision = self.store.local_decision(pending_id) if pending_id else None
         return {
             "state": self.state, "message": self.message,
             "message_template": self.message_template, "message_values": self.message_values,
             "current_publication_id": selected.get("publication_id") if selected else None,
-            "pending_publication_id": self.store._setting("cloud_pending_id") or None,
+            "pending_publication_id": pending_id,
             "auto_sync": self.store.cloud_auto_sync_enabled(),
             "last_checked_at": self.last_checked_at,
             "linked": bool(self.store.link_token()),
             "notifications_supported": self.notifications_supported,
+            # Lokala ändringar i tidtabellen, och vad admin har valt för den väntande versionen.
+            "local_changes": bool(local["active"]),
+            "local_decision": decision["decision"] if decision else None,
         }
+
+    def _local_changes_waiting(self, publication_id, count):
+        """En ny Cloud-version väntar på att admin väljer, eftersom lokala ändringar finns."""
+        self.store._save_setting("cloud_pending_id", publication_id)
+        self.store._save_setting("cloud_pending_region", "eu")
+        if (self.store.local_decision(publication_id) or {}).get("decision") == "keep":
+            self._report("local_changes_kept", "Lokala ändringar behålls. Cloud-versionen väntar tills du väljer Ta Cloud-versionen.")
+        else:
+            self._report("local_changes", "Ny Cloud-version hämtad. {count} lokala ändringar finns: välj Ta Cloud-versionen eller Behåll mina ändringar.",
+                         count=count)
+        return {"pending": True, "local_changes": True, "publication_id": publication_id, "message": self.message,
+                "message_template": self.message_template, "message_values": self.message_values}
+
+    def take_pending(self, publication_id):
+        """Admin valde Ta Cloud-versionen: samma väg som en automatisk aktivering.
+
+        Paketet är redan hämtat och kontrollerat, så det fungerar också utan
+        nät. Hindrar trafiken blir det "väntar" som vanligt, och valet står
+        kvar till nästa kontroll.
+        """
+        with self.lock:
+            with self.app.lifecycle.lock:
+                publication = self.store.publication(publication_id)
+                if publication is None:
+                    raise CentralSyncError("Cloud-versionen finns inte längre på servern. Hämta den igen.")
+                return self._deliver(publication.payload)
 
     def heartbeat(self):
         """Only a completed, loaded selection may be reported as running."""
@@ -170,9 +203,21 @@ class CloudConfiguration:
                         self.store._save_setting("cloud_pending_id", "")
                         self.store._save_setting("cloud_pending_region", "")
                         self.store.clear_pending()
+                        self.store.clear_local_decision()
                         self._report("current", "Servern använder senaste publicerade config.")
                         self.last_checked_at = datetime.now(timezone.utc).isoformat()
                         return {"checked": True, "pending": False, "update_available": False, **self.status()}
+                # Admin har valt att behålla de lokala ändringarna mot just den
+                # här versionen: ingen ny hämtning, och frågan kommer igen först
+                # när Cloud publicerar en nyare.
+                if ((self.store.local_decision(manifest.publication_id) or {}).get("decision") == "keep"
+                        and selected["region"] == "eu" and self.store.publication(manifest.publication_id) is not None):
+                    with self.app.lifecycle.lock:
+                        active = self.store.active()
+                        if active is not None and self.store.local_edits(active.publication_id) is not None:
+                            result = self._local_changes_waiting(manifest.publication_id, self.store.local_edits_summary(active)["count"])
+                            self.last_checked_at = datetime.now(timezone.utc).isoformat()
+                            return {"checked": True, "update_available": True, **result, **self.status()}
                 download = self.app.linked_runtime_fetcher(token, url, False)
                 if self._stopping.is_set():
                     return {"checked": False, "stopping": True}
@@ -233,10 +278,18 @@ class CloudConfiguration:
             # Every answer carries its message: the admin page prints it.
             return {"pending": False, "publication_id": publication_id, "operating_region": region, "message": self.message,
                     "message_template": self.message_template, "message_values": self.message_values}
+        old_publication = self.store.active()
+        # Lokala ändringar i tidtabellen ersätts aldrig tyst. Samma träff och
+        # ett lager på den aktiva publiceringen: vänta på admins val, om inte
+        # admin redan har valt att ta just den här versionen.
+        local_layer = (self.store.local_edits(old_publication.publication_id)
+                       if region == "eu" and old_publication is not None and not switching else None)
+        if local_layer is not None and (self.store.local_decision(publication_id) or {}).get("decision") != "take":
+            from .local_edits import edit_count
+            return self._local_changes_waiting(publication_id, edit_count(local_layer["edits"]))
         blockers = self._engine_blockers() if not previous or previous["region"] == "eu" else []
         if getattr(app, "simulation", None) and app.simulation.active:
             blockers.append("Avsluta simuleringen innan ny config eller annan träff aktiveras.")
-        old_publication = self.store.active()
         us_session = app.us_store.context("config", True)["session"] if app.us_store else None
         if switching and us_session and us_session["status"] != "closed":
             blockers.append("Avsluta den pågående US-körningen innan du byter träff.")
@@ -274,6 +327,10 @@ class CloudConfiguration:
                     app.operations_store.adopt_publication(old_publication, publication)
                 else:
                     app.operations_store.start_meet(publication)
+            if local_layer is not None:
+                # Admin valde Ta Cloud-versionen. Historiken säger varför lagret upphörde.
+                self.store.discard_local_edits(old_publication.publication_id,
+                                               expected_revision=local_layer["revision"], reason="cloud_taken")
             self.store.activate(publication_id, preserve_active_day=bool(old_publication and not switching))
             app.engine.adopt_config(self.store.session_config(publication))
             app.identities.reconcile_panels(set(app.engine.config.panels))
@@ -304,6 +361,7 @@ class CloudConfiguration:
         self.store._save_setting("cloud_pending_id", "")
         self.store._save_setting("cloud_pending_region", "")
         self.store.clear_pending()
+        self.store.clear_local_decision()
         if switching:
             # A different meet starts from its own plan; nothing was kept (#128).
             self._report("current", "Servern kör nu {name}.", name=name)

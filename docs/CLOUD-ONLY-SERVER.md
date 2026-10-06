@@ -79,6 +79,45 @@ Detta är inte en transaktion över alla databaser. Ett avbrott mitt i övergån
 ska därför ge spärrad drift efter omstart, inte låtsas att blandad config är
 säker. Sådan återställning kräver administrativ kontroll och vid behov backup.
 
+## Lokala ändringar i tidtabellen
+
+Cloud är källan, men mitt under träffen kan admin behöva flytta en tid, byta
+spår, ta bort ett tåg eller göra en sträcka dubbelspårig utan att vänta på
+Cloud. Sådana ändringar ligger som ett lager ovanpå Clouds publicering: samma
+publicerings-id och samma rad-id:n, så TKL-läget följer med raden, boxarna ser
+den nya tiden direkt och Cloud ser ingenting. Clouds version står orörd, och
+"Återgå till Cloud-versionen" tar bort lagret efter en säkerhetskopia.
+
+Bara det Data-vyn får ändra får ändras: tågnummer, dagar, spår, ankomst,
+avgång, från, till, ej uppehåll och anmärkning på en rad, borttagning av en rad,
+och spårtypen på en sträcka. Stationer, signaturer, spårkatalog, nya tåg och nya
+sträckor ändras i Cloud. Tjänster och rutter byggs om med Clouds egen kod
+(`timetable_core`), så det effektiva paketet är exakt det Cloud skulle ha byggt.
+
+Spärrarna gäller bara det som ändras, inte hela banan: ett tåg som är ute på
+linjen, har ett öppet körtillstånd eller väntar på kvittens av ett linjebesked
+kan inte ändras; ett tåg med registrerade driftuppgifter kan inte tas bort; en
+sträcka byter spårtyp bara när den är fri och ingen TMBox vid den är mitt i en
+inmatning. Under en simulering kan inget ändras. Varje sparning är en ny
+revision med samma övergångsmärke som en aktivering, och en sida som ligger
+efter får inte spara. API:et är `GET /v1/meet-data`, `POST /v1/meet-data` och
+`POST /v1/meet-data/discard`, bara för admin.
+
+När Cloud publicerar en ny version medan lokala ändringar finns aktiveras den
+inte automatiskt. Den hämtas och kontrolleras, och Cloud-statusen blir
+`local_changes`. `GET /v1/runtime/pending` visar vad Cloud ändrar mot det som
+gäller nu och vilka lokala ändringar som försvinner. Admin väljer med
+`POST /v1/cloud/local-decision {decision, publication_id, expected_revision}`:
+
+- **Ta Cloud-versionen** (`take`): en säkerhetskopia tas, sedan samma väg som en
+  automatisk aktivering med samma spärrar. Hindrar trafiken väntar den, valet
+  står kvar, och de lokala ändringarna gäller tills banan är fri.
+- **Behåll mina ändringar** (`keep`): servern hämtar inte den versionen igen.
+  Frågan kommer tillbaka först när Cloud publicerar en nyare version.
+
+Kastas de lokala ändringarna medan en version väntar tas den som vanligt så fort
+banan är fri. Utan lokala ändringar fungerar allt som förut.
+
 ## Arbetsytor och navigation
 
 Efter inloggning väljer användaren arbetsyta utifrån behörighet och träff:
