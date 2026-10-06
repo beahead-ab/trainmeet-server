@@ -5,7 +5,7 @@ import json
 import logging
 import sqlite3
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -77,6 +77,10 @@ class RuntimePublicationError(ValueError):
     pass
 
 
+class LocalEditsConflict(RuntimePublicationError):
+    """Någon annan sparade lokala ändringar efter att sidan lästes in."""
+
+
 @dataclass(frozen=True)
 class RuntimePublication:
     schema_version: int
@@ -88,6 +92,9 @@ class RuntimePublication:
     timezone: str
     checksum: str
     payload: dict[str, Any]
+    #: Större än noll när lokala ändringar ligger ovanpå Clouds paket. Då är
+    #: payload det effektiva paketet, medan id och checksumma är Clouds.
+    local_revision: int = 0
 
     @property
     def country(self) -> str:
@@ -458,8 +465,8 @@ class SQLiteRuntimeStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
-        # The active publication, parsed once: (publication_id, checksum, parsed).
-        self._parsed: tuple[str, str, RuntimePublication] | None = None
+        # The active publication, parsed once: (publication_id, checksum, local revision, parsed).
+        self._parsed: tuple[str, str, int, RuntimePublication] | None = None
         self._connection = sqlite3.connect(
             self.path,
             timeout=10,
@@ -488,6 +495,27 @@ class SQLiteRuntimeStore:
                 value TEXT NOT NULL,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+            -- Lokala ändringar i tidtabellen, ett lager ovanpå Clouds paket.
+            -- Varje sparning är en ny revision; inget raderas. Högst en rad
+            -- per bas är aktiv, och den bär hela det effektiva paketet så
+            -- att active() inte behöver räkna om något.
+            CREATE TABLE IF NOT EXISTS local_timetable_edits (
+                meet_id TEXT NOT NULL,
+                base_publication_id TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('active', 'superseded', 'discarded')),
+                base_checksum TEXT NOT NULL,
+                edits_json TEXT NOT NULL,
+                effective_payload_json TEXT NOT NULL,
+                findings_json TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ended_at TEXT,
+                ended_reason TEXT,
+                PRIMARY KEY(base_publication_id, revision)
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS one_active_local_timetable
+            ON local_timetable_edits(base_publication_id) WHERE status = 'active';
             """
         )
 
@@ -565,19 +593,157 @@ class SQLiteRuntimeStore:
             ).fetchone()
             if row is None:
                 return None
-            if self._parsed is not None and self._parsed[:2] == (row[0], row[1]):
-                return self._parsed[2]
-            text = self._connection.execute(
-                "SELECT payload_json FROM runtime_publications WHERE publication_id = ?", (row[0],)
-            ).fetchone()[0]
+            # Lokala ändringar ligger ovanpå Clouds paket: samma id och
+            # checksumma, men det effektiva paketet är lagrets.
+            layer = self._connection.execute(
+                "SELECT revision FROM local_timetable_edits WHERE base_publication_id = ? AND status = 'active'", (row[0],)
+            ).fetchone()
+            revision = int(layer[0]) if layer else 0
+            if self._parsed is not None and self._parsed[:3] == (row[0], row[1], revision):
+                return self._parsed[3]
+            if revision:
+                text = self._connection.execute(
+                    "SELECT effective_payload_json FROM local_timetable_edits WHERE base_publication_id = ? AND revision = ?",
+                    (row[0], revision),
+                ).fetchone()[0]
+            else:
+                text = self._connection.execute(
+                    "SELECT payload_json FROM runtime_publications WHERE publication_id = ?", (row[0],)
+                ).fetchone()[0]
         try:
             payload = json.loads(text)
         except json.JSONDecodeError as error:
             raise RuntimePublicationError("Det aktiva driftpaketet är skadat") from error
         publication = RuntimePublication.parse(payload)
+        if revision:
+            publication = replace(publication, checksum=row[1], local_revision=revision)
         with self._lock:
-            self._parsed = (row[0], row[1], publication)
+            self._parsed = (row[0], row[1], revision, publication)
         return publication
+
+    # ------------------------------------------------------------------
+    # Lokala ändringar i tidtabellen
+
+    def local_edits(self, base_publication_id: str) -> dict[str, Any] | None:
+        """Det aktiva lagret för en bas, utan paketet: revision, ändringar, kontroll, vem och när."""
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT revision, edits_json, findings_json, actor, created_at, base_checksum"
+                " FROM local_timetable_edits WHERE base_publication_id = ? AND status = 'active'",
+                (base_publication_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {"base_publication_id": base_publication_id, "revision": int(row[0]), "edits": json.loads(row[1]),
+                "findings": json.loads(row[2]), "actor": row[3], "created_at": row[4], "base_checksum": row[5]}
+
+    def local_edits_summary(self, publication: RuntimePublication) -> dict[str, Any]:
+        """Det sidhuvudet och Cloud-rutan behöver veta om lagret."""
+        from .local_edits import edit_count
+        layer = self.local_edits(publication.publication_id)
+        if layer is None:
+            return {"active": False, "revision": 0, "count": 0}
+        return {"active": True, "revision": layer["revision"], "count": edit_count(layer["edits"]),
+                "actor": layer["actor"], "created_at": layer["created_at"]}
+
+    def _active_local_revision(self, base_publication_id: str) -> int:
+        row = self._connection.execute(
+            "SELECT revision FROM local_timetable_edits WHERE base_publication_id = ? AND status = 'active'",
+            (base_publication_id,),
+        ).fetchone()
+        return int(row[0]) if row else 0
+
+    def save_local_edits(self, base: RuntimePublication, effective_payload: dict[str, Any], edits: dict[str, Any],
+                         findings: dict[str, Any], *, actor: str, expected_revision: int) -> RuntimePublication:
+        """En ny revision av lagret, i samma transaktion som konfigurationsversionen.
+
+        Revisionen räknas upp över alla rader för basen, också kastade, så att
+        en sida som läste in revision 3 aldrig kan spara ovanpå en annan 3.
+        """
+        if effective_payload.get("publication_id") != base.publication_id:
+            raise RuntimePublicationError("Det effektiva paketet hör till en annan publicering")
+        encoded_payload = json.dumps(effective_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                current = self._active_local_revision(base.publication_id)
+                if expected_revision != current:
+                    raise LocalEditsConflict("Tidtabellen har ändrats av någon annan. Läs in sidan igen.")
+                top = self._connection.execute(
+                    "SELECT COALESCE(MAX(revision), 0) FROM local_timetable_edits WHERE base_publication_id = ?",
+                    (base.publication_id,),
+                ).fetchone()[0]
+                self._connection.execute(
+                    "UPDATE local_timetable_edits SET status = 'superseded', ended_at = CURRENT_TIMESTAMP, ended_reason = 'replaced'"
+                    " WHERE base_publication_id = ? AND status = 'active'",
+                    (base.publication_id,),
+                )
+                self._connection.execute(
+                    "INSERT INTO local_timetable_edits (meet_id, base_publication_id, revision, status, base_checksum,"
+                    " edits_json, effective_payload_json, findings_json, actor) VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?)",
+                    (base.meet_id, base.publication_id, int(top) + 1, base.checksum,
+                     json.dumps(edits, ensure_ascii=False), encoded_payload, json.dumps(findings, ensure_ascii=False), actor),
+                )
+                self.bump_config_version()
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+            self._parsed = None
+        return self.active()
+
+    def discard_local_edits(self, base_publication_id: str, *, expected_revision: int, reason: str = "discarded") -> None:
+        """Lagret upphör och Clouds paket gäller igen. Raderna finns kvar som historik."""
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                current = self._active_local_revision(base_publication_id)
+                if expected_revision != current:
+                    raise LocalEditsConflict("Tidtabellen har ändrats av någon annan. Läs in sidan igen.")
+                if current:
+                    self._connection.execute(
+                        "UPDATE local_timetable_edits SET status = 'discarded', ended_at = CURRENT_TIMESTAMP, ended_reason = ?"
+                        " WHERE base_publication_id = ? AND status = 'active'",
+                        (reason, base_publication_id),
+                    )
+                    self.bump_config_version()
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+            self._parsed = None
+
+    def reinstate_local_edits(self, base_publication_id: str, revision: int, *, drop: int | None = None) -> None:
+        """Återställning när motorn inte kunde ta en sparning eller ett kast.
+
+        `revision` blir aktiv igen (0 betyder inget lager), och `drop` är en
+        nyss sparad revision som tas bort, så att den aldrig syns som historik.
+        """
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    "UPDATE local_timetable_edits SET status = 'superseded', ended_at = CURRENT_TIMESTAMP, ended_reason = 'rolled_back'"
+                    " WHERE base_publication_id = ? AND status = 'active'",
+                    (base_publication_id,),
+                )
+                if drop is not None:
+                    self._connection.execute(
+                        "DELETE FROM local_timetable_edits WHERE base_publication_id = ? AND revision = ?",
+                        (base_publication_id, drop),
+                    )
+                if revision:
+                    self._connection.execute(
+                        "UPDATE local_timetable_edits SET status = 'active', ended_at = NULL, ended_reason = NULL"
+                        " WHERE base_publication_id = ? AND revision = ?",
+                        (base_publication_id, revision),
+                    )
+                self.bump_config_version()
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+            self._parsed = None
 
     def quarantine_active(self, error: str) -> None:
         """Keep an invalid publication, but prevent it from blocking server startup."""
@@ -647,13 +813,21 @@ class SQLiteRuntimeStore:
                 self._connection.execute(
                     "DELETE FROM runtime_settings WHERE key = 'runtime_error'"
                 )
+                # Lokala ändringar hör till sin bas. När en annan publicering
+                # tar över upphör lagret; historiken står kvar.
+                self._connection.execute(
+                    "UPDATE local_timetable_edits SET status = 'superseded', ended_at = CURRENT_TIMESTAMP,"
+                    " ended_reason = 'other_publication_activated' WHERE status = 'active' AND base_publication_id != ?",
+                    (publication_id,),
+                )
                 self._connection.execute("COMMIT")
             except Exception:
                 if self._connection.in_transaction:
                     self._connection.execute("ROLLBACK")
                 raise
+            self._parsed = None
         self.bump_config_version()
-        return publication
+        return self.active() or publication
 
     def deactivate(self) -> None:
         """Archive EU's active pointer for an explicit switch, never its data.
@@ -1088,6 +1262,7 @@ class SQLiteRuntimeStore:
                 if pending is not None
                 else None
             ),
+            "local_edits": self.local_edits_summary(publication),
         }
 
     def close(self) -> None:

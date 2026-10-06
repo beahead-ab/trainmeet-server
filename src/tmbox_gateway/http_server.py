@@ -59,6 +59,8 @@ from .local_config import (
 )
 from .models import Command, ConnectionState, InteractionMode, TrackConfig, TrackType, UnknownTrackError, resolve_track_id
 from .observability import log_event, use_correlation
+from . import local_edits
+from .local_edits import LocalEditError
 from .operations import SQLiteOperationsStore
 from .us import USStore, USError
 from .us_clock import clock_settings as validate_us_clock_settings
@@ -66,6 +68,7 @@ from .protocol_v2 import TMBoxStationService, find_track_conflict
 from .train_routes import _visits
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
+    LocalEditsConflict,
     COUNTRY_LANGUAGES,
     DEFAULT_WEB_CLIENT_TTL_MINUTES,
     DISPLAY_SCREENS,
@@ -621,6 +624,7 @@ class TrainMeetHTTPApplication:
             "operating_region": region, "country": country, "available_workspaces": workspaces,
             "cloud_update": self.cloud_config.status() if self.cloud_config and admin else {},
             "config_authority": "cloud", "local_editing": False,
+            "local_edits": self._local_edits_context(),
             "simulation": {"active": bool(self.simulation and self.simulation.active)},
             "transition_pending": bool(self.lifecycle and self.lifecycle.transition()),
             "error": self.lifecycle_error or None,
@@ -3042,6 +3046,191 @@ class TrainMeetHTTPApplication:
         findings = [row for row in findings if isinstance(row, dict)] if isinstance(findings, list) else None
         return {"supported": True, **self.runtime_store.display_placements(publication), "findings": findings}
 
+    # ------------------------------------------------------------------
+    # Lokala ändringar i tidtabellen: Data-vyn på servern, ovanpå Clouds paket.
+    # Samma publicerings-id och samma rad-id:n, så TKL-läget och boxarna
+    # följer med; Cloud ser inget förrän admin tar nästa Cloud-version.
+
+    def _local_edits_context(self) -> dict[str, Any]:
+        publication = self.runtime_store.active() if self.runtime_store else None
+        if publication is None:
+            return {"active": False, "revision": 0, "count": 0}
+        return self.runtime_store.local_edits_summary(publication)
+
+    def _meet_data_publication(self) -> RuntimePublication:
+        publication = self.runtime_store.active() if self.runtime_store else None
+        if not publication or self._eu_runtime_guard():
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "runtime_missing", "Välj en aktiv EU-träff först.")
+        if self.lifecycle is None or self.operations_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "runtime_unavailable", "Driftläget kan inte verifieras.")
+        return publication
+
+    @staticmethod
+    def _timetable_delta(before: dict[str, Any], after: dict[str, Any]) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+        """Det som skiljer det som gäller nu från det som ska gälla.
+
+        Rörelser som ändras och rörelser som försvinner, som {id: tågnummer},
+        och sträckor som byter spårtyp, som {id: namn}. Det är dessa, och
+        bara dessa, som spärrarna prövar.
+        """
+        def bare(row: dict[str, Any]) -> dict[str, Any]:
+            return {key: value for key, value in row.items() if key != "service_id"}
+        old = {str(row["id"]): row for row in before.get("trains") or []}
+        new = {str(row["id"]): row for row in after.get("trains") or []}
+        changed = {key: str(new[key].get("train_number") or "") for key in old.keys() & new.keys() if bare(old[key]) != bare(new[key])}
+        removed = {key: str(old[key].get("train_number") or "") for key in old.keys() - new.keys()}
+        names = {str(station["id"]): str(station.get("name") or station["id"]) for station in after.get("stations") or []}
+        types = {str(item["id"]): item.get("track_type") for item in before.get("connections") or []}
+        connections = {str(item["id"]): f"{names.get(str(item.get('station_a_id')), '?')}–{names.get(str(item.get('station_b_id')), '?')}"
+                       for item in after.get("connections") or [] if item.get("track_type") != types.get(str(item["id"]))}
+        return changed, removed, connections
+
+    def _meet_data_blockers(self, publication: RuntimePublication, changed: dict[str, str],
+                            removed: dict[str, str], connections: dict[str, str]) -> None:
+        reasons = self.operations_store.local_edit_blockers(
+            publication.publication_id, changed_movements=changed, removed_movements=removed, changed_connections=connections)
+        for connection_id, name in connections.items():
+            line = self.engine.connections.get(connection_id)
+            if line is not None and line.state != ConnectionState.FREE:
+                reasons.append(f"Sträckan {name} är upptagen.")
+        for panel_id, panel in self.engine.config.panels.items():
+            if set(connections) & {value for value in panel.slots.values() if value} and self.engine.panels[panel_id].mode != InteractionMode.IDLE:
+                reasons.append("Avsluta pågående TMBox-inmatning vid sträckan först.")
+        if reasons:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "local_edit_blocked", " ".join(dict.fromkeys(reasons)))
+
+    def _meet_data_state(self, publication: RuntimePublication, *, generation: int | None,
+                         changed: bool = False, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+        layer = self.runtime_store.local_edits(publication.publication_id)
+        base = self.runtime_store.publication(publication.publication_id)
+        return {
+            "changed": changed, "base_publication_id": publication.publication_id,
+            "revision": layer["revision"] if layer else 0,
+            "config_version": self.runtime_store.config_version(), "meet_generation": generation,
+            "local_edits": {**self.runtime_store.local_edits_summary(publication),
+                            "lines": local_edits.describe(layer["edits"], base.payload) if layer and base else []},
+            "review": layer["findings"] if layer else None,
+            **(extra or {}),
+        }
+
+    @runtime_view
+    def meet_data(self, client: PairedClient) -> dict[str, Any]:
+        """Tidtabellen i Clouds utkastform, för Data-vyn på servern."""
+        self._require_admin(client)
+        publication = self._meet_data_publication()
+        selected = self.lifecycle.selected() or {}
+        state = self._meet_data_state(publication, generation=selected.get("generation"))
+        if state["review"] is None:
+            state["review"] = local_edits.review(publication.payload)
+        return {**state, "draft": local_edits.draft_from_publication(publication.payload)}
+
+    def _commit_meet_data(self, client: PairedClient, selected: dict[str, Any], *, before: RuntimePublication,
+                          write: Callable[[], RuntimePublication], revert: Callable[[RuntimePublication], None],
+                          connections: dict[str, str], action: str, detail: dict[str, Any]) -> tuple[RuntimePublication, dict[str, Any]]:
+        """Det gemensamma i att spara och kasta: övergången, lagret, identiteterna, motorn och beskedet.
+
+        Som set_active_day: övergångsmarkören gör att en krasch mitt i stannar
+        säkert, och den nya generationen gör att 16x2-vyerna och köade
+        kommandon från den gamla tidtabellen byggs om. Tar motorn inte
+        sträckbytet rullas lagret tillbaka hela vägen innan markören tas bort.
+        """
+        ticket = self.lifecycle.begin_transition("eu", selected["meet_id"], selected["publication_id"],
+                                                 meet_name=selected.get("meet_name", ""), expected_generation=selected["generation"])
+        try:
+            after = write()
+        except LocalEditsConflict as error:
+            self.lifecycle.abort_transition(ticket)
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_local_edits", str(error)) from error
+        except BaseException:
+            self.lifecycle.abort_transition(ticket)
+            raise
+        try:
+            self.operations_store.refresh_movement_identity(after)
+            if connections:
+                self.engine.apply_connection_rules(self.runtime_store.session_config(after), set(connections))
+        except Exception as error:
+            revert(after)
+            self.operations_store.refresh_movement_identity(before)
+            self.lifecycle.abort_transition(ticket)
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "local_edit_blocked", str(error)) from error
+        updated = self.lifecycle.complete_transition(ticket)
+        self.operations_store.record_audit_event(
+            correlation_id=f"meet-data-{after.publication_id}", source="web-admin",
+            actor=client.admin_user_id or "konsol", action=action, outcome="ok",
+            detail={"by": client.display_name, **detail})
+        self.changes.notify("runtime", "traffic")
+        if self.on_config_applied:
+            try:
+                self.on_config_applied()
+            except Exception:
+                LOGGER.warning("Tidtabellen har ändrats; enheter hämtar den vid nästa kontakt.", exc_info=True)
+        return after, updated
+
+    @runtime_command("eu")
+    def save_meet_data(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Hela utkastet från Data-vyn blir en ny revision av lagret, direkt i driften."""
+        self._no_simulation()
+        self._require_admin(client)
+        publication = self._meet_data_publication()
+        selected = self.lifecycle.assert_selected("eu", publication_id=publication.publication_id)
+        if payload.get("base_publication_id") not in (None, publication.publication_id):
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_local_edits", "Cloud har publicerat en ny version. Läs in sidan igen.")
+        current = self.runtime_store.local_edits(publication.publication_id)
+        current_revision = current["revision"] if current else 0
+        if type(payload.get("expected_revision")) is not int or payload["expected_revision"] != current_revision:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_local_edits", "Tidtabellen har ändrats av någon annan. Läs in sidan igen.")
+        base = self.runtime_store.publication(publication.publication_id)
+        try:
+            effective, edits = local_edits.apply_draft(base.payload, payload.get("draft"))
+            reviewed = local_edits.review(effective, base.payload.get("findings"))
+            RuntimePublication.parse(local_edits.with_findings(effective, reviewed))
+        except (LocalEditError, RuntimePublicationError) as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_meet_data", str(error)) from error
+        changed, removed, connections = self._timetable_delta(publication.payload, effective)
+        same_rows = {str(row["id"]) for row in effective["trains"]} == {str(row["id"]) for row in publication.payload["trains"]}
+        if not changed and not removed and not connections and same_rows:
+            return self._meet_data_state(publication, generation=selected["generation"])
+        self._meet_data_blockers(publication, changed, removed, connections)
+        actor = client.admin_user_id or "konsol"
+        after, updated = self._commit_meet_data(
+            client, selected, before=publication,
+            write=lambda: self.runtime_store.save_local_edits(base, effective, edits, reviewed, actor=actor, expected_revision=current_revision),
+            revert=lambda saved: self.runtime_store.reinstate_local_edits(publication.publication_id, current_revision, drop=saved.local_revision),
+            connections=connections, action="meet_data.saved",
+            detail={"revision": current_revision + 1, "lines": local_edits.describe(edits, base.payload)})
+        return self._meet_data_state(after, generation=updated["generation"], changed=True)
+
+    @runtime_command("eu")
+    def discard_meet_data(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Clouds tidtabell gäller igen. Lagret står kvar som historik, och en säkerhetskopia tas först."""
+        self._no_simulation()
+        self._require_admin(client)
+        publication = self._meet_data_publication()
+        selected = self.lifecycle.assert_selected("eu", publication_id=publication.publication_id)
+        current = self.runtime_store.local_edits(publication.publication_id)
+        if current is None:
+            return self._meet_data_state(publication, generation=selected["generation"])
+        if type(payload.get("expected_revision")) is not int or payload["expected_revision"] != current["revision"]:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_local_edits", "Tidtabellen har ändrats av någon annan. Läs in sidan igen.")
+        base = self.runtime_store.publication(publication.publication_id)
+        changed, removed, connections = self._timetable_delta(publication.payload, base.payload)
+        self._meet_data_blockers(publication, changed, removed, connections)
+        backup = self._backup_before("lokala ändringar kastas")
+        publication_id, revision = publication.publication_id, current["revision"]
+
+        def write() -> RuntimePublication:
+            self.runtime_store.discard_local_edits(publication_id, expected_revision=revision)
+            return self.runtime_store.active()
+
+        after, updated = self._commit_meet_data(
+            client, selected, before=publication, write=write,
+            revert=lambda _after: self.runtime_store.reinstate_local_edits(publication_id, revision),
+            connections=connections, action="meet_data.discarded",
+            detail={"revision": revision, "backup": str(backup) if backup else None,
+                    "lines": local_edits.describe(current["edits"], base.payload)})
+        return self._meet_data_state(after, generation=updated["generation"], changed=True,
+                                     extra={"backup": str(backup) if backup else None})
+
     @runtime_view
     def save_display_placement(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
@@ -4127,6 +4316,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     self.server.application.local_configuration(client),
                 )
                 return
+            if path == "/v1/meet-data":
+                self._send_json(HTTPStatus.OK, self.server.application.meet_data(self._authenticated_client()))
+                return
             if path == "/v1/runtime/pending":
                 client = self._authenticated_client()
                 self._send_json(
@@ -4499,6 +4691,12 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     self.server.application.configure_cloud_auto_sync(client, payload),
                 )
+                return
+            if path == "/v1/meet-data":
+                self._send_json(HTTPStatus.OK, self.server.application.save_meet_data(self._authenticated_client(), payload))
+                return
+            if path == "/v1/meet-data/discard":
+                self._send_json(HTTPStatus.OK, self.server.application.discard_meet_data(self._authenticated_client(), payload))
                 return
             if path == "/v1/cloud/display-placement":
                 self._send_json(HTTPStatus.OK, self.server.application.save_display_placement(self._authenticated_client(), payload))

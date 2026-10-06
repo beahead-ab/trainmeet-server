@@ -5,15 +5,41 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tidtabellen kan ändras på plats, ovanpå Clouds version
+
+Admin kan nu flytta en tid, byta spår, ändra dagar, från och till, ta bort
+ett tåg eller göra en sträcka dubbelspårig mitt under träffen, utan att gå
+via Cloud. Ändringarna ligger som ett lager ovanpå Clouds publicering, med
+samma publicerings-id och samma rad-id:n, så TKL-läget följer med raden och
+boxarna ser den nya tiden direkt. Cloud ser ingenting, och Clouds version
+står orörd: "Återgå till Cloud-versionen" tar bort lagret, efter en
+säkerhetskopia. Tjänster och rutter byggs om med Clouds egen kod, så tågen
+blir exakt de Cloud skulle ha gett.
+
+Bara det som är fritt får ändras: ett tåg som är ute på linjen, har ett
+öppet körtillstånd eller väntar på kvittens av ett linjebesked kan inte
+ändras, och ett tåg med registrerade driftuppgifter kan inte tas bort. En
+sträcka byter spårtyp bara när den är fri och ingen TMBox vid den är mitt i
+en inmatning. Resten av trafiken går vidare under tiden. Varje sparning är en
+ny revision; en sida som ligger efter får inte spara, och under en
+simulering kan inget ändras. 16x2-boxarna byggs om efter en ändring, som vid
+byte av trafikdag, så en box mitt i ett val får "Läget ändrades" och väljer
+om.
+
+API:et är `GET /v1/meet-data`, `POST /v1/meet-data` och
+`POST /v1/meet-data/discard`, bara för admin. Sidan som använder det kommer i
+nästa steg, tillsammans med valet när Cloud publicerar en ny version medan
+lokala ändringar finns.
+
 ### Samma tidtabellskod som Cloud
 
 Servern har nu Clouds egen kod för tidtabellen: tjänster och rutter ur
 tågraderna, trafikdagar, spår, kontrollen och rimlighetskontrollen. Den ligger
 som en byte-identisk kopia i `src/tmbox_gateway/timetable_core/`, låst med samma
-digest som i Cloud, och kopieras med `node tools/sync-timetable-core.mjs`. Inget
-i driften använder den än; den behövs när tidtabellen ska kunna ändras lokalt
-på servern och ge exakt de tåg som Cloud skulle ha gett. Ett prov visar att
-kopian bygger om tjänsterna och rutterna i ett riktigt Cloud-paket exakt.
+digest som i Cloud, och kopieras med `node tools/sync-timetable-core.mjs`. Det
+är den som bygger om tjänster och rutter när tidtabellen ändras på plats, så
+att tågen blir exakt de Cloud skulle ha gett. Ett prov visar att kopian bygger
+om tjänsterna och rutterna i ett riktigt Cloud-paket exakt.
 
 
 ### Programuppdatering säger varför installationen gick fel
