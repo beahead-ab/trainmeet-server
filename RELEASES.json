@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.7.1",
+    "date": "2026-10-06",
+    "notes": [
+      "Uppdateringen från 3.4 startar servern med den pågående körningen"
+    ]
+  },
+  {
     "version": "3.7.0",
     "date": "2026-10-06",
     "notes": [

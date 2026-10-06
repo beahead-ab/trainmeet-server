@@ -64,6 +64,18 @@ class RuntimePublicationTests(unittest.TestCase):
         with self.assertRaises(RuntimePublicationError):
             RuntimePublication.parse(payload)
 
+    def test_a_connections_own_mode_is_kept_only_to_recognise_an_older_run(self):
+        for packaged, expected in (("direct", "direct"), ("", None), (None, None)):
+            with self.subTest(packaged=packaged):
+                payload = runtime_package_v3()
+                connection = payload["connections"][0]
+                if packaged is not None:
+                    connection["dispatch_mode_override"] = packaged
+
+                overrides = RuntimePublication.parse(payload).legacy_dispatch_overrides()
+
+                self.assertEqual(overrides, {connection["id"]: expected})
+
     def test_the_catalogue_is_parsed_and_ordered_by_sort_order(self):
         config = RuntimePublication.parse(runtime_package_v3()).session_config()
 

@@ -7,7 +7,7 @@ import logging
 import threading
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol
 
 from .models import SessionConfig
 
@@ -42,7 +42,12 @@ class CorruptStateError(StateStoreError):
     pass
 
 
-def session_config_fingerprint(config: SessionConfig, *, explicit_panel_layout_defaults: bool = False) -> str:
+def session_config_fingerprint(
+    config: SessionConfig,
+    *,
+    explicit_panel_layout_defaults: bool = False,
+    connection_dispatch_overrides: Mapping[str, str | None] | None = None,
+) -> str:
     value = asdict(config)
     # Local screen placement cannot invalidate saved traffic or old fingerprints.
     for panel in value["panels"].values():
@@ -55,6 +60,12 @@ def session_config_fingerprint(config: SessionConfig, *, explicit_panel_layout_d
         for panel in value["panels"].values():
             if panel.get("slot_layout") == "rows":
                 panel.pop("slot_layout")
+    # Before 3.5.0 every connection carried dispatch_mode_override, None
+    # unless the package set one. Only the legacy fingerprints below put it
+    # back, to recognise a run an older version saved for this configuration.
+    if connection_dispatch_overrides is not None:
+        for connection_id, connection in value["connections"].items():
+            connection["dispatch_mode_override"] = connection_dispatch_overrides.get(connection_id)
     canonical = json.dumps(
         value,
         ensure_ascii=False,
@@ -62,6 +73,31 @@ def session_config_fingerprint(config: SessionConfig, *, explicit_panel_layout_d
         sort_keys=True,
     ).encode("utf-8")
     return hashlib.sha256(canonical).hexdigest()
+
+
+def legacy_session_config_fingerprints(
+    config: SessionConfig,
+    connection_dispatch_overrides: Mapping[str, str | None] | None = None,
+) -> list[str]:
+    """The fingerprints older versions wrote for exactly this configuration.
+
+    1.9.0 hashed explicit default panel layouts, and versions before 3.5.0
+    hashed each connection's own dispatch mode. Every candidate is this
+    configuration in an older encoding - never another configuration. The
+    overrides are the ones the publication itself carries; without them a
+    connection that had its own mode is not guessed.
+    """
+    current = session_config_fingerprint(config)
+    candidates = [
+        session_config_fingerprint(
+            config,
+            explicit_panel_layout_defaults=explicit,
+            connection_dispatch_overrides=overrides,
+        )
+        for overrides in (None, connection_dispatch_overrides or {})
+        for explicit in (False, True)
+    ]
+    return [fingerprint for fingerprint in dict.fromkeys(candidates) if fingerprint != current]
 
 
 class SQLiteStateStore:
