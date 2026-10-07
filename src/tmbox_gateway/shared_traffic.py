@@ -69,7 +69,7 @@ class SharedPanelTraffic:
             self.refresh()
             cases = self.cases()
             return [{"id": key, **asdict(line), "channels": [
-                {"channel_id": case["channel_id"], **asdict(self.line(case))}
+                {"channel_id": case["channel_id"], "movement_id": case["movement_id"], **asdict(self.line(case))}
                 for case in cases if case["connection_id"] == key
             ]} for key, line in self.view(station_id, panel=False).items()]
 

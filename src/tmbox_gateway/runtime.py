@@ -30,6 +30,8 @@ LOGGER = logging.getLogger("tmbox_gateway.runtime")
 #: sitt eget paket. Ett paket utan land, från ett äldre Cloud, är en svensk träff.
 COUNTRY_LANGUAGES = {"se": "sv", "dk": "da", "de": "de", "no": "nb", "us": "en"}
 EU_COUNTRIES = ("se", "dk", "de", "no")
+# Vänstertrafik på dubbelspår; övriga länder kör till höger.
+LEFT_HAND_COUNTRIES = {"se": "left", "no": "left", "dk": "right", "de": "right", "us": "right"}
 
 
 def meet_country(meet: Any) -> str:
@@ -893,6 +895,23 @@ class SQLiteRuntimeStore:
             return int(value) if value else 1
         except ValueError:
             return 1
+
+    def traffic_side(self, meet_id: str, country: str | None = None) -> dict[str, Any]:
+        """Vilken sida tågen går på vid dubbelspår, per träff.
+
+        Förvalet följer landet: vänstertrafik i Sverige och Norge, högertrafik
+        i Danmark, Tyskland och USA. Admin kan välja annat för en träff vars
+        moduler är byggda annorlunda.
+        """
+        default = LEFT_HAND_COUNTRIES.get(country or "se", "right")
+        saved = self._setting("traffic_side:" + meet_id)
+        side = saved if saved in {"left", "right"} else default
+        return {"side": side, "default": default, "overridden": saved in {"left", "right"}}
+
+    def set_traffic_side(self, meet_id: str, side: str | None) -> None:
+        if side not in {"left", "right", None, ""}:
+            raise RuntimePublicationError("Välj vänster eller höger")
+        self._save_setting("traffic_side:" + meet_id, side or "")
 
     def display_placement_overrides(self, meet_id: str) -> dict:
         raw = self._setting("display_placement:" + meet_id)

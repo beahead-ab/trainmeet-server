@@ -1,8 +1,10 @@
 // Bankartan och tågdiagrammet efter Caspers skärmbilder 2026-10-07: räls med syllar,
 // dubbelspår som två spår, stationen en bricka som täcker sina spår, bara namn (inga
-// koder), antalet tåg inne i brickan, inga namn som krockar, ingen ram på skärmarna och
-// diagrammets fönster en halvtimme före nu. Banan liknar Caspers: 20 stationer, tre
-// grenar och dubbelspår kring Charlottendal. Kör: node tests/js/topology-rails.test.cjs
+// koder), antalet tåg inne som en liten bricka vid stationen, inga namn som krockar, ingen
+// ram på skärmarna och diagrammets fönster en halvtimme före nu. Tågen rör sig efter
+// träffklockan och går på dubbelspårets vänstra eller högra spår efter träffens val.
+// Banan liknar Caspers: 20 stationer, tre grenar och dubbelspår kring Charlottendal.
+// Kör: node tests/js/topology-rails.test.cjs
 const assert = require('node:assert/strict');
 const { open } = require('./kr-fixture.cjs');
 
@@ -28,11 +30,16 @@ const routes = services.flatMap((s) => s.stops.map((st) => ({ train_number: s.tr
 const channels = { c6: [['8782', 'gsl', 'cda', 'occupied'], ['3571', 'cda', 'gsl', 'reserved']], c3: [['93', 'avk', 'kbg', 'occupied']] };
 const positions = [{ train_number: '92', station_id: 'cda', status: 'station' }, { train_number: '95', station_id: 'cda', status: 'station' }, { train_number: '4202', station_id: 'sns', status: 'station' },
   { train_number: '8782', status: 'connection', connection_id: 'c6', from_station_id: 'gsl', to_station_id: 'cda' }, { train_number: '93', status: 'connection', connection_id: 'c3', from_station_id: 'avk', to_station_id: 'kbg' }];
-const clock = { configured: true, running: false, time: '06:20:00', speed: 1, source: 'internal', available: true, can_control: true };
-const display = () => ({ data: { clock, meet: { id: 'meet-1', name: 'Grimslöv 2027' }, active_day: 'Dagl', publication_id: 'pub-9', stations, connections, routes, services,
+// display({ time, running, speed, side, departed }) – departed: { tågnummer: träffklockans sekunder vid avgången }.
+const display = ({ time = '06:20:00', running = false, speed = 1, side, departed = {} } = {}) => () => ({ data: {
+  clock: { configured: true, running, time, speed, source: 'internal', available: true, can_control: true },
+  meet: { id: 'meet-1', name: 'Grimslöv 2027' }, active_day: 'Dagl', publication_id: 'pub-9', stations, connections, routes, services,
   train_positions: positions, connection_states: connections.map((c) => ({ id: c.id, state: channels[c.id] ? 'occupied' : 'free',
-    channels: (channels[c.id] || []).map(([train_number, from_station_id, to_station_id, state]) => ({ train_number, from_station_id, to_station_id, state })) })),
-  connection: { screens: [] }, display: { graph_station_order: order, topology_branch_station_ids: ['ryt', 'syd', 'vo', 'vst', 'bea', 'r', 'nav'] } } });
+    channels: (channels[c.id] || []).map(([train_number, from_station_id, to_station_id, state]) => ({ train_number, from_station_id, to_station_id, state,
+      ...(departed[train_number] !== undefined && state === 'occupied' ? { departed_seconds: departed[train_number] } : {}) })) })),
+  connection: { screens: [] }, display: { graph_station_order: order, topology_branch_station_ids: ['ryt', 'syd', 'vo', 'vst', 'bea', 'r', 'nav'],
+    ...(side ? { traffic_side: side } : {}) } } });
+const seconds = (value) => value.split(':').reduce((sum, part) => sum * 60 + Number(part), 0);
 
 // Allt kartan ritar, mätt på skärmen.
 const inspect = (page, selector) => page.evaluate((selector) => {
@@ -50,6 +57,7 @@ const inspect = (page, selector) => page.evaluate((selector) => {
     names: [...svg.querySelectorAll('.topology-name')].map((n) => ({ text: n.textContent, ...box(n) })),
     bricks: [...svg.querySelectorAll('.topology-station')].map(box),
     counts: Object.fromEntries([...svg.querySelectorAll('.topology-count')].map((c) => [c.closest('.topology-node').getAttribute('aria-label').split(',')[0], c.textContent])),
+    badges: [...svg.querySelectorAll('.topology-count-badge')].map((b) => ({ station: b.closest('.topology-node').getAttribute('aria-label').split(',')[0], ...box(b) })),
     salsborg: station('Salsborg'), charlottendal: station('Charlottendal'), angviken: station('Ångviken'),
     lineY: centreY('Gässlösa'), t8782: tag('8782'), t3571: tag('3571'), t93: tag('93'),
   };
@@ -70,15 +78,18 @@ function checkMap(map, where) {
   assert.equal(map.angviken.w, map.angviken.h, `${where}: a station on single track is round`);
   assert.ok(map.salsborg.h > map.salsborg.w, `${where}: a station on double track stands upright ${JSON.stringify(map.salsborg)}`);
   assert.ok(map.charlottendal.h > map.angviken.h && map.charlottendal.w > map.angviken.w, `${where}: a crossing of double tracks is a wide brick`);
-  // Bara namn; antalet tåg inne står i brickan och bara där det finns tåg.
+  // Bara namn; antalet tåg inne står bara där det finns tåg.
   assert.equal(map.codes, 0, `${where}: no station codes on the map`);
   assert.equal(map.names.length, stations.length);
   assert.deepEqual(map.counts, { Charlottendal: '2', 'Syltenäs': '1' }, `${where}: the number of trains inside, only where there are any`);
-  // Inga namn på varandra eller på en station.
+  // Inga namn på varandra, på en station eller på en antalsbricka.
   for (const [i, a] of map.names.entries()) {
     for (const b of map.names.slice(i + 1)) assert.ok(!overlap(a, b), `${where}: ${a.text} over ${b.text}`);
     for (const brick of map.bricks) assert.ok(!overlap(a, brick), `${where}: ${a.text} over a station`);
+    for (const badge of map.badges) assert.ok(!overlap(a, badge), `${where}: ${a.text} over the count at ${badge.station}`);
   }
+  // Antalet inne är en liten bricka vid stationens hörn, som i skissen, inte i stationen.
+  assert.deepEqual(map.badges.map((b) => b.station).sort(), ['Charlottendal', 'Syltenäs'], `${where}: a count badge where trains are inside`);
   // På dubbelspår går tåget på sitt eget spår, till vänster i färdriktningen: 8782 mot
   // Charlottendal och 3571 därifrån ligger på var sin sida om mittlinjen och täcker inte varandra.
   assert.equal(map.t8782.kind, 'on-line');
@@ -94,7 +105,7 @@ function checkMap(map, where) {
 (async () => {
   for (const theme of ['dark', 'light']) {
     // Drift, i riktiga pixlar.
-    const drift = await open({ route: '/drift', theme, api: { '/v1/display': display } });
+    const drift = await open({ route: '/drift', theme, api: { '/v1/display': display() } });
     try {
       await drift.page.waitForFunction(() => document.querySelectorAll('#overview-topology .topology-name').length === 20 && document.querySelector('#overview-topology .topology-train'));
       await drift.page.waitForTimeout(300);
@@ -109,7 +120,7 @@ function checkMap(map, where) {
     } finally { await drift.browser.close(); }
 
     // Banöversikt på skärmen: samma ritning, större, och ingen ram runt kartan.
-    const tv = await open({ route: '/display/topology', theme, api: { '/v1/display': display } });
+    const tv = await open({ route: '/display/topology', theme, api: { '/v1/display': display() } });
     try {
       await tv.page.waitForFunction(() => document.querySelectorAll('#topology-svg .topology-name').length === 20 && document.querySelector('#topology-svg .topology-train'));
       await tv.page.waitForTimeout(300);
@@ -126,7 +137,7 @@ function checkMap(map, where) {
     } finally { await tv.browser.close(); }
 
     // Tågdiagrammet på skärmen: bara namn, fönstret en halvtimme före nu, ingen ram.
-    const graph = await open({ route: '/display/graph', theme, api: { '/v1/display': display } });
+    const graph = await open({ route: '/display/graph', theme, api: { '/v1/display': display() } });
     try {
       await graph.page.waitForFunction(() => document.querySelectorAll('#graph-svg .sc-graph-label').length === 20);
       const seen = await graph.page.evaluate(() => {
@@ -145,8 +156,60 @@ function checkMap(map, where) {
     } finally { await graph.browser.close(); }
   }
 
+  // Ett avgånget tåg rör sig mot nästa station i takt med träffklockan, från
+  // den faktiska avgången. 93 Ångviken–Kristineberg: planerat 06:04–06:12.
+  const at = async (options) => {
+    const drift = await open({ route: '/drift', api: { '/v1/display': display(options) } });
+    try {
+      await drift.page.waitForFunction(() => document.querySelector('#overview-topology .topology-train[data-train-number="93"]'));
+      const where = () => drift.page.evaluate(() => {
+        const centre = (element) => { const b = element.getBoundingClientRect(); return { x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2 }; };
+        const svg = document.querySelector('#overview-topology');
+        const station = (name) => centre(svg.querySelector(`.topology-node[aria-label^="${name},"] .topology-station`));
+        const from = station('Ångviken'), to = station('Kristineberg'), tag = centre(svg.querySelector('.topology-train[data-train-number="93"]'));
+        return (tag.x - from.x) / (to.x - from.x);
+      });
+      return { first: await where(), later: async (ms) => { await drift.page.waitForTimeout(ms); return where(); }, close: () => drift.browser.close(), errors: drift.errors };
+    } catch (error) { await drift.browser.close(); throw error; }
+  };
+  // Andelen mäts mellan där tåget står vid avgången och där det står framme (brickan
+  // stannar före stationerna, så sträckan den glider är kortare än mellan stationerna).
+  const departed = { 93: seconds('06:05:00') };
+  const runs = { start: await at({ time: '06:05:00', departed }), early: await at({ time: '06:07:00', departed }),
+    late: await at({ time: '06:11:00', departed }), end: await at({ time: '06:30:00', departed }), planned: await at({ time: '06:07:00' }) };
+  try {
+    const share = (run) => (run.first - runs.start.first) / (runs.end.first - runs.start.first);
+    assert.ok(runs.end.first > runs.start.first + 0.1, `it moves towards Kristineberg (${runs.start.first} → ${runs.end.first})`);
+    assert.ok(Math.abs(share(runs.early) - 0.25) < 0.05, `two of eight minutes after the departure (${share(runs.early)})`);
+    assert.ok(Math.abs(share(runs.late) - 0.75) < 0.05, `six of eight minutes (${share(runs.late)})`);
+    // Utan en registrerad avgång gäller den planerade 06:04: tre minuter av åtta.
+    assert.ok(Math.abs(share(runs.planned) - 0.375) < 0.05, `the planned departure without a recorded one (${share(runs.planned)})`);
+    assert.deepEqual(Object.values(runs).flatMap((run) => run.errors), []);
+    // Medan klockan går flyttar tåget sig utan att kartan ritas om: 60× betyder en minut i sekunden.
+    const running = await at({ time: '06:05:00', running: true, speed: 60, departed });
+    try {
+      // Varje mätning drygt en sekund efter den förra: tåget har flyttat sig varje gång.
+      const samples = [running.first];
+      for (let i = 0; i < 3; i += 1) samples.push(await running.later(1150));
+      const shares = samples.map((x) => (x - runs.start.first) / (runs.end.first - runs.start.first));
+      for (let i = 1; i < shares.length; i += 1) assert.ok(shares[i] > shares[i - 1] + 0.05, `it keeps moving every second (${shares.join(' → ')})`);
+      assert.ok(shares.at(-1) < 1, `not yet at Kristineberg (${shares.at(-1)})`);
+    } finally { await running.close(); }
+  } finally { for (const run of Object.values(runs)) await run.close(); }
+  // Högertrafik: tågen byter spår. 8782 österut ligger då under mittlinjen, 3571 västerut över.
+  for (const [side, sign] of [['left', -1], ['right', 1]]) {
+    const drift = await open({ route: '/drift', api: { '/v1/display': display({ side }) } });
+    try {
+      await drift.page.waitForFunction(() => document.querySelector('#overview-topology .topology-train[data-train-number="8782"]'));
+      const map = await inspect(drift.page, '#overview-topology');
+      const mid = (t) => (t.y1 + t.y2) / 2;
+      assert.equal(Math.sign(mid(map.t8782) - map.lineY), sign, `${side}-hand traffic: 8782 eastbound on its own track`);
+      assert.equal(Math.sign(mid(map.t3571) - map.lineY), -sign, `${side}-hand traffic: 3571 westbound on the other`);
+    } finally { await drift.browser.close(); }
+  }
+
   // Diagrammet på Drift i en telefon: koderna i stället för namnen, aldrig båda.
-  const phone = await open({ route: '/drift', width: 390, height: 844, api: { '/v1/display': display } });
+  const phone = await open({ route: '/drift', width: 390, height: 844, api: { '/v1/display': display() } });
   try {
     await phone.page.waitForFunction(() => document.querySelectorAll('#overview-graph .cnt').length === 20);
     assert.equal(await phone.page.locator('#overview-graph .lbl').count(), 0, 'a phone shows the codes only');

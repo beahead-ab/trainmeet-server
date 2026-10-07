@@ -5,6 +5,25 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tågen rör sig mellan stationerna, och dubbelspårets sida väljs per träff
+
+Efter Drift-skissen i Claude Design och Caspers önskan att se tågen röra sig.
+
+- **Ett avgånget tåg glider mot nästa station** i takt med träffklockan, från
+  den faktiska avgången till den planerade ankomsten. Förut stod det stilla en
+  fjärdedel ut från avgångsstationen. Servern sparar träffklockans tid i
+  avgångshändelsen och lämnar den i `/v1/display` (`departed_seconds`). En äldre
+  avgång utan klocktid räknas från den planerade avgången. Ett tåg som är klart
+  men inte avgånget står kvar vid stationen. Medan klockan går flyttas tågen en
+  gång i sekunden utan att kartan ritas om.
+- **Vänster- eller högertrafik på dubbelspår per träff:** landet ger förvalet,
+  vänster i Sverige och Norge och höger i Danmark, Tyskland och USA. Admin kan
+  välja annat under Inställningar → Träff och Cloud → Trafik på dubbelspår.
+  Förut gick tågen alltid till vänster.
+- **Antalet tåg inne** står som en liten bricka vid stationens hörn, som i
+  skissen, i stället för siffran inne i stationen. Stationen lyser inte längre
+  blått, och inget namn läggs på brickan.
+
 ### Träffklockan står still medan servern startar om
 
 En gående träffklocka hoppade fram med avbrottet gånger hastigheten när servern
