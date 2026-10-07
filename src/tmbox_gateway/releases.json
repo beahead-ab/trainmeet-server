@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.10.0",
+    "date": "2026-10-07",
+    "notes": [
+      "Tågen står där tidtabellen säger efter nollställning och klockbyte"
+    ]
+  },
+  {
     "version": "3.9.0",
     "date": "2026-10-07",
     "notes": [
