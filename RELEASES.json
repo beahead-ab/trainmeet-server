@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.8.1",
+    "date": "2026-10-07",
+    "notes": [
+      "Träffklockan står still medan servern startar om"
+    ]
+  },
+  {
     "version": "3.8.0",
     "date": "2026-10-07",
     "notes": [
