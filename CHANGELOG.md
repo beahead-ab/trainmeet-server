@@ -5,6 +5,16 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Träffklockan står still medan servern startar om
+
+En gående träffklocka hoppade fram med avbrottet gånger hastigheten när servern
+startade om: en minuts omstart i 4× blev fyra minuter i träffen. Render startar
+om servern vid varje driftsättning. Nu stannar en ordnad nedstängning (SIGTERM
+från Render, systemd eller uppdateraren) klockan, och nästa start låter den gå
+vidare från samma tid innan någon sida eller box hinner fråga. En klocka som
+admin själv stoppat förblir stoppad, och FastClock följer sin egen klocka som
+förut. Vid en krasch, utan ordnad nedstängning, går klockan som tidigare.
+
 ### Banöversikten och tågdiagrammet: räls, stationsbrickor och luftigare text
 
 Efter Caspers skärmbilder av Banöversikt och Tågdiagram på helskärm och

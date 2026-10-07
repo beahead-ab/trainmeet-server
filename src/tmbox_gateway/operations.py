@@ -12,6 +12,10 @@ from uuid import uuid4
 
 from .runtime import AVAILABLE_CLOCK_STYLES, RuntimePublication, RuntimePublicationError
 
+# Orsaken när servern själv stannar klockan inför en omstart. Den syns bara om
+# servern inte kommer upp igen; annars går klockan vidare direkt vid start.
+RESTART_STOP_REASON = "Servern startas om"
+
 
 class SQLiteOperationsStore:
     """Persistent local clock and last-known train positions for display clients."""
@@ -764,6 +768,49 @@ class SQLiteOperationsStore:
                 (status.get("elapsed_seconds", _time_to_seconds(status["time"])), _now_iso(), reason or None),
             )
         return self.clock_status()
+
+    def pause_clock_for_restart(self, *, now: datetime | None = None) -> bool:
+        """Stannar en gående träffklocka när servern stängs ned i ordning.
+
+        Annars hoppar klockan fram med avbrottet gånger hastigheten när servern
+        startar igen (Render startar om vid varje driftsättning). Läser den
+        interna raden direkt: med FastClock som källa ger clock_status FastClocks
+        tid. En stoppad klocka lämnas som den är.
+        """
+        moment = now or datetime.now(timezone.utc)
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT base_seconds, base_recorded_at, speed, running FROM runtime_clock WHERE singleton = 1"
+            ).fetchone()
+            if row is None or not bool(row[3]):
+                return False
+            recorded_at = datetime.fromisoformat(str(row[1]).replace("Z", "+00:00"))
+            seconds = float(row[0]) + max((moment - recorded_at).total_seconds(), 0) * float(row[2])
+            self._connection.execute(
+                "UPDATE runtime_clock SET base_seconds = ?, base_recorded_at = ?, running = 0, stopped_reason = ? "
+                "WHERE singleton = 1",
+                (seconds, _datetime_iso(moment), RESTART_STOP_REASON),
+            )
+        return True
+
+    def resume_clock_after_restart(self, *, now: datetime | None = None) -> bool:
+        """Låter en klocka som stannades av en omstart gå vidare från samma tid.
+
+        Bara en klocka som pause_clock_for_restart stannade: en klocka som admin
+        själv har stoppat förblir stoppad.
+        """
+        moment = now or datetime.now(timezone.utc)
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT running, stopped_reason FROM runtime_clock WHERE singleton = 1"
+            ).fetchone()
+            if row is None or bool(row[0]) or row[1] != RESTART_STOP_REASON:
+                return False
+            self._connection.execute(
+                "UPDATE runtime_clock SET base_recorded_at = ?, running = 1, stopped_reason = NULL WHERE singleton = 1",
+                (_datetime_iso(moment),),
+            )
+        return True
 
     def set_speed(self, speed: float) -> dict[str, Any]:
         if speed <= 0:
