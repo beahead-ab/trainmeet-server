@@ -2997,7 +2997,21 @@ function authorizedFetch(path, options = {}) {
     options = { ...options, body: JSON.stringify(body) };
   }
   if (state.token) headers.set("Authorization", `Bearer ${state.token}`);
-  return fetch(path, { ...options, headers, credentials: "same-origin" });
+  return fetch(path, { ...options, headers, credentials: "same-origin" }).then(readableReply, (error) => {
+    if (error?.name === "AbortError") throw error;
+    throw new Error(SERVER_UNREACHABLE);
+  });
+}
+
+// Medan servern startar om svarar proxyn med en HTML-sida, eller inte alls.
+// Webbläsarens egen text blir då obegriplig: Safari säger "The string did not
+// match the expected pattern." när svaret inte är JSON och "Load failed" när
+// inget svar kommer. I stället står vad som hände och vad man gör.
+const SERVER_UNREACHABLE = "Servern svarade inte. Den kan hålla på att starta om – försök igen om en stund.";
+function readableReply(response) {
+  const json = response.json.bind(response);
+  response.json = () => json().catch(() => { throw new Error(SERVER_UNREACHABLE); });
+  return response;
 }
 
 function handleConnectionError(error) {

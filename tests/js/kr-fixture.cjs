@@ -118,11 +118,13 @@ async function open(opts = {}) {
     const url = new URL(request.url());
     if (url.pathname.startsWith('/v1/')) {
       if (o.apiDelay) await new Promise(resolve => setTimeout(resolve, o.apiDelay));
-      // A test can answer one path itself, status code and all.
-      if (o.api && o.api[url.pathname]) {
-        const answer = await o.api[url.pathname](request, url);
-        return route.fulfill({ status: answer.status || 200, contentType: 'application/json', body: JSON.stringify(answer.data ?? {}) });
-      }
+      // A test can answer one path itself, status code and all: { raw } is sent
+      // as it is (a proxy's HTML page), { abort } drops the connection and
+      // undefined leaves the request to the fixture.
+      const answer = o.api && o.api[url.pathname] ? await o.api[url.pathname](request, url) : undefined;
+      if (answer?.abort) return route.abort('connectionreset');
+      if (answer?.raw !== undefined) return route.fulfill({ status: answer.status || 200, contentType: answer.contentType || 'text/html', body: answer.raw });
+      if (answer) return route.fulfill({ status: answer.status || 200, contentType: 'application/json', body: JSON.stringify(answer.data ?? {}) });
       let data = {};
       switch (url.pathname) {
         case '/v1/setup': case '/v1/setup/status': data = { required: false, admin_configured: true, runtime }; break;
