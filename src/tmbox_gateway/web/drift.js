@@ -74,8 +74,9 @@
   const button = (text, { cls = "kr-btn sm", on, ...rest } = {}) => h("button", { type: "button", class: cls, on, ...rest }, text);
   const plural = (n, one, many) => t(n === 1 ? one : many, { count: n, n });
   // Ett fönster kring midnatt börjar före 00:00, så minuten kan vara negativ.
+  // Nedåt, som klockan: 09:17:54 är 09:17 (nu-linjen går med sekunderna).
   const clockLabel = (minute) => {
-    const value = ((Math.round(minute) % 1440) + 1440) % 1440;
+    const value = ((Math.floor(minute + 1e-9) % 1440) + 1440) % 1440;
     return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
   };
 
@@ -108,10 +109,27 @@
   }
 
   // ── Klockraden ────────────────────────────────────────────────────────
+  // Klockan mellan uppdateringarna. app.js hämtar läget när något händer och
+  // annars var 30:e sekund; klockan, nu-linjen och tågen på linjen går ändå
+  // vidare i takt med träffklockan. Varje ny klocka får sin mottagningstid.
+  let clockSeen = { clock: null, at: 0 };
+  function liveSeconds() {
+    const clock = ctx.clock || ctx.snapshot?.clock;
+    const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(String(clock?.time ?? ""));
+    if (!match) return null;
+    if (clockSeen.clock !== clock) clockSeen = { clock, at: performance.now() };
+    const base = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
+    const run = clock.running ? (performance.now() - clockSeen.at) / 1000 * Number(clock.speed || 1) : 0;
+    return ((base + run) % 86400 + 86400) % 86400;
+  }
+  const clockText = (seconds) => [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, Math.floor(seconds) % 60]
+    .map((part) => String(part).padStart(2, "0")).join(":");
+
   function renderClock() {
     const clock = ctx.clock || ctx.snapshot?.clock;
     if (!clock) return;
-    const time = formatTime(clock.time, ctx.us);
+    const live = liveSeconds();
+    const time = formatTime(live === null ? clock.time : clockText(live), ctx.us);
     for (const id of ["#overview-clock", "#app-clock"]) {
       const el = $(id); if (!el) continue;
       el.textContent = time; el.classList.toggle("kr-stopped", !clock.running);
@@ -271,7 +289,8 @@
   // och hela diagrammet syns utan att man rullar.
   function renderGraph() {
     const target = $("#overview-graph"), snapshot = ctx.snapshot; if (!target || !snapshot) return;
-    const g = model.graph(snapshot, { windowMinutes: ctx.graphWindow, train: ctx.selection.train });
+    const live = liveSeconds();
+    const g = model.graph(snapshot, { windowMinutes: ctx.graphWindow, train: ctx.selection.train, now: live === null ? null : live / 60 });
     const width = Math.max(280, contentWidth(target.parentElement) || 1200);
     // Namnen när det finns plats, annars koderna: aldrig båda, det blev plottrigt.
     const showNames = width >= 640;
@@ -310,7 +329,8 @@
       const inside = line.points.find((point) => point.minute >= g.start && point.minute <= g.end);
       if (inside && !line.selected && !line.segment) group.append(svg("text", { class: "ptxt", x: x(inside.minute) + 7, y: y(inside.row) + 4 }, line.number));
       (line.selected ? chosen : gray).push(group);
-      const marker = line.selected ? (line.segment ? line.segment[0] : line.points[0]) : line.segment ? line.segment[0] : null;
+      // Ett avgånget tåg på nu-linjen där det är nu; ett klart tåg vid avgången.
+      const marker = line.at || (line.selected ? (line.segment ? line.segment[0] : line.points[0]) : line.segment ? line.segment[0] : null);
       if (line.segment && !line.selected) {
         const [from, to] = line.segment;
         const segment = svg("g", { class: "tr-lit", "data-train-number": line.number, role: "button", tabindex: "0", "aria-label": t("Tåg {number}", { number: line.number }) });
@@ -582,7 +602,17 @@
     scheduleRender();
   }
 
-  function init() { wireChrome(); wireSearch(); wireDialogs(); scheduleRender(); }
+  // En gång i sekunden medan klockan går: klockan och diagrammet. Diagrammet
+  // ritas inte om medan ett tåg i det har fokus från tangentbordet.
+  function tick() {
+    const clock = ctx.clock || ctx.snapshot?.clock;
+    if (!clock?.running || doc.hidden) return;
+    renderClock();
+    const graph = $("#overview-graph");
+    if (!ctx.us && graph && graph.getClientRects().length && !graph.contains(doc.activeElement)) renderGraph();
+  }
+
+  function init() { wireChrome(); wireSearch(); wireDialogs(); scheduleRender(); setInterval(tick, 1000); }
   if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", init); else init();
 
   globalThis.TrainMeetDrift = { hooks, update, render, theme, model, nowText, openDialog, formatTime, get context() { return ctx; } };

@@ -50,13 +50,15 @@
       for (const channel of connection.channels || []) {
         if (!channel.train_number || !["reserved", "occupied"].includes(channel.state)) continue;
         seen.add(String(channel.train_number));
-        onLine.push({ trainNumber: String(channel.train_number), from: channel.from_station_id, to: channel.to_station_id, departed: channel.state === "occupied" });
+        onLine.push({ trainNumber: String(channel.train_number), from: channel.from_station_id, to: channel.to_station_id, departed: channel.state === "occupied",
+          departedSeconds: channel.departed_seconds ?? null });
       }
     }
     for (const position of snapshot?.train_positions || []) {
       const trainNumber = String(position.train_number);
       if (seen.has(trainNumber)) continue;
-      if (position.status === "connection") onLine.push({ trainNumber, from: position.from_station_id, to: position.to_station_id, departed: true });
+      if (position.status === "connection") onLine.push({ trainNumber, from: position.from_station_id, to: position.to_station_id, departed: true,
+        departedSeconds: position.departed_seconds ?? null });
       else if (position.station_id) atStation.push({ trainNumber, station: position.station_id });
     }
     return { onLine, atStation };
@@ -66,7 +68,7 @@
   function trainStates(snapshot) {
     const result = new Map();
     const { onLine, atStation } = trains(snapshot);
-    for (const train of onLine) result.set(train.trainNumber, { state: train.departed ? "on-line" : "cleared", from: train.from, to: train.to });
+    for (const train of onLine) result.set(train.trainNumber, { state: train.departed ? "on-line" : "cleared", from: train.from, to: train.to, departedSeconds: train.departedSeconds });
     for (const train of atStation) if (!result.has(train.trainNumber)) result.set(train.trainNumber, { state: "at-station", station: train.station });
     return result;
   }
@@ -258,12 +260,27 @@
    * som just hänt och det som kommer syns. Tåget på linjen får sin nuvarande
    * sträcka tänd; det valda tåget hela sin rutt.
    */
-  function graph(snapshot, { windowMinutes = 180, train = null } = {}) {
+  /**
+   * Hur långt ett avgånget tåg har kommit på sin sträcka, 0–1, i takt med
+   * klockan: från den faktiska avgången (träffklockans sekunder) eller den
+   * planerade, fram till den planerade ankomsten. Samma regel som kartan.
+   */
+  function legProgress(from, to, departedSeconds, now) {
+    let departed = from.minute;
+    if (departedSeconds !== null && departedSeconds !== undefined && Number.isFinite(Number(departedSeconds))) {
+      const actual = Number(departedSeconds) / 60;
+      departed = actual + Math.round((from.minute - actual) / 1440) * 1440;
+    }
+    return Math.min(1, Math.max(0, (now - departed) / Math.max(1, to.minute - from.minute)));
+  }
+
+  function graph(snapshot, { windowMinutes = 180, train = null, now: liveNow = null } = {}) {
     const stations = stationOrder(snapshot);
     const rowOf = new Map(stations.map((station, index) => [station.id, index]));
     const lines = services(snapshot).map((service) => ({ service, number: String(service.train_number), points: routePoints(service, rowOf) }))
       .filter((line) => line.points.length >= 2);
-    const now = minutes(snapshot?.clock?.time);
+    // Drift skickar klockan som den går (minuter med decimaler); annars bildens.
+    const now = liveNow ?? minutes(snapshot?.clock?.time);
     // Klockan visar bara tid på dygnet. I ett fönster flyttas därför varje tåg
     // till den förekomst som ligger närmast klockan, som skärmens tågdiagram
     // gör. Förut flyttades klockan i stället till nästa dygn för hela
@@ -296,9 +313,19 @@
       // Tåg på linjen: just den sträckan som är under väg.
       line.segment = null;
       if (state && state.state !== "at-station") {
-        const from = line.points.find((point) => point.station === state.from);
-        const to = line.points.slice().reverse().find((point) => point.station === state.to);
-        if (from && to && to.minute >= from.minute) line.segment = [from, to];
+        // Från avgången där till ankomsten vid nästa station, inte från
+        // ankomsten där till avgången därifrån.
+        const end = line.points.findIndex((point, index) => point.station === state.to
+          && line.points.slice(0, index).some((earlier) => earlier.station === state.from));
+        const start = end < 0 ? -1 : line.points.slice(0, end).map((point) => point.station).lastIndexOf(state.from);
+        const from = line.points[start], to = line.points[end];
+        if (start >= 0 && to.minute >= from.minute) line.segment = [from, to];
+      }
+      // Ett avgånget tåg står på nu-linjen, så högt upp på sträckan som det kommit.
+      line.at = null;
+      if (state?.state === "on-line" && line.segment && now !== null) {
+        const [from, to] = line.segment, part = legProgress(from, to, state.departedSeconds, now);
+        line.at = { minute: now, row: from.row + (to.row - from.row) * part, progress: part };
       }
     }
     // Hela dagen visar tidtabellen som den är. Står klockan före den och ryms
@@ -331,5 +358,5 @@
   }
 
   return { compare, minutes, hhmm, services, orderedStops, stationMap, trains, trainStates, stationCounts, lateTrains,
-    placement, connectionTone, stationRows, stats, events, stationOrder, routePoints, graph, search };
+    placement, connectionTone, stationRows, stats, events, stationOrder, routePoints, graph, legProgress, search };
 });
