@@ -131,6 +131,10 @@ def main() -> None:
     database_path = _database_path(state_directory)
     runtime_store = SQLiteRuntimeStore(database_path)
     operations_store = SQLiteOperationsStore(database_path)
+    # Stannade klockan inför en omstart går den vidare från samma tid, innan
+    # någon sida eller box hinner fråga efter den.
+    if operations_store.resume_clock_after_restart():
+        print(f"Träffklockan går vidare från {operations_store.clock_status()['time']}.")
     us_store = USStore(database_path)
     lifecycle = SQLiteMeetLifecycle(database_path)
     local_configuration_store = SQLiteLocalConfigurationStore(database_path)
@@ -266,6 +270,10 @@ def main() -> None:
         application.changes.close()  # Open pages' event streams end now.
         server.shutdown()
         server.server_close()
+        # Ingen begäran kan längre starta klockan: den står still tills servern
+        # är uppe igen i stället för att hoppa fram med avbrottet.
+        if operations_store.pause_clock_for_restart():
+            print("Träffklockan står still tills servern är igång igen.")
         transport.disconnect()
         _stop_process(discovery_advertiser)
         identities.close()
