@@ -1,5 +1,20 @@
 [
   {
+    "version": "3.7.3",
+    "date": "2026-10-06",
+    "notes": [
+      "Tågdiagrammet på Drift visar rätt dygn tidigt på morgonen"
+    ]
+  },
+  {
+    "version": "3.7.2",
+    "date": "2026-10-06",
+    "notes": [
+      "Add Render deployment for EU browser clients",
+      "Include version and build metadata in Render deployment"
+    ]
+  },
+  {
     "version": "3.7.1",
     "date": "2026-10-06",
     "notes": [

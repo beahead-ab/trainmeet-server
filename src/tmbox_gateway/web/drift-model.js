@@ -263,11 +263,21 @@
     const rowOf = new Map(stations.map((station, index) => [station.id, index]));
     const lines = services(snapshot).map((service) => ({ service, number: String(service.train_number), points: routePoints(service, rowOf) }))
       .filter((line) => line.points.length >= 2);
-    let now = minutes(snapshot?.clock?.time);
+    const now = minutes(snapshot?.clock?.time);
+    // Klockan visar bara tid på dygnet. I ett fönster flyttas därför varje tåg
+    // till den förekomst som ligger närmast klockan, som skärmens tågdiagram
+    // gör. Förut flyttades klockan i stället till nästa dygn för hela
+    // tidtabellen så fort den stod före dagens första tåg och ett nattåg var
+    // ute vid samma klockslag nästa morgon - efter en nollställning visade
+    // fönstret då nästa dygn (#137).
+    if (windowMinutes && now !== null) {
+      for (const line of lines) {
+        const centre = (line.points[0].minute + line.points.at(-1).minute) / 2;
+        const shift = Math.round((now - centre) / 1440) * 1440;
+        if (shift) line.points = line.points.map((point) => ({ ...point, minute: point.minute + shift }));
+      }
+    }
     const all = lines.flatMap((line) => line.points.map((point) => point.minute));
-    // Klockan visar bara tid på dygnet. Går tidtabellen över midnatt och klockan
-    // står efter midnatt ligger den på nästa dygn, som nattågens punkter.
-    if (now !== null && all.length && now < Math.min(...all) && now + 1440 <= Math.max(...all)) now += 1440;
     let start, end;
     if (!windowMinutes) {
       start = all.length ? Math.floor(Math.min(...all) / 60) * 60 : 0;
@@ -291,6 +301,8 @@
         if (from && to && to.minute >= from.minute) line.segment = [from, to];
       }
     }
+    // Hela dagen visar tidtabellen som den är. Står klockan före den och ryms
+    // den på nästa dygn hör den till nattågen efter midnatt.
     let clockMinute = now;
     if (clockMinute !== null && clockMinute < start && clockMinute + 1440 <= end) clockMinute += 1440;
     return { stations, lines, start, end, now: clockMinute !== null && clockMinute >= start && clockMinute <= end ? clockMinute : null };

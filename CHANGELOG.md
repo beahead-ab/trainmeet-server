@@ -5,6 +5,17 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tågdiagrammet på Drift visar rätt dygn tidigt på morgonen
+
+Stod klockan före dagens första tåg – som efter Nollställ träffen, när den
+ställs på planens start – och var ett nattåg fortfarande ute vid samma
+klockslag nästa morgon, flyttade diagrammet på Drift hela klockan till nästa
+dygn. Axeln visade rätt klockslag, men tågen var nästa dygns, så bara
+nattåget syntes, och i Hela dagen hamnade nu-linjen nästan längst till höger
+(#137). Nu flyttas i stället varje tåg till den förekomst som ligger närmast
+klockan, som skärmens tågdiagram redan gör. Hela dagen visar tidtabellen som
+förut. Ett fönster kring midnatt får också rätt klockslag på axeln.
+
 ### Uppdateringen från 3.4 startar servern med den pågående körningen
 
 En server som körde 3.4 eller äldre kom inte upp på 3.5: tjänsten stannade

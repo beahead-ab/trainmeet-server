@@ -73,7 +73,11 @@
     h("span", { class: plain && !selected ? "kr-trainno" : `kr-badge${hollow ? " hollow" : ""}${selected ? " sel" : ""}` }, number);
   const button = (text, { cls = "kr-btn sm", on, ...rest } = {}) => h("button", { type: "button", class: cls, on, ...rest }, text);
   const plural = (n, one, many) => t(n === 1 ? one : many, { count: n, n });
-  const clockLabel = (minute) => `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:${String(Math.round(minute % 60)).padStart(2, "0")}`;
+  // Ett fönster kring midnatt börjar före 00:00, så minuten kan vara negativ.
+  const clockLabel = (minute) => {
+    const value = ((Math.round(minute) % 1440) + 1440) % 1440;
+    return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+  };
 
   function formatTime(value, us) {
     const text = String(value || "").slice(0, 5);
