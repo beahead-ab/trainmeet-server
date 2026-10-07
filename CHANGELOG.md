@@ -5,6 +5,15 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Fliken visar Mötesspåret i stället för den gamla orange ikonen
+
+Logotypbytet (#119) lade Mötesspåret på samma adress som den gamla orange
+ikonen hade, och webbläsare som redan sparat ikonen för adressen fortsatte
+visa den i fliken. Ikonlänkarna på alla sidor bär nu ikonens version i
+adressen, så webbläsaren hämtar den nya, och servern svarar på
+`/favicon.ico`, som webbläsare frågar efter på egen hand. Den byggs av
+ikonens egna PNG-filer med `tools/build-favicon.py`.
+
 ### Tågdiagrammet på Drift visar rätt dygn tidigt på morgonen
 
 Stod klockan före dagens första tåg – som efter Nollställ träffen, när den

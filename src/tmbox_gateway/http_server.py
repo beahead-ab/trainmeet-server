@@ -4083,6 +4083,9 @@ class TrainMeetHTTPApplication:
             "/assets/fonts/inter-600.woff2": "fonts/inter-600.woff2",
             "/assets/fonts/inter-700.woff2": "fonts/inter-700.woff2",
             "/trainmeet-logo.png": "trainmeet-logo.png",
+            # Webbläsare frågar efter /favicon.ico på egen hand; utan den kan en
+            # gammal sparad ikon ligga kvar i fliken.
+            "/favicon.ico": "ikon/favicon.ico",
         }.get(path)
         if relative is None and path in {
             "/display",

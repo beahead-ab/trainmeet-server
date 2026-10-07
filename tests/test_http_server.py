@@ -571,10 +571,13 @@ class HTTPServerTests(unittest.TestCase):
         links = re.findall(r'<link rel="(icon|apple-touch-icon)"([^>]*)href="([^"]+)"', html)
         self.assertEqual({"icon", "apple-touch-icon"}, {rel for rel, _, _ in links})
         for rel, attributes, href in links:
+            # Före Mötesspåret låg en orange ikon på samma adress, och webbläsarna
+            # visade den kvar i fliken: adressen bär därför ikonens version.
+            self.assertTrue(href.endswith("?v=motesparet"), href)
             with urlopen(f"{self.base_url}{href}", timeout=2) as response:
                 body = response.read()
                 kind = response.headers.get_content_type()
-            if href.endswith(".svg"):
+            if href.split("?")[0].endswith(".svg"):
                 self.assertEqual("image/svg+xml", kind)
                 self.assertIn(b'fill="#1D4ED8"', body)
                 self.assertIn(b'fill="#F7931E"', body)
@@ -585,6 +588,41 @@ class HTTPServerTests(unittest.TestCase):
                     self.assertEqual((180, 180, 2), (width, height, body[25]), "square, RGB, no alpha")
                 else:
                     self.assertEqual(width, height)
+
+    def test_favicon_ico_is_the_meeting_track(self):
+        """/favicon.ico finns och bär ikonens egna PNG-filer, 16, 32 och 64 px.
+
+        Webbläsare frågar efter /favicon.ico på egen hand (bokmärken, flikar
+        utan länkad ikon), och utan den kan en gammal sparad ikon ligga kvar.
+        """
+        import struct
+        from pathlib import Path
+        with urlopen(f"{self.base_url}/favicon.ico", timeout=2) as response:
+            body = response.read()
+            kind = response.headers.get_content_type()
+        self.assertIn(kind, {"image/vnd.microsoft.icon", "image/x-icon"})
+        reserved, kind_code, count = struct.unpack("<HHH", body[:6])
+        self.assertEqual((0, 1, 3), (reserved, kind_code, count))
+        png = Path(__file__).resolve().parents[1] / "src" / "tmbox_gateway" / "web" / "ikon" / "png"
+        for index, size in enumerate((16, 32, 64)):
+            width, height, _, _, _, _, length, offset = struct.unpack("<BBBBHHII", body[6 + 16 * index:22 + 16 * index])
+            self.assertEqual((size, size), (width, height))
+            # Samma bytes som ikonen: ändras ikonen utan att favicon.ico byggs om fälls provet.
+            self.assertEqual((png / f"trainmeet-ikon-{size}.png").read_bytes(), body[offset:offset + length],
+                             "kör python3 tools/build-favicon.py")
+
+    def test_every_page_links_the_versioned_icon(self):
+        """Boxsidorna och US-sidan länkar också ikonen med versionen, inte den gamla adressen."""
+        import re
+        for path in ("/tmbox/", "/us/dispatcher"):
+            with urlopen(f"{self.base_url}{path}", timeout=2) as response:
+                html = response.read().decode("utf-8")
+            hrefs = re.findall(r'<link rel="icon"[^>]*href="([^"]+)"', html)
+            self.assertTrue(hrefs, path)
+            for href in hrefs:
+                self.assertTrue(href.endswith("?v=motesparet"), (path, href))
+                with urlopen(f"{self.base_url}{href}", timeout=2) as response:
+                    self.assertEqual(200, response.status)
 
     def test_all_runtime_pages_serve_their_scripts_and_styles_locally(self):
         class Assets(HTMLParser):
