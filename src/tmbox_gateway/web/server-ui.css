@@ -247,20 +247,16 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .light .sc-run::before { background: #1f6b3d; }
 .light .sc-stopped { background: #fff8e6; }
 .light .sc-stopped__title { color: #7a5a00; }
-#graph-scroll { width: 100%; height: 100%; overflow: hidden; border-radius: 14px; border: 1px solid #262626; }
+#graph-scroll { width: 100%; height: 100%; overflow: hidden; }
 #graph-canvas { width: 100% !important; height: 100% !important; min-width: 0; min-height: 0; }
 #graph-svg { width: 100%; height: 100%; min-height: 0; }
 #graph-station-overlay, #graph-time-overlay { display: none; }
-.sc-graph-label { font: 28px var(--font); fill: var(--display-fg); }
-.sc-graph-code { font: 22px var(--font-mono); fill: var(--display-muted); }
 /* Train numbers in the diagram (renderGraph): a dark edge so a line under
    the number never cuts it; a blue tag on the now line for a train out on
    the line; the time as a yellow tag on top of the now line. */
-.sc-graph-train { font: 600 26px var(--font); paint-order: stroke; stroke: var(--display-bg); stroke-width: 7px; stroke-linejoin: round; }
+.sc-graph-train { paint-order: stroke; stroke-linejoin: round; }
 .sc-graph-tag { fill: #7fa3ea; }
-.sc-graph-tag-text { font: 700 24px var(--font-mono); fill: #0b0b0b; }
 .sc-graph-now-tag { fill: #f2c230; }
-.sc-graph-now-text { font: 700 24px var(--font-mono); fill: #0b0b0b; }
 .light .sc-graph-tag { fill: #2256c3; }
 .light .sc-graph-tag-text { fill: #fff; }
 /* Översikt as in the design (SkarmOversikt): no top row. The tile row
@@ -292,14 +288,9 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 #display-stage[data-kind=dashboard] .sc-qr__code svg { width: 84px; height: 84px; }
 #display-stage[data-kind=dashboard] .sc-qr__text { font-size: 19px; white-space: normal; text-align: center; max-width: 220px; }
 #dashboard-topology { width: 100%; height: 100%; min-height: 0; }
-.topology-tv .topology-name { font: 30px var(--font); fill: var(--display-fg); text-anchor: middle; }
-.topology-tv .topology-code { font: 22px var(--font-mono); fill: var(--display-muted); text-anchor: middle; }
-.topology-tv .topology-track { stroke-width: 8; }
-.topology-tv .topology-name, .topology-tv .topology-code { paint-order: stroke; stroke: var(--display-bg); stroke-width: 8px; stroke-linejoin: round; }
-#dashboard-topology .topology-name, #dashboard-topology .topology-code { stroke: var(--display-card); }
 /* Names moved to the free side of their node (placeTopologyLabels in app.js). */
-.topology-node .topology-name.label-start, .topology-node .topology-code.label-start { text-anchor: start; }
-.topology-node .topology-name.label-end, .topology-node .topology-code.label-end { text-anchor: end; }
+.topology-node .topology-name.label-start { text-anchor: start; }
+.topology-node .topology-name.label-end { text-anchor: end; }
 /* Trains on the map (appendTopologyTrain in app.js), all maps: filled on the
    line, outlined with a clear but not departed, pale inside a station. */
 .topology-train-tag { fill: #2256c3; stroke: #2256c3; stroke-width: 1.2; }
@@ -310,36 +301,7 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .topology-train.cleared .topology-train-arrow { fill: none; stroke: #2256c3; stroke-width: 1.3; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .topology-train.at-station .topology-train-tag { fill: #eef3fb; stroke: #b9c9ec; }
 .topology-train.at-station .train-number { fill: #1d4aa8; }
-.topology-tv .topology-train .train-number { font-size: 26px; fill: #0b0b0b; }
-.topology-tv .topology-train-tag { fill: var(--sc-primary, #7fa3ea); stroke: var(--sc-primary, #7fa3ea); stroke-width: 3; }
-.topology-tv .topology-train-arrow { fill: #0b0b0b; }
-.topology-tv .topology-train.cleared .topology-train-tag { fill: var(--display-bg, #000); }
-.topology-tv .topology-train.cleared .train-number { fill: var(--sc-primary, #7fa3ea); }
-.topology-tv .topology-train.cleared .topology-train-arrow { stroke: var(--sc-primary, #7fa3ea); stroke-width: 2.5; }
-.topology-tv .topology-train.at-station .topology-train-tag { fill: var(--display-card, #0f0f0f); stroke: color-mix(in srgb, var(--sc-primary, #7fa3ea) 45%, transparent); }
-.topology-tv .topology-train.at-station .train-number { fill: var(--sc-primary, #7fa3ea); }
-.light .topology-tv .topology-train-tag { fill: #2256c3; stroke: #2256c3; }
-.light .topology-tv .topology-train .train-number, .light .topology-tv .topology-train-arrow { fill: #fff; }
-.light .topology-tv .topology-train.cleared .topology-train-tag { fill: #fff; }
-.light .topology-tv .topology-train.cleared .train-number { fill: #2256c3; }
-.light .topology-tv .topology-train.cleared .topology-train-arrow { fill: none; stroke: #2256c3; }
-.light .topology-tv .topology-train.at-station .topology-train-tag { fill: #eef3fb; stroke: #b9c9ec; }
-.light .topology-tv .topology-train.at-station .train-number { fill: #1d4aa8; }
 .topology-train-ring { fill: none; stroke: #2256c3; stroke-width: 2; }
-.topology-tv .topology-train-ring { stroke: var(--sc-primary, #7fa3ea); stroke-width: 4; }
-.topology-tv .topology-track.active { stroke: #4380f0; }
-/* Stations on a TV map are the design's rings (SkarmBana): light on the
-   card, blue while a train is inside, names in semibold. */
-.topology-tv .topology-track { stroke-width: 10; }
-.topology-tv .topology-mask { fill: var(--display-card); }
-.topology-tv .topology-station { fill: var(--display-card); stroke: #d4d4d3; stroke-width: 7; }
-.topology-tv .topology-station.autonomous { stroke-width: 5; stroke-dasharray: 8 6; }
-.topology-tv .topology-station.active { fill: var(--display-card); stroke: #7fa3ea; }
-.topology-tv .topology-station.highlighted { fill: var(--display-card); stroke: #9db9f0; stroke-width: 9; }
-.topology-tv .topology-station-ring { stroke: #9db9f0; stroke-width: 4; }
-.topology-tv .topology-name { font-weight: 600; }
-.light .topology-tv .topology-station { stroke: #525252; }
-.light .topology-tv .topology-station.active, .light .topology-tv .topology-station.highlighted { stroke: #2256c3; }
 #clock-view[data-us=true] .clock-digital { font-size: 320px; }
 /* "12:34 PM" */
 #clock-view[data-us=true] .clock-digital[data-seconds=true] { font-size: 260px; }
@@ -386,24 +348,22 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .dash-status.is-late::before { background: #f2c230; }
 .light .dash-head, .light .server-dashboard-bottom .dash-row, .light .dash-status { border-color: #e5e5e5; }
 .light .server-dashboard-bottom .dash-in.is-late { color: #8a6400; }
-/* Banöversikt as in the design (SkarmBana): the map on a card, and under it
-   the trains out on the line with where they run and when they are due. */
-#display-stage[data-kind=topology] .sc-content { flex-direction: column; background: var(--display-card); border: 1px solid #262626; border-radius: 20px; overflow: hidden; }
-.light #display-stage[data-kind=topology] .sc-content { border-color: #e5e5e5; }
+/* Banöversikt: kartan direkt på skärmen, utan kort och ram, och under den
+   tågen ute på linjen med var de går och när de ska vara framme. */
+#display-stage[data-kind=topology] .sc-content { flex-direction: column; overflow: hidden; }
 #display-stage[data-kind=topology] #topology-svg { flex: 1 1 0; height: auto; min-height: 0; }
-#topology-svg .topology-name, #topology-svg .topology-code { stroke: var(--display-card); }
 .sc-online { flex: 0 0 auto; display: grid; grid-template-columns: repeat(var(--count, 3), minmax(0, 1fr)); border-top: 1px solid #262626; }
 .light .sc-online, .light .sc-online__item { border-color: #e5e5e5; }
-.sc-online__item { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0; padding: 16px 28px; border-right: 1px solid #262626; }
+.sc-online__item { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; padding: 12px 24px; border-right: 1px solid #262626; }
 .sc-online__item:last-child { border-right: 0; }
-.sc-online__kicker { font-size: 20px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--display-muted); }
-.sc-online__line { font-size: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sc-online__line b { font-family: var(--font-mono); font-weight: 700; margin-right: 14px; }
+.sc-online__kicker { font-size: 16px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--display-muted); }
+.sc-online__line { font-size: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-online__line b { font-family: var(--font-mono); font-weight: 600; margin-right: 12px; }
 .sc-online__head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
-.sc-online__due { font-size: 24px; color: var(--display-muted); white-space: nowrap; }
+.sc-online__due { font-size: 19px; color: var(--display-muted); white-space: nowrap; }
 .sc-online__due.is-late { color: #f2c230; }
 .light .sc-online__due.is-late { color: #8a6400; }
-.sc-online__more, .sc-online__empty { font-size: 26px; color: var(--display-muted); }
+.sc-online__more, .sc-online__empty { font-size: 21px; color: var(--display-muted); }
 .sc-online.has-more { grid-template-columns: repeat(var(--count, 3), minmax(0, 1fr)) auto; }
 .sc-online__more { white-space: nowrap; }
 @media (max-width: 600px) {

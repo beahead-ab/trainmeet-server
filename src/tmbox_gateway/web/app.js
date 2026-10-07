@@ -3156,14 +3156,6 @@ let displayClockAnchorSpeed = null;
 let swissMinuteKey = null;
 let swissMinuteWobbleStartedAt = null;
 
-// "KOD · n": koden i monospace, antalet tåg inne i Inter med vanlig nolla (en tio ska inte läsas som en åtta).
-function codeLabel(attrs, code, count, suffix = "") {
-  const label = svgElement("text", { ...attrs, class: "topology-code" });
-  label.append(`${code || ""} · `, svgElement("tspan", { class: "topology-count" }, count));
-  if (suffix) label.append(` ${suffix}`);
-  return label;
-}
-
 function svgElement(name, attrs = {}, textValue = null) {
   const element = document.createElementNS(svgNS, name);
   for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, String(value));
@@ -3291,6 +3283,19 @@ function topologyBounds(sourcePositions, edges, orientation = "") {
   };
 }
 
+// Spåret ritas som räls, som i det första TrainMeet: två räler på syllar.
+// Dubbelspår är två sådana spår bredvid varandra, så enkel- och dubbelspår
+// syns direkt. Kontrollrummet och skärmarna ritar i riktiga pixlar; skärmarna
+// (screen) lite större. Är sträckorna för korta för syllar blir bara rälerna
+// kvar, och ruttkartan (i layoutens egna mått) har inga syllar.
+function topologyTrackStyle(kr, screen, shortest = Infinity) {
+  const style = screen ? { rail: 2, gauge: 5, tie: 2, sleeper: 12, every: 9, lane: 9, node: 10 }
+    : kr ? { rail: 1.5, gauge: 4, tie: 1.5, sleeper: 10, every: 7, lane: 7, node: 8 }
+      : { rail: 1.2, gauge: 3.2, tie: 0, sleeper: 0, every: 0, lane: 4.5, node: 7 };
+  if (style.sleeper && shortest < 48) style.sleeper = 0;
+  return style;
+}
+
 // A train on the map: its number in a small tag with a small triangle the way
 // it runs (as the line block in TrainMeet Cloud). The tag is filled once
 // the train is out on the line, and only outlined while it has a clear but has
@@ -3319,19 +3324,20 @@ function topologyTrains(snapshot) {
   return { onLine, atStation };
 }
 
-// Kontrollrummet (kr) ritar i riktiga pixlar: ett tåg är 26 px högt, siffran 15 px.
-function topologyTrainSize(trainNumber, withArrow, tv, kr = false) {
-  const font = kr ? 15 : tv ? 26 : 11, arrow = kr ? 11 : tv ? 18 : 8, pad = kr ? 7 : tv ? 10 : 4, gap = kr ? 5 : tv ? 6 : 2.5;
+// Kontrollrummet (kr) ritar i riktiga pixlar: ett tåg är 20 px högt, siffran 12,5 px;
+// på skärmarna 22 px och 13,5 px. Taggen ryms på sitt eget spår vid dubbelspår.
+function topologyTrainSize(trainNumber, withArrow, kr = false, screen = false) {
+  const font = screen ? 13.5 : kr ? 12.5 : 11, arrow = 8 + (screen ? 1 : 0);
+  const pad = screen ? 6 : kr ? 5 : 4, gap = kr ? 4 : 2.5;
   const textWidth = String(trainNumber).length * font * (kr ? 0.6 : 0.62);
-  return { font, arrow, pad, textWidth, height: kr ? 26 : tv ? 40 : 16, width: textWidth + pad * 2 + (withArrow ? arrow + gap : 0) };
+  return { font, arrow, pad, textWidth, height: screen ? 22 : kr ? 20 : 16, width: textWidth + pad * 2 + (withArrow ? arrow + gap : 0) };
 }
 
 function appendTopologyTrain(target, point, train, options = {}) {
-  const tv = Boolean(options.tv);
   const kr = Boolean(options.kr);
   const label = String(train.trainNumber);
   const heading = train.heading; // the way it runs from the station it leaves; none inside a station
-  const { font, arrow, pad, textWidth, height, width } = topologyTrainSize(label, Boolean(heading), tv, kr);
+  const { font, arrow, pad, textWidth, height, width } = topologyTrainSize(label, Boolean(heading), kr, Boolean(options.screen));
   const kind = !heading ? "at-station" : train.departed ? "on-line" : "cleared";
   const group = svgElement("g", {
     transform: `translate(${point.x},${point.y})`,
@@ -3341,8 +3347,8 @@ function appendTopologyTrain(target, point, train, options = {}) {
     "aria-label": train.label,
   });
   group.dataset.trainNumber = label;
-  if (options.selected) group.append(svgElement("rect", { x: -width / 2 - 3, y: -height / 2 - 3, width: width + 6, height: height + 6, rx: kr ? 9 : tv ? 11 : 6, class: "topology-train-ring" }));
-  group.append(svgElement("rect", { x: -width / 2, y: -height / 2, width, height, rx: kr ? 6 : tv ? 8 : 3, class: "topology-train-tag" }));
+  if (options.selected) group.append(svgElement("rect", { x: -width / 2 - 3, y: -height / 2 - 3, width: width + 6, height: height + 6, rx: kr ? 8 : 6, class: "topology-train-ring" }));
+  group.append(svgElement("rect", { x: -width / 2, y: -height / 2, width, height, rx: kr ? 5 : 3, class: "topology-train-tag" }));
   let textX = 0;
   if (heading) {
     // Sideways the triangle leads: after the number going right, before it
@@ -3400,12 +3406,11 @@ function topologyCrosses(box, [a, b]) {
 
 function placeTopologyLabels(items, segments, viewBox, options = {}) {
   if (!items.length) return;
-  const tv = Boolean(options.tv);
   const kr = Boolean(options.kr);
-  const gap = kr ? 8 : tv ? 14 : 5;
-  const lineGap = kr ? 17 : 30; // TV: from the name's baseline to the code line's
+  const gap = kr ? 8 : 5;
+  const lineGap = 17; // from the name's baseline to a code line's
   const measure = (element) => {
-    const size = parseFloat(getComputedStyle(element).fontSize) || (tv ? 30 : 11);
+    const size = parseFloat(getComputedStyle(element).fontSize) || (kr ? 13 : 11);
     let width = 0;
     try { width = element.getComputedTextLength(); } catch { width = 0; }
     return { size, width: width > 0 ? width : element.textContent.length * size * 0.58 };
@@ -3414,27 +3419,29 @@ function placeTopologyLabels(items, segments, viewBox, options = {}) {
     item.nameSize = measure(item.name);
     item.codeSize = item.code ? measure(item.code) : null;
     item.below = Number(item.name.getAttribute("y")) - item.point.y;
-    item.node = { x1: item.point.x - item.radius - 2, y1: item.point.y - item.radius - 2, x2: item.point.x + item.radius + 2, y2: item.point.y + item.radius + 2 };
+    item.rx ??= item.radius;
+    item.ry ??= item.radius;
+    item.node = { x1: item.point.x - item.rx - 2, y1: item.point.y - item.ry - 2, x2: item.point.x + item.rx + 2, y2: item.point.y + item.ry + 2 };
   }
   const layout = (item, side) => {
     const [horizontal, vertical, preference] = TOPOLOGY_LABEL_SIDES[side];
-    const { x, y } = item.point, radius = item.radius, name = item.nameSize, code = item.codeSize;
+    const { x, y } = item.point, rx = item.rx, ry = item.ry, name = item.nameSize, code = item.codeSize;
     const width = Math.max(name.width, code ? code.width : 0);
     const ascent = name.size * 0.75;
     const height = ascent + (code ? lineGap + code.size * 0.22 : name.size * 0.22);
-    const corner = horizontal && vertical ? radius * 0.75 + (kr ? 4 : tv ? 6 : 2) : 0;
+    const corner = horizontal && vertical ? Math.max(rx, ry) * 0.75 + (kr ? 4 : 2) : 0;
     let baseline;
     // A name beside and below its node keeps the row's baseline when there is room.
     if (vertical > 0) baseline = horizontal ? Math.max(y + corner + ascent, y + item.below) : y + item.below;
-    else if (vertical < 0) baseline = (horizontal ? y - corner : y - radius - gap) - height + ascent;
+    else if (vertical < 0) baseline = (horizontal ? y - corner : y - ry - gap) - height + ascent;
     else baseline = y - height / 2 + ascent;
     const anchor = horizontal > 0 ? "start" : horizontal < 0 ? "end" : "middle";
-    const textX = horizontal ? x + horizontal * (corner || radius + gap) : x;
+    const textX = horizontal ? x + horizontal * (corner || rx + gap) : x;
     const x1 = anchor === "start" ? textX : anchor === "end" ? textX - width : textX - width / 2;
     return { side, preference, anchor, textX, baseline, box: { x1, x2: x1 + width, y1: baseline - ascent, y2: baseline - ascent + height } };
   };
   const overlap = (a, b, margin = 0) => Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) + margin) * Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1) + margin);
-  const clearance = kr ? 8 : tv ? 10 : 6; // two names never closer than this
+  const clearance = kr ? 8 : 6; // two names never closer than this
   const crosses = topologyCrosses;
   const [viewX, viewY, viewWidth, viewHeight] = String(viewBox).split(" ").map(Number);
   const placed = new Map(items.map((item) => [item, layout(item, "below")]));
@@ -3482,12 +3489,12 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   if (!target) return;
   let { positions, edges, viewBox } = topologyLayout(snapshot, options.kr?.wide ? "wide" : "");
   // kr = Kontrollrummet: ritas i riktiga pixlar på rutans bredd, med egna storlekar.
+  // kr.screen = en skärm på helskärm (Banöversikt, Översikt): samma ritning, större,
+  // och kr.height låter grenarna använda höjden i stället för att lämna den tom.
   const kr = options.kr || null;
-  target.classList.toggle("topology-tv", Boolean(options.tv) && !kr);
+  const screen = Boolean(kr?.screen);
   target.classList.toggle("topology-kr", Boolean(kr));
-  // On a TV a station is a ring, as in the design (SkarmBana): 22 px on the
-  // Banöversikt screen, 16 px on the lower map of Översikt.
-  const ring = kr ? 11 : options.tv ? ((options.height || 680) < 600 ? 16 : 22) : 7;
+  target.classList.toggle("topology-screen", screen);
   if (kr) {
     const width = Math.max(280, Math.round(kr.width || 1200));
     const points = [...positions.values()];
@@ -3496,28 +3503,20 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const spanX = maxX - minX, spanY = maxY - minY;
     // En stående linje (telefon) får nodavstånd i höjdled; annars fyller linjen bredden.
     const upright = spanY > spanX * 1.2;
-    const marginX = upright ? 120 : Math.min(84, width * 0.08);
+    const marginX = upright ? 120 : Math.min(screen ? 110 : 84, width * 0.08);
     const scaleX = upright ? 1.7 : spanX ? (width - marginX * 2) / spanX : 1;
-    const scaleY = upright ? 0.95 : 1.7;
-    const top = upright ? 36 : 58, bottom = upright ? 44 : 66;
+    let scaleY = upright ? 0.95 : 1.7;
+    let top = upright ? 36 : 58, bottom = upright ? 44 : 66;
+    if (screen && !upright && kr.height) {
+      // Grenarna får gå längre ut när skärmen har höjden, men aldrig längre än
+      // drygt två stationsavstånd; ritningen hamnar mitt i höjden.
+      const room = Math.max(0, kr.height - 150);
+      scaleY = spanY ? Math.max(1.7, Math.min(room / spanY, scaleX * 3)) : 1.7;
+      top = Math.max(top, (kr.height - spanY * scaleY) / 2);
+      bottom = Math.max(bottom, kr.height - spanY * scaleY - top);
+    }
     positions = new Map([...positions].map(([id, p]) => [id, { x: (p.x - (minX + maxX) / 2) * scaleX + width / 2, y: (p.y - minY) * scaleY + top }]));
     viewBox = `0 0 ${width} ${Math.ceil(top + spanY * scaleY + bottom)}`;
-  } else if (options.tv) {
-    // Fit the actual nodes, not the editor's padded canvas. Small layouts
-    // otherwise collapse to an unreadable cluster in the middle of a TV.
-    const points = [...positions.values()], height = options.height || 680;
-    const minX = Math.min(...points.map(p=>p.x)), maxX = Math.max(...points.map(p=>p.x));
-    const minY = Math.min(...points.map(p=>p.y)), maxY = Math.max(...points.map(p=>p.y));
-    const width = maxX-minX, depth = maxY-minY;
-    // The line always uses the full width. A low map (the Översikt card) is
-    // squeezed vertically rather than shrunk as a whole, which would crowd the
-    // names on the main line; the drawing is never stretched upwards.
-    const fitDepth = depth ? (height-220)/depth : Infinity; // room for the rings and their names
-    const scaleX = points.length > 1 ? (width ? 1480/width : fitDepth) : 1;
-    const safeX = Number.isFinite(scaleX) ? scaleX : 1;
-    const safeY = Math.min(safeX, fitDepth);
-    positions = new Map([...positions].map(([id,p])=>[id,{x:(p.x-(minX+maxX)/2)*safeX+920,y:(p.y-(minY+maxY)/2)*safeY+height/2-30}]));
-    viewBox = `0 0 1840 ${height}`;
   }
   target.setAttribute("viewBox", viewBox);
   target.replaceChildren();
@@ -3542,6 +3541,22 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     }
   }
   const hasSelection = Boolean(selectedService || options.selectedStationID);
+  const shortest = Math.min(Infinity, ...edges.map((edge) => {
+    const a = positions.get(edge.from), b = positions.get(edge.to);
+    return a && b ? Math.hypot(b.x - a.x, b.y - a.y) : Infinity;
+  }));
+  const track = topologyTrackStyle(Boolean(kr), screen, kr ? shortest : Infinity);
+  // Vilka stationer har dubbelspår i sidled och i höjdled: brickan täcker sina spår.
+  const doubleAt = new Map();
+  for (const edge of edges) {
+    if (edge.source?.track_type !== "double" || edge.autonomous) continue;
+    const a = positions.get(edge.from), b = positions.get(edge.to);
+    if (!a || !b) continue;
+    const axis = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? "across" : "upright";
+    for (const id of [edge.from, edge.to]) doubleAt.set(id, { ...(doubleAt.get(id) || {}), [axis]: true });
+  }
+  const doubleKeys = new Set(edges.filter((edge) => edge.source?.track_type === "double" && !edge.autonomous).map((edge) => topologyEdgeKey(edge.from, edge.to)));
+  const doubleLane = (from, to) => (doubleKeys.has(topologyEdgeKey(from, to)) ? track.lane : 0);
   for (const edge of edges) {
     const from = positions.get(edge.from);
     const to = positions.get(edge.to);
@@ -3553,22 +3568,40 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const stationHighlighted = stationEdgeKeys.has(key);
     const dimmed = hasSelection && !routeHighlighted && !stationHighlighted;
     const lineClass = `topology-track${active ? " active" : ""}${routeHighlighted ? " route-highlight" : ""}${stationHighlighted ? " station-highlight" : ""}${dimmed ? " dimmed" : ""}`;
-    if (edge.source?.track_type === "double") {
-      const dx = to.x - from.x, dy = to.y - from.y, length = Math.hypot(dx, dy) || 1;
-      const offset = kr ? 3.4 : 2.5;
-      const ox = -dy / length * offset, oy = dx / length * offset;
-      target.append(svgElement("line", { x1: from.x + ox, y1: from.y + oy, x2: to.x + ox, y2: to.y + oy, class: `${lineClass} double` }));
-      target.append(svgElement("line", { x1: from.x - ox, y1: from.y - oy, x2: to.x - ox, y2: to.y - oy, class: `${lineClass} double` }));
-    } else {
-      target.append(svgElement("line", { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: lineClass, "stroke-dasharray": edge.autonomous ? "4 3" : "none" }));
+    if (edge.autonomous) {
+      // En obemannad stations koppling är ingen sträcka: en streckad linje.
+      target.append(svgElement("line", { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: `${lineClass} autonomous`, "stroke-dasharray": "4 3" }));
+      continue;
     }
+    const double = edge.source?.track_type === "double";
+    const dx = to.x - from.x, dy = to.y - from.y, length = Math.hypot(dx, dy) || 1;
+    const normal = { x: -dy / length, y: dx / length };
+    const group = svgElement("g", { class: `${lineClass}${double ? " double" : " single"}` });
+    for (const lane of double ? [-track.lane, track.lane] : [0]) {
+      const line = (offset, attrs) => svgElement("line", {
+        x1: from.x + normal.x * offset, y1: from.y + normal.y * offset, x2: to.x + normal.x * offset, y2: to.y + normal.y * offset, ...attrs });
+      const rails = svgElement("g", { class: "topology-lane" });
+      if (track.sleeper) rails.append(line(lane, { class: "topology-sleepers", "stroke-width": track.sleeper, "stroke-dasharray": `${track.tie} ${track.every - track.tie}` }));
+      for (const side of [-1, 1]) rails.append(line(lane + side * track.gauge / 2, { class: "topology-rail", "stroke-width": track.rail }));
+      group.append(rails);
+    }
+    target.append(group);
   }
   const labels = [];
+  const bricks = new Map(); // stationens halva bredd och höjd: tågen hålls utanför brickan
   for (const station of snapshot.stations || []) {
     const point = positions.get(station.id);
     if (!point) continue;
     const autonomous = Boolean(station.is_autonomous);
-    const radius = options.tv ? (autonomous ? Math.round(ring * 0.75) : ring) : autonomous ? 5 : 7;
+    const radius = kr ? (autonomous ? Math.round(track.node * 0.75) : track.node) : autonomous ? 5 : 7;
+    // Stationen är en bricka: en cirkel vid enkelspår, avlång där dubbelspår går
+    // in så att den täcker båda spåren, och en rundad kvadrat vid dubbelspår åt två håll.
+    const doubles = autonomous ? {} : doubleAt.get(station.id) || {};
+    const reach = track.lane + (track.sleeper ? track.sleeper / 2 : track.gauge / 2 + track.rail) + (kr ? 3 : 1.5);
+    const halfW = doubles.upright ? Math.max(radius, reach) : radius;
+    const halfH = doubles.across ? Math.max(radius, reach) : radius;
+    const brick = (pad, className) => svgElement("rect", { x: point.x - halfW - pad, y: point.y - halfH - pad,
+      width: (halfW + pad) * 2, height: (halfH + pad) * 2, rx: radius + pad, class: className });
     const onRoute = routeStationIDs.has(station.id);
     const inNeighborhood = stationNeighborIDs.has(station.id);
     const selected = station.id === options.selectedStationID;
@@ -3580,26 +3613,20 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
       tabindex: stationClickable ? "0" : "-1",
       "aria-label": `${station.name}, ${station.code || "station"}`,
     });
-    if (onRoute || selected) group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + (kr ? 8 : 5), class: "topology-station-ring" }));
-    group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius + 1, class: "topology-mask" }));
+    if (onRoute || selected) group.append(brick(kr ? 6 : 5, "topology-station-ring"));
+    group.append(brick(1, "topology-mask"));
     const extraClass = options.stationClass?.(station);
-    group.append(svgElement("circle", { cx: point.x, cy: point.y, r: radius, class: `topology-station${autonomous ? " autonomous" : ""}${activeStationIDs.has(station.id) ? " active" : ""}${onRoute || selected ? " highlighted" : ""}${extraClass ? ` ${extraClass}` : ""}` }));
-    const name = svgElement("text", { x: point.x, y: point.y + (kr ? radius + 25 : options.tv ? radius + 34 : autonomous ? 16 : 20), class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name);
-    group.append(name);
-    let code = null;
-    // Siffran i kodraden är antalet tåg inne på stationen; själva tågen ritas
-    // inte, bara de som har klart och det valda tåget (se nedan).
+    // Antalet tåg inne på stationen står i brickan, som då lyser; själva tågen
+    // ritas inte, bara de som har klart och det valda tåget (se nedan).
     const inside = (snapshot.train_positions || []).filter((p) => p.station_id === station.id && !p.connection_id).length;
-    if (kr?.noCode) {
-      // Telefonen visar bara namnet; siffran står i sammanfattningen under kartan.
-    } else if (kr) {
-      code = codeLabel({ x: point.x, y: point.y + radius + 42 }, station.code, inside);
-      group.append(code);
-    } else if (options.tv) {
-      code = codeLabel({ x: point.x, y: point.y + radius + 64 }, station.code, inside, options.compactCount ? "" : t("tåg"));
-      group.append(code);
-    }
-    labels.push({ point, radius, name, code });
+    group.append(brick(0, `topology-station${autonomous ? " autonomous" : ""}${activeStationIDs.has(station.id) ? " active" : ""}${onRoute || selected ? " highlighted" : ""}${extraClass ? ` ${extraClass}` : ""}`));
+    if (inside && kr) group.append(svgElement("text", { x: point.x, y: point.y + (screen ? 4.5 : 3.8), class: "topology-count" }, inside));
+    // Bara namnet: koden står i stationens etikett för skärmläsare, och på kartan blev namn och kod plottrigt.
+    const nameGap = kr ? (screen ? 21 : 17) : autonomous ? 11 : 13;
+    const name = svgElement("text", { x: point.x, y: point.y + halfH + nameGap, class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name);
+    group.append(name);
+    labels.push({ point, radius, rx: halfW, ry: halfH, name, code: null });
+    bricks.set(station.id, { x: halfW, y: halfH });
     const activate = (event) => {
       event.stopPropagation();
       options.onStationSelect?.(station.id);
@@ -3621,8 +3648,8 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   }
   const code = (id) => (snapshot.stations || []).find((station) => station.id === id)?.code || "?";
   const trainOptions = (trainNumber) => ({
-    tv: Boolean(options.tv),
     kr: Boolean(kr),
+    screen,
     selected: trainNumber === String(options.selectedTrainNumber),
     dimmed: Boolean(selectedService && trainNumber !== String(options.selectedTrainNumber)),
     clickable: Boolean(options.onTrainSelect),
@@ -3633,6 +3660,8 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   // come only from an older recorded position; the second then stacks beside
   // the first instead of hiding it.
   const sameWay = new Map();
+  // Dubbelspår med tåg åt båda hållen: taggarna flyttas isär så att de inte täcker varandra.
+  const bothWays = new Set(trains.onLine.filter((a) => trains.onLine.some((b) => b.from === a.to && b.to === a.from)).map((a) => topologyEdgeKey(a.from, a.to)));
   const taken = []; // tags already drawn: a station's row never covers one
   const names = labels.flatMap((label) => [label.name, label.code].filter(Boolean)).flatMap((text) => {
     // A map not on screen has no measured text (and some browsers throw).
@@ -3644,9 +3673,11 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     if (!from || !to) continue;
     const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
     const along = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
-    const size = topologyTrainSize(train.trainNumber, true, options.tv, Boolean(kr));
+    const size = topologyTrainSize(train.trainNumber, true, Boolean(kr), screen);
     const reach = Math.abs(along.x) * size.width / 2 + Math.abs(along.y) * size.height / 2;
-    const clear = (kr ? ring + 10 : options.tv ? ring + 14 : 14) + reach; // off the station's ring
+    const brick = bricks.get(train.from) || { x: 7, y: 7 };
+    const edge = Math.abs(along.x) * brick.x + Math.abs(along.y) * brick.y; // brickans kant i färdriktningen
+    const clear = edge + (kr ? 8 : 7) + reach; // off the station
     const distance = Math.min(Math.max(length * 0.25, clear), length / 2);
     const key = `${train.from}>${train.to}`;
     const order = sameWay.get(key) || 0;
@@ -3654,17 +3685,18 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     // Up from a sideways line, to the right of an upright one.
     let side = { x: along.y, y: -along.x };
     if (side.y > 0 || (side.y === 0 && side.x < 0)) side = { x: -side.x, y: -side.y };
-    const across = order * (Math.abs(side.y) * size.height + Math.abs(side.x) * size.width + (options.tv ? 6 : 3));
+    // På dubbelspår går tåget på sitt eget spår: vänster i färdriktningen, som i Sverige.
+    let lane = doubleLane(train.from, train.to);
+    if (lane && bothWays.has(topologyEdgeKey(train.from, train.to))) lane = Math.max(lane, Math.abs(along.x) * size.height / 2 + Math.abs(along.y) * size.width / 2 + 1.5);
+    const leftHand = { x: along.y * lane, y: -along.x * lane };
+    const across = order * (Math.abs(side.y) * size.height + Math.abs(side.x) * size.width + (kr ? 4 : 3));
     const route = `${code(train.from)} → ${code(train.to)}`;
-    // On a TV the names under the line are large: the tag rides on the line
-    // rather than over them.
-    const lift = options.tv && !kr && Math.abs(along.y) < 0.5 ? 12 : 0;
-    const spot = (d) => ({ x: from.x + along.x * d + side.x * across, y: from.y + along.y * d + side.y * across - lift });
+    const spot = (d) => ({ x: from.x + along.x * d + side.x * across + leftHand.x, y: from.y + along.y * d + side.y * across + leftHand.y });
     const boxAt = (p) => ({ x1: p.x - size.width / 2, y1: p.y - size.height / 2, x2: p.x + size.width / 2, y2: p.y + size.height / 2 });
     let at = spot(distance);
-    // Kontrollrummet och TV: sitter taggen över ett stationsnamn får den glida
-    // längs linjen till närmaste ställe som är fritt.
-    if ((kr || options.tv) && overlaps(boxAt(at), names, 2)) {
+    // Sitter taggen över ett stationsnamn får den glida längs linjen till
+    // närmaste ställe som är fritt.
+    if (kr && overlaps(boxAt(at), names, 2)) {
       const low = Math.min(clear, length / 2), high = Math.max(length - clear, length / 2);
       const covered = (box) => names.reduce((sum, o) => sum + Math.max(0, Math.min(box.x2, o.x2) - Math.max(box.x1, o.x1)) * Math.max(0, Math.min(box.y2, o.y2) - Math.max(box.y1, o.y1)), 0);
       let best = { d: distance, area: covered(boxAt(at)) };
@@ -3694,7 +3726,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   const free = (box) => inView(box) && !overlaps(box, names) && !overlaps(box, taken, 4)
     && !segments.some((segment) => topologyCrosses(box, segment));
   const byStation = new Map();
-  const plainMap = !options.tv && !kr; // deltagarvyn och äldre kartor visar fortfarande raden vid stationen
+  const plainMap = !kr; // tågets ruttkarta visar fortfarande raden vid stationen
   for (const train of trains.atStation) {
     if (!plainMap && train.trainNumber !== String(options.selectedTrainNumber)) continue;
     byStation.set(train.station, [...(byStation.get(train.station) || []), train]);
@@ -3704,8 +3736,10 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     if (!point) continue;
     const shown = here.length > 3 ? here.slice(0, 2) : here;
     const items = [...shown.map((train) => train.trainNumber), ...(here.length > shown.length ? [`+${here.length - shown.length}`] : [])];
-    const gap = kr ? 6 : options.tv ? 10 : 4, off = (kr ? ring + 6 : options.tv ? ring + 4 : 7) + gap;
-    const height = topologyTrainSize("", false, options.tv, Boolean(kr)).height;
+    const brick = bricks.get(stationID) || { x: 7, y: 7 };
+    const gap = kr ? 6 : 4;
+    const offX = brick.x + gap + (kr ? 6 : 0), offY = brick.y + gap + (kr ? 6 : 0);
+    const height = topologyTrainSize("", false, Boolean(kr), screen).height;
     // Kontrollrummet: finns ingen fri plats för raden krymper den, först till ett tåg och +N, sedan bara +N.
     const variants = [items];
     if (kr && here.length > 2 && items.length > 2) variants.push([here[0].trainNumber, `+${here.length - 1}`]);
@@ -3713,9 +3747,9 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     // Above, below, left, right; then the four corners, which miss both the
     // line through the station and its name when all four sides are taken.
     const place = (list) => {
-      const widths = list.map((item) => topologyTrainSize(item, false, options.tv, Boolean(kr)).width);
+      const widths = list.map((item) => topologyTrainSize(item, false, Boolean(kr), screen).width);
       const width = widths.reduce((sum, value) => sum + value, 0) + gap * (list.length - 1);
-      const across = off + width / 2, up = off + height / 2;
+      const across = offX + width / 2, up = offY + height / 2;
       const sides = [[0, -up], [0, up], [-across, 0], [across, 0], [across, -up], [-across, -up], [across, up], [-across, up]]
         .map(([dx, dy]) => ({ x: point.x + dx, y: point.y + dy }));
       const boxes = sides.map((side) => ({ x1: side.x - width / 2, y1: side.y - height / 2, x2: side.x + width / 2, y2: side.y + height / 2 }));
@@ -3733,7 +3767,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
       const at = { x: left + widths[index] / 2, y: centre.y };
       left += widths[index] + gap;
       if (item.startsWith("+")) {
-        appendTopologyTrain(target, at, { trainNumber: item, label: item }, { tv: Boolean(options.tv), kr: Boolean(kr), dimmed: Boolean(selectedService) });
+        appendTopologyTrain(target, at, { trainNumber: item, label: item }, { kr: Boolean(kr), screen, dimmed: Boolean(selectedService) });
         return;
       }
       appendTopologyTrain(target, at, { trainNumber: item, label: t("Tåg {number} vid {station}", { number: item, station: code(stationID) }) }, trainOptions(item));
@@ -3824,7 +3858,9 @@ function renderDisplaySelection(snapshot) {
 // Diagrammets tidsfönster: hela timmar, med "nu" ungefär en tredjedel in.
 function graphWindowBounds(snapshot) {
   const now = currentClockSeconds(snapshot) / 60, span = displayGraphWindow();
-  const min = Math.floor((now - span / 3) / 60) * 60;
+  // Fönstret börjar en halvtimme före nu (en kvart i det kortaste), på jämn kvart:
+  // det mesta av ytan visar det som kommer.
+  const min = Math.floor((now - Math.min(30, span / 4)) / 15) * 15;
   return { now, min, max: min + span, span };
 }
 function graphWindowRange(snapshot) {
@@ -3835,37 +3871,36 @@ function graphWindowRange(snapshot) {
 
 function renderGraph(snapshot) {
   const svg = document.querySelector("#graph-svg");
-  // Draw for the box the diagram really has, so 28 px text stays 28 px
-  // whether or not the QR codes and the top row take part of the screen.
-  const box = svg.getBoundingClientRect();
-  const width = 1840, left = 270, top = 65, bottom = 50;
-  const height = box.width > 0 && box.height > 0 ? Math.max(600, Math.round(width * box.height / box.width)) : 850;
+  // Ritas i skissens mått (en skärm 1440 bred) för rutan diagrammet har, som
+  // Banöversikten; SVG:n skalar upp till duken. Bara namnen står till vänster.
+  const width = Math.round((svg.clientWidth || 1840) * SCREEN_MAP_UNITS);
+  const height = Math.max(420, Math.round((svg.clientHeight || 850) * SCREEN_MAP_UNITS));
+  const top = 40, bottom = 56, pad = 18;
   const { now, min, max, span } = graphWindowBounds(snapshot);
   const stations = orderedStations(snapshot);
+  const longest = Math.max(0, ...stations.map((station) => String(station.name || "").length));
+  const left = Math.min(260, Math.max(110, Math.round(longest * 7.4) + 28));
   const stationIndex = new Map(stations.map((s, i) => [s.id, i]));
   const x = minute => left + (minute - min) / (max - min) * (width - left - 30);
   const y = i => top + i * (height - top - bottom) / Math.max(1, stations.length - 1);
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`); svg.removeAttribute("width"); svg.removeAttribute("height"); svg.replaceChildren();
   const defs = svgElement("defs"), clip = svgElement("clipPath", {id: "screen-graph-clip"});
-  clip.append(svgElement("rect", {x: left, y: top - 24, width: width - left, height: height - top - bottom + 48})); defs.append(clip); svg.append(defs);
+  clip.append(svgElement("rect", {x: left, y: top - pad - 2, width: width - left, height: height - top - bottom + pad * 2 + 4})); defs.append(clip); svg.append(defs);
   // Det som redan hänt ligger i en skuggad yta; timmarna är heldragna och
   // halvtimmarna prickade (hela dygnet: varannan timme, timmarna prickade).
-  svg.append(svgElement("rect", {x:left, y:top - 24, width:Math.max(0, x(now) - left), height:height - top - bottom + 24, class:"sc-graph-past"}));
+  svg.append(svgElement("rect", {x:left, y:top - pad, width:Math.max(0, Math.min(x(now), width - 30) - left), height:height - top - bottom + pad * 2, class:"sc-graph-past"}));
   const gridStep = span <= 360 ? 30 : 60, labelStep = span <= 360 ? 60 : 120;
   for (let minute = Math.ceil(min / gridStep) * gridStep; minute <= max; minute += gridStep) {
     const solid = minute % labelStep === 0;
-    svg.append(svgElement("line", {x1:x(minute), x2:x(minute), y1:top - 24, y2:height - bottom, class:`graph-grid graph-col${solid ? "" : " is-half"}`}));
+    svg.append(svgElement("line", {x1:x(minute), x2:x(minute), y1:top - pad, y2:height - bottom + pad, class:`graph-grid graph-col${solid ? "" : " is-half"}`}));
     if (!solid) continue;
     const normalized = (Math.floor(minute) % 1440 + 1440) % 1440;
-    svg.append(svgElement("text", {x:x(minute), y:height - 12, "text-anchor":minute >= max ? "end" : "middle", class:"sc-graph-label"}, `${String(Math.floor(normalized/60)).padStart(2,"0")}:${String(normalized%60).padStart(2,"0")}`));
+    svg.append(svgElement("text", {x:x(minute), y:height - 16, "text-anchor":minute <= min ? "start" : minute >= max ? "end" : "middle", class:"sc-graph-time"}, `${String(Math.floor(normalized/60)).padStart(2,"0")}:${String(normalized%60).padStart(2,"0")}`));
   }
   stations.forEach((station, i) => {
-    svg.append(svgElement("line", {x1:left, x2:width, y1:y(i), y2:y(i), class:"graph-grid graph-row"}));
-    // Name and code on the station's own line, as in the design; a name too
-    // long to leave room for the code keeps the code on a row of its own.
-    const long = String(station.name || "").length > 14;
-    svg.append(svgElement("text", {x:10, y:long ? y(i)-7 : y(i)+10, class:"sc-graph-label"}, station.name));
-    svg.append(svgElement("text", long ? {x:10, y:y(i)+24, class:"sc-graph-code"} : {x:left-16, y:y(i)+9, "text-anchor":"end", class:"sc-graph-code"}, station.code || ""));
+    svg.append(svgElement("line", {x1:left, x2:width - 30, y1:y(i), y2:y(i), class:"graph-grid graph-row"}));
+    // Bara namnet, högerställt mot diagrammet; koden står i stationens etikett.
+    svg.append(svgElement("text", {x:left - 14, y:y(i) + 4.5, "text-anchor":"end", class:"sc-graph-label"}, station.name));
   });
   const trains = svgElement("g", {"clip-path":"url(#screen-graph-clip)"});
   const active = new Set((snapshot.train_positions || []).filter(p=>p.connection_id).map(p => String(p.train_number)));
@@ -3883,7 +3918,7 @@ function renderGraph(snapshot) {
     group.dataset.trainNumber=String(service.train_number);
     const line = points.map(p=>`${x(p.minute+shift)},${y(p.station)}`).join(" ");
     group.append(svgElement("polyline", {points:line, class:`sc-graph-line${isOut ? " is-out" : ""}`}));
-    group.append(svgElement("polyline",{points:line,fill:"none",stroke:"transparent","stroke-width":20}));
+    group.append(svgElement("polyline",{points:line,fill:"none",stroke:"transparent","stroke-width":14}));
     const select=()=>{state.displaySelectedTrainNumber=state.displaySelectedTrainNumber===String(service.train_number)?null:String(service.train_number); document.querySelector("#display-train-select").value=state.displaySelectedTrainNumber||"";updateDisplayGraphSelection();renderDisplaySelection(snapshot);};
     group.addEventListener("click",select);group.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select();}});
     drawn.push({group, service, points, shift, select, out: isOut});
@@ -3901,14 +3936,14 @@ function renderGraph(snapshot) {
     return g;
   };
   const placed = [];
-  const free = (b) => b.x1 >= left + 4 && b.x2 <= width - 6 && b.y1 >= top - 30 && b.y2 <= height - bottom + 4
-    && placed.every(o => b.x2 + 6 < o.x1 || b.x1 - 6 > o.x2 || b.y2 + 4 < o.y1 || b.y1 - 4 > o.y2);
+  const free = (b) => b.x1 >= left + 3 && b.x2 <= width - 4 && b.y1 >= top - pad && b.y2 <= height - bottom + pad
+    && placed.every(o => b.x2 + 4 < o.x1 || b.x1 - 4 > o.x2 || b.y2 + 2 < o.y1 || b.y1 - 2 > o.y2);
   const label = (entry) => {
-    const text = String(entry.service.train_number), w = text.length * 17;
+    const text = String(entry.service.train_number), w = text.length * 7.2;
     for (const p of entry.points.filter(p => p.minute + entry.shift >= min && p.minute + entry.shift <= max)) {
-      const px = Math.max(left + 8, x(p.minute + entry.shift) + 8), py = y(p.station);
-      for (const ty of p.station === 0 ? [py + 32, py - 10] : [py - 10, py + 32]) {
-        const b = {x1: px, x2: px + w, y1: ty - 22, y2: ty + 4};
+      const px = Math.max(left + 4, x(p.minute + entry.shift) + 5), py = y(p.station);
+      for (const ty of p.station === 0 ? [py + 15, py - 5] : [py - 5, py + 15]) {
+        const b = {x1: px, x2: px + w, y1: ty - 10, y2: ty + 2};
         if (!free(b)) continue;
         placed.push(b);
         layer(entry).append(svgElement("text", {x: px, y: ty, class: `sc-graph-train${entry.out ? " is-out" : ""}`}, text));
@@ -3921,23 +3956,23 @@ function renderGraph(snapshot) {
     const i = pts.findIndex((p, k) => k < pts.length - 1 && p.m <= now && now <= pts[k + 1].m);
     if (i < 0) return label(entry);
     const a = pts[i], b = pts[i + 1], yNow = b.m > a.m ? a.y + (b.y - a.y) * (now - a.m) / (b.m - a.m) : a.y;
-    const text = String(entry.service.train_number), w = text.length * 14.4 + 24, h = 38;
-    for (const [bx, by] of [[x(now) - 14 - w, yNow - h / 2], [x(now) + 14, yNow - h / 2], [x(now) - 14 - w, yNow - h / 2 - 44], [x(now) - 14 - w, yNow - h / 2 + 44]]) {
+    const text = String(entry.service.train_number), w = text.length * 7.2 + 12, h = 18;
+    for (const [bx, by] of [[x(now) - 7 - w, yNow - h / 2], [x(now) + 7, yNow - h / 2], [x(now) - 7 - w, yNow - h / 2 - 22], [x(now) - 7 - w, yNow - h / 2 + 22]]) {
       const box = {x1: bx, x2: bx + w, y1: by, y2: by + h};
       if (!free(box)) continue;
       placed.push(box);
-      layer(entry).append(svgElement("rect", {x: bx, y: by, width: w, height: h, rx: 10, class: "sc-graph-tag"}),
-        svgElement("text", {x: bx + w / 2, y: by + 27, "text-anchor": "middle", class: "sc-graph-tag-text"}, text));
+      layer(entry).append(svgElement("rect", {x: bx, y: by, width: w, height: h, rx: 4, class: "sc-graph-tag"}),
+        svgElement("text", {x: bx + w / 2, y: by + 13, "text-anchor": "middle", class: "sc-graph-tag-text"}, text));
       return;
     }
     label(entry);
   };
   drawn.filter(entry => entry.out).forEach(tag);
   drawn.filter(entry => !entry.out).forEach(label);
-  svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top-24, y2:height-bottom, class:"sc-graph-now"}), labels);
+  svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top - pad, y2:height - bottom + pad, class:"sc-graph-now"}), labels);
   // The time on the now line, as a yellow tag like the design's.
-  svg.append(svgElement("rect", {x:x(now)-48, y:top-60, width:96, height:36, rx:8, class:"sc-graph-now-tag"}),
-    svgElement("text",{x:x(now),y:top-33,"text-anchor":"middle",class:"sc-graph-now-text"},currentClockTime(snapshot).slice(0,5)));
+  svg.append(svgElement("rect", {x:x(now)-25, y:2, width:50, height:18, rx:4, class:"sc-graph-now-tag"}),
+    svgElement("text",{x:x(now),y:15,"text-anchor":"middle",class:"sc-graph-now-text"},currentClockTime(snapshot).slice(0,5)));
   updateDisplayGraphSelection();
 }
 
@@ -4233,7 +4268,7 @@ function renderDashboard(snapshot) {
   <section class="display-card dash-card"><div class="dash-head"><h3>På linjen just nu</h3><span>tåg · sträcka · ankomst</span></div>${lineRows || html`<p class="dash-empty">Inget tåg är ute på linjen</p>`}<p class="dash-status${late.length ? " is-late" : ""}">${escapeHTML(status)}</p></section></div>`;
   // Draw for the height the card really has, so station names stay at their 30 px.
   const dashboardMap = document.querySelector("#dashboard-topology");
-  renderTopology(snapshot, dashboardMap, {tv:true, compactCount:true, height: Math.max(300, Math.round(dashboardMap.clientHeight || 450))});
+  renderTopology(snapshot, dashboardMap, { kr: screenMapSize(dashboardMap, 1200, 450) });
 }
 
 // Trains out on the line, where they run and when they are due: the strip
@@ -4277,13 +4312,19 @@ function renderDisplayOnLine(snapshot) {
   strip.replaceChildren(...cells);
 }
 
+// Skärmen är en duk på 1920 × 1080 som skalas in i fönstret. Kartan ritas i
+// skissens mått, en skärm 1440 bred, och SVG:n skalar upp den till duken.
+const SCREEN_MAP_UNITS = 1440 / 1920;
+function screenMapSize(svg, width, height) {
+  return { width: (svg.clientWidth || width) * SCREEN_MAP_UNITS, height: (svg.clientHeight || height) * SCREEN_MAP_UNITS, screen: true };
+}
+
 function renderDisplayTopology(snapshot) {
   renderDisplayOnLine(snapshot);
-  // Draw for the box the map really has, between the top row and the strip.
-  const box = document.querySelector("#topology-svg").getBoundingClientRect();
-  renderTopology(snapshot, document.querySelector("#topology-svg"), {
-    tv: true,
-    height: box.width > 0 && box.height > 0 ? Math.max(500, Math.round(1840 * box.height / box.width)) : 680,
+  // Ritas för rutan kartan har, mellan sidhuvudet och remsan.
+  const svg = document.querySelector("#topology-svg");
+  renderTopology(snapshot, svg, {
+    kr: screenMapSize(svg, 1840, 860),
     selectedTrainNumber: state.displaySelectedTrainNumber,
     selectedStationID: state.displaySelectedStationID,
     onTrainSelect: (trainNumber) => {

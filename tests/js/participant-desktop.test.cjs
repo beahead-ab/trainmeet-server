@@ -14,6 +14,7 @@ const measure = (page) => page.evaluate(() => {
   const [, , boxWidth, boxHeight] = svg.getAttribute('viewBox').split(' ').map(Number);
   return { svg: Math.round(svg.getBoundingClientRect().width), host: host.clientWidth, upright: boxHeight > boxWidth * 1.5,
     stations: svg.querySelectorAll('.topology-station').length, codes: [...svg.querySelectorAll('.topology-code')].map((code) => code.textContent),
+    names: [...svg.querySelectorAll('.topology-name')].map((name) => name.textContent), counts: [...svg.querySelectorAll('.topology-count')].map((count) => count.textContent),
     hint: !document.querySelector('#pv-map-hint').hidden,
     overflow: document.documentElement.scrollWidth > innerWidth + 1,
     columns: getComputedStyle(document.querySelector('.pv-page')).gridTemplateColumns.split(' ').filter((c) => c !== 'none').length,
@@ -55,8 +56,8 @@ const settle = async (page) => {
     assert.ok(phone.upright, 'on a phone held upright the line stands upright, as in Drift');
     assert.ok(phone.svg <= phone.host, `the map fits its panel (${phone.svg} > ${phone.host})`);
     assert.equal(phone.hint, false, 'nothing to drag sideways, so no hint');
-    assert.equal(phone.codes.length, phone.stations, 'every station shows its code and number of trains, as in Drift');
-    assert.ok(phone.codes.every((code) => /^\S+ · \d+$/.test(code)), `codes read "CST · 0" (${phone.codes.slice(0, 2)})`);
+    assert.equal(phone.names.length, phone.stations, 'every station shows its name, as in Drift');
+    assert.deepEqual(phone.codes, [], 'no codes beside the names');
     assert.equal(phone.overflow, false, 'the page itself does not scroll sideways on a phone');
     assert.deepEqual(h.errors, []);
   } finally { await h.browser.close(); }
@@ -68,13 +69,15 @@ const settle = async (page) => {
     const logged = await drift.page.evaluate(() => {
       const svg = document.querySelector('#overview-topology');
       const [, , w, hgt] = svg.getAttribute('viewBox').split(' ').map(Number);
-      return { upright: hgt > w * 1.5, codes: [...svg.querySelectorAll('.topology-code')].map((code) => code.textContent).sort() };
+      return { upright: hgt > w * 1.5, names: [...svg.querySelectorAll('.topology-name')].map((name) => name.textContent).sort(),
+        counts: [...svg.querySelectorAll('.topology-count')].map((count) => count.textContent).sort() };
     });
     const guest = await open({ route: '/', width: 390, height: 844, theme: 'dark', loggedOut: true });
     try {
       await settle(guest.page);
       const out = await measure(guest.page);
-      assert.deepEqual([out.upright, [...out.codes].sort()], [logged.upright, logged.codes], 'logged out shows the same map as logged in');
+      assert.deepEqual([out.upright, [...out.names].sort(), [...out.counts].sort()], [logged.upright, logged.names, logged.counts], 'logged out shows the same map as logged in');
+      assert.deepEqual(out.codes, [], 'only names on the map, no codes');
     } finally { await guest.browser.close(); }
   } finally { await drift.browser.close(); }
   console.log('participant-desktop: ok');

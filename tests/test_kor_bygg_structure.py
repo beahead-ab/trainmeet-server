@@ -60,11 +60,11 @@ class ShellStructureTests(unittest.TestCase):
         self.assertNotRegex(css, r"#[0-9a-fA-F]{3,8}\b", "colours come from the --kr- tokens")
         self.assertNotIn("participant-view", (WEB / "server-ui.css").read_text(encoding="utf-8"))
         # The map is Drift's: the same options, so on a phone held upright the
-        # line stands upright with each station's code, as it does logged in.
+        # line stands upright with each station's name, as it does logged in.
         # tests/js/participant-desktop.test.cjs compares the two drawings.
         participant = (WEB / "participant.js").read_text(encoding="utf-8")
-        self.assertIn("kr: { width: available }, tv: true", participant)
-        self.assertIn("kr: { width }, tv: true", (WEB / "drift.js").read_text(encoding="utf-8"))
+        self.assertIn("kr: { width: available }, showBadge: false", participant)
+        self.assertIn("kr: { width },", (WEB / "drift.js").read_text(encoding="utf-8"))
         self.assertNotIn("wide: true", participant)
         self.assertNotIn("noCode: true", participant)
 
@@ -197,7 +197,7 @@ class DesignTokenTests(unittest.TestCase):
             self.assertIn("var(--kr-num)", block, selector)
             self.assertIn("font-variant-numeric: tabular-nums", block, selector)
             self.assertNotIn("var(--kr-mono)", block.split("}")[0], selector)
-        for selector in (".kr-code", ".kr-graph .cnt", ".kr-map .topology-code"):
+        for selector in (".kr-code", ".kr-graph .cnt"):
             block = kr[kr.index(selector + " {"):][:320]
             self.assertIn("var(--kr-mono)", block.split("}")[0], selector)
         self.assertIn("#app-chrome .app-clock", kr)
@@ -215,10 +215,9 @@ class DesignTokenTests(unittest.TestCase):
         for selector in (".pv-clock__time", ".pv-item .t", ".pv-item .no", ".pv-badge-train"):
             block = participant[participant.index(selector + " {"):][:360].split("}")[0]
             self.assertIn("var(--kr-num)", block, selector)
-        # Antalet tåg bredvid stationskoden är en egen del av etiketten: koden
-        # i monospace, siffran i Inter.
+        # Antalet tåg inne står i stationens bricka, i Inter med tabellsiffror.
         self.assertIn(".topology-count { font-family: var(--kr-num)", kr)
-        self.assertIn('svgElement("tspan", { class: "topology-count" }', (WEB / "app.js").read_text(encoding="utf-8"))
+        self.assertIn('class: "topology-count" }, inside)', (WEB / "app.js").read_text(encoding="utf-8"))
 
     def test_motion_is_only_where_it_means_something(self):
         """DEL 7.7: blinkar allt betyder blinkandet ingenting."""

@@ -5,6 +5,41 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Banöversikten och tågdiagrammet: räls, stationsbrickor och luftigare text
+
+Efter Caspers skärmbilder av Banöversikt och Tågdiagram på helskärm och
+kartan på Drift, och en skiss i Claude Design.
+
+- **Räls:** banan ritas som räls med syllar, som i Lovable-projektet. Enkelspår
+  är ett spår och dubbelspår två, så de går att skilja åt. Förut var alla
+  sträckor lika tjocka linjer.
+- **Stationerna är brickor som täcker sina spår:** en cirkel vid enkelspår, en
+  stående bricka där dubbelspår går in i sidled, en liggande i höjdled och en
+  rundad kvadrat där dubbelspår möts från två håll.
+- **Bara namnen står på kartan,** i vanlig vikt. Koden och raden "KOD · n tåg"
+  är borta. Antalet tåg inne står i brickan, som lyser blått, och bara när
+  något tåg är inne.
+- **Tågen på dubbelspår går på sitt eget spår,** till vänster i färdriktningen.
+  Två tåg åt var sitt håll på samma sträcka täcker inte varandra.
+- **Skärmarna (Banöversikt och Översikt):**
+  - ritas som kartan på Drift, i skissens mått, och fyller bredden och mer av
+    höjden;
+  - kortet och ramen runt Banöversikten är borta;
+  - remsan med tåg på linjen har mindre text.
+- **Tågdiagrammet på skärmen:**
+  - bara namnen, högerställda, i stället för namn och kod som bröts och krockade;
+  - tunnare linjer och mindre tågnummer;
+  - ingen ram;
+  - fönstret börjar en halvtimme före nu i stället för en timme, så det mesta
+    av ytan visar det som kommer.
+- **Tågdiagrammet på Drift** visar namnen när det finns plats och koderna på
+  en telefon, aldrig båda, och har tunnare linjer.
+- **Tågets ruttkarta i tidtabellsdialogen på Drift** visar nu också sträckorna
+  utanför rutten och de upptagna sträckorna. De saknade färg i Drift
+  (`--display-line` och `--display-primary` finns bara på skärmarna).
+- Det gamla TV-läget i ritningen är borttaget, eftersom alla kartor nu ritas
+  på samma sätt. Nytt prov: `tests/js/topology-rails.test.cjs`.
+
 ### Fliken visar Mötesspåret i stället för den gamla orange ikonen
 
 Logotypbytet (#119) lade Mötesspåret på samma adress som den gamla orange
