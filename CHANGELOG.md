@@ -5,6 +5,20 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Begripligt besked när servern inte svarar
+
+Casper såg "The string did not match the expected pattern." på klockraden i
+Drift. Det är Safaris text när ett svar inte är JSON, här troligen Render- eller
+Cloudflare-sidan medan servern startade om efter en uppdatering.
+
+- **Sidan:** varje anrop från administrationen säger nu "Servern svarade inte.
+  Den kan hålla på att starta om – försök igen om en stund." när svaret inte
+  är JSON eller inget svar kommer alls ("Load failed"). Texten står på sidans
+  språk.
+- **Servern:** ett fel som ingen förutsåg ger ett JSON-svar (500,
+  `internal_error`), och hela spåret skrivs i loggen. Förut stängdes
+  anslutningen utan svar.
+
 ### Tågen står där tidtabellen säger (#136)
 
 Efter Nollställ träffen fanns inga tåg på stationerna (Benny, #136). Nu står

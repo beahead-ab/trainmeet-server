@@ -4490,6 +4490,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             self._send_api_error(HTTPAPIError(HTTPStatus(error.status), "us_error", str(error)))
         except HTTPAPIError as error:
             self._send_api_error(error)
+        except ConnectionError:
+            raise  # sidan har redan gått; inget att svara på
+        except Exception:  # noqa: BLE001 - ett oväntat fel ska ändå ge ett svar sidan kan läsa
+            self._send_unexpected_error()
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
@@ -4907,6 +4911,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             self._send_api_error(HTTPAPIError(HTTPStatus(error.status), "us_error", str(error)))
         except HTTPAPIError as error:
             self._send_api_error(error)
+        except ConnectionError:
+            raise  # sidan har redan gått; inget att svara på
+        except Exception:  # noqa: BLE001 - ett oväntat fel ska ändå ge ett svar sidan kan läsa
+            self._send_unexpected_error()
 
     def log_message(self, format: str, *args: Any) -> None:
         LOGGER.info("%s - %s", self.address_string(), format % args)
@@ -5051,6 +5059,18 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
 
     def _send_api_error(self, error: HTTPAPIError) -> None:
         self._send_json(error.status, {"error": error.code, "message": str(error)})
+
+    def _send_unexpected_error(self) -> None:
+        """Ett fel ingen förutsåg: hela spåret i loggen och ett JSON-svar som
+        sidan kan visa. Förut stängdes anslutningen utan svar, och bakom
+        Cloudflare blev det en HTML-sida som Safari inte kunde läsa som JSON
+        ("The string did not match the expected pattern.")."""
+        LOGGER.exception("Oväntat fel vid %s %s", self.command, urlparse(self.path).path)
+        try:
+            self._send_api_error(HTTPAPIError(HTTPStatus.INTERNAL_SERVER_ERROR, "internal_error",
+                "Något gick fel på servern. Försök igen, och säg till den som sköter servern om det händer igen."))
+        except Exception:  # noqa: BLE001 - anslutningen kan redan vara stängd
+            LOGGER.debug("Felsvaret kunde inte skickas", exc_info=True)
 
     def _serve_events(self) -> None:
         """What changed, as it happens (Server-Sent Events). Topic names only,
