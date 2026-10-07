@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.8.0",
+    "date": "2026-10-07",
+    "notes": [
+      "Banöversikt och tågdiagram: räls, stationsbrickor och luftigare text"
+    ]
+  },
+  {
     "version": "3.7.4",
     "date": "2026-10-07",
     "notes": [
