@@ -2243,6 +2243,18 @@ class TrainMeetHTTPApplication:
             self.notify_clock_changed()
             return {"settings": self.clock_source_settings(client), "clock": self.clock_status(client)}
 
+    def _place_trains_by_timetable(self, clock: dict[str, Any]) -> None:
+        """Admin ställde klockan: tågen utan verkliga händelser står där
+        tidtabellen säger vid den nya tiden (#136)."""
+        publication = self.runtime_store.active() if self.runtime_store else None
+        if publication is None or self.operations_store is None:
+            return
+        day = self.runtime_store.active_day() or publication.active_day
+        self.operations_store.place_trains_by_timetable(publication, day, float(clock["elapsed_seconds"]))
+        if self._station_service is not None:
+            self._station_service.notify_changed()
+        self.changes.notify("runtime", "traffic")
+
     def notify_clock_changed(self):
         self.changes.notify("clock")
         if self.on_clock_changed:
@@ -2360,9 +2372,12 @@ class TrainMeetHTTPApplication:
         action = str(payload.get("action") or "")
         try:
             if action in {"start", "set", "speed"}:
-                self.operations_store.configure_clock(time_value=payload.get("time"),
-                    speed=float(payload["speed"]) if payload.get("speed") is not None else None,
-                    running=True if action == "start" else None)
+                with self.operations_store.command_lock:
+                    clock = self.operations_store.configure_clock(time_value=payload.get("time"),
+                        speed=float(payload["speed"]) if payload.get("speed") is not None else None,
+                        running=True if action == "start" else None)
+                    if payload.get("time"):
+                        self._place_trains_by_timetable(clock)
                 return self.clock_status(client)
             if action == "stop":
                 self.operations_store.stop_clock(str(payload.get("reason") or "") or None)
@@ -2423,7 +2438,8 @@ class TrainMeetHTTPApplication:
             # Samma lås som varje kommando från en box, så att inget hinner in
             # mellan att klareringarna tas bort och att motorn släpper dem.
             with self.operations_store.command_lock:
-                removed = self.operations_store.reset_meet(publication)
+                removed = self.operations_store.reset_meet(
+                    publication, self.runtime_store.active_day() or publication.active_day)
                 if self.automatic:
                     self.automatic.forget_meet()
                 # En box mitt i en inmatning börjar om. Linjerna är en vy av
@@ -3842,6 +3858,10 @@ class TrainMeetHTTPApplication:
         ticket = self.lifecycle.begin_transition("eu", selected["meet_id"], selected["publication_id"],
             meet_name=selected.get("meet_name", ""), expected_generation=selected["generation"])
         self.runtime_store.set_active_day(day)
+        # Den nya dagens tåg står där tidtabellen säger vid klockan (#136).
+        with self.operations_store.command_lock:
+            self.operations_store.place_trains_by_timetable(
+                publication, day, float(self.operations_store.clock_status()["elapsed_seconds"]))
         self.runtime_store.bump_config_version()
         self.runtime_store._save_setting("require_scoped_commands", "true")
         self.engine.adopt_config(self.engine.config)

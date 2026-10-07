@@ -78,7 +78,7 @@ class MeetResetTests(unittest.TestCase):
 
     def play_for_a_while(self):
         """Ett tåg ute på linjen, ett TKL-pass och en klocka som går."""
-        self.app.control_clock(self.admin, {"action": "start", "time": "10:40:00", "speed": 4,
+        self.app.control_clock(self.admin, {"action": "start", "time": "09:17:00", "speed": 4,
                                             "meet_generation": self.generation()})
         self.app.control_clock(self.admin, {"action": "appearance", "style": "digital", "show_seconds": False,
                                             "meet_generation": self.generation()})
@@ -110,8 +110,13 @@ class MeetResetTests(unittest.TestCase):
         self.assertTrue(result["reset"])
         self.assertEqual([], self.service.open_cases(None))
         self.assertEqual({"free"}, set(self.lines().values()))
-        self.assertEqual([], self.ops.positions())
-        for table in ("clearances", "clearance_events", "line_available_messages", "tkl_movement_states",
+        # Tågen står där tidtabellen säger vid planens start (#136): 101 på A
+        # före sin avgång, och inget annat finns kvar av det som hände.
+        self.assertEqual([("101", "station", "station-a")],
+                         [(p["train_number"], p["status"], p["station_id"]) for p in self.ops.positions()])
+        self.assertEqual([("movement-101-a", "none", "positioned", "tidtabell")], self.ops._connection.execute(  # noqa: SLF001
+            "SELECT movement_id, arrival_status, departure_status, updated_by FROM tkl_movement_states").fetchall())
+        for table in ("clearances", "clearance_events", "line_available_messages",
                       "tkl_events", "train_readiness", "device_commands"):
             with self.subTest(table=table):
                 self.assertEqual(0, self.count(table))
@@ -188,7 +193,7 @@ class MeetResetTests(unittest.TestCase):
             self.reset()
         self.assertEqual("backup_failed", raised.exception.code)
         self.assertEqual("occupied", self.lines()["connection-a-b"])
-        self.assertEqual("10:40", self.ops.clock_status()["time"][:5])
+        self.assertEqual("09:17", self.ops.clock_status()["time"][:5])
 
     def test_a_backup_folder_the_server_may_not_write_is_named(self):
         # #129: a Raspberry Pi updater left the folder owned by root.

@@ -328,9 +328,13 @@ class CloudOnlyCoreTests(CoreStoreCase):
         newer["publication_id"] = "other-meet-publication"
         newer["meet"]["id"] = "other-meet"
         operations.start_meet(RuntimePublication.parse(newer))
-        self.assertEqual([], operations.positions())
+        # Inget följer med från den gamla träffen. Tågen står där den nya
+        # träffens tidtabell säger vid start (#136), inte på spår 2.
+        self.assertEqual([("101", "station-a")], [(p["train_number"], p["station_id"]) for p in operations.positions()])
         self.assertFalse(operations.clock_status()["running"])
-        self.assertEqual({}, operations.tkl_station_state(newer["publication_id"], first.active_day, "station-a")["movements"])
+        movements = operations.tkl_station_state(newer["publication_id"], first.active_day, "station-a")["movements"]
+        self.assertEqual({(movement["updated_by"], movement["arrival"], movement["actualTrack"]) for movement in movements.values()},
+                         {("tidtabell", "none", movement["track_id"])})
         self.assertTrue(operations.tkl_station_state(first.publication_id, first.active_day, "station-a")["movements"])
         self.assertEqual(1, operations._connection.execute("SELECT COUNT(*) FROM runtime_meet_archives").fetchone()[0])
 

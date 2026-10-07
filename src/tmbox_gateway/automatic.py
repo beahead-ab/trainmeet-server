@@ -276,8 +276,10 @@ class AutomaticStations:
             if math.isinf(ready):
                 return "Väntar på föregående ankomst"
             # A train planned before the automation started is sent only once
-            # it has actually come in here.
-            if leg["previous"] is None and leg["departure"] < state["start"]:
+            # it has actually come in here, or stands here already: after a
+            # reset or a new clock time the timetable puts it here (#136).
+            if (leg["previous"] is None and leg["departure"] < state["start"]
+                    and live[sender].get(key, {}).get("departure", "none") == "none"):
                 return ""
             if seconds < ready - REQUEST_LEAD_SECONDS:
                 return ""

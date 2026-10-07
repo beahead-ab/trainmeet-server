@@ -231,6 +231,9 @@ class SQLiteOperationsStore:
                 "operator_note": "TEXT",
             },
         )
+        # Ett läge som tidtabellen gav (#136) skiljs från ett som trafiken gav:
+        # det räknas inte som registrerat trafikläge i spärrarna.
+        self._add_missing_columns("train_positions", {"source": "TEXT NOT NULL DEFAULT 'event'"})
 
     def _add_missing_columns(self, table: str, columns: dict[str, str]) -> None:
         existing = {
@@ -258,8 +261,10 @@ class SQLiteOperationsStore:
             if blockers:
                 raise RuntimePublicationError(" ".join(blockers))
             self._initialize_publication(publication, carry_previous=False)
+            # Tågen står där tidtabellen säger vid planens start (#136).
+            self.place_trains_by_timetable(publication, publication.active_day, float(_plan_start_seconds(publication)))
 
-    def reset_meet(self, publication: RuntimePublication) -> dict[str, int]:
+    def reset_meet(self, publication: RuntimePublication, day: str | None = None) -> dict[str, int]:
         """Börja om träffen från början, med samma plan.
 
         Allt som har hänt i den här publikationen tas bort, för alla
@@ -271,7 +276,8 @@ class SQLiteOperationsStore:
         Planen, Cloud-kopplingen, enheterna och användarna rörs inte, och
         granskningsloggen står kvar: den säger att träffen nollställdes och av
         vem. Klockan och lägena före nollställningen sparas i arkivet, som vid
-        ett träffbyte.
+        ett träffbyte. Därefter står tågen där tidtabellen säger vid planens
+        start, på trafikdagen `day` (förvalt publikationens).
         """
 
         publication_id = publication.publication_id
@@ -323,7 +329,94 @@ class SQLiteOperationsStore:
                 raise
         # Fanns ingen klocka än skapas den, och rörelsernas identiteter skrivs.
         self._initialize_publication(publication, carry_previous=True)
+        # Tågen står där tidtabellen säger vid planens start (#136).
+        removed["placed"] = self.place_trains_by_timetable(
+            publication, day or publication.active_day, float(_plan_start_seconds(publication)))["placed"]
         return removed
+
+    def place_trains_by_timetable(self, publication: RuntimePublication, day: str,
+                                  clock_seconds: float) -> dict[str, int]:
+        """Ställ varje tåg där tidtabellen säger vid klocktiden (#136).
+
+        Tåget står på den station det senast skulle ha kommit till, på
+        stoppets planerade spår, och räknas som ankommet där. Ett tåg som
+        enligt tidtabellen är ute på linjen saknar klarering och står kvar på
+        avgångsstationen. Det tåget skulle ha gjort före stationen räknas som
+        gjort. Lägena är riktiga: TKL, boxarna, kartorna och automatiken ser
+        dem. De skrivs som tidtabellens (updated_by "tidtabell", source
+        "timetable") och utan händelser, eftersom inget har hänt.
+
+        Ett tåg med verkliga händelser rörs aldrig: en klarering, ett
+        linjebesked, en TKL-händelse, ett klarmeddelande, ett läge som någon
+        annan än tidtabellen skrivit eller en position från trafiken.
+        """
+        from .timetable_placement import PLACED_BY, timetable_positions
+
+        publication_id = publication.publication_id
+        wanted = timetable_positions(publication.payload, day, clock_seconds)
+        train_of = {str(row["id"]): str(row["train_number"]) for row in publication.payload.get("trains", [])}
+        placed = kept = 0
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                real_movements = {str(row[0]) for row in self._connection.execute(
+                    "SELECT movement_id FROM clearances WHERE publication_id=? AND active_day=?"
+                    " UNION SELECT movement_id FROM line_available_messages WHERE publication_id=? AND active_day=?"
+                    " UNION SELECT movement_id FROM tkl_events WHERE publication_id=? AND active_day=?"
+                    " UNION SELECT movement_id FROM train_readiness WHERE publication_id=? AND active_day=?"
+                    " UNION SELECT movement_id FROM tkl_movement_states WHERE publication_id=? AND active_day=?"
+                    " AND updated_by != ?",
+                    (publication_id, day) * 5 + (PLACED_BY,)).fetchall() if row[0]}
+                real = {train_of[movement] for movement in real_movements if movement in train_of}
+                real |= {str(row[0]) for row in self._connection.execute(
+                    "SELECT train_number FROM train_positions WHERE source != 'timetable'").fetchall()}
+                previous = {str(row[0]): (tuple(row[1:5]), int(row[5])) for row in self._connection.execute(
+                    "SELECT movement_id, station_id, arrival_status, departure_status, actual_track, revision"
+                    " FROM tkl_movement_states WHERE publication_id=? AND active_day=? AND updated_by=?",
+                    (publication_id, day, PLACED_BY)).fetchall()}
+                standing = {str(row[0]): row[1] for row in self._connection.execute(
+                    "SELECT train_number, station_id FROM train_positions WHERE source = 'timetable'").fetchall()}
+                desired = {movement: (state["station_id"], state["arrival"], state["departure"], state["track_id"])
+                           for number, place in wanted.items() if number not in real
+                           for movement, state in place["states"].items()}
+                # Bara det som ändras skrivs: ett oförändrat läge behåller sin
+                # revision, så att en TKL som just läst det inte blir inaktuell.
+                for movement, (values, _) in previous.items():
+                    if train_of.get(movement) not in real and desired.get(movement) != values:
+                        self._connection.execute(
+                            "DELETE FROM tkl_movement_states WHERE publication_id=? AND active_day=? AND movement_id=?",
+                            (publication_id, day, movement))
+                now = _now_iso()
+                for movement, values in desired.items():
+                    if movement in previous and previous[movement][0] == values:
+                        continue
+                    self._connection.execute(
+                        "INSERT INTO tkl_movement_states(publication_id, active_day, movement_id, station_id,"
+                        " arrival_status, departure_status, actual_track, operator_note, updated_by, updated_at,"
+                        " revision, crew_ready) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 0)",
+                        (publication_id, day, movement, *values, PLACED_BY, now,
+                         previous[movement][1] + 1 if movement in previous else 1))
+                for number, station in standing.items():
+                    place = wanted.get(number)
+                    if number not in real and (place is None or place["station_id"] != station):
+                        self._connection.execute("DELETE FROM train_positions WHERE train_number=?", (number,))
+                for number, place in wanted.items():
+                    if number in real:
+                        kept += 1
+                    elif place["station_id"] is not None:
+                        placed += 1
+                        if standing.get(number) != place["station_id"]:
+                            self._connection.execute(
+                                "INSERT OR REPLACE INTO train_positions(train_number, status, station_id, connection_id,"
+                                " from_station_id, to_station_id, updated_at, source)"
+                                " VALUES (?, 'station', ?, NULL, NULL, NULL, ?, 'timetable')",
+                                (number, place["station_id"], now))
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return {"placed": placed, "kept": kept}
 
     def start_meet_blockers(self, publication: RuntimePublication) -> list[str]:
         """Read-only preflight before the coordinator starts a transition.
@@ -422,7 +515,8 @@ class SQLiteOperationsStore:
                 reasons.append("Väntar på att utestående körtillstånd avslutas.")
             if self._connection.execute("SELECT 1 FROM line_available_messages WHERE publication_id=? AND status='delivered_to_device' LIMIT 1", (previous.publication_id,)).fetchone():
                 reasons.append("Väntar på kvittens av linjemeddelande.")
-            for train, station in self._connection.execute("SELECT train_number,station_id FROM train_positions").fetchall():
+            # Ett läge som bara tidtabellen gav är inget registrerat trafikläge (#136).
+            for train, station in self._connection.execute("SELECT train_number,station_id FROM train_positions WHERE source != 'timetable'").fetchall():
                 if train not in trains or station and station not in stations:
                     reasons.append("Config tar bort ett tåg eller en station med registrerat trafikläge.")
                     break
@@ -435,7 +529,8 @@ class SQLiteOperationsStore:
             recorded = self._connection.execute("""
                 SELECT i.train_number,i.station_id,i.stop_index
                 FROM movement_identity i WHERE i.publication_id=? AND (
-                    EXISTS(SELECT 1 FROM tkl_movement_states s WHERE s.publication_id=i.publication_id AND s.movement_id=i.movement_id)
+                    EXISTS(SELECT 1 FROM tkl_movement_states s WHERE s.publication_id=i.publication_id AND s.movement_id=i.movement_id
+                           AND s.updated_by != 'tidtabell')
                     OR EXISTS(SELECT 1 FROM train_readiness r WHERE r.publication_id=i.publication_id AND r.movement_id=i.movement_id))
                 """, (previous.publication_id,)).fetchall()
             if any(tuple(row) not in identities for row in recorded):
@@ -444,7 +539,7 @@ class SQLiteOperationsStore:
                 SELECT s.movement_id,i.train_number,i.station_id,i.stop_index,s.actual_track
                 FROM tkl_movement_states s JOIN movement_identity i
                   ON i.publication_id=s.publication_id AND i.movement_id=s.movement_id
-                WHERE s.publication_id=?
+                WHERE s.publication_id=? AND s.updated_by != 'tidtabell'
             """, (previous.publication_id,)).fetchall():
                 target_id = identities.get((train, station, stop_index))
                 if target_id is None:
@@ -484,7 +579,9 @@ class SQLiteOperationsStore:
                     reasons.append(f"Tåg {train} väntar på kvittens av ett linjebesked.")
             for movement_id, train in removed_movements.items():
                 for table in ("tkl_movement_states", "train_readiness", "tkl_events"):
-                    if self._connection.execute(f"SELECT 1 FROM {table} WHERE publication_id=? AND movement_id=? LIMIT 1",
+                    # Ett läge som bara tidtabellen gav hindrar inte (#136).
+                    placed = " AND updated_by != 'tidtabell'" if table == "tkl_movement_states" else ""
+                    if self._connection.execute(f"SELECT 1 FROM {table} WHERE publication_id=? AND movement_id=?{placed} LIMIT 1",
                                                 (publication_id, movement_id)).fetchone():
                         reasons.append(f"Tåg {train} har registrerade driftuppgifter och kan inte tas bort.")
                         break
@@ -1971,15 +2068,16 @@ class SQLiteOperationsStore:
                 """
                 INSERT INTO train_positions(
                     train_number, status, station_id, connection_id,
-                    from_station_id, to_station_id, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    from_station_id, to_station_id, updated_at, source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'event')
                 ON CONFLICT(train_number) DO UPDATE SET
                     status = excluded.status,
                     station_id = excluded.station_id,
                     connection_id = excluded.connection_id,
                     from_station_id = excluded.from_station_id,
                     to_station_id = excluded.to_station_id,
-                    updated_at = excluded.updated_at
+                    updated_at = excluded.updated_at,
+                    source = 'event'
                 """,
                 (
                     train_number,

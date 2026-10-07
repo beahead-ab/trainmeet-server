@@ -5,6 +5,33 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tågen står där tidtabellen säger (#136)
+
+Efter Nollställ träffen fanns inga tåg på stationerna (Benny, #136). Nu står
+varje tåg där tidtabellen säger vid klockans tid: efter en nollställning, när
+en träff startar, när admin ställer klockan och när trafikdagen byts.
+
+- **På stationen det senast skulle ha kommit till,** på stoppets planerade
+  spår, och räknat som ankommet där. Ett genomgående tåg kan därför begära
+  avgång direkt.
+- **Ute på linjen enligt tidtabellen:** tåget står kvar på avgångsstationen,
+  eftersom det saknar klarering. Avgången görs som vanligt.
+- **Före första avgången:** tåget står uppställt på sin första station. Kommer
+  ett annat tåg in på samma spår innan det avgår, oftast samma tågsätt som
+  vänder, ställs det upp först när det tåget har kommit.
+- **Efter sista ankomsten:** tåget står på sista stationen.
+- **Lägena är riktiga:** TKL, boxarna, kartorna och automatiken ser dem. Det
+  tåget skulle ha gjort före stationen räknas som gjort, men skrivs inte som
+  händelser.
+- **Ett tåg med verkliga händelser rörs aldrig:** en klarering, ett
+  linjebesked, något som TKL eller en box har registrerat, eller ett läge från
+  trafiken.
+- **Spärrarna** för en ny Cloud-version och för borttagning i den lokala
+  tidtabellen räknar inte tidtabellens lägen som registrerat trafikläge.
+- **Automatiska stationer** fortsätter från lägena. Ett tåg som står
+  uppställt skickas även om dess planerade avgång var före automatikens
+  start. Ett tåg som redan har kommit fram skickas aldrig igen.
+
 ### Tågen rör sig mellan stationerna, och dubbelspårets sida väljs per träff
 
 Efter Drift-skissen i Claude Design och Caspers önskan att se tågen röra sig.
