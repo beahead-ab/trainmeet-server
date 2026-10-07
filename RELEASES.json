@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.9.0",
+    "date": "2026-10-07",
+    "notes": [
+      "Tågen rör sig mellan stationerna och dubbelspårets sida väljs per träff"
+    ]
+  },
+  {
     "version": "3.8.1",
     "date": "2026-10-07",
     "notes": [
