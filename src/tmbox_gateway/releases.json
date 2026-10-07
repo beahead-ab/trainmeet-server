@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.10.2",
+    "date": "2026-10-07",
+    "notes": [
+      "Tågdiagrammet på Drift går med klockan"
+    ]
+  },
+  {
     "version": "3.10.1",
     "date": "2026-10-07",
     "notes": [
