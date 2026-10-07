@@ -44,3 +44,4 @@ jobs:
           node tests/js/header-mobile.test.cjs
           node tests/js/software-retry.test.cjs
           node tests/js/data-page.test.cjs
+          node tests/js/topology-rails.test.cjs

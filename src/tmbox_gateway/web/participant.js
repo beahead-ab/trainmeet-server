@@ -79,13 +79,13 @@
 
   // The map is drawn by app.js with the same options as Drift, in real pixels
   // on the width of its panel: on a phone held upright the line stands upright
-  // with each station's code and number of trains, and on a computer it runs
-  // across its column. Nothing has to be dragged; the hint under the map only
+  // with each station's name and the number of trains inside, and on a computer
+  // it runs across its column. Nothing has to be dragged; the hint under the map only
   // shows if a drawing is ever wider than its panel.
   function drawMap(svg) {
     const host = svg.closest(".pv-map");
     const available = Math.max(280, (host?.clientWidth || 0) - 20);
-    renderTopology(snapshot, svg, { kr: { width: available }, tv: true, showBadge: false, selectedStationID: selectedStation,
+    renderTopology(snapshot, svg, { kr: { width: available }, showBadge: false, selectedStationID: selectedStation,
       onStationSelect: id => { selectedStation = selectedStation === id ? null : id; renderTrack(); renderTimetable(); },
       onClear: () => { selectedStation = null; renderTrack(); renderTimetable(); } });
     const [, , width, height] = svg.getAttribute("viewBox").split(" ").map(Number);

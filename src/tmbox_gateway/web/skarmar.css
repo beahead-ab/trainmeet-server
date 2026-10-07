@@ -138,29 +138,9 @@ body.server-display { background: var(--kr-bg); }
 #display-stage[data-kind="clock"] .sc-qr__code svg { width: 88px; height: 88px; }
 
 /* ── Banöversikt ────────────────────────────────────────────────────── */
-#display-stage[data-kind="topology"] .sc-content { background: var(--kr-panel); border: 1px solid var(--kr-line); border-radius: 20px; }
-#display-app #topology-svg .topology-name, #display-app #topology-svg .topology-code,
-#display-app #dashboard-topology .topology-name, #display-app #dashboard-topology .topology-code { stroke: var(--kr-panel); }
-#display-app .topology-tv .topology-name { fill: var(--kr-ink); font-weight: 600; }
-#display-app .topology-tv .topology-code { fill: var(--kr-mute); }
-#display-app .topology-tv .topology-track { stroke: var(--kr-track); }
-#display-app .topology-tv .topology-track.active { stroke: var(--kr-blue); }
-#display-app .topology-tv .topology-track.route-highlight, #display-app .topology-tv .topology-track.station-highlight { stroke: var(--kr-blue); }
-#display-app .topology-tv .topology-mask { fill: var(--kr-panel); }
-#display-app .topology-tv .topology-station { fill: var(--kr-node-fill); stroke: var(--kr-node-line); }
-/* Tåg inne ger ingen blå ring (siffran i kodraden säger det); blått är en simulerad eller vald station. */
-#display-app .topology-tv .topology-station.active { fill: var(--kr-node-fill); stroke: var(--kr-node-line); }
-#display-app .topology-tv .topology-station.sim, #display-app .topology-tv .topology-station.highlighted { fill: var(--kr-node-fill); stroke: var(--kr-blue); }
-#display-app .topology-tv .topology-station-ring { stroke: var(--kr-blue); }
-/* Tågbrickor: fylld = på linjen, ofylld = klart men inte avgått. */
-#display-app .topology-tv .topology-train-tag { fill: var(--kr-blue); stroke: var(--kr-blue); }
-#display-app .topology-tv .topology-train .train-number, #display-app .topology-tv .topology-train-arrow { fill: var(--kr-blue-ink); }
-#display-app .topology-tv .topology-train.cleared .topology-train-tag { fill: var(--kr-panel); }
-#display-app .topology-tv .topology-train.cleared .train-number { fill: var(--kr-blue); }
-#display-app .topology-tv .topology-train.cleared .topology-train-arrow { fill: none; stroke: var(--kr-blue); }
-#display-app .topology-tv .topology-train.at-station .topology-train-tag { fill: var(--kr-panel); stroke: var(--kr-blue); }
-#display-app .topology-tv .topology-train.at-station .train-number { fill: var(--kr-blue); }
-#display-app .topology-tv .topology-train-ring { stroke: var(--kr-ink); }
+#display-stage[data-kind="topology"] .sc-content { background: none; border: 0; border-radius: 0; }
+/* Kartan ligger direkt på skärmens bakgrund; Översiktens karta står på sitt kort. */
+#display-stage[data-kind="topology"] #topology-svg { --topology-bg: var(--kr-bg); }
 .sc-online { border-top-color: var(--kr-line); }
 .sc-online__item { border-right-color: var(--kr-line); }
 .light .sc-online, .light .sc-online__item { border-color: var(--kr-line); }
@@ -168,27 +148,26 @@ body.server-display { background: var(--kr-bg); }
 .sc-online__due.is-late, .light .sc-online__due.is-late { color: var(--kr-amber); }
 
 /* ── Tågdiagram ─────────────────────────────────────────────────────── */
-#graph-scroll { border: 1px solid var(--kr-line); border-radius: 20px; background: var(--kr-panel); }
-.sc-graph-past { fill: var(--kr-panel-2); }
-.graph-grid { stroke: var(--kr-line); stroke-width: 2; }
+/* I skissens mått (en skärm 1440 bred), uppskalat till duken: bara namn,
+   tunna linjer och små tågnummer, utan kort och ram. */
+#graph-scroll { border: 0; border-radius: 0; background: none; }
+.sc-graph-past { fill: color-mix(in srgb, var(--kr-panel) 70%, transparent); }
+.graph-grid { stroke: color-mix(in srgb, var(--kr-line) 60%, transparent); stroke-width: 1; }
 .graph-grid.graph-col { stroke: var(--kr-line-2); }
-.graph-grid.graph-col.is-half { stroke: var(--kr-line); stroke-dasharray: 4 7; }
-.sc-graph-label { font: 600 26px var(--kr-sans); fill: var(--kr-ink); }
-.sc-graph-code { font: 22px var(--kr-mono); fill: var(--kr-mute); }
-text.sc-graph-label[text-anchor] { font: 24px var(--kr-num); fill: var(--kr-mute); font-variant-numeric: tabular-nums; }
-.sc-graph-line { fill: none; stroke: var(--kr-faint); stroke-width: 3; stroke-linejoin: round; }
-.sc-graph-line.is-out { stroke: var(--kr-blue); stroke-width: 6; }
-.graph-train-group.selected .sc-graph-line { stroke: var(--kr-ink); }
-.graph-train-group.selected .sc-graph-line.is-out { stroke: var(--kr-blue); stroke-width: 9; }
-.sc-graph-train { font: 700 22px var(--kr-num); fill: var(--kr-mute); stroke: var(--kr-panel); font-variant-numeric: tabular-nums; }
+.graph-grid.graph-col.is-half { stroke: var(--kr-line); stroke-dasharray: 3 5; }
+.sc-graph-label { font: 500 13px var(--kr-sans); fill: var(--kr-ink-2); }
+.sc-graph-time { font: 12px var(--kr-num); fill: var(--kr-mute); font-variant-numeric: tabular-nums; }
+.sc-graph-line { fill: none; stroke: var(--kr-faint); stroke-width: 1.5; stroke-linejoin: round; }
+.sc-graph-line.is-out { stroke: var(--kr-blue); stroke-width: 2.5; }
+.graph-train-group.selected .sc-graph-line { stroke: var(--kr-ink); stroke-width: 2.5; }
+.graph-train-group.selected .sc-graph-line.is-out { stroke: var(--kr-blue); stroke-width: 3.5; }
+.sc-graph-train { font: 600 11.5px var(--kr-num); fill: var(--kr-mute); stroke: var(--kr-bg); stroke-width: 3px; font-variant-numeric: tabular-nums; }
 .sc-graph-train.is-out { fill: var(--kr-blue); }
 .sc-graph-tag { fill: var(--kr-blue); }
-.sc-graph-tag-text { font: 700 24px var(--kr-num); fill: var(--kr-blue-ink); font-variant-numeric: tabular-nums; }
-.light .sc-graph-tag { fill: var(--kr-blue); }
-.light .sc-graph-tag-text { fill: var(--kr-blue-ink); }
-.sc-graph-now { stroke: var(--kr-amber); stroke-width: 4; }
+.sc-graph-tag-text { font: 600 11.5px var(--kr-num); fill: var(--kr-blue-ink); font-variant-numeric: tabular-nums; }
+.sc-graph-now { stroke: var(--kr-amber); stroke-width: 2; }
 .sc-graph-now-tag { fill: var(--kr-amber); }
-.sc-graph-now-text { font: 700 22px var(--kr-num); fill: var(--kr-amber-ink); font-variant-numeric: tabular-nums; }
+.sc-graph-now-text { font: 600 11.5px var(--kr-num); fill: var(--kr-amber-ink); font-variant-numeric: tabular-nums; }
 
 /* ── Översikt ───────────────────────────────────────────────────────── */
 #dashboard-view .display-card { background: var(--kr-panel); border: 1px solid var(--kr-line); border-radius: 20px; }
@@ -234,4 +213,4 @@ text.sc-graph-label[text-anchor] { font: 24px var(--kr-num); fill: var(--kr-mute
 #dashboard-view .dashboard-stat span { font-size: 21px; line-height: 1.15; }
 
 /* Översiktens klocka, tågnummer och tider kommer från den äldre server-ui.css i monospace: samma siffror som övriga skärmar. */
-#dashboard-view .dashboard-clock, #dashboard-view .dash-time, #dashboard-view .dash-row b, #dashboard-view .dash-in, #display-app .topology-tv .topology-train .train-number, #display-app .sc-online__line b { font-family: var(--kr-num); font-variant-numeric: tabular-nums; }
+#dashboard-view .dashboard-clock, #dashboard-view .dash-time, #dashboard-view .dash-row b, #dashboard-view .dash-in, #display-app .sc-online__line b { font-family: var(--kr-num); font-variant-numeric: tabular-nums; }

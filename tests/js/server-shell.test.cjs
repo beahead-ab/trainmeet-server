@@ -384,12 +384,13 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       assert.ok(Math.abs(g.b.y - g.a.y) > Math.abs(g.b.x - g.a.x), 'portrait: the line is upright');
       assert.ok(pointsTowards(g, from, to), `upright, the triangle points at ${to}: ${JSON.stringify(g.points)}`);
     }
-    // Trains inside a station are not drawn: the number after the station's code
-    // says how many stand there (SkarmBana: "siffran = tåg inne").
+    // Trains inside a station are not drawn: the number in the station's brick
+    // says how many stand there (SkarmBana: "siffran = tåg inne"). No codes on the map.
     for (const station of ['a', 'b']) {
       await showTraffic([], parked(4).map(train => ({ ...train, station_id: station })));
       const name = station === 'a' ? 'Alpha' : 'Beta';
-      await page.waitForFunction(name => /· 4$/.test(document.querySelector(`#overview-topology .topology-node[aria-label^="${name}"] .topology-code`)?.textContent || ''), name);
+      await page.waitForFunction(name => document.querySelector(`#overview-topology .topology-node[aria-label^="${name}"] .topology-count`)?.textContent === '4', name);
+      assert.equal(await page.locator('#overview-topology .topology-code').count(), 0, 'only names on the map');
       assert.equal(await page.locator('#overview-topology .topology-train.at-station').count(), 0, `station ${station}: no row of tags`);
     }
     // Readable on a phone: the map's box grows with the upright line.
@@ -410,17 +411,17 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     // Older paths record only the line position; that is on the line too.
     await showTraffic([], [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: 'a', to_station_id: 'b' }]);
     await page.locator('#overview-topology .topology-train.on-line[data-train-number="421"]').waitFor();
-    // Inside a station: no tag, only the number beside the code. With a clear
+    // Inside a station: no tag, only the number in the station's brick. With a clear
     // for the next line the train is that outlined tag on the line instead.
     await showTraffic([], [{ train_number: '421', status: 'station', station_id: 'b' }]);
-    await page.waitForFunction(() => /· 1$/.test(document.querySelector('#overview-topology .topology-node[aria-label^="Beta"] .topology-code')?.textContent || ''));
+    await page.waitForFunction(() => document.querySelector('#overview-topology .topology-node[aria-label^="Beta"] .topology-count')?.textContent === '1');
     assert.equal(await mapTrain.count(), 0);
     await showTraffic([line('reserved', 'b', 'a')], [{ train_number: '421', status: 'station', station_id: 'b' }]);
     await page.locator('#overview-topology .topology-train.cleared[data-train-number="421"]').waitFor();
     assert.equal(await mapTrain.count(), 1);
     // Many trains inside one station: still only the number.
     await showTraffic([], parked(4));
-    await page.waitForFunction(() => [...document.querySelectorAll('#overview-topology .topology-code')].some(code => /· 4$/.test(code.textContent)));
+    await page.waitForFunction(() => [...document.querySelectorAll('#overview-topology .topology-count')].some(count => count.textContent === '4'));
     assert.equal(await page.locator('#overview-topology .topology-train').count(), 0);
     // Clicking a train on the map lights its route and opens the train panel.
     await showTraffic([line('occupied')], [{ train_number: '421', status: 'connection', connection_id: 'a-b', from_station_id: 'a', to_station_id: 'b' }]);

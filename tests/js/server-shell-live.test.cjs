@@ -171,9 +171,13 @@ const root = path.resolve(__dirname, '../..');
       assert.equal(await clockScreen.locator('#screen-meet .sc-badge').count(),0,'Screens show the meet name, not EU/US');
       if(path==='topology'){
         const bounds=await clockScreen.locator('#topology-svg .topology-name').evaluateAll(nodes=>nodes.map(n=>Number(n.getAttribute('x'))));
-        assert.ok(Math.max(...bounds)-Math.min(...bounds)>1000,'Two-station TV layout uses the available width');
-        // As in the design: stations are rings, and the trains on the line are listed under the map.
-        assert.ok(Number(await clockScreen.locator('#topology-svg .topology-station').first().getAttribute('r'))>=16,'TV stations are rings');
+        const drawn=Number((await clockScreen.locator('#topology-svg').getAttribute('viewBox')).split(' ')[2]);
+        assert.ok(Math.max(...bounds)-Math.min(...bounds)>drawn*0.75,'Two-station TV layout uses the available width');
+        // As in the design: rails, stations are bricks, and the trains on the line are listed under the map.
+        assert.ok(await clockScreen.locator('#topology-svg.topology-screen .topology-rail').count()>=2,'the line is drawn as rails');
+        const brick=clockScreen.locator('#topology-svg .topology-station').first();
+        assert.equal(await brick.evaluate(node=>node.tagName),'rect');
+        assert.ok(Number(await brick.getAttribute('width'))>=20,'TV stations are bricks');
         assert.equal(await clockScreen.locator('#topology-online').isVisible(),true,'Banöversikt lists the trains on the line under the map');
       }
       if(path==='graph'){

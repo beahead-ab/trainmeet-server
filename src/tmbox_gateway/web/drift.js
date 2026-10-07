@@ -146,7 +146,7 @@
     const width = Math.max(280, contentWidth(target.parentElement) || 1200);
     const simulated = new Set((ctx.simulation?.active ? ctx.simulation.stations || [] : []).filter((station) => station.mode === "automatic").map((station) => station.id));
     hooks.renderTopology(snapshot, target, {
-      kr: { width }, tv: true,
+      kr: { width },
       selectedTrainNumber: ctx.selection.train, selectedStationID: ctx.selection.station, showBadge: false,
       stationClass: (station) => (simulated.has(station.id) ? "sim" : ""),
       onTrainSelect: (number) => hooks.selectTrain?.(number),
@@ -273,8 +273,11 @@
     const target = $("#overview-graph"), snapshot = ctx.snapshot; if (!target || !snapshot) return;
     const g = model.graph(snapshot, { windowMinutes: ctx.graphWindow, train: ctx.selection.train });
     const width = Math.max(280, contentWidth(target.parentElement) || 1200);
-    const showNames = width >= 900;
-    const left = showNames ? 176 : 64, right = 18, top = 24, bottom = 22, step = 20;
+    // Namnen när det finns plats, annars koderna: aldrig båda, det blev plottrigt.
+    const showNames = width >= 640;
+    const longest = Math.max(0, ...g.stations.map((station) => String(station.name || "").length));
+    const left = showNames ? Math.min(210, Math.max(96, Math.round(longest * 7.2) + 24)) : 64;
+    const right = 18, top = 24, bottom = 22, step = 20;
     const height = top + (Math.max(g.stations.length, 1) - 1) * step + bottom + 6;
     const x = (minute) => left + (minute - g.start) / (g.end - g.start) * (width - left - right);
     const y = (row) => top + row * step;
@@ -287,8 +290,8 @@
     if (g.now !== null) parts.push(svg("rect", { class: "sh", x: left, y: 4, width: Math.max(0, x(g.now) - left), height: height - 18 }));
     g.stations.forEach((station, row) => {
       parts.push(svg("line", { class: "gl", x1: left, y1: y(row), x2: width - right, y2: y(row) }));
-      if (showNames) parts.push(svg("text", { class: "lbl s", x: 8, y: y(row) + 5 }, station.name));
-      parts.push(svg("text", { class: "cnt", x: left - 10, y: y(row) + 4, "text-anchor": "end" }, station.code || ""));
+      parts.push(showNames ? svg("text", { class: "lbl s", x: left - 10, y: y(row) + 4.5, "text-anchor": "end" }, station.name)
+        : svg("text", { class: "cnt", x: left - 10, y: y(row) + 4, "text-anchor": "end" }, station.code || ""));
     });
     for (let minute = Math.ceil(g.start / 60) * 60; minute <= g.end; minute += 60) {
       const major = g.end - g.start <= 360 || (minute / 60) % 2 === 0;

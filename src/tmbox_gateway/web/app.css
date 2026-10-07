@@ -685,10 +685,14 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 }
 .graph-time-overlay svg { display: block; }
 .topology-track { stroke: var(--display-line); stroke-width: 2.5; stroke-linecap: round; transition: opacity .25s ease, stroke .25s ease, stroke-width .25s ease; }
+/* Ruttkartan i Drift har inte --display-line: kontrollrummets färg, före markeringarna nedan. */
+.route-map .topology-track { stroke: var(--display-line, var(--kr-rail, #888)); }
 .topology-track.active { stroke: var(--display-primary); }
+.route-map .topology-track.active { stroke: var(--display-primary, var(--kr-blue, #2256c3)); }
 .topology-track.route-highlight { stroke: hsl(220 70% 48%); stroke-width: 4; opacity: 1; }
 .topology-track.station-highlight { stroke: hsl(220 70% 58%); stroke-width: 3.5; opacity: 1; }
 .topology-track.dimmed { opacity: .18; }
+.route-map .topology-track.dimmed { opacity: .4; } /* tunna räler: sträckorna utanför rutten syns svagt */
 .topology-mask { fill: var(--display-card); }
 .topology-station { fill: color-mix(in srgb, var(--display-primary) 20%, transparent); stroke: color-mix(in srgb, var(--display-primary) 50%, transparent); stroke-width: 1.5; }
 .topology-station.autonomous { stroke-dasharray: 3 2; stroke-width: 1; }
@@ -700,7 +704,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .topology-node.dimmed, .topology-train.dimmed { opacity: .2; }
 .topology-node.on-route .topology-name, .topology-node.selected .topology-name { fill: hsl(220 70% 38%); font-weight: 700; }
 .topology-name { fill: var(--display-fg); font: 500 11px/1 var(--font-sans); text-anchor: middle; }
-.topology-code { fill: var(--display-muted); font: 600 8px/1 var(--font-sans); text-anchor: middle; }
 .train-number { fill: var(--display-fg); font: 700 8px/1 var(--font-sans); text-anchor: middle; }
 .topology-train { transition: opacity .25s ease; }
 .topology-train-ring { fill: color-mix(in srgb, hsl(220 70% 50%) 12%, transparent); stroke: hsl(220 70% 50%); stroke-width: 2; }

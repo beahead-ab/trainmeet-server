@@ -216,7 +216,7 @@ const root = path.resolve(__dirname, '../..');
     const seen = async (viewer, selector) => { await viewer.locator(selector).waitFor({timeout: 5000}); return Date.now() - departed; };
     const delays = await Promise.all([
       seen(drift, '#overview-topology .topology-train.on-line[data-train-number="101"]'),
-      seen(tv, '#topology-svg.topology-tv .topology-train.on-line[data-train-number="101"] .topology-train-arrow'),
+      seen(tv, '#topology-svg.topology-screen .topology-train.on-line[data-train-number="101"] .topology-train-arrow'),
       seen(guest, '#pv-topology .topology-train.on-line[data-train-number="101"]'),
     ]);
     for (const delay of delays) assert.ok(delay < 1500, `seen after ${delays.join(' / ')} ms`);
@@ -234,13 +234,15 @@ const root = path.resolve(__dirname, '../..');
     await within('#overview-clock-stop', () => admin.request.post(urls.eu + '/v1/clock', {data: {action: 'start'}}));
     await guest.context().close();
     // The same tag on the TV's map, in its size.
-    // It rides on the line, clear of the large names under it.
+    // It rides on the line, and covers no station name.
     const ride = await tv.evaluate(() => {
       const tag = document.querySelector('#topology-svg .topology-train[data-train-number="101"] .topology-train-tag').getBoundingClientRect();
       const node = document.querySelector('#topology-svg .topology-node[aria-label^="Charlottendahl"] .topology-station').getBoundingClientRect();
-      return { top: tag.y, bottom: tag.y + tag.height, middle: tag.y + tag.height / 2, line: node.y + node.height / 2 };
+      const covered = [...document.querySelectorAll('#topology-svg .topology-name')].map(name => name.getBoundingClientRect())
+        .filter(name => tag.left < name.right && name.left < tag.right && tag.top < name.bottom && name.top < tag.bottom).length;
+      return { top: tag.y, bottom: tag.y + tag.height, line: node.y + node.height / 2, covered };
     });
-    assert.ok(ride.top < ride.line && ride.line < ride.bottom && ride.middle < ride.line - 5, JSON.stringify(ride));
+    assert.ok(ride.top < ride.line && ride.line < ride.bottom && ride.covered === 0, JSON.stringify(ride));
     await tv.close();
     await drift.locator('#drift-upcoming button.kr-ev[data-train-number="101"]').first().click();
     const trainPanel = drift.locator('#drift-train-detail');

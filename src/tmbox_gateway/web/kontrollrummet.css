@@ -23,6 +23,7 @@
   --kr-amber: #f2c230; --kr-amber-ink: #0b0b0b; --kr-amber-soft: #3a2f0a;
   --kr-red: #f0716b; --kr-red-soft: #3a1a18;
   --kr-track: #3a3f4b; --kr-node-fill: #15181e; --kr-node-line: #c9cfd9;
+  --kr-rail: #8c93a1; --kr-sleeper: #2c313b;
   --kr-shadow: 0 20px 50px rgba(0, 0, 0, .55);
   --kr-backdrop: rgba(4, 6, 9, .62);
 }
@@ -35,6 +36,7 @@
   --kr-amber: #b8810a; --kr-amber-ink: #ffffff; --kr-amber-soft: #fbf0d2;
   --kr-red: #b42318; --kr-red-soft: #fbe3e0;
   --kr-track: #c4c1b8; --kr-node-fill: #ffffff; --kr-node-line: #3b3f47;
+  --kr-rail: #7b808a; --kr-sleeper: #dcd9d0;
   --kr-shadow: 0 20px 50px rgba(20, 20, 30, .22);
   --kr-backdrop: rgba(30, 30, 38, .38);
 }
@@ -273,18 +275,18 @@ body[data-mode="kor"] #app-view { padding: 14px 20px 24px; max-width: none; }
 .kr-graph { padding: 8px 24px 6px; }
 .kr-graph svg { display: block; width: 100%; height: auto; overflow: visible; }
 .sh { fill: var(--kr-panel-2); }
-.gl { stroke: var(--kr-line); stroke-width: 1.5; }
+.gl { stroke: var(--kr-line); stroke-width: 1; }
 .gl.h { stroke: var(--kr-line-2); }
-.gl.d { stroke-dasharray: 4 7; }
+.gl.d { stroke-dasharray: 3 5; }
 .ax { fill: var(--kr-mute); font: 12px var(--kr-num); font-variant-numeric: tabular-nums; }
-.kr-graph .lbl { fill: var(--kr-ink); font: 600 15px var(--kr-sans); }
+.kr-graph .lbl { fill: var(--kr-ink-2); font: 500 13px var(--kr-sans); }
 .kr-graph .cnt { fill: var(--kr-mute); font: 12.5px var(--kr-mono); }
-.pl { fill: none; stroke: var(--kr-faint); stroke-width: 2; stroke-linejoin: round; }
-.pl.lit { stroke: var(--kr-blue); stroke-width: 4; }
-.pl.lit.sel { stroke-width: 7; }
+.pl { fill: none; stroke: var(--kr-faint); stroke-width: 1.5; stroke-linejoin: round; }
+.pl.lit { stroke: var(--kr-blue); stroke-width: 2.5; }
+.pl.lit.sel { stroke-width: 4; }
 .hit { fill: none; stroke: transparent; stroke-width: 12; stroke-linejoin: round; pointer-events: stroke; }
 .tr-line, .tr-lit { cursor: pointer; }
-.tr-line:hover .pl:not(.lit) { stroke: var(--kr-ink-2); stroke-width: 3; }
+.tr-line:hover .pl:not(.lit) { stroke: var(--kr-ink-2); stroke-width: 2; }
 .tr-line:focus-visible { outline: none; }
 .ptxt { fill: var(--kr-mute); font: 700 12px var(--kr-num); pointer-events: none; font-variant-numeric: tabular-nums; }
 .tb { fill: var(--kr-blue); }
@@ -297,42 +299,52 @@ body[data-mode="kor"] #app-view { padding: 14px 20px 24px; max-width: none; }
 .nowt { fill: var(--kr-amber-ink); font: 700 12px var(--kr-num); font-variant-numeric: tabular-nums; }
 
 /* Banöversiktens ritning: samma klasser som skärmarnas, nu i kontrollrummets färger */
-.kr-map .topology-track { stroke: var(--kr-track); stroke-width: 5; stroke-linecap: round; transition: opacity .2s ease, stroke .2s ease; }
-.kr-map .topology-track.double { stroke-width: 3.6; }
-.kr-map .topology-track.active { stroke: var(--kr-blue); }
-.kr-map .topology-track.route-highlight { stroke: var(--kr-blue); stroke-width: 9; opacity: 1; }
-.kr-map .topology-track.double.route-highlight { stroke-width: 6; }
-.kr-map .topology-track.station-highlight { stroke: var(--kr-blue); opacity: 1; }
-.kr-map .topology-track.dimmed { opacity: .22; }
-.kr-map .topology-mask { fill: var(--kr-panel); }
-.kr-map .topology-station { fill: var(--kr-node-fill); stroke: var(--kr-node-line); stroke-width: 4.5; }
-.kr-map .topology-station.autonomous { stroke-dasharray: 6 5; }
-.kr-map .topology-station.active { stroke: var(--kr-node-line); }
-.kr-map .topology-station.sim { stroke: var(--kr-blue); }
-.kr-map .topology-station.highlighted { fill: var(--kr-node-fill); stroke: var(--kr-blue); stroke-width: 6; }
-.kr-map .topology-station-ring { display: none; }
-.kr-map .topology-node.selected .topology-station-ring { display: inline; fill: none; stroke: var(--kr-blue); stroke-width: 3; opacity: .55; }
-.kr-map .topology-node { transition: opacity .2s ease; }
-.kr-map .topology-node.clickable { cursor: pointer; }
-.kr-map .topology-node.dimmed, .kr-map .topology-train.dimmed { opacity: .28; }
-.kr-map .topology-node:focus-visible { outline: none; }
-.kr-map .topology-name { fill: var(--kr-ink); font: 600 17px var(--kr-sans); text-anchor: middle; paint-order: stroke; stroke: var(--kr-panel); stroke-width: 8px; stroke-linejoin: round; }
+/* Bankartan i riktiga pixlar (Drift, deltagarvyn, Banöversikt och Översikt på skärmarna):
+   räls med syllar, dubbelspår som två spår, stationen en bricka som täcker sina spår.
+   --topology-bg är det som ligger bakom kartan, så att masker och namnens kant smälter in. */
+.topology-kr { --topology-bg: var(--kr-panel); }
+.topology-kr .topology-track { transition: opacity .2s ease; }
+.topology-kr .topology-rail { stroke: var(--kr-rail); }
+.topology-kr .topology-sleepers { stroke: var(--kr-sleeper); }
+.topology-kr .topology-track.autonomous { stroke: var(--kr-rail); stroke-width: 1.5; }
+.topology-kr .topology-track.active .topology-rail, .topology-kr .topology-track.route-highlight .topology-rail,
+.topology-kr .topology-track.station-highlight .topology-rail { stroke: var(--kr-blue); }
+.topology-kr .topology-track.route-highlight .topology-sleepers { stroke: var(--kr-blue-soft); }
+.topology-kr .topology-track.dimmed { opacity: .22; }
+.topology-kr .topology-mask { fill: var(--topology-bg); }
+.topology-kr .topology-station { fill: var(--topology-bg); stroke: var(--kr-node-line); stroke-width: 2; }
+.topology-screen .topology-station { stroke-width: 2.5; }
+.topology-kr .topology-station.autonomous { stroke-dasharray: 4 3; }
+/* Tåg inne: brickan lyser och siffran står i den. */
+.topology-kr .topology-station.active { fill: var(--kr-blue-soft); stroke: var(--kr-blue); }
+.topology-kr .topology-station.sim { stroke: var(--kr-blue); }
+.topology-kr .topology-station.highlighted { stroke: var(--kr-blue); stroke-width: 3; }
+.topology-kr .topology-station-ring { display: none; }
+.topology-kr .topology-node.selected .topology-station-ring { display: inline; fill: none; stroke: var(--kr-blue); stroke-width: 2; opacity: .55; }
+.topology-kr .topology-node { transition: opacity .2s ease; }
+.topology-kr .topology-node.clickable { cursor: pointer; }
+.topology-kr .topology-node.dimmed, .topology-kr .topology-train.dimmed { opacity: .28; }
+.topology-kr .topology-node:focus-visible { outline: none; }
+.topology-kr .topology-name { fill: var(--kr-ink); font: 500 13px var(--kr-sans); text-anchor: middle; paint-order: stroke; stroke: var(--topology-bg); stroke-width: 4px; stroke-linejoin: round; }
+.topology-screen .topology-name { font-size: 16px; }
 .topology-count { font-family: var(--kr-num); font-variant-numeric: tabular-nums; }
-.kr-map .topology-code { fill: var(--kr-mute); font: 12.5px var(--kr-mono); text-anchor: middle; paint-order: stroke; stroke: var(--kr-panel); stroke-width: 6px; stroke-linejoin: round; }
-.kr-map .topology-node .topology-name.label-start, .kr-map .topology-node .topology-code.label-start { text-anchor: start; }
-.kr-map .topology-node .topology-name.label-end, .kr-map .topology-node .topology-code.label-end { text-anchor: end; }
-.kr-map .topology-node.on-route .topology-name, .kr-map .topology-node.selected .topology-name { fill: var(--kr-blue); font-weight: 700; }
-.kr-map .topology-train-tag { fill: var(--kr-blue); stroke: var(--kr-blue); stroke-width: 1; }
-.kr-map .topology-train .train-number { fill: var(--kr-blue-ink); font: 700 15px var(--kr-num); text-anchor: middle; font-variant-numeric: tabular-nums; }
-.kr-map .topology-train-arrow { fill: var(--kr-blue-ink); }
-.kr-map .topology-train.cleared .topology-train-tag { fill: var(--kr-panel); stroke: var(--kr-blue); stroke-width: 2.5; }
-.kr-map .topology-train.cleared .train-number { fill: var(--kr-blue); }
-.kr-map .topology-train.cleared .topology-train-arrow { fill: none; stroke: var(--kr-blue); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.kr-map .topology-train.at-station .topology-train-tag { fill: var(--kr-panel-3); stroke: var(--kr-line-2); stroke-width: 1.5; }
-.kr-map .topology-train.at-station .train-number { fill: var(--kr-ink-2); }
-.kr-map .topology-train-ring { fill: none; stroke: var(--kr-ink); stroke-width: 2.5; }
-.kr-map .topology-train.clickable { cursor: pointer; }
-.kr-map .topology-train:focus-visible { outline: none; }
+.topology-kr .topology-count { fill: var(--kr-blue); font-size: 10.5px; font-weight: 600; text-anchor: middle; pointer-events: none; }
+.topology-screen .topology-count { font-size: 12.5px; }
+.topology-kr .topology-node .topology-name.label-start { text-anchor: start; }
+.topology-kr .topology-node .topology-name.label-end { text-anchor: end; }
+.topology-kr .topology-node.on-route .topology-name, .topology-kr .topology-node.selected .topology-name { fill: var(--kr-blue); font-weight: 600; }
+.topology-kr .topology-train-tag { fill: var(--kr-blue); stroke: var(--kr-blue); stroke-width: 1.25; }
+.topology-kr .topology-train .train-number { fill: var(--kr-blue-ink); font: 600 12.5px var(--kr-num); text-anchor: middle; font-variant-numeric: tabular-nums; }
+.topology-screen .topology-train .train-number { font-size: 13.5px; }
+.topology-kr .topology-train-arrow { fill: var(--kr-blue-ink); }
+.topology-kr .topology-train.cleared .topology-train-tag { fill: var(--topology-bg); stroke: var(--kr-blue); stroke-width: 1.5; }
+.topology-kr .topology-train.cleared .train-number { fill: var(--kr-blue); }
+.topology-kr .topology-train.cleared .topology-train-arrow { fill: none; stroke: var(--kr-blue); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.topology-kr .topology-train.at-station .topology-train-tag { fill: var(--kr-panel-3); stroke: var(--kr-line-2); stroke-width: 1.25; }
+.topology-kr .topology-train.at-station .train-number { fill: var(--kr-ink-2); }
+.topology-kr .topology-train-ring { fill: none; stroke: var(--kr-ink); stroke-width: 2; }
+.topology-kr .topology-train.clickable { cursor: pointer; }
+.topology-kr .topology-train:focus-visible { outline: none; }
 
 /* Valt tåg och vald station: ett kort, fäst nere till höger */
 .kr-asides { position: fixed; right: 20px; bottom: 20px; width: 380px; max-width: calc(100vw - 40px); max-height: calc(100vh - 92px); overflow: auto; display: flex; flex-direction: column; gap: 12px; z-index: 12; pointer-events: none; }
