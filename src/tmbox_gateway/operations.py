@@ -1148,6 +1148,9 @@ class SQLiteOperationsStore:
             departure = "positioned"
             crew_ready = True
         track = (actual_track or "").strip() or None
+        # Träffklockans tid när det hände: kartan låter ett avgånget tåg röra
+        # sig mot nästa station från den faktiska avgången, inte den planerade.
+        clock_seconds = self._clock_seconds()
         # None betyder "lämna anteckningen som den är". Tom sträng betyder
         # "ta bort den". En box som bara byter spår ska inte råka radera vad
         # någon annan skrivit.
@@ -1204,6 +1207,7 @@ class SQLiteOperationsStore:
                         "departure": departure,
                         "actual_track": track,
                         "updated_by": updated_by,
+                        "clock_seconds": clock_seconds,
                     },
                     shift_id=shift_id,
                     movement_id=movement_id,
@@ -1382,6 +1386,55 @@ class SQLiteOperationsStore:
                     self._connection.execute("ROLLBACK")
                 raise
         return _train_readiness_from_row(row, station_id)
+
+    def _clock_seconds(self) -> float | None:
+        status = self.clock_status()
+        if not status.get("configured", True):
+            return None
+        seconds = status.get("elapsed_seconds")
+        if seconds is None:
+            try:
+                seconds = _time_to_seconds(str(status.get("time") or ""))
+            except ValueError:
+                return None
+        return float(seconds)
+
+    def departure_clock_seconds(self, publication_id: str, active_day: str,
+                                movement_ids: list[str] | set[str]) -> dict[str, float]:
+        """Träffklockans tid när varje rörelse senast avgick.
+
+        Ur rörelsehändelserna: den senaste övergången till avgånget. En
+        rörelse som lades tillbaka och avgick igen räknas från den nya
+        avgången. Äldre händelser utan klocktid ger inget svar; då gäller den
+        planerade avgången.
+        """
+        wanted = sorted({str(movement) for movement in movement_ids if movement})
+        if not wanted:
+            return {}
+        with self._lock:
+            rows = self._connection.execute(
+                f"SELECT movement_id, payload_json FROM tkl_events WHERE publication_id = ? AND active_day = ?"
+                f" AND movement_id IN ({','.join('?' * len(wanted))}) ORDER BY recorded_at, rowid",
+                (publication_id, active_day, *wanted),
+            ).fetchall()
+        result: dict[str, float] = {}
+        departed: dict[str, bool] = {}
+        for movement, payload in rows:
+            try:
+                data = json.loads(payload)
+            except (TypeError, ValueError):
+                continue
+            if "departure" not in data:
+                continue
+            now_departed = data.get("departure") == "departed"
+            if now_departed and not departed.get(movement):
+                seconds = data.get("clock_seconds")
+                if isinstance(seconds, (int, float)) and not isinstance(seconds, bool):
+                    result[movement] = float(seconds)
+                else:
+                    result.pop(movement, None)
+            departed[movement] = now_departed
+        return {movement: seconds for movement, seconds in result.items() if departed.get(movement)}
 
     def _insert_tkl_event_locked(
         self,

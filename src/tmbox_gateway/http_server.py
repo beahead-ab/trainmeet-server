@@ -1561,6 +1561,9 @@ class TrainMeetHTTPApplication:
             publication_id = selected["publication_id"]
             positions = []
         clock = self._clock_display(clock)
+        if publication is not None and not (selected and selected["region"] == "us"):
+            display = {**display, "traffic_side": self.runtime_store.traffic_side(publication.meet_id, publication.country)["side"]}
+            connection_states, positions = self._with_departure_times(publication, active_day, connection_states, positions)
         return {
             "protocol_version": 1,
             "revision": self.engine.revision,
@@ -1583,6 +1586,55 @@ class TrainMeetHTTPApplication:
             "us": self.us_display_snapshot() if selected and selected["region"] == "us" else None,
             "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
+
+    def _with_departure_times(self, publication, active_day, connection_states, positions):
+        """Träffklockans tid när varje tåg på linjen avgick, så att kartan kan
+        låta det röra sig mot nästa station. Saknas den gäller den planerade."""
+        if self.operations_store is None:
+            return connection_states, positions
+        movement_of = {(str(row["train_number"]), str(row["station_id"])): str(row["id"])
+                       for row in publication.payload.get("trains", []) if row.get("id")}
+        wanted = {channel["movement_id"] for state in connection_states for channel in state.get("channels", [])
+                  if channel.get("movement_id") and channel.get("state") == "occupied"}
+        wanted |= {movement_of.get((str(position.get("train_number")), str(position.get("from_station_id"))))
+                   for position in positions if position.get("status") == "connection"}
+        departed = self.operations_store.departure_clock_seconds(
+            publication.publication_id, active_day, {movement for movement in wanted if movement})
+        if not departed:
+            return connection_states, positions
+        states = [{**state, "channels": [
+            {**channel, "departed_seconds": departed[channel["movement_id"]]}
+            if channel.get("state") == "occupied" and channel.get("movement_id") in departed else channel
+            for channel in state.get("channels", [])]} for state in connection_states]
+        moved = []
+        for position in positions:
+            movement = movement_of.get((str(position.get("train_number")), str(position.get("from_station_id"))))
+            moved.append({**position, "departed_seconds": departed[movement]}
+                         if position.get("status") == "connection" and movement in departed else position)
+        return states, moved
+
+    def traffic_side_state(self, client: PairedClient) -> dict[str, Any]:
+        self._require_admin(client)
+        publication = self.runtime_store.active() if self.runtime_store else None
+        if publication is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "runtime_missing", "Välj en aktiv träff först.")
+        return {"meet_id": publication.meet_id, "country": publication.country,
+                **self.runtime_store.traffic_side(publication.meet_id, publication.country)}
+
+    @runtime_view
+    def save_traffic_side(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_admin(client)
+        publication = self.runtime_store.active() if self.runtime_store else None
+        if publication is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "runtime_missing", "Välj en aktiv träff först.")
+        side = payload.get("side")
+        try:
+            # "default" (eller inget) går tillbaka till landets förval.
+            self.runtime_store.set_traffic_side(publication.meet_id, None if side in {None, "", "default"} else side)
+        except RuntimePublicationError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_traffic_side", str(error)) from error
+        self.changes.notify("runtime")
+        return self.traffic_side_state(client)
 
     def us_display_snapshot(self) -> dict[str, Any]:
         """Public board projection: operational facts, never credentials,
@@ -4198,6 +4250,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 application._require_admin(self._authenticated_client())
                 self._send_json(HTTPStatus.OK, application.connection_details(self.headers.get("Host", ""), private=True))
                 return
+            if path == "/v1/settings/traffic-side":
+                self._send_json(HTTPStatus.OK, self.server.application.traffic_side_state(self._authenticated_client()))
+                return
             if path == "/v1/display":
                 self._send_json(
                     HTTPStatus.OK,
@@ -4761,6 +4816,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/cloud/display-placement":
                 self._send_json(HTTPStatus.OK, self.server.application.save_display_placement(self._authenticated_client(), payload))
+                return
+            if path == "/v1/settings/traffic-side":
+                self._send_json(HTTPStatus.OK, self.server.application.save_traffic_side(self._authenticated_client(), payload))
                 return
             if path == "/v1/server/restart":
                 client = self._authenticated_client()

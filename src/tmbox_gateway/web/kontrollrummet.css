@@ -315,8 +315,6 @@ body[data-mode="kor"] #app-view { padding: 14px 20px 24px; max-width: none; }
 .topology-kr .topology-station { fill: var(--topology-bg); stroke: var(--kr-node-line); stroke-width: 2; }
 .topology-screen .topology-station { stroke-width: 2.5; }
 .topology-kr .topology-station.autonomous { stroke-dasharray: 4 3; }
-/* Tåg inne: brickan lyser och siffran står i den. */
-.topology-kr .topology-station.active { fill: var(--kr-blue-soft); stroke: var(--kr-blue); }
 .topology-kr .topology-station.sim { stroke: var(--kr-blue); }
 .topology-kr .topology-station.highlighted { stroke: var(--kr-blue); stroke-width: 3; }
 .topology-kr .topology-station-ring { display: none; }
@@ -328,7 +326,10 @@ body[data-mode="kor"] #app-view { padding: 14px 20px 24px; max-width: none; }
 .topology-kr .topology-name { fill: var(--kr-ink); font: 500 13px var(--kr-sans); text-anchor: middle; paint-order: stroke; stroke: var(--topology-bg); stroke-width: 4px; stroke-linejoin: round; }
 .topology-screen .topology-name { font-size: 16px; }
 .topology-count { font-family: var(--kr-num); font-variant-numeric: tabular-nums; }
-.topology-kr .topology-count { fill: var(--kr-blue); font-size: 10.5px; font-weight: 600; text-anchor: middle; pointer-events: none; }
+/* Tåg inne: en liten bricka vid stationens hörn, som i skissen. */
+.topology-kr .topology-count-badge rect { fill: var(--kr-blue-soft); stroke: var(--kr-blue); stroke-width: 1; }
+.topology-kr .topology-count-badge { pointer-events: none; }
+.topology-kr .topology-count { fill: var(--kr-blue); font-size: 10.5px; font-weight: 600; text-anchor: middle; }
 .topology-screen .topology-count { font-size: 12.5px; }
 .topology-kr .topology-node .topology-name.label-start { text-anchor: start; }
 .topology-kr .topology-node .topology-name.label-end { text-anchor: end; }

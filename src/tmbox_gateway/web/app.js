@@ -680,7 +680,7 @@ function setMode(mode) {
 
 function showSettings() {
   globalThis.TrainMeetSettings?.show();
-  Promise.allSettled([checkSoftwareUpdate(), refreshUsers(), refreshBackups(), refreshRuntime(), refreshDevices(), refreshAutomatic()]);
+  Promise.allSettled([checkSoftwareUpdate(), refreshUsers(), refreshBackups(), refreshRuntime(), refreshDevices(), refreshAutomatic(), refreshTrafficSide()]);
 }
 
 // ── Obemannade stationer (issue #115) ─────────────────────────────────────
@@ -1540,6 +1540,45 @@ document.querySelector("#cloud-auto-form").addEventListener("submit", async (eve
     if (!response.ok) throw new Error(payload.message || t("Inställningen kunde inte sparas."));
     await refreshServerContext();
     finishModal(form);
+  } catch (error) {
+    setMessage(form.querySelector(".form-message"), error.message, "error");
+  } finally { endModalAction(form); }
+});
+
+// Vilken sida tågen går på vid dubbelspår (kartorna). Förvalet följer
+// träffens land; en träff vars moduler är byggda annorlunda väljer själv.
+async function refreshTrafficSide() {
+  const form = document.querySelector("#traffic-side-form");
+  if (!form || editorActive(form)) return;
+  const response = await authorizedFetch("/v1/settings/traffic-side");
+  if (!response.ok) { form.hidden = true; return; }
+  const payload = await response.json();
+  const select = document.querySelector("#traffic-side");
+  select.replaceChildren(
+    new Option(t(payload.default === "right" ? "Landets förval (högertrafik)" : "Landets förval (vänstertrafik)"), "default"),
+    new Option(t("Vänstertrafik"), "left"),
+    new Option(t("Högertrafik"), "right"),
+  );
+  select.value = payload.overridden ? payload.side : "default";
+  document.querySelector("#traffic-side-note").textContent = t(payload.side === "right"
+    ? "Kartan visar tågen på höger spår i färdriktningen" : "Kartan visar tågen på vänster spår i färdriktningen");
+  form.hidden = false;
+  globalThis.TrainMeetSettings?.rebase(form);
+}
+
+document.querySelector("#traffic-side-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!beginModalAction(form)) return;
+  try {
+    const response = await authorizedFetch("/v1/settings/traffic-side", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ side: document.querySelector("#traffic-side").value }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || t("Inställningen kunde inte sparas."));
+    finishModal(form);
+    await refreshTrafficSide();
   } catch (error) {
     setMessage(form.querySelector(".form-message"), error.message, "error");
   } finally { endModalAction(form); }
@@ -3312,16 +3351,68 @@ function topologyTrains(snapshot) {
     for (const channel of connection.channels || []) {
       if (!channel.train_number || !["reserved", "occupied"].includes(channel.state)) continue;
       seen.add(String(channel.train_number));
-      onLine.push({ trainNumber: String(channel.train_number), from: channel.from_station_id, to: channel.to_station_id, departed: channel.state === "occupied" });
+      onLine.push({ trainNumber: String(channel.train_number), from: channel.from_station_id, to: channel.to_station_id, departed: channel.state === "occupied",
+        departedSeconds: channel.departed_seconds ?? null });
     }
   }
   for (const position of snapshot.train_positions || []) {
     const trainNumber = String(position.train_number);
     if (seen.has(trainNumber)) continue;
-    if (position.status === "connection") onLine.push({ trainNumber, from: position.from_station_id, to: position.to_station_id, departed: true });
+    if (position.status === "connection") onLine.push({ trainNumber, from: position.from_station_id, to: position.to_station_id, departed: true,
+      departedSeconds: position.departed_seconds ?? null });
     else if (position.station_id) atStation.push({ trainNumber, station: position.station_id });
   }
   return { onLine, atStation };
+}
+
+// Hur långt ett avgånget tåg har kommit på sin sträcka, 0–1: tiden sedan
+// avgången (den faktiska i träffklockan, annars den planerade) delat med
+// tidtabellens gångtid till nästa station. Utan tidtabell för sträckan: null.
+function topologyLegTimes(snapshot, trainNumber, from, to) {
+  for (const service of snapshot.services || []) {
+    if (String(service.train_number) !== String(trainNumber)) continue;
+    const stops = [...(service.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
+    const start = stops.findIndex((stop) => stop.station_id === from);
+    if (start < 0) continue;
+    const next = stops.findIndex((stop, index) => index > start && stop.station_id === to);
+    if (next < 0) continue;
+    const departure = minuteValue(stops[start].departure_time || stops[start].arrival_time);
+    const arrival = minuteValue(stops[next].arrival_time || stops[next].departure_time);
+    if (departure === null || arrival === null) continue;
+    return { departure: departure * 60, duration: (((arrival - departure) % 1440 + 1440) % 1440 || 1) * 60 };
+  }
+  return null;
+}
+function topologyProgress(snapshot, train, nowSeconds) {
+  const leg = topologyLegTimes(snapshot, train.trainNumber, train.from, train.to);
+  if (!leg) return null;
+  const actual = train.departedSeconds === null || train.departedSeconds === undefined ? NaN : Number(train.departedSeconds);
+  const departed = Number.isFinite(actual) ? ((actual % 86400) + 86400) % 86400 : leg.departure;
+  let elapsed = ((nowSeconds - departed) % 86400 + 86400) % 86400;
+  if (elapsed > 43200) elapsed = 0; // klockan står före avgången
+  return Math.min(1, Math.max(0, elapsed / leg.duration));
+}
+// Träffklockan för kartan: bildens tid plus det som gått sedan bilden kom,
+// om klockan går. Varje bild får sin mottagningstid när den ritas första gången.
+const topologyReceivedAt = new WeakMap();
+function topologyClockSeconds(snapshot) {
+  if (!topologyReceivedAt.has(snapshot)) topologyReceivedAt.set(snapshot, performance.now());
+  let seconds = parsedClockSeconds(snapshot);
+  if (snapshot.clock?.running) seconds += (performance.now() - topologyReceivedAt.get(snapshot)) / 1000 * Number(snapshot.clock?.speed || 1);
+  return ((seconds % 86400) + 86400) % 86400;
+}
+// Tågen som rör sig flyttas en gång i sekunden utan att kartan ritas om.
+const topologyMotion = new Map();
+let topologyMotionTimer = null;
+function moveTopologyTrains() {
+  for (const [svg, entries] of topologyMotion) {
+    if (!svg.isConnected) { topologyMotion.delete(svg); continue; }
+    for (const entry of entries) {
+      const point = entry.place();
+      entry.group.setAttribute("transform", `translate(${point.x},${point.y})`);
+    }
+  }
+  if (!topologyMotion.size) { clearInterval(topologyMotionTimer); topologyMotionTimer = null; }
 }
 
 // Kontrollrummet (kr) ritar i riktiga pixlar: ett tåg är 20 px högt, siffran 12,5 px;
@@ -3454,6 +3545,7 @@ function placeTopologyLabels(items, segments, viewBox, options = {}) {
       if (labels > 0) cost += 1000 + labels;
       if (node > 0) cost += 1000 + node;
     }
+    for (const other of items) if (other.badge && overlap(spot.box, other.badge) > 0) cost += 1000;
     for (const segment of segments) if (crosses(spot.box, segment)) cost += 300;
     if (!options.refit && Number.isFinite(viewWidth)
       && (spot.box.x1 < viewX || spot.box.x2 > viewX + viewWidth || spot.box.y1 < viewY || spot.box.y2 > viewY + viewHeight)) cost += 600;
@@ -3616,16 +3708,27 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     if (onRoute || selected) group.append(brick(kr ? 6 : 5, "topology-station-ring"));
     group.append(brick(1, "topology-mask"));
     const extraClass = options.stationClass?.(station);
-    // Antalet tåg inne på stationen står i brickan, som då lyser; själva tågen
-    // ritas inte, bara de som har klart och det valda tåget (se nedan).
+    // Antalet tåg inne på stationen står i en liten bricka vid stationens övre
+    // högra hörn, som i skissen; själva tågen ritas inte, bara de som har
+    // klart och det valda tåget (se nedan).
     const inside = (snapshot.train_positions || []).filter((p) => p.station_id === station.id && !p.connection_id).length;
     group.append(brick(0, `topology-station${autonomous ? " autonomous" : ""}${activeStationIDs.has(station.id) ? " active" : ""}${onRoute || selected ? " highlighted" : ""}${extraClass ? ` ${extraClass}` : ""}`));
-    if (inside && kr) group.append(svgElement("text", { x: point.x, y: point.y + (screen ? 4.5 : 3.8), class: "topology-count" }, inside));
+    let badge = null;
+    if (inside && kr) {
+      const r = screen ? 8 : 7, width = Math.max(r * 2, String(inside).length * (screen ? 7.5 : 6.5) + 8);
+      // På hörnet, som en notisbricka: varken på spåren eller där namnet står.
+      const cx = point.x + halfW + width / 2 - r + 1, cy = point.y - halfH + 2;
+      const count = svgElement("g", { class: "topology-count-badge" });
+      count.append(svgElement("rect", { x: cx - width / 2, y: cy - r, width, height: r * 2, rx: r }),
+        svgElement("text", { x: cx, y: cy + (screen ? 4.2 : 3.7), class: "topology-count" }, inside));
+      group.append(count);
+      badge = { x1: cx - width / 2 - 1, y1: cy - r - 1, x2: cx + width / 2 + 1, y2: cy + r + 1 };
+    }
     // Bara namnet: koden står i stationens etikett för skärmläsare, och på kartan blev namn och kod plottrigt.
     const nameGap = kr ? (screen ? 21 : 17) : autonomous ? 11 : 13;
     const name = svgElement("text", { x: point.x, y: point.y + halfH + nameGap, class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name);
     group.append(name);
-    labels.push({ point, radius, rx: halfW, ry: halfH, name, code: null });
+    labels.push({ point, radius, rx: halfW, ry: halfH, name, code: null, badge });
     bricks.set(station.id, { x: halfW, y: halfH });
     const activate = (event) => {
       event.stopPropagation();
@@ -3660,13 +3763,15 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   // come only from an older recorded position; the second then stacks beside
   // the first instead of hiding it.
   const sameWay = new Map();
+  const handed = snapshot.display?.traffic_side === "right" ? -1 : 1;
+  const motion = [];
   // Dubbelspår med tåg åt båda hållen: taggarna flyttas isär så att de inte täcker varandra.
   const bothWays = new Set(trains.onLine.filter((a) => trains.onLine.some((b) => b.from === a.to && b.to === a.from)).map((a) => topologyEdgeKey(a.from, a.to)));
   const taken = []; // tags already drawn: a station's row never covers one
   const names = labels.flatMap((label) => [label.name, label.code].filter(Boolean)).flatMap((text) => {
     // A map not on screen has no measured text (and some browsers throw).
     try { const box = text.getBBox(); return [{ x1: box.x, y1: box.y, x2: box.x + box.width, y2: box.y + box.height }]; } catch { return []; }
-  });
+  }).concat(labels.map((label) => label.badge).filter(Boolean)); // antalsbrickorna är också i vägen
   const overlaps = (box, list, margin = 0) => list.some((o) => box.x1 < o.x2 + margin && o.x1 - margin < box.x2 && box.y1 < o.y2 + margin && o.y1 - margin < box.y2);
   for (const train of trains.onLine) {
     const from = positions.get(train.from), to = positions.get(train.to);
@@ -3675,19 +3780,27 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const along = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
     const size = topologyTrainSize(train.trainNumber, true, Boolean(kr), screen);
     const reach = Math.abs(along.x) * size.width / 2 + Math.abs(along.y) * size.height / 2;
-    const brick = bricks.get(train.from) || { x: 7, y: 7 };
-    const edge = Math.abs(along.x) * brick.x + Math.abs(along.y) * brick.y; // brickans kant i färdriktningen
-    const clear = edge + (kr ? 8 : 7) + reach; // off the station
-    const distance = Math.min(Math.max(length * 0.25, clear), length / 2);
+    const edgeOf = (id) => { const brick = bricks.get(id) || { x: 7, y: 7 }; return Math.abs(along.x) * brick.x + Math.abs(along.y) * brick.y; };
+    const clear = edgeOf(train.from) + (kr ? 8 : 7) + reach; // off the station
+    const clearTo = edgeOf(train.to) + (kr ? 8 : 7) + reach;
+    // Ett avgånget tåg rör sig mot nästa station i takt med träffklockan; ett
+    // som bara har klart står en bit ut från stationen det ska lämna.
+    const moving = Boolean(kr && train.departed && topologyLegTimes(snapshot, train.trainNumber, train.from, train.to));
+    const travelled = () => {
+      const low = Math.min(clear, length / 2), high = Math.max(length - clearTo, low);
+      return low + (high - low) * topologyProgress(snapshot, train, topologyClockSeconds(snapshot));
+    };
+    const distance = moving ? travelled() : Math.min(Math.max(length * 0.25, clear), length / 2);
     const key = `${train.from}>${train.to}`;
     const order = sameWay.get(key) || 0;
     sameWay.set(key, order + 1);
     // Up from a sideways line, to the right of an upright one.
     let side = { x: along.y, y: -along.x };
     if (side.y > 0 || (side.y === 0 && side.x < 0)) side = { x: -side.x, y: -side.y };
-    // På dubbelspår går tåget på sitt eget spår: vänster i färdriktningen, som i Sverige.
-    let lane = doubleLane(train.from, train.to);
-    if (lane && bothWays.has(topologyEdgeKey(train.from, train.to))) lane = Math.max(lane, Math.abs(along.x) * size.height / 2 + Math.abs(along.y) * size.width / 2 + 1.5);
+    // På dubbelspår går tåget på sitt eget spår: vänster i färdriktningen vid
+    // vänstertrafik (Sverige, Norge), höger vid högertrafik. Valet är träffens.
+    let lane = doubleLane(train.from, train.to) * handed;
+    if (lane && bothWays.has(topologyEdgeKey(train.from, train.to))) lane = Math.sign(lane) * Math.max(Math.abs(lane), Math.abs(along.x) * size.height / 2 + Math.abs(along.y) * size.width / 2 + 1.5);
     const leftHand = { x: along.y * lane, y: -along.x * lane };
     const across = order * (Math.abs(side.y) * size.height + Math.abs(side.x) * size.width + (kr ? 4 : 3));
     const route = `${code(train.from)} → ${code(train.to)}`;
@@ -3695,8 +3808,8 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const boxAt = (p) => ({ x1: p.x - size.width / 2, y1: p.y - size.height / 2, x2: p.x + size.width / 2, y2: p.y + size.height / 2 });
     let at = spot(distance);
     // Sitter taggen över ett stationsnamn får den glida längs linjen till
-    // närmaste ställe som är fritt.
-    if (kr && overlaps(boxAt(at), names, 2)) {
+    // närmaste ställe som är fritt. Ett tåg som rör sig följer klockan.
+    if (kr && !moving && overlaps(boxAt(at), names, 2)) {
       const low = Math.min(clear, length / 2), high = Math.max(length - clear, length / 2);
       const covered = (box) => names.reduce((sum, o) => sum + Math.max(0, Math.min(box.x2, o.x2) - Math.max(box.x1, o.x1)) * Math.max(0, Math.min(box.y2, o.y2) - Math.max(box.y1, o.y1)), 0);
       let best = { d: distance, area: covered(boxAt(at)) };
@@ -3710,11 +3823,12 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
       at = spot(best.d);
     }
     taken.push({ x1: at.x - size.width / 2, y1: at.y - size.height / 2, x2: at.x + size.width / 2, y2: at.y + size.height / 2 });
-    appendTopologyTrain(target, at, {
+    const group = appendTopologyTrain(target, at, {
       ...train, heading: along,
       label: train.departed ? t("Tåg {number} · {route} · på linjen", { number: train.trainNumber, route })
         : t("Tåg {number} · {route} · klart, inte avgått", { number: train.trainNumber, route }),
     }, trainOptions(train.trainNumber));
+    if (moving && snapshot.clock?.running) motion.push({ group, place: () => spot(travelled()) });
   }
   // Inside a station: a row of tags beside it, at most three and then +N, on
   // the first side that covers neither a name nor a line: above, below, left,
@@ -3773,6 +3887,10 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
       appendTopologyTrain(target, at, { trainNumber: item, label: t("Tåg {number} vid {station}", { number: item, station: code(stationID) }) }, trainOptions(item));
     });
   }
+  if (motion.length) {
+    topologyMotion.set(target, motion);
+    topologyMotionTimer ??= setInterval(moveTopologyTrains, 1000);
+  } else topologyMotion.delete(target);
   if (selectedService && options.showBadge !== false) {
     const [boxX, boxY, boxWidth, boxHeight] = viewBox.split(" ").map(Number);
     const label = t("Tåg {number} · {count} stopp", { number: selectedService.train_number, count: routeStops.length });
