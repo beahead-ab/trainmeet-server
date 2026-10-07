@@ -578,6 +578,20 @@ starttid och står still, och allt som hänt tas bort: klareringar, linjebesked,
 tågens lägen, TKL:s anteckningar och pass, och automatikens tider. En box mitt i
 en inmatning börjar om.
 
+Därefter står tågen där tidtabellen säger vid starttiden, på stoppens planerade
+spår (#136). Samma sak gäller när en träff startar, när admin ställer klockan
+och när trafikdagen byts:
+
+- ett tåg står på den station det senast skulle ha kommit till, och räknas som
+  ankommet där;
+- ett tåg som enligt tidtabellen är ute på linjen står kvar på
+  avgångsstationen, eftersom det saknar klarering;
+- ett tåg med verkliga händelser rörs aldrig.
+
+Lägena är riktiga för TKL, boxarna, kartorna och automatiken, men räknas inte
+som registrerat trafikläge när en ny Cloud-version eller en lokal ändring i
+tidtabellen prövas.
+
 Planen, Cloud-kopplingen, enheterna och deras stationer, användarna och
 klockans hastighet och utseende står kvar. Servern startar inte om: boxar,
 skärmar och TKL får en ny träffgeneration och hämtar läget på nytt.
