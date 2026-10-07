@@ -5,6 +5,24 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tågdiagrammet på Drift går med klockan
+
+Casper såg inte tågen röra sig i diagrammet. Drift hämtar läget när något
+händer och annars var 30:e sekund, och diagrammet och klockan stod still
+däremellan. Kartan hade redan en egen takt.
+
+- **Klockan, nu-linjen och tågen på linjen** följer nu träffklockan varje
+  sekund.
+- **Ett avgånget tåg** står på nu-linjen, så långt fram på sträckan som det har
+  kommit sedan den faktiska avgången. Det räknas på samma sätt som på kartan,
+  så ett försenat tåg syns där det är och inte där tidtabellen har det.
+  Förut stod etiketten kvar vid avgången.
+- **Skärmens tågdiagram** räknar på samma sätt.
+- **Den tända sträckan** går från avgången till ankomsten vid nästa station.
+  Förut gick den från ankomsten till avgången därifrån.
+- **Nu-linjens tid** avrundas nedåt, som klockan. Förut stod det 09:18 när
+  klockan visade 09:17.
+
 ### Begripligt besked när servern inte svarar
 
 Casper såg "The string did not match the expected pattern." på klockraden i

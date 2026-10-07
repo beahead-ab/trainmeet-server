@@ -34,7 +34,8 @@ const positions = [{ train_number: '92', station_id: 'cda', status: 'station' },
 const display = ({ time = '06:20:00', running = false, speed = 1, side, departed = {} } = {}) => () => ({ data: {
   clock: { configured: true, running, time, speed, source: 'internal', available: true, can_control: true },
   meet: { id: 'meet-1', name: 'Grimslöv 2027' }, active_day: 'Dagl', publication_id: 'pub-9', stations, connections, routes, services,
-  train_positions: positions, connection_states: connections.map((c) => ({ id: c.id, state: channels[c.id] ? 'occupied' : 'free',
+  train_positions: positions.map((p) => (p.status === 'connection' && departed[p.train_number] !== undefined ? { ...p, departed_seconds: departed[p.train_number] } : p)),
+  connection_states: connections.map((c) => ({ id: c.id, state: channels[c.id] ? 'occupied' : 'free',
     channels: (channels[c.id] || []).map(([train_number, from_station_id, to_station_id, state]) => ({ train_number, from_station_id, to_station_id, state,
       ...(departed[train_number] !== undefined && state === 'occupied' ? { departed_seconds: departed[train_number] } : {}) })) })),
   connection: { screens: [] }, display: { graph_station_order: order, topology_branch_station_ids: ['ryt', 'syd', 'vo', 'vst', 'bea', 'r', 'nav'],
@@ -196,6 +197,64 @@ function checkMap(map, where) {
       assert.ok(shares.at(-1) < 1, `not yet at Kristineberg (${shares.at(-1)})`);
     } finally { await running.close(); }
   } finally { for (const run of Object.values(runs)) await run.close(); }
+  // Tågdiagrammet på Drift går också: nu-linjen och klockan följer träffklockan
+  // mellan uppdateringarna (app.js hämtar läget var 30:e sekund), och ett
+  // avgånget tåg står på nu-linjen så långt upp på sträckan som det kommit.
+  const graphAt = async ({ time, running = false, speed = 1, departed: when = {} }) => {
+    const clock = { configured: true, running, time, speed, source: 'internal', available: true, can_control: true, style: 'digital', show_seconds: true };
+    const drift = await open({ route: '/drift', running, api: { '/v1/display': display({ time, running, speed, departed: when }),
+      '/v1/clock': (request) => (request.method() === 'GET' ? { data: clock } : undefined) } });
+    await drift.page.waitForFunction(() => document.querySelector('#overview-graph .tr-tag[data-train-number="93"]'));
+    const read = () => drift.page.evaluate(() => {
+      const svg = document.querySelector('#overview-graph');
+      const rect = svg.querySelector('.tr-tag[data-train-number="93"] rect');
+      const row = (name) => Number([...svg.querySelectorAll('text.lbl')].find((t) => t.textContent === name).getAttribute('y')) - 4.5;
+      return { right: Number(rect.getAttribute('x')) + Number(rect.getAttribute('width')), middle: Number(rect.getAttribute('y')) + 11,
+        now: Number(svg.querySelector('line.now')?.getAttribute('x1')), from: row('Ångviken'), to: row('Kristineberg'),
+        clock: document.querySelector('#overview-clock').textContent };
+    });
+    return { read, page: drift.page, close: () => drift.browser.close(), errors: drift.errors };
+  };
+  const still = await graphAt({ time: '06:09:45', departed });
+  try {
+    const g = await still.read();
+    assert.ok(Math.abs(g.right + 6 - g.now) < 0.5, `the tag stands at the now line (${g.right + 6} / ${g.now})`);
+    assert.ok(Math.abs((g.middle - g.from) / (g.to - g.from) - 4.75 / 8) < 0.02, `4¾ of eight minutes after 06:05 (${JSON.stringify(g)})`);
+    assert.equal(await still.page.evaluate(() => document.querySelector('#overview-graph .nowt').textContent), '06:09', 'the minute, as on the clock');
+    assert.deepEqual(still.errors, []);
+  } finally { await still.close(); }
+  const moving = await graphAt({ time: '06:06:00', running: true, speed: 60, departed });
+  try {
+    const first = await moving.read();
+    await moving.page.waitForTimeout(3200);
+    const later = await moving.read();
+    assert.ok(later.now > first.now, `the now line moves with the clock (${first.now} → ${later.now})`);
+    assert.ok(Math.abs(later.right + 6 - later.now) < 0.5, 'and the tag with it');
+    const share = (g) => (g.middle - g.from) / (g.to - g.from);
+    assert.ok(share(later) - share(first) > 0.25, `the tag climbs towards Kristineberg (${share(first)} → ${share(later)})`);
+    assert.notEqual(later.clock, first.clock, `the clock runs between updates (${first.clock} → ${later.clock})`);
+    // Läst i samma ögonblick: klockan och nu-linjen ritas i samma sekundslag.
+    const [label, shown] = await moving.page.evaluate(() => [document.querySelector('#overview-graph .nowt').textContent,
+      document.querySelector('#overview-clock').textContent]);
+    assert.equal(label, shown, 'the now line says what the clock says');
+  } finally { await moving.close(); }
+
+  // Skärmens tågdiagram: samma läge, räknat från den faktiska avgången.
+  const screen = await open({ route: '/display/graph', api: { '/v1/display': display({ time: '06:09:00', departed }) } });
+  try {
+    await screen.page.waitForFunction(() => [...document.querySelectorAll('#graph-svg .graph-train-group')]
+      .some((el) => el.dataset.trainNumber === '93' && el.querySelector('.sc-graph-tag')));
+    const g = await screen.page.evaluate(() => {
+      const svg = document.querySelector('#graph-svg');
+      const group = [...svg.querySelectorAll('.graph-train-group')].find((el) => el.dataset.trainNumber === '93' && el.querySelector('.sc-graph-tag'));
+      const rect = group.querySelector('.sc-graph-tag');
+      const row = (name) => Number([...svg.querySelectorAll('.sc-graph-label')].find((t) => t.textContent === name).getAttribute('y')) - 4.5;
+      return { middle: Number(rect.getAttribute('y')) + 9, from: row('Ångviken'), to: row('Kristineberg') };
+    });
+    assert.ok(Math.abs((g.middle - g.from) / (g.to - g.from) - 0.5) < 0.02, `the screen's graph counts from the actual departure too (${JSON.stringify(g)})`);
+    assert.deepEqual(screen.errors, []);
+  } finally { await screen.browser.close(); }
+
   // Högertrafik: tågen byter spår. 8782 österut ligger då under mittlinjen, 3571 västerut över.
   for (const [side, sign] of [['left', -1], ['right', 1]]) {
     const drift = await open({ route: '/drift', api: { '/v1/display': display({ side }) } });

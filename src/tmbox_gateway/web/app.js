@@ -4083,11 +4083,28 @@ function renderGraph(snapshot) {
       }
     }
   };
+  // Var ett tåg på linjen står: på sin sträcka så långt det kommit sedan den
+  // faktiska avgången, som på kartan. Annars där tidtabellen har det nu.
+  const leg = (entry) => {
+    const position = (snapshot.train_positions || []).find((p) => p.connection_id && String(p.train_number) === String(entry.service.train_number));
+    const from = stationIndex.get(position?.from_station_id), to = stationIndex.get(position?.to_station_id);
+    if (from === undefined || to === undefined) return null;
+    const end = entry.points.findIndex((p, k) => p.station === to && entry.points.slice(0, k).some((q) => q.station === from));
+    if (end < 0) return null;
+    const start = entry.points.slice(0, end).map((p) => p.station).lastIndexOf(from);
+    const part = topologyProgress(snapshot, { trainNumber: String(entry.service.train_number), from: position.from_station_id,
+      to: position.to_station_id, departedSeconds: position.departed_seconds }, topologyClockSeconds(snapshot));
+    if (part === null) return null;
+    const a = y(entry.points[start].station), b = y(entry.points[end].station);
+    return a + (b - a) * part;
+  };
   const tag = (entry) => {
     const pts = entry.points.map(p => ({m: p.minute + entry.shift, y: y(p.station)}));
     const i = pts.findIndex((p, k) => k < pts.length - 1 && p.m <= now && now <= pts[k + 1].m);
-    if (i < 0) return label(entry);
-    const a = pts[i], b = pts[i + 1], yNow = b.m > a.m ? a.y + (b.y - a.y) * (now - a.m) / (b.m - a.m) : a.y;
+    const actual = leg(entry);
+    if (i < 0 && actual === null) return label(entry);
+    const a = pts[i], b = pts[i + 1];
+    const yNow = actual ?? (b.m > a.m ? a.y + (b.y - a.y) * (now - a.m) / (b.m - a.m) : a.y);
     const text = String(entry.service.train_number), w = text.length * 7.2 + 12, h = 18;
     for (const [bx, by] of [[x(now) - 7 - w, yNow - h / 2], [x(now) + 7, yNow - h / 2], [x(now) - 7 - w, yNow - h / 2 - 22], [x(now) - 7 - w, yNow - h / 2 + 22]]) {
       const box = {x1: bx, x2: bx + w, y1: by, y2: by + h};
