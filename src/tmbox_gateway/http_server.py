@@ -482,6 +482,8 @@ class TrainMeetHTTPApplication:
                 self.automatic.hand_back(str(payload.get("station_id") or ""))
             elif action == "manual" and payload.get("confirmed") is True:
                 self.automatic.take_over(str(payload.get("station_id") or ""), str(payload.get("device_id") or ""))
+            elif action == "disturbance":
+                self.automatic.set_disturbance({key: payload[key] for key in ("profile", "where", "seed", "stabling", "stabling_minutes") if key in payload})
             else:
                 raise ValueError("Ogiltig åtgärd eller bekräftelse saknas.")
         except ValueError as error:
