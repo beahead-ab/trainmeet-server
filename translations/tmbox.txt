@@ -28,6 +28,14 @@ The box works with the meet's real traffic. Traffic control can move it to anoth
 updates {n} times a second|uppdateras {n} gånger i sekunden|opdateres {n} gange i sekundet|oppdateres {n} ganger i sekundet|wird {n}-mal pro Sekunde aktualisiert
 The server is not connected.|Servern är inte ansluten.|Serveren er ikke forbundet.|Serveren er ikke tilkoblet.|Der Server ist nicht verbunden.
 This TMBox no longer exists on the server.|Den här TMBoxen finns inte längre på servern.|Denne TMBox findes ikke længere på serveren.|Denne TMBoxen finnes ikke lenger på serveren.|Diese TMBox gibt es auf dem Server nicht mehr.
+# The station's timetable beside the box, with delays (live.html)
+Delays in the timetable|Förseningar i tidtabellen|Forsinkelser i køreplanen|Forsinkelser i ruteplanen|Verspätungen im Fahrplan
+applies to this box|gäller den här boxen|gælder denne boks|gjelder denne boksen|gilt für diese Box
+Timetable · {station}|Tidtabell · {station}|Køreplan · {station}|Ruteplan · {station}|Fahrplan · {station}
+No trains at the station today.|Inga tåg vid stationen i dag.|Ingen tog ved stationen i dag.|Ingen tog ved stasjonen i dag.|Heute keine Züge am Bahnhof.
+{minutes} min late|{minutes} min sen|{minutes} min forsinket|{minutes} min forsinket|{minutes} Min. verspätet
+Just now|Nyss|Lige nu|Nettopp|Gerade eben
+estimated|beräknad|beregnet|beregnet|voraussichtlich
 The client cannot connect.|Klienten kan inte anslutas.|Klienten kan ikke forbindes.|Klienten kan ikke kobles til.|Der Client kann nicht verbunden werden.
 Connected to the server|Ansluten till servern|Forbundet til serveren|Koblet til serveren|Mit dem Server verbunden
 Device code: {code} · The administrator assigns the station|Enhetskod: {code} · Station tilldelas av administratören|Enhedskode: {code} · Stationen tildeles af administratoren|Enhetskode: {code} · Stasjonen tildeles av administratoren|Gerätecode: {code} · Der Administrator weist den Bahnhof zu

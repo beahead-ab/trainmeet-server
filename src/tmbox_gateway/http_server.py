@@ -66,6 +66,7 @@ from .us import USStore, USError
 from .us_clock import clock_settings as validate_us_clock_settings
 from .protocol_v2 import TMBoxStationService, find_track_conflict
 from .train_routes import _visits
+from .train_live import expected_time, on_line_trains, train_live
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
     CALENDAR_START_DAYS,
@@ -590,7 +591,37 @@ class TrainMeetHTTPApplication:
         self.note_device_seen(client.client_id)
         self._require_box_access(client, client.client_id)
         self._touch_browser_client(client.client_id)
-        return self.terminal16.timetable(client.client_id)
+        return self._timetable_with_deviations(self.terminal16.timetable(client.client_id))
+
+    def _timetable_with_deviations(self, result: dict[str, Any]) -> dict[str, Any]:
+        """Boxens tidtabell med förseningar och för tidiga tåg, som webbens vyer.
+
+        Samma regler som drift-model.js trainLive (train_live.py): förseningen
+        räknas ur verkliga tider, ett tåg som står kvar blir "beräknat" senare.
+        Varje rad får tågets försening och den nya tiden. Hur mycket som visas
+        väljer klienten med deviation_level (träffens förval, eller enhetens).
+        """
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        publication = self.runtime_store.active() if self.runtime_store is not None else None
+        if publication is None or self.operations_store is None or (selected and selected["region"] == "us"):
+            return result
+        day = self.runtime_store.active_day() or publication.active_day
+        timetable = publication.timetable(active_day=day)
+        live = self.operations_store.movement_live(publication.publication_id, day)
+        connection_states = self.engine.shared_traffic.connection_states() if self.engine.shared_traffic is not None else []
+        trains = train_live(timetable.get("services", []), timetable.get("trains", []), live,
+                            _clock_seconds(self.operations_store.clock_status()),
+                            on_line_trains(connection_states, self.operations_store.positions()))
+        for row in result.get("rows", []):
+            train = trains.get(str(row.get("train_number")))
+            delay = train["delay_minutes"] if train and train["state"] != "arrived" else 0
+            row.update({"delay_minutes": delay, "expected_time": expected_time(row.get("time"), delay),
+                        "estimated": bool(train and train["estimated"]),
+                        "early_minutes": train["early_minutes"] if train else 0,
+                        "early_kind": train["early_kind"] if train else None,
+                        "train_type": train["train_type"] if train else "person"})
+        result["deviation_level"] = self.runtime_store.deviation_level(publication.meet_id)["level"]
+        return result
 
     @runtime_view
     def terminal16_command(self, client, payload):
