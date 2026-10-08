@@ -233,7 +233,10 @@ class SQLiteOperationsStore:
         )
         # Ett läge som tidtabellen gav (#136) skiljs från ett som trafiken gav:
         # det räknas inte som registrerat trafikläge i spärrarna.
-        self._add_missing_columns("train_positions", {"source": "TEXT NOT NULL DEFAULT 'event'"})
+        # Rörelsen läget kom ur: vilken avgång tåget gjorde, så att kartorna
+        # och skärmarna vet vilken tur det kör när samma nummer går flera
+        # gånger om dagen eller tåget gör flera uppehåll på samma station.
+        self._add_missing_columns("train_positions", {"source": "TEXT NOT NULL DEFAULT 'event'", "movement_id": "TEXT"})
 
     def _add_missing_columns(self, table: str, columns: dict[str, str]) -> None:
         existing = {
@@ -951,6 +954,7 @@ class SQLiteOperationsStore:
                     connection_id=connection_id,
                     from_station_id=current.get("from_station_id"),
                     to_station_id=current.get("to_station_id"),
+                    movement_id=current.get("movement_id"),
                 )
             elif previous_state == "occupied" and current_state == "free" and previous.get("train_number"):
                 self._upsert_position(
@@ -964,7 +968,7 @@ class SQLiteOperationsStore:
             rows = self._connection.execute(
                 """
                 SELECT train_number, status, station_id, connection_id,
-                       from_station_id, to_station_id, updated_at
+                       from_station_id, to_station_id, updated_at, movement_id
                 FROM train_positions ORDER BY train_number
                 """
             ).fetchall()
@@ -977,6 +981,7 @@ class SQLiteOperationsStore:
                 "from_station_id": row[4],
                 "to_station_id": row[5],
                 "updated_at": row[6],
+                "movement_id": row[7],
             }
             for row in rows
         ]
@@ -2062,14 +2067,17 @@ class SQLiteOperationsStore:
         connection_id: str | None = None,
         from_station_id: str | None = None,
         to_station_id: str | None = None,
+        movement_id: str | None = None,
     ) -> None:
+        """Var tåget är, och ur vilken rörelse det läget kom (den avgång eller
+        ankomst som gjordes). Det gamla trafikläget känner ingen rörelse."""
         with self._lock:
             self._connection.execute(
                 """
                 INSERT INTO train_positions(
                     train_number, status, station_id, connection_id,
-                    from_station_id, to_station_id, updated_at, source
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'event')
+                    from_station_id, to_station_id, updated_at, source, movement_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'event', ?)
                 ON CONFLICT(train_number) DO UPDATE SET
                     status = excluded.status,
                     station_id = excluded.station_id,
@@ -2077,7 +2085,8 @@ class SQLiteOperationsStore:
                     from_station_id = excluded.from_station_id,
                     to_station_id = excluded.to_station_id,
                     updated_at = excluded.updated_at,
-                    source = 'event'
+                    source = 'event',
+                    movement_id = excluded.movement_id
                 """,
                 (
                     train_number,
@@ -2087,6 +2096,7 @@ class SQLiteOperationsStore:
                     from_station_id,
                     to_station_id,
                     _now_iso(),
+                    str(movement_id) if movement_id else None,
                 ),
             )
 

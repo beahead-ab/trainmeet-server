@@ -5,6 +5,29 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tåget på linjen visar sin egen turs ankomst
+
+Casper såg tåg 319 ute på linjen Charlottendal–Gässlösa med "ank 19:05" när
+klockan var 10:26, och "Inga avvikelser". Skärmen letade upp ankomsten på den
+första raden med numret vid stationen i tidtabellen, inte på den tur tåget
+kör. Går numret flera gånger om dagen, eller gör tåget flera uppehåll på samma
+station, blev det fel tur – här kvällens. Kartan tog på samma sätt den första
+turen och servern den sista rörelsen, så den faktiska avgångstiden hittades
+inte och tåget stod kvar vid stationen på kartan.
+
+- **Läget på linjen vet vilken rörelse som avgick.** Avgången (och ankomsten)
+  skriver rörelsen på tågets läge, och `/v1/display` ger den som
+  `movement_id` på positionen, som kanalen redan gjorde. Den faktiska
+  avgångstiden hör till just den rörelsen. Ett äldre läge utan rörelse får
+  den rörelse för numret på stationen som senast avgick.
+- **Översikt, Banöversikt, kartorna, skärmens tågdiagram, Drift och
+  deltagarvyn** räknar på samma tur: den rörelsen pekar ut, annars den vars
+  planerade avgång ligger närmast den faktiska avgången, annars närmast
+  klockan. Ankomsten, sen ankomst och tågets plats på sträckan följer den
+  turen. "Tåg på linjen" på Översikt räknar samma tåg som listan.
+- **Skärmens tågdiagram** tänder bara den tur som är ute och sätter taggen på
+  den, inte på varje tur med numret.
+
 ### Tågdiagrammet på Drift går med klockan
 
 Casper såg inte tågen röra sig i diagrammet. Drift hämtar läget när något
