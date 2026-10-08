@@ -131,6 +131,23 @@ sys.stdout.buffer.write(buffer.getvalue())`])));
     assert.ok(seen.size >= 2, 'and it moves');
     if (process.env.SHOTS) await screen.screenshot({ path: path.join(process.env.SHOTS, 'clock-faces-screen.png') });
 
+    // Klockan fyller skärmen på en stående telefon lika väl som på en liggande:
+    // en urtavla på en stående skärm får en stående duk (server-ui.js).
+    for (const [width, height] of [[390, 844], [844, 390], [820, 1180]]) {
+      const sized = await (await browser.newContext({ locale: 'sv-SE', viewport: { width, height } })).newPage();
+      watch(sized);
+      await sized.goto(base + '/display/clock');
+      const dial = sized.locator('#clock-view svg.clock-face--custom');
+      await dial.waitFor();
+      await sized.waitForTimeout(300);
+      const box = await dial.boundingBox();
+      assert.ok(box.width >= 0.85 * Math.min(width, height), `the dial fills ${width}×${height}: ${Math.round(box.width)} px`);
+      assert.ok(box.x >= 0 && box.x + box.width <= width && box.y >= 0 && box.y + box.height <= height, 'and stays on the screen');
+      assert.equal(await sized.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      if (process.env.SHOTS && width < height) await sized.screenshot({ path: path.join(process.env.SHOTS, `clock-faces-${width}x${height}.png`) });
+      await sized.context().close();
+    }
+
     // Skärmens eget val har klockan med sitt namn.
     assert.ok((await screen.locator('#display-clock-style option').allTextContents()).includes('Stil: Exempelur'));
 
@@ -191,6 +208,26 @@ with zipfile.ZipFile(sys.argv[3], "w") as bundle:
     await message.getByText('2 klockor är uppladdade. Välj en som stil ovan.').waitFor();
     assert.equal(await page.locator('#clock-faces-list .kr-line--face').count(), 2, 'the zip replaced the same two');
     assert.equal(await page.locator('#clock-style-tiles [data-value^="custom:"]').count(), 2);
+
+    // Ett paket som fungerar men skalar sämre än det kunde laddas upp, och
+    // inställningarna säger vad som kan bli bättre.
+    const texted = path.join(work, 'med-text.tmclock');
+    require('node:child_process').execFileSync('python3', ['-c', `
+import io, json, sys, zipfile
+svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">{}</svg>'
+with zipfile.ZipFile(sys.argv[1], "w") as archive:
+    archive.writestr("clock.json", json.dumps({"format": 1, "id": "med-text", "name": "Med text", "layers": {"dial": "d.svg", "hour": "h.svg", "minute": "m.svg"}}))
+    archive.writestr("d.svg", svg.format('<circle cx="100" cy="100" r="98" fill="#fff"/><text x="100" y="30">12</text>'))
+    archive.writestr("h.svg", svg.format('<rect x="98" y="50" width="4" height="50"/>'))
+    archive.writestr("m.svg", svg.format('<rect x="98.5" y="25" width="3" height="75"/>'))`, texted]);
+    await page.locator('#clock-face-file').setInputFiles(texted);
+    await page.locator('#clock-face-rights').check();
+    await panel.getByRole('button', { name: 'Ladda upp' }).click();
+    await message.getByText('Med text är uppladdad. Välj den som stil ovan.').waitFor();
+    const warnings = page.locator('#clock-face-warnings');
+    await warnings.getByText('Uppladdad, men det här skalar sämre än det kunde:').waitFor();
+    assert.match(await warnings.textContent(), /d\.svg: text ritas med det typsnitt som finns på varje skärm/);
+    if (process.env.SHOTS) await page.locator('#clock-face-upload-form').screenshot({ path: path.join(process.env.SHOTS, 'clock-faces-warnings.png') });
 
     assert.deepEqual(errors, []);
     assert.deepEqual(blocked, []);

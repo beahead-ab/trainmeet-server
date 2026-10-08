@@ -242,6 +242,9 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 .admin-modal .modal-close { width: 44px; height: 44px; }
 .sc-clock-layout .sc-run { font-size: 30px; }
 .sc-clock-layout .sc-stopped { max-width: 1240px; text-align: left; }
+/* En urtavla på en stående skärm: duken står (server-ui.js resize). */
+#display-stage.sc-portrait { width: 1080px; }
+#display-stage.sc-portrait .sc-clock-layout .sc-stopped { max-width: 1000px; }
 .sc-stopped__reason { color: var(--display-fg); overflow-wrap: anywhere; max-width: 1100px; }
 .light .sc-run { color: #1f6b3d; }
 .light .sc-run::before { background: #1f6b3d; }

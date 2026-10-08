@@ -5,6 +5,33 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Klockor som skalar på alla skärmar, och en guide för att göra egna
+
+Efter Caspers önskan: tydlig dokumentation om hur ett klockpaket ska utformas,
+och klockor som skalar väl på olika enheter och storlekar.
+
+- **En urtavla på en stående skärm fyller bredden.** Det gäller telefon,
+  surfplatta och stående TV. Tidigare tog den halva bredden, eftersom
+  klockskärmen alltid var en liggande duk. Nu tar tavlan knappt 90 % av
+  kortsidan på alla skärmar, från telefon till 4K.
+- **Guide i [docs/clock-packs.md](docs/clock-packs.md):**
+  - var klockan visas och hur stor (44 px till 960 px, 4K);
+  - en mallbild över ytan och vridpunkten;
+  - mått för linjer och visare som syns även i deltagarvyn;
+  - text som banor, färg och kontrast, och det som gör klockan tung;
+  - fel och varningar, och en checklista.
+- **`python -m tmbox_gateway.clock_pack preview`** gör en sida som visar
+  klockan i alla storlekar, på mörk och ljus bakgrund, med visarna i gång.
+- **Varningar som inte stoppar uppladdningen.** De visas i inställningarna,
+  i `check` och i `preview`, och gäller:
+  - text i SVG;
+  - filter;
+  - linjer under 0,5 % av sidan;
+  - tavlor och visare med bakgrund som täcker;
+  - PNG under 1 024 px eller utan genomskinlighet;
+  - lager över 200 kB.
+- **En PNG ska vara minst 512 px.** Tidigare var gränsen 64 px.
+
 ### Inbyggt finns en analog och en digital klocka; övriga tavlor är klockpaket
 
 Efter Caspers önskan.
