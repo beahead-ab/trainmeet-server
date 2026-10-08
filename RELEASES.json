@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.19.0",
+    "date": "2026-10-08",
+    "notes": [
+      "Inbyggt finns en analog och en digital klocka; övriga tavlor är klockpaket"
+    ]
+  },
+  {
     "version": "3.18.0",
     "date": "2026-10-08",
     "notes": [
