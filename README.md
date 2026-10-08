@@ -573,8 +573,9 @@ före uppgraderingen att ägaren har en adress.
 ### Nollställ träffen
 
 **Inställningar → Farozon → Nollställ träffen** börjar om träffen med samma
-plan, till exempel efter en provkörning kvällen före. Klockan ställs på planens
-starttid och står still, och allt som hänt tas bort: klareringar, linjebesked,
+plan, till exempel efter en provkörning kvällen före. Träffen går tillbaka till
+dag 1 (startdagen), också efter dygnsskiften och hopp med tidsmaskinen, och
+klockan ställs på planens starttid och står still. Allt som hänt tas bort: klareringar, linjebesked,
 tågens lägen, TKL:s anteckningar och pass, och automatikens tider. En box mitt i
 en inmatning börjar om.
 
@@ -606,14 +607,26 @@ simulering går det inte. API: `POST /v1/server/meet-reset` med
 ### Återställ från säkerhetskopia
 
 En kopia av databasen tas automatiskt före varje programuppdatering och sparas i
-`backups/` under datamappen; de tio senaste behålls. Under **Inställningar →
-System → Återställ från säkerhetskopia** listas de med datum, storlek och vilken
-träff de bär — namnet läses ur kopian, inte ur filnamnet. En kopia som inte går
-att lita på listas ändå, men går inte att välja.
+`backups/` under datamappen. Kopior tas också före tidsmaskinen, en
+nollställning av träffen, en ny startdag, Återgå till Cloud-versionen och Ta
+Cloud-versionen; skälet står sist i filnamnet
+(`trainmeet-20261008-142233-tidsmaskin.db`). De tio senaste behålls, och
+tidsmaskinens fem senaste räknas för sig, så att många hopp aldrig tränger ut
+kopian från före en uppdatering eller en nollställning.
+
+Under **Inställningar → Farozon → Återställ från säkerhetskopia** listas de,
+nyast först, med datum, skäl, var träffen stod (dag, veckodag och klockan),
+vilken träff de bär och storlek, till exempel "Före tidsmaskinen · Dag 1 · Lör
+09:15 · Sommarträffen · 348 kB". Det läses ur kopian, inte ur filnamnet, utom
+skälet. Så ångras ett hopp med tidsmaskinen: välj kopian före hoppet. En kopia
+som inte går att lita på listas ändå, men går inte att välja.
 
 Att återställa byter ut **hela** databasen: träff, tidtabell, användare och
-parkopplade enheter blir de som fanns när kopian togs. Därför får bara ägaren
-göra det, och bekräftelsen är namnet på det som skrivs över — inte ett fast ord.
+parkopplade enheter blir de som fanns när kopian togs. Undantaget är de egna
+klockorna, som står kvar som de är nu med sina godkännanden: en klocka som
+tagits bort, till exempel när licensen gått ut, kommer inte tillbaka. Bara
+ägaren får återställa, och bekräftelsen är namnet på det som skrivs över —
+inte ett fast ord.
 
 Själva bytet sker inte medan servern kör. Webbgränssnittet lägger en lapp om
 vilken kopia som gäller, servern stänger sina anslutningar, och filen byts först

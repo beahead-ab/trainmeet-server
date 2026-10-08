@@ -91,6 +91,11 @@ const root = path.resolve(__dirname, '../..');
     const after = await get('/v1/server/backups');
     assert.equal(after.backups.length, backups.backups.length + 1, 'en säkerhetskopia togs först');
     assert.ok((await get('/v1/server-context')).selected_meet.generation > generation, 'enheterna får en ny generation');
+    // Listan under Återställ säger varför kopian togs och var träffen stod.
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('#restore-list .restore-row'));
+    const newest = await page.locator('#restore-list .restore-row small').first().textContent();
+    assert.match(newest, /^Före nollställningen · Dag 1 · \S+ \d\d:\d\d · /, newest);
     // Nollställ träffdata på tyska: ordet som visas låser upp knappen (#129),
     // och NOLLSTÄLL gör det fortfarande. Knappen trycks inte.
     await page.evaluate(() => localStorage.setItem('trainmeet.language', 'de'));

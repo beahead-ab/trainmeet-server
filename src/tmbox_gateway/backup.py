@@ -34,6 +34,31 @@ from pathlib import Path
 #: Raspberry Pi's card is small, and nothing has ever deleted these.
 DEFAULT_KEEP = 10
 
+#: Varför en kopia togs. Skälet står sist i filnamnet
+#: (trainmeet-20261008-142233-tidsmaskin.db); uppdaterarens kopior och äldre
+#: kopior har inget.
+KINDS = ("tidsmaskin", "nollstallning", "startdag", "lokala-andringar", "cloud")
+
+#: Tidsmaskinens kopior räknas för sig (Casper 2026-10-08): många hopp i rad
+#: ska aldrig tränga ut kopian från före en uppdatering eller en nollställning.
+TIME_MACHINE = "tidsmaskin"
+TIME_MACHINE_KEEP = 5
+
+#: Det som hör till servern och inte till träffen. En återställning lägger
+#: tillbaka kopians träff, men de egna klockorna står kvar som de är nu: en
+#: klocka som tagits bort, till exempel när licensen gått ut, ska inte komma
+#: tillbaka med ett gammalt godkännande.
+KEPT_ON_RESTORE = ("clock_faces", "clock_face_layers")
+
+_KIND_IN_NAME = re.compile(r"^trainmeet-[0-9]{8}-[0-9]{6}-([a-z-]+)\.db$")
+
+
+def kind_of(path: Path) -> str | None:
+    """Skälet i filnamnet, eller None för en kopia utan skäl."""
+
+    found = _KIND_IN_NAME.match(Path(path).name)
+    return found.group(1) if found and found.group(1) in KINDS else None
+
 
 class BackupError(RuntimeError):
     """A backup could not be taken, or could not be trusted once taken."""
@@ -69,15 +94,20 @@ def _verify(path: Path, expected_tables: int) -> None:
         )
 
 
-def prune(backup_dir: Path, keep: int = DEFAULT_KEEP) -> list[Path]:
-    """Delete all but the newest `keep` backups. Returns what was removed."""
+def prune(backup_dir: Path, keep: int = DEFAULT_KEEP, kind: str | None = None) -> list[Path]:
+    """Delete all but the newest `keep` backups. Returns what was removed.
+
+    The time machine's copies are counted on their own (`kind` "tidsmaskin");
+    every other copy is counted together.
+    """
 
     if keep < 1:
         raise ValueError("keep måste vara minst 1")
     # The names are UTC timestamps, so they sort chronologically, but mtime is
     # what actually says which file is oldest if a name is ever hand-made.
+    jumps = kind == TIME_MACHINE
     backups = sorted(
-        backup_dir.glob("trainmeet-*.db"),
+        (item for item in backup_dir.glob("trainmeet-*.db") if (kind_of(item) == TIME_MACHINE) == jumps),
         key=lambda item: (item.stat().st_mtime, item.name),
     )
     removed = []
@@ -88,15 +118,18 @@ def prune(backup_dir: Path, keep: int = DEFAULT_KEEP) -> list[Path]:
 
 
 def create_backup(
-    database: Path, backup_dir: Path, stamp: str, keep: int = DEFAULT_KEEP
+    database: Path, backup_dir: Path, stamp: str, keep: int = DEFAULT_KEEP, kind: str | None = None
 ) -> Path | None:
     """Back up a live database. Returns the file written, or None if there
     was nothing worth backing up.
 
     `stamp` names the file. The caller passes it so this stays deterministic
-    and the shell keeps owning the clock.
+    and the shell keeps owning the clock. `kind` says why the copy is taken
+    (one of KINDS) and ends the name.
     """
 
+    if kind is not None and kind not in KINDS:
+        raise ValueError(f"okänt skäl för en säkerhetskopia: {kind}")
     database = Path(database)
     backup_dir = Path(backup_dir)
     if not database.exists():
@@ -112,7 +145,7 @@ def create_backup(
             return None
 
         backup_dir.mkdir(parents=True, exist_ok=True)
-        target = backup_dir / f"trainmeet-{stamp}.db"
+        target = backup_dir / (f"trainmeet-{stamp}-{kind}.db" if kind else f"trainmeet-{stamp}.db")
         # Write under a temporary name so an interrupted backup never leaves
         # a half-copy sitting there looking like a real one.
         partial = target.with_suffix(".db.partial")
@@ -131,7 +164,7 @@ def create_backup(
     finally:
         source.close()
 
-    prune(backup_dir, keep)
+    prune(backup_dir, TIME_MACHINE_KEEP if kind == TIME_MACHINE else keep, kind)
     return target
 
 
@@ -176,6 +209,12 @@ def restore(backup: Path, database: Path) -> None:
         with open(backup, "rb") as source, open(staged, "wb") as target:
             while chunk := source.read(1 << 20):
                 target.write(chunk)
+        try:
+            _keep_server_tables(database, staged)
+        except sqlite3.DatabaseError:
+            # Går de inte att läsa ur den nuvarande databasen återställs kopian
+            # som den är, hellre än inte alls.
+            pass
         for stale in (
             database.with_name(database.name + "-wal"),
             database.with_name(database.name + "-shm"),
@@ -185,6 +224,44 @@ def restore(backup: Path, database: Path) -> None:
     except BaseException:
         staged.unlink(missing_ok=True)
         raise
+
+
+def _keep_server_tables(current: Path, staged: Path) -> None:
+    """Lägg serverns egna tabeller (KEPT_ON_RESTORE) från databasen som gäller
+    nu i den återställda kopian, innan den byts in. Saknar den nuvarande
+    databasen tabellerna står kopians kvar som de är."""
+
+    if not current.exists():
+        return
+    target = sqlite3.connect(Path(staged).resolve().as_uri(), uri=True, isolation_level=None)
+    try:
+        try:
+            target.execute("ATTACH DATABASE ? AS present", (Path(current).resolve().as_uri() + "?mode=ro",))
+        except sqlite3.DatabaseError:
+            # En databas som inte går att läsa har inga klockor att behålla;
+            # återställningen ska inte stoppas av den.
+            return
+        present = [table for table in KEPT_ON_RESTORE if target.execute(
+            "SELECT 1 FROM present.sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()]
+        # Allt eller inget: en halv ändring skulle lämna kopian utan klockor.
+        target.execute("BEGIN IMMEDIATE")
+        try:
+            # Tabellerna som de är nu, även om kopian är från en version där
+            # de såg annorlunda ut: kopians tas bort och görs om.
+            for table in reversed(present):
+                target.execute(f"DROP TABLE IF EXISTS main.{table}")
+            for table in present:
+                for (sql,) in target.execute(
+                    "SELECT sql FROM present.sqlite_master WHERE tbl_name=? AND sql IS NOT NULL"
+                    " ORDER BY type = 'index'", (table,)).fetchall():
+                    target.execute(sql)
+                target.execute(f"INSERT INTO main.{table} SELECT * FROM present.{table}")
+            target.execute("COMMIT")
+        except BaseException:
+            target.execute("ROLLBACK")
+            raise
+    finally:
+        target.close()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -225,7 +302,7 @@ if __name__ == "__main__":
 #: Filnamnens form. Återställningen tar emot ett namn från webbläsaren och får
 #: aldrig läsa något annat än en säkerhetskopia i mappen: inga sökvägar, inga
 #: ".." och inget annat filnamn.
-BACKUP_NAME = re.compile(r"^trainmeet-[0-9]{8}-[0-9]{6}\.db$")
+BACKUP_NAME = re.compile(r"^trainmeet-[0-9]{8}-[0-9]{6}(?:-(?:" + "|".join(KINDS) + r"))?\.db$")
 
 
 def _meet_name(connection: sqlite3.Connection) -> str | None:
@@ -246,10 +323,58 @@ def _meet_name(connection: sqlite3.Connection) -> str | None:
     return str(row[0]) if row and row[0] else None
 
 
+def _meet_position(connection: sqlite3.Connection, taken_at: str | None) -> dict[str, object]:
+    """Var träffen stod när kopian togs: dag nummer, veckodag och klockan.
+    Det är så man hittar kopian från före ett hopp med tidsmaskinen."""
+
+    from .runtime import calendar_weekday
+
+    try:
+        row = connection.execute(
+            "SELECT meet_id FROM runtime_publications ORDER BY active DESC, installed_at DESC, rowid DESC LIMIT 1"
+        ).fetchone()
+        if not row:
+            return {}
+        settings = dict(connection.execute(
+            "SELECT key, value FROM runtime_settings WHERE key IN (?, 'active_day')", ("meet_calendar:" + str(row[0]),)
+        ).fetchall())
+        clock = connection.execute(
+            "SELECT base_seconds, base_recorded_at, speed, running FROM runtime_clock WHERE singleton = 1"
+        ).fetchone()
+    except sqlite3.DatabaseError:
+        return {}
+    position: dict[str, object] = {}
+    try:
+        saved = json.loads(settings.get("meet_calendar:" + str(row[0])) or "{}")
+    except ValueError:
+        saved = {}
+    saved = saved if isinstance(saved, dict) else {}
+    start = str(saved.get("start_day") or settings.get("active_day") or "")
+    if start:
+        try:
+            number = max(1, int(saved.get("day_number") or 1))
+        except (TypeError, ValueError):
+            number = 1
+        position["meet_day"] = {"day_number": number, "weekday": calendar_weekday(start, number)}
+    if clock:
+        seconds = float(clock[0])
+        try:
+            if clock[3] and taken_at:
+                recorded = datetime.fromisoformat(str(clock[1]).replace("Z", "+00:00"))
+                if recorded.tzinfo is None:
+                    recorded = recorded.replace(tzinfo=timezone.utc)
+                seconds += max(0.0, (datetime.fromisoformat(taken_at) - recorded).total_seconds()) * float(clock[2])
+        except (TypeError, ValueError):
+            pass
+        minutes = int(seconds // 60) % (24 * 60)
+        position["clock_time"] = f"{minutes // 60:02d}:{minutes % 60:02d}"
+    return position
+
+
 def _taken_at(path: Path) -> str | None:
     """När kopian togs, läst ur filnamnet (UTC)."""
 
-    stamp = Path(path).stem.removeprefix("trainmeet-")
+    stamp = Path(path).stem.removeprefix("trainmeet-")[:15]
     try:
         return datetime.strptime(stamp, "%Y%m%d-%H%M%S").replace(tzinfo=timezone.utc).isoformat()
     except ValueError:
@@ -269,6 +394,9 @@ def describe(path: Path) -> dict[str, object]:
         "size_bytes": path.stat().st_size,
         "taken_at": _taken_at(path),
         "meet_name": None,
+        "kind": kind_of(path),
+        "meet_day": None,
+        "clock_time": None,
         "usable": False,
         "problem": None,
     }
@@ -287,6 +415,7 @@ def describe(path: Path) -> dict[str, object]:
             described["problem"] = "kopian är tom"
             return described
         described["meet_name"] = _meet_name(connection)
+        described.update(_meet_position(connection, described["taken_at"]))
         described["usable"] = True
     except sqlite3.DatabaseError as error:
         described["problem"] = "kopian går inte att läsa - filen är skadad eller inte en databas"
@@ -301,8 +430,11 @@ def available(backup_dir: Path) -> list[dict[str, object]]:
     backup_dir = Path(backup_dir)
     if not backup_dir.is_dir():
         return []
-    found = [describe(path) for path in backup_dir.glob("trainmeet-*.db")]
-    return sorted(found, key=lambda item: str(item["name"]), reverse=True)
+    # Efter tiden i namnet och sedan filens tid: två kopior samma sekund (före
+    # tidsmaskinen och strax efter före en nollställning) står i rätt ordning.
+    paths = sorted(backup_dir.glob("trainmeet-*.db"),
+                   key=lambda path: (path.name[:len("trainmeet-00000000-000000")], path.stat().st_mtime_ns), reverse=True)
+    return [describe(path) for path in paths]
 
 
 def resolve(backup_dir: Path, name: str) -> Path:

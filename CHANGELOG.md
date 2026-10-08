@@ -28,6 +28,22 @@ inte och tåget stod kvar vid stationen på kartan.
 - **Skärmens tågdiagram** tänder bara den tur som är ute och sätter taggen på
   den, inte på varje tur med numret.
 
+### Nollställ träffen börjar på dag 1, och kopian före ett hopp går att hitta
+
+Efter Caspers fråga om hur tidsmaskinen och återställningen av träffen hänger
+ihop.
+
+- **Nollställ träffen går tillbaka till dag 1** och planens starttid. Tidigare
+  stod träffen kvar på den dag den kommit till, till exempel Dag 3 efter två
+  dygnsskiften eller ett hopp med tidsmaskinen.
+- **Listan under Återställ från säkerhetskopia** säger varför kopian togs och
+  var träffen stod, till exempel "Före tidsmaskinen · Dag 1 · Lör 09:15", med
+  den nyaste först. Så ångras ett hopp med tidsmaskinen.
+- **Tidsmaskinens kopior räknas för sig** (de fem senaste). Många hopp tränger
+  inte längre ut kopian från före en uppdatering eller en nollställning.
+- **En återställning behåller de egna klockorna** som de är nu, med sina
+  godkännanden. En klocka som tagits bort kommer inte tillbaka med kopian.
+
 ### Släpp klockorna på panelen och godkänn var och en
 
 Efter Caspers önskan: dra och släpp flera zip-filer på en gång, en ruta där

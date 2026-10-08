@@ -157,6 +157,13 @@ def _device_state(age: float, heard: bool) -> str:
             "lost" if age <= DEVICE_OFFLINE_SECONDS else "offline")
 
 
+#: Skälet till en säkerhetskopia, som det står sist i filnamnet. Listan under
+#: Farozon → Återställ säger det, så att kopian från före ett hopp med
+#: tidsmaskinen går att hitta.
+BACKUP_KINDS = {"tidsmaskinen": "tidsmaskin", "nollställning": "nollstallning", "ny startdag": "startdag",
+                "lokala ändringar kastas": "lokala-andringar", "Cloud-versionen tas": "cloud"}
+
+
 def announces(*topics):
     """Once the change is done, tell open pages what changed (/v1/events)."""
     def decorate(method):
@@ -2664,7 +2671,8 @@ class TrainMeetHTTPApplication:
     def reset_meet(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         """Nollställ träffen: börja om från början med samma plan.
 
-        Klockan går tillbaka till planens starttid och står still, och allt
+        Träffen går tillbaka till dag 1 (startdagen), klockan till planens
+        starttid och står still, och allt
         som hänt tas bort: klareringar, linjebesked, TKL-rörelser, tågens
         lägen och automatikens tider. Träffen, Cloud-kopplingen, enheterna
         och användarna står kvar. Ingen omstart: enheterna får den nya
@@ -2693,8 +2701,13 @@ class TrainMeetHTTPApplication:
             # Samma lås som varje kommando från en box, så att inget hinner in
             # mellan att klareringarna tas bort och att motorn släpper dem.
             with self.operations_store.command_lock:
-                removed = self.operations_store.reset_meet(
-                    publication, self.runtime_store.active_day() or publication.active_day)
+                # Från början: dag 1, oavsett hur långt träffen kommit eller
+                # vart tidsmaskinen hoppat.
+                calendar = self.runtime_store.meet_calendar(publication.meet_id)
+                first_day = calendar_weekday(calendar["start_day"], 1)
+                self.runtime_store.set_meet_calendar(publication.meet_id, calendar["start_day"], 1)
+                self.runtime_store.set_active_day(first_day)
+                removed = self.operations_store.reset_meet(publication, first_day)
                 if self.automatic:
                     self.automatic.forget_meet()
                 # En box mitt i en inmatning börjar om. Linjerna är en vy av
@@ -2743,7 +2756,7 @@ class TrainMeetHTTPApplication:
                     else Path(self.config.state_dir) / "trainmeet.db")
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         try:
-            return backup.create_backup(database, self._backup_dir(), stamp)
+            return backup.create_backup(database, self._backup_dir(), stamp, kind=BACKUP_KINDS.get(reason))
         except (backup.BackupError, OSError, sqlite3.Error) as error:
             folder = self._backup_dir()
             # SQLite only says "unable to open database file". On a Raspberry Pi
@@ -2897,6 +2910,7 @@ class TrainMeetHTTPApplication:
                 "Träffdata, tidtabell och driftläge blir det som fanns när kopian togs.",
                 "Inloggningar och lösenord blir också de som gällde då.",
                 "Enheter som parkopplats efter kopian måste parkopplas igen.",
+                "Egna klockor står kvar som de är nu, med sina godkännanden.",
                 "Anslutna skärmar och TMBoxar återansluter av sig själva efter omstarten.",
             ],
             "path": str(path),
