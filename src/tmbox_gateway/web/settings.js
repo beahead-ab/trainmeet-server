@@ -146,27 +146,41 @@
     return node;
   }
 
+  /** En uppladdad klocka i liten skala, med visarna på 10:08:36. */
+  function customPreview(box, face) {
+    const faces = globalThis.TrainMeetClockFace;
+    const angles = faces.handAngles(10 * 3600 + 8 * 60 + 36, face.motion);
+    const svg = svgEl("svg", { width: 52, height: 52, viewBox: "0 0 200 200", "aria-hidden": "true" });
+    for (const [layer, angle] of [["dial"], ["hour", angles.hour], ["minute", angles.minute], ["second", angles.second], ["top"]]) {
+      const url = faces.layerUrl(face.layers?.[layer]);
+      if (!url) continue;
+      const image = svgEl("image", { href: url, x: 0, y: 0, width: 200, height: 200 });
+      if (angle !== undefined) image.setAttribute("transform", `rotate(${angle} 100 100)`);
+      svg.append(image);
+    }
+    box.append(svg);
+    return box;
+  }
+
   /** En liten förhandsbild av klockstilen. Ritas lokalt, ingen bild följer med. */
   function clockPreview(style) {
     const box = document.createElement("span");
     box.className = "kr-prev";
+    const face = globalThis.TrainMeetClockFace?.find(style);
+    if (face) return customPreview(box, face);
     if (style === "digital") {
       const time = document.createElement("span");
       time.className = "kr-prev__time"; time.textContent = "05:12";
       box.append(time);
       return box;
     }
-    const light = style === "swiss" || style === "stationsur";
-    const ink = light ? "#0b0b0b" : "#f1f3f6";
+    // Den analoga klockan: mörk tavla med streck och visare på 10:08.
+    const ink = "#f1f3f6";
     const svg = svgEl("svg", { width: 52, height: 52, viewBox: "0 0 100 100", "aria-hidden": "true" });
-    svg.append(svgEl("circle", { cx: 50, cy: 50, r: 46, fill: light ? "#f1f3f6" : "#1b1f27", stroke: light ? "none" : "#5c6370", "stroke-width": 3 }));
-    svg.append(svgEl("circle", { cx: 50, cy: 50, r: 40, fill: "none", stroke: ink, "stroke-width": light ? 8 : 7, "stroke-dasharray": light ? "4 16.9" : "3 16.9", "stroke-dashoffset": light ? 2 : 1.5 }));
+    svg.append(svgEl("circle", { cx: 50, cy: 50, r: 46, fill: "#1b1f27", stroke: "#5c6370", "stroke-width": 3 }));
+    svg.append(svgEl("circle", { cx: 50, cy: 50, r: 40, fill: "none", stroke: ink, "stroke-width": 7, "stroke-dasharray": "3 16.9", "stroke-dashoffset": 1.5 }));
     svg.append(svgEl("rect", { x: 47, y: 24, width: 6, height: 30, rx: 1, fill: ink, transform: "rotate(156 50 50)" }));
     svg.append(svgEl("rect", { x: 48, y: 14, width: 4, height: 40, rx: 1, fill: ink, transform: "rotate(-30 50 50)" }));
-    if (style === "swiss") {
-      svg.append(svgEl("rect", { x: 49, y: 12, width: 2, height: 46, fill: "#d8261b", transform: "rotate(72 50 50)" }));
-      svg.append(svgEl("circle", { cx: 50, cy: 18, r: 5, fill: "#d8261b", transform: "rotate(72 50 50)" }));
-    }
     box.append(svg);
     return box;
   }

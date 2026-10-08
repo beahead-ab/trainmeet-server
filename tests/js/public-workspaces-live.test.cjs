@@ -84,7 +84,7 @@ const root = path.resolve(__dirname, '../..');
     }), 'On Översikt the QR codes are a tile of their own');
     await tvPage.close();
     await clockPage.locator('#display-clock-style').selectOption('digital');
-    assert.equal((await (await page.request.get(urls.eu+'/v1/display')).json()).clock.style, 'swiss', 'A screen preference never changes the shared clock');
+    assert.equal((await (await page.request.get(urls.eu+'/v1/display')).json()).clock.style, 'analog', 'A screen preference never changes the shared clock (the package lists swiss first: the analog clock until its pack is uploaded)');
     await clockPage.close();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Participant page fits a phone');
     await page.locator('#pv-topology .topology-station').first().click();

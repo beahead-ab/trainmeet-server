@@ -420,7 +420,6 @@
     ['Koppla en EU-träff från Cloud för att simulera stationsarbetet.', 'Connect an EU meet from Cloud to simulate the station work.', 'Tilslut et EU-træf fra Cloud for at simulere stationsarbejdet.', 'Koble til et EU-treff fra Cloud for å simulere stasjonsarbeidet.', 'Ein EU-Treffen aus der Cloud verbinden, um die Bahnhofsarbeit zu simulieren.'],
     ['Digital', 'Digital', 'Digital', 'Digital', 'Digital'],
     ['Klockhastighet', 'Clock speed', 'Urhastighed', 'Klokkehastighet', 'Uhrgeschwindigkeit'],
-    ['Schweizisk (SBB)', 'Swiss (SBB)', 'Schweizisk (SBB)', 'Sveitsisk (SBB)', 'Schweizer (SBB)'],
     ['Adress', 'Address', 'Adresse', 'Adresse', 'Adresse'],
     ['Automatiskt', 'Automatic', 'Automatisk', 'Automatisk', 'Automatisch'],
     ['Byt träff', 'Change meet', 'Skift træf', 'Bytt treff', 'Treffen wechseln'],

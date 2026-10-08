@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import ipaddress
 import logging
@@ -59,7 +61,7 @@ from .local_config import (
 )
 from .models import Command, ConnectionState, InteractionMode, TrackConfig, TrackType, UnknownTrackError, resolve_track_id
 from .observability import log_event, use_correlation
-from . import local_edits
+from . import clock_pack, local_edits
 from .local_edits import LocalEditError
 from .operations import SQLiteOperationsStore
 from .us import USStore, USError
@@ -69,6 +71,9 @@ from .train_routes import _visits
 from .train_live import expected_time, on_line_trains, train_live
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
+    CUSTOM_CLOCK_PREFIX,
+    LEGACY_CLOCK_STYLES,
+    MAX_CLOCK_FACES,
     CALENDAR_START_DAYS,
     DAY_ORDER,
     LocalEditsConflict,
@@ -1749,6 +1754,87 @@ class TrainMeetHTTPApplication:
         self.changes.notify("runtime")
         return self.deviation_level_state(client)
 
+    # ------------------------------------------------------------ egna klockor
+
+    def _admin_clock_face(self, face: dict[str, Any]) -> dict[str, Any]:
+        manifest = face["manifest"]
+        return {**self._public_clock_face(face), "author": manifest.get("author", ""),
+                "uploaded_by": face["uploaded_by"], "uploaded_at": face["uploaded_at"],
+                "rights_confirmed_at": face["rights_confirmed_at"]}
+
+    def clock_faces_state(self, client: PairedClient) -> dict[str, Any]:
+        self._require_admin(client)
+        faces = self.runtime_store.clock_faces() if self.runtime_store else []
+        return {"faces": [self._admin_clock_face(face) for face in faces],
+                "limits": {"faces": MAX_CLOCK_FACES, "package_bytes": clock_pack.MAX_PACKAGE_BYTES}}
+
+    @announces("clock")
+    def upload_clock_face(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Tar emot ett klockpaket (base64) från Inställningar → Klockan, eller
+        en zip med flera klockpaket."""
+        self._require_admin(client)
+        if self.runtime_store is None:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "clock_unavailable", "Klockinställningarna kan inte sparas")
+        if payload.get("rights_confirmed") is not True:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "clock_face_rights", "Kryssa i att du har rätt att använda urtavlan.")
+        try:
+            data = base64.b64decode(str(payload.get("data") or ""), validate=True)
+        except (binascii.Error, ValueError) as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_pack", "Filen kom inte fram hel. Försök igen.") from error
+        try:
+            packs = clock_pack.read_packs(data)
+        except clock_pack.ClockPackError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_pack", str(error)) from error
+        # Ryms inte alla får ingen av dem plats: hellre inget än hälften.
+        existing = {face["id"] for face in self.runtime_store.clock_faces()}
+        if len(existing | {pack.id for pack in packs}) > MAX_CLOCK_FACES:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_pack",
+                               f"Servern rymmer {MAX_CLOCK_FACES} egna klockor. Ta bort några först.")
+        saved = []
+        for pack in packs:
+            try:
+                face = self.runtime_store.save_clock_face(pack, uploaded_by=client.display_name or "admin")
+            except RuntimePublicationError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_pack", str(error)) from error
+            saved.append(face)
+            if self.operations_store is not None:
+                self.operations_store.record_audit_event(
+                    correlation_id=f"clock-face-{pack.id}-{pack.sha256[:12]}", source="web-admin",
+                    actor=client.admin_user_id or "konsol", action="clock_face.uploaded", outcome="ok",
+                    detail={"by": client.display_name, "id": pack.id, "name": pack.name, "version": pack.version,
+                            "sha256": pack.sha256, "file_name": str(payload.get("file_name") or "")[:120],
+                            "replaced": face["replaced"], "rights_confirmed": True, "warnings": list(pack.warnings)})
+        # Varningarna stoppar inget: de säger vad som skalar sämre än det kunde (docs/clock-packs.md).
+        return {"face": self._admin_clock_face(saved[0]), "replaced": saved[0]["replaced"],
+                "uploaded": [{"id": face["id"], "name": face["name"], "replaced": face["replaced"], "warnings": list(pack.warnings)}
+                             for face, pack in zip(saved, packs)],
+                **self.clock_faces_state(client)}
+
+    @announces("clock")
+    def delete_clock_face(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_admin(client)
+        face = self.runtime_store.clock_face(str(payload.get("id") or "")) if self.runtime_store else None
+        if face is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "clock_face_missing", "Klockan finns inte längre.")
+        self.runtime_store.delete_clock_face(face["id"])
+        if self.operations_store is not None:
+            self.operations_store.record_audit_event(
+                correlation_id=f"clock-face-{face['id']}-deleted", source="web-admin",
+                actor=client.admin_user_id or "konsol", action="clock_face.deleted", outcome="ok",
+                detail={"by": client.display_name, "id": face["id"], "name": face["name"], "sha256": face["sha256"]})
+        return self.clock_faces_state(client)
+
+    def clock_face_layer(self, path: str) -> tuple[str, bytes] | None:
+        """Ett lager ur /v1/clock-faces/<id>/<sha>/<lager>. En gammal adress
+        (en tidigare version av paketet) finns inte längre."""
+        parts = path.removeprefix("/v1/clock-faces/").split("/")
+        if len(parts) != 3 or parts[2] not in clock_pack.LAYERS or self.runtime_store is None:
+            return None
+        found = self.runtime_store.clock_face_layer(parts[0], parts[2])
+        if found is None or not found[2].startswith(parts[1]) or len(parts[1]) != 16:
+            return None
+        return found[0], found[1]
+
     def us_display_snapshot(self) -> dict[str, Any]:
         """Public board projection: operational facts, never credentials,
         identity records, command history or permission-bearing tokens."""
@@ -2385,11 +2471,36 @@ class TrainMeetHTTPApplication:
 
     def _clock_display(self, clock: dict[str, Any]) -> dict[str, Any]:
         settings = self.runtime_store.clock_display_settings(self._clock_scope()) if self.runtime_store else {}
-        styles = list(dict.fromkeys([*(clock.get("available_styles") or list(AVAILABLE_CLOCK_STYLES)), "analog", "stationsur", "digital", "swiss"]))
-        style = settings.get("style", styles[0])
+        faces = self.runtime_store.clock_faces() if self.runtime_store else []
+        custom = [CUSTOM_CLOCK_PREFIX + face["id"] for face in faces]
+
+        def current(style):
+            # En tidigare inbyggd stil är numera ett klockpaket med samma id.
+            if style in LEGACY_CLOCK_STYLES:
+                style = CUSTOM_CLOCK_PREFIX + LEGACY_CLOCK_STYLES[style]
+                return style if style in custom else "analog"
+            return style
+
+        # Paketets stilar först (den första är förvalet), sedan de inbyggda och
+        # de uppladdade.
+        package = [current(style) for style in (clock.get("available_styles") or list(AVAILABLE_CLOCK_STYLES))]
+        styles = list(dict.fromkeys([*(style for style in package if style in AVAILABLE_CLOCK_STYLES or style in custom),
+                                     *AVAILABLE_CLOCK_STYLES, *custom]))
+        style = current(settings.get("style", styles[0]))
         return {**clock, "simulation": bool(self.simulation and self.simulation.active),
                 "available_styles": styles, "style": style if style in styles else styles[0],
-                "show_seconds": settings.get("show_seconds", clock.get("show_seconds", True))}
+                "show_seconds": settings.get("show_seconds", clock.get("show_seconds", True)),
+                "faces": [self._public_clock_face(face) for face in faces]}
+
+    @staticmethod
+    def _public_clock_face(face: dict[str, Any]) -> dict[str, Any]:
+        """Det en skärm behöver för att rita en uppladdad klocka. Inte vem som
+        laddade upp den: /v1/display är öppen för alla."""
+        manifest = face["manifest"]
+        base = f"/v1/clock-faces/{face['id']}/{face['sha256'][:16]}/"
+        return {"style": CUSTOM_CLOCK_PREFIX + face["id"], "id": face["id"], "name": face["name"],
+                "version": manifest.get("version", ""), "sha256": face["sha256"], "motion": manifest["motion"],
+                "layers": {layer: base + layer for layer in manifest["layers"]}}
 
     def clock_status(self, client: PairedClient) -> dict[str, Any]:
         selected = self.lifecycle.selected() if self.lifecycle else None
@@ -4514,6 +4625,7 @@ class TrainMeetHTTPApplication:
             "/assets/server-design.css": "server-design.css",
             "/assets/simulation-banner.js": "simulation-banner.js",
             "/assets/day-change.js": "day-change.js",
+            "/assets/clock-face.js": "clock-face.js",
             "/assets/live-events.js": "live-events.js",
             "/assets/i18n.js": "i18n.js",
             "/assets/i18n-messages.js": "i18n-messages.js",
@@ -4663,6 +4775,20 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/settings/deviation-level":
                 self._send_json(HTTPStatus.OK, self.server.application.deviation_level_state(self._authenticated_client()))
+                return
+            if path == "/v1/clock-faces":
+                self._send_json(HTTPStatus.OK, self.server.application.clock_faces_state(self._authenticated_client()))
+                return
+            if path == "/v1/clock-faces/exempelur.tmclock":
+                # Exemplet att börja från när man gör en egen klocka (docs/clock-packs.md).
+                self._send_bytes(HTTPStatus.OK, clock_pack.example_pack(), "application/zip",
+                                 headers={"Content-Disposition": 'attachment; filename="exempelur.tmclock"'})
+                return
+            if path.startswith("/v1/clock-faces/"):
+                layer = self.server.application.clock_face_layer(path)
+                if layer is None:
+                    raise HTTPAPIError(HTTPStatus.NOT_FOUND, "clock_face_missing", "Klockan finns inte längre.")
+                self._send_clock_layer(*layer)
                 return
             if path == "/v1/display":
                 self._send_json(
@@ -5244,6 +5370,12 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/settings/deviation-level":
                 self._send_json(HTTPStatus.OK, self.server.application.save_deviation_level(self._authenticated_client(), payload))
                 return
+            if path == "/v1/clock-faces":
+                self._send_json(HTTPStatus.OK, self.server.application.upload_clock_face(self._authenticated_client(), payload))
+                return
+            if path == "/v1/clock-faces/delete":
+                self._send_json(HTTPStatus.OK, self.server.application.delete_clock_face(self._authenticated_client(), payload))
+                return
             if path == "/v1/server/restart":
                 client = self._authenticated_client()
                 response = self.server.application.restart_server(client)
@@ -5541,6 +5673,21 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
     ) -> None:
         data = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self._send_bytes(status, data, "application/json; charset=utf-8", headers=headers)
+
+    def _send_clock_layer(self, content_type: str, data: bytes) -> None:
+        """Ett lager ur ett klockpaket. Adressen bär paketets sha, så bilden
+        får sparas länge. Öppnas en SVG direkt (inte som bild i en klocka)
+        körs den i en sandlåda utan skript och utan något utifrån."""
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Content-Security-Policy", "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox")
+        self.end_headers()
+        self.wfile.write(data)
 
     def _send_bytes(
         self,

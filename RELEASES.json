@@ -1,5 +1,26 @@
 [
   {
+    "version": "3.20.0",
+    "date": "2026-10-08",
+    "notes": [
+      "Klockor som skalar på alla skärmar, och en guide för att göra egna"
+    ]
+  },
+  {
+    "version": "3.19.0",
+    "date": "2026-10-08",
+    "notes": [
+      "Inbyggt finns en analog och en digital klocka; övriga tavlor är klockpaket"
+    ]
+  },
+  {
+    "version": "3.18.0",
+    "date": "2026-10-08",
+    "notes": [
+      "Egna klockor: ladda upp en urtavla som klockpaket"
+    ]
+  },
+  {
     "version": "3.17.0",
     "date": "2026-10-08",
     "notes": [

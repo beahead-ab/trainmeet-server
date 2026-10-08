@@ -28,6 +28,75 @@ inte och tåget stod kvar vid stationen på kartan.
 - **Skärmens tågdiagram** tänder bara den tur som är ute och sätter taggen på
   den, inte på varje tur med numret.
 
+### Klockor som skalar på alla skärmar, och en guide för att göra egna
+
+Efter Caspers önskan: tydlig dokumentation om hur ett klockpaket ska utformas,
+och klockor som skalar väl på olika enheter och storlekar.
+
+- **En urtavla på en stående skärm fyller bredden.** Det gäller telefon,
+  surfplatta och stående TV. Tidigare tog den halva bredden, eftersom
+  klockskärmen alltid var en liggande duk. Nu tar tavlan knappt 90 % av
+  kortsidan på alla skärmar, från telefon till 4K.
+- **Guide i [docs/clock-packs.md](docs/clock-packs.md):**
+  - var klockan visas och hur stor (44 px till 960 px, 4K);
+  - en mallbild över ytan och vridpunkten;
+  - mått för linjer och visare som syns även i deltagarvyn;
+  - text som banor, färg och kontrast, och det som gör klockan tung;
+  - fel och varningar, och en checklista.
+- **`python -m tmbox_gateway.clock_pack preview`** gör en sida som visar
+  klockan i alla storlekar, på mörk och ljus bakgrund, med visarna i gång.
+- **Varningar som inte stoppar uppladdningen.** De visas i inställningarna,
+  i `check` och i `preview`, och gäller:
+  - text i SVG;
+  - filter;
+  - linjer under 0,5 % av sidan;
+  - tavlor och visare med bakgrund som täcker;
+  - PNG under 1 024 px eller utan genomskinlighet;
+  - lager över 200 kB.
+- **En PNG ska vara minst 512 px.** Tidigare var gränsen 64 px.
+
+### Inbyggt finns en analog och en digital klocka; övriga tavlor är klockpaket
+
+Efter Caspers önskan.
+
+- **Två inbyggda klockor:** Analog, som är generisk och följer mörkt och
+  ljust läge, och Digital.
+- **Övriga stilar har blivit klockpaket:**
+  - stationsuret;
+  - Svensk, Norsk, Dansk, Tysk, Finsk, Polsk, Nederländsk, Fransk,
+    Italiensk och Amerikansk;
+  - den schweiziska.
+- **Gamla inställningar:** en träff som har en av de gamla stilarna sparad
+  visar paketet med samma id när det är uppladdat, och annars den analoga
+  klockan.
+- **Flera klockor på en gång:** välj flera filer, eller ladda upp en zip med
+  flera klockpaket.
+  - Ett fel i ett av paketen stoppar alla, och beskedet säger vilket paket det
+    gäller.
+  - Ryms inte alla under taket på 20 klockor laddas inget upp.
+
+### Egna klockor: ladda upp en urtavla som klockpaket
+
+Efter Caspers önskan: den schweiziska tavlan är licensbelagd, och den som har
+rätt att använda den ska kunna ladda upp den själv.
+
+- **Klockpaket (.tmclock)**: en zip med `clock.json` och tavlans lager som SVG
+  eller PNG (tavlan, tim-, minut- och sekundvisaren och något ovanpå). Hur
+  visarna går står i `clock.json`: jämnt, minutvisaren som hoppar (med studs),
+  sekundvisaren som tickar eller sveper varvet på till exempel 58,5 s och
+  väntar vid 12. Paketet har ingen kod; lagren visas som bilder.
+- **Inställningar → Skärmar och klocka → Egna klockor**: ladda upp, se vem som
+  laddade upp och när, och ta bort. Den som laddar upp intygar rätten att
+  använda tavlan; intyget loggas. Klockan blir en stil bland de andra, för
+  alla skärmar, en enskild skärm och deltagarvyn, på alla träffar på servern.
+  Samma id ersätter en tidigare version.
+- **För den som gör en egen**: exempelpaketet laddas ner från samma ställe, och
+  `python -m tmbox_gateway.clock_pack example|check|build` gör en mapp att
+  börja från, kontrollerar med serverns regler och packar. Formatet står i
+  [docs/clock-packs.md](docs/clock-packs.md).
+- **Den schweiziska tavlan (SBB) följer inte med längre.** En träff som visade
+  den visar stationsuret tills en egen klocka laddats upp och valts.
+
 ### Dygnsskiftet en timme före första tåget, och Tidsmaskinen spolar dygn
 
 Efter Caspers önskan.

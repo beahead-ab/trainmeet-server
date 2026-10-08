@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trainmeet-server"
-version = "3.17.0"
+version = "3.20.0"
 description = "Local TrainMeet Server and server-authoritative TMBox runtime for Raspberry Pi"
 requires-python = ">=3.11"
 dependencies = []
@@ -19,4 +19,4 @@ trainmeet-server = "tmbox_gateway.local_server:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-tmbox_gateway = ["releases.json", "web/*.html", "web/*.css", "web/*.js", "web/*.png", "web/fonts/*", "web/ikon/*.svg", "web/ikon/*.ico", "web/ikon/png/*.png", "us_web/*", "terminal16_web/*"]
+tmbox_gateway = ["releases.json", "web/*.html", "web/*.css", "web/*.js", "web/*.png", "web/fonts/*", "web/ikon/*.svg", "web/ikon/*.ico", "web/ikon/png/*.png", "us_web/*", "terminal16_web/*", "clock_pack_example/*"]

@@ -40,22 +40,18 @@ def meet_country(meet: Any) -> str:
     träffen svensk: ett okänt land får aldrig stoppa ett paket."""
     value = meet.get("country") if isinstance(meet, dict) else None
     return value if value in EU_COUNTRIES else "se"
-AVAILABLE_CLOCK_STYLES = (
-    "swiss",
-    "swedish",
-    "norwegian",
-    "danish",
-    "german",
-    "finnish",
-    "polish",
-    "dutch",
-    "french",
-    "italian",
-    "american",
-    "digital",
-    "analog",
-    "stationsur",
-)
+#: De inbyggda klockorna: en generisk analog och en digital (Casper 2026-10-08).
+AVAILABLE_CLOCK_STYLES = ("analog", "digital")
+# Övriga tavlor är klockpaket som laddas upp (clock_pack.py). En träff eller ett
+# äldre Cloud-paket som säger en av de tidigare inbyggda stilarna visar paketet
+# med samma id när det är uppladdat, annars den analoga klockan. Den schweiziska
+# (SBB) är licensbelagd och laddas upp av den som har rätt att använda den.
+LEGACY_CLOCK_STYLES = {style: style for style in (
+    "stationsur", "swedish", "norwegian", "danish", "german", "finnish", "polish", "dutch", "french", "italian", "american")}
+LEGACY_CLOCK_STYLES["swiss"] = "sbb"
+#: En uppladdad klocka väljs som stil "custom:<id>" (clock_pack.py).
+CUSTOM_CLOCK_PREFIX = "custom:"
+MAX_CLOCK_FACES = 20
 DISPLAY_SCREENS = ("clock", "topology", "graph", "dashboard", "territories")
 DEFAULT_WEB_CLIENT_TTL_MINUTES = 30
 WEB_CLIENT_TTL_MINUTES_RANGE = (5, 240)
@@ -535,6 +531,24 @@ class SQLiteRuntimeStore:
             );
             CREATE UNIQUE INDEX IF NOT EXISTS one_active_local_timetable
             ON local_timetable_edits(base_publication_id) WHERE status = 'active';
+            -- Egna klockor (klockpaket), för alla träffar på servern. Den som
+            -- laddade upp intygade att den får använda urtavlan.
+            CREATE TABLE IF NOT EXISTS clock_faces (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                sha256 TEXT NOT NULL,
+                manifest_json TEXT NOT NULL,
+                uploaded_by TEXT NOT NULL,
+                uploaded_at TEXT NOT NULL,
+                rights_confirmed_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS clock_face_layers (
+                face_id TEXT NOT NULL,
+                layer TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                data BLOB NOT NULL,
+                PRIMARY KEY(face_id, layer)
+            );
             """
         )
 
@@ -1113,10 +1127,78 @@ class SQLiteRuntimeStore:
         self._save_setting("clock_source:" + scope, json.dumps(settings))
 
     def save_clock_display_settings(self, scope: str, style: str, show_seconds: bool) -> None:
-        if style not in AVAILABLE_CLOCK_STYLES or not isinstance(show_seconds, bool):
+        custom = isinstance(style, str) and style.startswith(CUSTOM_CLOCK_PREFIX) and self.clock_face(style[len(CUSTOM_CLOCK_PREFIX):]) is not None
+        if (style not in AVAILABLE_CLOCK_STYLES and not custom) or not isinstance(show_seconds, bool):
             raise ValueError("Ogiltigt klockutseende")
         self._save_setting("clock_display:" + scope,
                            json.dumps({"style": style, "show_seconds": show_seconds}))
+
+    # ------------------------------------------------------------ egna klockor
+
+    def clock_faces(self) -> list[dict[str, Any]]:
+        """De uppladdade klockorna, utan bilderna, i namnordning."""
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT id, name, sha256, manifest_json, uploaded_by, uploaded_at, rights_confirmed_at"
+                " FROM clock_faces ORDER BY name COLLATE NOCASE, id").fetchall()
+        return [{"id": row[0], "name": row[1], "sha256": row[2], "manifest": json.loads(row[3]),
+                 "uploaded_by": row[4], "uploaded_at": row[5], "rights_confirmed_at": row[6]} for row in rows]
+
+    def clock_face(self, face_id: str) -> dict[str, Any] | None:
+        return next((face for face in self.clock_faces() if face["id"] == face_id), None)
+
+    def clock_face_layer(self, face_id: str, layer: str) -> tuple[str, bytes, str] | None:
+        """(innehållstyp, bild, paketets sha256) för ett lager, eller None."""
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT layers.content_type, layers.data, faces.sha256 FROM clock_face_layers AS layers"
+                " JOIN clock_faces AS faces ON faces.id = layers.face_id WHERE layers.face_id = ? AND layers.layer = ?",
+                (face_id, layer)).fetchone()
+        return (str(row[0]), bytes(row[1]), str(row[2])) if row else None
+
+    def save_clock_face(self, pack: Any, *, uploaded_by: str, now: str | None = None) -> dict[str, Any]:
+        """Sparar ett kontrollerat klockpaket. Samma id ersätter den förra
+        versionen, så att skärmar som visar klockan får den nya direkt."""
+        stamp = now or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                exists = self._connection.execute("SELECT 1 FROM clock_faces WHERE id = ?", (pack.id,)).fetchone()
+                count = self._connection.execute("SELECT COUNT(*) FROM clock_faces").fetchone()[0]
+                if not exists and count >= MAX_CLOCK_FACES:
+                    raise RuntimePublicationError(f"Servern har redan {MAX_CLOCK_FACES} egna klockor. Ta bort en först.")
+                self._connection.execute("DELETE FROM clock_face_layers WHERE face_id = ?", (pack.id,))
+                self._connection.execute(
+                    """
+                    INSERT INTO clock_faces(id, name, sha256, manifest_json, uploaded_by, uploaded_at, rights_confirmed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET name = excluded.name, sha256 = excluded.sha256,
+                        manifest_json = excluded.manifest_json, uploaded_by = excluded.uploaded_by,
+                        uploaded_at = excluded.uploaded_at, rights_confirmed_at = excluded.rights_confirmed_at
+                    """,
+                    (pack.id, pack.name, pack.sha256, json.dumps(pack.manifest(), ensure_ascii=False), uploaded_by, stamp, stamp))
+                self._connection.executemany(
+                    "INSERT INTO clock_face_layers(face_id, layer, content_type, data) VALUES (?, ?, ?, ?)",
+                    [(pack.id, name, layer.content_type, layer.data) for name, layer in pack.layers.items()])
+                self._connection.execute("COMMIT")
+            except BaseException:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return {**self.clock_face(pack.id), "replaced": bool(exists)}
+
+    def delete_clock_face(self, face_id: str) -> bool:
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute("DELETE FROM clock_face_layers WHERE face_id = ?", (face_id,))
+                deleted = self._connection.execute("DELETE FROM clock_faces WHERE id = ?", (face_id,)).rowcount
+                self._connection.execute("COMMIT")
+            except BaseException:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        return bool(deleted)
 
     def connection_badge_screens(self) -> list[str]:
         """Screens showing the address and connection code. All of them by default."""
