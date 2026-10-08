@@ -1229,29 +1229,40 @@ async function fileBase64(file) {
   return btoa(binary);
 }
 
+// Ett eller flera klockpaket, eller en zip med flera: ett i taget till servern.
+// Ett fel stoppar resten och säger vilken fil det gällde.
 document.querySelector("#clock-face-upload-form")?.addEventListener("submit", async event => {
   event.preventDefault();
   const form = event.currentTarget;
   const message = document.querySelector("#clock-face-message");
-  const file = document.querySelector("#clock-face-file").files?.[0];
-  if (!file) return setMessage(message, "Välj ett klockpaket först.", "error");
-  if (file.size > CLOCK_PACK_MAX_BYTES) return setMessage(message, "Klockpaketet är större än 2 MB.", "error");
+  const files = [...(document.querySelector("#clock-face-file").files || [])];
+  if (!files.length) return setMessage(message, "Välj ett klockpaket först.", "error");
+  const large = files.find(file => file.size > CLOCK_PACK_MAX_BYTES);
+  if (large) return setMessage(message, "{name} är större än 2 MB.", "error", { name: large.name });
   if (!document.querySelector("#clock-face-rights").checked) return setMessage(message, "Kryssa i att du har rätt att använda urtavlan.", "error");
   if (!beginModalAction(form)) return;
+  const uploaded = [];
   try {
-    const data = await fileBase64(file);
-    const response = await authorizedFetch("/v1/clock-faces", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ file_name: file.name, data, rights_confirmed: true }) });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || t("Klockpaketet kunde inte laddas upp."));
+    for (const file of files) {
+      const data = await fileBase64(file);
+      const response = await authorizedFetch("/v1/clock-faces", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file_name: file.name, data, rights_confirmed: true }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(files.length > 1 ? `${file.name}: ${t(result.message || "Klockpaketet kunde inte laddas upp.")}` : result.message || t("Klockpaketet kunde inte laddas upp."));
+      uploaded.push(...(result.uploaded || [{ name: result.face.name, replaced: result.replaced }]));
+    }
     endModalAction(form);
     form.reset();
-    setMessage(message, result.replaced ? "{name} är uppdaterad." : "{name} är uppladdad. Välj den som stil ovan.", "success", { name: result.face.name });
-    clockFacesSignature = null;
-    await refreshLocalClock();
+    if (uploaded.length > 1) setMessage(message, "{count} klockor är uppladdade. Välj en som stil ovan.", "success", { count: uploaded.length });
+    else setMessage(message, uploaded[0].replaced ? "{name} är uppdaterad." : "{name} är uppladdad. Välj den som stil ovan.", "success", { name: uploaded[0].name });
   } catch (error) {
     endModalAction(form);
-    setMessage(message, error.message, "error");
+    setMessage(message, uploaded.length ? `${t("{count} klockor är uppladdade.", { count: uploaded.length })} ${error.message}` : error.message, "error");
+  } finally {
+    if (uploaded.length) {
+      clockFacesSignature = null;
+      await refreshLocalClock();
+    }
   }
 });
 
@@ -1260,7 +1271,7 @@ document.querySelector("#clock-faces-list")?.addEventListener("click", async eve
   if (!button) return;
   const message = document.querySelector("#clock-face-message");
   const name = button.closest(".kr-line")?.querySelector("b")?.textContent || button.dataset.deleteFace;
-  if (!window.confirm(t("Ta bort {name}? Skärmar som visar klockan byter till stationsuret.", { name }))) return;
+  if (!window.confirm(t("Ta bort {name}? Skärmar som visar klockan byter till den analoga.", { name }))) return;
   button.disabled = true;
   try {
     const response = await authorizedFetch("/v1/clock-faces/delete", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -4456,26 +4467,11 @@ function renderGraph(snapshot) {
 
 const clockStyleConfig = {
   analog: { hourMarkerWidth: 3, hourMarkerLength: 10, minuteMarkerWidth: 1, minuteMarkerLength: 4, hourHandWidth: 5, hourHandLength: 50, minuteHandWidth: 3, minuteHandLength: 75, secondHandColor: "#7fa3ea", secondHandWidth: 1, secondHandLength: 80, secondBallRadius: 0, hasNumbers: true, centerDotRadius: 3, bezelWidth: 1 },
-  stationsur: { hourMarkerWidth: 4, hourMarkerLength: 14, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#2256c3", secondHandWidth: 1.5, secondHandLength: 78, secondBallRadius: 0, hasNumbers: false, centerDotRadius: 4, bezelWidth: 3 },
-  swedish: { hourMarkerWidth: 4, hourMarkerLength: 14, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#1a5276", secondHandWidth: 1.5, secondHandLength: 72, secondBallRadius: 0, secondBallOffset: 0, hasNumbers: true, centerDotRadius: 4, bezelWidth: 3 },
-  norwegian: { hourMarkerWidth: 5, hourMarkerLength: 16, minuteMarkerWidth: 1.5, minuteMarkerLength: 7, hourHandWidth: 7, hourHandLength: 50, minuteHandWidth: 5, minuteHandLength: 75, secondHandColor: "#ba2025", secondHandWidth: 1.5, secondHandLength: 68, secondBallRadius: 5, secondBallOffset: 60, hasNumbers: false, centerDotRadius: 5, bezelWidth: 5 },
-  danish: { hourMarkerWidth: 5, hourMarkerLength: 15, minuteMarkerWidth: 2, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#c1272d", secondHandWidth: 1.5, secondHandLength: 70, secondBallRadius: 4, secondBallOffset: 62, hasNumbers: false, centerDotRadius: 5, bezelWidth: 4 },
-  german: { hourMarkerWidth: 5, hourMarkerLength: 16, minuteMarkerWidth: 1.5, minuteMarkerLength: 7, hourHandWidth: 7, hourHandLength: 50, minuteHandWidth: 5, minuteHandLength: 74, secondHandColor: "#e30613", secondHandWidth: 1.5, secondHandLength: 68, secondBallRadius: 0, secondBallOffset: 0, hasNumbers: true, centerDotRadius: 4, bezelWidth: 4 },
-  finnish: { hourMarkerWidth: 3, hourMarkerLength: 14, minuteMarkerWidth: 1, minuteMarkerLength: 5, hourHandWidth: 6, hourHandLength: 48, minuteHandWidth: 4, minuteHandLength: 74, secondHandColor: "#003580", secondHandWidth: 1, secondHandLength: 70, secondBallRadius: 0, secondBallOffset: 0, hasNumbers: false, centerDotRadius: 3, bezelWidth: 3 },
-  polish: { hourMarkerWidth: 5, hourMarkerLength: 16, minuteMarkerWidth: 2, minuteMarkerLength: 7, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#d4213d", secondHandWidth: 1.5, secondHandLength: 68, secondBallRadius: 3, secondBallOffset: 60, hasNumbers: true, centerDotRadius: 5, bezelWidth: 4 },
-  dutch: { hourMarkerWidth: 4, hourMarkerLength: 14, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 6, hourHandLength: 50, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#ffc917", secondHandWidth: 2, secondHandLength: 70, secondBallRadius: 4, secondBallOffset: 62, hasNumbers: false, centerDotRadius: 4, bezelWidth: 3 },
-  french: { hourMarkerWidth: 5, hourMarkerLength: 16, minuteMarkerWidth: 1.5, minuteMarkerLength: 7, hourHandWidth: 7, hourHandLength: 50, minuteHandWidth: 5, minuteHandLength: 74, secondHandColor: "#1a237e", secondHandWidth: 1.5, secondHandLength: 68, secondBallRadius: 0, secondBallOffset: 0, hasNumbers: true, centerDotRadius: 5, bezelWidth: 5 },
-  italian: { hourMarkerWidth: 5, hourMarkerLength: 15, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#006633", secondHandWidth: 1.5, secondHandLength: 70, secondBallRadius: 4, secondBallOffset: 62, hasNumbers: false, centerDotRadius: 5, bezelWidth: 4 },
-  american: { hourMarkerWidth: 4, hourMarkerLength: 14, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#c8102e", secondHandWidth: 1.5, secondHandLength: 72, secondBallRadius: 0, secondBallOffset: 0, hasNumbers: true, centerDotRadius: 4, bezelWidth: 4 },
 };
 
-const clockStyleLabels = {
-  analog: "Analog", stationsur: "Stationsur",
-  swedish: "Svensk (SJ)", norwegian: "Norsk (NSB)",
-  danish: "Dansk (DSB)", german: "Tysk (DB)", finnish: "Finsk (VR)",
-  polish: "Polsk (PKP)", dutch: "Nederländsk (NS)", french: "Fransk (SNCF)",
-  italian: "Italiensk (FS)", american: "Amerikansk", digital: "Digital",
-};
+// Inbyggt finns en generisk analog och en digital klocka. Andra tavlor är
+// klockpaket som laddas upp (clock-face.js).
+const clockStyleLabels = { analog: "Analog", digital: "Digital" };
 
 // Stilens namn: en uppladdad klocka heter det den heter i sitt paket.
 function clockStyleLabel(style) {
@@ -4486,12 +4482,12 @@ function clockStyleLabel(style) {
 
 // Urtavlan ritas med klasser, inte färgattribut: färgerna kommer från
 // Kontrollrummets tokens (skarmar.css), så den följer mörkt och ljust läge.
-// Stationsuret har alltid ljus tavla (darkBackground false). En uppladdad
-// klocka är bilder (clock-face.js); finns den inte längre visas stationsuret.
+// En uppladdad klocka är bilder (clock-face.js); finns den inte längre visas
+// den analoga klockan.
 function clockSVG(style, darkBackground, showSeconds, stopped) {
   const face = globalThis.TrainMeetClockFace?.find(style);
   if (face) return globalThis.TrainMeetClockFace.markup(face, { showSeconds, stopped });
-  const config = clockStyleConfig[style] || clockStyleConfig.stationsur;
+  const config = clockStyleConfig.analog;
   const marks = Array.from({ length: 60 }, (_, index) => {
     const major = index % 5 === 0;
     const length = major ? config.hourMarkerLength : config.minuteMarkerLength;
@@ -4585,7 +4581,7 @@ function updateAnalogClockHands(target, seconds, style, running) {
 }
 
 // The clock styles offered on a screen, in the same order as under ⚙ Inställningar.
-const DISPLAY_CLOCK_STYLES = ["digital", "analog", "stationsur"];
+const DISPLAY_CLOCK_STYLES = ["digital", "analog"];
 // Och de uppladdade klockorna efter dem, i serverns ordning.
 const offeredClockStyles = (available) => [...DISPLAY_CLOCK_STYLES, ...available.filter(value => globalThis.TrainMeetClockFace?.isCustom(value))];
 const DISPLAY_CLOCK_STYLE_KEY = "trainmeet.displayClockStyle";
@@ -4607,7 +4603,7 @@ function saveDisplayClockPreference(key, value) {
 
 function resolveClockAppearance(snapshot) {
   globalThis.TrainMeetClockFace?.remember(snapshot.clock?.faces);
-  const available = snapshot.clock?.available_styles?.length ? snapshot.clock.available_styles : ["stationsur", "digital"];
+  const available = snapshot.clock?.available_styles?.length ? snapshot.clock.available_styles : ["analog", "digital"];
   const preference = displayClockPreference();
   let style = available.includes(preference.style) ? preference.style : snapshot.clock?.style || available[0];
   if (!available.includes(style)) style = available[0];
@@ -4679,7 +4675,7 @@ function renderClock(snapshot) {
     // One clock only: a face never has digits beside it, and digits never have a face.
     const clock = digital
       ? html`<div class="clock-digital${stopped ? " stopped" : ""}" data-seconds="${showSeconds}"><span class="cd-hm"></span><span class="cd-side"><span class="cd-ap"></span><span class="cd-ss"></span></span></div>`
-      : clockSVG(style, style === "stationsur" ? false : darkBackground, showSeconds, stopped);
+      : clockSVG(style, darkBackground, showSeconds, stopped);
     target.innerHTML = html`<div class="sc-clock-layout ${digital ? "sc-clock-layout--digital" : "sc-clock-layout--face"}${stopped || externalMissing ? " is-stopped" : ""}">${clock}${status}</div>`;
   }
   const digits = target.querySelector(".clock-digital");

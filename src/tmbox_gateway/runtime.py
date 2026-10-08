@@ -40,26 +40,15 @@ def meet_country(meet: Any) -> str:
     träffen svensk: ett okänt land får aldrig stoppa ett paket."""
     value = meet.get("country") if isinstance(meet, dict) else None
     return value if value in EU_COUNTRIES else "se"
-AVAILABLE_CLOCK_STYLES = (
-    "stationsur",
-    "analog",
-    "digital",
-    "swedish",
-    "norwegian",
-    "danish",
-    "german",
-    "finnish",
-    "polish",
-    "dutch",
-    "french",
-    "italian",
-    "american",
-)
-# Den schweiziska tavlan (SBB) är licensbelagd och följer inte med servern
-# längre (Casper 2026-10-08). Den som har rätt att använda den laddar upp den
-# som ett eget klockpaket; en träff eller ett äldre Cloud-paket som säger
-# "swiss" visar stationsuret tills dess.
-LEGACY_CLOCK_STYLES = {"swiss": "stationsur"}
+#: De inbyggda klockorna: en generisk analog och en digital (Casper 2026-10-08).
+AVAILABLE_CLOCK_STYLES = ("analog", "digital")
+# Övriga tavlor är klockpaket som laddas upp (clock_pack.py). En träff eller ett
+# äldre Cloud-paket som säger en av de tidigare inbyggda stilarna visar paketet
+# med samma id när det är uppladdat, annars den analoga klockan. Den schweiziska
+# (SBB) är licensbelagd och laddas upp av den som har rätt att använda den.
+LEGACY_CLOCK_STYLES = {style: style for style in (
+    "stationsur", "swedish", "norwegian", "danish", "german", "finnish", "polish", "dutch", "french", "italian", "american")}
+LEGACY_CLOCK_STYLES["swiss"] = "sbb"
 #: En uppladdad klocka väljs som stil "custom:<id>" (clock_pack.py).
 CUSTOM_CLOCK_PREFIX = "custom:"
 MAX_CLOCK_FACES = 20

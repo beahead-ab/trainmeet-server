@@ -1331,7 +1331,7 @@ Own clocks|Egna klockor|Egne ure|Egne klokker|Eigene Uhren
 clock packs (.tmclock) · for every meet on the server · chosen as a style above|klockpaket (.tmclock) · för alla träffar på servern · väljs som stil ovan|urpakker (.tmclock) · for alle træf på serveren · vælges som stil ovenfor|klokkepakker (.tmclock) · for alle treff på serveren · velges som stil over|Uhrenpakete (.tmclock) · für alle Treffen auf dem Server · oben als Stil wählbar
 No own clocks yet.|Inga egna klockor ännu.|Ingen egne ure endnu.|Ingen egne klokker ennå.|Noch keine eigenen Uhren.
 Clock pack|Klockpaket|Urpakke|Klokkepakke|Uhrenpaket
-zip with clock.json and the layers as SVG or PNG · at most 2 MB|zip med clock.json och lagren som SVG eller PNG · högst 2 MB|zip med clock.json og lagene som SVG eller PNG · højst 2 MB|zip med clock.json og lagene som SVG eller PNG · høyst 2 MB|ZIP mit clock.json und den Ebenen als SVG oder PNG · höchstens 2 MB
+one or more clock packs, or a zip with several · at most 2 MB per file|ett eller flera klockpaket, eller en zip med flera · högst 2 MB per fil|en eller flere urpakker, eller en zip med flere · højst 2 MB pr. fil|én eller flere klokkepakker, eller en zip med flere · høyst 2 MB per fil|ein oder mehrere Uhrenpakete oder eine ZIP mit mehreren · höchstens 2 MB pro Datei
 Right to use|Rätt att använda|Ret til brug|Rett til bruk|Nutzungsrecht
 I have the right to use this clock face: it is our own design or licensed from its owner.|Jag har rätt att använda den här urtavlan: den är vår egen formgivning eller licensierad från den som äger den.|Jeg har ret til at bruge denne urskive: den er vores eget design eller licenseret fra ejeren.|Jeg har rett til å bruke denne urskiven: den er vår egen utforming eller lisensiert fra eieren.|Ich habe das Recht, dieses Zifferblatt zu verwenden: Es ist unser eigenes Design oder vom Inhaber lizenziert.
 Download the example pack|Ladda ner exempelpaketet|Hent eksempelpakken|Last ned eksempelpakken|Beispielpaket herunterladen
@@ -1340,13 +1340,15 @@ by {name}|av {name}|af {name}|av {name}|von {name}
 uploaded by {name} {time}|uppladdad av {name} {time}|uploadet af {name} {time}|lastet opp av {name} {time}|hochgeladen von {name} {time}
 right to use confirmed|rätt att använda intygad|ret til brug bekræftet|rett til bruk bekreftet|Nutzungsrecht bestätigt
 Choose a clock pack first.|Välj ett klockpaket först.|Vælg en urpakke først.|Velg en klokkepakke først.|Wähle zuerst ein Uhrenpaket.
-The clock pack is larger than 2 MB.|Klockpaketet är större än 2 MB.|Urpakken er større end 2 MB.|Klokkepakken er større enn 2 MB.|Das Uhrenpaket ist größer als 2 MB.
+{name} is larger than 2 MB.|{name} är större än 2 MB.|{name} er større end 2 MB.|{name} er større enn 2 MB.|{name} ist größer als 2 MB.
 Tick the box to confirm you have the right to use the clock face.|Kryssa i att du har rätt att använda urtavlan.|Sæt kryds for at bekræfte, at du har ret til at bruge urskiven.|Kryss av for å bekrefte at du har rett til å bruke urskiven.|Bestätige mit dem Häkchen, dass du das Zifferblatt verwenden darfst.
 The clock pack could not be uploaded.|Klockpaketet kunde inte laddas upp.|Urpakken kunne ikke uploades.|Klokkepakken kunne ikke lastes opp.|Das Uhrenpaket konnte nicht hochgeladen werden.
 {name} has been updated.|{name} är uppdaterad.|{name} er opdateret.|{name} er oppdatert.|{name} wurde aktualisiert.
 {name} has been uploaded. Choose it as a style above.|{name} är uppladdad. Välj den som stil ovan.|{name} er uploadet. Vælg den som stil ovenfor.|{name} er lastet opp. Velg den som stil over.|{name} wurde hochgeladen. Wähle sie oben als Stil.
-Remove {name}? Displays showing the clock switch to the station clock.|Ta bort {name}? Skärmar som visar klockan byter till stationsuret.|Fjern {name}? Skærme, der viser uret, skifter til stationsuret.|Fjerne {name}? Skjermer som viser klokken, bytter til stasjonsuret.|{name} entfernen? Anzeigen mit dieser Uhr wechseln zur Bahnhofsuhr.
+Remove {name}? Displays showing the clock switch to the analog one.|Ta bort {name}? Skärmar som visar klockan byter till den analoga.|Fjern {name}? Skærme, der viser uret, skifter til det analoge.|Fjerne {name}? Skjermer som viser klokken, bytter til den analoge.|{name} entfernen? Anzeigen mit dieser Uhr wechseln zur analogen.
 The clock could not be removed.|Klockan kunde inte tas bort.|Uret kunne ikke fjernes.|Klokken kunne ikke fjernes.|Die Uhr konnte nicht entfernt werden.
 {name} has been removed.|{name} är borttagen.|{name} er fjernet.|{name} er fjernet.|{name} wurde entfernt.
 The file did not arrive complete. Try again.|Filen kom inte fram hel. Försök igen.|Filen kom ikke helt frem. Prøv igen.|Filen kom ikke frem i sin helhet. Prøv igjen.|Die Datei ist nicht vollständig angekommen. Versuche es erneut.
 The clock no longer exists.|Klockan finns inte längre.|Uret findes ikke længere.|Klokken finnes ikke lenger.|Die Uhr gibt es nicht mehr.
+{count} clocks have been uploaded. Choose one as a style above.|{count} klockor är uppladdade. Välj en som stil ovan.|{count} ure er uploadet. Vælg et som stil ovenfor.|{count} klokker er lastet opp. Velg én som stil over.|{count} Uhren wurden hochgeladen. Wähle oben eine als Stil.
+{count} clocks have been uploaded.|{count} klockor är uppladdade.|{count} ure er uploadet.|{count} klokker er lastet opp.|{count} Uhren wurden hochgeladen.

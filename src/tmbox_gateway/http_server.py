@@ -1756,7 +1756,8 @@ class TrainMeetHTTPApplication:
 
     @announces("clock")
     def upload_clock_face(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        """Tar emot ett klockpaket (base64) från Inställningar → Klockan."""
+        """Tar emot ett klockpaket (base64) från Inställningar → Klockan, eller
+        en zip med flera klockpaket."""
         self._require_admin(client)
         if self.runtime_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "clock_unavailable", "Klockinställningarna kan inte sparas")
@@ -1767,18 +1768,31 @@ class TrainMeetHTTPApplication:
         except (binascii.Error, ValueError) as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_pack", "Filen kom inte fram hel. Försök igen.") from error
         try:
-            pack = clock_pack.read_pack(data)
-            face = self.runtime_store.save_clock_face(pack, uploaded_by=client.display_name or "admin")
-        except (clock_pack.ClockPackError, RuntimePublicationError) as error:
+            packs = clock_pack.read_packs(data)
+        except clock_pack.ClockPackError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_pack", str(error)) from error
-        if self.operations_store is not None:
-            self.operations_store.record_audit_event(
-                correlation_id=f"clock-face-{pack.id}-{pack.sha256[:12]}", source="web-admin",
-                actor=client.admin_user_id or "konsol", action="clock_face.uploaded", outcome="ok",
-                detail={"by": client.display_name, "id": pack.id, "name": pack.name, "version": pack.version,
-                        "sha256": pack.sha256, "file_name": str(payload.get("file_name") or "")[:120],
-                        "replaced": face["replaced"], "rights_confirmed": True})
-        return {"face": self._admin_clock_face(face), "replaced": face["replaced"], **self.clock_faces_state(client)}
+        # Ryms inte alla får ingen av dem plats: hellre inget än hälften.
+        existing = {face["id"] for face in self.runtime_store.clock_faces()}
+        if len(existing | {pack.id for pack in packs}) > MAX_CLOCK_FACES:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_pack",
+                               f"Servern rymmer {MAX_CLOCK_FACES} egna klockor. Ta bort några först.")
+        saved = []
+        for pack in packs:
+            try:
+                face = self.runtime_store.save_clock_face(pack, uploaded_by=client.display_name or "admin")
+            except RuntimePublicationError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_pack", str(error)) from error
+            saved.append(face)
+            if self.operations_store is not None:
+                self.operations_store.record_audit_event(
+                    correlation_id=f"clock-face-{pack.id}-{pack.sha256[:12]}", source="web-admin",
+                    actor=client.admin_user_id or "konsol", action="clock_face.uploaded", outcome="ok",
+                    detail={"by": client.display_name, "id": pack.id, "name": pack.name, "version": pack.version,
+                            "sha256": pack.sha256, "file_name": str(payload.get("file_name") or "")[:120],
+                            "replaced": face["replaced"], "rights_confirmed": True})
+        return {"face": self._admin_clock_face(saved[0]), "replaced": saved[0]["replaced"],
+                "uploaded": [{"id": face["id"], "name": face["name"], "replaced": face["replaced"]} for face in saved],
+                **self.clock_faces_state(client)}
 
     @announces("clock")
     def delete_clock_face(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
@@ -2442,13 +2456,21 @@ class TrainMeetHTTPApplication:
     def _clock_display(self, clock: dict[str, Any]) -> dict[str, Any]:
         settings = self.runtime_store.clock_display_settings(self._clock_scope()) if self.runtime_store else {}
         faces = self.runtime_store.clock_faces() if self.runtime_store else []
+        custom = [CUSTOM_CLOCK_PREFIX + face["id"] for face in faces]
+
+        def current(style):
+            # En tidigare inbyggd stil är numera ett klockpaket med samma id.
+            if style in LEGACY_CLOCK_STYLES:
+                style = CUSTOM_CLOCK_PREFIX + LEGACY_CLOCK_STYLES[style]
+                return style if style in custom else "analog"
+            return style
+
         # Paketets stilar först (den första är förvalet), sedan de inbyggda och
-        # de uppladdade. "swiss" från ett äldre paket eller en sparad
-        # inställning blir stationsuret; tavlan följer inte med servern längre.
-        package = [LEGACY_CLOCK_STYLES.get(style, style) for style in (clock.get("available_styles") or list(AVAILABLE_CLOCK_STYLES))]
-        styles = list(dict.fromkeys([*(style for style in package if style in AVAILABLE_CLOCK_STYLES), "analog", "stationsur", "digital",
-                                     *(CUSTOM_CLOCK_PREFIX + face["id"] for face in faces)]))
-        style = LEGACY_CLOCK_STYLES.get(settings.get("style"), settings.get("style", styles[0]))
+        # de uppladdade.
+        package = [current(style) for style in (clock.get("available_styles") or list(AVAILABLE_CLOCK_STYLES))]
+        styles = list(dict.fromkeys([*(style for style in package if style in AVAILABLE_CLOCK_STYLES or style in custom),
+                                     *AVAILABLE_CLOCK_STYLES, *custom]))
+        style = current(settings.get("style", styles[0]))
         return {**clock, "simulation": bool(self.simulation and self.simulation.active),
                 "available_styles": styles, "style": style if style in styles else styles[0],
                 "show_seconds": settings.get("show_seconds", clock.get("show_seconds", True)),
