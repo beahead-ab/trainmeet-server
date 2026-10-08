@@ -1,6 +1,8 @@
 // Träffens dagar och tidsmaskinen (Casper 2026-10-08): Drift visar "Dag 2 · Lör",
 // knappen Tidsmaskin… väljer dag och tid och skickar dem med träffens
-// generation, och startdagen väljs under Inställningar → Träff och Cloud.
+// generation, och startdagen och dygnsskiftets tid väljs under Inställningar →
+// Träff och Cloud. Vid dygnsskiftet säger en toast att alla tåg står på sin
+// utgångspunkt; den visas en gång, och medan skiftet väntar säger den det.
 // Kör: node tests/js/meet-calendar.test.cjs
 const assert = require('node:assert/strict');
 const { open } = require('./kr-fixture.cjs');
@@ -38,12 +40,50 @@ const calendar = { start_day: 'Fre', day_number: 2, weekday: 'Lör', week: ['Må
     assert.equal(await page.locator('#meet-start-day').inputValue(), 'Fre');
     assert.deepEqual(await page.locator('#meet-start-day option').allTextContents(), ['Alla dagar (Dagl)', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön']);
     assert.equal(await page.locator('#meet-calendar-note').textContent(), 'I dag: Dag 2 · Lör');
+    assert.equal(await page.locator('#meet-day-change').inputValue(), '05:00', 'the day change defaults to 05:00');
     await page.locator('#meet-start-day').selectOption('Lör');
+    await page.locator('#meet-day-change').fill('04:15');
     await page.locator('#meet-calendar-form [data-save-submit]').click();
     await page.waitForFunction(() => document.querySelector('#meet-calendar-form [data-save-state]')?.textContent.trim() === 'Sparat');
-    assert.deepEqual(sent[1], ['calendar', { start_day: 'Lör', meet_generation: 7 }]);
+    assert.deepEqual(sent[1], ['calendar', { start_day: 'Lör', change_time: '04:15', meet_generation: 7 }]);
+    assert.equal(await page.locator('.tm-day-change').isVisible(), false, 'no day change, no toast');
     assert.deepEqual(view.errors, []);
     assert.deepEqual(view.violations, []);
-    console.log('meet-calendar: ok');
   } finally { await view.browser.close(); }
+
+  // Dygnsskiftet nyss: toasten på Drift och i deltagarvyn, en gång.
+  const changed = { ...calendar, change_time: '05:00', last_change: { kind: 'day_change', day_number: 2, weekday: 'Lör', at: new Date(Date.now() - 10000).toISOString() } };
+  for (const route of ['/drift', '/']) {
+    const fresh = await open({ route, calendar: changed });
+    try {
+      const toast = fresh.page.locator('.tm-day-change');
+      await toast.waitFor({ state: 'visible', timeout: 8000 });
+      assert.equal(await toast.textContent(), 'Nytt trafikdygn: Dag 2 · Lör. Alla tåg står på sin utgångspunkt och statusarna är nollställda.');
+      assert.equal(await toast.getAttribute('role'), 'status');
+      const box = await toast.boundingBox(), width = fresh.page.viewportSize().width;
+      assert.ok(box.x >= 0 && box.x + box.width <= width, 'inside the screen');
+      await fresh.page.reload();
+      await fresh.page.waitForTimeout(1500);
+      assert.equal(await fresh.page.locator('.tm-day-change').isVisible(), false, 'the same change is shown once');
+      assert.deepEqual(fresh.errors, []);
+      assert.deepEqual(fresh.violations, [], 'no CSP violations');
+    } finally { await fresh.browser.close(); }
+  }
+
+  // En sida som öppnas långt efter skiftet visar ingenting.
+  const old = await open({ route: '/drift', calendar: { ...changed, last_change: { ...changed.last_change, at: new Date(Date.now() - 600000).toISOString() } } });
+  try {
+    await old.page.waitForFunction(() => document.querySelector('#overview-day')?.textContent === 'Dag 2 · Lör');
+    await old.page.waitForTimeout(1500);
+    assert.equal(await old.page.locator('.tm-day-change').isVisible(), false, 'ten minutes later: no toast');
+  } finally { await old.browser.close(); }
+
+  // Skiftet väntar på ett tåg ute på linjen.
+  const waiting = await open({ route: '/', calendar: { ...calendar, waiting: true } });
+  try {
+    const toast = waiting.page.locator('.tm-day-change');
+    await toast.waitFor({ state: 'visible', timeout: 8000 });
+    assert.equal(await toast.textContent(), 'Dygnsskiftet väntar på tåg som är ute på linjen.');
+  } finally { await waiting.browser.close(); }
+  console.log('meet-calendar: ok');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

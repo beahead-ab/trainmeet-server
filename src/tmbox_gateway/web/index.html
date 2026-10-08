@@ -24,6 +24,7 @@
     <script src="/assets/i18n-init.js" defer></script>
     <script src="/assets/live-events.js" defer></script>
     <script src="/assets/simulation-banner.js" defer></script>
+    <script src="/assets/day-change.js" defer></script>
   </head>
   <body>
     <main class="page-shell">
@@ -648,9 +649,10 @@
                 <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
               </form>
               <form id="meet-calendar-form" class="kr-panel kr-setform" aria-label="Träffens dagar" data-tm-aria-label="Träffens dagar" novalidate hidden>
-                <div class="kr-ph"><span>Träffens dagar</span><span class="kr-c">vid midnatt går träffen till nästa dag, med den dagens tidtabell</span></div>
+                <div class="kr-ph"><span>Träffens dagar</span><span class="kr-c">vid dygnsskiftet går träffen till nästa dag, med den dagens tidtabell</span></div>
                 <div class="kr-rows">
                   <div class="kr-kv"><span class="kr-k">Börjar på</span><select id="meet-start-day" class="kr-btn sm" aria-label="Träffens startdag" data-tm-aria-label="Träffens startdag" data-change-label="Startdag"></select><span id="meet-calendar-note" class="kr-m"></span></div>
+                  <div class="kr-kv"><span class="kr-k">Dygnsskifte kl.</span><input id="meet-day-change" class="kr-field kr-w-xs" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="05:00" aria-label="Dygnsskifte" data-tm-aria-label="Dygnsskifte" data-change-label="Dygnsskifte"><span class="kr-m">en timme innan trafikdygnet börjar: tåg ute på linjen hinner in, sedan står alla tåg på sin utgångspunkt och statusarna nollställs</span></div>
                 </div>
                 <p class="form-message" role="status"></p>
                 <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>

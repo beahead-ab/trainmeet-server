@@ -1723,6 +1723,7 @@ function refreshMeetCalendar() {
   const names = { Dagl: t("Alla dagar (Dagl)") };
   select.replaceChildren(...["Dagl", ...(snapshot.calendar.week || [])].map((day) => new Option(names[day] || day, day)));
   select.value = snapshot.calendar.start_day;
+  document.querySelector("#meet-day-change").value = snapshot.calendar.change_time || "05:00";
   document.querySelector("#meet-calendar-note").textContent = t("I dag: Dag {n} · {day}", { n: snapshot.calendar.day_number, day: snapshot.calendar.weekday });
   form.hidden = false;
   globalThis.TrainMeetSettings?.rebase(form);
@@ -1735,6 +1736,7 @@ document.querySelector("#meet-calendar-form")?.addEventListener("submit", async 
     const response = await authorizedFetch("/v1/runtime/calendar", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ start_day: document.querySelector("#meet-start-day").value,
+        change_time: document.querySelector("#meet-day-change").value,
         meet_generation: state.serverContext?.selected_meet?.generation }),
     });
     const payload = await response.json();
