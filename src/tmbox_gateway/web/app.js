@@ -3133,6 +3133,8 @@ function renderRouteMap() {
     showBadge: false,
     // Only this train: the others are on Banöversikten above.
     onlySelectedTrain: true,
+    // Tåget rör sig med klockan här också, som på Banöversikten.
+    live: true,
     onStationSelect: (stationID) => selectOverviewStation(stationID, true),
   });
   // Cropped to the drawing: a line is mostly long and low, and the whole
@@ -3975,7 +3977,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const clearTo = edgeOf(train.to) + (kr ? 8 : 7) + reach;
     // Ett avgånget tåg rör sig mot nästa station i takt med träffklockan; ett
     // som bara har klart står en bit ut från stationen det ska lämna.
-    const moving = Boolean(kr && train.departed && topologyLegTimes(snapshot, train.trainNumber, train.from, train.to));
+    const moving = Boolean((kr || options.live) && train.departed && topologyLegTimes(snapshot, train.trainNumber, train.from, train.to));
     const travelled = () => {
       const low = Math.min(clear, length / 2), high = Math.max(length - clearTo, low);
       return low + (high - low) * topologyProgress(snapshot, train, topologyClockSeconds(snapshot));
@@ -4800,6 +4802,12 @@ function renderDisplayThemeChoice() {
 }
 
 // Förseningar på den här skärmen: tomt följer träffens förval.
+// Tågdiagrammet på skärmen går med klockan varje sekund, som på Drift, och
+// inte bara när en ny bild hämtas.
+setInterval(() => {
+  if (displayKind === "graph" && displaySnapshot?.clock?.running && !document.hidden) renderGraph(displaySnapshot);
+}, 1000);
+
 function renderDisplayDeviationLevel(snapshot) {
   const select = document.querySelector("#display-deviation-level");
   if (!select) return;

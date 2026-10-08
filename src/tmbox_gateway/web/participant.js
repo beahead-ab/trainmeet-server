@@ -318,9 +318,18 @@
     if (active) pollTimer = setTimeout(poll, globalThis.TrainMeetLive?.connected ? 30000 : 5000);
   }
 
+  // Listorna räknas om var tionde sekund medan klockan går: "om N min" och
+  // ett tåg som står kvar och blir allt senare, även utan ny hämtning.
+  let lastLists = 0;
   function tick() {
     if (!active) return;
     renderClockCard();
+    const now = performance.now();
+    if (snapshot?.clock?.running && snapshot.meet?.operating_region !== "us" && now - lastLists > 10000) {
+      lastLists = now;
+      renderTrack();
+      renderTimetable();
+    }
     frameTimer = requestAnimationFrame(tick);
   }
 
