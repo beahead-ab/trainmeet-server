@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.15.0",
+    "date": "2026-10-08",
+    "notes": [
+      "Webb-TMBoxen visar stationens tidtabell med förseningar, och man väljer hur mycket"
+    ]
+  },
+  {
     "version": "3.14.0",
     "date": "2026-10-08",
     "notes": [
