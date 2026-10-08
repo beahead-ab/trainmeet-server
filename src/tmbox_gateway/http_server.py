@@ -1561,9 +1561,14 @@ class TrainMeetHTTPApplication:
             publication_id = selected["publication_id"]
             positions = []
         clock = self._clock_display(clock)
+        movement_live: dict[str, Any] = {}
         if publication is not None and not (selected and selected["region"] == "us"):
-            display = {**display, "traffic_side": self.runtime_store.traffic_side(publication.meet_id, publication.country)["side"]}
+            display = {**display, "traffic_side": self.runtime_store.traffic_side(publication.meet_id, publication.country)["side"],
+                       "deviation_level": self.runtime_store.deviation_level(publication.meet_id)["level"]}
             connection_states, positions = self._with_departure_times(publication, active_day, connection_states, positions)
+            if self.operations_store is not None:
+                # Vad varje rörelse gjort och när: tidtabellen visar verkliga tider och förseningar.
+                movement_live = self.operations_store.movement_live(publication.publication_id, active_day)
         return {
             "protocol_version": 1,
             "revision": self.engine.revision,
@@ -1581,6 +1586,7 @@ class TrainMeetHTTPApplication:
             "display": display,
             "clock": clock,
             "train_positions": positions,
+            "movement_live": movement_live,
             "connection": self.connection_details(request_host),
             "server_name": self.runtime_store.server_name() if self.runtime_store else self.config.gateway_id,
             "us": self.us_display_snapshot() if selected and selected["region"] == "us" else None,
@@ -1635,6 +1641,26 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_traffic_side", str(error)) from error
         self.changes.notify("runtime")
         return self.traffic_side_state(client)
+
+    def deviation_level_state(self, client: PairedClient) -> dict[str, Any]:
+        self._require_admin(client)
+        publication = self.runtime_store.active() if self.runtime_store else None
+        if publication is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "runtime_missing", "Välj en aktiv träff först.")
+        return {"meet_id": publication.meet_id, **self.runtime_store.deviation_level(publication.meet_id)}
+
+    @runtime_view
+    def save_deviation_level(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_admin(client)
+        publication = self.runtime_store.active() if self.runtime_store else None
+        if publication is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "runtime_missing", "Välj en aktiv träff först.")
+        try:
+            self.runtime_store.set_deviation_level(publication.meet_id, payload.get("level"))
+        except RuntimePublicationError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_deviation_level", str(error)) from error
+        self.changes.notify("runtime")
+        return self.deviation_level_state(client)
 
     def us_display_snapshot(self) -> dict[str, Any]:
         """Public board projection: operational facts, never credentials,
@@ -4273,6 +4299,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/settings/traffic-side":
                 self._send_json(HTTPStatus.OK, self.server.application.traffic_side_state(self._authenticated_client()))
                 return
+            if path == "/v1/settings/deviation-level":
+                self._send_json(HTTPStatus.OK, self.server.application.deviation_level_state(self._authenticated_client()))
+                return
             if path == "/v1/display":
                 self._send_json(
                     HTTPStatus.OK,
@@ -4843,6 +4872,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/settings/traffic-side":
                 self._send_json(HTTPStatus.OK, self.server.application.save_traffic_side(self._authenticated_client(), payload))
+                return
+            if path == "/v1/settings/deviation-level":
+                self._send_json(HTTPStatus.OK, self.server.application.save_deviation_level(self._authenticated_client(), payload))
                 return
             if path == "/v1/server/restart":
                 client = self._authenticated_client()

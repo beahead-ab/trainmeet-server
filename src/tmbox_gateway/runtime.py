@@ -61,6 +61,8 @@ WEB_CLIENT_TTL_MINUTES_RANGE = (5, 240)
 # 0 means the code never expires, which is the default: it is printed on the
 # meeting's screens and has to keep working for as long as it is up there.
 CONNECTION_CODE_VALIDITY_HOURS = (0, 12, 24, 72, 168)
+DEFAULT_DEVIATION_LEVEL = 2
+DEVIATION_LEVEL_VALUES = {"1", "2", "3", "4", "5"}
 DAY_ORDER = ("Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön")
 SHORT_DAYS = {
     "M": "Mån",
@@ -912,6 +914,22 @@ class SQLiteRuntimeStore:
         if side not in {"left", "right", None, ""}:
             raise RuntimePublicationError("Välj vänster eller höger")
         self._save_setting("traffic_side:" + meet_id, side or "")
+
+    def deviation_level(self, meet_id: str) -> dict[str, Any]:
+        """Hur mycket förseningar och för tidiga tåg som visas, träffens förval.
+
+        1 ingen markering, 2 när det inträffar (förval), 3 diskret, 4 fler,
+        5 allt. Varje skärm och webbläsare kan välja annat för sig själv.
+        """
+        saved = self._setting("deviation_level:" + meet_id)
+        level = int(saved) if saved in DEVIATION_LEVEL_VALUES else DEFAULT_DEVIATION_LEVEL
+        return {"level": level, "default": DEFAULT_DEVIATION_LEVEL, "overridden": saved in DEVIATION_LEVEL_VALUES}
+
+    def set_deviation_level(self, meet_id: str, level: Any) -> None:
+        value = "" if level in {None, "", "default"} else str(level)
+        if value and value not in DEVIATION_LEVEL_VALUES:
+            raise RuntimePublicationError("Välj en nivå mellan 1 och 5")
+        self._save_setting("deviation_level:" + meet_id, value)
 
     def display_placement_overrides(self, meet_id: str) -> dict:
         raw = self._setting("display_placement:" + meet_id)

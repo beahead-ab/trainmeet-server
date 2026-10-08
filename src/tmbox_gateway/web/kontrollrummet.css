@@ -783,3 +783,33 @@ body[data-mode="tidtabell"] #app-view { padding: 20px 24px 28px; max-width: none
 @media (max-width: 720px) {
   body[data-mode="tidtabell"] #app-view { padding: 12px 12px 20px; }
 }
+
+/* ── Tidtabellen som trafikinformation ───────────────────────────────────
+ * Som i SJ:s app: en försening från +3 min är en röd bricka med vita siffror,
+ * den planerade tiden står överstruken och den nya bredvid. En rad som just
+ * ändrats lyser upp kort och får "Nyss". Deltagarvyn, Drift och skärmarna. */
+:root { --kr-late: #d9342b; --kr-late-ink: #ffffff; --kr-early: #1d7a43; --kr-early-ink: #ffffff; }
+:root[data-kr-theme="light"] { --kr-late: #b42318; --kr-late-ink: #ffffff; --kr-early: #17693a; --kr-early-ink: #ffffff; }
+.tm-delay, .tm-early { display: inline-flex; align-items: center; justify-content: center; min-width: 2.4em; padding: 1px 6px; border-radius: 6px;
+  background: var(--kr-late); color: var(--kr-late-ink); font-family: var(--kr-num); font-variant-numeric: tabular-nums; font-weight: 700;
+  font-size: .9em; line-height: 1.4; white-space: nowrap; }
+/* För tidigt (nivå 4–5): grön bricka. Diskret (nivå 3): bara röd text. */
+.tm-early { background: var(--kr-early); color: var(--kr-early-ink); }
+.tm-delay.tm-delay--text { min-width: 0; padding: 0; margin-left: .3em; background: none; color: var(--kr-red); font-weight: 650; }
+.is-early .tm-new { color: var(--kr-green); }
+.tm-was { color: var(--kr-mute); text-decoration: line-through; text-decoration-thickness: 1.5px; margin-right: .35em; }
+.tm-new { color: var(--kr-red); font-weight: 650; }
+.tm-est { color: var(--kr-mute); font-size: .8em; margin-left: .35em; white-space: nowrap; }
+.tm-recent { display: inline-block; margin-left: .45em; padding: 0 6px; border-radius: 999px; background: var(--kr-blue-soft); color: var(--kr-blue);
+  font-size: .72em; font-weight: 650; line-height: 1.6; vertical-align: .1em; white-space: nowrap; }
+.is-updated { animation: tm-row-flash 2s ease-out both; }
+.is-updated .tm-flip { display: inline-block; animation: tm-flip .32s ease-out both; }
+@keyframes tm-row-flash { from { background-color: var(--kr-blue-soft); } to { background-color: transparent; } }
+@keyframes tm-flip { from { transform: translateY(-45%); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .is-updated, .is-updated .tm-flip { animation: none; } }
+/* I händelselistan på Drift står den överstrukna tiden ovanför den nya. */
+.kr-ev .t .tm-was { display: block; margin: 0; font-size: 11px; line-height: 1.2; }
+/* Nivå 5: "+7" eller "−2" vid tågnumret på kartan och i tågdiagrammet. */
+.topology-train-mark, .graph-train-mark { font: 700 11.5px var(--kr-num); font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--kr-bg); stroke-width: 3px; stroke-linejoin: round; }
+.topology-train-mark.is-late, .graph-train-mark.is-late { fill: var(--kr-red); }
+.topology-train-mark.is-early, .graph-train-mark.is-early { fill: var(--kr-green); }
