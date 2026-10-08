@@ -98,7 +98,7 @@
     const showSeconds = clock.show_seconds !== false;
     const stopped = !clock.running;
     const us = snapshot.meet?.operating_region === "us";
-    const meta = [snapshot.active_day, stopped && clock.stopped_reason ? clock.stopped_reason : clock.source === "fastclock" ? "FastClock" : t("intern klocka")].filter(Boolean).join(" · ");
+    const meta = [meetDayLabel(snapshot), stopped && clock.stopped_reason ? clock.stopped_reason : clock.source === "fastclock" ? "FastClock" : t("intern klocka")].filter(Boolean).join(" · ");
     const status = stopped ? t("Klockan stoppad") : `${t("Klockan går")} · ${Number(clock.speed || 1)}×`;
     const signature = [style, showSeconds, stopped, status, meta, TrainMeetI18n.getLanguage()].join("|");
     if (target.dataset.signature !== signature) {
@@ -211,7 +211,7 @@
     // Kvar att se: tåg som inte är framme, och de som ska komma senare.
     const upcoming = matches.filter((row) => { const live = lives.get(row.number); return live ? live.state !== "arrived" && (live.state !== "not_departed" || minutes(row.arrival || row.departure) >= now) : minutes(row.arrival || row.departure) >= now; });
     const rows = fullTimetable || needle ? matches : (upcoming.length ? upcoming.slice(0, 4) : matches.slice(-4));
-    $("#pv-timetable-count").textContent = `${t(services.length === 1 ? "1 tåg" : "{count} tåg", { count: services.length })} · ${snapshot.active_day || ""}`;
+    $("#pv-timetable-count").textContent = `${t(services.length === 1 ? "1 tåg" : "{count} tåg", { count: services.length })} · ${meetDayLabel(snapshot)}`;
     const list = $("#pv-timetable");
     list.replaceChildren();
     if (!rows.length) list.append(Object.assign(document.createElement("p"), { className: "pv-empty", textContent: needle ? t("Inget tåg matchar sökningen.") : t("Ingen tidtabell för dagen.") }));

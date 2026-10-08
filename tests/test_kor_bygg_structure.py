@@ -132,7 +132,7 @@ class ShellStructureTests(unittest.TestCase):
         """Inställningar: varje panel som går att ändra är ett eget formulär med
         Avbryt och Spara, släckta tills något skiljer sig från det sparade."""
         forms = re.findall(r'<form id="([\w-]+)" class="kr-panel kr-setform"', self.html)
-        self.assertEqual(forms, ["cloud-auto-form", "traffic-side-form", "automatic-form", "clock-appearance-form", "deviation-level-form", "connection-wifi-form",
+        self.assertEqual(forms, ["cloud-auto-form", "meet-calendar-form", "traffic-side-form", "automatic-form", "clock-appearance-form", "deviation-level-form", "connection-wifi-form",
                                  "connection-badge-form", "server-identity-form", "connection-code-form", "language-form", "browser-deviation-form"])
         for name in forms:
             start = self.html.index(f'<form id="{name}"')

@@ -142,3 +142,18 @@ test('the device choice goes before the meet default, which goes before level 2'
   assert.equal(model.deviationLevel({ display: { deviation_level: 4 } }, '1'), 1);
   assert.equal(model.deviationLevel({ display: { deviation_level: 9 } }, ''), 2, 'an unknown level falls back');
 });
+
+// ── Efter midnatt (träffkalendern, Casper 2026-10-08) ───────────────────
+test('a stop after midnight comes after the evening in Nästa händelser', () => {
+  const night = { clock: { time: '23:50:00' }, stations: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
+    services: [{ id: 's7', train_number: '7', stops: [{ station_id: 'a', departure_time: '23:55', stop_order: 0, service_day_offset: 0 },
+      { station_id: 'b', arrival_time: '00:20', stop_order: 1, service_day_offset: 1 }] }],
+    trains: [], movement_live: {}, connection_states: [], train_positions: [] };
+  const [first] = model.events(night, { train: '7', nowSeconds: at('23:50') });
+  assert.deepEqual([first.kind, first.delta], ['dep', 5]);
+  const both = model.events(night, { train: '7', nowSeconds: at('23:50') });
+  assert.deepEqual(both.map((event) => [event.stationId, event.delta]), [['a', 5], ['b', 30]], '00:20 is 30 min away, not gone');
+  // Klockan har gått förbi midnatt på gårdagens dag: 00:10 är före 00:20.
+  const after = model.events({ ...night, clock: { time: '00:10:00', elapsed_seconds: 86400 + 600 } }, { train: '7', nowSeconds: at('00:10') });
+  assert.deepEqual(after.map((event) => [event.stationId, event.delta]), [['b', 10]]);
+});

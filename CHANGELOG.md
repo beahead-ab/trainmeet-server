@@ -5,6 +5,44 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Träffens dagar: dagen går fram vid midnatt, och en tidsmaskin
+
+Efter Caspers önskan.
+
+- **Träffen börjar på en dag admin väljer:** Inställningar → Träff och Cloud →
+  Träffens dagar, med en veckodag eller "Alla dagar (Dagl)". Ingen koppling
+  till verkliga datum.
+- **Vid varje midnatt går träffen till nästa dag.** Tidtabellen för den
+  dagens veckodag gäller, och Dagl alltid. Drift, deltagarvyn och skärmarna
+  visar "Dag 2 · Sön".
+- **På den nya dagen är alla statusar för ankomst och avgång nollställda.**
+  Tågen står där tidtabellen säger, och automatiken börjar från dygnets
+  början. Gårdagen står kvar som historik.
+- **Samma veckodag en vecka senare** börjar också tom.
+- **TKL-pass följer med** till den nya dagen.
+- **Ett tåg som är ute vid midnatt kör klart på gårdagens dag** innan dagen
+  byts. Det gäller ett tåg på linjen, en öppen klarering, eller ett avgånget
+  tåg med stopp efter midnatt. Ett tåg som fastnat håller inte kvar gårdagen
+  mer än sex spel­timmar.
+- **FastClock:** dagen byts när klockan slår om från 23:59 till 00:00.
+- **Ingen dag byts under en simulering.**
+- **Tidsmaskin…** vid klockan på Drift, bara för admin: välj dag och tid.
+  - Alla tåg flyttas dit tidtabellen säger då, och alla statusar nollställs.
+  - En säkerhetskopia tas först.
+  - **Ställ klockan** finns kvar för små justeringar och rör inte tåg som
+    verkligen har kört.
+- **Rättelser:**
+  - Dagarna i tidtabellen läses som Cloud skriver dem: "M-F", "S" och
+    intervall i kommalistor ("Mån-Fre,Sön") matchade förut aldrig.
+  - Byte av trafikdag med FastClock som klocka gav ett fel.
+  - Nästa händelser visar stopp efter midnatt efter kvällens, inte som
+    passerade.
+- **API:**
+  - `/v1/display.calendar` (`start_day`, `day_number`, `weekday`, `week`);
+  - `POST /v1/runtime/time-machine` med `day_number`, `time` och
+    `meet_generation`;
+  - `POST /v1/runtime/calendar` med `start_day` och `meet_generation`.
+
 ### Tidtabellen visar verkliga tider, förseningar och vad som nyss ändrats, i fem nivåer
 
 Som i SJ:s app, efter Caspers önskan. Gäller deltagarvyns Tidtabell och Nästa

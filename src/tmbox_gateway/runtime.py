@@ -74,6 +74,8 @@ SHORT_DAYS = {
     "Lö": "Lör",
     "L": "Lör",
     "Sö": "Sön",
+    "F": "Fre",
+    "S": "Sön",
 }
 
 
@@ -915,6 +917,34 @@ class SQLiteRuntimeStore:
             raise RuntimePublicationError("Välj vänster eller höger")
         self._save_setting("traffic_side:" + meet_id, side or "")
 
+    def meet_calendar(self, meet_id: str, fallback_day: str | None = None) -> dict[str, Any]:
+        """Vilken dag träffen är på: startdagen admin valt och dag nummer.
+
+        Träffen börjar på `start_day` (en veckodag, eller "Dagl" när alla
+        tåg går varje dag). Vid varje midnatt går `day_number` upp ett steg,
+        och trafikdagen blir veckodagen den dagen. Utan något sparat gäller
+        den trafikdag som gäller nu, som dag 1.
+        """
+        try:
+            saved = json.loads(self._setting("meet_calendar:" + meet_id) or "{}")
+        except ValueError:
+            saved = {}
+        start = str(saved.get("start_day") or fallback_day or self.active_day() or "Dagl")
+        try:
+            number = max(1, int(saved.get("day_number") or 1))
+        except (TypeError, ValueError):
+            number = 1
+        return {"start_day": start, "day_number": number, "weekday": calendar_weekday(start, number), "week": list(DAY_ORDER)}
+
+    def set_meet_calendar(self, meet_id: str, start_day: str, day_number: int) -> dict[str, Any]:
+        start = str(start_day or "").strip()
+        if not start or len(start) > 40:
+            raise RuntimePublicationError("Välj träffens startdag")
+        if type(day_number) is not int or not 1 <= day_number <= 366:
+            raise RuntimePublicationError("Dagen ska vara mellan 1 och 366")
+        self._save_setting("meet_calendar:" + meet_id, json.dumps({"start_day": start, "day_number": day_number}))
+        return self.meet_calendar(meet_id)
+
     def deviation_level(self, meet_id: str) -> dict[str, Any]:
         """Hur mycket förseningar och för tidiga tåg som visas, träffens förval.
 
@@ -1351,30 +1381,59 @@ class SQLiteRuntimeStore:
 
 
 def matches_active_day(train_days: str, active_day: str) -> bool:
+    """Går ett tåg med dagarna `train_days` på trafikdagen `active_day`?
+
+    Dagarna läses som Clouds tidtabellskärna gör (timetable_core
+    canonical_days): "Dagl" eller "dagligen", en dag ("Lör", "Lö", "L"), ett
+    intervall ("Mån-Fre", "M-F", "Fre-Mån") och kommalistor av båda
+    ("Mån-Fre,Sön"). Kärnan importeras inte här: 16×2-provbänkens paket har
+    bara den här filen.
+    """
     train_days = train_days.strip()
     active_day = active_day.strip()
     if train_days == "Dagl" or active_day == "Dagl" or train_days == active_day:
         return True
-    if "," in train_days:
-        return active_day in {_resolve_day(part.strip()) for part in train_days.split(",")}
-    if "-" in train_days:
-        start_raw, end_raw = train_days.split("-", 1)
-        start = _resolve_day(start_raw.strip())
-        end = _resolve_day(end_raw.strip())
+    if not train_days or train_days.lower() in {"dagl", "dagligen"}:
+        return True
+    day = _resolve_day(active_day)
+    for part in train_days.split(","):
+        part = part.strip()
+        if "-" not in part:
+            if _resolve_day(part) == day:
+                return True
+            continue
+        start_raw, end_raw = part.split("-", 1)
         try:
-            start_index = DAY_ORDER.index(start)
-            end_index = DAY_ORDER.index(end)
-            active_index = DAY_ORDER.index(active_day)
+            start_index = DAY_ORDER.index(_resolve_day(start_raw.strip()))
+            end_index = DAY_ORDER.index(_resolve_day(end_raw.strip()))
+            active_index = DAY_ORDER.index(day)
         except ValueError:
-            return False
+            continue
         if start_index <= end_index:
-            return start_index <= active_index <= end_index
-        return active_index >= start_index or active_index <= end_index
+            if start_index <= active_index <= end_index:
+                return True
+        elif active_index >= start_index or active_index <= end_index:
+            return True
     return False
 
 
 def _resolve_day(value: str) -> str:
     return SHORT_DAYS.get(value, value)
+
+
+CALENDAR_START_DAYS = ("Dagl",) + DAY_ORDER
+
+
+def calendar_weekday(start_day: str, day_number: int) -> str:
+    """Trafikdagen på träffens dag nummer `day_number` (1 är första dagen).
+
+    En veckodag går fram ett steg per dag (Fre, Lör, Sön, Mån …). "Dagl" och
+    en dag som inte är en veckodag står kvar: då går alla dagar likadant.
+    """
+    start = _resolve_day(start_day.strip())
+    if start not in DAY_ORDER:
+        return start_day.strip() or "Dagl"
+    return DAY_ORDER[(DAY_ORDER.index(start) + max(1, int(day_number)) - 1) % 7]
 
 
 def _fingerprint_text(value: Any) -> str:

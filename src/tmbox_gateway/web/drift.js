@@ -143,7 +143,7 @@
     const start = $("#overview-clock-start"), stop = $("#overview-clock-stop");
     if (start) start.hidden = Boolean(clock.running);
     if (stop) stop.hidden = !clock.running;
-    const day = $("#overview-day"); if (day && ctx.snapshot?.active_day) day.textContent = ctx.snapshot.active_day;
+    const day = $("#overview-day"); if (day && ctx.snapshot?.active_day) day.textContent = globalThis.meetDayLabel ? globalThis.meetDayLabel(ctx.snapshot) : ctx.snapshot.active_day;
   }
 
   // ── Nyckeltal ─────────────────────────────────────────────────────────
