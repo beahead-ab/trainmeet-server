@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.18.0",
+    "date": "2026-10-08",
+    "notes": [
+      "Egna klockor: ladda upp en urtavla som klockpaket"
+    ]
+  },
+  {
     "version": "3.17.0",
     "date": "2026-10-08",
     "notes": [
