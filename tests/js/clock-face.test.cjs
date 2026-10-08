@@ -79,6 +79,20 @@ test('only the server’s own layer addresses are ever used', () => {
   assert.equal((svg.match(/<image /g) || []).length, 1, 'only the valid second hand is left');
 });
 
+test('the approval dialog shows a clock before it is uploaded, from data addresses only', () => {
+  const image = 'data:image/svg+xml;base64,PHN2Zy8+';
+  const pack = { id: 'ny', name: 'Ny', motion: { minute: 'jump' }, layers: { dial: image, hour: image, minute: image, second: 'data:image/png;base64,iVBORw0K' },
+    dark_layers: { dial: 'data:image/png;base64,QUJD' } };
+  const svg = faces.markup(pack, { preview: true, dark: false, at: at(10, 8, 36) });
+  assert.equal((svg.match(/<image /g) || []).length, 4);
+  assert.match(svg, /data-clock-hand="minute" transform="rotate\(48 100 100\)"/, 'the hands already at 10:08:36, the minute hand jumping');
+  assert.match(svg, /data-clock-hand="second" transform="rotate\(216 100 100\)"/);
+  assert.match(faces.markup(pack, { preview: true, dark: true }), /href="data:image\/png;base64,QUJD"/, 'the dark dial on a dark page');
+  assert.equal(faces.markup(pack, { dark: false }).includes('data:'), false, 'a data address is never used outside the preview');
+  const hostile = { ...pack, layers: { dial: 'data:text/html;base64,PHNjcmlwdD4=', hour: 'data:image/svg+xml;base64,AA" onload="x', minute: '/v1/clock-faces/x/aaaaaaaaaaaaaaaa/minute' } };
+  assert.doesNotMatch(faces.markup(hostile, { preview: true, dark: false }), /<image /, 'only image data, and no server address in the preview');
+});
+
 test('the faces remembered from the server are found by their style', () => {
   faces.remember([face]);
   assert.equal(faces.find('custom:mitt-ur').name, face.name);

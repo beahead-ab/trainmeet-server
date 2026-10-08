@@ -5,6 +5,27 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Släpp klockorna på panelen och godkänn var och en
+
+Efter Caspers önskan: dra och släpp flera zip-filer på en gång, en ruta där
+varje klocka godkänns för sig, och en stämpel i admin som visar att klockan
+är godkänd att visas.
+
+- **Släpp en eller flera filer** (`.tmclock` eller zip med flera) på panelen
+  Egna klockor, eller tryck Välj filer.
+- **Rutan Godkänn klockor** visar varje klocka från alla filer med
+  förhandsbild, version, fil och varningar, innan något laddas upp. Varje
+  klocka har en egen kryssruta, och Markera alla kryssar alla. Bara de
+  godkända laddas upp, och samma klocka i två filer kan bara godkännas en
+  gång.
+- **Stämpeln Godkänd att visas** står på varje uppladdad klocka, med vem som
+  godkände den och när.
+- **Servern sparar bara klockor som godkänts med sitt id** (`approved`).
+  Granskningen (`POST /v1/clock-faces/check`) sparar och loggar inget.
+- **Skärmens klockval** säger bara stilens namn: "Digital", "Schweizisk (SBB)",
+  och "Som i inställningarna · Schweizisk (SBB)" överst. "Stil:" framför är
+  borta.
+
 ### Dina tidigare klockor ser ut som förut, också i mörkt läge
 
 Efter Caspers fråga om alla hans klockor fungerar lika bra som förut. En
