@@ -197,13 +197,22 @@ const root = path.resolve(__dirname, '../..');
         // Stress the presentation with four future events. Render an isolated
         // snapshot only; no traffic or timetable records are changed.
         const snapshot=await (await page.request.get(urls.eu+'/v1/display')).json();
+        // The list reads the timetable's services: four trains A 23:5x → B, two
+        // of them seven minutes late, at Fler (4) so the tallest rows are drawn.
         const eventsFit=await clockScreen.evaluate(snapshot=>{
-          renderDashboard({...snapshot,routes:Array.from({length:4},(_,i)=>({...snapshot.routes[0],departure_time:`23:5${i}`,arrival_time:null,train_number:String(900+i)}))});
+          const [a,b]=snapshot.stations;
+          const numbers=Array.from({length:4},(_,i)=>String(900+i));
+          const services=numbers.map((number,i)=>({id:`stress-${number}`,train_number:number,days:'Dagl',train_type:'person',stops:[
+            {station_id:a.id,arrival_time:null,departure_time:`23:5${i}`,stop_order:0},{station_id:b.id,arrival_time:'23:59',departure_time:null,stop_order:1}]}));
+          const trains=services.flatMap(service=>service.stops.map((stop,i)=>({id:`${service.id}-${i}`,service_id:service.id,train_number:service.train_number,station_id:stop.station_id,arrival_time:stop.arrival_time,departure_time:stop.departure_time})));
+          const movement_live={'stress-900-0':{arrival:'none',departure:'departed',departed_seconds:(23*60+57)*60},'stress-901-0':{arrival:'none',departure:'departed',departed_seconds:(23*60+58)*60}};
+          renderDashboard({...snapshot,services,trains,movement_live,train_positions:[],connection_states:[],display:{...snapshot.display,deviation_level:4}});
           const card=document.querySelector('.server-dashboard-bottom .display-card');
           const events=[...card.querySelectorAll('.server-event')];
-          return events.length===4 && events.every(row=>row.getBoundingClientRect().bottom<=card.getBoundingClientRect().bottom-8);
+          return {ok:events.length===4 && events.every(row=>row.getBoundingClientRect().bottom<=card.getBoundingClientRect().bottom-8),
+            rows:events.map(row=>[row.textContent.replace(/\s+/g,' ').trim(),Math.round(row.getBoundingClientRect().height),Math.round(row.getBoundingClientRect().bottom)]),card:Math.round(card.getBoundingClientRect().bottom)};
         },snapshot);
-        assert.ok(eventsFit,'All four upcoming events fit inside the TV card');
+        assert.ok(eventsFit.ok,`All four upcoming events fit inside the TV card: ${JSON.stringify(eventsFit)}`);
         // Three train rows, or two plus "and N more", must leave room for
         // the late-arrival status instead of clipping it at the card edge.
         for(const count of [3,6]){
@@ -324,7 +333,8 @@ const root = path.resolve(__dirname, '../..');
     // own section, Anslutningskod. Farozon is the last one.
     await page.goto(urls.eu+'/installningar#wifi');
     const panels = section => page.locator(`#${section} form.kr-setform`).evaluateAll(forms => forms.map(form => form.getAttribute('aria-label')));
-    assert.deepEqual(await panels('skarmar'), ['Klockan']);
+    assert.deepEqual(await panels('skarmar'), ['Klockan', 'Förseningar och för tidiga tåg']);
+    assert.deepEqual(await panels('visning'), ['Förseningar i den här webbläsaren']);
     assert.deepEqual(await panels('wifi'), ['Träffens Wi-Fi', 'QR-koder på skärmarna']);
     assert.equal(await page.locator('#kod #connection-code-form').count(),1);
     assert.equal(await page.locator('#admin-view .kr-setsec').last().getAttribute('data-section'),'farozon');

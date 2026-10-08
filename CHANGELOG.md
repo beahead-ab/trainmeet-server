@@ -5,6 +5,46 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tidtabellen visar verkliga tider, förseningar och vad som nyss ändrats, i fem nivåer
+
+Som i SJ:s app, efter Caspers önskan. Gäller deltagarvyns Tidtabell och Nästa
+händelser, Nästa händelser på Drift och skärmarnas Översikt.
+
+- **Fem nivåer,** eftersom tåg nästan alltid är lite sena och det annars blir
+  plottrigt:
+  1. Ingen markering.
+  2. När det inträffar (förval): raden lyser kort och får "Nyss".
+  3. Diskret: dessutom förseningen i liten röd text från +5 min.
+  4. Fler: röd bricka från +3 min, den nya tiden, och för tidig avgång.
+  5. Allt: från +1 min, för tidig ankomst, och förseningen vid tågnumret på
+     kartan och i tågdiagrammet.
+- **Vem väljer:** admin sätter träffens förval under Inställningar → Skärmar
+  och klocka. Varje webbläsare väljer eget under Inställningar → Visning, i
+  deltagarvyn under Visning, och varje skärm i sin verktygsrad. Att byta nivå
+  markerar ingenting.
+- **För tidigt:** en för tidig avgång är en grön "−2" för persontåg. Godståg
+  och arbetståg får gå tidigare och markeras aldrig.
+- **`/v1/display`:** `display.deviation_level`; endpoint
+  `/v1/settings/deviation-level`, bara admin.
+- **Försening:** på nivå 4 syns en röd bricka med vita siffror från +3 min. Den
+  planerade tiden står överstruken och den nya tiden bredvid. Ankomsterna
+  framåt räknas om med förseningen.
+- **Tåg som står kvar:** ett tåg som står kvar efter sin avgångstid räknas upp
+  som "beräknad". Ett läge som bara tidtabellen gav räknas som i tid.
+- **Status i tidtabellen:** varje tåg visar var det är, till exempel "På väg
+  mot Bor", "Väntar i Alvesta", "Vid Bor" eller "Ankom 09:56". Förut stod det
+  "gick 117 min sedan", räknat bara från tidtabellen.
+- **Markering vid ändring:** en rad som just ändrats lyser upp kort och får
+  "Nyss". Det sker aldrig när listan ritas första gången. Med minskad rörelse
+  blir det bara "Nyss".
+- **`/v1/display` har `movement_live`:** per rörelse läge, spår och
+  träffklockans tid för ankomst och avgång. Tiden kommer ur händelserna.
+  - En övergång som systemet räknade fram i efterhand ("tåget hoppar fram")
+    har ingen tid.
+  - Vem som gjorde något och anteckningar lämnas aldrig ut.
+  - Ett nytt index på `tkl_events` och en cache gör att det inte kostar något
+    vid varje uppdatering.
+
 ### Tågdiagrammet på Drift går med klockan
 
 Casper såg inte tågen röra sig i diagrammet. Drift hämtar läget när något
