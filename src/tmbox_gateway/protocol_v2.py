@@ -229,6 +229,9 @@ class TMBoxStationService:
             # Stabled terminal trains in a simulation are off the line.
             released = ({self.simulation.legs[k]["to_movement_id"] for k in self.simulation.run.get("stabled", {})}
                         if simulating else set())
+            # Undanställda tåg vid en automatisk slutstation har lämnat spåret.
+            if self.automatic and not simulating:
+                released |= self.automatic.stabled_movements(publication, day)
             rows = [r for r in rows if r["id"] not in released and (
                 states.get(r["id"], {}).get("arrival") == "arrived" or
                 states.get(r["id"], {}).get("departure") in {"positioned", "ready"})]

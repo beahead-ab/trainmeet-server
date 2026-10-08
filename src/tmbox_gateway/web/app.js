@@ -714,6 +714,16 @@ function renderAutomatic(data) {
     enabled.checked = Boolean(data.enabled);
     globalThis.TrainMeetSettings?.rebase(form);
   }
+  const disturbance = document.querySelector("#automatic-disturbance-form");
+  if (disturbance && data.disturbance && !editorActive(disturbance)) {
+    document.querySelector("#automatic-disturbance-profile").value = data.disturbance.profile;
+    document.querySelector("#automatic-disturbance-where").value = data.disturbance.where;
+    document.querySelector("#automatic-disturbance-seed").value = data.disturbance.seed || "";
+    document.querySelector("#automatic-stabling").checked = Boolean(data.disturbance.stabling);
+    document.querySelector("#automatic-stabling-minutes").value = String(data.disturbance.stabling_minutes);
+    globalThis.TrainMeetSettings?.rebase(disturbance);
+  }
+  if (disturbance) disturbance.hidden = !data.supported;
   document.querySelector("#automatic-note").textContent = t(!data.supported ? "Koppla en EU-träff först."
     : data.simulation ? "Pausad medan simuleringen körs." : data.enabled ? "Aktiv när träffklockan går." : "Avstängd.");
   const host = document.querySelector("#automatic-stations");
@@ -780,6 +790,20 @@ document.querySelector("#automatic-form").addEventListener("submit", async (even
   if (!beginModalAction(form)) return;
   try {
     await sendAutomatic({action: "enable", enabled: document.querySelector("#automatic-enabled").checked});
+    finishModal(form);
+  } catch (error) {
+    setMessage(form.querySelector(".form-message"), error.message, "error");
+  } finally { endModalAction(form); }
+});
+
+document.querySelector("#automatic-disturbance-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!beginModalAction(form)) return;
+  try {
+    await sendAutomatic({ action: "disturbance", profile: document.querySelector("#automatic-disturbance-profile").value,
+      where: document.querySelector("#automatic-disturbance-where").value, seed: document.querySelector("#automatic-disturbance-seed").value.trim(),
+      stabling: document.querySelector("#automatic-stabling").checked, stabling_minutes: Number(document.querySelector("#automatic-stabling-minutes").value) });
     finishModal(form);
   } catch (error) {
     setMessage(form.querySelector(".form-message"), error.message, "error");

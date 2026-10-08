@@ -679,6 +679,18 @@
                 <p class="form-message" role="status"></p>
                 <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
               </form>
+              <form id="automatic-disturbance-form" class="kr-panel kr-setform" aria-label="Störningar och undanställning" data-tm-aria-label="Störningar och undanställning" novalidate>
+                <div class="kr-ph"><span>Störningar och undanställning</span><span class="kr-c">gäller de automatiska stationerna</span></div>
+                <div class="kr-rows">
+                  <div class="kr-kv"><span class="kr-k">Störningar</span><select id="automatic-disturbance-profile" class="kr-btn sm" aria-label="Störningar" data-tm-aria-label="Störningar" data-change-label="Störningar"><option value="off">Av – tågen går enligt tidtabellen</option><option value="normal">Normal trafik – vart fjärde tåg, 1–4 min</option><option value="disrupted">Störd trafik – två av tre tåg, 1–12 min</option></select></div>
+                  <div class="kr-kv"><span class="kr-k">Var</span><select id="automatic-disturbance-where" class="kr-btn sm" aria-label="Var störningarna sker" data-tm-aria-label="Var störningarna sker" data-change-label="Var"><option value="both">Vid stationen och på linjen</option><option value="station">Vid stationen – stationsarbete före avgång</option><option value="line">På linjen – längre gångtid</option></select></div>
+                  <div class="kr-kv"><span class="kr-k">Scenarionyckel</span><input id="automatic-disturbance-seed" class="kr-field kr-w-md" maxlength="40" autocomplete="off" placeholder="Samma nyckel ger samma störningar" data-tm-placeholder="Samma nyckel ger samma störningar" data-change-label="Scenarionyckel"></div>
+                  <div class="kr-kv"><span class="kr-k">Undanställning</span><label class="kr-switch"><input id="automatic-stabling" type="checkbox" data-change-label="Undanställning"><span>Tåg som slutar vid en automatisk station rangeras bort, så att spåret blir fritt</span></label></div>
+                  <div class="kr-kv"><span class="kr-k">Efter</span><input id="automatic-stabling-minutes" class="kr-field kr-w-xs" type="number" min="1" max="60" step="1" data-change-label="Spelminuter"><span class="kr-m">spelminuter</span></div>
+                </div>
+                <p class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
               <section class="kr-panel" aria-label="Stationernas läge">
                 <div class="kr-ph"><span>Stationernas läge</span><span id="automatic-note" class="kr-c"></span></div>
                 <div id="automatic-stations" class="kr-rows"></div>

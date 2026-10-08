@@ -5,6 +5,29 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Störningar och undanställning i automatiken
+
+Förseningsdelarna ur simuleringen flyttar in i den vanliga automatiken, efter
+Caspers önskan. Inställningen finns under Inställningar → Obemannade
+stationer → Störningar och undanställning.
+
+- **Störningar:**
+  - Av (förval);
+  - Normal trafik: vart fjärde tåg, 1–4 min;
+  - Störd trafik: två av tre tåg, 1–12 min.
+- **Var störningen sker:**
+  - vid stationen: stationsarbete före avgång, och tåget väntar med
+    "Stationsarbete pågår";
+  - på linjen: längre gångtid till en automatisk mottagare;
+  - båda.
+- **Scenarionyckeln:** samma nyckel ger samma störningar. Förseningarna blir
+  verkliga händelsetider och syns i tidtabellen enligt den valda nivån.
+- **Undanställning vid slutstation** (på som förval, efter 5 spelminuter): ett
+  tåg som slutar vid en automatisk station rangeras bort, så att spåret blir
+  fritt. Förut höll tåget spåret resten av dagen, och nästa tåg in fick
+  "Mottagningsspåret är upptaget", så automatiken stod still. Bemannade
+  stationer ställer inte undan.
+
 ### Träffens dagar: dagen går fram vid midnatt, och en tidsmaskin
 
 Efter Caspers önskan.

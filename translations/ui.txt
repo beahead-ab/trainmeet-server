@@ -1300,3 +1300,20 @@ The time machine could not jump.|Tidsmaskinen kunde inte hoppa.|Tidsmaskinen kun
 Day {n} · {day} at {time}. Every train is where the timetable says.|Dag {n} · {day} kl. {time}. Alla tåg står där tidtabellen säger.|Dag {n} · {day} kl. {time}. Alle tog står, hvor køreplanen siger.|Dag {n} · {day} kl. {time}. Alle tog står der ruteplanen sier.|Tag {n} · {day} um {time}. Alle Züge stehen, wo der Fahrplan es vorsieht.
 Every day (Dagl)|Alla dagar (Dagl)|Alle dage (Dagl)|Alle dager (Dagl)|Jeden Tag (Dagl)
 Today: Day {n} · {day}|I dag: Dag {n} · {day}|I dag: Dag {n} · {day}|I dag: Dag {n} · {day}|Heute: Tag {n} · {day}
+Disturbances and stabling|Störningar och undanställning|Forstyrrelser og hensætning|Forstyrrelser og hensetting|Störungen und Abstellen
+applies to the automatic stations|gäller de automatiska stationerna|gælder de automatiske stationer|gjelder de automatiske stasjonene|gilt für die automatischen Bahnhöfe
+Disturbances|Störningar|Forstyrrelser|Forstyrrelser|Störungen
+Off – the trains run to the timetable|Av – tågen går enligt tidtabellen|Fra – togene kører efter køreplanen|Av – togene går etter ruteplanen|Aus – die Züge fahren nach Fahrplan
+Normal traffic – one train in four, 1–4 min|Normal trafik – vart fjärde tåg, 1–4 min|Normal trafik – hvert fjerde tog, 1–4 min|Normal trafikk – hvert fjerde tog, 1–4 min|Normaler Verkehr – jeder vierte Zug, 1–4 Min.
+Disrupted traffic – two trains in three, 1–12 min|Störd trafik – två av tre tåg, 1–12 min|Forstyrret trafik – to ud af tre tog, 1–12 min|Forstyrret trafikk – to av tre tog, 1–12 min|Gestörter Verkehr – zwei von drei Zügen, 1–12 Min.
+Where|Var|Hvor|Hvor|Wo
+Where the disturbances happen|Var störningarna sker|Hvor forstyrrelserne sker|Hvor forstyrrelsene skjer|Wo die Störungen auftreten
+At the station and on the line|Vid stationen och på linjen|Ved stationen og på strækningen|Ved stasjonen og på strekningen|Am Bahnhof und auf der Strecke
+At the station – station work before departure|Vid stationen – stationsarbete före avgång|Ved stationen – stationsarbejde før afgang|Ved stasjonen – stasjonsarbeid før avgang|Am Bahnhof – Bahnhofsarbeit vor der Abfahrt
+On the line – longer running time|På linjen – längre gångtid|På strækningen – længere køretid|På strekningen – lengre kjøretid|Auf der Strecke – längere Fahrzeit
+Scenario key|Scenarionyckel|Scenarienøgle|Scenarionøkkel|Szenarioschlüssel
+Stabling|Undanställning|Hensætning|Hensetting|Abstellen
+Trains that end at an automatic station are shunted away, so that the track is free|Tåg som slutar vid en automatisk station rangeras bort, så att spåret blir fritt|Tog, der ender ved en automatisk station, rangeres væk, så sporet bliver frit|Tog som ender ved en automatisk stasjon skiftes bort, så sporet blir ledig|Züge, die an einem automatischen Bahnhof enden, werden weggestellt, damit das Gleis frei wird
+After|Efter|Efter|Etter|Nach
+game minutes|spelminuter|spilminutter|spillminutter|Spielminuten
+Station work in progress|Stationsarbete pågår|Stationsarbejde i gang|Stasjonsarbeid pågår|Bahnhofsarbeit läuft
