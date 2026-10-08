@@ -7,7 +7,8 @@
 const assert = require('node:assert/strict');
 const { open } = require('./kr-fixture.cjs');
 
-const calendar = { start_day: 'Fre', day_number: 2, weekday: 'Lör', week: ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'] };
+const calendar = { start_day: 'Fre', day_number: 2, weekday: 'Lör', week: ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön'],
+  change_time: '05:20', change_auto: true, change_time_set: null };
 
 (async () => {
   const sent = [];
@@ -24,9 +25,25 @@ const calendar = { start_day: 'Fre', day_number: 2, weekday: 'Lör', week: ['Må
     await page.locator('#time-machine-modal[open]').waitFor();
     const days = await page.locator('#time-machine-day option').allTextContents();
     assert.deepEqual(days.slice(0, 4), ['Dag 1 · Fre', 'Dag 2 · Lör', 'Dag 3 · Sön', 'Dag 4 · Mån']);
-    assert.ok(days.length >= 9, 'a week ahead of today');
+    assert.ok(days.length >= 16, 'two weeks ahead of today');
     assert.equal(await page.locator('#time-machine-day').inputValue(), '2');
     assert.match(await page.locator('#time-machine-time').inputValue(), /^\d\d:\d\d$/);
+    // Spola dygn: ett dygn fram och bak, och till nästa dygnsskifte (Dag 3 kl. 05:20).
+    const step = (name) => page.locator('#time-machine-form .time-machine-steps button', { hasText: name }).click();
+    await step('+1 dygn');
+    await step('+1 dygn');
+    assert.equal(await page.locator('#time-machine-day').inputValue(), '4');
+    await step('−1 dygn');
+    assert.equal(await page.locator('#time-machine-day').inputValue(), '3');
+    await page.locator('#time-machine-day').selectOption('1');
+    await step('−1 dygn');
+    assert.equal(await page.locator('#time-machine-day').inputValue(), '1', 'not before the first day');
+    await step('Nästa dygnsskifte');
+    assert.deepEqual([await page.locator('#time-machine-day').inputValue(), await page.locator('#time-machine-time').inputValue()], ['3', '05:20']);
+    await page.locator('#time-machine-day').selectOption('16');
+    for (let n = 0; n < 3; n += 1) await step('+1 dygn');
+    assert.equal(await page.locator('#time-machine-day').inputValue(), '19', 'the list grows as days are stepped');
+    assert.equal(sent.length, 0, 'the buttons only fill in; Hoppa dit jumps');
     await page.locator('#time-machine-day').selectOption('3');
     await page.locator('#time-machine-time').fill('14:00');
     await page.locator('#time-machine-form button[type=submit]').click();
@@ -40,7 +57,9 @@ const calendar = { start_day: 'Fre', day_number: 2, weekday: 'Lör', week: ['Må
     assert.equal(await page.locator('#meet-start-day').inputValue(), 'Fre');
     assert.deepEqual(await page.locator('#meet-start-day option').allTextContents(), ['Alla dagar (Dagl)', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön']);
     assert.equal(await page.locator('#meet-calendar-note').textContent(), 'I dag: Dag 2 · Lör');
-    assert.equal(await page.locator('#meet-day-change').inputValue(), '05:00', 'the day change defaults to 05:00');
+    assert.equal(await page.locator('#meet-day-change').inputValue(), '', 'empty: automatic');
+    assert.equal(await page.locator('#meet-day-change').getAttribute('placeholder'), '05:20');
+    assert.equal(await page.locator('#meet-day-change-note').textContent(), 'Tomt: automatiskt, en timme före första tåget (05:20)');
     await page.locator('#meet-start-day').selectOption('Lör');
     await page.locator('#meet-day-change').fill('04:15');
     await page.locator('#meet-calendar-form [data-save-submit]').click();

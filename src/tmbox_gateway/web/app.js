@@ -1679,15 +1679,33 @@ function fillTimeMachine() {
   const snapshot = state.overviewSnapshot || {};
   const calendar = snapshot.calendar || { start_day: snapshot.active_day || "Dagl", day_number: 1, week: [] };
   const select = document.querySelector("#time-machine-day");
-  const last = Math.max(7, calendar.day_number + 7);
-  select.replaceChildren(...Array.from({ length: last }, (_, index) => new Option(
-    t("Dag {n} · {day}", { n: index + 1, day: calendarWeekday(calendar, index + 1) }), String(index + 1))));
+  fillTimeMachineDays(calendar, Math.max(14, calendar.day_number + 14));
   select.value = String(calendar.day_number);
   document.querySelector("#time-machine-time").value = currentClockTime(snapshot).slice(0, 5);
   const dialog = document.querySelector("#time-machine-modal");
   dialog.dataset.meetGeneration = String(state.serverContext?.selected_meet?.generation ?? "");
   modalValues.set(dialog, [...dialog.querySelectorAll("input, select, textarea")].map((input) => [input, input.value, input.checked]));
 }
+
+function fillTimeMachineDays(calendar, last) {
+  const select = document.querySelector("#time-machine-day");
+  const chosen = select.value;
+  select.replaceChildren(...Array.from({ length: Math.min(366, last) }, (_, index) => new Option(
+    t("Dag {n} · {day}", { n: index + 1, day: calendarWeekday(calendar, index + 1) }), String(index + 1))));
+  if (chosen) select.value = chosen;
+}
+// Spola dygn: ett dygn fram eller bak, eller till nästa dygnsskifte (den nya
+// dagen när den börjar, alla tåg på sin utgångspunkt). Hoppa dit bekräftar.
+document.querySelector("#time-machine-form")?.addEventListener("click", (event) => {
+  const step = event.target.closest("[data-day-step]")?.dataset.dayStep;
+  if (!step) return;
+  const calendar = state.overviewSnapshot?.calendar || { start_day: state.overviewSnapshot?.active_day || "Dagl", day_number: 1, week: [] };
+  const select = document.querySelector("#time-machine-day");
+  const day = step === "change" ? calendar.day_number + 1 : Math.min(366, Math.max(1, (Number(select.value) || 1) + Number(step)));
+  if (day > select.options.length) fillTimeMachineDays(calendar, day + 7);
+  select.value = String(day);
+  if (step === "change" && calendar.change_time) document.querySelector("#time-machine-time").value = calendar.change_time;
+});
 
 document.querySelector("#time-machine-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1723,7 +1741,13 @@ function refreshMeetCalendar() {
   const names = { Dagl: t("Alla dagar (Dagl)") };
   select.replaceChildren(...["Dagl", ...(snapshot.calendar.week || [])].map((day) => new Option(names[day] || day, day)));
   select.value = snapshot.calendar.start_day;
-  document.querySelector("#meet-day-change").value = snapshot.calendar.change_time || "05:00";
+  // Tomt fält: automatiskt, en timme före den nya dagens första tåg.
+  const change = document.querySelector("#meet-day-change");
+  change.value = snapshot.calendar.change_time_set || "";
+  change.placeholder = snapshot.calendar.change_auto === false ? "" : snapshot.calendar.change_time || "";
+  document.querySelector("#meet-day-change-note").textContent = snapshot.calendar.change_time_set
+    ? t("Fast tid. Töm fältet för automatiskt: en timme före första tåget.")
+    : t("Tomt: automatiskt, en timme före första tåget ({time})", { time: snapshot.calendar.change_time || "05:00" });
   document.querySelector("#meet-calendar-note").textContent = t("I dag: Dag {n} · {day}", { n: snapshot.calendar.day_number, day: snapshot.calendar.weekday });
   form.hidden = false;
   globalThis.TrainMeetSettings?.rebase(form);

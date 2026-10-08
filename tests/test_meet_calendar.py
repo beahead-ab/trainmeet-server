@@ -2,8 +2,9 @@
 
 Träffen börjar på en dag admin väljer. Vid varje dygnsskifte går dagen fram
 och tidtabellen för den nya veckodagen gäller, Dagl alltid. Skiftet ligger
-kl. 05:00 (inställbart), en timme innan trafikdygnet börjar: mellan midnatt
-och skiftet är det kvar gårdagens trafikdygn, så att nattåg kör klart. Vid
+en timme före den nya dagens första tågrörelse (en fast tid kan anges):
+mellan midnatt och skiftet är det kvar gårdagens trafikdygn, så att nattåg
+kör klart. Vid
 skiftet är alla statusar för ankomst och avgång nollställda och varje tåg
 står på sin utgångspunkt. Ett tåg som fortfarande är ute kör klart på
 gårdagens dag först, högst en halvtimme. Tidsmaskinen hoppar till valfri dag
@@ -31,8 +32,9 @@ def at(hours, minutes=0, seconds=0):
     return hours * 3600 + minutes * 60 + seconds
 
 
-#: Klockan vid dygnsskiftet nästa morgon, i sekunder sedan träffdagens början.
-CHANGE = 86400 + at(5)
+#: Klockan vid dygnsskiftet nästa morgon, i sekunder sedan träffdagens början:
+#: en timme före söndagens första tågrörelse (101 från A 09:20).
+CHANGE = 86400 + at(8, 20)
 
 
 class _Meet(unittest.TestCase):
@@ -111,8 +113,8 @@ class DayChangeTests(_Meet):
         self.assertEqual({p["train_number"]: p["station_id"] for p in self.ops.positions()}.get("101"), "station-a")
         clock = self.ops.clock_status()
         self.assertTrue(clock["running"], "the clock keeps running")
-        self.assertLess(clock["elapsed_seconds"], at(5) + 120, "and goes on from the day change")
-        self.assertEqual(clock["time"][:5], "05:00")
+        self.assertLess(clock["elapsed_seconds"], at(8, 20) + 120, "and goes on from the day change")
+        self.assertEqual(clock["time"][:5], "08:20")
         # Gårdagen står kvar som historik.
         rows = self.ops._connection.execute(  # noqa: SLF001
             "SELECT count(*) FROM tkl_events WHERE publication_id=? AND active_day='Lör'", (self.pub.publication_id,)).fetchone()[0]
@@ -168,6 +170,7 @@ class DayChangeTests(_Meet):
         self.assertIsNone(self.app.calendar_tick())
 
     def test_with_fastclock_the_new_day_starts_when_the_clock_passes_the_day_change_after_midnight(self):
+        self.runtime.set_day_change_time(self.pub.meet_id, "05:00")
         readings = iter([{"running": True, "seconds": float(at(4, 30)), "time": "04:30:00"},
                          {"running": True, "seconds": float(at(5, 0, 10)), "time": "05:00:10"},
                          {"running": True, "seconds": float(at(23, 59, 50)), "time": "23:59:50"},
@@ -189,7 +192,7 @@ class DayChangeTests(_Meet):
         self.run_clock_at(CHANGE + 5)
         self.app.calendar_tick()
         after = self.app.automatic._state(self.pub, "Sön")  # noqa: SLF001
-        self.assertLess(after["start"], at(5) + 60, "the new day's trains are sent from the day change, not history")
+        self.assertLess(after["start"], at(8, 20) + 60, "the new day's trains are sent from the day change, not history")
         self.assertEqual(after["stations"], {"station-a": "tmbox-1"}, "who works where stays")
 
 
@@ -198,20 +201,24 @@ class DayChangeSettingsTests(_Meet):
 
     def package(self):
         package = runtime_package_v3()
-        # 401 går tidigt, 04:30, före skiftet: det ska ändå stå på sin första station.
+        # 401 går tidigt, 04:30: skiftet blir 03:30, en timme före.
         add_service(package, "401", [("station-a", None, "04:30", "track-station-a-1"),
                                      ("station-b", "04:45", None, "track-station-b-1")])
         return package
 
-    def test_nothing_happens_between_midnight_and_the_day_change(self):
-        self.run_clock_at(86400 + at(4, 59))
-        self.assertIsNone(self.app.calendar_tick())
+    def test_the_day_change_is_an_hour_before_the_new_days_first_train(self):
+        calendar = self.app.display_snapshot()["calendar"]
+        self.assertEqual((calendar["change_time"], calendar["change_auto"], calendar["change_time_set"]), ("03:30", True, None))
+        self.run_clock_at(86400 + at(3, 29))
+        self.assertIsNone(self.app.calendar_tick(), "midnight until the day change is still yesterday")
         snapshot = self.app.display_snapshot()
         self.assertEqual((snapshot["active_day"], snapshot["calendar"]["day_number"]), ("Lör", 1))
-        self.assertEqual(snapshot["calendar"]["change_time"], "05:00", "the default")
+        self.run_clock_at(86400 + at(3, 30, 30))
+        self.assertEqual(self.app.calendar_tick()["day_number"], 2)
 
     def test_every_train_of_the_new_day_stands_at_its_starting_point(self):
-        self.run_clock_at(CHANGE + 30)
+        self.runtime.set_day_change_time(self.pub.meet_id, "05:00")
+        self.run_clock_at(86400 + at(5, 0, 30))
         self.assertEqual(self.app.calendar_tick()["day_number"], 2)
         positions = {p["train_number"]: p["station_id"] for p in self.ops.positions()}
         self.assertEqual((positions.get("401"), positions.get("101")), ("station-a", "station-a"),
@@ -220,13 +227,16 @@ class DayChangeSettingsTests(_Meet):
         self.assertEqual(live["movement-401-0"]["departure"], "positioned")
         self.assertNotEqual(live.get("movement-401-1", {}).get("arrival"), "arrived")
 
-    def test_the_day_change_time_is_a_setting_for_the_administrator(self):
+    def test_a_fixed_day_change_time_can_be_set_and_cleared(self):
         result = self.app.save_meet_calendar(self.admin, {"start_day": "Lör", "change_time": "4:15",
                                                           "meet_generation": self.generation()})
-        self.assertEqual((result["change_time"], result["changed"]), ("04:15", False), "no new day for a new time")
+        self.assertEqual((result["change_time"], result["change_auto"], result["changed"]), ("04:15", False, False),
+                         "a fixed time, and no new day for it")
         self.run_clock_at(86400 + at(4, 15, 5))
         self.assertEqual(self.app.calendar_tick()["day_number"], 2)
-        for wrong in ("12:00", "25:00", "kväll", ""):
+        cleared = self.app.save_meet_calendar(self.admin, {"start_day": "Lör", "change_time": "", "meet_generation": self.generation()})
+        self.assertEqual((cleared["change_time"], cleared["change_auto"]), ("03:30", True), "empty: automatic again")
+        for wrong in ("25:00", "kväll", "12"):
             with self.assertRaises(HTTPAPIError) as raised:
                 self.app.save_meet_calendar(self.admin, {"start_day": "Lör", "change_time": wrong, "meet_generation": self.generation()})
             self.assertEqual(raised.exception.status, 400, wrong)
@@ -235,17 +245,59 @@ class DayChangeSettingsTests(_Meet):
         with self.assertRaises(HTTPAPIError) as raised:
             self.app.save_meet_calendar(box, {"start_day": "Lör", "change_time": "03:00", "meet_generation": self.generation()})
         self.assertEqual(raised.exception.status, 403)
-        self.assertEqual(self.runtime.meet_calendar(self.pub.meet_id)["change_time"], "04:15")
+        self.assertIsNone(self.runtime.meet_calendar(self.pub.meet_id)["change_time_set"])
 
     def test_a_day_change_is_announced_to_the_views_and_a_time_machine_jump_is_not(self):
         self.assertIsNone(self.app.display_snapshot()["calendar"]["last_change"])
-        self.run_clock_at(CHANGE + 5)
+        self.run_clock_at(86400 + at(3, 30, 5))
         self.app.calendar_tick()
         last = self.app.display_snapshot()["calendar"]["last_change"]
         self.assertEqual((last["kind"], last["day_number"], last["weekday"]), ("day_change", 2, "Sön"))
         self.assertTrue(last["at"].endswith("Z"))
         self.app.time_machine(self.admin, {"day_number": 4, "time": "10:00", "meet_generation": self.generation()})
         self.assertEqual(self.app.display_snapshot()["calendar"]["last_change"], last, "the jump is not a day change")
+
+
+class NextDayChangeTimeTests(_Meet):
+    """It is the new day's first train that counts, not today's."""
+
+    def package(self):
+        package = runtime_package_v3()
+        # 808 går bara på söndagar, 06:00. Lördagens första tåg är 101 09:20.
+        add_service(package, "808", [("station-a", None, "06:00", "track-station-a-1"),
+                                     ("station-b", "06:15", None, "track-station-b-1")])
+        for collection in ("services", "routes", "trains"):
+            for item in package[collection]:
+                if item.get("train_number") == "808":
+                    item["days"] = "Sön"
+        return package
+
+    def test_saturday_into_sunday_changes_an_hour_before_sundays_first_train(self):
+        self.assertEqual(self.app.display_snapshot()["calendar"]["change_time"], "05:00")
+        self.run_clock_at(86400 + at(5, 0, 30))
+        self.assertEqual(self.app.calendar_tick()["active_day"], "Sön")
+
+
+class AutomaticChangeTimeTests(_Meet):
+    """The day change follows the next day's first train, day by day."""
+
+    def package(self):
+        package = runtime_package_v3()
+        # 707 går varje dag 00:30, strax efter midnatt.
+        add_service(package, "707", [("station-a", None, "00:30", "track-station-a-1"),
+                                     ("station-b", "00:45", None, "track-station-b-1")])
+        return package
+
+    def test_never_before_midnight_and_five_without_trains(self):
+        self.assertEqual(self.app.display_snapshot()["calendar"]["change_time"], "00:00",
+                         "a train at 00:30: the change at midnight, not the evening before")
+        self.runtime.set_meet_calendar(self.pub.meet_id, "Lör", 1)
+        real = self.app._first_movement_seconds  # noqa: SLF001
+        self.app._first_movement_seconds = lambda publication, day: None  # noqa: SLF001
+        try:
+            self.assertEqual(self.app.display_snapshot()["calendar"]["change_time"], "05:00", "no trains that day")
+        finally:
+            self.app._first_movement_seconds = real  # noqa: SLF001
 
 
 class TimeMachineTests(_Meet):

@@ -5,6 +5,19 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Dygnsskiftet en timme före första tåget, och Tidsmaskinen spolar dygn
+
+Efter Caspers önskan.
+
+- **Dygnsskiftet räknas ut**: en timme före den nya dagens första
+  tågrörelse (avgång eller ankomst), aldrig före midnatt; utan tåg den dagen
+  05:00. Går första tåget 06:20 sker skiftet 05:20. Under Inställningar →
+  Träff och Cloud → Träffens dagar visar fältet den uträknade tiden; en fast
+  tid går fortfarande att skriva in, och ett tomt fält är automatiskt igen.
+- **Tidsmaskinen** har knapparna −1 dygn, +1 dygn och Nästa dygnsskifte (den
+  nya dagen när den börjar). De fyller i dag och tid; Hoppa dit bekräftar.
+  Daglistan går två veckor framåt och växer när man stegar längre.
+
 ### Dygnsskiftet kl. 05:00: alla tåg på sin utgångspunkt, med en toast i vyerna
 
 Efter Caspers önskan: dygnsskiftet görs en timme innan trafikdygnet börjar,
