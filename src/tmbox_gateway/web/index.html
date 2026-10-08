@@ -718,6 +718,18 @@
                 <p id="clock-appearance-message" class="form-message" role="status"></p>
                 <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
               </form>
+              <!-- Egna klockor: klockpaket (.tmclock) som admin laddar upp (clock_pack.py). -->
+              <section id="clock-faces-panel" class="kr-panel" aria-label="Egna klockor" data-tm-aria-label="Egna klockor">
+                <div class="kr-ph"><span>Egna klockor</span><span class="kr-c">klockpaket (.tmclock) · för alla träffar på servern · väljs som stil ovan</span></div>
+                <div id="clock-faces-list" class="kr-lines"><p class="kr-empty">Inga egna klockor ännu.</p></div>
+                <form id="clock-face-upload-form" class="kr-rows kr-clock-upload" novalidate>
+                  <div class="kr-kv"><label class="kr-k" for="clock-face-file">Klockpaket</label><input id="clock-face-file" class="kr-file" type="file" accept=".tmclock,.zip,application/zip"><span class="kr-m">zip med clock.json och lagren som SVG eller PNG · högst 2 MB</span></div>
+                  <div class="kr-kv"><span class="kr-k">Rätt att använda</span><label class="kr-chk"><input id="clock-face-rights" type="checkbox"><span>Jag har rätt att använda den här urtavlan: den är vår egen formgivning eller licensierad från den som äger den.</span></label></div>
+                  <p id="clock-face-message" class="form-message" role="status"></p>
+                  <div class="kr-kv kr-clock-upload__actions"><a class="kr-btn sm" href="/v1/clock-faces/exempelur.tmclock" download>Ladda ner exempelpaketet</a><span class="kr-sp"></span><button class="kr-btn sm primary" type="submit">Ladda upp</button></div>
+                </form>
+                <div class="kr-pf"><span>Ett klockpaket är bilder och inställningar, ingen kod: tavlan, visarna ritade mot 12 och hur de går. Börja från exempelpaketet; formatet står i docs/clock-packs.md.</span></div>
+              </section>
               <form id="deviation-level-form" class="kr-panel kr-setform" aria-label="Förseningar och för tidiga tåg" data-tm-aria-label="Förseningar och för tidiga tåg" novalidate hidden>
                 <div class="kr-ph"><span>Förseningar och för tidiga tåg</span><span class="kr-c">förval för träffen, skärmarna, TKL och apparna · var och en kan välja eget</span></div>
                 <div class="kr-rows">
@@ -1251,6 +1263,7 @@
     <script src="/assets/tmbox-nav.js?v=20260821-1" defer></script>
     <script src="/assets/tmbox-attention.js?v=20260821-1" defer></script>
     <script src="/assets/qrcode.js" defer></script>
+    <script src="/assets/clock-face.js" defer></script>
     <script src="/assets/drift-model.js" defer></script>
     <script src="/assets/drift.js" defer></script>
     <script src="/assets/server-ui.js" defer></script>

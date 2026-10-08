@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- Timvisaren pekar mot 12. Skärmen vrider den kring mitten (100,100). -->
+  <polygon points="95,118 105,118 103.5,48 96.5,48" fill="#16181c"/>
+</svg>

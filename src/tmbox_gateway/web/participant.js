@@ -93,6 +93,8 @@
     const target = $("#pv-clock");
     if (!target || !snapshot) return;
     const clock = snapshot.clock || {};
+    // Uppladdade klockor (klockpaket) ritas som bilder av clock-face.js.
+    globalThis.TrainMeetClockFace?.remember(clock.faces);
     const style = clock.style || "digital";
     const digital = style === "digital";
     const showSeconds = clock.show_seconds !== false;
@@ -100,7 +102,7 @@
     const us = snapshot.meet?.operating_region === "us";
     const meta = [meetDayLabel(snapshot), stopped && clock.stopped_reason ? clock.stopped_reason : clock.source === "fastclock" ? "FastClock" : t("intern klocka")].filter(Boolean).join(" · ");
     const status = stopped ? t("Klockan stoppad") : `${t("Klockan går")} · ${Number(clock.speed || 1)}×`;
-    const signature = [style, showSeconds, stopped, status, meta, TrainMeetI18n.getLanguage()].join("|");
+    const signature = [style, globalThis.TrainMeetClockFace?.find(style)?.sha256, showSeconds, stopped, status, meta, TrainMeetI18n.getLanguage()].join("|");
     if (target.dataset.signature !== signature) {
       target.dataset.signature = signature;
       const face = digital

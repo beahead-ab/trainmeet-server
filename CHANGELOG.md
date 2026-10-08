@@ -5,6 +5,28 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Egna klockor: ladda upp en urtavla som klockpaket
+
+Efter Caspers önskan: den schweiziska tavlan är licensbelagd, och den som har
+rätt att använda den ska kunna ladda upp den själv.
+
+- **Klockpaket (.tmclock)**: en zip med `clock.json` och tavlans lager som SVG
+  eller PNG (tavlan, tim-, minut- och sekundvisaren och något ovanpå). Hur
+  visarna går står i `clock.json`: jämnt, minutvisaren som hoppar (med studs),
+  sekundvisaren som tickar eller sveper varvet på till exempel 58,5 s och
+  väntar vid 12. Paketet har ingen kod; lagren visas som bilder.
+- **Inställningar → Skärmar och klocka → Egna klockor**: ladda upp, se vem som
+  laddade upp och när, och ta bort. Den som laddar upp intygar rätten att
+  använda tavlan; intyget loggas. Klockan blir en stil bland de andra, för
+  alla skärmar, en enskild skärm och deltagarvyn, på alla träffar på servern.
+  Samma id ersätter en tidigare version.
+- **För den som gör en egen**: exempelpaketet laddas ner från samma ställe, och
+  `python -m tmbox_gateway.clock_pack example|check|build` gör en mapp att
+  börja från, kontrollerar med serverns regler och packar. Formatet står i
+  [docs/clock-packs.md](docs/clock-packs.md).
+- **Den schweiziska tavlan (SBB) följer inte med längre.** En träff som visade
+  den visar stationsuret tills en egen klocka laddats upp och valts.
+
 ### Dygnsskiftet en timme före första tåget, och Tidsmaskinen spolar dygn
 
 Efter Caspers önskan.

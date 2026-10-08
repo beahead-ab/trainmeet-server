@@ -556,7 +556,7 @@ export const SURFACES = {
     catalog: ['i18n-messages.js', 'meet-type-messages.js', 'shell-messages.js', 'participant-messages.js'].map(web),
     html: [web('index.html')],
     css: fs.readdirSync(path.join(pkg, 'web')).filter((name) => name.endsWith('.css')).map(web),
-    js: ['app.js', 'drift.js', 'drift-model.js', 'live-events.js', 'participant.js', 'server-ui.js', 'settings.js', 'simulation-banner.js', 'day-change.js', 'kr-theme.js', 'data-page.js'].map(web),
+    js: ['app.js', 'drift.js', 'drift-model.js', 'live-events.js', 'participant.js', 'server-ui.js', 'settings.js', 'simulation-banner.js', 'day-change.js', 'clock-face.js', 'kr-theme.js', 'data-page.js'].map(web),
     skip: {'app.js': UNREACHABLE_APP},
   },
   'US pages': {

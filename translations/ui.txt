@@ -1327,3 +1327,26 @@ Trains that end at an automatic station are shunted away, so that the track is f
 After|Efter|Efter|Etter|Nach
 game minutes|spelminuter|spilminutter|spillminutter|Spielminuten
 Station work in progress|Stationsarbete pågår|Stationsarbejde i gang|Stasjonsarbeid pågår|Bahnhofsarbeit läuft
+Own clocks|Egna klockor|Egne ure|Egne klokker|Eigene Uhren
+clock packs (.tmclock) · for every meet on the server · chosen as a style above|klockpaket (.tmclock) · för alla träffar på servern · väljs som stil ovan|urpakker (.tmclock) · for alle træf på serveren · vælges som stil ovenfor|klokkepakker (.tmclock) · for alle treff på serveren · velges som stil over|Uhrenpakete (.tmclock) · für alle Treffen auf dem Server · oben als Stil wählbar
+No own clocks yet.|Inga egna klockor ännu.|Ingen egne ure endnu.|Ingen egne klokker ennå.|Noch keine eigenen Uhren.
+Clock pack|Klockpaket|Urpakke|Klokkepakke|Uhrenpaket
+zip with clock.json and the layers as SVG or PNG · at most 2 MB|zip med clock.json och lagren som SVG eller PNG · högst 2 MB|zip med clock.json og lagene som SVG eller PNG · højst 2 MB|zip med clock.json og lagene som SVG eller PNG · høyst 2 MB|ZIP mit clock.json und den Ebenen als SVG oder PNG · höchstens 2 MB
+Right to use|Rätt att använda|Ret til brug|Rett til bruk|Nutzungsrecht
+I have the right to use this clock face: it is our own design or licensed from its owner.|Jag har rätt att använda den här urtavlan: den är vår egen formgivning eller licensierad från den som äger den.|Jeg har ret til at bruge denne urskive: den er vores eget design eller licenseret fra ejeren.|Jeg har rett til å bruke denne urskiven: den er vår egen utforming eller lisensiert fra eieren.|Ich habe das Recht, dieses Zifferblatt zu verwenden: Es ist unser eigenes Design oder vom Inhaber lizenziert.
+Download the example pack|Ladda ner exempelpaketet|Hent eksempelpakken|Last ned eksempelpakken|Beispielpaket herunterladen
+A clock pack is pictures and settings, no code: the dial, the hands drawn pointing at 12 and how they move. Start from the example pack; the format is described in docs/clock-packs.md.|Ett klockpaket är bilder och inställningar, ingen kod: tavlan, visarna ritade mot 12 och hur de går. Börja från exempelpaketet; formatet står i docs/clock-packs.md.|En urpakke er billeder og indstillinger, ingen kode: skiven, viserne tegnet mod 12 og hvordan de går. Start fra eksempelpakken; formatet står i docs/clock-packs.md.|En klokkepakke er bilder og innstillinger, ingen kode: skiven, viserne tegnet mot 12 og hvordan de går. Start fra eksempelpakken; formatet står i docs/clock-packs.md.|Ein Uhrenpaket besteht aus Bildern und Einstellungen, ohne Code: das Zifferblatt, die auf 12 gezeichneten Zeiger und wie sie laufen. Beginne mit dem Beispielpaket; das Format steht in docs/clock-packs.md.
+by {name}|av {name}|af {name}|av {name}|von {name}
+uploaded by {name} {time}|uppladdad av {name} {time}|uploadet af {name} {time}|lastet opp av {name} {time}|hochgeladen von {name} {time}
+right to use confirmed|rätt att använda intygad|ret til brug bekræftet|rett til bruk bekreftet|Nutzungsrecht bestätigt
+Choose a clock pack first.|Välj ett klockpaket först.|Vælg en urpakke først.|Velg en klokkepakke først.|Wähle zuerst ein Uhrenpaket.
+The clock pack is larger than 2 MB.|Klockpaketet är större än 2 MB.|Urpakken er større end 2 MB.|Klokkepakken er større enn 2 MB.|Das Uhrenpaket ist größer als 2 MB.
+Tick the box to confirm you have the right to use the clock face.|Kryssa i att du har rätt att använda urtavlan.|Sæt kryds for at bekræfte, at du har ret til at bruge urskiven.|Kryss av for å bekrefte at du har rett til å bruke urskiven.|Bestätige mit dem Häkchen, dass du das Zifferblatt verwenden darfst.
+The clock pack could not be uploaded.|Klockpaketet kunde inte laddas upp.|Urpakken kunne ikke uploades.|Klokkepakken kunne ikke lastes opp.|Das Uhrenpaket konnte nicht hochgeladen werden.
+{name} has been updated.|{name} är uppdaterad.|{name} er opdateret.|{name} er oppdatert.|{name} wurde aktualisiert.
+{name} has been uploaded. Choose it as a style above.|{name} är uppladdad. Välj den som stil ovan.|{name} er uploadet. Vælg den som stil ovenfor.|{name} er lastet opp. Velg den som stil over.|{name} wurde hochgeladen. Wähle sie oben als Stil.
+Remove {name}? Displays showing the clock switch to the station clock.|Ta bort {name}? Skärmar som visar klockan byter till stationsuret.|Fjern {name}? Skærme, der viser uret, skifter til stationsuret.|Fjerne {name}? Skjermer som viser klokken, bytter til stasjonsuret.|{name} entfernen? Anzeigen mit dieser Uhr wechseln zur Bahnhofsuhr.
+The clock could not be removed.|Klockan kunde inte tas bort.|Uret kunne ikke fjernes.|Klokken kunne ikke fjernes.|Die Uhr konnte nicht entfernt werden.
+{name} has been removed.|{name} är borttagen.|{name} er fjernet.|{name} er fjernet.|{name} wurde entfernt.
+The file did not arrive complete. Try again.|Filen kom inte fram hel. Försök igen.|Filen kom ikke helt frem. Prøv igen.|Filen kom ikke frem i sin helhet. Prøv igjen.|Die Datei ist nicht vollständig angekommen. Versuche es erneut.
+The clock no longer exists.|Klockan finns inte längre.|Uret findes ikke længere.|Klokken finnes ikke lenger.|Die Uhr gibt es nicht mehr.

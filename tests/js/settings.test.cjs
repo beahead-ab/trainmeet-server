@@ -79,9 +79,10 @@ const bar = (page, form) => page.evaluate((id) => {
     await seconds.setChecked(!secondsBefore);
     assert.deepEqual(await bar(page, 'clock-appearance-form'), { cancel: true, save: true, text: 'Ändrat: Sekunder' });
 
-    // Clock styles are one choice among four, by mouse and by arrow keys.
+    // Clock styles are one choice among three built-in ones (and any uploaded
+    // clock packs), by mouse and by arrow keys. The Swiss face is no longer built in.
     const tiles = page.locator('#clock-style-tiles [role=radio]');
-    assert.equal(await tiles.count(), 4);
+    assert.deepEqual(await tiles.evaluateAll(nodes => nodes.map(n => n.dataset.value)), ['digital', 'analog', 'stationsur']);
     assert.equal(await page.locator('#clock-style-tiles').getAttribute('role'), 'radiogroup');
     assert.equal(await page.locator('#clock-style-tiles [aria-checked="true"]').count(), 1);
     const selected = await page.locator('#clock-style-tiles [aria-checked="true"]').getAttribute('data-value');
@@ -96,8 +97,8 @@ const bar = (page, form) => page.evaluate((id) => {
     assert.equal(await page.locator('#clock-style-tiles [aria-checked="true"]').getAttribute('data-value'), selected, 'Avbryt restores the tile');
     assert.equal(await seconds.isChecked(), secondsBefore, 'and the switch');
     assert.equal((await bar(page, 'clock-appearance-form')).save, false);
-    // The previews are drawn, not images from somewhere.
-    assert.equal(await page.locator('#clock-style-tiles svg').count() >= 3, true);
+    // The previews are drawn, not images from somewhere (Analog and Stationsur; Digital is text).
+    assert.equal(await page.locator('#clock-style-tiles svg').count(), 2);
 
     // QR codes are made on the spot: Wi-Fi first (when there is one), then the meet.
     await page.evaluate(() => { location.hash = 'wifi'; });
