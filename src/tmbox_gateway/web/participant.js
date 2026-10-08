@@ -30,6 +30,48 @@
     return t("om {n} min", { n: delta });
   };
 
+  // ── Verkliga tider och förseningar, som i SJ:s app ────────────────────
+  const model = globalThis.TrainMeetDriftModel;
+  const FLASH_MS = 2000, RECENT_MS = 30000;
+  let eventFresh = model.changeTracker(), timetableFresh = model.changeTracker();
+  const clockOf = (minute) => {
+    if (minute === null || minute === undefined) return null;
+    const value = ((Math.round(minute) % 1440) + 1440) % 1440;
+    return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+  };
+  /** Planerad tid, eller den överstruken med den nya bredvid. */
+  const timeCell = (planned, changed, kind = "t") => changed && changed !== planned
+    ? `<span class="${kind}"><span class="tm-was">${escapeHTML(planned)}</span><span class="tm-new tm-flip">${escapeHTML(changed)}</span></span>`
+    : `<span class="${kind}">${escapeHTML(planned)}</span>`;
+  // Hur mycket som visas: deltagarens eget val (Visning), annars träffens förval.
+  // Att byta nivå är ingen ändring i trafiken: minnet börjar om, inget lyser upp.
+  let trackedLevel = null;
+  const level = () => {
+    const value = deviationLevelOf(snapshot);
+    if (trackedLevel !== null && value !== trackedLevel) { eventFresh = model.changeTracker(); timetableFresh = model.changeTracker(); }
+    trackedLevel = value;
+    return value;
+  };
+  /** Var tåget är nu, i stället för bara tid kvar enligt tidtabellen. */
+  function statusCell(row, live, view) {
+    if (!live || live.state === "not_departed") return `<span class="in">${escapeHTML(relative(row.departure))}</span>`;
+    const mark = deviationMarkHTML(view);
+    const text = live.state === "on_line" ? t("På väg mot {station}", { station: stationNameOf(live.to) })
+      : live.state === "arrived" ? t("Ankom {time}", { time: clockOf(live.arrivedAt) || row.arrival })
+      : live.state === "waiting" ? t("Väntar i {station}", { station: stationNameOf(live.station) })
+      : t("Vid {station}", { station: stationNameOf(live.station) });
+    return `<span class="in pv-status">${escapeHTML(text)}${mark ? ` ${mark}` : ""}</span>`;
+  }
+  /** En rad som ändrats sedan förra uppdateringen lyser upp kort och får "Nyss". */
+  function markFresh(row, tracker, key, signature, view) {
+    if (!row || signature === null) return;
+    const changedAt = tracker.note(key, signature, Date.now());
+    if (changedAt === null || !view.flash) return;
+    const age = Date.now() - changedAt;
+    if (age < FLASH_MS) { row.classList.add("is-updated"); row.style.animationDelay = `-${age}ms`; }
+    if (age < RECENT_MS) row.querySelector(".w")?.insertAdjacentHTML("beforeend", `<span class="tm-recent">${escapeHTML(t("Nyss"))}</span>`);
+  }
+
   function renderTop() {
     const meet = snapshot.meet || {};
     const us = meet.operating_region === "us";
@@ -56,7 +98,7 @@
     const showSeconds = clock.show_seconds !== false;
     const stopped = !clock.running;
     const us = snapshot.meet?.operating_region === "us";
-    const meta = [snapshot.active_day, stopped && clock.stopped_reason ? clock.stopped_reason : clock.source === "fastclock" ? "FastClock" : t("intern klocka")].filter(Boolean).join(" · ");
+    const meta = [meetDayLabel(snapshot), stopped && clock.stopped_reason ? clock.stopped_reason : clock.source === "fastclock" ? "FastClock" : t("intern klocka")].filter(Boolean).join(" · ");
     const status = stopped ? t("Klockan stoppad") : `${t("Klockan går")} · ${Number(clock.speed || 1)}×`;
     const signature = [style, showSeconds, stopped, status, meta, TrainMeetI18n.getLanguage()].join("|");
     if (target.dataset.signature !== signature) {
@@ -115,27 +157,46 @@
     const scope = $("#pv-events-scope");
     scope.dataset.tmText = selectedStation ? "" : "hela banan";
     scope.textContent = selectedStation ? stationNameOf(selectedStation) : t("hela banan");
-    const upcoming = (snapshot.routes || [])
-      .filter(route => !selectedStation || route.station_id === selectedStation)
-      .flatMap(route => ["arrival_time", "departure_time"].filter(key => route[key]).map(key => ({...route, eventTime: route[key], departure: key === "departure_time"})))
-      .filter((route) => minutes(route.eventTime) >= now)
-      .sort((a, b) => minutes(a.eventTime) - minutes(b.eventTime))
-      .slice(0, 4);
+    // Varje ankomst och avgång som är kvar, i tidtabellens ordning. Det tåget
+    // redan gjort är borta; ett sent tåg står kvar med sin nya tid.
+    const lives = model.trainLive(snapshot, currentClockSeconds(snapshot));
+    const shown = level();
+    const upcoming = [];
+    for (const service of model.services(snapshot)) {
+      const number = String(service.train_number), live = lives.get(number);
+      model.orderedStops(service).forEach((stop, index) => {
+        if (selectedStation && stop.station_id !== selectedStation) return;
+        const done = live?.stops[index];
+        for (const [kind, planned] of [["arr", stop.arrival_time], ["dep", stop.departure_time]]) {
+          if (minutes(planned) === null || (done && (kind === "arr" ? done.arrived : done.departed))) continue;
+          // Ett sent tåg står kvar i listan med sin nya tid, vad nivån än visar.
+          const delay = live?.late ? live.delayMinutes : 0;
+          if (minutes(planned) + delay < now) continue;
+          upcoming.push({ number, kind, planned, delay, live, stationId: stop.station_id,
+            station: stop.station_name || stationNameOf(stop.station_id), state: live?.state || null });
+        }
+      });
+    }
+    upcoming.sort((a, b) => minutes(a.planned) - minutes(b.planned) || model.compare(a.number, b.number));
     const events = $("#pv-events");
     events.replaceChildren();
     if (!upcoming.length) events.append(Object.assign(document.createElement("p"), { className: "pv-empty", textContent: t("Inga fler planerade händelser idag.") }));
-    for (const route of upcoming) {
-      const station = route.station_name || stationNameOf(route.station_id);
-      const what = route.departure ? t("avgår {station}", { station }) : t("ankommer {station}", { station });
-      const delta = minutes(route.eventTime) - now;
+    for (const event of upcoming.slice(0, 4)) {
+      const what = event.kind === "dep" ? t("avgår {station}", { station: event.station }) : t("ankommer {station}", { station: event.station });
+      const view = model.deviationView(shown, event.live ? { ...event.live, delayMinutes: event.delay } : null);
+      const delta = minutes(event.planned) + event.delay - now;
+      const changed = view.strike && event.delay ? clockOf(minutes(event.planned) + event.delay) : null;
+      const quiet = view.mark?.style === "text" ? ` ${deviationMarkHTML(view)}` : "";
       // Hollow: the train stands at the station and is about to leave; filled: on its way in.
-      events.insertAdjacentHTML("beforeend", html`<div class="pv-item pv-item--event"><span class="t">${escapeHTML(route.eventTime)}</span><span class="pv-badge-train${route.departure ? " is-hollow" : ""}">${escapeHTML(route.train_number)}</span><span>${escapeHTML(what)}</span><span class="in">${escapeHTML(delta <= 0 ? t("nu") : t("{n} min", { n: delta }))}</span></div>`);
+      events.insertAdjacentHTML("beforeend", html`<div class="pv-item pv-item--event${view.mark ? ` is-${view.mark.tone}` : ""}">${timeCell(event.planned, changed)}<span class="pv-badge-train${event.kind === "dep" ? " is-hollow" : ""}">${escapeHTML(event.number)}</span><span class="w">${escapeHTML(what)}${quiet}</span><span class="in">${view.mark?.style === "pill" ? deviationMarkHTML(view) : escapeHTML(delta <= 0 ? t("nu") : t("{n} min", { n: delta }))}</span></div>`);
+      markFresh(events.lastElementChild, eventFresh, `${event.number}|${event.kind}|${event.stationId}|${event.planned}`,
+        [event.state, view.mark?.text || "", view.estimated], view);
     }
   }
 
   function renderTimetable() {
     const now = nowMinutes();
-    const out = new Set((snapshot.train_positions || []).filter((position) => position.connection_id).map((position) => String(position.train_number)));
+    const lives = model.trainLive(snapshot, currentClockSeconds(snapshot));
     const needle = query.trim().toLowerCase();
     const services = (snapshot.services || []).filter(service => !selectedStation || (service.stops || []).some(stop => stop.station_id === selectedStation)).map((service) => {
       const stops = service.stops || [];
@@ -147,19 +208,54 @@
     const matches = needle
       ? services.filter((row) => row.number.toLowerCase().includes(needle) || row.search.includes(needle))
       : services;
-    const upcoming = matches.filter((row) => minutes(row.arrival || row.departure) >= now);
+    // Kvar att se: tåg som inte är framme, och de som ska komma senare.
+    const upcoming = matches.filter((row) => { const live = lives.get(row.number); return live ? live.state !== "arrived" && (live.state !== "not_departed" || minutes(row.arrival || row.departure) >= now) : minutes(row.arrival || row.departure) >= now; });
     const rows = fullTimetable || needle ? matches : (upcoming.length ? upcoming.slice(0, 4) : matches.slice(-4));
-    $("#pv-timetable-count").textContent = `${t(services.length === 1 ? "1 tåg" : "{count} tåg", { count: services.length })} · ${snapshot.active_day || ""}`;
+    $("#pv-timetable-count").textContent = `${t(services.length === 1 ? "1 tåg" : "{count} tåg", { count: services.length })} · ${meetDayLabel(snapshot)}`;
     const list = $("#pv-timetable");
     list.replaceChildren();
     if (!rows.length) list.append(Object.assign(document.createElement("p"), { className: "pv-empty", textContent: needle ? t("Inget tåg matchar sökningen.") : t("Ingen tidtabell för dagen.") }));
+    const shown = level();
     for (const row of rows) {
-      const tag = out.has(row.number) ? `<span class="pv-tag-out">${t("ute")}</span>` : `<span class="in">${escapeHTML(relative(row.departure))}</span>`;
-      list.insertAdjacentHTML("beforeend", html`<div class="pv-item pv-item--line"><span class="no">${escapeHTML(row.number)}</span><span>${escapeHTML(row.from)} <span class="sub">${escapeHTML(row.departure)}</span> → ${escapeHTML(row.to)} <span class="sub">${escapeHTML(row.arrival)}</span></span>${tag}</div>`);
+      const live = lives.get(row.number);
+      const view = model.deviationView(shown, live);
+      const first = live?.stops[0], last = live?.stops.at(-1);
+      // Avgången: den verkliga om den var sen eller för tidig; ankomsten: den verkliga eller den nya.
+      const actualFirst = first?.actualDeparture !== null && first?.actualDeparture !== undefined;
+      const departure = view.strike && actualFirst && !live.estimated ? clockOf(first.actualDeparture) : null;
+      const arrival = view.strike && view.mark?.tone === "late" && last ? clockOf(last.expectedArrival ?? last.actualArrival)
+        : view.strike && last?.actualArrival !== null && last?.actualArrival !== undefined ? clockOf(last.actualArrival) : null;
+      list.insertAdjacentHTML("beforeend", html`<div class="pv-item pv-item--line${view.mark ? ` is-${view.mark.tone}` : ""}"><span class="no">${escapeHTML(row.number)}</span><span class="w">${escapeHTML(row.from)} ${timeCell(row.departure, departure, "sub")} → ${escapeHTML(row.to)} ${timeCell(row.arrival, arrival, "sub")}</span>${statusCell(row, live, view)}</div>`);
+      markFresh(list.lastElementChild, timetableFresh, row.number,
+        live ? [live.state, live.station, live.to, view.mark?.text || "", view.estimated, live.arrivedAt] : null, view);
     }
     const toggle = $("#pv-timetable-toggle");
     $("#pv-timetable-toggle").closest(".pv-foot-row").hidden = toggle.hidden = Boolean(needle) || matches.length <= rows.length && !fullTimetable;
     label(toggle, fullTimetable ? "Visa bara de närmaste ↑" : "Hela tidtabellen ↓");
+  }
+
+  // Visning: deltagarens eget val av hur mycket förseningar som syns. Tomt
+  // betyder träffens förval; valet sparas bara i den här webbläsaren.
+  function renderLevels() {
+    const host = $("#pv-view-levels");
+    if (!host) return;
+    const own = deviationOwnLevel(DEVIATION_LEVEL_KEY);
+    const meet = model.deviationLevel(snapshot);
+    const choice = (value, title, hint) => {
+      const row = document.createElement("label");
+      row.className = "pv-level";
+      const input = Object.assign(document.createElement("input"), { type: "radio", name: "pv-level", value, checked: own === value });
+      input.addEventListener("change", () => {
+        try { if (value) localStorage.setItem(DEVIATION_LEVEL_KEY, value); else localStorage.removeItem(DEVIATION_LEVEL_KEY); } catch { /* privat läge */ }
+        if (snapshot) { renderTrack(); renderTimetable(); }
+      });
+      const name = Object.assign(document.createElement("b"), { textContent: title });
+      const note = Object.assign(document.createElement("span"), { textContent: hint });
+      row.append(input, name, note);
+      return row;
+    };
+    host.replaceChildren(choice("", t("Som träffen: {level}", { level: `${meet} · ${t(DEVIATION_LEVEL_NAMES[meet])}` }), t("Trafikledningens förval")),
+      ...model.DEVIATION_LEVELS.map((level) => choice(String(level), `${level} · ${t(DEVIATION_LEVEL_NAMES[level])}`, t(DEVIATION_LEVEL_HINTS[level]))));
   }
 
   function renderConnect() {
@@ -222,9 +318,18 @@
     if (active) pollTimer = setTimeout(poll, globalThis.TrainMeetLive?.connected ? 30000 : 5000);
   }
 
+  // Listorna räknas om var tionde sekund medan klockan går: "om N min" och
+  // ett tåg som står kvar och blir allt senare, även utan ny hämtning.
+  let lastLists = 0;
   function tick() {
     if (!active) return;
     renderClockCard();
+    const now = performance.now();
+    if (snapshot?.clock?.running && snapshot.meet?.operating_region !== "us" && now - lastLists > 10000) {
+      lastLists = now;
+      renderTrack();
+      renderTimetable();
+    }
     frameTimer = requestAnimationFrame(tick);
   }
 
@@ -254,6 +359,10 @@
       $("#pv-connect-open")?.addEventListener("click", () => { if (typeof sheet.showModal === "function") sheet.showModal(); else sheet.setAttribute("open", ""); });
       $("#pv-connect-close")?.addEventListener("click", () => sheet.close());
       sheet?.addEventListener("click", (event) => { if (event.target === sheet) sheet.close(); });
+      const viewSheet = $("#pv-view-card");
+      $("#pv-view-open")?.addEventListener("click", () => { renderLevels(); if (typeof viewSheet.showModal === "function") viewSheet.showModal(); else viewSheet.setAttribute("open", ""); });
+      $("#pv-view-close")?.addEventListener("click", () => viewSheet.close());
+      viewSheet?.addEventListener("click", (event) => { if (event.target === viewSheet) viewSheet.close(); });
       $("#pv-clear-station")?.addEventListener("click", () => { selectedStation = null; if (snapshot) { renderTrack(); renderTimetable(); } });
       document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && active) poll(); });
       globalThis.TrainMeetLive?.subscribe((topics) => {

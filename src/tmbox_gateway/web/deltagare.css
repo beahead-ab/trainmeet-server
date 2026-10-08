@@ -144,3 +144,21 @@ body.participant-mode #app-view { padding: 0; max-width: none; }
   .pv-map { overflow-x: hidden; }
   .pv-foot { max-width: 1320px; padding: 4px 24px 22px; }
 }
+
+/* Försenade tåg: den överstrukna tiden ovanför den nya, och status som får brytas. */
+.pv-item .t .tm-was, .pv-item .sub .tm-was { display: block; margin: 0; font-size: 11px; line-height: 1.2; }
+.pv-item .sub .tm-was { display: inline; margin-right: .3em; }
+.pv-item .sub .tm-new { color: var(--kr-red); }
+.pv-item .pv-status { white-space: normal; max-width: 46vw; color: var(--kr-ink-2); line-height: 1.35; }
+.pv-item .pv-status .tm-delay { margin-left: 4px; }
+
+/* Visning: hur mycket förseningar och för tidiga tåg som syns (fem nivåer). */
+#participant-view .pv-view-open { padding: 0; border: 0; background: none; color: var(--kr-mute); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+#participant-view .pv-view-open:hover { color: var(--kr-ink); }
+#participant-view .pv-view-open:focus-visible { outline: 2px solid var(--kr-blue); outline-offset: 2px; }
+.pv-levels { margin: 0; padding: 4px 16px 16px; border: 0; }
+.pv-levels legend { padding: 8px 0; color: var(--kr-mute); font-size: 12.5px; }
+.pv-level { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: start; padding: 10px 4px; border-top: 1px solid var(--kr-line); cursor: pointer; }
+.pv-level input { margin: 3px 0 0; accent-color: var(--kr-blue); }
+.pv-level b { color: var(--kr-ink); font-size: 14px; font-weight: 600; }
+.pv-level span { grid-column: 2; color: var(--kr-mute); font-size: 12.5px; }

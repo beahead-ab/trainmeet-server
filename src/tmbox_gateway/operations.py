@@ -27,6 +27,7 @@ class SQLiteOperationsStore:
         self._lock = threading.RLock()
         self._command_depth = 0
         self._after_commit = []
+        self._movement_live_cache = None
         self._connection = sqlite3.connect(
             self.path,
             timeout=10,
@@ -120,6 +121,9 @@ class SQLiteOperationsStore:
                 payload_json TEXT NOT NULL,
                 recorded_at TEXT NOT NULL
             );
+            -- De öppna vyerna läser dagens händelser per rörelse vid varje uppdatering.
+            CREATE INDEX IF NOT EXISTS tkl_events_by_movement
+                ON tkl_events(publication_id, active_day, movement_id, recorded_at);
             CREATE TABLE IF NOT EXISTS train_readiness (
                 publication_id TEXT NOT NULL,
                 active_day TEXT NOT NULL,
@@ -335,6 +339,69 @@ class SQLiteOperationsStore:
         # Tågen står där tidtabellen säger vid planens start (#136).
         removed["placed"] = self.place_trains_by_timetable(
             publication, day or publication.active_day, float(_plan_start_seconds(publication)))["placed"]
+        return removed
+
+    def start_traffic_day(self, publication: RuntimePublication, day: str, clock_seconds: float, *,
+                          previous_day: str | None = None, everything: bool = False) -> dict[str, int]:
+        """Börja en ny trafikdag: alla statusar för ankomst och avgång är nollställda.
+
+        Vid midnatt (träffkalendern) tas den nya dagens rader bort: de kan
+        finnas kvar från samma veckodag en vecka tidigare, eller från ett
+        besök med tidsmaskinen. Gårdagens rader står kvar som historik.
+        Med `everything` (tidsmaskinen) tas allt som hänt i publikationen
+        bort, för alla dagar, som vid en nollställning.
+
+        Tågens lägen töms och ställs efter den nya dagens tidtabell vid
+        `clock_seconds`. Klockan ställs på `clock_seconds` och går vidare om
+        den gick; hastigheten står kvar. Pågående TKL-pass följer med till
+        den nya dagen, så att ingen behöver logga in igen. Klockan och
+        lägena före sparas i arkivet.
+        """
+
+        publication_id = publication.publication_id
+        removed: dict[str, int] = {}
+        scope, values = ("publication_id=?", (publication_id,)) if everything else ("publication_id=? AND active_day=?", (publication_id, day))
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    "INSERT INTO runtime_meet_archives VALUES(?,?,?,?,?)",
+                    (str(uuid4()), publication_id, json.dumps(self.clock_status()),
+                     json.dumps(self.positions()), _now_iso()),
+                )
+                removed["clearance_events"] = self._connection.execute(
+                    f"DELETE FROM clearance_events WHERE clearance_id IN (SELECT clearance_id FROM clearances WHERE {scope})", values
+                ).rowcount
+                for table in ("clearances", "line_available_messages", "tkl_movement_states", "tkl_events", "train_readiness"):
+                    removed[table] = self._connection.execute(f"DELETE FROM {table} WHERE {scope}", values).rowcount
+                if self._connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='automatic_events'"
+                ).fetchone():
+                    removed["automatic_events"] = self._connection.execute(
+                        f"DELETE FROM automatic_events WHERE {scope.replace('active_day', 'day')}", values
+                    ).rowcount
+                if previous_day is not None and previous_day != day:
+                    # Ett gammalt pass på den nya dagen avslutas; de som pågår följer med.
+                    self._connection.execute(
+                        "UPDATE tkl_shifts SET status='closed', ended_at=?, updated_at=?"
+                        " WHERE publication_id=? AND active_day=? AND status!='closed'",
+                        (_now_iso(), _now_iso(), publication_id, day))
+                    removed["tkl_shifts_moved"] = self._connection.execute(
+                        "UPDATE tkl_shifts SET active_day=?, updated_at=? WHERE publication_id=? AND active_day=? AND status!='closed'",
+                        (day, _now_iso(), publication_id, previous_day)).rowcount
+                removed["train_positions"] = self._connection.execute("DELETE FROM train_positions").rowcount
+                self._connection.execute("DELETE FROM device_commands")
+                self._connection.execute(
+                    "UPDATE runtime_clock SET publication_id=?, base_seconds=?, base_recorded_at=? WHERE singleton = 1",
+                    (publication_id, float(clock_seconds), _now_iso()),
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        self._movement_live_cache = None
+        removed["placed"] = self.place_trains_by_timetable(publication, day, float(clock_seconds))["placed"]
         return removed
 
     def place_trains_by_timetable(self, publication: RuntimePublication, day: str,
@@ -1500,6 +1567,64 @@ class SQLiteOperationsStore:
             except ValueError:
                 return None
         return float(seconds)
+
+    def movement_live(self, publication_id: str, active_day: str) -> dict[str, dict[str, Any]]:
+        """Vad varje rörelse har gjort i dag och när, för de öppna vyerna.
+
+        Läget (ankomst, avgång, spår) och träffklockans tid för den senaste
+        övergången till ankommet respektive avgånget, ur händelserna. Ett läge
+        som bara tidtabellen gav (#136) har inga tider och märks by_timetable.
+        En övergång som systemet räknade fram i efterhand (train.advanced,
+        "tåget hoppar fram") har ingen tid: den sparade tiden är när systemet
+        kom ikapp, inte när tåget gick. Vem som gjorde något och anteckningar
+        lämnas aldrig ut; /v1/display är öppen.
+        """
+        from .timetable_placement import PLACED_BY
+
+        with self._lock:
+            key = (id(self._connection), publication_id, active_day,
+                   self._connection.execute("SELECT MAX(rowid) FROM tkl_events").fetchone()[0],
+                   *self._connection.execute(
+                       "SELECT COUNT(*), TOTAL(revision) FROM tkl_movement_states WHERE publication_id=? AND active_day=?",
+                       (publication_id, active_day)).fetchone())
+            if self._movement_live_cache is not None and self._movement_live_cache[0] == key:
+                return self._movement_live_cache[1]
+            states = self._connection.execute(
+                "SELECT movement_id, arrival_status, departure_status, actual_track, updated_by FROM tkl_movement_states"
+                " WHERE publication_id=? AND active_day=?", (publication_id, active_day)).fetchall()
+            events = self._connection.execute(
+                "SELECT movement_id, event_type, payload_json FROM tkl_events WHERE publication_id=? AND active_day=?"
+                " AND movement_id IS NOT NULL ORDER BY recorded_at, rowid", (publication_id, active_day)).fetchall()
+        times: dict[str, dict[str, float | None]] = {}
+        reached: dict[tuple[str, str], bool] = {}
+        for movement, kind, payload in events:
+            try:
+                data = json.loads(payload)
+            except (TypeError, ValueError):
+                continue
+            seconds = data.get("clock_seconds")
+            if kind == "train.advanced" or not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+                seconds = None
+            for field, value, name in (("arrival", "arrived", "arrived_seconds"), ("departure", "departed", "departed_seconds")):
+                if field not in data:
+                    continue
+                now = data[field] == value
+                if now and not reached.get((movement, field)):
+                    times.setdefault(movement, {})[name] = float(seconds) if seconds is not None else None
+                reached[(movement, field)] = now
+        result: dict[str, dict[str, Any]] = {}
+        for movement, arrival, departure, track, updated_by in states:
+            placed = updated_by == PLACED_BY
+            entry: dict[str, Any] = {"arrival": arrival, "departure": departure, "actual_track": track, "by_timetable": placed}
+            known = times.get(movement, {})  # tidtabellens lägen har inga händelser
+            if arrival == "arrived" and known.get("arrived_seconds") is not None:
+                entry["arrived_seconds"] = known["arrived_seconds"]
+            if departure == "departed" and known.get("departed_seconds") is not None:
+                entry["departed_seconds"] = known["departed_seconds"]
+            result[movement] = entry
+        with self._lock:
+            self._movement_live_cache = (key, result)
+        return result
 
     def departure_clock_seconds(self, publication_id: str, active_day: str,
                                 movement_ids: list[str] | set[str]) -> dict[str, float]:

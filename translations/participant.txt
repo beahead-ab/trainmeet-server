@@ -157,3 +157,8 @@ no time given|tid saknas|tid mangler|tid mangler|keine Zeit angegeben
 Train {number} on the line|Tåg {number} på banan|Tog {number} på banen|Tog {number} på banen|Zug {number} auf der Strecke
 1 train|1 tåg|1 tog|1 tog|1 Zug
 {count} trains|{count} tåg|{count} tog|{count} tog|{count} Züge
+Waiting at {station}|Väntar i {station}|Venter i {station}|Venter i {station}|Wartet in {station}
+On its way to {station}|På väg mot {station}|På vej mod {station}|På vei mot {station}|Unterwegs nach {station}
+Arrived {time}|Ankom {time}|Ankom {time}|Ankom {time}|Angekommen {time}
+Just now|Nyss|Lige nu|Nettopp|Gerade eben
+estimated|beräknad|beregnet|beregnet|voraussichtlich

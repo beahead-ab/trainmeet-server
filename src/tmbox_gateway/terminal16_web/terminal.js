@@ -75,7 +75,24 @@
     const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
-  if (typeof module !== "undefined") module.exports = {EntryBuffer, screenChanged, guarded, overlay, commandId, boxText, BOX_TEXT,
+  // The station's timetable beside the live box shows delays as the meet's
+  // other views do (Casper 2026-10-08): the server sends each row's delay,
+  // and drift-model.js deviationView decides what the chosen level shows.
+  const clockShift = (time, minutes) => {
+    const match = /^(\d{2}):(\d{2})$/.exec(String(time || ""));
+    if (!match) return time;
+    const value = ((Number(match[1]) * 60 + Number(match[2]) + minutes) % 1440 + 1440) % 1440;
+    return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+  };
+  function timetableRow(row, level, drift) {
+    const view = drift.deviationView(level, {delayMinutes: row.delay_minutes || 0, estimated: Boolean(row.estimated),
+      earlyMinutes: row.early_minutes || 0, earlyKind: row.early_kind || null, trainType: row.train_type || "person"});
+    const early = view.mark?.tone === "early";
+    const shown = !view.strike ? null : early ? clockShift(row.time, -view.mark.minutes) : row.expected_time || clockShift(row.time, view.mark.minutes);
+    const done = row.state === "arrived" || (row.kind === "departure" && row.state === "departed");
+    return {view, early, time: row.time, shown, done, signature: [row.state, view.mark?.text || "", view.estimated]};
+  }
+  if (typeof module !== "undefined") module.exports = {EntryBuffer, screenChanged, guarded, overlay, commandId, boxText, BOX_TEXT, timetableRow, clockShift,
     times: {WAITING_SHOWN_MS, COMMAND_GIVE_UP_MS, UNANSWERED_SHOWN_MS, SILENCE_MS, POLL_MS}};
   if (typeof document === "undefined") return;
 
@@ -390,12 +407,113 @@
       pollTimer = setTimeout(pollLive, POLL_MS);
     }
   }
+  // The station's timetable beside the live box, with delays. How much is
+  // shown is chosen in the "Your TMBox" card and kept in this browser; empty
+  // follows the meet's default. Asked for every few seconds while the page shows.
+  const DEVIATION_KEY = "trainmeet.tmbox.deviationLevel", TIMETABLE_MS = 5000, RECENT_MS = 30000;
+  const LEVEL_NAMES = {1: "Ingen markering", 2: "När det inträffar", 3: "Diskret", 4: "Fler", 5: "Allt"};
+  const LEVEL_HINTS = {
+    1: "Bara tidtabellens tider, inget rött och ingen markering",
+    2: "Raden lyser kort och får Nyss när något händer",
+    3: "Dessutom förseningen i liten röd text från 5 min",
+    4: "Röd bricka från 3 min, den nya tiden och för tidig avgång för persontåg",
+    5: "Allt från 1 min, även för tidig ankomst och vid tågen på kartan",
+  };
+  const drift = root.TrainMeetDriftModel;
+  let recent = drift?.changeTracker(), shownLevel = null;
+  let liveTable = null, tableTimer = null, tableVersion = 0;
+  function ownLevel() { try { return localStorage.getItem(DEVIATION_KEY) || ""; } catch { return ""; } }
+  function meetLevel() { return drift?.deviationLevel({display: {deviation_level: liveTable?.deviation_level}}) ?? 2; }
+  function renderLevelChoice() {
+    const select = document.querySelector("#box-deviation-level");
+    if (!select || !drift) return;
+    // Not while the list is open or being chosen in; the note still follows.
+    if (select !== document.activeElement) {
+      const named = (level) => `${level} · ${t(LEVEL_NAMES[level])}`;
+      select.replaceChildren(new Option(t("Som träffen: {level}", {level: named(meetLevel())}), ""),
+        ...drift.DEVIATION_LEVELS.map((level) => new Option(named(level), String(level))));
+      select.value = ownLevel();
+    }
+    document.querySelector("#box-deviation-note").textContent = t(LEVEL_HINTS[Number(select.value) || meetLevel()]);
+  }
+  function renderLiveTimetable() {
+    const box = boxes.values().next().value;
+    renderLevelChoice();
+    if (!box || !drift) return;
+    const container = box.card.querySelector(".box-timetable");
+    if (!liveTable?.station) { container.replaceChildren(); return; }
+    const level = drift.deviationLevel({display: {deviation_level: liveTable.deviation_level}}, ownLevel());
+    // A new level is not a change on the rows: nothing lights up for it.
+    if (level !== shownLevel) { recent = drift.changeTracker(); shownLevel = level; }
+    const now = performance.now();
+    const table = document.createElement("table");
+    const caption = document.createElement("caption"); caption.textContent = t("Tidtabell · {station}", {station: liveTable.station.name});
+    const head = document.createElement("thead"), heading = document.createElement("tr");
+    for (const label of ["Tåg", "Tid", "Från / till"]) { const cell = document.createElement("th"); cell.scope = "col"; cell.textContent = t(label); heading.append(cell); }
+    head.append(heading);
+    const body = document.createElement("tbody");
+    const words = {departure: ["Avg {time}", "Till {station}"], arrival: ["Ank {time}", "Från {station}"]};
+    for (const row of liveTable.rows) {
+      const shown = timetableRow(row, level, drift);
+      const changedAt = recent.note(`${row.movement_id}:${row.kind}`, shown.signature, now);
+      const fresh = shown.view.flash && changedAt !== null && now - changedAt < RECENT_MS;
+      const line = document.createElement("tr");
+      line.classList.toggle("is-done", shown.done);
+      line.classList.toggle("is-early", shown.early);
+      if (fresh) { line.classList.add("is-updated"); line.style.animationDelay = `${-(now - changedAt)}ms`; }
+      const number = document.createElement("th"); number.scope = "row"; number.textContent = row.train_number;
+      const [timeWord, routeWord] = words[row.kind] || ["{time}", "{station}"];
+      const time = document.createElement("td");
+      if (shown.shown) {
+        const was = document.createElement("s"); was.className = "tm-was"; was.textContent = row.time;
+        const next = document.createElement("b"); next.className = "tm-new"; next.textContent = t(timeWord, {time: shown.shown});
+        time.append(was, next);
+      } else time.textContent = t(timeWord, {time: row.time});
+      const mark = shown.view.mark;
+      if (mark) {
+        const badge = document.createElement("span");
+        badge.className = mark.tone === "early" ? "tm-early" : mark.style === "text" ? "tm-delay tm-delay--text" : "tm-delay";
+        badge.textContent = mark.text;
+        const label = mark.tone === "early" ? t("{minutes} min för tidigt", {minutes: mark.minutes})
+          : t("{minutes} min sen", {minutes: mark.minutes}) + (shown.view.estimated ? ` · ${t("beräknad")}` : "");
+        badge.title = label; badge.setAttribute("aria-label", label);
+        time.append(badge);
+      }
+      if (fresh) { const note = document.createElement("span"); note.className = "tm-recent"; note.textContent = t("Nyss"); time.append(note); }
+      const route = document.createElement("td"); route.textContent = t(routeWord, {station: row.station?.name || ""});
+      line.append(number, time, route);
+      body.append(line);
+    }
+    if (!liveTable.rows.length) {
+      const line = document.createElement("tr"), cell = document.createElement("td");
+      cell.colSpan = 3; cell.textContent = t("Inga tåg vid stationen i dag."); line.append(cell); body.append(line);
+    }
+    table.append(caption, head, body);
+    container.replaceChildren(table);
+  }
+  async function pollTimetable() {
+    clearTimeout(tableTimer); tableTimer = null;
+    const version = ++tableVersion;
+    try {
+      if (identity && !document.hidden) {
+        const response = await fetch("/v1/tmbox/terminal/timetable", {credentials:"omit", cache:"no-store",
+          headers:{Authorization:`Bearer ${identity.access_token}`}, signal:AbortSignal.timeout(5000)});
+        if (response.ok && version === tableVersion) { liveTable = await response.json(); renderLiveTimetable(); }
+      }
+    } catch {}
+    finally { if (version === tableVersion) tableTimer = setTimeout(pollTimetable, TIMETABLE_MS); }
+  }
   if (live) {
     document.querySelector("#start-client").addEventListener("click",()=>{try { localStorage.removeItem(SAVED); } catch {} startLive();});
     document.addEventListener("visibilitychange",()=>{if(document.hidden){++pollVersion;lost();} else pollLive();});
     addEventListener("pageshow", event => { if (event.persisted) pollLive(); });
     addEventListener("online", () => pollLive());
-    startLive().then(pollLive);
+    startLive().then(() => { pollLive(); pollTimetable(); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) pollTimetable(); });
+    document.querySelector("#box-deviation-level")?.addEventListener("change", (event) => {
+      try { if (event.target.value) localStorage.setItem(DEVIATION_KEY, event.target.value); else localStorage.removeItem(DEVIATION_KEY); } catch {}
+      renderLiveTimetable();
+    });
   }
   loadChrome();
   // A language chosen in another tab: draw the page's own words again.
@@ -403,6 +521,7 @@
     helpWords();
     for (const model of boxes.values()) model.timetableSignature = null;
     if (lastState) update(lastState);
+    if (live) renderLiveTimetable();
     const rate = document.querySelector("#connection-rate");
     if (rate) rate.textContent = ` · ${t("uppdateras {n} gånger i sekunden", {n: 1000 / POLL_MS})}`;
   });

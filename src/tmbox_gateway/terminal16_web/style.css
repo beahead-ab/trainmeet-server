@@ -305,3 +305,24 @@ html, body { overflow-x: clip; }
 @media (hover: none) and (pointer: coarse) {
   input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { font-size: 16px !important; }
 }
+
+/* Stationens tidtabell bredvid den riktiga boxen, med förseningar som i serverns
+   övriga vyer (Casper 2026-10-08). Nivån väljs i kortet Din TMBox. */
+:root { --tm-late: #b42318; --tm-late-ink: #ffffff; --tm-early: #17693a; --tm-early-ink: #ffffff; --tm-flash: #e4ecfb; }
+.box-deviation { display: grid; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.box-deviation .c { font-weight: 500; color: var(--muted); }
+.box-deviation select { font: inherit; font-weight: 500; min-height: 34px; border-radius: var(--radius-sm); border: 1px solid var(--border); padding: 5px 10px; background: var(--card); color: var(--text); }
+.box-timetable tr.is-done > * { color: var(--muted); }
+.box-timetable .tm-was { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1.5px; margin-right: .35em; }
+.box-timetable .tm-new { color: var(--tm-late); font-weight: 650; }
+.box-timetable .is-early .tm-new { color: var(--tm-early); }
+.box-timetable .tm-delay, .box-timetable .tm-early { display: inline-flex; align-items: center; justify-content: center; min-width: 2.4em; margin-left: .4em;
+  padding: 0 6px; border-radius: 6px; font-weight: 700; font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.box-timetable .tm-delay { background: var(--tm-late); color: var(--tm-late-ink); }
+.box-timetable .tm-early { background: var(--tm-early); color: var(--tm-early-ink); }
+.box-timetable .tm-delay.tm-delay--text { min-width: 0; padding: 0; margin-left: .3em; background: none; color: var(--tm-late); font-weight: 650; }
+.box-timetable .tm-recent { display: inline-block; margin-left: .45em; padding: 0 6px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-text);
+  font-size: 11px; font-weight: 600; line-height: 1.6; }
+.box-timetable tr.is-updated > * { animation: tm-box-flash 2s ease-out both; animation-delay: inherit; }
+@keyframes tm-box-flash { from { background: var(--tm-flash); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .box-timetable tr.is-updated > * { animation: none; } }

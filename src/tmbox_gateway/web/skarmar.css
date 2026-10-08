@@ -214,3 +214,8 @@ body.server-display { background: var(--kr-bg); }
 
 /* Översiktens klocka, tågnummer och tider kommer från den äldre server-ui.css i monospace: samma siffror som övriga skärmar. */
 #dashboard-view .dashboard-clock, #dashboard-view .dash-time, #dashboard-view .dash-row b, #dashboard-view .dash-in, #display-app .sc-online__line b { font-family: var(--kr-num); font-variant-numeric: tabular-nums; }
+/* En sen rad på TV:n är lika hög som de andra: den planerade tiden liten och
+   överstruken ovanför, den nya under, tillsammans en rads höjd (32 px). */
+.server-dashboard-bottom .dash-time .tm-was { display: block; margin: 0; font-size: 12px; line-height: 11px; }
+.server-dashboard-bottom .dash-time .tm-new { display: block; font-size: 22px; line-height: 21px; }
+.server-dashboard-bottom .dash-in .tm-delay, .server-dashboard-bottom .dash-in .tm-early { line-height: 1.15; vertical-align: middle; }

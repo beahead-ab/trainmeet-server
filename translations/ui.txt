@@ -1261,3 +1261,59 @@ Choose left or right|Välj vänster eller höger|Vælg venstre eller højre|Velg
 The clock is set to the plan's start time and stands still. Clearances, line messages, TKL notes and the automatic stations' times are removed, and the trains are put where the timetable says at the start time. A box in the middle of an entry starts over.|Klockan ställs på planens starttid och står still. Klareringar, linjebesked, TKL:s anteckningar och automatikens tider tas bort, och tågen ställs där tidtabellen säger vid starttiden. En box mitt i en inmatning börjar om.|Uret stilles på planens starttid og står stille. Tilladelser, linjebeskeder, TKL's noter og automatikkens tider fjernes, og togene sættes, hvor køreplanen siger ved starttiden. En boks midt i en indtastning starter forfra.|Klokken stilles på planens starttid og står stille. Tillatelser, linjebeskjeder, TKLs notater og automatikkens tider fjernes, og togene settes der ruteplanen sier ved starttiden. En boks midt i en inntasting starter på nytt.|Die Uhr wird auf die Startzeit des Plans gestellt und steht still. Fahrberechtigungen, Streckenmeldungen, TKL-Notizen und die Zeiten der Automatik werden entfernt, und die Züge werden dort aufgestellt, wo der Fahrplan sie zur Startzeit vorsieht. Eine Box mitten in einer Eingabe beginnt von vorn.
 The server did not respond. It may be restarting – try again in a moment.|Servern svarade inte. Den kan hålla på att starta om – försök igen om en stund.|Serveren svarede ikke. Den er måske ved at genstarte – prøv igen om lidt.|Serveren svarte ikke. Den holder kanskje på å starte på nytt – prøv igjen om litt.|Der Server hat nicht geantwortet. Er startet vielleicht gerade neu – versuche es gleich noch einmal.
 Something went wrong on the server. Try again, and tell whoever runs the server if it happens again.|Något gick fel på servern. Försök igen, och säg till den som sköter servern om det händer igen.|Noget gik galt på serveren. Prøv igen, og sig det til den, der passer serveren, hvis det sker igen.|Noe gikk galt på serveren. Prøv igjen, og si fra til den som har ansvar for serveren hvis det skjer igjen.|Auf dem Server ist etwas schiefgelaufen. Versuche es erneut und sag der Person Bescheid, die den Server betreut, wenn es wieder passiert.
+Display|Visning|Visning|Visning|Anzeige
+Delays and early trains|Förseningar och för tidiga tåg|Forsinkelser og tog før tid|Forsinkelser og tog før tiden|Verspätungen und verfrühte Züge
+default for the meet, the screens, TKL and the apps · everyone can choose their own|förval för träffen, skärmarna, TKL och apparna · var och en kan välja eget|standard for træffet, skærmene, TKL og apperne · alle kan vælge selv|standard for treffet, skjermene, TKL og appene · alle kan velge selv|Vorgabe für das Treffen, die Bildschirme, TKL und die Apps · jeder kann selbst wählen
+How much deviation is shown|Hur mycket avvikelser som visas|Hvor mange afvigelser der vises|Hvor mye avvik som vises|Wie viele Abweichungen angezeigt werden
+Early|För tidigt|For tidligt|For tidlig|Zu früh
+An early departure is marked for passenger trains only; freight and work trains may leave early.|En för tidig avgång markeras bara för persontåg; godståg och arbetståg får gå tidigare.|En afgang før tid markeres kun for persontog; godstog og arbejdstog må køre tidligere.|En avgang før tiden markeres bare for persontog; godstog og arbeidstog får gå tidligere.|Eine verfrühte Abfahrt wird nur bei Reisezügen markiert; Güter- und Arbeitszüge dürfen früher fahren.
+applies to this browser · the meet default is changed under Screens and clock|gäller den här webbläsaren · träffens förval ändras under Skärmar och klocka|gælder denne browser · træffets standard ændres under Skærme og ur|gjelder denne nettleseren · treffets standard endres under Skjermer og klokke|gilt für diesen Browser · die Vorgabe des Treffens wird unter Bildschirme und Uhr geändert
+Delays in this browser|Förseningar i den här webbläsaren|Forsinkelser i denne browser|Forsinkelser i denne nettleseren|Verspätungen in diesem Browser
+Drift and the participant view in this browser|Drift och deltagarvyn i den här webbläsaren|Drift og deltagervisningen i denne browser|Drift og deltakervisningen i denne nettleseren|Betrieb und Teilnehmeransicht in diesem Browser
+How much deviation is shown here|Hur mycket avvikelser som visas här|Hvor mange afvigelser der vises her|Hvor mye avvik som vises her|Wie viele Abweichungen hier angezeigt werden
+Delays on this screen|Förseningar på den här skärmen|Forsinkelser på denne skærm|Forsinkelser på denne skjermen|Verspätungen auf diesem Bildschirm
+{minutes} min early|{minutes} min för tidigt|{minutes} min for tidligt|{minutes} min for tidlig|{minutes} Min. zu früh
+As the meet: {level}|Som träffen: {level}|Som træffet: {level}|Som treffet: {level}|Wie das Treffen: {level}
+Only the timetable's times, no red and no marking|Bara tidtabellens tider, inget rött och ingen markering|Kun køreplanens tider, intet rødt og ingen markering|Bare ruteplanens tider, ikke rødt og ingen markering|Nur die Fahrplanzeiten, kein Rot und keine Markierung
+The row lights up briefly and says Just now when something happens|Raden lyser kort och får Nyss när något händer|Rækken lyser kort op og får Lige nu, når noget sker|Raden lyser kort og får Nettopp når noe skjer|Die Zeile leuchtet kurz auf und zeigt Gerade eben, wenn etwas passiert
+Also the delay in small red text from 5 min|Dessutom förseningen i liten röd text från 5 min|Desuden forsinkelsen med lille rød tekst fra 5 min|I tillegg forsinkelsen med liten rød tekst fra 5 min|Zusätzlich die Verspätung in kleiner roter Schrift ab 5 Min.
+Red badge from 3 min, the new time and early departures of passenger trains|Röd bricka från 3 min, den nya tiden och för tidig avgång för persontåg|Rødt mærke fra 3 min, den nye tid og afgang før tid for persontog|Rødt merke fra 3 min, den nye tiden og avgang før tiden for persontog|Rotes Abzeichen ab 3 Min., die neue Zeit und verfrühte Abfahrten von Reisezügen
+Everything from 1 min, also early arrivals and beside the trains on the map|Allt från 1 min, även för tidig ankomst och vid tågen på kartan|Alt fra 1 min, også ankomst før tid og ved togene på kortet|Alt fra 1 min, også ankomst før tiden og ved togene på kartet|Alles ab 1 Min., auch verfrühte Ankünfte und an den Zügen auf der Karte
+No marking|Ingen markering|Ingen markering|Ingen markering|Keine Markierung
+When it happens|När det inträffar|Når det sker|Når det skjer|Wenn es passiert
+Discreet|Diskret|Diskret|Diskret|Dezent
+More|Fler|Flere|Flere|Mehr
+Everything|Allt|Alt|Alt|Alles
+The traffic control's default|Trafikledningens förval|Trafikledelsens standard|Trafikkledelsens standard|Vorgabe der Betriebsleitung
+Jump to another day and time; every train follows|Hoppa till en annan dag och tid; alla tåg följer med|Spring til en anden dag og tid; alle tog følger med|Hopp til en annen dag og tid; alle tog følger med|Zu einem anderen Tag und einer anderen Zeit springen; alle Züge folgen
+Time machine…|Tidsmaskin…|Tidsmaskine…|Tidsmaskin…|Zeitmaschine…
+The meet's days|Träffens dagar|Træffets dage|Treffets dager|Die Tage des Treffens
+at midnight the meet moves on to the next day, with that day's timetable|vid midnatt går träffen till nästa dag, med den dagens tidtabell|ved midnat går træffet videre til næste dag med den dags køreplan|ved midnatt går treffet videre til neste dag, med den dagens ruteplan|um Mitternacht geht das Treffen zum nächsten Tag über, mit dessen Fahrplan
+Starts on|Börjar på|Starter på|Starter på|Beginnt am
+The meet's first day|Träffens startdag|Træffets første dag|Treffets første dag|Erster Tag des Treffens
+Time machine|Tidsmaskin|Tidsmaskine|Tidsmaskin|Zeitmaschine
+Jump to a day and a time. Every train moves to where the timetable has it then, and every arrival and departure status is reset. A backup is taken first.|Hoppa till en dag och en tid. Alla tåg flyttas dit tidtabellen säger då, och alla statusar för ankomst och avgång nollställs. En säkerhetskopia tas först.|Spring til en dag og et klokkeslæt. Alle tog flyttes derhen, hvor køreplanen har dem, og alle statusser for ankomst og afgang nulstilles. Der tages en sikkerhedskopi først.|Hopp til en dag og et klokkeslett. Alle tog flyttes dit ruteplanen har dem da, og alle statuser for ankomst og avgang nullstilles. En sikkerhetskopi tas først.|Zu einem Tag und einer Uhrzeit springen. Alle Züge werden dorthin gestellt, wo der Fahrplan sie dann vorsieht, und alle Ankunfts- und Abfahrtsstatus werden zurückgesetzt. Vorher wird eine Sicherung erstellt.
+Jump there|Hoppa dit|Spring derhen|Hopp dit|Dorthin springen
+Day {n} · {day}|Dag {n} · {day}|Dag {n} · {day}|Dag {n} · {day}|Tag {n} · {day}
+Moving the trains …|Tågen flyttas …|Togene flyttes …|Togene flyttes …|Die Züge werden versetzt …
+The time machine could not jump.|Tidsmaskinen kunde inte hoppa.|Tidsmaskinen kunne ikke springe.|Tidsmaskinen kunne ikke hoppe.|Die Zeitmaschine konnte nicht springen.
+Day {n} · {day} at {time}. Every train is where the timetable says.|Dag {n} · {day} kl. {time}. Alla tåg står där tidtabellen säger.|Dag {n} · {day} kl. {time}. Alle tog står, hvor køreplanen siger.|Dag {n} · {day} kl. {time}. Alle tog står der ruteplanen sier.|Tag {n} · {day} um {time}. Alle Züge stehen, wo der Fahrplan es vorsieht.
+Every day (Dagl)|Alla dagar (Dagl)|Alle dage (Dagl)|Alle dager (Dagl)|Jeden Tag (Dagl)
+Today: Day {n} · {day}|I dag: Dag {n} · {day}|I dag: Dag {n} · {day}|I dag: Dag {n} · {day}|Heute: Tag {n} · {day}
+Disturbances and stabling|Störningar och undanställning|Forstyrrelser og hensætning|Forstyrrelser og hensetting|Störungen und Abstellen
+applies to the automatic stations|gäller de automatiska stationerna|gælder de automatiske stationer|gjelder de automatiske stasjonene|gilt für die automatischen Bahnhöfe
+Disturbances|Störningar|Forstyrrelser|Forstyrrelser|Störungen
+Off – the trains run to the timetable|Av – tågen går enligt tidtabellen|Fra – togene kører efter køreplanen|Av – togene går etter ruteplanen|Aus – die Züge fahren nach Fahrplan
+Normal traffic – one train in four, 1–4 min|Normal trafik – vart fjärde tåg, 1–4 min|Normal trafik – hvert fjerde tog, 1–4 min|Normal trafikk – hvert fjerde tog, 1–4 min|Normaler Verkehr – jeder vierte Zug, 1–4 Min.
+Disrupted traffic – two trains in three, 1–12 min|Störd trafik – två av tre tåg, 1–12 min|Forstyrret trafik – to ud af tre tog, 1–12 min|Forstyrret trafikk – to av tre tog, 1–12 min|Gestörter Verkehr – zwei von drei Zügen, 1–12 Min.
+Where|Var|Hvor|Hvor|Wo
+Where the disturbances happen|Var störningarna sker|Hvor forstyrrelserne sker|Hvor forstyrrelsene skjer|Wo die Störungen auftreten
+At the station and on the line|Vid stationen och på linjen|Ved stationen og på strækningen|Ved stasjonen og på strekningen|Am Bahnhof und auf der Strecke
+At the station – station work before departure|Vid stationen – stationsarbete före avgång|Ved stationen – stationsarbejde før afgang|Ved stasjonen – stasjonsarbeid før avgang|Am Bahnhof – Bahnhofsarbeit vor der Abfahrt
+On the line – longer running time|På linjen – längre gångtid|På strækningen – længere køretid|På strekningen – lengre kjøretid|Auf der Strecke – längere Fahrzeit
+Scenario key|Scenarionyckel|Scenarienøgle|Scenarionøkkel|Szenarioschlüssel
+Stabling|Undanställning|Hensætning|Hensetting|Abstellen
+Trains that end at an automatic station are shunted away, so that the track is free|Tåg som slutar vid en automatisk station rangeras bort, så att spåret blir fritt|Tog, der ender ved en automatisk station, rangeres væk, så sporet bliver frit|Tog som ender ved en automatisk stasjon skiftes bort, så sporet blir ledig|Züge, die an einem automatischen Bahnhof enden, werden weggestellt, damit das Gleis frei wird
+After|Efter|Efter|Etter|Nach
+game minutes|spelminuter|spilminutter|spillminutter|Spielminuten
+Station work in progress|Stationsarbete pågår|Stationsarbejde i gang|Stasjonsarbeid pågår|Bahnhofsarbeit läuft

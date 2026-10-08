@@ -228,21 +228,27 @@
    *   ett tåg      – tågets återstående stopp.
    * delta = minuter från träffklockan; 0 eller mindre visas som "nu".
    */
-  function events(snapshot, { station = null, train = null, limit = 8 } = {}) {
-    const now = minutes(snapshot?.clock?.time) ?? 0;
+  function events(snapshot, { station = null, train = null, limit = 8, nowSeconds = null } = {}) {
+    // Stoppen räknas på tjänstens dygn: ett stopp efter midnatt (service_day_offset 1)
+    // ligger efter kvällens. Går klockan förbi midnatt på gårdagens dag (tåg som
+    // kör klart innan dagen byts) ligger nu också på andra dygnet.
+    const base = Number.isFinite(nowSeconds) ? Math.floor(nowSeconds / 60) : minutes(snapshot?.clock?.time) ?? 0;
+    const now = base + (Number(snapshot?.clock?.elapsed_seconds) >= 86400 && base < 720 ? 1440 : 0);
+    const stopAt = (stop, key) => { const value = minutes(stop?.[key]); return value === null ? null : value + Number(stop.service_day_offset || 0) * 1440; };
     const names = stationMap(snapshot);
     const states = trainStates(snapshot);
     const listed = services(snapshot);
     const stopsOf = new Map(listed.map((service) => [String(service.train_number), orderedStops(service)]));
-    const nextAfter = (number, stationId) => {
+    const nextAfter = (number, stationId, step = 1) => {
       const stops = stopsOf.get(String(number)) || [];
       const index = stops.findIndex((stop) => stop.station_id === stationId);
-      return index >= 0 ? stops[index + 1]?.station_id || null : null;
+      return index >= 0 ? stops[index + step]?.station_id || null : null;
     };
     const build = (number, stop, kind, at) => ({
-      time: hhmm(at), minute: minutes(at), delta: minutes(at) - now, train: String(number), stationId: stop.station_id,
+      time: hhmm(at), minute: stopAt(stop, kind === "dep" ? "departure_time" : "arrival_time"), delta: stopAt(stop, kind === "dep" ? "departure_time" : "arrival_time") - now, train: String(number), stationId: stop.station_id,
       station: names.get(stop.station_id)?.name || stop.station_id,
       kind, nextStationId: kind === "dep" ? nextAfter(number, stop.station_id) : null,
+      previousStationId: kind === "arr" ? nextAfter(number, stop.station_id, -1) : null,
       state: states.get(String(number))?.state || null,
     });
     const rowsOf = (number) => stopsOf.get(String(number)) || [];
@@ -250,7 +256,7 @@
 
     if (train) {
       for (const stop of rowsOf(train)) {
-        const arrival = minutes(stop.arrival_time), departure = minutes(stop.departure_time);
+        const arrival = stopAt(stop, "arrival_time"), departure = stopAt(stop, "departure_time");
         if (departure !== null && departure >= now) result.push(build(train, stop, "dep", stop.departure_time));
         else if (arrival !== null && arrival >= now) result.push(build(train, stop, "arr", stop.arrival_time));
       }
@@ -258,7 +264,7 @@
       for (const service of listed) {
         for (const stop of orderedStops(service)) {
           if (stop.station_id !== station) continue;
-          const arrival = minutes(stop.arrival_time), departure = minutes(stop.departure_time);
+          const arrival = stopAt(stop, "arrival_time"), departure = stopAt(stop, "departure_time");
           if (arrival !== null && arrival >= now) result.push(build(service.train_number, stop, "arr", stop.arrival_time));
           if (departure !== null && departure >= now && departure !== arrival) result.push(build(service.train_number, stop, "dep", stop.departure_time));
         }
@@ -280,13 +286,202 @@
         if (!event && !live) {
           for (const stop of stops) {
             const at = stop.departure_time || stop.arrival_time;
-            if (minutes(at) !== null && minutes(at) >= now) { event = build(number, stop, stop.departure_time ? "dep" : "arr", at); break; }
+            const minute = stopAt(stop, stop.departure_time ? "departure_time" : "arrival_time");
+            if (minute !== null && minute >= now) { event = build(number, stop, stop.departure_time ? "dep" : "arr", at); break; }
           }
         }
         if (event) result.push(event);
       }
     }
+    // Förseningen ur trainLive: en händelse vid en senare station får samma
+    // försening, den man står vid får den beräknade.
+    const lives = trainLive(snapshot, Number.isFinite(nowSeconds) ? nowSeconds : now * 60);
+    for (const event of result) {
+      const live = lives.get(event.train);
+      const delay = live && live.state !== "arrived" ? live.delayMinutes : 0;
+      event.delayMinutes = delay;
+      event.late = delay >= LATE_MINUTES;
+      event.estimated = Boolean(live?.estimated);
+      event.earlyMinutes = live?.earlyMinutes || 0;
+      event.earlyKind = live?.earlyKind || null;
+      event.trainType = live?.trainType || "person";
+      event.expectedTime = event.late && event.minute !== null ? clock(event.minute + delay) : null;
+      event.expectedDelta = event.late ? event.delta + delay : event.delta;
+    }
     return result.sort((a, b) => a.minute - b.minute || compare(a.train, b.train)).slice(0, limit);
+  }
+
+  // ── Verkliga tider och förseningar ────────────────────────────────────
+
+  /** Från hur många minuter en försening visas som en röd bricka (Casper 2026-10-08). */
+  const LATE_MINUTES = 3;
+
+  /** Minuter från a till b på ett dygn, alltid mellan −12 och +12 timmar. */
+  const minutesBetween = (a, b) => ((b - a + 720) % 1440 + 1440) % 1440 - 720;
+  const clock = (minute) => { const value = ((Math.round(minute) % 1440) + 1440) % 1440; return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`; };
+
+  /** Rörelsen bakom ett stopp: raden i snapshot.trains med samma tjänst, station
+   *  och tider, som serverns train_routes._visits. Tvetydigt ger ingen. */
+  const movementIndexes = new WeakMap();
+  function movementOf(snapshot, service, stop) {
+    let index = movementIndexes.get(snapshot);
+    if (!index) {
+      index = new Map();
+      for (const row of snapshot?.trains || []) {
+        const key = `${row.service_id}|${row.station_id}|${hhmm(row.arrival_time)}|${hhmm(row.departure_time)}`;
+        index.set(key, index.has(key) ? null : String(row.id));
+      }
+      if (snapshot && typeof snapshot === "object") movementIndexes.set(snapshot, index);
+    }
+    return index.get(`${service?.id}|${stop?.station_id}|${hhmm(stop?.arrival_time)}|${hhmm(stop?.departure_time)}`) || null;
+  }
+
+  /**
+   * Var varje tåg är och hur sent, ur serverns movement_live och klockan.
+   * tågnummer → { state, station, from, to, delayMinutes, late, estimated, stops }
+   *
+   *  - not_departed: inget har hänt och avgången är inte passerad
+   *  - waiting: står kvar efter sin avgångstid (förseningen räknas upp, "beräknad")
+   *  - on_line: avgått, inte framme
+   *  - at_station: inne på en station längs vägen
+   *  - arrived: framme vid sista stationen
+   *
+   * Försening = verklig tid − planerad, från den senaste händelsen med tid.
+   * Lägen som bara tidtabellen gav har ingen tid: utan någon tid är tåget i tid.
+   * Tiderna framåt får förseningen: "ny tid".
+   */
+  function trainLive(snapshot, nowSeconds) {
+    const live = snapshot?.movement_live || {};
+    const states = trainStates(snapshot);
+    const now = Number.isFinite(nowSeconds) ? nowSeconds / 60 : minutes(snapshot?.clock?.time) ?? 0;
+    const result = new Map();
+    for (const service of services(snapshot)) {
+      const number = String(service.train_number);
+      const stops = orderedStops(service).map((stop) => {
+        const offset = Number(stop.service_day_offset || 0) * 1440;
+        const state = live[movementOf(snapshot, service, stop)] || null;
+        const arrival = minutes(stop.arrival_time), departure = minutes(stop.departure_time);
+        return { stationId: stop.station_id, stop, state,
+          plannedArrival: arrival === null ? null : arrival + offset, plannedDeparture: departure === null ? null : departure + offset,
+          arrived: state?.arrival === "arrived", departed: state?.departure === "departed",
+          actualArrival: Number.isFinite(state?.arrived_seconds) ? state.arrived_seconds / 60 : null,
+          actualDeparture: Number.isFinite(state?.departed_seconds) ? state.departed_seconds / 60 : null };
+      });
+      if (!stops.length) continue;
+      // Den senaste händelsen med en verklig tid ger förseningen. Ett läge utan
+      // tid (tidtabellens, eller "tåget hoppar fram") säger inget om den.
+      let delay = 0, estimated = false, lastIndex = -1, measuredAt = null;
+      stops.forEach((stop, index) => { if (stop.arrived || stop.departed) lastIndex = index; });
+      for (let index = stops.length - 1; index >= 0; index -= 1) {
+        const stop = stops[index];
+        if (stop.departed && stop.actualDeparture !== null && stop.plannedDeparture !== null) { delay = minutesBetween(stop.plannedDeparture, stop.actualDeparture); measuredAt = "dep"; break; }
+        if (stop.arrived && stop.actualArrival !== null && stop.plannedArrival !== null) { delay = minutesBetween(stop.plannedArrival, stop.actualArrival); measuredAt = "arr"; break; }
+      }
+      const channel = states.get(number);
+      const last = stops.at(-1);
+      let state, station = null, from = null, to = null;
+      if (channel && channel.state === "on-line") { state = "on_line"; from = channel.from; to = channel.to; }
+      else if (lastIndex >= 0 && stops[lastIndex].departed && lastIndex < stops.length - 1) {
+        state = "on_line"; from = stops[lastIndex].stationId; to = stops[lastIndex + 1].stationId;
+      } else if (last.arrived) { state = "arrived"; station = last.stationId; }
+      else {
+        // Står på en station: den senast nådda, annars den första.
+        const here = stops[Math.max(0, lastIndex)];
+        station = here.stationId;
+        const leaves = here.plannedDeparture;
+        const overdue = leaves !== null ? minutesBetween(leaves, now) : -1;
+        state = lastIndex < 0 && overdue < 0 ? "not_departed" : lastIndex >= 0 && overdue < 0 ? "at_station" : "waiting";
+        if (state === "waiting" && Math.floor(overdue) > delay) { delay = Math.floor(overdue); estimated = true; measuredAt = null; }
+        if (channel?.state === "cleared") { from = channel.from; to = channel.to; }
+      }
+      delay = Math.round(delay);
+      // För tidigt: en verklig avgång eller ankomst före den planerade. En
+      // beräknad tid är aldrig tidig.
+      const earlyMinutes = delay < 0 ? -delay : 0;
+      const earlyKind = earlyMinutes ? measuredAt : null;
+      if (delay < 0) delay = 0;
+      const shift = delay > 0 ? delay : 0;
+      const times = stops.map((stop, index) => {
+        const done = index <= lastIndex;
+        const expected = (planned) => planned === null ? null : planned + shift;
+        return { stationId: stop.stationId, plannedArrival: stop.plannedArrival, plannedDeparture: stop.plannedDeparture,
+          arrived: stop.arrived, departed: stop.departed, actualArrival: stop.actualArrival, actualDeparture: stop.actualDeparture,
+          expectedArrival: done ? stop.actualArrival : expected(stop.plannedArrival),
+          expectedDeparture: stop.departed ? stop.actualDeparture : expected(stop.plannedDeparture) };
+      });
+      result.set(number, { number, state, station, from, to, delayMinutes: delay, late: delay >= LATE_MINUTES, estimated,
+        earlyMinutes, earlyKind, trainType: String(service.train_type || "person").toLowerCase(),
+        arrivedAt: last.actualArrival, stops: times });
+    }
+    return result;
+  }
+
+  // ── Hur mycket avvikelser som visas (Casper 2026-10-08) ───────────────
+  //
+  // Det blir lätt plottrigt, eftersom tåg nästan alltid är lite sena. Fem
+  // nivåer; var och en väljer på sin enhet, admin sätter träffens förval.
+  //   1 Ingen markering
+  //   2 När det inträffar (förval): raden lyser kort och får "Nyss"
+  //   3 Diskret + när det händer: dessutom liten röd text "+7" från +5 min
+  //   4 Fler: röd bricka från +3, överstruken tid med den nya, "beräknad",
+  //     och för tidig avgång för persontåg som grön "−2"
+  //   5 Allt: allt från +1, för tidig ankomst för alla tåg, och förseningen
+  //     även vid tågnumret på kartan och i tågdiagrammet
+  // En för tidig avgång är tillåten för godståg och arbetståg och markeras aldrig.
+
+  const DEVIATION_LEVELS = [1, 2, 3, 4, 5];
+  const DEFAULT_DEVIATION_LEVEL = 2;
+  const validLevel = (value) => { const level = Number(value); return DEVIATION_LEVELS.includes(level) ? level : null; };
+
+  /** Enhetens eget val går före träffens förval; annars nivå 2. */
+  function deviationLevel(snapshot, own = null) {
+    return validLevel(own) ?? validLevel(snapshot?.display?.deviation_level) ?? DEFAULT_DEVIATION_LEVEL;
+  }
+
+  /**
+   * Vad en rad visar för ett tåg (trainLive eller en händelse) på en nivå:
+   *   flash   – raden lyser kort och får "Nyss" när något ändras
+   *   mark    – { tone: late|early, style: text|pill, minutes, text } eller null
+   *   strike  – den planerade tiden överstruken med den nya bredvid
+   *   estimated – "beräknad" står med
+   */
+  function deviationView(level, train) {
+    const view = { flash: level >= 2, mark: null, strike: false, estimated: false };
+    if (!train) return view;
+    const delay = Math.max(0, Math.round(train.delayMinutes || 0));
+    if (level === 3 && delay >= 5) view.mark = { tone: "late", style: "text", minutes: delay, text: `+${delay}` };
+    if (level >= 4 && delay >= (level >= 5 ? 1 : LATE_MINUTES)) {
+      view.mark = { tone: "late", style: "pill", minutes: delay, text: `+${delay}` };
+      view.strike = true;
+      view.estimated = Boolean(train.estimated);
+    }
+    const early = Math.max(0, Math.round(train.earlyMinutes || 0));
+    if (!view.mark && level >= 4 && early >= 1) {
+      const passenger = String(train.trainType || "person").toLowerCase() === "person";
+      if ((train.earlyKind === "dep" && passenger) || (train.earlyKind === "arr" && level >= 5)) {
+        view.mark = { tone: "early", style: "pill", minutes: early, text: `\u2212${early}` };
+        view.strike = true;
+      }
+    }
+    return view;
+  }
+
+  /**
+   * Vad som ändrats sedan förra ritningen. note(key, signatur, nu) ger tiden
+   * för den senaste ändringen av nyckeln, eller null. Första gången en nyckel
+   * ses är ingen ändring: en lista som ritas för första gången blinkar inte.
+   */
+  function changeTracker() {
+    const seen = new Map();
+    return {
+      note(key, signature, now) {
+        const sig = JSON.stringify(signature);
+        const previous = seen.get(key);
+        if (!previous) { seen.set(key, { sig, changedAt: null }); return null; }
+        if (previous.sig !== sig) { previous.sig = sig; previous.changedAt = now; }
+        return previous.changedAt;
+      },
+    };
   }
 
   // ── Tågdiagram ────────────────────────────────────────────────────────
@@ -422,5 +617,6 @@
   }
 
   return { compare, minutes, hhmm, services, orderedStops, stationMap, trains, trainStates, stationCounts, onLineLeg, lateTrains,
-    placement, connectionTone, stationRows, stats, events, stationOrder, routePoints, graph, legProgress, search };
+    placement, connectionTone, stationRows, stats, events, stationOrder, routePoints, graph, legProgress, search, LATE_MINUTES, movementOf, trainLive, changeTracker,
+    DEVIATION_LEVELS, DEFAULT_DEVIATION_LEVEL, deviationLevel, deviationView };
 });

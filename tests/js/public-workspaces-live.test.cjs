@@ -106,7 +106,9 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('.tm-top a[href="/tmbox-lab/"]').textContent(), 'Provbänk');
     await page.waitForFunction(() => document.querySelector('#connection-rate').textContent === ' · uppdateras 2 gånger i sekunden');
     const box = await page.evaluate(() => JSON.parse(localStorage.getItem('trainmeet.browser-tmbox')));
-    assert.equal(await page.locator('input, select').count(), 0, 'No station or address controls');
+    // The only choice on the page is how much delay the timetable shows (a
+    // view setting kept in this browser); station and address are never chosen here.
+    assert.equal(await page.locator('input, select:not(#box-deviation-level)').count(), 0, 'No station or address controls');
     assert.equal(await page.locator('.keypad button').count(), 16);
     // As on the physical box, every key can be pressed; without a station
     // none of them does anything.

@@ -419,6 +419,12 @@ def _external_clock_loop(application, stop):
         except Exception:
             LOGGER.warning("Simuleringen pausades efter ett simulatorfel")
         try:
+            # Midnatt: träffen går till nästa dag, före automatiken, så att
+            # den nya dagens tåg körs från början av dygnet.
+            application.calendar_tick()
+        except Exception:
+            LOGGER.exception("Dygnsskiftet kunde inte göras; försöker igen")
+        try:
             if application.automatic:
                 application.automatic.tick()
         except Exception:

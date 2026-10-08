@@ -28,6 +28,146 @@ inte och tåget stod kvar vid stationen på kartan.
 - **Skärmens tågdiagram** tänder bara den tur som är ute och sätter taggen på
   den, inte på varje tur med numret.
 
+### Webb-TMBoxen visar stationens tidtabell med förseningar, och man väljer hur mycket
+
+Efter Caspers önskan: webb-TMBoxarna och iPhone-appen ska också kunna välja
+om förseningar markeras.
+
+- **Tidtabellen bredvid webb-TMBoxen.** När boxen har en station visas
+  stationens tåg under boxen, med samma markeringar som i serverns övriga
+  vyer: röd bricka och ny tid för sena tåg, grön för en för tidig avgång med
+  persontåg, och "Nyss" när något ändras. Godståg och arbetståg får gå före
+  sin tid utan markering.
+- **Valet görs i kortet Din TMBox** (Förseningar i tidtabellen), med samma
+  fem nivåer som i webbläsaren och på skärmarna. Valet sparas i webbläsaren;
+  "Som träffen" följer trafikledningens förval.
+- **/v1/tmbox/terminal/timetable** (webb-TMBoxen och iPhone-appen) ger nu
+  varje rad tågets försening, den nya tiden, om den är beräknad och om tåget
+  är för tidigt, samt träffens förval `deviation_level`. Servern räknar med
+  samma regler som webbens vyer (`train_live.py`, samma fall som
+  `train-live.test.cjs`).
+- **Provbänken** (`/tmbox-lab/`) kör en egen testtrafik utan klocka och
+  verkliga tider. Där finns inga förseningar att visa, och därför inget val.
+
+### Tågen rör sig i realtid i alla vyer med linjer, och två tåg som möts på dubbelspår
+
+Efter Caspers önskan: alla vyer med linjer ska visa tågrörelser i realtid.
+
+- **Två tåg som möts på dubbelspår** går på var sitt spår, enligt träffens
+  trafiksida, utan att taggarna täcker varandra. Det gäller Drift, skärmarnas
+  Banöversikt och deltagarvyn, och provas nu med två tåg som båda har avgått
+  och möts mitt på sträckan.
+- **Kartan i Tidtabell och tågrutter** (Drift) låter det valda tåget röra sig
+  med klockan, som Banöversikten. Förut stod det still en fjärdedel ut från
+  stationen.
+- **Tågdiagrammet på skärmarna** går med klockan varje sekund, inte bara när
+  en ny bild hämtas.
+- **Nästa händelser och tidtabellen** räknas om medan klockan går, även
+  mellan hämtningarna. Det gäller Drift var femte sekund och deltagarvyn var
+  tionde. "om N min" och ett tåg som står kvar och blir allt senare stämmer
+  alltså hela tiden.
+
+### Störningar och undanställning i automatiken
+
+Förseningsdelarna ur simuleringen flyttar in i den vanliga automatiken, efter
+Caspers önskan. Inställningen finns under Inställningar → Obemannade
+stationer → Störningar och undanställning.
+
+- **Störningar:**
+  - Av (förval);
+  - Normal trafik: vart fjärde tåg, 1–4 min;
+  - Störd trafik: två av tre tåg, 1–12 min.
+- **Var störningen sker:**
+  - vid stationen: stationsarbete före avgång, och tåget väntar med
+    "Stationsarbete pågår";
+  - på linjen: längre gångtid till en automatisk mottagare;
+  - båda.
+- **Scenarionyckeln:** samma nyckel ger samma störningar. Förseningarna blir
+  verkliga händelsetider och syns i tidtabellen enligt den valda nivån.
+- **Undanställning vid slutstation** (på som förval, efter 5 spelminuter): ett
+  tåg som slutar vid en automatisk station rangeras bort, så att spåret blir
+  fritt. Förut höll tåget spåret resten av dagen, och nästa tåg in fick
+  "Mottagningsspåret är upptaget", så automatiken stod still. Bemannade
+  stationer ställer inte undan.
+
+### Träffens dagar: dagen går fram vid midnatt, och en tidsmaskin
+
+Efter Caspers önskan.
+
+- **Träffen börjar på en dag admin väljer:** Inställningar → Träff och Cloud →
+  Träffens dagar, med en veckodag eller "Alla dagar (Dagl)". Ingen koppling
+  till verkliga datum.
+- **Vid varje midnatt går träffen till nästa dag.** Tidtabellen för den
+  dagens veckodag gäller, och Dagl alltid. Drift, deltagarvyn och skärmarna
+  visar "Dag 2 · Sön".
+- **På den nya dagen är alla statusar för ankomst och avgång nollställda.**
+  Tågen står där tidtabellen säger, och automatiken börjar från dygnets
+  början. Gårdagen står kvar som historik.
+- **Samma veckodag en vecka senare** börjar också tom.
+- **TKL-pass följer med** till den nya dagen.
+- **Ett tåg som är ute vid midnatt kör klart på gårdagens dag** innan dagen
+  byts. Det gäller ett tåg på linjen, en öppen klarering, eller ett avgånget
+  tåg med stopp efter midnatt. Ett tåg som fastnat håller inte kvar gårdagen
+  mer än sex spel­timmar.
+- **FastClock:** dagen byts när klockan slår om från 23:59 till 00:00.
+- **Ingen dag byts under en simulering.**
+- **Tidsmaskin…** vid klockan på Drift, bara för admin: välj dag och tid.
+  - Alla tåg flyttas dit tidtabellen säger då, och alla statusar nollställs.
+  - En säkerhetskopia tas först.
+  - **Ställ klockan** finns kvar för små justeringar och rör inte tåg som
+    verkligen har kört.
+- **Rättelser:**
+  - Dagarna i tidtabellen läses som Cloud skriver dem: "M-F", "S" och
+    intervall i kommalistor ("Mån-Fre,Sön") matchade förut aldrig.
+  - Byte av trafikdag med FastClock som klocka gav ett fel.
+  - Nästa händelser visar stopp efter midnatt efter kvällens, inte som
+    passerade.
+- **API:**
+  - `/v1/display.calendar` (`start_day`, `day_number`, `weekday`, `week`);
+  - `POST /v1/runtime/time-machine` med `day_number`, `time` och
+    `meet_generation`;
+  - `POST /v1/runtime/calendar` med `start_day` och `meet_generation`.
+
+### Tidtabellen visar verkliga tider, förseningar och vad som nyss ändrats, i fem nivåer
+
+Som i SJ:s app, efter Caspers önskan. Gäller deltagarvyns Tidtabell och Nästa
+händelser, Nästa händelser på Drift och skärmarnas Översikt.
+
+- **Fem nivåer,** eftersom tåg nästan alltid är lite sena och det annars blir
+  plottrigt:
+  1. Ingen markering.
+  2. När det inträffar (förval): raden lyser kort och får "Nyss".
+  3. Diskret: dessutom förseningen i liten röd text från +5 min.
+  4. Fler: röd bricka från +3 min, den nya tiden, och för tidig avgång.
+  5. Allt: från +1 min, för tidig ankomst, och förseningen vid tågnumret på
+     kartan och i tågdiagrammet.
+- **Vem väljer:** admin sätter träffens förval under Inställningar → Skärmar
+  och klocka. Varje webbläsare väljer eget under Inställningar → Visning, i
+  deltagarvyn under Visning, och varje skärm i sin verktygsrad. Att byta nivå
+  markerar ingenting.
+- **För tidigt:** en för tidig avgång är en grön "−2" för persontåg. Godståg
+  och arbetståg får gå tidigare och markeras aldrig.
+- **`/v1/display`:** `display.deviation_level`; endpoint
+  `/v1/settings/deviation-level`, bara admin.
+- **Försening:** på nivå 4 syns en röd bricka med vita siffror från +3 min. Den
+  planerade tiden står överstruken och den nya tiden bredvid. Ankomsterna
+  framåt räknas om med förseningen.
+- **Tåg som står kvar:** ett tåg som står kvar efter sin avgångstid räknas upp
+  som "beräknad". Ett läge som bara tidtabellen gav räknas som i tid.
+- **Status i tidtabellen:** varje tåg visar var det är, till exempel "På väg
+  mot Bor", "Väntar i Alvesta", "Vid Bor" eller "Ankom 09:56". Förut stod det
+  "gick 117 min sedan", räknat bara från tidtabellen.
+- **Markering vid ändring:** en rad som just ändrats lyser upp kort och får
+  "Nyss". Det sker aldrig när listan ritas första gången. Med minskad rörelse
+  blir det bara "Nyss".
+- **`/v1/display` har `movement_live`:** per rörelse läge, spår och
+  träffklockans tid för ankomst och avgång. Tiden kommer ur händelserna.
+  - En övergång som systemet räknade fram i efterhand ("tåget hoppar fram")
+    har ingen tid.
+  - Vem som gjorde något och anteckningar lämnas aldrig ut.
+  - Ett nytt index på `tkl_events` och en cache gör att det inte kostar något
+    vid varje uppdatering.
+
 ### Tågdiagrammet på Drift går med klockan
 
 Casper såg inte tågen röra sig i diagrammet. Drift hämtar läget när något

@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+from hashlib import sha256
 from time import monotonic
 
 from .operations import _time_to_seconds
@@ -37,6 +38,13 @@ STATE_SETTING = "automatic_stations_state"
 # administrator or a TKL terminal names it in the request.
 NAMED_STATION_KINDS = {"web_admin", "swift_admin", "tkl_terminal"}
 REQUEST_LEAD_SECONDS = 120
+# Störningar i automatiken (Casper 2026-10-08: förseningsdelarna ur
+# simuleringen, som en del av automatiken, med en inställning i admin).
+# (andel av tågen i procent, längsta extra minuter) som simuleringens profiler.
+DISTURBANCE_SETTING = "automatic_disturbance"
+DISTURBANCE_PROFILES = {"off": (0, 0), "normal": (25, 4), "disrupted": (65, 12)}
+DISTURBANCE_PLACES = ("both", "station", "line")
+DEFAULT_DISTURBANCE = {"profile": "off", "where": "both", "seed": "", "stabling": True, "stabling_minutes": 5}
 
 
 class AutomaticStations:
@@ -62,6 +70,47 @@ class AutomaticStations:
     def set_enabled(self, enabled: bool) -> None:
         with self.store.command_lock:
             self.runtime._save_setting(ENABLED_SETTING, "true" if enabled else "false")
+
+    def disturbance(self) -> dict:
+        """Störningar och undanställning: admins val, annars inga störningar
+        och undanställning efter fem spelminuter."""
+        try:
+            saved = json.loads(self.runtime._setting(DISTURBANCE_SETTING) or "{}")
+        except ValueError:
+            saved = {}
+        return {**DEFAULT_DISTURBANCE, **{key: value for key, value in saved.items() if key in DEFAULT_DISTURBANCE}}
+
+    def set_disturbance(self, values: dict) -> dict:
+        settings = {**self.disturbance(), **{key: value for key, value in values.items() if key in DEFAULT_DISTURBANCE}}
+        if settings["profile"] not in DISTURBANCE_PROFILES:
+            raise ValueError("Välj Av, Normal eller Störd trafik.")
+        if settings["where"] not in DISTURBANCE_PLACES:
+            raise ValueError("Välj var störningarna sker.")
+        if not isinstance(settings["seed"], str) or len(settings["seed"]) > 40:
+            raise ValueError("Scenarionyckeln får vara högst 40 tecken.")
+        if not isinstance(settings["stabling"], bool):
+            raise ValueError("Undanställningen är på eller av.")
+        if type(settings["stabling_minutes"]) is not int or not 1 <= settings["stabling_minutes"] <= 60:
+            raise ValueError("Undanställningen sker efter 1–60 spelminuter.")
+        with self.store.command_lock:
+            self.runtime._save_setting(DISTURBANCE_SETTING, json.dumps(settings, ensure_ascii=False, sort_keys=True))
+        return settings
+
+    def _delay(self, kind: str, key: str) -> float:
+        """Extra spelsekunder för ett tåg: stationsarbete före avgången
+        ("station") eller längre gångtid före ankomsten ("line"). Samma nyckel
+        ger samma störningar, som i simuleringen."""
+        settings = getattr(self, "_settings", None) or DEFAULT_DISTURBANCE
+        chance, limit = DISTURBANCE_PROFILES.get(settings["profile"], (0, 0))
+        if not limit or settings["where"] not in (kind, "both"):
+            return 0.0
+        value = int(sha256(f"{getattr(self, '_seed', '')}:{kind}:{key}".encode()).hexdigest()[:12], 16)
+        return float((1 + value // 100 % limit) * 60) if value % 100 < chance else 0.0
+
+    def stabled_movements(self, publication, day) -> set:
+        """Tåg som ställts undan vid en automatisk slutstation: de håller
+        inte längre sitt spår."""
+        return set(self._state(publication, day).get("stabled", {}))
 
     def running(self) -> bool:
         """Automatic stations act only in normal operation, never in a simulation."""
@@ -168,6 +217,20 @@ class AutomaticStations:
         self.blocked.clear()
         self._acted = False
 
+    def new_day(self, publication, day: str, start_seconds: float) -> None:
+        """En ny trafikdag (midnatt eller tidsmaskinen): automatiken börjar om
+        från `start_seconds` för den nya dagens tåg. Vem som arbetar var står
+        kvar. Dagens tider tas bort av operations.start_traffic_day. Körs mitt
+        i övergången, när ingen träff räknas som vald: därför anges den här."""
+        try:
+            saved = json.loads(self.runtime._setting(STATE_SETTING) or "{}")
+        except ValueError:
+            saved = {}
+        state = {"key": [publication.publication_id, day], "stations": saved.get("stations", {}),
+                 "suppressed": [], "start": float(start_seconds)}
+        self._save(state)
+        self.blocked.clear()
+
     # ------------------------------------------------------------- traffic
 
     def guard(self, actor, station) -> None:
@@ -228,6 +291,8 @@ class AutomaticStations:
             legs = self.legs(publication, day)
             if not legs:
                 return
+            self._settings = self.disturbance()
+            self._seed = self._settings["seed"] or f"{publication.publication_id}:{day}"
             self._ensure_events()
             times = {(action, movement): when for action, movement, when in self.store._connection.execute(
                 "SELECT action, movement_id, seconds FROM automatic_events WHERE publication_id=? AND day=?",
@@ -254,6 +319,37 @@ class AutomaticStations:
                     # What one train did changes what the next one sees.
                     live, cases = read()
             self.blocked = blocked
+            if self._settings["stabling"]:
+                self._stable(publication, day, legs, live, times, seconds)
+
+    def _stable(self, publication, day, legs, live, times, seconds) -> None:
+        """Undanställning vid en automatisk slutstation: ett tåg som har
+        kommit fram och slutar där rangeras bort efter några spelminuter, så
+        att spåret blir fritt för nästa tåg. Utan det håller tåget sitt spår
+        resten av dagen, och mottagaren säger "Mottagningsspåret är upptaget".
+        Ingen avgång hittas på; ankomsten står kvar i historiken."""
+        rows = {str(row["id"]): row for row in publication.payload["trains"]}
+        state = self._state(publication, day)
+        stabled = state.setdefault("stabled", {})
+        wait = self._settings["stabling_minutes"] * 60
+        changed = False
+        for leg in legs.values():
+            movement, station = leg["to_movement_id"], leg["to_station_id"]
+            if movement in stabled or rows.get(movement, {}).get("departure_time"):
+                continue
+            if self.mode(station, state) != "automatic" or live[station].get(movement, {}).get("arrival") != "arrived":
+                continue
+            arrived = times.get(("train.arrived", movement), leg["arrival"])
+            if seconds < arrived + wait:
+                continue
+            stabled[movement] = seconds
+            changed = True
+            self.store.record_audit_event(correlation_id=f"automatic-{publication.publication_id}", source="automatic",
+                actor=ACTOR, action="automatic.stabled", outcome="accepted", station_id=station, movement_id=movement,
+                detail={"game_seconds": seconds, "description": "Rangerat till uppställning utanför trafikspåren"})
+        if changed:
+            self._save(state)
+            self.store.after_commit(self.service.notify_changed)
 
     def _step(self, key, leg, legs, seconds, state, times, live, cases, publication, day):
         sender, receiver = leg["from_station_id"], leg["to_station_id"]
@@ -263,7 +359,7 @@ class AutomaticStations:
             if self.mode(receiver, state) != "automatic":
                 return "Väntar på mottagarens ankomst"
             departed = times.get(("train.departed", key), leg["departure"])
-            if seconds < departed + leg["duration"]:
+            if seconds < departed + leg["duration"] + self._delay("line", key):
                 return "På väg"
             self._act(receiver, "train.arrived", movement_id=leg["to_movement_id"], track_id=leg["track_id"])
             return ""
@@ -300,6 +396,8 @@ class AutomaticStations:
         if automatic_sender and case and case["status"] == "approved" and seconds >= ready:
             self._act(sender, "train.departed", movement_id=key)
             return ""
+        if automatic_sender and case and case["status"] == "approved" and seconds >= leg["departure"]:
+            return "Stationsarbete pågår"
         if case and case["status"] == "waiting":
             return "Väntar på klartecken"
         return ""
@@ -307,12 +405,12 @@ class AutomaticStations:
     def _ready_at(self, key, leg, legs, live, times):
         previous = leg["previous"]
         if previous is None:
-            return leg["departure"]
+            return leg["departure"] + self._delay("station", key)
         prior = legs[previous]
         if live[prior["to_station_id"]].get(prior["to_movement_id"], {}).get("arrival") != "arrived":
             return math.inf
         arrived = times.get(("train.arrived", prior["to_movement_id"]), prior["arrival"])
-        return max(leg["departure"], arrived + leg["dwell"])
+        return max(leg["departure"], arrived + leg["dwell"]) + self._delay("station", key)
 
     def _act(self, station, action, **body):
         self._acted = True
@@ -325,7 +423,7 @@ class AutomaticStations:
             publication, day = self._context()
             simulation = self.service.simulation
             result = {"enabled": self.enabled(), "simulation": bool(simulation and simulation.active),
-                      "stations": [], "trains": [], "plan_errors": []}
+                      "stations": [], "trains": [], "plan_errors": [], "disturbance": self.disturbance()}
             if publication is None:
                 return result
             state = self._state(publication, day)

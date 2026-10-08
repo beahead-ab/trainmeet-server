@@ -143,7 +143,7 @@
     const start = $("#overview-clock-start"), stop = $("#overview-clock-stop");
     if (start) start.hidden = Boolean(clock.running);
     if (stop) stop.hidden = !clock.running;
-    const day = $("#overview-day"); if (day && ctx.snapshot?.active_day) day.textContent = ctx.snapshot.active_day;
+    const day = $("#overview-day"); if (day && ctx.snapshot?.active_day) day.textContent = globalThis.meetDayLabel ? globalThis.meetDayLabel(ctx.snapshot) : ctx.snapshot.active_day;
   }
 
   // ── Nyckeltal ─────────────────────────────────────────────────────────
@@ -259,11 +259,46 @@
     return next ? t("avgår {station} → {next}", { station: event.station, next }) : t("avgår {station}", { station: event.station });
   }
   const eventIn = (event) => (event.delta <= 0 ? t("nu") : t("{n} min", { n: event.delta }));
+
+  // Som i SJ:s app, i den mängd användaren valt (fem nivåer, förval 2): en
+  // rad som just ändrats lyser upp kort och får "Nyss"; från nivå 3 syns
+  // förseningen, från nivå 4 som röd bricka med den nya tiden.
+  const FLASH_MS = 2000, RECENT_MS = 30000;
+  let fresh = model.changeTracker(), trackedLevel = null;
+  // Att byta nivå är ingen ändring i trafiken: minnet börjar om, inget lyser upp.
+  const levelNow = () => {
+    const value = model.deviationLevel(ctx.snapshot, globalThis.deviationOwnLevel?.() ?? "");
+    if (trackedLevel !== null && value !== trackedLevel) fresh = model.changeTracker();
+    trackedLevel = value;
+    return value;
+  };
+  function markOf(view) {
+    const mark = view.mark;
+    if (!mark) return null;
+    const label = globalThis.deviationLabel ? globalThis.deviationLabel(view) : mark.text;
+    const cls = mark.tone === "early" ? "tm-early" : mark.style === "text" ? "tm-delay tm-delay--text" : "tm-delay";
+    return h("span", { class: `${cls} tm-flip`, title: label, "aria-label": label }, mark.text);
+  }
+  const eventTime = (event, view) => (view.strike && event.expectedTime
+    ? h("span", { class: "t" }, h("span", { class: "tm-was" }, event.time), h("span", { class: "tm-new tm-flip" }, event.expectedTime))
+    : h("span", { class: "t" }, event.time));
+  const eventWhen = (event, view) => h("span", { class: "in" }, view.mark?.style === "pill" ? markOf(view) : eventIn(event));
+  /** Markera en rad som ändrats sedan förra gången den ritades. */
+  function markFresh(row, key, signature, label = row, view = { flash: true }) {
+    const changedAt = fresh.note(key, signature, Date.now());
+    if (changedAt === null || !view.flash) return row;
+    const age = Date.now() - changedAt;
+    if (age < FLASH_MS) { row.classList.add("is-updated"); row.style.animationDelay = `-${age}ms`; }
+    if (age < RECENT_MS) label.append(h("span", { class: "tm-recent" }, t("Nyss")));
+    return row;
+  }
+  // Det som syns ingår i signaturen: på nivå 2 är det läget, inte minuterna.
+  const eventSignature = (event, view) => [event.time, event.state, view.mark?.text || "", view.estimated];
   function renderEvents() {
     const host = $("#drift-upcoming"), snapshot = ctx.snapshot; if (!host || !snapshot) return;
     const { train, station } = ctx.selection;
     const names = model.stationMap(snapshot);
-    const events = model.events(snapshot, { station: train ? null : station, train, limit: 8 });
+    const events = model.events(snapshot, { station: train ? null : station, train, limit: 8, nowSeconds: liveSeconds() });
     const scope = $("#drift-events-scope"), clear = $("#drift-events-clear");
     if (scope) scope.textContent = train ? t("tåg {number}", { number: train }) : station ? (names.get(station)?.name || "") : t("hela banan");
     if (clear) clear.hidden = !(train || station);
@@ -274,13 +309,18 @@
         delayed ? h("span", { class: "kr-tag warn" }, dot(), plural(delayed, "{count} avvikelse", "{count} avvikelser")) : h("span", { class: "kr-tag ok" }, dot(), t("Inga avvikelser")),
         h("span", {}, `· ${delayed ? t("något tåg är senare än tidtabellen") : t("trafiken följer tidtabellen")} · ${t("ofylld bricka = klart men inte avgått")}`));
     }
-    if (!changed("events", [events, train, station, root.lang])) return;
+    const level = levelNow();
+    if (!changed("events", [events, train, station, root.lang, level])) return;
     if (!events.length) { host.replaceChildren(h("p", { class: "kr-empty" }, t("Inga fler planerade händelser idag."))); return; }
     host.replaceChildren(...events.map((event) => {
       const selected = train === event.train;
+      const view = model.deviationView(level, event);
       const mark = event.state === "on-line" ? badge(event.train, { selected }) : event.state === "cleared" ? badge(event.train, { hollow: true, selected }) : badge(event.train, { plain: true, selected });
-      return h("button", { type: "button", class: `kr-ev${selected ? " sel" : ""}`, data: { trainNumber: event.train }, "aria-pressed": String(selected), on: { click: () => hooks.selectTrain?.(event.train) } },
-        h("span", { class: "t" }, event.time), mark, h("span", { class: "w" }, eventText(event, names)), h("span", { class: "in" }, eventIn(event)));
+      const what = h("span", { class: "w" }, eventText(event, names));
+      if (view.mark?.style === "text") what.append(" ", markOf(view));
+      const row = h("button", { type: "button", class: `kr-ev${selected ? " sel" : ""}${view.mark ? ` is-${view.mark.tone}` : ""}`, data: { trainNumber: event.train }, "aria-pressed": String(selected), on: { click: () => hooks.selectTrain?.(event.train) } },
+        eventTime(event, view), mark, what, eventWhen(event, view));
+      return markFresh(row, `ev|${event.train}|${event.kind}|${event.stationId}`, eventSignature(event, view), what, view);
     }));
   }
 
@@ -305,6 +345,7 @@
     target.replaceChildren();
     target.onclick = (event) => { if (event.target === target) hooks.clear?.(); };
     const parts = [];
+    const lives = levelNow() >= 5 ? model.trainLive(ctx.snapshot, liveSeconds()) : null;
     // Tiden som redan har gått ligger i en svagt skuggad yta.
     if (g.now !== null) parts.push(svg("rect", { class: "sh", x: left, y: 4, width: Math.max(0, x(g.now) - left), height: height - 18 }));
     g.stations.forEach((station, row) => {
@@ -344,6 +385,9 @@
         const mark = svg("g", { class: "tr-tag", "data-train-number": line.number, "pointer-events": "none" });
         mark.append(svg("rect", { class: `${cleared ? "tbh" : "tb"}${line.selected ? " sel" : ""}`, x: x(marker.minute) - w - 6, y: y(marker.row) - 11, width: w, height: 22, rx: 6 }),
           svg("text", { class: cleared ? "tbht" : "tbt", x: x(marker.minute) - w / 2 - 6, y: y(marker.row) + 5, "text-anchor": "middle" }, line.number));
+        // Nivå 5 (Allt): förseningen ovanför taggen.
+        const view = lives ? model.deviationView(5, lives.get(String(line.number))) : null;
+        if (view?.mark) mark.append(svg("text", { class: `graph-train-mark is-${view.mark.tone}`, x: x(marker.minute) - w - 6, y: y(marker.row) - 14 }, view.mark.text));
         lit.push(mark);
       }
     }
@@ -436,7 +480,7 @@
     const here = model.stationCounts(snapshot).get(station.id) || [];
     const devices = ctx.devices.filter((device) => device.station_id === station.id);
     const place = model.placement(ctx.presentation, station.id);
-    const events = model.events(snapshot, { station: station.id, limit: 5 });
+    const events = model.events(snapshot, { station: station.id, limit: 5, nowSeconds: liveSeconds() });
     if (!changed("station-aside", [station.id, here, devices.map((device) => [device.device_code, device.connection?.state]), place, events, ctx.selection.train, root.lang])) return;
     const names = model.stationMap(snapshot);
     const links = (snapshot.connections || []).filter((c) => c.station_a_id === station.id || c.station_b_id === station.id).length;
@@ -455,8 +499,13 @@
       : h("p", { class: "kr-aside__note" }, t("Ingen box tilldelad."))));
     if (place.available) body.push(section(t("Vänster · höger"), h("p", { class: "mono kr-aside__plain" }, `${place.left.join(", ") || "—"} · ${place.right.join(", ") || "—"}`)));
     body.push(section(t("Nästa här"), events.length
-      ? h("div", { class: "kr-events kr-events--tight" }, events.map((event) => h("button", { type: "button", class: "kr-ev", on: { click: () => hooks.selectTrain?.(event.train) } },
-        h("span", { class: "t" }, event.time), badge(event.train, { plain: true }), h("span", { class: "w" }, eventText(event, names)), h("span", { class: "in" }, eventIn(event)))))
+      ? h("div", { class: "kr-events kr-events--tight" }, events.map((event) => {
+        const view = model.deviationView(levelNow(), event);
+        const what = h("span", { class: "w" }, eventText(event, names));
+        if (view.mark?.style === "text") what.append(" ", markOf(view));
+        return h("button", { type: "button", class: `kr-ev${view.mark ? ` is-${view.mark.tone}` : ""}`, on: { click: () => hooks.selectTrain?.(event.train) } },
+          eventTime(event, view), badge(event.train, { plain: true }), what, eventWhen(event, view));
+      }))
       : h("p", { class: "kr-aside__note" }, t("Inga fler planerade händelser idag."))));
     host.replaceChildren(...body);
   }
@@ -604,12 +653,17 @@
 
   // En gång i sekunden medan klockan går: klockan och diagrammet. Diagrammet
   // ritas inte om medan ett tåg i det har fokus från tangentbordet.
+  let ticks = 0;
   function tick() {
     const clock = ctx.clock || ctx.snapshot?.clock;
     if (!clock?.running || doc.hidden) return;
     renderClock();
     const graph = $("#overview-graph");
     if (!ctx.us && graph && graph.getClientRects().length && !graph.contains(doc.activeElement)) renderGraph();
+    // Nästa händelser räknas om var femte sekund medan klockan går: "om N min"
+    // och ett tåg som står kvar och blir allt senare, även utan ny hämtning.
+    ticks += 1;
+    if (!ctx.us && ticks % 5 === 0) renderEvents();
   }
 
   function init() { wireChrome(); wireSearch(); wireDialogs(); scheduleRender(); setInterval(tick, 1000); }

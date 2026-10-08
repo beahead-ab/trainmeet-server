@@ -253,6 +253,7 @@
             <b id="pv-meet-name">TrainMeet Server</b><span id="pv-region" class="pv-badge"></span>
             <span class="pv-spacer"></span>
             <span id="pv-live" class="pv-live" title="Uppdateras direkt när något ändras" data-tm-title="Uppdateras direkt när något ändras"></span>
+            <button id="pv-view-open" class="pv-login pv-view-open" type="button" aria-haspopup="dialog">Visning</button>
             <a id="pv-login" class="pv-login" href="/login">Logga in</a>
           </header>
           <div class="pv-page">
@@ -304,6 +305,10 @@
             </div>
           </div>
           <footer class="pv-foot"><span id="pv-foot-meta"></span></footer>
+          <dialog id="pv-view-card" class="pv-sheet pv-sheet--small" aria-labelledby="pv-view-title">
+            <div class="pv-head"><span id="pv-view-title">Visning</span><span class="pv-c">gäller den här webbläsaren</span><span class="pv-spacer"></span><button id="pv-view-close" class="pv-x" type="button" aria-label="Stäng" data-tm-aria-label="Stäng">×</button></div>
+            <fieldset class="pv-levels"><legend>Förseningar och för tidiga tåg</legend><div id="pv-view-levels" role="radiogroup"></div></fieldset>
+          </dialog>
           <dialog id="pv-connect-card" class="pv-sheet" aria-labelledby="pv-connect-title">
             <div class="pv-head"><span id="pv-connect-title">Anslut din TMBox</span><span class="pv-c">tre steg, i den här ordningen</span><span class="pv-spacer"></span><button id="pv-connect-close" class="pv-x" type="button" aria-label="Stäng" data-tm-aria-label="Stäng">×</button></div>
             <div class="pv-steps">
@@ -352,6 +357,7 @@
               <button id="overview-clock-stop" class="kr-btn danger" type="button">Stoppa klockan</button>
               <button id="overview-clock-start" class="kr-btn primary" type="button" hidden>Starta klockan</button>
               <button id="clock-adjust" class="kr-btn" type="button" data-open-modal="clock-control-form-modal">Justera…</button>
+              <button id="time-machine-open" class="kr-btn" type="button" data-open-modal="time-machine-modal" title="Hoppa till en annan dag och tid; alla tåg följer med">Tidsmaskin…</button>
             </div>
             <span class="kr-vsep" aria-hidden="true"></span>
             <div id="drift-simulation" class="kr-sim">
@@ -610,6 +616,7 @@
             <a class="kr-nav" href="/installningar#uppdatering" data-section="uppdatering" data-group="servern">Programuppdatering</a>
             <span class="kr-grp" data-group="webblasaren">Webbläsaren</span>
             <a class="kr-nav" href="/installningar#sprak" data-section="sprak" data-group="webblasaren">Språk</a>
+            <a class="kr-nav" href="/installningar#visning" data-section="visning" data-group="webblasaren">Visning</a>
             <span class="kr-sp"></span>
             <a class="kr-nav danger" href="/installningar#farozon" data-section="farozon">Farozon</a>
             <span id="settings-version" class="kr-navver"></span>
@@ -640,6 +647,14 @@
                 <p class="form-message" role="status"></p>
                 <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
               </form>
+              <form id="meet-calendar-form" class="kr-panel kr-setform" aria-label="Träffens dagar" data-tm-aria-label="Träffens dagar" novalidate hidden>
+                <div class="kr-ph"><span>Träffens dagar</span><span class="kr-c">vid midnatt går träffen till nästa dag, med den dagens tidtabell</span></div>
+                <div class="kr-rows">
+                  <div class="kr-kv"><span class="kr-k">Börjar på</span><select id="meet-start-day" class="kr-btn sm" aria-label="Träffens startdag" data-tm-aria-label="Träffens startdag" data-change-label="Startdag"></select><span id="meet-calendar-note" class="kr-m"></span></div>
+                </div>
+                <p class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
               <form id="traffic-side-form" class="kr-panel kr-setform" aria-label="Trafik på dubbelspår" data-tm-aria-label="Trafik på dubbelspår" novalidate hidden>
                 <div class="kr-rows">
                   <div class="kr-kv"><span class="kr-k">Dubbelspår</span><select id="traffic-side" class="kr-btn sm" aria-label="Trafik på dubbelspår" data-tm-aria-label="Trafik på dubbelspår" data-change-label="Trafik på dubbelspår"></select><span id="traffic-side-note" class="kr-m"></span></div>
@@ -660,6 +675,18 @@
               <form id="automatic-form" class="kr-panel kr-setform" aria-label="Obemannade stationer" novalidate>
                 <div class="kr-rows">
                   <div class="kr-kv"><span class="kr-k">Automatik</span><label class="kr-switch"><input id="automatic-enabled" type="checkbox" data-change-label="Automatik"><span>Stationer utan TMBox eller TKL sköts automatiskt</span></label></div>
+                </div>
+                <p class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+              <form id="automatic-disturbance-form" class="kr-panel kr-setform" aria-label="Störningar och undanställning" data-tm-aria-label="Störningar och undanställning" novalidate>
+                <div class="kr-ph"><span>Störningar och undanställning</span><span class="kr-c">gäller de automatiska stationerna</span></div>
+                <div class="kr-rows">
+                  <div class="kr-kv"><span class="kr-k">Störningar</span><select id="automatic-disturbance-profile" class="kr-btn sm" aria-label="Störningar" data-tm-aria-label="Störningar" data-change-label="Störningar"><option value="off">Av – tågen går enligt tidtabellen</option><option value="normal">Normal trafik – vart fjärde tåg, 1–4 min</option><option value="disrupted">Störd trafik – två av tre tåg, 1–12 min</option></select></div>
+                  <div class="kr-kv"><span class="kr-k">Var</span><select id="automatic-disturbance-where" class="kr-btn sm" aria-label="Var störningarna sker" data-tm-aria-label="Var störningarna sker" data-change-label="Var"><option value="both">Vid stationen och på linjen</option><option value="station">Vid stationen – stationsarbete före avgång</option><option value="line">På linjen – längre gångtid</option></select></div>
+                  <div class="kr-kv"><span class="kr-k">Scenarionyckel</span><input id="automatic-disturbance-seed" class="kr-field kr-w-md" maxlength="40" autocomplete="off" placeholder="Samma nyckel ger samma störningar" data-tm-placeholder="Samma nyckel ger samma störningar" data-change-label="Scenarionyckel"></div>
+                  <div class="kr-kv"><span class="kr-k">Undanställning</span><label class="kr-switch"><input id="automatic-stabling" type="checkbox" data-change-label="Undanställning"><span>Tåg som slutar vid en automatisk station rangeras bort, så att spåret blir fritt</span></label></div>
+                  <div class="kr-kv"><span class="kr-k">Efter</span><input id="automatic-stabling-minutes" class="kr-field kr-w-xs" type="number" min="1" max="60" step="1" data-change-label="Spelminuter"><span class="kr-m">spelminuter</span></div>
                 </div>
                 <p class="form-message" role="status"></p>
                 <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
@@ -687,6 +714,15 @@
                   <div class="kr-kv"><span class="kr-k">Tidsformat</span><span>24 timmar</span><span class="kr-m">följer träffens typ · US-träffar visar AM/PM</span></div>
                 </div>
                 <p id="clock-appearance-message" class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+              <form id="deviation-level-form" class="kr-panel kr-setform" aria-label="Förseningar och för tidiga tåg" data-tm-aria-label="Förseningar och för tidiga tåg" novalidate hidden>
+                <div class="kr-ph"><span>Förseningar och för tidiga tåg</span><span class="kr-c">förval för träffen, skärmarna, TKL och apparna · var och en kan välja eget</span></div>
+                <div class="kr-rows">
+                  <div class="kr-kv"><span class="kr-k">Visa</span><select id="deviation-level" class="kr-btn sm" aria-label="Hur mycket avvikelser som visas" data-tm-aria-label="Hur mycket avvikelser som visas" data-change-label="Förseningar och för tidiga tåg"></select><span id="deviation-level-note" class="kr-m"></span></div>
+                  <div class="kr-kv"><span class="kr-k">För tidigt</span><span class="kr-m">En för tidig avgång markeras bara för persontåg; godståg och arbetståg får gå tidigare.</span></div>
+                </div>
+                <p class="form-message" role="status"></p>
                 <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
               </form>
               <section class="kr-panel" aria-label="Skärmarna">
@@ -857,6 +893,19 @@
               </section>
             </section>
 
+            <!-- 8b · Visning -->
+            <section id="visning" class="kr-setsec" data-section="visning" aria-labelledby="visning-title" hidden>
+              <div class="kr-sectitle"><h1 id="visning-title">Visning</h1><span>gäller den här webbläsaren · träffens förval ändras under Skärmar och klocka</span></div>
+              <form id="browser-deviation-form" class="kr-panel kr-setform" aria-label="Förseningar i den här webbläsaren" data-tm-aria-label="Förseningar i den här webbläsaren" novalidate>
+                <div class="kr-ph"><span>Förseningar och för tidiga tåg</span><span class="kr-c">Drift och deltagarvyn i den här webbläsaren</span></div>
+                <div class="kr-rows">
+                  <div class="kr-kv"><span class="kr-k">Visa</span><select id="browser-deviation-level" class="kr-btn sm" aria-label="Hur mycket avvikelser som visas här" data-tm-aria-label="Hur mycket avvikelser som visas här" data-change-label="Förseningar i den här webbläsaren"></select><span id="browser-deviation-note" class="kr-m"></span></div>
+                </div>
+                <p class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+            </section>
+
             <!-- 9 · Farozon -->
             <section id="farozon" class="kr-setsec" data-section="farozon" aria-labelledby="farozon-title" hidden>
               <div class="kr-sectitle"><h1 id="farozon-title" class="danger">Farozon</h1><span>varje åtgärd bekräftas i ett eget fönster</span></div>
@@ -921,6 +970,18 @@
                 <button type="button" class="secondary" data-close-modal>Avbryt</button>
                 <button id="stop-local-clock" class="secondary" type="button"><tm-text data-tm-text="Stoppa">Stoppa</tm-text></button>
                 <button class="primary" type="submit"><tm-text data-tm-text="Spara">Spara</tm-text></button>
+              </div>
+</form>
+</dialog>
+<dialog id="time-machine-modal" class="admin-modal" aria-labelledby="time-machine-title"><h2 id="time-machine-title">Tidsmaskin</h2>
+<form id="time-machine-form" class="clock-control-form">
+              <p class="kr-m">Hoppa till en dag och en tid. Alla tåg flyttas dit tidtabellen säger då, och alla statusar för ankomst och avgång nollställs. En säkerhetskopia tas först.</p>
+              <label><tm-text data-tm-text="Dag">Dag</tm-text><select id="time-machine-day"></select></label>
+              <label><tm-text data-tm-text="Klockslag">Klockslag</tm-text><input id="time-machine-time" type="time" step="60" value="06:00" required></label>
+              <p id="time-machine-message" class="form-message" role="status"></p>
+              <div class="modal-actions">
+                <button type="button" class="secondary" data-close-modal>Avbryt</button>
+                <button class="primary" type="submit"><tm-text data-tm-text="Hoppa dit">Hoppa dit</tm-text></button>
               </div>
 </form>
 </dialog>
@@ -1142,6 +1203,7 @@
           <select id="display-clock-style" class="kr-btn sm display-select hidden" aria-label="Klockstil på den här skärmen" data-tm-aria-label="Klockstil på den här skärmen"></select>
           <select id="display-clock-seconds" class="kr-btn sm display-select hidden" aria-label="Sekunder på den här skärmen" data-tm-aria-label="Sekunder på den här skärmen"></select>
           <select id="display-graph-window" class="kr-btn sm display-select hidden" aria-label="Tidsfönster i tågdiagrammet" data-tm-aria-label="Tidsfönster i tågdiagrammet"></select>
+          <select id="display-deviation-level" class="kr-btn sm display-select hidden" aria-label="Förseningar på den här skärmen" data-tm-aria-label="Förseningar på den här skärmen"></select>
           <select id="display-train-select" class="kr-btn sm display-select hidden" aria-label="Välj tåg" data-tm-aria-label="Välj tåg"><option value="" data-tm-text="Alla tåg">Alla tåg</option></select>
           <span class="kr-sp"></span>
           <span id="display-day" class="kr-pill"><tm-text data-tm-text="Dagl">Dagl</tm-text></span>

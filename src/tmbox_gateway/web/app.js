@@ -680,7 +680,7 @@ function setMode(mode) {
 
 function showSettings() {
   globalThis.TrainMeetSettings?.show();
-  Promise.allSettled([checkSoftwareUpdate(), refreshUsers(), refreshBackups(), refreshRuntime(), refreshDevices(), refreshAutomatic(), refreshTrafficSide()]);
+  Promise.allSettled([checkSoftwareUpdate(), refreshUsers(), refreshBackups(), refreshRuntime(), refreshDevices(), refreshAutomatic(), refreshTrafficSide(), refreshDeviationLevel()]);
 }
 
 // ── Obemannade stationer (issue #115) ─────────────────────────────────────
@@ -714,6 +714,16 @@ function renderAutomatic(data) {
     enabled.checked = Boolean(data.enabled);
     globalThis.TrainMeetSettings?.rebase(form);
   }
+  const disturbance = document.querySelector("#automatic-disturbance-form");
+  if (disturbance && data.disturbance && !editorActive(disturbance)) {
+    document.querySelector("#automatic-disturbance-profile").value = data.disturbance.profile;
+    document.querySelector("#automatic-disturbance-where").value = data.disturbance.where;
+    document.querySelector("#automatic-disturbance-seed").value = data.disturbance.seed || "";
+    document.querySelector("#automatic-stabling").checked = Boolean(data.disturbance.stabling);
+    document.querySelector("#automatic-stabling-minutes").value = String(data.disturbance.stabling_minutes);
+    globalThis.TrainMeetSettings?.rebase(disturbance);
+  }
+  if (disturbance) disturbance.hidden = !data.supported;
   document.querySelector("#automatic-note").textContent = t(!data.supported ? "Koppla en EU-träff först."
     : data.simulation ? "Pausad medan simuleringen körs." : data.enabled ? "Aktiv när träffklockan går." : "Avstängd.");
   const host = document.querySelector("#automatic-stations");
@@ -780,6 +790,20 @@ document.querySelector("#automatic-form").addEventListener("submit", async (even
   if (!beginModalAction(form)) return;
   try {
     await sendAutomatic({action: "enable", enabled: document.querySelector("#automatic-enabled").checked});
+    finishModal(form);
+  } catch (error) {
+    setMessage(form.querySelector(".form-message"), error.message, "error");
+  } finally { endModalAction(form); }
+});
+
+document.querySelector("#automatic-disturbance-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!beginModalAction(form)) return;
+  try {
+    await sendAutomatic({ action: "disturbance", profile: document.querySelector("#automatic-disturbance-profile").value,
+      where: document.querySelector("#automatic-disturbance-where").value, seed: document.querySelector("#automatic-disturbance-seed").value.trim(),
+      stabling: document.querySelector("#automatic-stabling").checked, stabling_minutes: Number(document.querySelector("#automatic-stabling-minutes").value) });
     finishModal(form);
   } catch (error) {
     setMessage(form.querySelector(".form-message"), error.message, "error");
@@ -887,6 +911,7 @@ function openModal(id, trigger = document.activeElement) {
   }
   modalOrigins.set(dialog, trigger);
   if (id === "clock-source-modal") dialog.dataset.meetGeneration = String(state.serverContext?.selected_meet?.generation ?? "");
+  if (id === "time-machine-modal") fillTimeMachine();
   modalSections.set(dialog, trigger?.closest("section"));
   modalValues.set(dialog, [...dialog.querySelectorAll("input, select, textarea")].map((input) => [input, input.value, input.checked]));
   dialog.dataset.dirty = "false";
@@ -1579,6 +1604,143 @@ document.querySelector("#traffic-side-form")?.addEventListener("submit", async (
     if (!response.ok) throw new Error(payload.message || t("Inställningen kunde inte sparas."));
     finishModal(form);
     await refreshTrafficSide();
+  } catch (error) {
+    setMessage(form.querySelector(".form-message"), error.message, "error");
+  } finally { endModalAction(form); }
+});
+
+// Förseningar och för tidiga tåg: träffens förval (admin) och den här
+// webbläsarens eget val. Skärmarna väljer eget i sin verktygsrad.
+async function refreshDeviationLevel() {
+  const form = document.querySelector("#deviation-level-form");
+  if (!form || editorActive(form)) return;
+  const response = await authorizedFetch("/v1/settings/deviation-level");
+  if (!response.ok) { form.hidden = true; return; }
+  const payload = await response.json();
+  const select = document.querySelector("#deviation-level");
+  select.replaceChildren(...deviationLevelOptions(payload.level, { followMeet: false }));
+  select.value = String(payload.level);
+  renderDeviationNote(select, "#deviation-level-note", payload.level);
+  form.hidden = false;
+  globalThis.TrainMeetSettings?.rebase(form);
+  refreshBrowserDeviation(payload.level);
+}
+function renderDeviationNote(select, note, meetLevel) {
+  const level = Number(select.value) || meetLevel;
+  document.querySelector(note).textContent = t(DEVIATION_LEVEL_HINTS[level] || "");
+}
+function refreshBrowserDeviation(meetLevel = state.meetDeviationLevel || TrainMeetDriftModel.DEFAULT_DEVIATION_LEVEL) {
+  state.meetDeviationLevel = meetLevel;
+  const form = document.querySelector("#browser-deviation-form");
+  if (!form || editorActive(form)) return;
+  const select = document.querySelector("#browser-deviation-level");
+  select.replaceChildren(...deviationLevelOptions(meetLevel));
+  select.value = deviationOwnLevel(DEVIATION_LEVEL_KEY);
+  renderDeviationNote(select, "#browser-deviation-note", meetLevel);
+  globalThis.TrainMeetSettings?.rebase(form);
+}
+document.querySelector("#deviation-level")?.addEventListener("change", (event) => renderDeviationNote(event.target, "#deviation-level-note", Number(event.target.value)));
+document.querySelector("#browser-deviation-level")?.addEventListener("change", (event) => renderDeviationNote(event.target, "#browser-deviation-note", state.meetDeviationLevel || 2));
+document.querySelector("#deviation-level-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!beginModalAction(form)) return;
+  try {
+    const response = await authorizedFetch("/v1/settings/deviation-level", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level: Number(document.querySelector("#deviation-level").value) }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || t("Inställningen kunde inte sparas."));
+    finishModal(form);
+    await refreshDeviationLevel();
+  } catch (error) {
+    setMessage(form.querySelector(".form-message"), error.message, "error");
+  } finally { endModalAction(form); }
+});
+document.querySelector("#browser-deviation-form")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const value = document.querySelector("#browser-deviation-level").value;
+  try { if (value) localStorage.setItem(DEVIATION_LEVEL_KEY, value); else localStorage.removeItem(DEVIATION_LEVEL_KEY); } catch { /* privat läge */ }
+  globalThis.TrainMeetSettings?.saved(form);
+  refreshBrowserDeviation();
+});
+
+// ── Träffens dagar och tidsmaskinen ───────────────────────────────────────
+/** Veckodagen på dag `number` när träffen börjar på `start` (som servern). Veckans dagar kommer från servern. */
+function calendarWeekday(calendar, number) {
+  const week = calendar.week || [];
+  const index = week.indexOf(calendar.start_day);
+  return index < 0 ? calendar.start_day : week[(index + number - 1) % 7];
+}
+
+function fillTimeMachine() {
+  const snapshot = state.overviewSnapshot || {};
+  const calendar = snapshot.calendar || { start_day: snapshot.active_day || "Dagl", day_number: 1, week: [] };
+  const select = document.querySelector("#time-machine-day");
+  const last = Math.max(7, calendar.day_number + 7);
+  select.replaceChildren(...Array.from({ length: last }, (_, index) => new Option(
+    t("Dag {n} · {day}", { n: index + 1, day: calendarWeekday(calendar, index + 1) }), String(index + 1))));
+  select.value = String(calendar.day_number);
+  document.querySelector("#time-machine-time").value = currentClockTime(snapshot).slice(0, 5);
+  const dialog = document.querySelector("#time-machine-modal");
+  dialog.dataset.meetGeneration = String(state.serverContext?.selected_meet?.generation ?? "");
+  modalValues.set(dialog, [...dialog.querySelectorAll("input, select, textarea")].map((input) => [input, input.value, input.checked]));
+}
+
+document.querySelector("#time-machine-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const message = document.querySelector("#time-machine-message");
+  if (!beginModalAction(form)) return;
+  setMessage(message, t("Tågen flyttas …"), "notice");
+  try {
+    const response = await authorizedFetch("/v1/runtime/time-machine", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ day_number: Number(document.querySelector("#time-machine-day").value),
+        time: document.querySelector("#time-machine-time").value,
+        meet_generation: Number(form.closest("dialog").dataset.meetGeneration) }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || t("Tidsmaskinen kunde inte hoppa."));
+    finishModal(form);
+    setTranslatedMessage(document.querySelector("#overview-clock-message"),
+      t("Dag {n} · {day} kl. {time}. Alla tåg står där tidtabellen säger.", { n: payload.day_number, day: payload.active_day, time: payload.clock?.time?.slice(0, 5) || "" }), "success");
+    await refreshServerContext?.();
+    await refreshLocalClock();
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  } finally { endModalAction(form); }
+});
+
+// Träffens startdag (Inställningar → Träff och Cloud).
+function refreshMeetCalendar() {
+  const form = document.querySelector("#meet-calendar-form");
+  const snapshot = state.overviewSnapshot;
+  if (!form || editorActive(form) || !snapshot?.calendar || state.serverContext?.operating_region !== "eu") { if (form && !snapshot?.calendar) form.hidden = true; return; }
+  const select = document.querySelector("#meet-start-day");
+  const names = { Dagl: t("Alla dagar (Dagl)") };
+  select.replaceChildren(...["Dagl", ...(snapshot.calendar.week || [])].map((day) => new Option(names[day] || day, day)));
+  select.value = snapshot.calendar.start_day;
+  document.querySelector("#meet-calendar-note").textContent = t("I dag: Dag {n} · {day}", { n: snapshot.calendar.day_number, day: snapshot.calendar.weekday });
+  form.hidden = false;
+  globalThis.TrainMeetSettings?.rebase(form);
+}
+document.querySelector("#meet-calendar-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!beginModalAction(form)) return;
+  try {
+    const response = await authorizedFetch("/v1/runtime/calendar", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start_day: document.querySelector("#meet-start-day").value,
+        meet_generation: state.serverContext?.selected_meet?.generation }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || t("Inställningen kunde inte sparas."));
+    finishModal(form);
+    await refreshServerContext?.();
   } catch (error) {
     setMessage(form.querySelector(".form-message"), error.message, "error");
   } finally { endModalAction(form); }
@@ -2360,6 +2522,7 @@ async function refreshLocalClock() {
       const payload = await display.json();
       state.overviewSnapshot = payload;
       renderOverview(payload);
+      refreshMeetCalendar();
     }
   } else {
     const display = await fetch("/v1/display", {cache:"no-store"});
@@ -2970,6 +3133,8 @@ function renderRouteMap() {
     showBadge: false,
     // Only this train: the others are on Banöversikten above.
     onlySelectedTrain: true,
+    // Tåget rör sig med klockan här också, som på Banöversikten.
+    live: true,
     onStationSelect: (stationID) => selectOverviewStation(stationID, true),
   });
   // Cropped to the drawing: a line is mostly long and low, and the whole
@@ -3438,6 +3603,17 @@ function topologyTrainSize(trainNumber, withArrow, kr = false, screen = false) {
   return { font, arrow, pad, textWidth, height: screen ? 22 : kr ? 20 : 16, width: textWidth + pad * 2 + (withArrow ? arrow + gap : 0) };
 }
 
+/** "+7" eller "−2" ovanför tågets tagg, i rött eller grönt (nivå 5). */
+function markTopologyTrain(group, live, size) {
+  if (!live) return;
+  const view = TrainMeetDriftModel.deviationView(5, live);
+  if (!view.mark) return;
+  const text = svgElement("text", { x: size.width / 2 + 2, y: -size.height / 2 - 2, "text-anchor": "start",
+    class: `topology-train-mark is-${view.mark.tone}` }, view.mark.text);
+  text.append(svgElement("title", {}, deviationLabel(view)));
+  group.append(text);
+}
+
 function appendTopologyTrain(target, point, train, options = {}) {
   const kr = Boolean(options.kr);
   const label = String(train.trainNumber);
@@ -3764,6 +3940,8 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     trains.atStation = trains.atStation.filter(chosen);
   }
   const code = (id) => (snapshot.stations || []).find((station) => station.id === id)?.code || "?";
+  // Nivå 5 (Allt): förseningen står också vid tågnumret på kartan.
+  const lives = deviationLevelOf(snapshot) >= 5 ? TrainMeetDriftModel.trainLive(snapshot, topologyClockSeconds(snapshot)) : null;
   const trainOptions = (trainNumber) => ({
     kr: Boolean(kr),
     screen,
@@ -3799,7 +3977,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const clearTo = edgeOf(train.to) + (kr ? 8 : 7) + reach;
     // Ett avgånget tåg rör sig mot nästa station i takt med träffklockan; ett
     // som bara har klart står en bit ut från stationen det ska lämna.
-    const moving = Boolean(kr && train.departed && topologyLegTimes(snapshot, train));
+    const moving = Boolean((kr || options.live) && train.departed && topologyLegTimes(snapshot, train));
     const travelled = () => {
       const low = Math.min(clear, length / 2), high = Math.max(length - clearTo, low);
       return low + (high - low) * topologyProgress(snapshot, train, topologyClockSeconds(snapshot));
@@ -3843,6 +4021,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
         : t("Tåg {number} · {route} · klart, inte avgått", { number: train.trainNumber, route }),
     }, trainOptions(train.trainNumber));
     if (moving && snapshot.clock?.running) motion.push({ group, place: () => spot(travelled()) });
+    markTopologyTrain(group, lives?.get(train.trainNumber), size);
   }
   // Inside a station: a row of tags beside it, at most three and then +N, on
   // the first side that covers neither a name nor a line: above, below, left,
@@ -4112,12 +4291,17 @@ function renderGraph(snapshot) {
       const box = {x1: bx, x2: bx + w, y1: by, y2: by + h};
       if (!free(box)) continue;
       placed.push(box);
-      layer(entry).append(svgElement("rect", {x: bx, y: by, width: w, height: h, rx: 4, class: "sc-graph-tag"}),
+      const group = layer(entry);
+      group.append(svgElement("rect", {x: bx, y: by, width: w, height: h, rx: 4, class: "sc-graph-tag"}),
         svgElement("text", {x: bx + w / 2, y: by + 13, "text-anchor": "middle", class: "sc-graph-tag-text"}, text));
+      // Nivå 5 (Allt): förseningen vid tågnumret.
+      const view = graphLives ? TrainMeetDriftModel.deviationView(5, graphLives.get(text)) : null;
+      if (view?.mark) group.append(svgElement("text", {x: bx + w + 3, y: by + 13, class: `graph-train-mark is-${view.mark.tone}`}, view.mark.text));
       return;
     }
     label(entry);
   };
+  const graphLives = deviationLevelOf(snapshot) >= 5 ? TrainMeetDriftModel.trainLive(snapshot, topologyClockSeconds(snapshot)) : null;
   drawn.filter(entry => entry.out).forEach(tag);
   drawn.filter(entry => !entry.out).forEach(label);
   svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top - pad, y2:height - bottom + pad, class:"sc-graph-now"}), labels);
@@ -4378,35 +4562,49 @@ function renderClock(snapshot) {
   if (!digital) updateAnalogClockHands(target, seconds, style, !stopped);
 }
 
+// Skärmens Nästa händelser: hur länge sedan en rad ändrades, eller null.
+let screenChanges = globalThis.TrainMeetDriftModel?.changeTracker(), screenLevel = null;
+function screenFresh(key, signature) {
+  const changedAt = screenChanges?.note(key, signature, Date.now()) ?? null;
+  return changedAt === null ? null : Date.now() - changedAt;
+}
+
 function renderDashboard(snapshot) {
   const target = document.querySelector("#dashboard-view");
   const positions = snapshot.train_positions || [];
   const now = currentClockTime(snapshot).slice(0, 5);
   const onLine = screenOnLine(snapshot);
   const late = onLine.filter((train) => train.late);
-  const upcoming = (snapshot.routes || []).filter(r => (r.departure_time || r.arrival_time || "") >= now).sort((a,b)=>(a.departure_time||a.arrival_time).localeCompare(b.departure_time||b.arrival_time)).slice(0,4);
+  // Samma händelser som på Drift och i deltagarvyn: var tåget är och hur sent.
+  const model = globalThis.TrainMeetDriftModel;
+  const upcoming = model.events(snapshot, { limit: 4, nowSeconds: currentClockSeconds(snapshot) });
   const stationName = id => snapshot.stations?.find(s=>s.id===id)?.name || id || "—";
   const staffed = snapshot.staffed_station_count;
   // The lists as in the design (SkarmOversikt): time, train, what happens
   // and in how long; the trains out on the line with when they are due.
-  const routes = snapshot.routes || [];
-  const nowMinute = minuteValue(now) ?? 0;
-  const eventRow = (route) => {
-    const time = route.departure_time || route.arrival_time;
-    const sibling = (step) => route.service_id ? routes.find((other) => other.service_id === route.service_id && Number(other.stop_order) === Number(route.stop_order) + step) : null;
-    const next = sibling(1), previous = sibling(-1), station = stationName(route.station_id);
-    const what = route.departure_time
-      ? (next ? t("avgår {station} mot {next}", { station, next: stationName(next.station_id) }) : t("avgår {station}", { station }))
-      : (previous ? t("ankommer {station} från {previous}", { station, previous: stationName(previous.station_id) }) : t("ankommer {station}", { station }));
-    const delta = ((minuteValue(time) ?? nowMinute) - nowMinute + 1440) % 1440;
-    return html`<div class="server-event dash-row"><span class="dash-time">${escapeHTML(time)}</span><b>${escapeHTML(route.train_number)}</b><span class="dash-what">${escapeHTML(what)}</span><span class="dash-in">${escapeHTML(delta === 0 ? t("nu") : t("{n} min", { n: delta }))}</span></div>`;
+  const level = deviationLevelOf(snapshot);
+  // Att byta nivå är ingen ändring i trafiken: minnet börjar om, inget lyser upp.
+  if (screenLevel !== null && level !== screenLevel) screenChanges = TrainMeetDriftModel.changeTracker();
+  screenLevel = level;
+  const eventRow = (event) => {
+    const station = stationName(event.stationId);
+    const what = event.kind === "dep"
+      ? (event.nextStationId ? t("avgår {station} mot {next}", { station, next: stationName(event.nextStationId) }) : t("avgår {station}", { station }))
+      : (event.previousStationId ? t("ankommer {station} från {previous}", { station, previous: stationName(event.previousStationId) }) : t("ankommer {station}", { station }));
+    const delta = Math.max(0, event.delta);
+    const view = TrainMeetDriftModel.deviationView(level, event);
+    const time = view.strike && event.expectedTime ? `<span class="tm-was">${escapeHTML(event.time)}</span><span class="tm-new tm-flip">${escapeHTML(event.expectedTime)}</span>` : escapeHTML(event.time);
+    const when = view.mark?.style === "pill" ? deviationMarkHTML(view) : escapeHTML(delta === 0 ? t("nu") : t("{n} min", { n: delta }));
+    const quiet = view.mark?.style === "text" ? ` ${deviationMarkHTML(view)}` : "";
+    const age = view.flash ? screenFresh(`${event.train}|${event.kind}|${event.stationId}`, [event.time, event.state, view.mark?.text || "", view.estimated]) : null;
+    return html`<div class="server-event dash-row${view.mark ? ` is-${view.mark.tone}` : ""}${age !== null && age < 2000 ? " is-updated" : ""}" data-fresh-age="${age ?? ""}"><span class="dash-time">${time}</span><b>${escapeHTML(event.train)}</b><span class="dash-what">${escapeHTML(what)}${quiet}${age !== null && age < 30000 ? `<span class="tm-recent">${escapeHTML(t("Nyss"))}</span>` : ""}</span><span class="dash-in">${when}</span></div>`;
   };
   const shownOnLine = onLine.length > 3 ? onLine.slice(0, 2) : onLine;
   const lineRows = shownOnLine.map((train) => html`<div class="server-event dash-row dash-row--line"><b>${escapeHTML(train.train)}</b><span class="dash-what">${escapeHTML(train.from)} → ${escapeHTML(train.to)}</span><span class="dash-in${train.late ? " is-late" : ""}">${train.due ? escapeHTML(t("ank {time}", { time: train.due })) : ""}</span></div>`).join("")
     + (onLine.length > shownOnLine.length ? html`<div class="server-event dash-row dash-row--more">${escapeHTML(t("och {n} till", { n: onLine.length - shownOnLine.length }))}</div>` : "");
   const status = late.length ? (late.length === 1 ? t("1 sen ankomst") : t("{n} sena ankomster", { n: late.length })) : `${t("Inga avvikelser")} · ${t("trafiken följer tidtabellen")}`;
   target.innerHTML = html`<div class="dashboard-column">
-    <section class="display-card dashboard-clock-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><div class="dashboard-clock-meta"><b>${escapeHTML(snapshot.meet?.name || "TrainMeet")}</b><span class="dashboard-run${snapshot.clock?.running ? "" : " is-stopped"}">${snapshot.clock?.running ? `${escapeHTML(t("Klockan går"))} · ${Number(snapshot.clock?.speed || 1)}×` : escapeHTML(t("Klockan är stoppad"))}</span><span class="dashboard-day">${escapeHTML(snapshot.active_day || "")}</span></div></section>
+    <section class="display-card dashboard-clock-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><div class="dashboard-clock-meta"><b>${escapeHTML(snapshot.meet?.name || "TrainMeet")}</b><span class="dashboard-run${snapshot.clock?.running ? "" : " is-stopped"}">${snapshot.clock?.running ? `${escapeHTML(t("Klockan går"))} · ${Number(snapshot.clock?.speed || 1)}×` : escapeHTML(t("Klockan är stoppad"))}</span><span class="dashboard-day">${escapeHTML(meetDayLabel(snapshot))}</span></div></section>
     <section class="display-card dashboard-stats">
       <div class="dashboard-stat"><b>${onLine.length}</b><span>tåg på linjen</span></div>
       <div class="dashboard-stat"><b>${positions.filter(p=>p.station_id && !p.connection_id).length}</b><span>inne på stationerna</span></div>
@@ -4416,6 +4614,8 @@ function renderDashboard(snapshot) {
   </div><section class="display-card"><svg id="dashboard-topology" class="display-visual" role="img" aria-label="Banöversikt"></svg></section>
   <div class="server-dashboard-bottom"><section class="display-card dash-card"><div class="dash-head"><h3>Nästa händelser</h3><span>de fyra närmaste</span></div>${upcoming.map(eventRow).join("") || html`<p class="dash-empty">Inga fler planerade händelser idag.</p>`}</section>
   <section class="display-card dash-card"><div class="dash-head"><h3>På linjen just nu</h3><span>tåg · sträcka · ankomst</span></div>${lineRows || html`<p class="dash-empty">Inget tåg är ute på linjen</p>`}<p class="dash-status${late.length ? " is-late" : ""}">${escapeHTML(status)}</p></section></div>`;
+  // En rad som just ändrats tonar ut från där den var, även om skärmen ritats om.
+  for (const row of target.querySelectorAll(".is-updated[data-fresh-age]")) row.style.animationDelay = `-${row.dataset.freshAge}ms`;
   // Draw for the height the card really has, so station names stay at their 30 px.
   const dashboardMap = document.querySelector("#dashboard-topology");
   renderTopology(snapshot, dashboardMap, { kr: screenMapSize(dashboardMap, 1200, 450) });
@@ -4519,6 +4719,50 @@ function renderConnectionBadge(snapshot) {
   document.querySelector("#display-connection-code").textContent = connection.code;
 }
 
+// Träffens dag: "Dag 2 · Lör" när träffen har en kalender, annars trafikdagen.
+function meetDayLabel(snapshot) {
+  const calendar = snapshot?.calendar;
+  if (!calendar) return snapshot?.active_day || "";
+  return t("Dag {n} · {day}", { n: calendar.day_number, day: calendar.weekday || snapshot.active_day || "" });
+}
+
+// ── Hur mycket förseningar och för tidiga tåg som visas ───────────────────
+// Fem nivåer (drift-model.js deviationView). Admin sätter träffens förval
+// under Inställningar; varje webbläsare och varje skärm kan välja eget.
+const DEVIATION_LEVEL_KEY = "trainmeet.deviationLevel";
+const DISPLAY_DEVIATION_LEVEL_KEY = "trainmeet.displayDeviationLevel";
+const DEVIATION_LEVEL_NAMES = { 1: "Ingen markering", 2: "När det inträffar", 3: "Diskret", 4: "Fler", 5: "Allt" };
+const DEVIATION_LEVEL_HINTS = {
+  1: "Bara tidtabellens tider, inget rött och ingen markering",
+  2: "Raden lyser kort och får Nyss när något händer",
+  3: "Dessutom förseningen i liten röd text från 5 min",
+  4: "Röd bricka från 3 min, den nya tiden och för tidig avgång för persontåg",
+  5: "Allt från 1 min, även för tidig ankomst och vid tågen på kartan",
+};
+function deviationOwnLevel(key = displayKind ? DISPLAY_DEVIATION_LEVEL_KEY : DEVIATION_LEVEL_KEY) {
+  try { return localStorage.getItem(key) || ""; } catch { return ""; }
+}
+function deviationLevelOf(snapshot) { return TrainMeetDriftModel.deviationLevel(snapshot, deviationOwnLevel()); }
+function deviationLabel(view) {
+  const mark = view.mark;
+  if (!mark) return "";
+  return mark.tone === "early" ? t("{minutes} min för tidigt", { minutes: mark.minutes })
+    : t("{minutes} min sen", { minutes: mark.minutes }) + (view.estimated ? ` · ${t("beräknad")}` : "");
+}
+function deviationMarkHTML(view) {
+  const mark = view.mark;
+  if (!mark) return "";
+  const label = escapeHTML(deviationLabel(view));
+  const cls = mark.tone === "early" ? "tm-early" : mark.style === "text" ? "tm-delay tm-delay--text" : "tm-delay";
+  return `<span class="${cls} tm-flip" title="${label}" aria-label="${label}">${escapeHTML(mark.text)}</span>`;
+}
+/** Valen i en lista: "Som träffen (…)" och de fem nivåerna. */
+function deviationLevelOptions(meetLevel, { followMeet = true } = {}) {
+  const named = (level) => `${level} · ${t(DEVIATION_LEVEL_NAMES[level])}`;
+  return [...(followMeet ? [new Option(t("Som träffen: {level}", { level: named(meetLevel) }), "")] : []),
+    ...TrainMeetDriftModel.DEVIATION_LEVELS.map((level) => new Option(named(level), String(level)))];
+}
+
 // ── Skärmarnas verktygsrad ───────────────────────────────────────────────
 // Fönsterläge: raden står kvar. Helskärm (webbläsarens eller kioskens): raden
 // döljs efter fyra sekunder och kommer tillbaka vid musrörelse eller tryck.
@@ -4561,6 +4805,27 @@ function renderDisplayThemeChoice() {
   select.value = displayTheme();
 }
 
+// Förseningar på den här skärmen: tomt följer träffens förval.
+// Tågdiagrammet på skärmen går med klockan varje sekund, som på Drift, och
+// inte bara när en ny bild hämtas.
+setInterval(() => {
+  if (displayKind === "graph" && displaySnapshot?.clock?.running && !document.hidden) renderGraph(displaySnapshot);
+}, 1000);
+
+function renderDisplayDeviationLevel(snapshot) {
+  const select = document.querySelector("#display-deviation-level");
+  if (!select) return;
+  const listed = ["dashboard", "topology", "graph"].includes(displayKind) && snapshot?.meet?.operating_region !== "us";
+  select.classList.toggle("hidden", !listed);
+  const meet = TrainMeetDriftModel.deviationLevel(snapshot);
+  const signature = [globalThis.TrainMeetI18n?.getLanguage?.() || "", meet].join("|");
+  if (select.dataset.signature !== signature) {
+    select.dataset.signature = signature;
+    select.replaceChildren(...deviationLevelOptions(meet).map((option) => { option.textContent = `${t("Förseningar")}: ${option.textContent}`; return option; }));
+  }
+  select.value = displayStored(DISPLAY_DEVIATION_LEVEL_KEY);
+}
+
 function renderDisplayGraphWindow() {
   const select = document.querySelector("#display-graph-window");
   select.classList.toggle("hidden", displayKind !== "graph");
@@ -4597,12 +4862,13 @@ function renderDisplay(snapshot) {
   const screenNames = { topology: t("Banöversikt"), graph: t("Tågdiagram"), clock: t("Träffklocka"), dashboard: t("Översikt"), territories: t("Områdestavla") };
   document.querySelector("#display-title").textContent = screenNames[displayKind];
   document.title = `${screenNames[displayKind]} · ${snapshot.meet?.name || "TrainMeet"}`;
-  document.querySelector("#display-day").textContent = snapshot.active_day || "Dagl";
+  document.querySelector("#display-day").textContent = meetDayLabel(snapshot) || "Dagl";
   const isClock = displayKind === "clock";
   document.querySelector("#display-clock-style").classList.toggle("hidden", !isClock);
   document.querySelector("#display-clock-seconds").classList.toggle("hidden", !isClock);
   renderDisplaySwitch(snapshot);
   renderDisplayGraphWindow();
+  renderDisplayDeviationLevel(snapshot);
   renderDisplayThemeChoice();
   const trainSelect = document.querySelector("#display-train-select");
   const trainSelectable = displayKind === "topology" || displayKind === "graph";
@@ -4681,6 +4947,10 @@ async function initDisplay() {
   document.querySelector("#display-theme").addEventListener("change", (event) => {
     displayStore(DISPLAY_THEME_KEY, event.target.value);
     applyDisplayTheme(event.target.value);
+    if (displaySnapshot) renderDisplay(displaySnapshot);
+  });
+  document.querySelector("#display-deviation-level")?.addEventListener("change", (event) => {
+    displayStore(DISPLAY_DEVIATION_LEVEL_KEY, event.target.value);
     if (displaySnapshot) renderDisplay(displaySnapshot);
   });
   document.querySelector("#display-graph-window").addEventListener("change", (event) => {

@@ -248,7 +248,9 @@ class HTTPServerTests(unittest.TestCase):
         for row in table["rows"]:
             self.assertEqual(row["state"], "planned")
             self.assertIn(row["kind"], {"departure", "arrival"})
-            self.assertEqual(set(row), {"movement_id", "train_number", "kind", "time", "station", "side", "track", "state", "selected"})
+            self.assertEqual(set(row), {"movement_id", "train_number", "kind", "time", "station", "side", "track", "state", "selected",
+                                        "delay_minutes", "expected_time", "estimated", "early_minutes", "early_kind", "train_type"})
+        self.assertEqual(table["deviation_level"], 2)
         frame = self._json_request("/v1/tmbox/terminal", token=token)
         self.assertEqual(frame["keys"]["A"]["short"], "KÖ")
         self.assertEqual(frame["entry"]["short"]["#"], "SÖK")

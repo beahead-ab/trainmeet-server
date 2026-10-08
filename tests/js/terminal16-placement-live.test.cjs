@@ -227,7 +227,8 @@ const root = path.resolve(__dirname, '../..');
     // The operational browser client has no simulator configuration controls.
     await page.goto(urls.eu + '/tmbox/');
     await page.locator('.box-code').getByText(/^WEB/).waitFor();
-    assert.equal(await page.locator('#placement-dialog, #placement-open, select').count(), 0);
+    // Its one list is the delay level for its timetable, a view setting.
+    assert.equal(await page.locator('#placement-dialog, #placement-open, select:not(#box-deviation-level)').count(), 0);
     const identity = await page.evaluate(() => JSON.parse(localStorage.getItem('trainmeet.browser-tmbox')));
     await admin.request.post(urls.eu + '/v1/devices/assign', {data: {device_code: identity.device_code, station_id: 'station-a'}});
     await page.locator('.box h2').getByText('Charlottendahl', {exact: true}).waitFor();
