@@ -357,6 +357,7 @@
               <button id="overview-clock-stop" class="kr-btn danger" type="button">Stoppa klockan</button>
               <button id="overview-clock-start" class="kr-btn primary" type="button" hidden>Starta klockan</button>
               <button id="clock-adjust" class="kr-btn" type="button" data-open-modal="clock-control-form-modal">Justera…</button>
+              <button id="time-machine-open" class="kr-btn" type="button" data-open-modal="time-machine-modal" title="Hoppa till en annan dag och tid; alla tåg följer med">Tidsmaskin…</button>
             </div>
             <span class="kr-vsep" aria-hidden="true"></span>
             <div id="drift-simulation" class="kr-sim">
@@ -642,6 +643,14 @@
                   <div class="kr-kv" data-eu-only><span class="kr-k">Tidtabell</span><a class="kr-btn sm" href="/tidtabell">Öppna tidtabellen</a><span class="kr-m">justera tider, spår och sträckor här, direkt i driften</span></div>
                   <div class="kr-kv"><span class="kr-k">Automatiskt</span><label class="kr-switch"><input id="cloud-auto-enabled" type="checkbox" data-change-label="Hämta automatiskt"><span>Hämta publicerade versioner automatiskt</span></label></div>
                   <div class="kr-kv"><span class="kr-k">Byt träff</span><button type="button" class="kr-btn sm" data-open-modal="runtime-sync-form-modal">Byt träff…</button><span class="kr-m">användare och nätverk behålls · stationstilldelningarna följer inte med</span></div>
+                </div>
+                <p class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+              <form id="meet-calendar-form" class="kr-panel kr-setform" aria-label="Träffens dagar" data-tm-aria-label="Träffens dagar" novalidate hidden>
+                <div class="kr-ph"><span>Träffens dagar</span><span class="kr-c">vid midnatt går träffen till nästa dag, med den dagens tidtabell</span></div>
+                <div class="kr-rows">
+                  <div class="kr-kv"><span class="kr-k">Börjar på</span><select id="meet-start-day" class="kr-btn sm" aria-label="Träffens startdag" data-tm-aria-label="Träffens startdag" data-change-label="Startdag"></select><span id="meet-calendar-note" class="kr-m"></span></div>
                 </div>
                 <p class="form-message" role="status"></p>
                 <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
@@ -949,6 +958,18 @@
                 <button type="button" class="secondary" data-close-modal>Avbryt</button>
                 <button id="stop-local-clock" class="secondary" type="button"><tm-text data-tm-text="Stoppa">Stoppa</tm-text></button>
                 <button class="primary" type="submit"><tm-text data-tm-text="Spara">Spara</tm-text></button>
+              </div>
+</form>
+</dialog>
+<dialog id="time-machine-modal" class="admin-modal" aria-labelledby="time-machine-title"><h2 id="time-machine-title">Tidsmaskin</h2>
+<form id="time-machine-form" class="clock-control-form">
+              <p class="kr-m">Hoppa till en dag och en tid. Alla tåg flyttas dit tidtabellen säger då, och alla statusar för ankomst och avgång nollställs. En säkerhetskopia tas först.</p>
+              <label><tm-text data-tm-text="Dag">Dag</tm-text><select id="time-machine-day"></select></label>
+              <label><tm-text data-tm-text="Klockslag">Klockslag</tm-text><input id="time-machine-time" type="time" step="60" value="06:00" required></label>
+              <p id="time-machine-message" class="form-message" role="status"></p>
+              <div class="modal-actions">
+                <button type="button" class="secondary" data-close-modal>Avbryt</button>
+                <button class="primary" type="submit"><tm-text data-tm-text="Hoppa dit">Hoppa dit</tm-text></button>
               </div>
 </form>
 </dialog>

@@ -47,3 +47,4 @@ jobs:
           node tests/js/topology-rails.test.cjs
           node tests/js/server-unreachable.test.cjs
           node tests/js/live-timetable.test.cjs
+          node tests/js/meet-calendar.test.cjs

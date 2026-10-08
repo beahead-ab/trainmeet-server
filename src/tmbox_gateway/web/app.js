@@ -887,6 +887,7 @@ function openModal(id, trigger = document.activeElement) {
   }
   modalOrigins.set(dialog, trigger);
   if (id === "clock-source-modal") dialog.dataset.meetGeneration = String(state.serverContext?.selected_meet?.generation ?? "");
+  if (id === "time-machine-modal") fillTimeMachine();
   modalSections.set(dialog, trigger?.closest("section"));
   modalValues.set(dialog, [...dialog.querySelectorAll("input, select, textarea")].map((input) => [input, input.value, input.checked]));
   dialog.dataset.dirty = "false";
@@ -1640,6 +1641,85 @@ document.querySelector("#browser-deviation-form")?.addEventListener("submit", (e
   try { if (value) localStorage.setItem(DEVIATION_LEVEL_KEY, value); else localStorage.removeItem(DEVIATION_LEVEL_KEY); } catch { /* privat läge */ }
   globalThis.TrainMeetSettings?.saved(form);
   refreshBrowserDeviation();
+});
+
+// ── Träffens dagar och tidsmaskinen ───────────────────────────────────────
+/** Veckodagen på dag `number` när träffen börjar på `start` (som servern). Veckans dagar kommer från servern. */
+function calendarWeekday(calendar, number) {
+  const week = calendar.week || [];
+  const index = week.indexOf(calendar.start_day);
+  return index < 0 ? calendar.start_day : week[(index + number - 1) % 7];
+}
+
+function fillTimeMachine() {
+  const snapshot = state.overviewSnapshot || {};
+  const calendar = snapshot.calendar || { start_day: snapshot.active_day || "Dagl", day_number: 1, week: [] };
+  const select = document.querySelector("#time-machine-day");
+  const last = Math.max(7, calendar.day_number + 7);
+  select.replaceChildren(...Array.from({ length: last }, (_, index) => new Option(
+    t("Dag {n} · {day}", { n: index + 1, day: calendarWeekday(calendar, index + 1) }), String(index + 1))));
+  select.value = String(calendar.day_number);
+  document.querySelector("#time-machine-time").value = currentClockTime(snapshot).slice(0, 5);
+  const dialog = document.querySelector("#time-machine-modal");
+  dialog.dataset.meetGeneration = String(state.serverContext?.selected_meet?.generation ?? "");
+  modalValues.set(dialog, [...dialog.querySelectorAll("input, select, textarea")].map((input) => [input, input.value, input.checked]));
+}
+
+document.querySelector("#time-machine-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const message = document.querySelector("#time-machine-message");
+  if (!beginModalAction(form)) return;
+  setMessage(message, t("Tågen flyttas …"), "notice");
+  try {
+    const response = await authorizedFetch("/v1/runtime/time-machine", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ day_number: Number(document.querySelector("#time-machine-day").value),
+        time: document.querySelector("#time-machine-time").value,
+        meet_generation: Number(form.closest("dialog").dataset.meetGeneration) }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || t("Tidsmaskinen kunde inte hoppa."));
+    finishModal(form);
+    setTranslatedMessage(document.querySelector("#overview-clock-message"),
+      t("Dag {n} · {day} kl. {time}. Alla tåg står där tidtabellen säger.", { n: payload.day_number, day: payload.active_day, time: payload.clock?.time?.slice(0, 5) || "" }), "success");
+    await refreshServerContext?.();
+    await refreshLocalClock();
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  } finally { endModalAction(form); }
+});
+
+// Träffens startdag (Inställningar → Träff och Cloud).
+function refreshMeetCalendar() {
+  const form = document.querySelector("#meet-calendar-form");
+  const snapshot = state.overviewSnapshot;
+  if (!form || editorActive(form) || !snapshot?.calendar || state.serverContext?.operating_region !== "eu") { if (form && !snapshot?.calendar) form.hidden = true; return; }
+  const select = document.querySelector("#meet-start-day");
+  const names = { Dagl: t("Alla dagar (Dagl)") };
+  select.replaceChildren(...["Dagl", ...(snapshot.calendar.week || [])].map((day) => new Option(names[day] || day, day)));
+  select.value = snapshot.calendar.start_day;
+  document.querySelector("#meet-calendar-note").textContent = t("I dag: Dag {n} · {day}", { n: snapshot.calendar.day_number, day: snapshot.calendar.weekday });
+  form.hidden = false;
+  globalThis.TrainMeetSettings?.rebase(form);
+}
+document.querySelector("#meet-calendar-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!beginModalAction(form)) return;
+  try {
+    const response = await authorizedFetch("/v1/runtime/calendar", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start_day: document.querySelector("#meet-start-day").value,
+        meet_generation: state.serverContext?.selected_meet?.generation }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || t("Inställningen kunde inte sparas."));
+    finishModal(form);
+    await refreshServerContext?.();
+  } catch (error) {
+    setMessage(form.querySelector(".form-message"), error.message, "error");
+  } finally { endModalAction(form); }
 });
 
 function renderCloudStatus() {
@@ -2418,6 +2498,7 @@ async function refreshLocalClock() {
       const payload = await display.json();
       state.overviewSnapshot = payload;
       renderOverview(payload);
+      refreshMeetCalendar();
     }
   } else {
     const display = await fetch("/v1/display", {cache:"no-store"});
@@ -4496,7 +4577,7 @@ function renderDashboard(snapshot) {
     + (onLine.length > shownOnLine.length ? html`<div class="server-event dash-row dash-row--more">${escapeHTML(t("och {n} till", { n: onLine.length - shownOnLine.length }))}</div>` : "");
   const status = late.length ? (late.length === 1 ? t("1 sen ankomst") : t("{n} sena ankomster", { n: late.length })) : `${t("Inga avvikelser")} · ${t("trafiken följer tidtabellen")}`;
   target.innerHTML = html`<div class="dashboard-column">
-    <section class="display-card dashboard-clock-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><div class="dashboard-clock-meta"><b>${escapeHTML(snapshot.meet?.name || "TrainMeet")}</b><span class="dashboard-run${snapshot.clock?.running ? "" : " is-stopped"}">${snapshot.clock?.running ? `${escapeHTML(t("Klockan går"))} · ${Number(snapshot.clock?.speed || 1)}×` : escapeHTML(t("Klockan är stoppad"))}</span><span class="dashboard-day">${escapeHTML(snapshot.active_day || "")}</span></div></section>
+    <section class="display-card dashboard-clock-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><div class="dashboard-clock-meta"><b>${escapeHTML(snapshot.meet?.name || "TrainMeet")}</b><span class="dashboard-run${snapshot.clock?.running ? "" : " is-stopped"}">${snapshot.clock?.running ? `${escapeHTML(t("Klockan går"))} · ${Number(snapshot.clock?.speed || 1)}×` : escapeHTML(t("Klockan är stoppad"))}</span><span class="dashboard-day">${escapeHTML(meetDayLabel(snapshot))}</span></div></section>
     <section class="display-card dashboard-stats">
       <div class="dashboard-stat"><b>${moving.length}</b><span>tåg på linjen</span></div>
       <div class="dashboard-stat"><b>${positions.filter(p=>p.station_id && !p.connection_id).length}</b><span>inne på stationerna</span></div>
@@ -4606,6 +4687,13 @@ function renderConnectionBadge(snapshot) {
   if (!visible) return;
   document.querySelector("#display-connection-address").textContent = `TMBox ${address}`;
   document.querySelector("#display-connection-code").textContent = connection.code;
+}
+
+// Träffens dag: "Dag 2 · Lör" när träffen har en kalender, annars trafikdagen.
+function meetDayLabel(snapshot) {
+  const calendar = snapshot?.calendar;
+  if (!calendar) return snapshot?.active_day || "";
+  return t("Dag {n} · {day}", { n: calendar.day_number, day: calendar.weekday || snapshot.active_day || "" });
 }
 
 // ── Hur mycket förseningar och för tidiga tåg som visas ───────────────────
@@ -4738,7 +4826,7 @@ function renderDisplay(snapshot) {
   const screenNames = { topology: t("Banöversikt"), graph: t("Tågdiagram"), clock: t("Träffklocka"), dashboard: t("Översikt"), territories: t("Områdestavla") };
   document.querySelector("#display-title").textContent = screenNames[displayKind];
   document.title = `${screenNames[displayKind]} · ${snapshot.meet?.name || "TrainMeet"}`;
-  document.querySelector("#display-day").textContent = snapshot.active_day || "Dagl";
+  document.querySelector("#display-day").textContent = meetDayLabel(snapshot) || "Dagl";
   const isClock = displayKind === "clock";
   document.querySelector("#display-clock-style").classList.toggle("hidden", !isClock);
   document.querySelector("#display-clock-seconds").classList.toggle("hidden", !isClock);

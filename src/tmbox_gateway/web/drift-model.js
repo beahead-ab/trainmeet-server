@@ -165,7 +165,12 @@
    * delta = minuter från träffklockan; 0 eller mindre visas som "nu".
    */
   function events(snapshot, { station = null, train = null, limit = 8, nowSeconds = null } = {}) {
-    const now = Number.isFinite(nowSeconds) ? Math.floor(nowSeconds / 60) : minutes(snapshot?.clock?.time) ?? 0;
+    // Stoppen räknas på tjänstens dygn: ett stopp efter midnatt (service_day_offset 1)
+    // ligger efter kvällens. Går klockan förbi midnatt på gårdagens dag (tåg som
+    // kör klart innan dagen byts) ligger nu också på andra dygnet.
+    const base = Number.isFinite(nowSeconds) ? Math.floor(nowSeconds / 60) : minutes(snapshot?.clock?.time) ?? 0;
+    const now = base + (Number(snapshot?.clock?.elapsed_seconds) >= 86400 && base < 720 ? 1440 : 0);
+    const stopAt = (stop, key) => { const value = minutes(stop?.[key]); return value === null ? null : value + Number(stop.service_day_offset || 0) * 1440; };
     const names = stationMap(snapshot);
     const states = trainStates(snapshot);
     const listed = services(snapshot);
@@ -176,7 +181,7 @@
       return index >= 0 ? stops[index + step]?.station_id || null : null;
     };
     const build = (number, stop, kind, at) => ({
-      time: hhmm(at), minute: minutes(at), delta: minutes(at) - now, train: String(number), stationId: stop.station_id,
+      time: hhmm(at), minute: stopAt(stop, kind === "dep" ? "departure_time" : "arrival_time"), delta: stopAt(stop, kind === "dep" ? "departure_time" : "arrival_time") - now, train: String(number), stationId: stop.station_id,
       station: names.get(stop.station_id)?.name || stop.station_id,
       kind, nextStationId: kind === "dep" ? nextAfter(number, stop.station_id) : null,
       previousStationId: kind === "arr" ? nextAfter(number, stop.station_id, -1) : null,
@@ -187,7 +192,7 @@
 
     if (train) {
       for (const stop of rowsOf(train)) {
-        const arrival = minutes(stop.arrival_time), departure = minutes(stop.departure_time);
+        const arrival = stopAt(stop, "arrival_time"), departure = stopAt(stop, "departure_time");
         if (departure !== null && departure >= now) result.push(build(train, stop, "dep", stop.departure_time));
         else if (arrival !== null && arrival >= now) result.push(build(train, stop, "arr", stop.arrival_time));
       }
@@ -195,7 +200,7 @@
       for (const service of listed) {
         for (const stop of orderedStops(service)) {
           if (stop.station_id !== station) continue;
-          const arrival = minutes(stop.arrival_time), departure = minutes(stop.departure_time);
+          const arrival = stopAt(stop, "arrival_time"), departure = stopAt(stop, "departure_time");
           if (arrival !== null && arrival >= now) result.push(build(service.train_number, stop, "arr", stop.arrival_time));
           if (departure !== null && departure >= now && departure !== arrival) result.push(build(service.train_number, stop, "dep", stop.departure_time));
         }
@@ -217,7 +222,8 @@
         if (!event && !live) {
           for (const stop of stops) {
             const at = stop.departure_time || stop.arrival_time;
-            if (minutes(at) !== null && minutes(at) >= now) { event = build(number, stop, stop.departure_time ? "dep" : "arr", at); break; }
+            const minute = stopAt(stop, stop.departure_time ? "departure_time" : "arrival_time");
+            if (minute !== null && minute >= now) { event = build(number, stop, stop.departure_time ? "dep" : "arr", at); break; }
           }
         }
         if (event) result.push(event);

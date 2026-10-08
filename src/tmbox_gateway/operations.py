@@ -338,6 +338,69 @@ class SQLiteOperationsStore:
             publication, day or publication.active_day, float(_plan_start_seconds(publication)))["placed"]
         return removed
 
+    def start_traffic_day(self, publication: RuntimePublication, day: str, clock_seconds: float, *,
+                          previous_day: str | None = None, everything: bool = False) -> dict[str, int]:
+        """Börja en ny trafikdag: alla statusar för ankomst och avgång är nollställda.
+
+        Vid midnatt (träffkalendern) tas den nya dagens rader bort: de kan
+        finnas kvar från samma veckodag en vecka tidigare, eller från ett
+        besök med tidsmaskinen. Gårdagens rader står kvar som historik.
+        Med `everything` (tidsmaskinen) tas allt som hänt i publikationen
+        bort, för alla dagar, som vid en nollställning.
+
+        Tågens lägen töms och ställs efter den nya dagens tidtabell vid
+        `clock_seconds`. Klockan ställs på `clock_seconds` och går vidare om
+        den gick; hastigheten står kvar. Pågående TKL-pass följer med till
+        den nya dagen, så att ingen behöver logga in igen. Klockan och
+        lägena före sparas i arkivet.
+        """
+
+        publication_id = publication.publication_id
+        removed: dict[str, int] = {}
+        scope, values = ("publication_id=?", (publication_id,)) if everything else ("publication_id=? AND active_day=?", (publication_id, day))
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    "INSERT INTO runtime_meet_archives VALUES(?,?,?,?,?)",
+                    (str(uuid4()), publication_id, json.dumps(self.clock_status()),
+                     json.dumps(self.positions()), _now_iso()),
+                )
+                removed["clearance_events"] = self._connection.execute(
+                    f"DELETE FROM clearance_events WHERE clearance_id IN (SELECT clearance_id FROM clearances WHERE {scope})", values
+                ).rowcount
+                for table in ("clearances", "line_available_messages", "tkl_movement_states", "tkl_events", "train_readiness"):
+                    removed[table] = self._connection.execute(f"DELETE FROM {table} WHERE {scope}", values).rowcount
+                if self._connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='automatic_events'"
+                ).fetchone():
+                    removed["automatic_events"] = self._connection.execute(
+                        f"DELETE FROM automatic_events WHERE {scope.replace('active_day', 'day')}", values
+                    ).rowcount
+                if previous_day is not None and previous_day != day:
+                    # Ett gammalt pass på den nya dagen avslutas; de som pågår följer med.
+                    self._connection.execute(
+                        "UPDATE tkl_shifts SET status='closed', ended_at=?, updated_at=?"
+                        " WHERE publication_id=? AND active_day=? AND status!='closed'",
+                        (_now_iso(), _now_iso(), publication_id, day))
+                    removed["tkl_shifts_moved"] = self._connection.execute(
+                        "UPDATE tkl_shifts SET active_day=?, updated_at=? WHERE publication_id=? AND active_day=? AND status!='closed'",
+                        (day, _now_iso(), publication_id, previous_day)).rowcount
+                removed["train_positions"] = self._connection.execute("DELETE FROM train_positions").rowcount
+                self._connection.execute("DELETE FROM device_commands")
+                self._connection.execute(
+                    "UPDATE runtime_clock SET publication_id=?, base_seconds=?, base_recorded_at=? WHERE singleton = 1",
+                    (publication_id, float(clock_seconds), _now_iso()),
+                )
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        self._movement_live_cache = None
+        removed["placed"] = self.place_trains_by_timetable(publication, day, float(clock_seconds))["placed"]
+        return removed
+
     def place_trains_by_timetable(self, publication: RuntimePublication, day: str,
                                   clock_seconds: float) -> dict[str, int]:
         """Ställ varje tåg där tidtabellen säger vid klocktiden (#136).

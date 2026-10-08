@@ -1285,3 +1285,18 @@ Discreet|Diskret|Diskret|Diskret|Dezent
 More|Fler|Flere|Flere|Mehr
 Everything|Allt|Alt|Alt|Alles
 The traffic control's default|Trafikledningens förval|Trafikledelsens standard|Trafikkledelsens standard|Vorgabe der Betriebsleitung
+Jump to another day and time; every train follows|Hoppa till en annan dag och tid; alla tåg följer med|Spring til en anden dag og tid; alle tog følger med|Hopp til en annen dag og tid; alle tog følger med|Zu einem anderen Tag und einer anderen Zeit springen; alle Züge folgen
+Time machine…|Tidsmaskin…|Tidsmaskine…|Tidsmaskin…|Zeitmaschine…
+The meet's days|Träffens dagar|Træffets dage|Treffets dager|Die Tage des Treffens
+at midnight the meet moves on to the next day, with that day's timetable|vid midnatt går träffen till nästa dag, med den dagens tidtabell|ved midnat går træffet videre til næste dag med den dags køreplan|ved midnatt går treffet videre til neste dag, med den dagens ruteplan|um Mitternacht geht das Treffen zum nächsten Tag über, mit dessen Fahrplan
+Starts on|Börjar på|Starter på|Starter på|Beginnt am
+The meet's first day|Träffens startdag|Træffets første dag|Treffets første dag|Erster Tag des Treffens
+Time machine|Tidsmaskin|Tidsmaskine|Tidsmaskin|Zeitmaschine
+Jump to a day and a time. Every train moves to where the timetable has it then, and every arrival and departure status is reset. A backup is taken first.|Hoppa till en dag och en tid. Alla tåg flyttas dit tidtabellen säger då, och alla statusar för ankomst och avgång nollställs. En säkerhetskopia tas först.|Spring til en dag og et klokkeslæt. Alle tog flyttes derhen, hvor køreplanen har dem, og alle statusser for ankomst og afgang nulstilles. Der tages en sikkerhedskopi først.|Hopp til en dag og et klokkeslett. Alle tog flyttes dit ruteplanen har dem da, og alle statuser for ankomst og avgang nullstilles. En sikkerhetskopi tas først.|Zu einem Tag und einer Uhrzeit springen. Alle Züge werden dorthin gestellt, wo der Fahrplan sie dann vorsieht, und alle Ankunfts- und Abfahrtsstatus werden zurückgesetzt. Vorher wird eine Sicherung erstellt.
+Jump there|Hoppa dit|Spring derhen|Hopp dit|Dorthin springen
+Day {n} · {day}|Dag {n} · {day}|Dag {n} · {day}|Dag {n} · {day}|Tag {n} · {day}
+Moving the trains …|Tågen flyttas …|Togene flyttes …|Togene flyttes …|Die Züge werden versetzt …
+The time machine could not jump.|Tidsmaskinen kunde inte hoppa.|Tidsmaskinen kunne ikke springe.|Tidsmaskinen kunne ikke hoppe.|Die Zeitmaschine konnte nicht springen.
+Day {n} · {day} at {time}. Every train is where the timetable says.|Dag {n} · {day} kl. {time}. Alla tåg står där tidtabellen säger.|Dag {n} · {day} kl. {time}. Alle tog står, hvor køreplanen siger.|Dag {n} · {day} kl. {time}. Alle tog står der ruteplanen sier.|Tag {n} · {day} um {time}. Alle Züge stehen, wo der Fahrplan es vorsieht.
+Every day (Dagl)|Alla dagar (Dagl)|Alle dage (Dagl)|Alle dager (Dagl)|Jeden Tag (Dagl)
+Today: Day {n} · {day}|I dag: Dag {n} · {day}|I dag: Dag {n} · {day}|I dag: Dag {n} · {day}|Heute: Tag {n} · {day}

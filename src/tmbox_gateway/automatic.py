@@ -168,6 +168,20 @@ class AutomaticStations:
         self.blocked.clear()
         self._acted = False
 
+    def new_day(self, publication, day: str, start_seconds: float) -> None:
+        """En ny trafikdag (midnatt eller tidsmaskinen): automatiken börjar om
+        från `start_seconds` för den nya dagens tåg. Vem som arbetar var står
+        kvar. Dagens tider tas bort av operations.start_traffic_day. Körs mitt
+        i övergången, när ingen träff räknas som vald: därför anges den här."""
+        try:
+            saved = json.loads(self.runtime._setting(STATE_SETTING) or "{}")
+        except ValueError:
+            saved = {}
+        state = {"key": [publication.publication_id, day], "stations": saved.get("stations", {}),
+                 "suppressed": [], "start": float(start_seconds)}
+        self._save(state)
+        self.blocked.clear()
+
     # ------------------------------------------------------------- traffic
 
     def guard(self, actor, station) -> None:
