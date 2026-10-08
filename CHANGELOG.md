@@ -5,6 +5,24 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tågen rör sig i realtid i alla vyer med linjer, och två tåg som möts på dubbelspår
+
+Efter Caspers önskan: alla vyer med linjer ska visa tågrörelser i realtid.
+
+- **Två tåg som möts på dubbelspår** går på var sitt spår, enligt träffens
+  trafiksida, utan att taggarna täcker varandra. Det gäller Drift, skärmarnas
+  Banöversikt och deltagarvyn, och provas nu med två tåg som båda har avgått
+  och möts mitt på sträckan.
+- **Kartan i Tidtabell och tågrutter** (Drift) låter det valda tåget röra sig
+  med klockan, som Banöversikten. Förut stod det still en fjärdedel ut från
+  stationen.
+- **Tågdiagrammet på skärmarna** går med klockan varje sekund, inte bara när
+  en ny bild hämtas.
+- **Nästa händelser och tidtabellen** räknas om medan klockan går, även
+  mellan hämtningarna. Det gäller Drift var femte sekund och deltagarvyn var
+  tionde. "om N min" och ett tåg som står kvar och blir allt senare stämmer
+  alltså hela tiden.
+
 ### Störningar och undanställning i automatiken
 
 Förseningsdelarna ur simuleringen flyttar in i den vanliga automatiken, efter

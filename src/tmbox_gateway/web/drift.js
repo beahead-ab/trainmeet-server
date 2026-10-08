@@ -653,12 +653,17 @@
 
   // En gång i sekunden medan klockan går: klockan och diagrammet. Diagrammet
   // ritas inte om medan ett tåg i det har fokus från tangentbordet.
+  let ticks = 0;
   function tick() {
     const clock = ctx.clock || ctx.snapshot?.clock;
     if (!clock?.running || doc.hidden) return;
     renderClock();
     const graph = $("#overview-graph");
     if (!ctx.us && graph && graph.getClientRects().length && !graph.contains(doc.activeElement)) renderGraph();
+    // Nästa händelser räknas om var femte sekund medan klockan går: "om N min"
+    // och ett tåg som står kvar och blir allt senare, även utan ny hämtning.
+    ticks += 1;
+    if (!ctx.us && ticks % 5 === 0) renderEvents();
   }
 
   function init() { wireChrome(); wireSearch(); wireDialogs(); scheduleRender(); setInterval(tick, 1000); }

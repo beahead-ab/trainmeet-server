@@ -48,3 +48,4 @@ jobs:
           node tests/js/server-unreachable.test.cjs
           node tests/js/live-timetable.test.cjs
           node tests/js/meet-calendar.test.cjs
+          node tests/js/double-track-meet.test.cjs
