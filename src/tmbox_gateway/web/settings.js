@@ -152,7 +152,7 @@
     const angles = faces.handAngles(10 * 3600 + 8 * 60 + 36, face.motion);
     const svg = svgEl("svg", { width: 52, height: 52, viewBox: "0 0 200 200", "aria-hidden": "true" });
     for (const [layer, angle] of [["dial"], ["hour", angles.hour], ["minute", angles.minute], ["second", angles.second], ["top"]]) {
-      const url = faces.layerUrl(face.layers?.[layer]);
+      const url = faces.layerFor(face, layer, faces.pageIsDark());
       if (!url) continue;
       const image = svgEl("image", { href: url, x: 0, y: 0, width: 200, height: 200 });
       if (angle !== undefined) image.setAttribute("transform", `rotate(${angle} 100 100)`);

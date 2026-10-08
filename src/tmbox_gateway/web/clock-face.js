@@ -72,13 +72,17 @@
 
   const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[c]);
   // Bara serverns egna adresser till lagren; aldrig något annat i href.
-  const layerUrl = (url) => (typeof url === "string" && /^\/v1\/clock-faces\/[a-z0-9-]+\/[0-9a-f]{16}\/[a-z]+$/.test(url) ? url : "");
+  const layerUrl = (url) => (typeof url === "string" && /^\/v1\/clock-faces\/[a-z0-9-]+\/[0-9a-f]{16}\/(?:dark-)?[a-z]+$/.test(url) ? url : "");
+  // Sidans tema (kr-theme.js): skärmar och deltagarvyn i mörkt läge använder
+  // paketets mörka variant när det har en.
+  const pageIsDark = () => (typeof document === "undefined" ? true : document.documentElement.dataset.krTheme !== "light");
+  /** Lagrets adress, ur den mörka varianten när skärmen är mörk och paketet har en. */
+  const layerFor = (face, layer, dark) => layerUrl((dark && face?.dark_layers?.[layer]) || face?.layers?.[layer]);
 
   /** En uppladdad klocka som SVG-markup, med visarna där app.js vrider dem. */
-  function markup(face, { showSeconds = true, stopped = false } = {}) {
-    const layers = face?.layers || {};
+  function markup(face, { showSeconds = true, stopped = false, dark = pageIsDark() } = {}) {
     const image = (layer, hand) => {
-      const url = layerUrl(layers[layer]);
+      const url = layerFor(face, layer, dark);
       if (!url) return "";
       const handAttributes = hand ? ` data-clock-hand="${hand}" transform="rotate(0 100 100)"` : "";
       return `<image href="${escape(url)}" x="0" y="0" width="200" height="200" preserveAspectRatio="xMidYMid meet"${handAttributes}/>`;
@@ -88,5 +92,5 @@
       + "</svg>";
   }
 
-  return { PREFIX, DEFAULT_MOTION, handAngles, bounceTracker, remember, isCustom, find, all, markup, layerUrl };
+  return { PREFIX, DEFAULT_MOTION, handAngles, bounceTracker, remember, isCustom, find, all, markup, layerUrl, layerFor, pageIsDark };
 });
