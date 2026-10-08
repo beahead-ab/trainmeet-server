@@ -1179,7 +1179,7 @@ class SQLiteRuntimeStore:
                     (pack.id, pack.name, pack.sha256, json.dumps(pack.manifest(), ensure_ascii=False), uploaded_by, stamp, stamp))
                 self._connection.executemany(
                     "INSERT INTO clock_face_layers(face_id, layer, content_type, data) VALUES (?, ?, ?, ?)",
-                    [(pack.id, name, layer.content_type, layer.data) for name, layer in pack.layers.items()])
+                    [(pack.id, name, layer.content_type, layer.data) for name, layer in pack.stored_layers().items()])
                 self._connection.execute("COMMIT")
             except BaseException:
                 if self._connection.in_transaction:

@@ -13,6 +13,7 @@ import base64
 import contextlib
 import io
 import json
+import re
 import struct
 import tempfile
 import threading
@@ -227,6 +228,54 @@ class ScalingWarningTests(unittest.TestCase):
         self.assertNotIn("<script>alert", page)
 
 
+class DarkVariantTests(unittest.TestCase):
+    """Ett paket kan ha en mörk variant för skärmar i mörkt läge, så att en
+    tavla kan se ut som de tidigare inbyggda gjorde i mörkt läge."""
+
+    DARK = SQUARE.format('<circle cx="100" cy="100" r="96" fill="#15181e"/>')
+
+    def test_dark_layers_are_read_and_stored_beside_the_light_ones(self):
+        result = read_pack(pack({"dial-dark.svg": self.DARK, "hour-dark.svg": HAND}, dark={"dial": "dial-dark.svg", "hour": "hour-dark.svg"}))
+        self.assertEqual(sorted(result.dark), ["dial", "hour"])
+        self.assertEqual(result.manifest()["dark"], {"dial": {"file": "dial-dark.svg", "type": "image/svg+xml"},
+                                                     "hour": {"file": "hour-dark.svg", "type": "image/svg+xml"}})
+        self.assertEqual(sorted(result.stored_layers()), ["dark-dial", "dark-hour", "dial", "hour", "minute", "second"])
+        self.assertIn("mörk variant: dial, hour", clock_pack.describe(result))
+
+    def test_a_dark_layer_needs_a_light_one_and_a_file(self):
+        with self.assertRaises(ClockPackError) as caught:
+            read_pack(pack({"top-dark.svg": HAND}, dark={"top": "top-dark.svg"}))
+        self.assertIn("dark.top har inget lager top", str(caught.exception))
+        with self.assertRaises(ClockPackError) as caught:
+            read_pack(pack(dark={"dial": "saknas.svg"}))
+        self.assertIn("saknas.svg finns inte", str(caught.exception))
+        with self.assertRaises(ClockPackError) as caught:
+            read_pack(pack(dark=["dial-dark.svg"]))
+        self.assertIn("\"dark\" ska vara ett objekt", str(caught.exception))
+
+    def test_dark_layers_get_the_same_checks_and_warnings(self):
+        with self.assertRaises(ClockPackError):
+            read_pack(pack({"dial-dark.svg": SQUARE.format("<script/>")}, dark={"dial": "dial-dark.svg"}))
+        warning, = read_pack(pack({"hour-dark.svg": SQUARE.format('<rect width="200" height="200" fill="#000"/>')}, dark={"hour": "hour-dark.svg"})).warnings
+        self.assertIn("hour-dark.svg: lagret har en bakgrund", warning)
+        self.assertEqual(read_pack(pack({"dial-dark.svg": self.DARK}, dark={"dial": "dial-dark.svg"})).warnings, (), "a round dark dial is fine")
+
+    def test_build_packs_the_dark_files_and_the_preview_shows_them_on_dark(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "ur"
+            with contextlib.redirect_stdout(io.StringIO()):
+                clock_pack.main(["example", str(folder)])
+            (folder / "dial-dark.svg").write_text(self.DARK)
+            manifest = json.loads((folder / "clock.json").read_text())
+            manifest["dark"] = {"dial": "dial-dark.svg"}
+            (folder / "clock.json").write_text(json.dumps(manifest))
+            result = read_pack(clock_pack.build(folder))
+        self.assertEqual(list(result.dark), ["dial"])
+        page = clock_pack.preview([result])
+        dark_source = base64.b64encode(self.DARK.encode()).decode()
+        self.assertEqual(page.count(dark_source), 6, "the dark dial on the six dark figures")
+
+
 class ClockFaceServerTests(unittest.TestCase):
     setUp = fixture.CloudOnlyDeliveryTests.setUp
     fetch = fixture.CloudOnlyDeliveryTests.fetch
@@ -327,6 +376,17 @@ class ClockFaceServerTests(unittest.TestCase):
         self.assertIn("Ta bort några först", str(full.exception))
         self.assertTrue(self.upload(pack(id="ur-3", version="2"))["replaced"], "replacing one still works")
 
+    def test_a_dark_variant_is_offered_to_screens_in_dark_mode(self):
+        self.connect()
+        dark = SQUARE.format('<circle cx="100" cy="100" r="96" fill="#15181e"/>')
+        self.upload(pack({"dial-dark.svg": dark}, dark={"dial": "dial-dark.svg"}))
+        face, = self.app.display_snapshot()["clock"]["faces"]
+        self.assertEqual(set(face["dark_layers"]), {"dial"})
+        self.assertTrue(face["dark_layers"]["dial"].endswith("/dark-dial"))
+        self.assertEqual(self.app.clock_face_layer(face["dark_layers"]["dial"])[1], dark.encode())
+        self.assertIsNone(self.app.clock_face_layer(face["layers"]["dial"].replace("/dial", "/dark-hour")), "no dark hour hand")
+        self.assertIsNone(self.app.clock_face_layer(face["layers"]["dial"].replace("/dial", "/dark-banan")))
+
     def test_an_upload_says_what_scales_worse_than_it_could(self):
         self.connect()
         result = self.upload(pack({"dial.svg": SQUARE.format('<circle cx="100" cy="100" r="98" fill="#fff"/><text>12</text>')}))
@@ -387,9 +447,16 @@ class BuiltInStyleTests(unittest.TestCase):
     def test_only_a_generic_analog_and_a_digital_clock_are_built_in(self):
         self.assertEqual(AVAILABLE_CLOCK_STYLES, ("analog", "digital"))
         web = Path(__file__).resolve().parents[1] / "src" / "tmbox_gateway" / "web"
-        for name in ("app.js", "settings.js", "participant.js", "shell-messages.js"):
+        app = (web / "app.js").read_text()
+        # Bara den analoga tavlan ritas inbyggt; de gamla namnen finns kvar bara
+        # för att en skärms gamla egna val ska hitta paketet med samma id.
+        config = re.search(r"const clockStyleConfig = \{(.*?)\n\};", app, re.S).group(1)
+        self.assertEqual(re.findall(r"^\s*(\w+):", config, re.M), ["analog"])
+        self.assertIn('const clockStyleLabels = { analog: "Analog", digital: "Digital" };', app)
+        self.assertNotIn("SBB", app)
+        for name in ("settings.js", "participant.js", "shell-messages.js"):
             text = (web / name).read_text()
-            for gone in ("swiss", "stationsur:", "swedish", "norwegian", "american", "Svensk (SJ)", "SBB"):
+            for gone in ("swiss", "stationsur", "swedish", "norwegian", "american", "Svensk (SJ)", "SBB"):
                 self.assertNotIn(gone, text, name)
 
     def test_an_old_style_shows_the_analog_clock_until_its_pack_is_uploaded(self):

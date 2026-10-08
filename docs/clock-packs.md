@@ -156,13 +156,39 @@ och laptopen. Kontrollen varnar för `<text>`.
 
 ### Färg och kontrast
 
-Paketets färger är fasta. Skärmarna kan visa mörkt eller ljust läge, men
-tavlan ser likadan ut i båda. Därför:
+Paketets färger är fasta. Skärmarna kan visa mörkt eller ljust läge, och
+utan en mörk variant ser tavlan likadan ut i båda. Därför:
 
 - Ge tavlan en egen fylld bakgrund och en tydlig kant.
 - Låt visarna och strecken kontrastera starkt mot tavlan, till exempel svart
   mot vitt eller vitt mot mörkgrått.
 - Sekundvisaren får gärna ha en egen färg.
+
+### Mörkt läge
+
+Ett paket kan ha en **mörk variant**. Den används på skärmar och i deltagarvyn
+när de visar mörkt läge. En ljus tavla kan annars lysa starkt på en TV i en
+mörk lokal.
+
+- Ange varianten under `"dark"` i `clock.json`, med samma lagernamn som i
+  `"layers"`.
+- Lager som saknas i `"dark"` tas från `"layers"`. En sekundvisare i egen färg
+  passar ofta båda lägena, och behöver då bara finnas en gång.
+- Den mörka varianten kontrolleras på samma sätt och syns på de mörka rutorna
+  i `preview`.
+
+```json
+"dark": {
+  "dial": "dial-dark.svg",
+  "hour": "hour-dark.svg",
+  "minute": "minute-dark.svg",
+  "top": "top-dark.svg"
+}
+```
+
+Klockorna som var inbyggda före 3.19 har en sådan variant. I mörkt läge har de
+mörk tavla (`#15181e`), kant `#363c49`, streck och visare `#f1f3f6` och
+siffror `#b7bdc8`. Stationsuret var alltid ljust.
 
 ### Det som gör klockan tung
 
@@ -209,6 +235,7 @@ Raspberry Pi.
 | `version`, `author` | Valfria. |
 | `layers` | Filen för varje lager. `dial`, `hour` och `minute` krävs. |
 | `motion` | Hur visarna går, se nedan. Utelämnat betyder att alla visare glider jämnt. |
+| `dark` | Valfritt. Lager för mörkt läge, se [Mörkt läge](#mörkt-läge). |
 
 ### Hur visarna går
 
@@ -294,6 +321,8 @@ Innan du laddar upp:
 - [ ] Timstreck och visare syns i deltagarvyns storlek, 84 px, i
       `preview`.
 - [ ] Texten är gjord till banor.
+- [ ] Tavlan ser bra ut på både mörk och ljus bakgrund i `preview`, eller har
+      en mörk variant.
 - [ ] `check` visar inga fel, och helst inga varningar.
 
 ## Flera klockor på en gång
@@ -338,5 +367,6 @@ inga licensbelagda tavlor inbyggda.
 | `GET /v1/clock-faces/exempelur.tmclock` | Exempelpaketet. |
 
 `/v1/display` och `/v1/clock` har klockorna i `clock.faces`. Där står stil,
-namn, lager och gång, men inte vem som laddade upp dem. En uppladdad klockas
+namn, lager (`layers` och den mörka varianten i `dark_layers`) och gång, men
+inte vem som laddade upp dem. En uppladdad klockas
 stil är `custom:<id>` i `clock.available_styles`.

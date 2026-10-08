@@ -1814,7 +1814,7 @@ class TrainMeetHTTPApplication:
         """Ett lager ur /v1/clock-faces/<id>/<sha>/<lager>. En gammal adress
         (en tidigare version av paketet) finns inte längre."""
         parts = path.removeprefix("/v1/clock-faces/").split("/")
-        if len(parts) != 3 or parts[2] not in clock_pack.LAYERS or self.runtime_store is None:
+        if len(parts) != 3 or parts[2].removeprefix(clock_pack.DARK_PREFIX) not in clock_pack.LAYERS or self.runtime_store is None:
             return None
         found = self.runtime_store.clock_face_layer(parts[0], parts[2])
         if found is None or not found[2].startswith(parts[1]) or len(parts[1]) != 16:
@@ -2486,7 +2486,9 @@ class TrainMeetHTTPApplication:
         base = f"/v1/clock-faces/{face['id']}/{face['sha256'][:16]}/"
         return {"style": CUSTOM_CLOCK_PREFIX + face["id"], "id": face["id"], "name": face["name"],
                 "version": manifest.get("version", ""), "sha256": face["sha256"], "motion": manifest["motion"],
-                "layers": {layer: base + layer for layer in manifest["layers"]}}
+                "layers": {layer: base + layer for layer in manifest["layers"]},
+                # Den mörka varianten, när paketet har en: skärmar i mörkt läge använder den.
+                "dark_layers": {layer: base + clock_pack.DARK_PREFIX + layer for layer in manifest.get("dark", {})}}
 
     def clock_status(self, client: PairedClient) -> dict[str, Any]:
         selected = self.lifecycle.selected() if self.lifecycle else None

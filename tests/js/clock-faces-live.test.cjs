@@ -229,6 +229,40 @@ with zipfile.ZipFile(sys.argv[1], "w") as archive:
     assert.match(await warnings.textContent(), /d\.svg: text ritas med det typsnitt som finns på varje skärm/);
     if (process.env.SHOTS) await page.locator('#clock-face-upload-form').screenshot({ path: path.join(process.env.SHOTS, 'clock-faces-warnings.png') });
 
+    // En tavla med mörk variant: skärmar i mörkt läge får den, ljusa den ljusa.
+    // Paketets id är en tidigare inbyggd stil, så en skärm som själv valt den
+    // stilen förut (sparat i webbläsaren) visar paketet igen.
+    const legacy = path.join(work, 'stationsur.tmclock');
+    require('node:child_process').execFileSync('python3', ['-c', `
+import io, json, sys, zipfile
+svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">{}</svg>'
+with zipfile.ZipFile(sys.argv[1], "w") as archive:
+    archive.writestr("clock.json", json.dumps({"format": 1, "id": "stationsur", "name": "Stationsur",
+        "layers": {"dial": "d.svg", "hour": "h.svg", "minute": "m.svg"}, "dark": {"dial": "d-dark.svg"}}))
+    archive.writestr("d.svg", svg.format('<circle cx="100" cy="100" r="96" fill="#fff"/>'))
+    archive.writestr("d-dark.svg", svg.format('<circle cx="100" cy="100" r="96" fill="#15181e"/>'))
+    archive.writestr("h.svg", svg.format('<rect x="98" y="50" width="4" height="50"/>'))
+    archive.writestr("m.svg", svg.format('<rect x="98.5" y="25" width="3" height="75"/>'))`, legacy]);
+    await page.locator('#clock-face-file').setInputFiles(legacy);
+    await page.locator('#clock-face-rights').check();
+    await panel.getByRole('button', { name: 'Ladda upp' }).click();
+    await message.getByText('Stationsur är uppladdad. Välj den som stil ovan.').waitFor();
+    for (const theme of ['dark', 'light']) {
+      const context = await browser.newContext({ locale: 'sv-SE', viewport: { width: 1280, height: 900 } });
+      await context.addInitScript(theme => {
+        localStorage.setItem('trainmeet.displayTheme', theme);
+        localStorage.setItem('trainmeet.displayClockStyle', 'stationsur');
+      }, theme);
+      const tv = await context.newPage();
+      watch(tv);
+      await tv.goto(base + '/display/clock');
+      const dial = tv.locator('#clock-view svg.clock-face--custom[data-face="stationsur"] image').first();
+      await dial.waitFor();
+      const href = await dial.getAttribute('href');
+      assert.ok(theme === 'dark' ? href.endsWith('/dark-dial') : href.endsWith('/dial') && !href.endsWith('/dark-dial'), `${theme}: ${href}`);
+      await context.close();
+    }
+
     assert.deepEqual(errors, []);
     assert.deepEqual(blocked, []);
     console.log('PASS egna klockor: uppladdning, intyg, skärm, deltagarvy och borttagning');

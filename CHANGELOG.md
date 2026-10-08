@@ -5,6 +5,22 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Dina tidigare klockor ser ut som förut, också i mörkt läge
+
+Efter Caspers fråga om alla hans klockor fungerar lika bra som förut. En
+jämförelse med 3.17.0 visade två skillnader: i mörkt läge hade tavlorna
+blivit ljusa, och en skärms eget val av stationsuret eller den schweiziska
+försvann.
+
+- **Klockpaket kan ha en mörk variant** (`"dark"` i `clock.json`). Skärmar och
+  deltagarvyn i mörkt läge använder den, och lager som saknas tas från de
+  vanliga.
+- **De tidigare inbyggda tavlorna** är gjorda om med en mörk variant i samma
+  färger som förut. Jämfört med 3.17.0 är sju tavlor identiska i båda lägena;
+  de fem med siffror skiljer 0,3–0,5 % i pixlar, i siffrornas kantutjämning.
+- **En skärms eget val från förut** (Stationsur eller Schweizisk i
+  verktygsraden) visar paketet med samma id när det är uppladdat.
+
 ### Klockor som skalar på alla skärmar, och en guide för att göra egna
 
 Efter Caspers önskan: tydlig dokumentation om hur ett klockpaket ska utformas,

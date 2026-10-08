@@ -62,6 +62,16 @@ test('an uploaded clock is drawn as images, with the hands where app.js turns th
   assert.match(faces.markup(face, { stopped: true }), /class="clock-face clock-face--custom stopped"/);
 });
 
+test('a screen in dark mode uses the dark variant where the pack has one', () => {
+  const dark = { ...face, dark_layers: { dial: '/v1/clock-faces/mitt-ur/aaaaaaaaaaaaaaaa/dark-dial' } };
+  const night = faces.markup(dark, { dark: true });
+  assert.match(night, /href="\/v1\/clock-faces\/mitt-ur\/aaaaaaaaaaaaaaaa\/dark-dial"/);
+  assert.match(night, /href="\/v1\/clock-faces\/mitt-ur\/aaaaaaaaaaaaaaaa\/hour"/, 'the rest from the light layers');
+  assert.doesNotMatch(faces.markup(dark, { dark: false }), /dark-dial/, 'a light screen uses the light dial');
+  assert.doesNotMatch(faces.markup(face, { dark: true }), /dark-/, 'a pack without a dark variant looks the same in both');
+  assert.equal(faces.layerFor(dark, 'dial', true), '/v1/clock-faces/mitt-ur/aaaaaaaaaaaaaaaa/dark-dial');
+});
+
 test('only the server’s own layer addresses are ever used', () => {
   const hostile = { ...face, layers: { ...face.layers, dial: 'javascript:alert(1)', hour: 'https://example.com/x.svg', minute: '/v1/clock-faces/x/aaaaaaaaaaaaaaaa/minute" onload="x' } };
   const svg = faces.markup(hostile);

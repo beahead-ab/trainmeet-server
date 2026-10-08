@@ -4504,7 +4504,7 @@ function clockStyleLabel(style) {
 // den analoga klockan.
 function clockSVG(style, darkBackground, showSeconds, stopped) {
   const face = globalThis.TrainMeetClockFace?.find(style);
-  if (face) return globalThis.TrainMeetClockFace.markup(face, { showSeconds, stopped });
+  if (face) return globalThis.TrainMeetClockFace.markup(face, { showSeconds, stopped, dark: darkBackground && globalThis.TrainMeetClockFace.pageIsDark() });
   const config = clockStyleConfig.analog;
   const marks = Array.from({ length: 60 }, (_, index) => {
     const major = index % 5 === 0;
@@ -4609,9 +4609,15 @@ const DISPLAY_CLOCK_SECONDS_KEY = "trainmeet.displayClockSeconds";
 // A screen may still choose its own style and seconds from its menu bar (the
 // TV in the hall and the laptop by the desk are different screens); that
 // choice lives in this browser only and an empty value follows the server.
+// En skärms eget val från före 3.19 (stationsur, swiss med flera) är nu ett
+// klockpaket med samma id, som på servern (runtime.LEGACY_CLOCK_STYLES). Finns
+// paketet inte uppladdat följer skärmen träffens val.
+const LEGACY_SCREEN_STYLES = Object.fromEntries(["stationsur", "swedish", "norwegian", "danish", "german", "finnish", "polish", "dutch",
+  "french", "italian", "american"].map(style => [style, `custom:${style}`]).concat([["swiss", "custom:sbb"]]));
 function displayClockPreference() {
   try {
-    return { style: localStorage.getItem(DISPLAY_CLOCK_STYLE_KEY) || "", seconds: localStorage.getItem(DISPLAY_CLOCK_SECONDS_KEY) || "" };
+    const style = localStorage.getItem(DISPLAY_CLOCK_STYLE_KEY) || "";
+    return { style: LEGACY_SCREEN_STYLES[style] || style, seconds: localStorage.getItem(DISPLAY_CLOCK_SECONDS_KEY) || "" };
   } catch { return { style: "", seconds: "" }; }
 }
 
