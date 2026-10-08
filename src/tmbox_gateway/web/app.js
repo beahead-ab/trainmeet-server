@@ -1165,6 +1165,117 @@ document.querySelector("#clock-appearance-form").addEventListener("submit", asyn
   finally { endModalAction(form); }
 });
 
+// ── Egna klockor (klockpaket) under Inställningar → Skärmar och klocka ─────
+const CLOCK_PACK_MAX_BYTES = 2 * 1024 * 1024;
+let clockFacesSignature = null;
+
+function formatUploadedAt(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const two = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`;
+}
+
+function renderClockFaceList(faces) {
+  const list = document.querySelector("#clock-faces-list");
+  if (!list) return;
+  if (!faces.length) {
+    list.innerHTML = html`<p class="kr-empty">${t("Inga egna klockor ännu.")}</p>`;
+    return;
+  }
+  list.replaceChildren(...faces.map(face => {
+    const row = document.createElement("div");
+    row.className = "kr-line kr-line--face";
+    row.dataset.face = face.id;
+    const preview = document.createElement("span");
+    preview.innerHTML = globalThis.TrainMeetClockFace.markup(face, { showSeconds: true });
+    updateAnalogClockHands(preview, 10 * 3600 + 8 * 60 + 36, face.style, false);
+    const text = document.createElement("span");
+    const name = document.createElement("b");
+    name.textContent = [face.name, face.version].filter(Boolean).join(" ");
+    const meta = document.createElement("span");
+    meta.className = "kr-m";
+    meta.textContent = " · " + [face.author ? t("av {name}", { name: face.author }) : "",
+      t("uppladdad av {name} {time}", { name: face.uploaded_by, time: formatUploadedAt(face.uploaded_at) }),
+      t("rätt att använda intygad")].filter(Boolean).join(" · ");
+    text.append(name, meta);
+    const actions = document.createElement("span");
+    actions.className = "kr-actions";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "kr-btn sm";
+    remove.dataset.deleteFace = face.id;
+    remove.textContent = t("Ta bort");
+    actions.append(remove);
+    row.append(preview, text, actions);
+    return row;
+  }));
+}
+
+// Listan hämtas när de uppladdade klockorna ändrats (namn, version eller sha).
+async function syncClockFaces(faces) {
+  const signature = JSON.stringify((faces || []).map(face => [face.id, face.sha256]));
+  if (signature === clockFacesSignature || !document.querySelector("#clock-faces-list")) return;
+  const response = await authorizedFetch("/v1/clock-faces", { cache: "no-store" });
+  if (!response.ok) return;
+  renderClockFaceList((await response.json()).faces || []);
+  clockFacesSignature = signature;
+}
+
+async function fileBase64(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  return btoa(binary);
+}
+
+document.querySelector("#clock-face-upload-form")?.addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const message = document.querySelector("#clock-face-message");
+  const file = document.querySelector("#clock-face-file").files?.[0];
+  if (!file) return setMessage(message, "Välj ett klockpaket först.", "error");
+  if (file.size > CLOCK_PACK_MAX_BYTES) return setMessage(message, "Klockpaketet är större än 2 MB.", "error");
+  if (!document.querySelector("#clock-face-rights").checked) return setMessage(message, "Kryssa i att du har rätt att använda urtavlan.", "error");
+  if (!beginModalAction(form)) return;
+  try {
+    const data = await fileBase64(file);
+    const response = await authorizedFetch("/v1/clock-faces", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file_name: file.name, data, rights_confirmed: true }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || t("Klockpaketet kunde inte laddas upp."));
+    endModalAction(form);
+    form.reset();
+    setMessage(message, result.replaced ? "{name} är uppdaterad." : "{name} är uppladdad. Välj den som stil ovan.", "success", { name: result.face.name });
+    clockFacesSignature = null;
+    await refreshLocalClock();
+  } catch (error) {
+    endModalAction(form);
+    setMessage(message, error.message, "error");
+  }
+});
+
+document.querySelector("#clock-faces-list")?.addEventListener("click", async event => {
+  const button = event.target.closest("[data-delete-face]");
+  if (!button) return;
+  const message = document.querySelector("#clock-face-message");
+  const name = button.closest(".kr-line")?.querySelector("b")?.textContent || button.dataset.deleteFace;
+  if (!window.confirm(t("Ta bort {name}? Skärmar som visar klockan byter till stationsuret.", { name }))) return;
+  button.disabled = true;
+  try {
+    const response = await authorizedFetch("/v1/clock-faces/delete", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: button.dataset.deleteFace }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || t("Klockan kunde inte tas bort."));
+    setMessage(message, "{name} är borttagen.", "success", { name });
+    clockFacesSignature = null;
+    await refreshLocalClock();
+  } catch (error) {
+    button.disabled = false;
+    setMessage(message, error.message, "error");
+  }
+});
+
 document.querySelector("#device-language-form").addEventListener("submit", async event => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -2561,11 +2672,13 @@ async function refreshLocalClock() {
   if (!editorActive(clockControlForm)) timeInput.value = String(clock.time || "12:00").slice(0, 5);
   const speedInput = document.querySelector("#local-clock-speed");
   if (!editorActive(clockControlForm)) speedInput.value = Number(clock.speed || 1);
+  globalThis.TrainMeetClockFace?.remember(clock.faces);
   if (!editorActive(document.querySelector("#clock-appearance-form"))) {
     const styleSelect = document.querySelector("#meet-clock-style");
-    const styles = ["digital", "analog", "stationsur", "swiss"];
+    const styles = offeredClockStyles(clock.available_styles || []);
     if (clock.style && !styles.includes(clock.style)) styles.push(clock.style);
-    const options = styles.map(value => [t(clockStyleLabels[value] || value), value]);
+    // En ny version av en uppladdad klocka (ny sha) ritar om rutan med förhandsbilden.
+    const options = styles.map(value => [clockStyleLabel(value), value, globalThis.TrainMeetClockFace?.find(value)?.sha256 || ""]);
     // Only when the list changed: the style tiles are rebuilt from it.
     const optionSignature = JSON.stringify(options);
     if (styleSelect.dataset.options !== optionSignature) {
@@ -2576,6 +2689,7 @@ async function refreshLocalClock() {
     document.querySelector("#meet-clock-seconds").checked = clock.show_seconds !== false;
     globalThis.TrainMeetSettings?.rebase(document.querySelector("#clock-appearance-form"));
   }
+  syncClockFaces(clock.faces).catch(() => {});
   // Tid, gång/stoppad-pillret och start/stopp-knapparna ritas av Drift.
   globalThis.TrainMeetDrift?.update({ clock });
   const external = clock.source === "fastclock";
@@ -3397,8 +3511,13 @@ let displayClockAnchorSeconds = null;
 let displayClockAnchorAt = null;
 let displayClockAnchorRunning = null;
 let displayClockAnchorSpeed = null;
-let swissMinuteKey = null;
-let swissMinuteWobbleStartedAt = null;
+// Minutvisarens studs för tavlor vars minutvisare hoppar (clock-face.js), en per
+// ritad klocka: skärmens, deltagarvyns och förhandsbildernas stör inte varandra.
+const minuteBounces = new WeakMap();
+function minuteBounce(target, minuteKey, running) {
+  if (!minuteBounces.has(target)) minuteBounces.set(target, globalThis.TrainMeetClockFace?.bounceTracker() || (() => 0));
+  return minuteBounces.get(target)(minuteKey, running, performance.now());
+}
 
 function svgElement(name, attrs = {}, textValue = null) {
   const element = document.createElementNS(svgNS, name);
@@ -4338,7 +4457,6 @@ function renderGraph(snapshot) {
 const clockStyleConfig = {
   analog: { hourMarkerWidth: 3, hourMarkerLength: 10, minuteMarkerWidth: 1, minuteMarkerLength: 4, hourHandWidth: 5, hourHandLength: 50, minuteHandWidth: 3, minuteHandLength: 75, secondHandColor: "#7fa3ea", secondHandWidth: 1, secondHandLength: 80, secondBallRadius: 0, hasNumbers: true, centerDotRadius: 3, bezelWidth: 1 },
   stationsur: { hourMarkerWidth: 4, hourMarkerLength: 14, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#2256c3", secondHandWidth: 1.5, secondHandLength: 78, secondBallRadius: 0, hasNumbers: false, centerDotRadius: 4, bezelWidth: 3 },
-  swiss: { hourMarkerWidth: 6, hourMarkerLength: 18, minuteMarkerWidth: 2, minuteMarkerLength: 8, hourHandWidth: 8, hourHandLength: 55, minuteHandWidth: 6, minuteHandLength: 78, secondHandColor: "#e2000a", secondHandWidth: 2, secondHandLength: 70, secondBallRadius: 7, secondBallOffset: 62, hasNumbers: false, centerDotRadius: 5, bezelWidth: 4 },
   swedish: { hourMarkerWidth: 4, hourMarkerLength: 14, minuteMarkerWidth: 1.5, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#1a5276", secondHandWidth: 1.5, secondHandLength: 72, secondBallRadius: 0, secondBallOffset: 0, hasNumbers: true, centerDotRadius: 4, bezelWidth: 3 },
   norwegian: { hourMarkerWidth: 5, hourMarkerLength: 16, minuteMarkerWidth: 1.5, minuteMarkerLength: 7, hourHandWidth: 7, hourHandLength: 50, minuteHandWidth: 5, minuteHandLength: 75, secondHandColor: "#ba2025", secondHandWidth: 1.5, secondHandLength: 68, secondBallRadius: 5, secondBallOffset: 60, hasNumbers: false, centerDotRadius: 5, bezelWidth: 5 },
   danish: { hourMarkerWidth: 5, hourMarkerLength: 15, minuteMarkerWidth: 2, minuteMarkerLength: 6, hourHandWidth: 7, hourHandLength: 52, minuteHandWidth: 5, minuteHandLength: 76, secondHandColor: "#c1272d", secondHandWidth: 1.5, secondHandLength: 70, secondBallRadius: 4, secondBallOffset: 62, hasNumbers: false, centerDotRadius: 5, bezelWidth: 4 },
@@ -4353,17 +4471,27 @@ const clockStyleConfig = {
 
 const clockStyleLabels = {
   analog: "Analog", stationsur: "Stationsur",
-  swiss: "Schweizisk (SBB)", swedish: "Svensk (SJ)", norwegian: "Norsk (NSB)",
+  swedish: "Svensk (SJ)", norwegian: "Norsk (NSB)",
   danish: "Dansk (DSB)", german: "Tysk (DB)", finnish: "Finsk (VR)",
   polish: "Polsk (PKP)", dutch: "Nederländsk (NS)", french: "Fransk (SNCF)",
   italian: "Italiensk (FS)", american: "Amerikansk", digital: "Digital",
 };
 
+// Stilens namn: en uppladdad klocka heter det den heter i sitt paket.
+function clockStyleLabel(style) {
+  const face = globalThis.TrainMeetClockFace?.find(style);
+  if (face) return face.name;
+  return t(clockStyleLabels[style] || style || "");
+}
+
 // Urtavlan ritas med klasser, inte färgattribut: färgerna kommer från
 // Kontrollrummets tokens (skarmar.css), så den följer mörkt och ljust läge.
-// Stationsuret har alltid ljus tavla (darkBackground false).
+// Stationsuret har alltid ljus tavla (darkBackground false). En uppladdad
+// klocka är bilder (clock-face.js); finns den inte längre visas stationsuret.
 function clockSVG(style, darkBackground, showSeconds, stopped) {
-  const config = clockStyleConfig[style] || clockStyleConfig.swiss;
+  const face = globalThis.TrainMeetClockFace?.find(style);
+  if (face) return globalThis.TrainMeetClockFace.markup(face, { showSeconds, stopped });
+  const config = clockStyleConfig[style] || clockStyleConfig.stationsur;
   const marks = Array.from({ length: 60 }, (_, index) => {
     const major = index % 5 === 0;
     const length = major ? config.hourMarkerLength : config.minuteMarkerLength;
@@ -4445,43 +4573,21 @@ function currentClockTime(snapshot) {
   return formatClockTime(currentClockSeconds(snapshot));
 }
 
-function swissMinuteWobble(minuteKey, running) {
-  if (swissMinuteKey === null) swissMinuteKey = minuteKey;
-  if (minuteKey !== swissMinuteKey) {
-    swissMinuteKey = minuteKey;
-    swissMinuteWobbleStartedAt = running ? performance.now() : null;
-  }
-  if (swissMinuteWobbleStartedAt === null) return 0;
-  const elapsed = (performance.now() - swissMinuteWobbleStartedAt) / 1000;
-  const decay = Math.exp(-6 * elapsed);
-  if (decay <= 0.01) {
-    swissMinuteWobbleStartedAt = null;
-    return 0;
-  }
-  return 1.8 * decay * Math.sin(8 * Math.PI * 2 * elapsed);
-}
-
+// De inbyggda tavlorna glider; en uppladdad klocka går som dess clock.json säger.
 function updateAnalogClockHands(target, seconds, style, running) {
-  const isSwiss = style === "swiss";
-  const hour = Math.floor(seconds / 3600);
-  const minute = Math.floor((seconds % 3600) / 60);
-  const second = seconds % 60;
-  const minuteKey = Math.floor(seconds / 60);
-  const hourAngle = isSwiss
-    ? (hour % 12 + minute / 60) * 30
-    : (hour % 12 + minute / 60 + second / 3600) * 30;
-  const minuteAngle = isSwiss
-    ? minute * 6 + swissMinuteWobble(minuteKey, running)
-    : (minute + second / 60) * 6;
-  // Hilfikers SBB-klocka gör varvet på 58,5 s och väntar sedan vid 12.
-  const secondAngle = isSwiss ? Math.min(second / 58.5, 1) * 360 : second * 6;
-  target.querySelector('[data-clock-hand="hour"]')?.setAttribute("transform", `rotate(${hourAngle} 100 100)`);
-  target.querySelector('[data-clock-hand="minute"]')?.setAttribute("transform", `rotate(${minuteAngle} 100 100)`);
-  target.querySelector('[data-clock-hand="second"]')?.setAttribute("transform", `rotate(${secondAngle} 100 100)`);
+  const faces = globalThis.TrainMeetClockFace;
+  const motion = faces?.find(style)?.motion;
+  const bounce = motion?.minute === "jump" && motion.minute_bounce ? minuteBounce(target, Math.floor(seconds / 60), running) : 0;
+  const angles = faces ? faces.handAngles(seconds, motion, bounce) : { hour: 0, minute: 0, second: 0 };
+  target.querySelector('[data-clock-hand="hour"]')?.setAttribute("transform", `rotate(${angles.hour} 100 100)`);
+  target.querySelector('[data-clock-hand="minute"]')?.setAttribute("transform", `rotate(${angles.minute} 100 100)`);
+  target.querySelector('[data-clock-hand="second"]')?.setAttribute("transform", `rotate(${angles.second} 100 100)`);
 }
 
 // The clock styles offered on a screen, in the same order as under ⚙ Inställningar.
-const DISPLAY_CLOCK_STYLES = ["digital", "analog", "stationsur", "swiss"];
+const DISPLAY_CLOCK_STYLES = ["digital", "analog", "stationsur"];
+// Och de uppladdade klockorna efter dem, i serverns ordning.
+const offeredClockStyles = (available) => [...DISPLAY_CLOCK_STYLES, ...available.filter(value => globalThis.TrainMeetClockFace?.isCustom(value))];
 const DISPLAY_CLOCK_STYLE_KEY = "trainmeet.displayClockStyle";
 const DISPLAY_CLOCK_SECONDS_KEY = "trainmeet.displayClockSeconds";
 
@@ -4500,7 +4606,8 @@ function saveDisplayClockPreference(key, value) {
 }
 
 function resolveClockAppearance(snapshot) {
-  const available = snapshot.clock?.available_styles?.length ? snapshot.clock.available_styles : ["swiss", "swedish", "digital"];
+  globalThis.TrainMeetClockFace?.remember(snapshot.clock?.faces);
+  const available = snapshot.clock?.available_styles?.length ? snapshot.clock.available_styles : ["stationsur", "digital"];
   const preference = displayClockPreference();
   let style = available.includes(preference.style) ? preference.style : snapshot.clock?.style || available[0];
   if (!available.includes(style)) style = available[0];
@@ -4513,17 +4620,17 @@ function renderClockToolbar(snapshot) {
   const secondsSelect = document.querySelector("#display-clock-seconds");
   if (!styleSelect || !secondsSelect) return;
   const { available, preference } = resolveClockAppearance(snapshot);
-  const styles = DISPLAY_CLOCK_STYLES.filter(value => available.includes(value));
+  const styles = offeredClockStyles(available).filter(value => available.includes(value));
   if (snapshot.clock?.style && !styles.includes(snapshot.clock.style)) styles.push(snapshot.clock.style);
-  const serverStyle = t(clockStyleLabels[snapshot.clock?.style] || snapshot.clock?.style || "");
+  const serverStyle = clockStyleLabel(snapshot.clock?.style);
   const serverSeconds = snapshot.clock?.show_seconds !== false;
-  const signature = [globalThis.TrainMeetI18n?.getLanguage?.(), styles.join(","), serverStyle, serverSeconds].join("|");
+  const signature = [globalThis.TrainMeetI18n?.getLanguage?.(), styles.map(clockStyleLabel).join(","), styles.join(","), serverStyle, serverSeconds].join("|");
   if (styleSelect.dataset.signature !== signature) {
     styleSelect.dataset.signature = signature;
     // "Stil: Digital", "Sekunder: visas": reglaget säger vad det styr och vad det står på.
     styleSelect.replaceChildren(
       new Option(`${t("Stil")}: ${t("Som i inställningarna")} (${serverStyle})`, ""),
-      ...styles.map(value => new Option(`${t("Stil")}: ${t(clockStyleLabels[value] || value)}`, value)));
+      ...styles.map(value => new Option(`${t("Stil")}: ${clockStyleLabel(value)}`, value)));
     secondsSelect.replaceChildren(
       new Option(`${t("Sekunder")}: ${t("Som i inställningarna")} (${serverSeconds ? t("visas") : t("dolda")})`, ""),
       new Option(`${t("Sekunder")}: ${t("visas")}`, "on"),
@@ -4559,7 +4666,7 @@ function renderClock(snapshot) {
   const meta = `${Number(snapshot.clock?.speed || 1)}× · ${snapshot.clock?.source === "fastclock" ? "FastClock" : t("Intern klocka")}`;
   // Stoppad klocka står still: tiden den visar är tiden den stannade på.
   const since = stopped && !externalMissing && /^\d\d:\d\d/.test(time) ? time.slice(0, 5) : "";
-  const renderSignature = [style, darkBackground, showSeconds, stopped, externalMissing, reason, meta, since, us, globalThis.TrainMeetI18n?.getLanguage?.()].join("|");
+  const renderSignature = [style, globalThis.TrainMeetClockFace?.find(style)?.sha256, darkBackground, showSeconds, stopped, externalMissing, reason, meta, since, us, globalThis.TrainMeetI18n?.getLanguage?.()].join("|");
   if (target.dataset.clockSignature !== renderSignature) {
     target.dataset.clockSignature = renderSignature;
     // Går klockan fyller siffrorna eller urtavlan skärmen själva; raden under

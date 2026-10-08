@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "id": "exempelur",
+  "name": "Exempelur",
+  "version": "1.0",
+  "author": "TrainMeet",
+  "layers": {
+    "dial": "dial.svg",
+    "hour": "hour.svg",
+    "minute": "minute.svg",
+    "second": "second.svg",
+    "top": "top.svg"
+  },
+  "motion": {
+    "hour": "minute",
+    "minute": "jump",
+    "second": "tick"
+  }
+}
