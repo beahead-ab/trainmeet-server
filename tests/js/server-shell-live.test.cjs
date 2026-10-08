@@ -153,7 +153,7 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await windowScreen.locator('#display-toolbar.hidden-toolbar').count(),0,'A window keeps its toolbar');
     assert.match(await windowScreen.locator('#display-fullscreen').textContent(),/^\s*Helskärm/);
     await windowContext.close();
-    for(const style of ['analog','stationsur','digital']){
+    for(const style of ['analog','digital']){
       await page.locator(`#clock-style-tiles [data-value="${style}"]`).click();
       await page.locator('#clock-appearance-form [type=submit]').click();
       await page.waitForFunction(()=>!document.querySelector('#clock-appearance-form').dataset.dirty);

@@ -5,7 +5,8 @@
 // egen klocka." Admin laddar upp ett klockpaket under Inställningar →
 // Skärmar och klocka, intygar rätten att använda tavlan och väljer klockan som
 // stil. Skärmarna och deltagarvyn ritar den som bilder, med visarna som
-// paketets clock.json säger. Tas klockan bort visas stationsuret.
+// paketets clock.json säger. Tas klockan bort visas den analoga klockan.
+// Flera paket laddas upp på en gång, som flera filer eller en zip med flera.
 const { chromium } = require('playwright');
 const { spawn } = require('node:child_process');
 const readline = require('node:readline');
@@ -148,13 +149,48 @@ sys.stdout.buffer.write(buffer.getvalue())`])));
     if (process.env.SHOTS) await page.locator('#clock-faces-panel').screenshot({ path: path.join(process.env.SHOTS, 'clock-faces-phone.png') });
     await page.setViewportSize({ width: 1280, height: 960 });
 
-    // Tas klockan bort visar skärmen stationsuret, utan omladdning.
+    // Tas klockan bort visar skärmen den analoga klockan, utan omladdning.
     await row.getByRole('button', { name: 'Ta bort' }).click();
     await message.getByText('Exempelur 1.0 är borttagen.').waitFor();
     await page.locator('#clock-faces-list').getByText('Inga egna klockor ännu.').waitFor();
-    await screen.waitForFunction(() => document.querySelector('#clock-view').dataset.clockSignature.startsWith('stationsur|'));
+    await screen.waitForFunction(() => document.querySelector('#clock-view').dataset.clockSignature.startsWith('analog|'));
     assert.equal(await screen.locator('#clock-view svg.clock-face--custom').count(), 0);
     assert.equal(await page.locator('#clock-style-tiles [data-value="custom:exempelur"]').count(), 0);
+
+    // Flera paket på en gång: två filer i samma val, och sedan en zip med båda.
+    const second = path.join(work, 'andra.tmclock');
+    const zipped = path.join(work, 'klockor.zip');
+    require('node:child_process').execFileSync('python3', ['-c', `
+import io, json, sys, zipfile
+source = zipfile.ZipFile(sys.argv[1])
+buffer = io.BytesIO()
+with zipfile.ZipFile(buffer, "w") as archive:
+    for info in source.infolist():
+        data = source.read(info)
+        if info.filename == "clock.json":
+            manifest = json.loads(data)
+            manifest.update(id="andra-uret", name="Andra uret")
+            data = json.dumps(manifest).encode()
+        archive.writestr(info.filename, data)
+open(sys.argv[2], "wb").write(buffer.getvalue())
+with zipfile.ZipFile(sys.argv[3], "w") as bundle:
+    bundle.write(sys.argv[1], "klockor/exempelur.tmclock")
+    bundle.write(sys.argv[2], "klockor/andra.tmclock")`, file, second, zipped]);
+    await page.locator('#clock-face-file').setInputFiles([file, second]);
+    await page.locator('#clock-face-rights').check();
+    await panel.getByRole('button', { name: 'Ladda upp' }).click();
+    await message.getByText('2 klockor är uppladdade. Välj en som stil ovan.').waitFor();
+    await page.locator('#clock-faces-list .kr-line--face').nth(1).waitFor();
+    assert.deepEqual(await page.locator('#clock-faces-list .kr-line--face b').allTextContents(), ['Andra uret 1.0', 'Exempelur 1.0']);
+    await page.locator('#clock-face-file').setInputFiles(zipped);
+    await page.locator('#clock-face-rights').check();
+    await message.evaluate(node => { node.textContent = ''; });
+    const zipUpload = page.waitForResponse(response => response.url().endsWith('/v1/clock-faces') && response.request().method() === 'POST');
+    await panel.getByRole('button', { name: 'Ladda upp' }).click();
+    assert.deepEqual((await (await zipUpload).json()).uploaded.map(face => [face.id, face.replaced]), [['exempelur', true], ['andra-uret', true]], 'one zip, both packs');
+    await message.getByText('2 klockor är uppladdade. Välj en som stil ovan.').waitFor();
+    assert.equal(await page.locator('#clock-faces-list .kr-line--face').count(), 2, 'the zip replaced the same two');
+    assert.equal(await page.locator('#clock-style-tiles [data-value^="custom:"]').count(), 2);
 
     assert.deepEqual(errors, []);
     assert.deepEqual(blocked, []);

@@ -5,6 +5,26 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Inbyggt finns en analog och en digital klocka; övriga tavlor är klockpaket
+
+Efter Caspers önskan.
+
+- **Två inbyggda klockor:** Analog, som är generisk och följer mörkt och
+  ljust läge, och Digital.
+- **Övriga stilar har blivit klockpaket:**
+  - stationsuret;
+  - Svensk, Norsk, Dansk, Tysk, Finsk, Polsk, Nederländsk, Fransk,
+    Italiensk och Amerikansk;
+  - den schweiziska.
+- **Gamla inställningar:** en träff som har en av de gamla stilarna sparad
+  visar paketet med samma id när det är uppladdat, och annars den analoga
+  klockan.
+- **Flera klockor på en gång:** välj flera filer, eller ladda upp en zip med
+  flera klockpaket.
+  - Ett fel i ett av paketen stoppar alla, och beskedet säger vilket paket det
+    gäller.
+  - Ryms inte alla under taket på 20 klockor laddas inget upp.
+
 ### Egna klockor: ladda upp en urtavla som klockpaket
 
 Efter Caspers önskan: den schweiziska tavlan är licensbelagd, och den som har

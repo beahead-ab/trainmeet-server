@@ -10,13 +10,30 @@ Ett klockpaket innehåller bilder och inställningar, men ingen kod. Tavlan och
 visarna är bilder, och hur visarna går står i `clock.json`. Därför kan ett
 uppladdat paket aldrig köra något i en webbläsare.
 
+Flera paket kan laddas upp på en gång: välj flera filer, eller ladda upp en
+zip-fil som innehåller flera `.tmclock`.
+
+## Inbyggda klockor och tidigare stilar
+
+Sedan version 3.19 har servern två inbyggda klockor: en generisk analog och en
+digital. Övriga tavlor är klockpaket:
+
+- stationsuret;
+- de nationella tavlorna (Svensk, Norsk, Dansk med flera);
+- den schweiziska.
+
+En träff eller ett äldre Cloud-paket kan fortfarande ange en av de tidigare
+inbyggda stilarna, till exempel `stationsur`, `swedish` eller `swiss`. Den
+visar då klockpaketet med samma id när det är uppladdat, och annars den analoga
+klockan. Den schweiziska har id `sbb`, och de andra har sina gamla stilnamn som
+id.
+
 ## Rätten att använda tavlan
 
 Den som laddar upp intygar att den har rätt att använda tavlan. Det gäller
 till exempel en egen formgivning, eller en tavla som är licensierad av den som
 äger formgivningen. Intyget loggas tillsammans med namn och tid. TrainMeet har
-inga licensbelagda tavlor inbyggda. Den schweiziska tavlan (SBB) följer inte
-med sedan version 3.18.
+inga licensbelagda tavlor inbyggda.
 
 ## Innehåll
 
@@ -137,8 +154,8 @@ Skärmarna visar lagren som bilder (`<image>`), inte som en del av sidan.
 | | |
 |---|---|
 | `GET /v1/clock-faces` | Admin. Klockorna med uppladdare, tid och intyg. |
-| `POST /v1/clock-faces` | Admin. `{file_name, data (base64), rights_confirmed: true}`. Svarar med klockan och listan. |
-| `POST /v1/clock-faces/delete` | Admin. `{id}`. En skärm som visar klockan byter till stationsuret. |
+| `POST /v1/clock-faces` | Admin. `{file_name, data (base64), rights_confirmed: true}`. `data` är ett klockpaket eller en zip med flera, och svaret har dem i `uploaded`. Ett fel i ett av paketen stoppar alla. Ryms inte alla paket under taket på 20 klockor laddas inget upp. |
+| `POST /v1/clock-faces/delete` | Admin. `{id}`. En skärm som visar klockan byter till den analoga klockan. |
 | `GET /v1/clock-faces/<id>/<sha16>/<lager>` | Öppen, som `/v1/display`. Lagret sparas länge, eftersom adressen byts med varje ny version. |
 | `GET /v1/clock-faces/exempelur.tmclock` | Exempelpaketet. |
 

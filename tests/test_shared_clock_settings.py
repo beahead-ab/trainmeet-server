@@ -36,31 +36,31 @@ class SharedClockSettingsTests(unittest.TestCase):
     def test_appearance_persists_and_survives_same_meet_publication(self):
         self.connect()
         before = self.operations._connection.execute("SELECT * FROM runtime_clock").fetchone()
-        result = self.app.control_clock(self.admin, {"action": "appearance", "style": "swedish", "show_seconds": False})
-        self.assertEqual(result["style"], "swedish")
+        result = self.app.control_clock(self.admin, {"action": "appearance", "style": "digital", "show_seconds": False})
+        self.assertEqual(result["style"], "digital")
         self.assertFalse(result["show_seconds"])
         self.assertEqual(before, self.operations._connection.execute("SELECT * FROM runtime_clock").fetchone())
         reopened = SQLiteRuntimeStore(self.runtime.path)
         self.addCleanup(reopened.close)
-        self.assertEqual(reopened.clock_display_settings(self.app._clock_scope()), {"style": "swedish", "show_seconds": False})
+        self.assertEqual(reopened.clock_display_settings(self.app._clock_scope()), {"style": "digital", "show_seconds": False})
         self.offered["publication_id"] = "second"
         self.connect()
-        self.assertEqual(self.app.display_snapshot()["clock"]["style"], "swedish")
+        self.assertEqual(self.app.display_snapshot()["clock"]["style"], "digital")
 
     def test_station_client_cannot_change_time_or_appearance(self):
         self.connect()
         terminal = PairedClient("terminal", "TKL", DeviceKind.TKL_TERMINAL, ("panel-a",))
         for action in ("set", "appearance"):
             with self.assertRaises(HTTPAPIError) as error:
-                self.app.control_clock(terminal, {"action": action, "time": "11:12:13", "style": "swedish", "show_seconds": False})
+                self.app.control_clock(terminal, {"action": action, "time": "11:12:13", "style": "digital", "show_seconds": False})
             self.assertEqual(int(error.exception.status), 403)
 
     def test_us_clock_uses_same_presentation_without_leaking_eu_preferences(self):
         self.connect()
-        self.app.control_clock(self.admin, {"action": "appearance", "style": "swedish", "show_seconds": False})
+        self.app.control_clock(self.admin, {"action": "appearance", "style": "digital", "show_seconds": False})
         self.offered = fixture.us_package()
         self.connect(confirm_meet_change=True)
-        self.assertNotEqual(self.app.clock_status(self.admin)["style"], "swedish")
+        self.assertNotEqual(self.app.clock_status(self.admin)["style"], "digital")
         generation = self.app.lifecycle.selected()["generation"]
         result = self.app.control_clock(self.admin, {"action": "set", "time": "06:30", "speed": 4, "meet_generation": generation})
         self.assertFalse(result["running"])
@@ -71,7 +71,7 @@ class SharedClockSettingsTests(unittest.TestCase):
 
     def test_invalid_appearance_does_not_override_good_settings(self):
         self.connect()
-        for style, seconds in (("bad", True), ("swedish", "false"), (None, False)):
+        for style, seconds in (("bad", True), ("digital", "false"), (None, False)):
             with self.assertRaises(HTTPAPIError):
                 self.app.control_clock(self.admin, {"action": "appearance", "style": style, "show_seconds": seconds})
         self.assertEqual(self.runtime.clock_display_settings(self.app._clock_scope()), {})

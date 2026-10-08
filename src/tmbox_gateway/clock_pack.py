@@ -301,6 +301,51 @@ def read_pack(data: bytes) -> ClockPack:
         return parse(read(MANIFEST), read, sha256=hashlib.sha256(data).hexdigest())
 
 
+def read_packs(data: bytes) -> list[ClockPack]:
+    """Ett klockpaket, eller en zip med flera (.tmclock), som när man laddar ner
+    flera klockor på en gång. Kastar ClockPackError; ett fel i ett av paketen
+    säger vilket."""
+    if len(data) > MAX_PACKAGE_BYTES:
+        raise ClockPackError(f"Filen är större än {MAX_PACKAGE_BYTES // (1024 * 1024)} MB. Ladda upp klockpaketen var för sig.")
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            infos = archive.infolist()
+            names = [info.filename.replace("\\", "/") for info in infos if not info.is_dir()]
+            if any(name.rsplit("/", 1)[-1] == MANIFEST for name in names if not _junk(name)):
+                return [read_pack(data)]
+            # Paketen överst, eller i en enda mapp (som när man packar en mapp).
+            inner = [info for info in infos if not info.is_dir() and not _junk(info.filename)
+                     and info.filename.lower().endswith(".tmclock") and info.filename.replace("\\", "/").count("/") <= 1]
+            if not inner:
+                return [read_pack(data)]
+            if len(infos) > MAX_ENTRIES:
+                raise ClockPackError(f"Zip-filen har fler än {MAX_ENTRIES} filer.")
+            packs: list[ClockPack] = []
+            unpacked = 0
+            for info in inner:
+                label = info.filename.rsplit("/", 1)[-1]
+                try:
+                    with archive.open(info) as handle:
+                        content = handle.read(MAX_PACKAGE_BYTES + 1)
+                except (RuntimeError, zipfile.BadZipFile, NotImplementedError, EOFError, OSError) as error:
+                    raise ClockPackError(f"{label} går inte att packa upp: {error}.") from error
+                unpacked += len(content)
+                if unpacked > 4 * MAX_PACKAGE_BYTES:
+                    raise ClockPackError("Zip-filen packas upp till för mycket. Ladda upp klockpaketen var för sig.")
+                try:
+                    packs.append(read_pack(content))
+                except ClockPackError as error:
+                    raise ClockPackError(f"{label}: {error}") from error
+    except zipfile.BadZipFile as error:
+        raise ClockPackError("Filen är inte ett klockpaket. Ett klockpaket är en zip-fil med clock.json.") from error
+    seen: dict[str, str] = {}
+    for pack in packs:
+        if pack.id in seen:
+            raise ClockPackError(f"Två klockor har samma id ({pack.id}): {seen[pack.id]} och {pack.name}.")
+        seen[pack.id] = pack.name
+    return packs
+
+
 def build(directory: str | Path) -> bytes:
     """Packar en mapp till ett klockpaket och kontrollerar det. Bara clock.json
     och lagren som den nämner följer med, i samma ordning varje gång."""
@@ -378,7 +423,7 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     example = commands.add_parser("example", help="skriv exempelpaketets filer till en ny mapp att börja från")
     example.add_argument("directory")
-    check = commands.add_parser("check", help="kontrollera en mapp eller en .tmclock-fil med samma regler som servern")
+    check = commands.add_parser("check", help="kontrollera en mapp, en .tmclock-fil eller en zip med flera, med samma regler som servern")
     check.add_argument("path")
     pack = commands.add_parser("build", help="packa en mapp till en .tmclock-fil")
     pack.add_argument("directory")
@@ -398,8 +443,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if arguments.command == "check":
             path = Path(arguments.path)
-            result = read_pack(build(path) if path.is_dir() else path.read_bytes())
-            print("OK: " + describe(result))
+            for result in read_packs(build(path) if path.is_dir() else path.read_bytes()):
+                print("OK: " + describe(result))
             return 0
         directory = Path(arguments.directory)
         output = Path(arguments.output) if arguments.output else directory.with_suffix(".tmclock")

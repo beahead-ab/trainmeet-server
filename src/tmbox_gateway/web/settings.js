@@ -174,11 +174,11 @@
       box.append(time);
       return box;
     }
-    const light = style === "stationsur";
-    const ink = light ? "#0b0b0b" : "#f1f3f6";
+    // Den analoga klockan: mörk tavla med streck och visare på 10:08.
+    const ink = "#f1f3f6";
     const svg = svgEl("svg", { width: 52, height: 52, viewBox: "0 0 100 100", "aria-hidden": "true" });
-    svg.append(svgEl("circle", { cx: 50, cy: 50, r: 46, fill: light ? "#f1f3f6" : "#1b1f27", stroke: light ? "none" : "#5c6370", "stroke-width": 3 }));
-    svg.append(svgEl("circle", { cx: 50, cy: 50, r: 40, fill: "none", stroke: ink, "stroke-width": light ? 8 : 7, "stroke-dasharray": light ? "4 16.9" : "3 16.9", "stroke-dashoffset": light ? 2 : 1.5 }));
+    svg.append(svgEl("circle", { cx: 50, cy: 50, r: 46, fill: "#1b1f27", stroke: "#5c6370", "stroke-width": 3 }));
+    svg.append(svgEl("circle", { cx: 50, cy: 50, r: 40, fill: "none", stroke: ink, "stroke-width": 7, "stroke-dasharray": "3 16.9", "stroke-dashoffset": 1.5 }));
     svg.append(svgEl("rect", { x: 47, y: 24, width: 6, height: 30, rx: 1, fill: ink, transform: "rotate(156 50 50)" }));
     svg.append(svgEl("rect", { x: 48, y: 14, width: 4, height: 40, rx: 1, fill: ink, transform: "rotate(-30 50 50)" }));
     box.append(svg);

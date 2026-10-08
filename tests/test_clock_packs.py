@@ -55,6 +55,15 @@ def pack(files=None, *, prefix="", **manifest_changes) -> bytes:
     return buffer.getvalue()
 
 
+def bundle(packs, *, folder="") -> bytes:
+    """En zip med flera klockpaket, som när man laddar ner flera på en gång."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for name, data in packs.items():
+            archive.writestr(folder + name, data)
+    return buffer.getvalue()
+
+
 def png(width, height) -> bytes:
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
@@ -217,13 +226,13 @@ class ClockFaceServerTests(unittest.TestCase):
         content_type, data = self.app.clock_face_layer(second["face"]["layers"]["dial"])
         self.assertEqual((content_type, data[:4]), ("image/svg+xml", b"<svg"))
 
-    def test_removing_the_chosen_clock_falls_back_to_the_station_clock(self):
+    def test_removing_the_chosen_clock_falls_back_to_the_analog_clock(self):
         self.connect()
         self.upload()
         self.app.control_clock(self.admin, {"action": "appearance", "style": "custom:mitt-ur", "show_seconds": True})
         self.app.delete_clock_face(self.admin, {"id": "mitt-ur"})
         clock = self.app.display_snapshot()["clock"]
-        self.assertEqual((clock["style"], clock["faces"]), ("stationsur", []))
+        self.assertEqual((clock["style"], clock["faces"]), ("analog", []))
         self.assertNotIn("custom:mitt-ur", clock["available_styles"])
         self.assertEqual(len(self.audit("clock_face.deleted")), 1)
         with self.assertRaises(HTTPAPIError) as missing:
@@ -243,8 +252,37 @@ class ClockFaceServerTests(unittest.TestCase):
             self.upload(pack(id=f"ur-{number}"))
         with self.assertRaises(HTTPAPIError) as full:
             self.upload(pack(id="en-till"))
-        self.assertIn("Ta bort en först", str(full.exception))
+        self.assertIn("Ta bort några först", str(full.exception))
         self.assertTrue(self.upload(pack(id="ur-3", version="2"))["replaced"], "replacing one still works")
+
+    def test_a_zip_of_several_packs_uploads_them_all(self):
+        self.connect()
+        result = self.upload(bundle({"a.tmclock": pack(id="ur-a"), "b.tmclock": pack(id="ur-b", name="Ur B")}), file_name="klockor.zip")
+        self.assertEqual([(face["id"], face["replaced"]) for face in result["uploaded"]], [("ur-a", False), ("ur-b", False)])
+        self.assertEqual(sorted(face["id"] for face in self.runtime.clock_faces()), ["ur-a", "ur-b"])
+        self.assertEqual(sorted(entry["id"] for entry in self.audit("clock_face.uploaded")), ["ur-a", "ur-b"], "each one is logged")
+        styles = self.app.display_snapshot()["clock"]["available_styles"]
+        self.assertTrue({"custom:ur-a", "custom:ur-b"} <= set(styles))
+        again = self.upload(bundle({"a.tmclock": pack(id="ur-a", version="2")}, folder="klockor/"))
+        self.assertEqual(again["uploaded"], [{"id": "ur-a", "name": "Mitt ur", "replaced": True}], "a zipped folder works too")
+
+    def test_one_bad_pack_in_a_zip_stops_them_all_and_says_which(self):
+        self.connect()
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.upload(bundle({"bra.tmclock": pack(id="bra"), "dalig.tmclock": pack({"hour.svg": SQUARE.format("<script/>")}, id="dalig")}))
+        self.assertIn("dalig.tmclock: hour.svg: <script> är inte tillåtet", str(refused.exception))
+        with self.assertRaises(HTTPAPIError) as twice:
+            self.upload(bundle({"a.tmclock": pack(id="samma"), "b.tmclock": pack(id="samma")}))
+        self.assertIn("samma id", str(twice.exception))
+        self.assertEqual(self.runtime.clock_faces(), [], "nothing is saved")
+
+    def test_a_zip_that_would_not_fit_saves_none_of_its_packs(self):
+        self.connect()
+        for number in range(MAX_CLOCK_FACES - 1):
+            self.upload(pack(id=f"ur-{number}"))
+        with self.assertRaises(HTTPAPIError):
+            self.upload(bundle({"a.tmclock": pack(id="ny-a"), "b.tmclock": pack(id="ny-b")}))
+        self.assertEqual(len(self.runtime.clock_faces()), MAX_CLOCK_FACES - 1)
 
     def test_the_http_routes_upload_list_and_remove(self):
         self.connect()
@@ -257,31 +295,43 @@ class ClockFaceServerTests(unittest.TestCase):
         self.assertEqual((int(status), body["faces"]), (200, []))
 
 
-class SwissStyleTests(unittest.TestCase):
-    """Den schweiziska tavlan (SBB) är licensbelagd och följer inte med längre."""
+class BuiltInStyleTests(unittest.TestCase):
+    """Inbyggt finns en generisk analog och en digital klocka (Casper 2026-10-08).
+    De tidigare stilarna är klockpaket; den schweiziska (SBB) är licensbelagd."""
     setUp = fixture.CloudOnlyDeliveryTests.setUp
     fetch = fixture.CloudOnlyDeliveryTests.fetch
     connect = fixture.CloudOnlyDeliveryTests.connect
 
-    def test_the_swiss_face_is_not_built_in(self):
-        self.assertNotIn("swiss", AVAILABLE_CLOCK_STYLES)
-        web = Path(__file__).resolve().parents[1] / "src" / "tmbox_gateway" / "web"
-        for name in ("app.js", "settings.js", "shell-messages.js"):
-            text = (web / name).read_text()
-            self.assertNotIn("swiss", text.lower(), name)
-            self.assertNotIn("SBB", text, name)
+    def upload(self, data):
+        return self.app.upload_clock_face(self.admin, {"data": base64.b64encode(data).decode(), "rights_confirmed": True})
 
-    def test_a_package_or_setting_that_says_swiss_shows_the_station_clock(self):
+    def test_only_a_generic_analog_and_a_digital_clock_are_built_in(self):
+        self.assertEqual(AVAILABLE_CLOCK_STYLES, ("analog", "digital"))
+        web = Path(__file__).resolve().parents[1] / "src" / "tmbox_gateway" / "web"
+        for name in ("app.js", "settings.js", "participant.js", "shell-messages.js"):
+            text = (web / name).read_text()
+            for gone in ("swiss", "stationsur:", "swedish", "norwegian", "american", "Svensk (SJ)", "SBB"):
+                self.assertNotIn(gone, text, name)
+
+    def test_an_old_style_shows_the_analog_clock_until_its_pack_is_uploaded(self):
         self.offered["clock"]["available_styles"] = ["swiss", "swedish", "digital"]
         self.connect()
         clock = self.app.display_snapshot()["clock"]
-        self.assertEqual(clock["style"], "stationsur", "an older Cloud package lists swiss first")
-        self.assertNotIn("swiss", clock["available_styles"])
-        self.runtime._save_setting("clock_display:" + self.app._clock_scope(), json.dumps({"style": "swiss", "show_seconds": False}))
+        self.assertEqual((clock["style"], clock["available_styles"]), ("analog", ["analog", "digital"]), "an older Cloud package lists swiss first")
+        scope = "clock_display:" + self.app._clock_scope()
+        self.runtime._save_setting(scope, json.dumps({"style": "stationsur", "show_seconds": False}))
         clock = self.app.display_snapshot()["clock"]
-        self.assertEqual((clock["style"], clock["show_seconds"]), ("stationsur", False), "a saved choice of swiss")
-        with self.assertRaises(HTTPAPIError):
-            self.app.control_clock(self.admin, {"action": "appearance", "style": "swiss", "show_seconds": True})
+        self.assertEqual((clock["style"], clock["show_seconds"]), ("analog", False), "a saved choice of the station clock")
+        for style in ("swiss", "swedish", "stationsur"):
+            with self.assertRaises(HTTPAPIError):
+                self.app.control_clock(self.admin, {"action": "appearance", "style": style, "show_seconds": True})
+        # Med paketen uppladdade visar träffen samma klocka som förut.
+        self.upload(bundle({"stationsur.tmclock": pack(id="stationsur", name="Stationsur"), "sbb.tmclock": pack(id="sbb", name="Schweizisk (SBB)")}))
+        self.assertEqual(self.app.display_snapshot()["clock"]["style"], "custom:stationsur", "the saved choice is the uploaded pack")
+        self.runtime._save_setting(scope, json.dumps({"style": "swiss", "show_seconds": True}))
+        self.assertEqual(self.app.display_snapshot()["clock"]["style"], "custom:sbb")
+        self.runtime._save_setting(scope, "{}")
+        self.assertEqual(self.app.display_snapshot()["clock"]["style"], "custom:sbb", "the package's first style, swiss, is the uploaded pack")
 
 
 class ClockLayerHTTPTests(unittest.TestCase):

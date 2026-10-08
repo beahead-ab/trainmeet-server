@@ -723,7 +723,7 @@
                 <div class="kr-ph"><span>Egna klockor</span><span class="kr-c">klockpaket (.tmclock) · för alla träffar på servern · väljs som stil ovan</span></div>
                 <div id="clock-faces-list" class="kr-lines"><p class="kr-empty">Inga egna klockor ännu.</p></div>
                 <form id="clock-face-upload-form" class="kr-rows kr-clock-upload" novalidate>
-                  <div class="kr-kv"><label class="kr-k" for="clock-face-file">Klockpaket</label><input id="clock-face-file" class="kr-file" type="file" accept=".tmclock,.zip,application/zip"><span class="kr-m">zip med clock.json och lagren som SVG eller PNG · högst 2 MB</span></div>
+                  <div class="kr-kv"><label class="kr-k" for="clock-face-file">Klockpaket</label><input id="clock-face-file" class="kr-file" type="file" accept=".tmclock,.zip,application/zip" multiple><span class="kr-m">ett eller flera klockpaket, eller en zip med flera · högst 2 MB per fil</span></div>
                   <div class="kr-kv"><span class="kr-k">Rätt att använda</span><label class="kr-chk"><input id="clock-face-rights" type="checkbox"><span>Jag har rätt att använda den här urtavlan: den är vår egen formgivning eller licensierad från den som äger den.</span></label></div>
                   <p id="clock-face-message" class="form-message" role="status"></p>
                   <div class="kr-kv kr-clock-upload__actions"><a class="kr-btn sm" href="/v1/clock-faces/exempelur.tmclock" download>Ladda ner exempelpaketet</a><span class="kr-sp"></span><button class="kr-btn sm primary" type="submit">Ladda upp</button></div>

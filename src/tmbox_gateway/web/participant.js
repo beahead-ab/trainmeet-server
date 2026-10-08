@@ -107,7 +107,7 @@
       target.dataset.signature = signature;
       const face = digital
         ? `<div class="pv-clock__time${stopped ? " is-stopped" : ""}"><span class="hm"></span><small></small></div>`
-        : `<div class="pv-clock__face${stopped ? " is-stopped" : ""}">${clockSVG(style, style !== "stationsur", showSeconds, stopped)}</div>`;
+        : `<div class="pv-clock__face${stopped ? " is-stopped" : ""}">${clockSVG(style, true, showSeconds, stopped)}</div>`;
       target.innerHTML = `${face}<div class="pv-clock__side"><div class="pv-clock__status${stopped ? " is-stopped" : ""}">${escapeHTML(status)}</div><div class="pv-clock__meta">${escapeHTML(meta)}</div></div>`;
     }
     if (digital) {
