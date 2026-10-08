@@ -35,8 +35,10 @@ Det här dokumentet beskriver:
    python -m tmbox_gateway.clock_pack check mitt-ur/
    python -m tmbox_gateway.clock_pack build mitt-ur/ -o mitt-ur.tmclock
    ```
-6. **Ladda upp, kryssa i rätten att använda tavlan och välj klockan som stil.**
-   Ladda upp igen med samma `id` för att byta version.
+6. **Ladda upp och välj klockan som stil.** Släpp filen på panelen Egna
+   klockor under Inställningar → Skärmar och klocka, eller tryck Välj filer.
+   Godkänn klockan i rutan som öppnas. Ladda upp igen med samma `id` för att
+   byta version.
 
 `check` och `preview` använder samma regler som servern. Det som godtas där
 godtas också vid uppladdningen.
@@ -156,13 +158,39 @@ och laptopen. Kontrollen varnar för `<text>`.
 
 ### Färg och kontrast
 
-Paketets färger är fasta. Skärmarna kan visa mörkt eller ljust läge, men
-tavlan ser likadan ut i båda. Därför:
+Paketets färger är fasta. Skärmarna kan visa mörkt eller ljust läge, och
+utan en mörk variant ser tavlan likadan ut i båda. Därför:
 
 - Ge tavlan en egen fylld bakgrund och en tydlig kant.
 - Låt visarna och strecken kontrastera starkt mot tavlan, till exempel svart
   mot vitt eller vitt mot mörkgrått.
 - Sekundvisaren får gärna ha en egen färg.
+
+### Mörkt läge
+
+Ett paket kan ha en **mörk variant**. Den används på skärmar och i deltagarvyn
+när de visar mörkt läge. En ljus tavla kan annars lysa starkt på en TV i en
+mörk lokal.
+
+- Ange varianten under `"dark"` i `clock.json`, med samma lagernamn som i
+  `"layers"`.
+- Lager som saknas i `"dark"` tas från `"layers"`. En sekundvisare i egen färg
+  passar ofta båda lägena, och behöver då bara finnas en gång.
+- Den mörka varianten kontrolleras på samma sätt och syns på de mörka rutorna
+  i `preview`.
+
+```json
+"dark": {
+  "dial": "dial-dark.svg",
+  "hour": "hour-dark.svg",
+  "minute": "minute-dark.svg",
+  "top": "top-dark.svg"
+}
+```
+
+Klockorna som var inbyggda före 3.19 har en sådan variant. I mörkt läge har de
+mörk tavla (`#15181e`), kant `#363c49`, streck och visare `#f1f3f6` och
+siffror `#b7bdc8`. Stationsuret var alltid ljust.
 
 ### Det som gör klockan tung
 
@@ -209,6 +237,7 @@ Raspberry Pi.
 | `version`, `author` | Valfria. |
 | `layers` | Filen för varje lager. `dial`, `hour` och `minute` krävs. |
 | `motion` | Hur visarna går, se nedan. Utelämnat betyder att alla visare glider jämnt. |
+| `dark` | Valfritt. Lager för mörkt läge, se [Mörkt läge](#mörkt-läge). |
 
 ### Hur visarna går
 
@@ -274,7 +303,9 @@ Kommandona finns i TrainMeet Server, i källkoden eller en installation. De
 behöver bara Python 3.11, inga andra paket.
 
 Har du inte servern på datorn kan du ladda upp paketet direkt. Servern gör
-samma kontroll och visar varningarna under beskedet. Klockan syns sedan:
+samma kontroll. Rutan där du godkänner klockan visar den och varningarna
+innan något laddas upp, och varningarna står kvar under beskedet efteråt.
+Klockan syns sedan:
 - i stilvalet (52 px);
 - i deltagarvyn (84 px);
 - på klockskärmen, där du kan prova telefon, surfplatta och TV genom att
@@ -294,16 +325,24 @@ Innan du laddar upp:
 - [ ] Timstreck och visare syns i deltagarvyns storlek, 84 px, i
       `preview`.
 - [ ] Texten är gjord till banor.
+- [ ] Tavlan ser bra ut på både mörk och ljus bakgrund i `preview`, eller har
+      en mörk variant.
 - [ ] `check` visar inga fel, och helst inga varningar.
 
 ## Flera klockor på en gång
 
-Välj flera filer i uppladdningen, eller ladda upp en zip-fil med flera
-`.tmclock`.
+Släpp flera filer på en gång på panelen, eller välj flera. Varje fil kan vara
+ett `.tmclock` eller en zip-fil med flera.
 
-- Ett fel i ett av paketen stoppar alla, och beskedet säger vilket paket det
+- Rutan listar varje klocka från alla filer, med förhandsbild, filnamn och om
+  den ersätter en uppladdad klocka. Du godkänner dem var för sig, eller alla
+  med Markera alla. Bara de godkända laddas upp.
+- Finns samma klocka i två filer kan den bara godkännas en gång; den första
   gäller.
-- Ryms inte alla paket under taket på 20 klockor per server laddas inget upp.
+- En fil som inte går att läsa står i rutan med skälet. Ett fel i ett paket i
+  en zip stoppar hela den filen.
+- Ryms inte alla godkända klockor under taket på 20 per server laddas inget
+  upp från den filen.
 
 ## Inbyggda klockor och tidigare stilar
 
@@ -322,21 +361,25 @@ id.
 
 ## Rätten att använda tavlan
 
-Den som laddar upp intygar att den har rätt att använda tavlan. Det gäller
-till exempel en egen formgivning, eller en tavla som är licensierad av den som
-äger formgivningen. Intyget loggas tillsammans med namn och tid. TrainMeet har
-inga licensbelagda tavlor inbyggda.
+Den som laddar upp godkänner varje klocka för sig: att den har rätt att
+använda tavlan. Det gäller till exempel en egen formgivning, eller en tavla
+som är licensierad av den som äger formgivningen. Godkännandet sparas med namn
+och tid och syns som en stämpel, Godkänd att visas, på klockans rad under
+Egna klockor. Det loggas också. Servern sparar bara klockor som godkänts med
+sitt id. TrainMeet har inga licensbelagda tavlor inbyggda.
 
 ## API
 
 | | |
 |---|---|
-| `GET /v1/clock-faces` | Admin. Klockorna med uppladdare, tid och intyg. |
-| `POST /v1/clock-faces` | Admin. `{file_name, data (base64), rights_confirmed: true}`. `data` är ett klockpaket eller en zip med flera. Svaret har dem i `uploaded`, med varningarna. |
+| `GET /v1/clock-faces` | Admin. Klockorna med uppladdare och när de godkändes (`rights_confirmed_at`). |
+| `POST /v1/clock-faces/check` | Admin. `{file_name, data (base64)}`. Vad filen innehåller, utan att något sparas: `packs` med id, namn, version, varningar, om klockan ersätter en uppladdad (`replaces`, `unchanged`) och lagren som data-adresser för förhandsbilden. |
+| `POST /v1/clock-faces` | Admin. `{file_name, data (base64), rights_confirmed: true, approved: [id, …]}`. `data` är ett klockpaket eller en zip med flera; bara klockorna i `approved` sparas. Svaret har dem i `uploaded`, med varningarna. |
 | `POST /v1/clock-faces/delete` | Admin. `{id}`. En skärm som visar klockan byter till den analoga klockan. |
 | `GET /v1/clock-faces/<id>/<sha16>/<lager>` | Öppen, som `/v1/display`. Lagret sparas länge, eftersom adressen byts med varje ny version. |
 | `GET /v1/clock-faces/exempelur.tmclock` | Exempelpaketet. |
 
 `/v1/display` och `/v1/clock` har klockorna i `clock.faces`. Där står stil,
-namn, lager och gång, men inte vem som laddade upp dem. En uppladdad klockas
+namn, lager (`layers` och den mörka varianten i `dark_layers`) och gång, men
+inte vem som laddade upp dem. En uppladdad klockas
 stil är `custom:<id>` i `clock.available_styles`.

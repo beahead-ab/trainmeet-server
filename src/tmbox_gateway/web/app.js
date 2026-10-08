@@ -1193,12 +1193,21 @@ function renderClockFaceList(faces) {
     const text = document.createElement("span");
     const name = document.createElement("b");
     name.textContent = [face.name, face.version].filter(Boolean).join(" ");
-    const meta = document.createElement("span");
-    meta.className = "kr-m";
-    meta.textContent = " · " + [face.author ? t("av {name}", { name: face.author }) : "",
-      t("uppladdad av {name} {time}", { name: face.uploaded_by, time: formatUploadedAt(face.uploaded_at) }),
-      t("rätt att använda intygad")].filter(Boolean).join(" · ");
-    text.append(name, meta);
+    text.append(name);
+    if (face.author) text.append(Object.assign(document.createElement("span"), { className: "kr-m", textContent: ` · ${t("av {name}", { name: face.author })}` }));
+    // Stämpeln: admin har godkänt att urtavlan får visas, vem och när.
+    const stamp = document.createElement("span");
+    stamp.className = "kr-stamp";
+    if (face.rights_confirmed_at) {
+      const when = [face.uploaded_by, formatUploadedAt(face.rights_confirmed_at)].filter(Boolean).join(" · ");
+      stamp.title = t("Godkänd av {name} {time}: rätt att använda urtavlan.", { name: face.uploaded_by, time: formatUploadedAt(face.rights_confirmed_at) });
+      stamp.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+      stamp.append(Object.assign(document.createElement("b"), { textContent: t("Godkänd att visas") }),
+        Object.assign(document.createElement("span"), { textContent: when }));
+    } else {
+      stamp.classList.add("kr-stamp--missing");
+      stamp.textContent = t("Inget godkännande");
+    }
     const actions = document.createElement("span");
     actions.className = "kr-actions";
     const remove = document.createElement("button");
@@ -1207,7 +1216,7 @@ function renderClockFaceList(faces) {
     remove.dataset.deleteFace = face.id;
     remove.textContent = t("Ta bort");
     actions.append(remove);
-    row.append(preview, text, actions);
+    row.append(preview, text, stamp, actions);
     return row;
   }));
 }
@@ -1245,36 +1254,159 @@ function showClockPackWarnings(uploaded) {
   document.querySelector("#clock-face-message").after(list);
 }
 
-// Ett eller flera klockpaket, eller en zip med flera: ett i taget till servern.
-// Ett fel stoppar resten och säger vilken fil det gällde.
-document.querySelector("#clock-face-upload-form")?.addEventListener("submit", async event => {
-  event.preventDefault();
-  const form = event.currentTarget;
+// Filerna som väntar i godkännanderutan: [{ file, data, packs, error }].
+let clockPackBatch = [];
+const isClockPackFile = (file) => /\.(?:tmclock|zip)$/i.test(file.name);
+const CLOCK_PREVIEW_AT = 10 * 3600 + 8 * 60 + 36;
+
+// Ett eller flera klockpaket (eller zip-filer med flera), släppta på panelen
+// eller valda: servern läser varje fil och säger vad den innehåller. Inget
+// laddas upp förrän admin godkänt klockorna var för sig.
+async function prepareClockUpload(fileList) {
+  const files = [...(fileList || [])];
   const message = document.querySelector("#clock-face-message");
-  const files = [...(document.querySelector("#clock-face-file").files || [])];
-  if (!files.length) return setMessage(message, "Välj ett klockpaket först.", "error");
+  if (!files.length || document.querySelector("#clock-faces-modal")?.open) return;
+  document.querySelector("#clock-face-warnings")?.remove();
+  const other = files.find(file => !isClockPackFile(file));
+  if (other) return setMessage(message, "{name} är inget klockpaket (.tmclock eller .zip).", "error", { name: other.name });
   const large = files.find(file => file.size > CLOCK_PACK_MAX_BYTES);
   if (large) return setMessage(message, "{name} är större än 2 MB.", "error", { name: large.name });
-  if (!document.querySelector("#clock-face-rights").checked) return setMessage(message, "Kryssa i att du har rätt att använda urtavlan.", "error");
-  if (!beginModalAction(form)) return;
-  document.querySelector("#clock-face-warnings")?.remove();
-  const uploaded = [];
+  const drop = document.querySelector("#clock-face-drop");
+  drop?.setAttribute("aria-busy", "true");
+  setMessage(message, "Läser klockpaketen …");
+  const batch = [];
   try {
     for (const file of files) {
       const data = await fileBase64(file);
+      try {
+        const response = await authorizedFetch("/v1/clock-faces/check", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ file_name: file.name, data }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(t(result.message || "Klockpaketet kunde inte läsas."));
+        batch.push({ file, data, packs: result.packs || [] });
+      } catch (error) {
+        batch.push({ file, data, packs: [], error: error.message });
+      }
+    }
+  } finally {
+    drop?.removeAttribute("aria-busy");
+  }
+  if (!batch.some(entry => entry.packs.length)) {
+    return setMessage(message, batch.map(entry => files.length > 1 ? `${entry.file.name}: ${entry.error}` : entry.error).join(" "), "error");
+  }
+  setMessage(message, "");
+  clockPackBatch = batch;
+  renderClockApproval(batch);
+  openModal("clock-faces-modal", document.querySelector("#clock-face-file"));
+}
+
+// En rad per klocka, med förhandsbild och en egen kryssruta: admin intygar
+// för varje klocka att den får visas. En fil som inte gick att läsa står
+// med skälet, och samma klocka i två filer kan bara godkännas en gång.
+function renderClockApproval(batch) {
+  const list = document.querySelector("#clock-faces-approve-list");
+  const seen = new Map();
+  const dark = globalThis.TrainMeetClockFace.pageIsDark();
+  list.replaceChildren(...batch.flatMap((entry, index) => {
+    if (entry.error) {
+      const row = document.createElement("li");
+      row.className = "kr-clock-approve__item is-error";
+      row.append(Object.assign(document.createElement("b"), { textContent: entry.file.name }),
+        Object.assign(document.createElement("span"), { className: "kr-clock-approve__note", textContent: entry.error }));
+      return [row];
+    }
+    return entry.packs.map(pack => {
+      const row = document.createElement("li");
+      row.className = "kr-clock-approve__item";
+      row.dataset.face = pack.id;
+      const label = document.createElement("label");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.name = "clock-approve";
+      box.value = pack.id;
+      box.dataset.file = String(index);
+      box.setAttribute("aria-label", t("Rätt att använda {name}", { name: pack.name }));
+      const face = document.createElement("span");
+      face.className = "kr-clock-approve__face";
+      face.innerHTML = globalThis.TrainMeetClockFace.markup(pack, { preview: true, dark, at: CLOCK_PREVIEW_AT });
+      const text = document.createElement("span");
+      text.className = "kr-clock-approve__text";
+      text.append(Object.assign(document.createElement("b"), { textContent: [pack.name, pack.version].filter(Boolean).join(" ") }),
+        Object.assign(document.createElement("span"), { className: "kr-m",
+          textContent: [entry.file.name, pack.author ? t("av {name}", { name: pack.author }) : ""].filter(Boolean).join(" · ") }));
+      const twin = seen.get(pack.id);
+      const note = twin !== undefined ? t("Samma klocka som i {file}.", { file: twin })
+        : pack.unchanged ? t("Finns redan, oförändrad.") : pack.replaces ? t("Ersätter den uppladdade.") : "";
+      if (note) text.append(Object.assign(document.createElement("span"), { className: "kr-clock-approve__note", textContent: note }));
+      if (pack.warnings?.length) {
+        const warnings = document.createElement("ul");
+        warnings.className = "kr-clock-approve__warnings";
+        warnings.append(...pack.warnings.map(warning => Object.assign(document.createElement("li"), { textContent: warning })));
+        text.append(warnings);
+      }
+      if (twin !== undefined) { box.disabled = true; row.classList.add("is-off"); } else seen.set(pack.id, entry.file.name);
+      label.append(box, face, text);
+      row.append(label);
+      return row;
+    });
+  }));
+  document.querySelector("#clock-faces-approve-all").checked = false;
+  updateClockApproval();
+}
+
+function updateClockApproval() {
+  const boxes = [...document.querySelectorAll('#clock-faces-approve-list input[name="clock-approve"]:not(:disabled)')];
+  const chosen = boxes.filter(box => box.checked).length;
+  const all = document.querySelector("#clock-faces-approve-all");
+  all.checked = boxes.length > 0 && chosen === boxes.length;
+  all.indeterminate = chosen > 0 && chosen < boxes.length;
+  all.disabled = !boxes.length;
+  const submit = document.querySelector("#clock-faces-approve-submit");
+  submit.disabled = chosen === 0;
+  submit.textContent = chosen ? t("Ladda upp {count}", { count: chosen }) : t("Ladda upp");
+}
+
+document.querySelector("#clock-faces-approve-all")?.addEventListener("change", event => {
+  document.querySelectorAll('#clock-faces-approve-list input[name="clock-approve"]:not(:disabled)').forEach(box => { box.checked = event.target.checked; });
+  updateClockApproval();
+});
+document.querySelector("#clock-faces-approve-list")?.addEventListener("change", updateClockApproval);
+
+// De godkända klockorna, fil för fil, med deras id: servern sparar bara dem.
+// Ett fel stoppar resten och säger vilken fil det gällde; det som redan är
+// uppladdat står kvar som uppladdat i rutan.
+document.querySelector("#clock-faces-approve-form")?.addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const message = document.querySelector("#clock-faces-approve-message");
+  const chosen = [...form.querySelectorAll('input[name="clock-approve"]:checked:not(:disabled)')];
+  if (!chosen.length) return setMessage(message, "Godkänn minst en klocka.", "error");
+  if (!beginModalAction(form)) return;
+  const uploaded = [];
+  try {
+    for (const [index, entry] of clockPackBatch.entries()) {
+      const approved = chosen.filter(box => box.dataset.file === String(index)).map(box => box.value);
+      if (!approved.length) continue;
       const response = await authorizedFetch("/v1/clock-faces", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file_name: file.name, data, rights_confirmed: true }) });
+        body: JSON.stringify({ file_name: entry.file.name, data: entry.data, rights_confirmed: true, approved }) });
       const result = await response.json();
-      if (!response.ok) throw new Error(files.length > 1 ? `${file.name}: ${t(result.message || "Klockpaketet kunde inte laddas upp.")}` : result.message || t("Klockpaketet kunde inte laddas upp."));
-      uploaded.push(...(result.uploaded || [{ name: result.face.name, replaced: result.replaced }]));
+      if (!response.ok) throw new Error(`${entry.file.name}: ${t(result.message || "Klockpaketet kunde inte laddas upp.")}`);
+      uploaded.push(...(result.uploaded || []));
     }
     endModalAction(form);
-    form.reset();
-    if (uploaded.length > 1) setMessage(message, "{count} klockor är uppladdade. Välj en som stil ovan.", "success", { count: uploaded.length });
-    else setMessage(message, uploaded[0].replaced ? "{name} är uppdaterad." : "{name} är uppladdad. Välj den som stil ovan.", "success", { name: uploaded[0].name });
+    const panelMessage = document.querySelector("#clock-face-message");
+    if (uploaded.length > 1) setMessage(panelMessage, "{count} klockor är uppladdade. Välj en som stil ovan.", "success", { count: uploaded.length });
+    else setMessage(panelMessage, uploaded[0].replaced ? "{name} är uppdaterad." : "{name} är uppladdad. Välj den som stil ovan.", "success", { name: uploaded[0].name });
+    clockPackBatch = [];
+    finishModal(form, panelMessage.textContent);
     showClockPackWarnings(uploaded);
   } catch (error) {
     endModalAction(form);
+    for (const face of uploaded) {
+      const box = form.querySelector(`.kr-clock-approve__item[data-face="${CSS.escape(face.id)}"] input`);
+      if (box) { box.checked = false; box.disabled = true; box.closest("li").classList.add("is-done"); }
+    }
+    updateClockApproval();
     setMessage(message, uploaded.length ? `${t("{count} klockor är uppladdade.", { count: uploaded.length })} ${error.message}` : error.message, "error");
   } finally {
     if (uploaded.length) {
@@ -1283,6 +1415,35 @@ document.querySelector("#clock-face-upload-form")?.addEventListener("submit", as
     }
   }
 });
+
+document.querySelector("#clock-face-file")?.addEventListener("change", event => {
+  const files = [...event.target.files];
+  event.target.value = "";
+  prepareClockUpload(files);
+});
+document.querySelector("#clock-face-upload-form")?.addEventListener("submit", event => event.preventDefault());
+
+// Dra och släpp en eller flera filer var som helst på panelen.
+(() => {
+  const panel = document.querySelector("#clock-faces-panel");
+  const drop = document.querySelector("#clock-face-drop");
+  if (!panel || !drop) return;
+  const carriesFiles = (event) => [...(event.dataTransfer?.types || [])].includes("Files");
+  panel.addEventListener("dragenter", event => { if (carriesFiles(event)) { event.preventDefault(); drop.classList.add("is-dragover"); } });
+  panel.addEventListener("dragover", event => {
+    if (!carriesFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    drop.classList.add("is-dragover");
+  });
+  panel.addEventListener("dragleave", event => { if (!panel.contains(event.relatedTarget)) drop.classList.remove("is-dragover"); });
+  panel.addEventListener("drop", event => {
+    if (!carriesFiles(event)) return;
+    event.preventDefault();
+    drop.classList.remove("is-dragover");
+    prepareClockUpload(event.dataTransfer.files);
+  });
+})();
 
 document.querySelector("#clock-faces-list")?.addEventListener("click", async event => {
   const button = event.target.closest("[data-delete-face]");
@@ -4506,7 +4667,7 @@ function clockStyleLabel(style) {
 // den analoga klockan.
 function clockSVG(style, darkBackground, showSeconds, stopped) {
   const face = globalThis.TrainMeetClockFace?.find(style);
-  if (face) return globalThis.TrainMeetClockFace.markup(face, { showSeconds, stopped });
+  if (face) return globalThis.TrainMeetClockFace.markup(face, { showSeconds, stopped, dark: darkBackground && globalThis.TrainMeetClockFace.pageIsDark() });
   const config = clockStyleConfig.analog;
   const marks = Array.from({ length: 60 }, (_, index) => {
     const major = index % 5 === 0;
@@ -4611,9 +4772,15 @@ const DISPLAY_CLOCK_SECONDS_KEY = "trainmeet.displayClockSeconds";
 // A screen may still choose its own style and seconds from its menu bar (the
 // TV in the hall and the laptop by the desk are different screens); that
 // choice lives in this browser only and an empty value follows the server.
+// En skärms eget val från före 3.19 (stationsur, swiss med flera) är nu ett
+// klockpaket med samma id, som på servern (runtime.LEGACY_CLOCK_STYLES). Finns
+// paketet inte uppladdat följer skärmen träffens val.
+const LEGACY_SCREEN_STYLES = Object.fromEntries(["stationsur", "swedish", "norwegian", "danish", "german", "finnish", "polish", "dutch",
+  "french", "italian", "american"].map(style => [style, `custom:${style}`]).concat([["swiss", "custom:sbb"]]));
 function displayClockPreference() {
   try {
-    return { style: localStorage.getItem(DISPLAY_CLOCK_STYLE_KEY) || "", seconds: localStorage.getItem(DISPLAY_CLOCK_SECONDS_KEY) || "" };
+    const style = localStorage.getItem(DISPLAY_CLOCK_STYLE_KEY) || "";
+    return { style: LEGACY_SCREEN_STYLES[style] || style, seconds: localStorage.getItem(DISPLAY_CLOCK_SECONDS_KEY) || "" };
   } catch { return { style: "", seconds: "" }; }
 }
 
@@ -4643,10 +4810,11 @@ function renderClockToolbar(snapshot) {
   const signature = [globalThis.TrainMeetI18n?.getLanguage?.(), styles.map(clockStyleLabel).join(","), styles.join(","), serverStyle, serverSeconds].join("|");
   if (styleSelect.dataset.signature !== signature) {
     styleSelect.dataset.signature = signature;
-    // "Stil: Digital", "Sekunder: visas": reglaget säger vad det styr och vad det står på.
+    // Stilen syns på sitt namn ("Digital", "Analog"); sekunderna behöver
+    // säga vad de gäller ("Sekunder: visas").
     styleSelect.replaceChildren(
-      new Option(`${t("Stil")}: ${t("Som i inställningarna")} (${serverStyle})`, ""),
-      ...styles.map(value => new Option(`${t("Stil")}: ${clockStyleLabel(value)}`, value)));
+      new Option(`${t("Som i inställningarna")} · ${serverStyle}`, ""),
+      ...styles.map(value => new Option(clockStyleLabel(value), value)));
     secondsSelect.replaceChildren(
       new Option(`${t("Sekunder")}: ${t("Som i inställningarna")} (${serverSeconds ? t("visas") : t("dolda")})`, ""),
       new Option(`${t("Sekunder")}: ${t("visas")}`, "on"),

@@ -1,5 +1,19 @@
 [
   {
+    "version": "3.22.0",
+    "date": "2026-10-08",
+    "notes": [
+      "Släpp klockorna på panelen och godkänn var och en"
+    ]
+  },
+  {
+    "version": "3.21.0",
+    "date": "2026-10-08",
+    "notes": [
+      "Dina tidigare klockor ser ut som förut, också i mörkt läge"
+    ]
+  },
+  {
     "version": "3.20.0",
     "date": "2026-10-08",
     "notes": [

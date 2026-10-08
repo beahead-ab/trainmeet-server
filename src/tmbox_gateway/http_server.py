@@ -1762,29 +1762,58 @@ class TrainMeetHTTPApplication:
                 "uploaded_by": face["uploaded_by"], "uploaded_at": face["uploaded_at"],
                 "rights_confirmed_at": face["rights_confirmed_at"]}
 
+    @staticmethod
+    def _clock_pack_preview(pack: clock_pack.ClockPack, *, replaces: bool, unchanged: bool = False) -> dict[str, Any]:
+        """En klocka i godkännanderutan: lagren som data-adresser, så att den
+        syns innan den är uppladdad. De är kontrollerade av clock_pack."""
+        def source(layer):
+            return f"data:{layer.content_type};base64,{base64.b64encode(layer.data).decode()}"
+        return {"id": pack.id, "name": pack.name, "version": pack.version, "author": pack.author,
+                "warnings": list(pack.warnings), "replaces": replaces, "unchanged": unchanged, "motion": pack.motion,
+                "layers": {name: source(layer) for name, layer in pack.layers.items()},
+                "dark_layers": {name: source(layer) for name, layer in pack.dark.items()}}
+
     def clock_faces_state(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
         faces = self.runtime_store.clock_faces() if self.runtime_store else []
         return {"faces": [self._admin_clock_face(face) for face in faces],
                 "limits": {"faces": MAX_CLOCK_FACES, "package_bytes": clock_pack.MAX_PACKAGE_BYTES}}
 
-    @announces("clock")
-    def upload_clock_face(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        """Tar emot ett klockpaket (base64) från Inställningar → Klockan, eller
-        en zip med flera klockpaket."""
-        self._require_admin(client)
+    def _uploaded_packs(self, payload: dict[str, Any]) -> list[clock_pack.ClockPack]:
         if self.runtime_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "clock_unavailable", "Klockinställningarna kan inte sparas")
-        if payload.get("rights_confirmed") is not True:
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "clock_face_rights", "Kryssa i att du har rätt att använda urtavlan.")
         try:
             data = base64.b64decode(str(payload.get("data") or ""), validate=True)
         except (binascii.Error, ValueError) as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_pack", "Filen kom inte fram hel. Försök igen.") from error
         try:
-            packs = clock_pack.read_packs(data)
+            return clock_pack.read_packs(data)
         except clock_pack.ClockPackError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_clock_pack", str(error)) from error
+
+    def check_clock_packs(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Godkännanderutan: vad en fil innehåller, med förhandsbild och
+        varningar. Inget sparas, inget loggas och inga sidor meddelas."""
+        self._require_admin(client)
+        packs = self._uploaded_packs(payload)
+        existing = {face["id"]: face["sha256"] for face in self.runtime_store.clock_faces()}
+        return {"packs": [self._clock_pack_preview(pack, replaces=pack.id in existing,
+                                                   unchanged=existing.get(pack.id) == pack.sha256) for pack in packs]}
+
+    @announces("clock")
+    def upload_clock_face(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Tar emot ett klockpaket (base64) från Inställningar → Klockan, eller
+        en zip med flera klockpaket. Bara klockor som admin godkänt var för sig
+        (approved: deras id) sparas, med godkännandet."""
+        self._require_admin(client)
+        approved = payload.get("approved")
+        if payload.get("rights_confirmed") is not True or not isinstance(approved, list) or not approved:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "clock_face_rights",
+                               "Godkänn varje klocka: att du har rätt att använda urtavlan.")
+        packs = [pack for pack in self._uploaded_packs(payload) if pack.id in approved]
+        if not packs:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "clock_face_rights",
+                               "Godkänn varje klocka: att du har rätt att använda urtavlan.")
         # Ryms inte alla får ingen av dem plats: hellre inget än hälften.
         existing = {face["id"] for face in self.runtime_store.clock_faces()}
         if len(existing | {pack.id for pack in packs}) > MAX_CLOCK_FACES:
@@ -1828,7 +1857,7 @@ class TrainMeetHTTPApplication:
         """Ett lager ur /v1/clock-faces/<id>/<sha>/<lager>. En gammal adress
         (en tidigare version av paketet) finns inte längre."""
         parts = path.removeprefix("/v1/clock-faces/").split("/")
-        if len(parts) != 3 or parts[2] not in clock_pack.LAYERS or self.runtime_store is None:
+        if len(parts) != 3 or parts[2].removeprefix(clock_pack.DARK_PREFIX) not in clock_pack.LAYERS or self.runtime_store is None:
             return None
         found = self.runtime_store.clock_face_layer(parts[0], parts[2])
         if found is None or not found[2].startswith(parts[1]) or len(parts[1]) != 16:
@@ -2500,7 +2529,9 @@ class TrainMeetHTTPApplication:
         base = f"/v1/clock-faces/{face['id']}/{face['sha256'][:16]}/"
         return {"style": CUSTOM_CLOCK_PREFIX + face["id"], "id": face["id"], "name": face["name"],
                 "version": manifest.get("version", ""), "sha256": face["sha256"], "motion": manifest["motion"],
-                "layers": {layer: base + layer for layer in manifest["layers"]}}
+                "layers": {layer: base + layer for layer in manifest["layers"]},
+                # Den mörka varianten, när paketet har en: skärmar i mörkt läge använder den.
+                "dark_layers": {layer: base + clock_pack.DARK_PREFIX + layer for layer in manifest.get("dark", {})}}
 
     def clock_status(self, client: PairedClient) -> dict[str, Any]:
         selected = self.lifecycle.selected() if self.lifecycle else None
@@ -5372,6 +5403,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/clock-faces":
                 self._send_json(HTTPStatus.OK, self.server.application.upload_clock_face(self._authenticated_client(), payload))
+                return
+            if path == "/v1/clock-faces/check":
+                self._send_json(HTTPStatus.OK, self.server.application.check_clock_packs(self._authenticated_client(), payload))
                 return
             if path == "/v1/clock-faces/delete":
                 self._send_json(HTTPStatus.OK, self.server.application.delete_clock_face(self._authenticated_client(), payload))

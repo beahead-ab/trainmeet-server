@@ -31,7 +31,7 @@ import shutil
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -42,6 +42,8 @@ MAX_PACKAGE_BYTES = 2 * 1024 * 1024
 MAX_LAYER_BYTES = 1024 * 1024
 MAX_ENTRIES = 32
 LAYERS = ("dial", "hour", "minute", "second", "top")
+# Lagren i den mörka varianten (clock.json "dark") sparas och hämtas med det här framför.
+DARK_PREFIX = "dark-"
 REQUIRED_LAYERS = ("dial", "hour", "minute")
 MOTIONS = {"hour": ("smooth", "minute"), "minute": ("smooth", "jump"), "second": ("smooth", "tick", "sweep")}
 DEFAULT_MOTION = {"hour": "smooth", "minute": "smooth", "minute_bounce": False, "second": "smooth", "sweep_seconds": 60.0}
@@ -91,12 +93,19 @@ class ClockPack:
     sha256: str
     #: Sådant som fungerar men skalar sämre än det kunde (docs/clock-packs.md).
     warnings: tuple[str, ...] = ()
+    #: Lagren när skärmen visar mörkt läge; de som saknas tas ur layers.
+    dark: dict[str, Layer] = field(default_factory=dict)
+
+    def stored_layers(self) -> dict[str, Layer]:
+        """Alla lager som servern sparar, de mörka med DARK_PREFIX."""
+        return {**self.layers, **{DARK_PREFIX + name: layer for name, layer in self.dark.items()}}
 
     def manifest(self) -> dict[str, Any]:
         """Det servern sparar om paketet, utan bilderna."""
         return {"format": FORMAT, "id": self.id, "name": self.name, "version": self.version, "author": self.author,
                 "motion": dict(self.motion),
-                "layers": {name: {"file": layer.file, "type": layer.content_type} for name, layer in self.layers.items()}}
+                "layers": {name: {"file": layer.file, "type": layer.content_type} for name, layer in self.layers.items()},
+                **({"dark": {name: {"file": layer.file, "type": layer.content_type} for name, layer in self.dark.items()}} if self.dark else {})}
 
 
 def _local(name: str) -> str:
@@ -193,9 +202,10 @@ def _svg_warnings(file: str, layer: str | None, root, text: str, side: float) ->
     if thinnest is not None and thinnest < THIN_LINE * side:
         warnings.append(f"{file}: den tunnaste linjen ({thinnest:g}) är under {THIN_LINE * 100:g} % av sidan ({THIN_LINE * side:g}) "
                         "och syns knappt när klockan är liten, som i deltagarvyn.")
-    if layer and any(_covers(element, _local(element.tag), side, dial=layer == "dial") for element in root.iter()):
+    base = layer.removeprefix(DARK_PREFIX) if layer else None
+    if layer and any(_covers(element, _local(element.tag), side, dial=base == "dial") for element in root.iter()):
         warnings.append(f"{file}: tavlan fyller hela rutan, så hörnen syns som en fyrkant. Låt ytan utanför tavlan vara genomskinlig."
-                        if layer == "dial" else
+                        if base == "dial" else
                         f"{file}: lagret har en bakgrund som täcker hela ytan och döljer tavlan under. "
                         "Exportera lagret med genomskinlig bakgrund.")
     return warnings
@@ -263,7 +273,7 @@ def check_png(file: str, data: bytes, layer: str | None = None) -> list[str]:
                         "Använd 2048 px, eller SVG som är skarp i alla storlekar.")
     transparent = data[25:26] in {b"\x04", b"\x06"} or b"tRNS" in data
     if layer and not transparent:
-        warnings.append(f"{file}: bilden saknar genomskinlighet, så hörnen syns som en fyrkant." if layer == "dial" else
+        warnings.append(f"{file}: bilden saknar genomskinlighet, så hörnen syns som en fyrkant." if layer.removeprefix(DARK_PREFIX) == "dial" else
                         f"{file}: bilden saknar genomskinlighet och döljer tavlan under. Exportera lagret med genomskinlig bakgrund.")
     return warnings
 
@@ -318,8 +328,19 @@ def parse(manifest_bytes: bytes, read_file, *, sha256: str) -> ClockPack:
         if not isinstance(file, str) or not file or "/" in file or "\\" in file or file.startswith("."):
             raise ClockPackError(f"clock.json: lagret {layer} ska vara ett filnamn i paketet, utan mappar.")
         result[layer] = _layer(layer, file, read_file(file), warnings)
+    # En mörk variant för skärmar i mörkt läge: samma lager, andra färger.
+    dark_files = manifest.get("dark")
+    if dark_files is not None and not isinstance(dark_files, dict):
+        raise ClockPackError("clock.json: \"dark\" ska vara ett objekt med lager, som \"layers\".")
+    dark: dict[str, Layer] = {}
+    for layer, file in (dark_files or {}).items():
+        if layer not in result:
+            raise ClockPackError(f"clock.json: dark.{layer} har inget lager {layer} i \"layers\" att vara mörk variant av.")
+        if not isinstance(file, str) or not file or "/" in file or "\\" in file or file.startswith("."):
+            raise ClockPackError(f"clock.json: dark.{layer} ska vara ett filnamn i paketet, utan mappar.")
+        dark[layer] = _layer(DARK_PREFIX + layer, file, read_file(file), warnings)
     return ClockPack(id=pack_id, name=name, version=_text(manifest, "version", 40), author=_text(manifest, "author", 80),
-                     motion=_motion(manifest.get("motion")), layers=result, sha256=sha256, warnings=tuple(warnings))
+                     motion=_motion(manifest.get("motion")), layers=result, sha256=sha256, warnings=tuple(warnings), dark=dark)
 
 
 def read_pack(data: bytes) -> ClockPack:
@@ -422,7 +443,8 @@ def build(directory: str | Path) -> bytes:
         raise ClockPackError(f"{MANIFEST} saknas i {root}.")
     manifest_bytes = manifest_path.read_bytes()
     try:
-        layers = json.loads(manifest_bytes.decode("utf-8-sig")).get("layers") or {}
+        parsed = json.loads(manifest_bytes.decode("utf-8-sig"))
+        layers = {**(parsed.get("layers") or {}), **{DARK_PREFIX + name: file for name, file in (parsed.get("dark") or {}).items()}}
     except (UnicodeDecodeError, json.JSONDecodeError, AttributeError) as error:
         raise ClockPackError(f"clock.json går inte att läsa: {error}.") from error
     names = [MANIFEST, *sorted({file for file in layers.values() if isinstance(file, str)})]
@@ -480,7 +502,7 @@ def describe(pack: ClockPack) -> str:
     second = f"sweep {motion['sweep_seconds']:g} s" if motion["second"] == "sweep" else motion["second"]
     minute = motion["minute"] + (" med studs" if motion["minute_bounce"] else "")
     lines = [f"{pack.name}{' ' + pack.version if pack.version else ''} (id {pack.id})",
-             f"  lager:  {', '.join(pack.layers)}",
+             f"  lager:  {', '.join(pack.layers)}" + (f" · mörk variant: {', '.join(pack.dark)}" if pack.dark else ""),
              f"  visare: tim {motion['hour']}, minut {minute}, sekund {second}"]
     lines += [f"  varning: {warning}" for warning in pack.warnings]
     return "\n".join(lines)
@@ -501,19 +523,21 @@ def preview(packs: list[ClockPack]) -> str:
     for pack in packs:
         # Samma uppbyggnad som skärmarna (clock-face.js markup): lagren som
         # bilder på en kvadrat, visarna vridna kring mitten.
-        def image(layer, hand=None):
+        def image(layer, hand=None, dark=False):
             if layer not in pack.layers:
                 return ""
-            data = pack.layers[layer]
+            data = pack.dark.get(layer, pack.layers[layer]) if dark else pack.layers[layer]
             source = f"data:{data.content_type};base64,{base64.b64encode(data.data).decode()}"
             turn = f' data-clock-hand="{hand}" transform="rotate(0 100 100)"' if hand else ""
             return f'<image href="{source}" x="0" y="0" width="200" height="200" preserveAspectRatio="xMidYMid meet"{turn}/>'
-        svg = (f'<svg viewBox="0 0 200 200" role="img" aria-label="{markup.escape(pack.name)}">' + image("dial")
-               + image("hour", "hour") + image("minute", "minute") + image("second", "second") + image("top") + "</svg>")
+        def svg(dark):
+            return (f'<svg viewBox="0 0 200 200" role="img" aria-label="{markup.escape(pack.name)}">' + image("dial", dark=dark)
+                    + image("hour", "hour", dark) + image("minute", "minute", dark) + image("second", "second", dark)
+                    + image("top", dark=dark) + "</svg>")
         motions[pack.id] = pack.motion
         warnings = "".join(f"<li>{markup.escape(warning)}</li>" for warning in pack.warnings) or "<li class=ok>Inga varningar.</li>"
         rows = "".join(
-            f'<figure class="{theme}"><div class=face data-face="{markup.escape(pack.id)}" style="width:{size}px;height:{size}px">{svg}</div>'
+            f'<figure class="{theme}"><div class=face data-face="{markup.escape(pack.id)}" style="width:{size}px;height:{size}px">{svg(theme == "dark")}</div>'
             f"<figcaption>{markup.escape(label)} · {size} px</figcaption></figure>"
             for theme in ("dark", "light") for label, size in PREVIEW_SIZES)
         sections.append(f"<section><h2>{markup.escape(describe(pack).splitlines()[0])}</h2><ul class=warnings>{warnings}</ul>"

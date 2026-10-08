@@ -583,16 +583,44 @@ select.kr-field { padding-right: 26px; }
 .kr-line--two { grid-template-columns: 200px minmax(0, 1fr); }
 .kr-line b, .kr-line > span:first-child { font-weight: 600; }
 .kr-line .kr-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
-/* Egna klockor: förhandsbild, namn och vem som laddade upp, och uppladdningen under. */
-.kr-line--face { grid-template-columns: 44px minmax(0, 1fr) auto; }
+/* Egna klockor: förhandsbild, namn, stämpeln för godkännandet och uppladdningen under. */
+.kr-line--face { grid-template-columns: 44px minmax(0, 1fr) auto auto; }
 .kr-line--face svg { width: 44px; height: 44px; display: block; }
+/* Stämpeln: admin har godkänt att urtavlan får visas, vem och när. */
+.kr-stamp { display: inline-grid; grid-template-columns: auto auto; column-gap: 6px; align-items: center; padding: 3px 9px 3px 6px; border: 1.5px solid var(--kr-green); border-radius: 6px; color: var(--kr-green); background: var(--kr-green-soft); transform: rotate(-2deg); line-height: 1.2; white-space: nowrap; }
+.kr-stamp svg { grid-row: span 2; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.kr-line .kr-stamp b { font: 700 10.5px/1.2 var(--kr-sans); letter-spacing: .06em; text-transform: uppercase; }
+.kr-stamp span { font: 500 11px/1.2 var(--kr-sans); color: var(--kr-ink-2); }
+.kr-stamp--missing { border-color: var(--kr-red); color: var(--kr-red); background: transparent; font: 600 11px/1.2 var(--kr-sans); }
 .kr-clock-upload { border-top: 1px solid var(--kr-line); }
-.kr-clock-upload .kr-chk span { max-width: 62ch; }
 .kr-clock-upload__actions { justify-content: flex-start; }
+/* Släppytan: en eller flera filer, eller Välj filer. */
+.kr-drop { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 12px 16px 4px; padding: 18px 16px; border: 1.5px dashed var(--kr-line-2); border-radius: var(--kr-r); text-align: center; transition: border-color .15s, background-color .15s; }
+.kr-drop.is-dragover { border-color: var(--kr-blue); background: var(--kr-blue-soft); }
+.kr-drop[aria-busy="true"] { opacity: .6; }
+.kr-drop__title { font: 600 14px/1.3 var(--kr-sans); color: var(--kr-ink); }
+.kr-drop .kr-m { max-width: 60ch; }
+#app-view .kr-drop label.kr-drop__pick { position: relative; display: inline-flex; margin-top: 4px; color: var(--kr-ink); font: 600 12.5px/1 var(--kr-sans); cursor: pointer; }
+#clock-face-file { top: 0; left: 0; min-width: 0; min-height: 0; margin: 0; padding: 0; border: 0; }
+.kr-drop__pick:focus-within { outline: 2px solid var(--kr-blue); outline-offset: 2px; }
+/* Godkännanderutan: en rad per klocka med förhandsbild och egen kryssruta. */
+dialog.kr-clock-approve { width: min(680px, calc(100vw - 32px)); }
+.kr-clock-approve__list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--kr-line); border-radius: var(--kr-r-sm); max-height: min(52vh, 520px); overflow-y: auto; }
+.kr-clock-approve__item { border-bottom: 1px solid var(--kr-line); }
+.kr-clock-approve__item:last-child { border-bottom: 0; }
+dialog.admin-modal .kr-clock-approve__item > label { display: grid; grid-template-columns: 18px 56px minmax(0, 1fr); gap: 12px; align-items: center; padding: 10px 12px; cursor: pointer; font-weight: 400; }
+.kr-clock-approve__item input { width: 18px; height: 18px; margin: 0; accent-color: var(--kr-blue); }
+.kr-clock-approve__face svg { width: 56px; height: 56px; display: block; }
+.kr-clock-approve__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; color: var(--kr-ink); overflow-wrap: anywhere; }
+.kr-clock-approve__text b { font-weight: 600; }
+.kr-clock-approve__note { font-size: 12px; color: var(--kr-ink-2); }
+.kr-clock-approve__warnings { margin: 4px 0 0; padding: 6px 10px 6px 24px; border-radius: var(--kr-r-sm); background: var(--kr-amber-soft, #fff4dc); color: var(--kr-ink); font-size: 12px; }
+.kr-clock-approve__item.is-error { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; font-size: 13px; }
+.kr-clock-approve__item.is-error .kr-clock-approve__note { color: var(--kr-red); }
+.kr-clock-approve__item.is-off > label, .kr-clock-approve__item.is-done > label { cursor: default; opacity: .6; }
+.kr-clock-approve__item:has(input:checked) { background: var(--kr-green-soft); }
 .kr-clock-warnings { margin: 0 0 8px; padding: 8px 12px 8px 28px; border-radius: var(--kr-r-sm); background: var(--kr-amber-soft, #fff4dc); color: var(--kr-ink); font-size: 12.5px; }
 .kr-clock-warnings__title { list-style: none; margin-left: -16px; font-weight: 600; }
-#clock-face-upload-form input.kr-file { width: auto; min-width: 0; max-width: 100%; height: auto; min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; font: 13px var(--kr-sans); color: var(--kr-ink-2); }
-.kr-file::file-selector-button { height: 28px; margin-right: 10px; padding: 0 10px; border-radius: var(--kr-r-sm); border: 1px solid var(--kr-line-2); background: var(--kr-panel-2); color: var(--kr-ink); font: 600 12.5px/1 var(--kr-sans); cursor: pointer; }
 a.kr-btn { text-decoration: none; }
 
 /* QR-förhandsvisning och anslutningskod */
@@ -649,6 +677,7 @@ a.kr-btn { text-decoration: none; }
   .kr-line--two { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .kr-kv .kr-k, .kr-lbl { width: 100%; }
   .kr-line--face { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .kr-line--face .kr-stamp { grid-column: 2 / -1; grid-row: 2; justify-self: start; }
   /* Användarna: namn och åtgärd överst, roll och läge under om det inte ryms – aldrig i sidled. */
   #users-table thead { display: none; }
   #users-rows tr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 9px 14px; border-bottom: 1px solid var(--kr-line); }
