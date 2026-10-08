@@ -5,6 +5,27 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Webb-TMBoxen visar stationens tidtabell med förseningar, och man väljer hur mycket
+
+Efter Caspers önskan: webb-TMBoxarna och iPhone-appen ska också kunna välja
+om förseningar markeras.
+
+- **Tidtabellen bredvid webb-TMBoxen.** När boxen har en station visas
+  stationens tåg under boxen, med samma markeringar som i serverns övriga
+  vyer: röd bricka och ny tid för sena tåg, grön för en för tidig avgång med
+  persontåg, och "Nyss" när något ändras. Godståg och arbetståg får gå före
+  sin tid utan markering.
+- **Valet görs i kortet Din TMBox** (Förseningar i tidtabellen), med samma
+  fem nivåer som i webbläsaren och på skärmarna. Valet sparas i webbläsaren;
+  "Som träffen" följer trafikledningens förval.
+- **/v1/tmbox/terminal/timetable** (webb-TMBoxen och iPhone-appen) ger nu
+  varje rad tågets försening, den nya tiden, om den är beräknad och om tåget
+  är för tidigt, samt träffens förval `deviation_level`. Servern räknar med
+  samma regler som webbens vyer (`train_live.py`, samma fall som
+  `train-live.test.cjs`).
+- **Provbänken** (`/tmbox-lab/`) kör en egen testtrafik utan klocka och
+  verkliga tider. Där finns inga förseningar att visa, och därför inget val.
+
 ### Tågen rör sig i realtid i alla vyer med linjer, och två tåg som möts på dubbelspår
 
 Efter Caspers önskan: alla vyer med linjer ska visa tågrörelser i realtid.

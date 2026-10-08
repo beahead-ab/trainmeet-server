@@ -4,7 +4,7 @@
 <link rel="icon" type="image/svg+xml" href="/assets/ikon/trainmeet-ikon.svg?v=motesparet">
 <link rel="stylesheet" href="/assets/server-design.css"><link rel="stylesheet" href="/tmbox/style.css">
 <script src="/assets/i18n-messages.js" defer></script><script src="/assets/tmbox-messages.js" defer></script><script src="/assets/i18n.js" defer></script>
-<script src="/tmbox/lcd.js" defer></script><script src="/tmbox/terminal.js" defer></script><script src="/assets/simulation-banner.js" defer></script></head>
+<script src="/assets/drift-model.js" defer></script><script src="/tmbox/lcd.js" defer></script><script src="/tmbox/terminal.js" defer></script><script src="/assets/simulation-banner.js" defer></script></head>
 <body data-terminal="live">
 <header class="tm-top">
   <img class="tm-top__mark" src="/assets/ikon/trainmeet-ikon.svg" alt="" width="26" height="26">
@@ -25,6 +25,8 @@
           <div id="box-state" class="tm-state"><span class="tm-dot"></span><span id="box-state-text">Ansluter…</span></div>
           <div id="box-identity" class="tm-code is-big" hidden><span class="tm-eyebrow">Enhetskod</span><span id="box-identity-code" class="pv-value pv-value--big"></span></div>
           <p id="box-note" class="tm-note">Visa koden för trafikledningen, som tilldelar din station under Inställningar → TMBoxar. Boxen börjar arbeta direkt när den är tilldelad – du behöver inte ladda om sidan.</p>
+          <label class="box-deviation" for="box-deviation-level"><span>Förseningar i tidtabellen <span class="c">gäller den här boxen</span></span><select id="box-deviation-level"></select></label>
+          <p id="box-deviation-note" class="tm-note"></p>
           <p class="tm-meta"><span id="connection" role="status">Ansluter…</span><span id="connection-rate"></span></p>
         </div>
       </section>

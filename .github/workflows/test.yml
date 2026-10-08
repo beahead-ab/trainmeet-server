@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: 22
       - name: Test localization, Cloud-only shell and US browser behavior
-        run: node --test tests/js/i18n.test.cjs tests/js/i18n-coverage.test.cjs tests/js/shell-i18n.test.cjs tests/js/us-ui.test.cjs tests/js/tmbox-catalog.test.cjs tests/js/tmbox-cloud-config.test.cjs tests/js/terminal16-buffer.test.cjs tests/js/terminal16-guard.test.cjs tests/js/live-events.test.cjs tests/js/simulation-banner.test.cjs tests/js/train-live.test.cjs
+        run: node --test tests/js/i18n.test.cjs tests/js/i18n-coverage.test.cjs tests/js/shell-i18n.test.cjs tests/js/us-ui.test.cjs tests/js/tmbox-catalog.test.cjs tests/js/tmbox-cloud-config.test.cjs tests/js/terminal16-buffer.test.cjs tests/js/terminal16-guard.test.cjs tests/js/live-events.test.cjs tests/js/simulation-banner.test.cjs tests/js/train-live.test.cjs tests/js/terminal16-timetable.test.cjs
       - name: Install isolated browser test runtime
         run: npm install --no-save --package-lock=false playwright@1.55.0 && npx playwright install --with-deps chromium
       - name: Verify desktop/mobile dialogs and public client assignment
@@ -35,6 +35,7 @@ jobs:
           node tests/js/restore-last.test.cjs
           node tests/js/meet-reset-live.test.cjs
           node tests/js/tmbox-wake-live.test.cjs
+          node tests/js/tmbox-timetable-live.test.cjs
           node tests/js/meet-country-live.test.cjs
           node tests/js/drift-station-list.test.cjs
           node tests/js/login-look.test.cjs
