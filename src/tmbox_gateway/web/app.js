@@ -1612,6 +1612,11 @@ function restoreSize(bytes) {
   return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(Number(bytes) / 1024))} kB`;
 }
 
+const BACKUP_REASONS = {
+  tidsmaskin: "Före tidsmaskinen", nollstallning: "Före nollställningen", startdag: "Före ny startdag",
+  "lokala-andringar": "Före Återgå till Cloud-versionen", cloud: "Före Ta Cloud-versionen",
+};
+
 function renderBackups(backups) {
   const list = restoreEl("list");
   restoreEl("empty").classList.toggle("hidden", backups.length > 0);
@@ -1634,8 +1639,14 @@ function renderBackups(backups) {
     const when = document.createElement("b");
     when.textContent = restoreClock(item.taken_at);
     const what = document.createElement("small");
+    // Varför kopian togs och var träffen stod då: så hittas kopian från före
+    // ett hopp med tidsmaskinen ("Före tidsmaskinen · Dag 3 · Mån 14:00").
+    const position = item.meet_day
+      ? [t("Dag {n} · {day}", { n: item.meet_day.day_number, day: item.meet_day.weekday }), item.clock_time].filter(Boolean).join(" ")
+      : item.clock_time;
     what.textContent = item.usable
-      ? `${item.meet_name || t("Ingen aktiv träff")} · ${restoreSize(item.size_bytes)}`
+      ? [BACKUP_REASONS[item.kind] ? t(BACKUP_REASONS[item.kind]) : "", position, item.meet_name || t("Ingen aktiv träff"),
+        restoreSize(item.size_bytes)].filter(Boolean).join(" · ")
       : item.problem || t("kopian går inte att använda");
     text.append(when, what);
     row.append(text);
@@ -1758,7 +1769,7 @@ function bindMeetReset() {
   start.addEventListener("click", async () => {
     const dialog = document.querySelector("#meet-reset-modal");
     if (dialog.dataset.busy === "true") return;
-    if (!window.confirm(t("Allt som hänt i {meet} tas bort och klockan går tillbaka till starttiden. Vill du fortsätta?",
+    if (!window.confirm(t("Allt som hänt i {meet} tas bort, och träffen går tillbaka till dag 1 och starttiden. Vill du fortsätta?",
       { meet: restore.overwrites }))) return;
     if (!beginModalAction(dialog)) return;
     setMessage(message, "Nollställer träffen …", "notice");

@@ -20,6 +20,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from runtime_fixture import runtime_package_v3
+from tmbox_gateway import backup
 from test_timetable_placement import add_service
 from tmbox_gateway.engine import TrafficEngine
 from tmbox_gateway.http_server import HTTPAPIError, HTTPServerConfig, TrainMeetHTTPApplication
@@ -276,6 +277,32 @@ class NextDayChangeTimeTests(_Meet):
         self.assertEqual(self.app.display_snapshot()["calendar"]["change_time"], "05:00")
         self.run_clock_at(86400 + at(5, 0, 30))
         self.assertEqual(self.app.calendar_tick()["active_day"], "Sön")
+
+
+class ResetToDayOneTests(_Meet):
+    package = NextDayChangeTimeTests.package
+
+    def test_a_reset_starts_the_meet_over_on_day_one(self):
+        """Nollställ träffen börjar om från början: dag 1 och planens
+        starttid, oavsett vart tidsmaskinen hoppat (Casper 2026-10-08)."""
+        saturday = self.numbers()
+        self.run_clock_at(at(9, 30))
+        jumped = self.app.time_machine(self.admin, {"day_number": 2, "time": "14:00", "meet_generation": self.generation()})
+        self.assertEqual(self.app.display_snapshot()["calendar"]["day_number"], 2)
+        self.assertIn("808", self.numbers(), "Sunday")
+        reset = self.app.reset_meet(self.admin, {"confirmation": self.app._current_meet_name(), "meet_generation": self.generation()})  # noqa: SLF001
+        calendar = self.app.display_snapshot()["calendar"]
+        self.assertEqual((calendar["day_number"], calendar["weekday"], self.runtime.active_day()), (1, "Lör", "Lör"))
+        self.assertFalse(self.ops.clock_status()["running"])
+        self.assertEqual(self.numbers(), saturday, "Saturday's trains again")
+        # Kopiorna säger varför de togs och var träffen stod.
+        folder = Path(self.temp.name) / "backups"
+        before_jump = backup.describe(folder / jumped["backup"])
+        self.assertEqual((before_jump["kind"], before_jump["meet_day"], before_jump["clock_time"]),
+                         ("tidsmaskin", {"day_number": 1, "weekday": "Lör"}, "09:30"))
+        before_reset = backup.describe(folder / reset["backup"])
+        self.assertEqual((before_reset["kind"], before_reset["meet_day"]), ("nollstallning", {"day_number": 2, "weekday": "Sön"}))
+        self.assertEqual(before_reset["clock_time"][:4], "14:0")
 
 
 class AutomaticChangeTimeTests(_Meet):

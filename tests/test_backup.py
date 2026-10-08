@@ -9,7 +9,8 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-from tmbox_gateway.backup import BackupError, create_backup, prune, restore
+from tmbox_gateway.backup import BackupError, create_backup, describe, prune, resolve, restore
+from tmbox_gateway.backup import available as backups_available
 
 
 def _live_database(path: Path) -> sqlite3.Connection:
@@ -149,6 +150,65 @@ class BackupTest(unittest.TestCase):
             ],
         )
 
+    def test_the_reason_ends_the_name_and_is_read_back(self) -> None:
+        written = create_backup(self.database, self.backups, "20261008-142233", kind="tidsmaskin")
+        self.assertEqual(written.name, "trainmeet-20261008-142233-tidsmaskin.db")
+        described = describe(written)
+        self.assertEqual((described["kind"], described["taken_at"]), ("tidsmaskin", "2026-10-08T14:22:33+00:00"))
+        self.assertEqual(resolve(self.backups, written.name), written.resolve(), "the restore list can pick it")
+        with self.assertRaises(BackupError):
+            resolve(self.backups, "trainmeet-20261008-142233-annat.db")
+        with self.assertRaises(ValueError):
+            create_backup(self.database, self.backups, "20261008-142234", kind="annat")
+
+    def test_the_list_says_where_the_meet_stood(self) -> None:
+        """Dag, veckodag och klockan när kopian togs: en klocka som går i 4×
+        sedan 14:00 har kommit till 14:40 tio minuter senare."""
+
+        database = self.root / "meet.db"
+        connection = sqlite3.connect(database)
+        connection.execute("CREATE TABLE runtime_publications (meet_id TEXT, meet_name TEXT, active INTEGER, installed_at TEXT)")
+        connection.execute("INSERT INTO runtime_publications VALUES ('meet-1', 'Sommarträffen', 1, '2026-10-08')")
+        connection.execute("CREATE TABLE runtime_settings (key TEXT PRIMARY KEY, value TEXT)")
+        connection.execute("INSERT INTO runtime_settings VALUES ('meet_calendar:meet-1', '{\"start_day\": \"Fre\", \"day_number\": 3}')")
+        connection.execute("CREATE TABLE runtime_clock (singleton INTEGER, base_seconds REAL, base_recorded_at TEXT, speed REAL, running INTEGER)")
+        connection.execute("INSERT INTO runtime_clock VALUES (1, 50400, '2026-10-08T12:00:00Z', 4, 1)")
+        connection.commit()
+        connection.close()
+        written = create_backup(database, self.backups, "20261008-121000", kind="tidsmaskin")
+        described = describe(written)
+        self.assertEqual((described["meet_name"], described["meet_day"], described["clock_time"]),
+                         ("Sommarträffen", {"day_number": 3, "weekday": "Sön"}, "14:40"))
+
+    def test_the_newest_copy_is_first_even_within_the_same_second(self) -> None:
+        import os
+
+        first = create_backup(self.database, self.backups, "20261008-211818", kind="tidsmaskin")
+        second = create_backup(self.database, self.backups, "20261008-211818", kind="nollstallning")
+        os.utime(first, ns=(1, 1))
+        os.utime(second, ns=(2, 2))
+        self.assertEqual([item["name"] for item in backups_available(self.backups)], [second.name, first.name])
+
+    def test_the_time_machine_never_pushes_out_the_other_copies(self) -> None:
+        """Casper 2026-10-08: many jumps in a row must not take the copy from
+        before an update or a reset with them."""
+
+        for minute in range(3):
+            create_backup(self.database, self.backups, f"20261008-1000{minute:02d}", kind="nollstallning")
+        for minute in range(12):
+            create_backup(self.database, self.backups, f"20261008-1100{minute:02d}", kind="tidsmaskin")
+        names = sorted(item.name for item in self.backups.glob("*.db"))
+        self.assertEqual([name for name in names if "nollstallning" in name],
+                         [f"trainmeet-20261008-1000{minute:02d}-nollstallning.db" for minute in range(3)])
+        self.assertEqual([name for name in names if "tidsmaskin" in name],
+                         [f"trainmeet-20261008-1100{minute:02d}-tidsmaskin.db" for minute in range(7, 12)],
+                         "the five newest jumps")
+        for minute in range(10):
+            create_backup(self.database, self.backups, f"20261008-1200{minute:02d}")
+        names = sorted(item.name for item in self.backups.glob("*.db"))
+        self.assertEqual(sum("tidsmaskin" in name for name in names), 5, "and the others do not push out the jumps")
+        self.assertEqual(sum("tidsmaskin" not in name for name in names), 10)
+
     def test_keep_must_be_positive(self) -> None:
         """keep=0 would delete every backup there is."""
 
@@ -236,6 +296,41 @@ class RestoreTest(unittest.TestCase):
             restore(empty, self.database)
         # And the database it refused to overwrite is untouched.
         self.assertEqual(self._content(), ["skadat"])
+
+    def test_own_clocks_stay_as_they_are_now(self) -> None:
+        """A restore puts back the meet, not the clocks: a clock removed since
+        (its licence ended, say) must not come back with an old approval."""
+
+        def clocks(path, names):
+            connection = sqlite3.connect(path)
+            connection.execute("CREATE TABLE IF NOT EXISTS clock_faces (id TEXT PRIMARY KEY, name TEXT NOT NULL, rights_confirmed_at TEXT NOT NULL)")
+            connection.execute("CREATE TABLE IF NOT EXISTS clock_face_layers (face_id TEXT NOT NULL, layer TEXT NOT NULL, data BLOB NOT NULL, PRIMARY KEY(face_id, layer))")
+            for name in names:
+                connection.execute("INSERT INTO clock_faces VALUES (?, ?, '2026-10-08T12:00:00Z')", (name, name.upper()))
+                connection.execute("INSERT INTO clock_face_layers VALUES (?, 'dial', x'00')", (name,))
+            connection.commit()
+            connection.close()
+
+        clocks(self.backup, ["sbb"])
+        clocks(self.database, ["stationsur", "egen"])
+        restore(self.backup, self.database)
+        connection = sqlite3.connect(self.database)
+        self.addCleanup(connection.close)
+        self.assertEqual([row[0] for row in connection.execute("SELECT v FROM t")], ["rätt"], "the meet is the backup's")
+        self.assertEqual(sorted(row[0] for row in connection.execute("SELECT id FROM clock_faces")), ["egen", "stationsur"])
+        self.assertEqual(sorted(row[0] for row in connection.execute("SELECT face_id FROM clock_face_layers")), ["egen", "stationsur"])
+
+    def test_a_backup_from_before_own_clocks_gets_the_clocks_of_now(self) -> None:
+        connection = sqlite3.connect(self.database)
+        connection.execute("CREATE TABLE clock_faces (id TEXT PRIMARY KEY, name TEXT NOT NULL)")
+        connection.execute("CREATE TABLE clock_face_layers (face_id TEXT, layer TEXT, PRIMARY KEY(face_id, layer))")
+        connection.execute("INSERT INTO clock_faces VALUES ('sbb', 'SBB')")
+        connection.commit()
+        connection.close()
+        restore(self.backup, self.database)
+        connection = sqlite3.connect(self.database)
+        self.addCleanup(connection.close)
+        self.assertEqual([row[0] for row in connection.execute("SELECT id FROM clock_faces")], ["sbb"])
 
     def test_a_missing_backup_is_refused(self) -> None:
         """And is not quietly conjured into existence.
