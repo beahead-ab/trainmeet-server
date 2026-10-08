@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.20.0",
+    "date": "2026-10-08",
+    "notes": [
+      "Klockor som skalar på alla skärmar, och en guide för att göra egna"
+    ]
+  },
+  {
     "version": "3.19.0",
     "date": "2026-10-08",
     "notes": [
