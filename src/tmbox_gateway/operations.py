@@ -342,7 +342,8 @@ class SQLiteOperationsStore:
         return removed
 
     def start_traffic_day(self, publication: RuntimePublication, day: str, clock_seconds: float, *,
-                          previous_day: str | None = None, everything: bool = False) -> dict[str, int]:
+                          previous_day: str | None = None, everything: bool = False,
+                          place_seconds: float | None = None) -> dict[str, int]:
         """Börja en ny trafikdag: alla statusar för ankomst och avgång är nollställda.
 
         Vid midnatt (träffkalendern) tas den nya dagens rader bort: de kan
@@ -352,7 +353,9 @@ class SQLiteOperationsStore:
         bort, för alla dagar, som vid en nollställning.
 
         Tågens lägen töms och ställs efter den nya dagens tidtabell vid
-        `clock_seconds`. Klockan ställs på `clock_seconds` och går vidare om
+        `clock_seconds`, eller vid `place_seconds` när den är given (vid
+        dygnsskiftet: strax före dagens första avgång, så att varje tåg står
+        på sin utgångspunkt). Klockan ställs på `clock_seconds` och går vidare om
         den gick; hastigheten står kvar. Pågående TKL-pass följer med till
         den nya dagen, så att ingen behöver logga in igen. Klockan och
         lägena före sparas i arkivet.
@@ -401,7 +404,8 @@ class SQLiteOperationsStore:
                     self._connection.execute("ROLLBACK")
                 raise
         self._movement_live_cache = None
-        removed["placed"] = self.place_trains_by_timetable(publication, day, float(clock_seconds))["placed"]
+        placed_at = float(clock_seconds if place_seconds is None else place_seconds)
+        removed["placed"] = self.place_trains_by_timetable(publication, day, placed_at)["placed"]
         return removed
 
     def place_trains_by_timetable(self, publication: RuntimePublication, day: str,

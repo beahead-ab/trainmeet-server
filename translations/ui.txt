@@ -1288,7 +1288,17 @@ The traffic control's default|Trafikledningens förval|Trafikledelsens standard|
 Jump to another day and time; every train follows|Hoppa till en annan dag och tid; alla tåg följer med|Spring til en anden dag og tid; alle tog følger med|Hopp til en annen dag og tid; alle tog følger med|Zu einem anderen Tag und einer anderen Zeit springen; alle Züge folgen
 Time machine…|Tidsmaskin…|Tidsmaskine…|Tidsmaskin…|Zeitmaschine…
 The meet's days|Träffens dagar|Træffets dage|Treffets dager|Die Tage des Treffens
-at midnight the meet moves on to the next day, with that day's timetable|vid midnatt går träffen till nästa dag, med den dagens tidtabell|ved midnat går træffet videre til næste dag med den dags køreplan|ved midnatt går treffet videre til neste dag, med den dagens ruteplan|um Mitternacht geht das Treffen zum nächsten Tag über, mit dessen Fahrplan
+at the day change the meet moves on to the next day, with that day's timetable|vid dygnsskiftet går träffen till nästa dag, med den dagens tidtabell|ved døgnskiftet går træffet videre til næste dag med den dags køreplan|ved døgnskiftet går treffet videre til neste dag, med den dagens ruteplan|beim Tageswechsel geht das Treffen zum nächsten Tag über, mit dessen Fahrplan
+Day change at|Dygnsskifte kl.|Døgnskifte kl.|Døgnskifte kl.|Tageswechsel um
+Day change|Dygnsskifte|Døgnskifte|Døgnskifte|Tageswechsel
+Empty: automatic, an hour before the first train ({time})|Tomt: automatiskt, en timme före första tåget ({time})|Tomt: automatisk, en time før første tog ({time})|Tomt: automatisk, en time før første tog ({time})|Leer: automatisch, eine Stunde vor dem ersten Zug ({time})
+Fixed time. Clear the field for automatic: an hour before the first train.|Fast tid. Töm fältet för automatiskt: en timme före första tåget.|Fast tid. Ryd feltet for automatisk: en time før første tog.|Fast tid. Tøm feltet for automatisk: en time før første tog.|Feste Zeit. Feld leeren für automatisch: eine Stunde vor dem ersten Zug.
+Step whole days|Spola dygn|Spol døgn frem|Spol døgn|Tage vorspulen
+−1 day|−1 dygn|−1 døgn|−1 døgn|−1 Tag
++1 day|+1 dygn|+1 døgn|+1 døgn|+1 Tag
+Next day change|Nästa dygnsskifte|Næste døgnskifte|Neste døgnskifte|Nächster Tageswechsel
+New traffic day: Day {n} · {day}. Every train is at its starting point and the statuses are reset.|Nytt trafikdygn: Dag {n} · {day}. Alla tåg står på sin utgångspunkt och statusarna är nollställda.|Nyt trafikdøgn: Dag {n} · {day}. Alle tog står på deres udgangspunkt, og statusserne er nulstillet.|Nytt trafikkdøgn: Dag {n} · {day}. Alle tog står på sitt utgangspunkt, og statusene er nullstilt.|Neuer Betriebstag: Tag {n} · {day}. Alle Züge stehen an ihrem Ausgangspunkt, und die Status sind zurückgesetzt.
+The day change waits for trains still out on the line.|Dygnsskiftet väntar på tåg som är ute på linjen.|Døgnskiftet venter på tog, der stadig er ude på strækningen.|Døgnskiftet venter på tog som fortsatt er ute på linjen.|Der Tageswechsel wartet auf Züge, die noch auf der Strecke sind.
 Starts on|Börjar på|Starter på|Starter på|Beginnt am
 The meet's first day|Träffens startdag|Træffets første dag|Treffets første dag|Erster Tag des Treffens
 Time machine|Tidsmaskin|Tidsmaskine|Tidsmaskin|Zeitmaschine

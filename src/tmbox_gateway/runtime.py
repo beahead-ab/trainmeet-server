@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import sqlite3
 import threading
 from dataclasses import dataclass, replace
@@ -925,24 +926,52 @@ class SQLiteRuntimeStore:
         och trafikdagen blir veckodagen den dagen. Utan något sparat gäller
         den trafikdag som gäller nu, som dag 1.
         """
-        try:
-            saved = json.loads(self._setting("meet_calendar:" + meet_id) or "{}")
-        except ValueError:
-            saved = {}
+        saved = self._saved_calendar(meet_id)
         start = str(saved.get("start_day") or fallback_day or self.active_day() or "Dagl")
         try:
             number = max(1, int(saved.get("day_number") or 1))
         except (TypeError, ValueError):
             number = 1
-        return {"start_day": start, "day_number": number, "weekday": calendar_weekday(start, number), "week": list(DAY_ORDER)}
+        last = saved.get("last_change") if isinstance(saved.get("last_change"), dict) else None
+        # Dygnsskiftet: en fast tid som admin skrivit in, annars None (en timme
+        # före dagens första tågrörelse; servern räknar ut den, http_server).
+        return {"start_day": start, "day_number": number, "weekday": calendar_weekday(start, number), "week": list(DAY_ORDER),
+                "change_time_set": day_change_time(saved.get("change_time")), "last_change": last}
 
-    def set_meet_calendar(self, meet_id: str, start_day: str, day_number: int) -> dict[str, Any]:
+    def _saved_calendar(self, meet_id: str) -> dict[str, Any]:
+        try:
+            saved = json.loads(self._setting("meet_calendar:" + meet_id) or "{}")
+        except ValueError:
+            return {}
+        return saved if isinstance(saved, dict) else {}
+
+    def set_meet_calendar(self, meet_id: str, start_day: str, day_number: int, *,
+                          last_change: dict[str, Any] | None = None) -> dict[str, Any]:
         start = str(start_day or "").strip()
         if not start or len(start) > 40:
             raise RuntimePublicationError("Välj träffens startdag")
         if type(day_number) is not int or not 1 <= day_number <= 366:
             raise RuntimePublicationError("Dagen ska vara mellan 1 och 366")
-        self._save_setting("meet_calendar:" + meet_id, json.dumps({"start_day": start, "day_number": day_number}))
+        saved = self._saved_calendar(meet_id)
+        saved.update({"start_day": start, "day_number": day_number})
+        if last_change is not None:
+            saved["last_change"] = last_change
+        self._save_setting("meet_calendar:" + meet_id, json.dumps(saved))
+        return self.meet_calendar(meet_id)
+
+    def set_day_change_time(self, meet_id: str, value: Any) -> dict[str, Any]:
+        """En fast tid för dygnsskiftet, eller tomt för automatiskt: en timme
+        före den nya dagens första tågrörelse (Casper 2026-10-08)."""
+        saved = self._saved_calendar(meet_id)
+        if value is None or str(value).strip() == "":
+            saved.pop("change_time", None)
+            self._save_setting("meet_calendar:" + meet_id, json.dumps(saved))
+            return self.meet_calendar(meet_id)
+        change = day_change_time(value)
+        if change is None:
+            raise RuntimePublicationError("Skriv tiden som TT:MM, eller lämna tomt.")
+        saved["change_time"] = change
+        self._save_setting("meet_calendar:" + meet_id, json.dumps(saved))
         return self.meet_calendar(meet_id)
 
     def deviation_level(self, meet_id: str) -> dict[str, Any]:
@@ -1422,6 +1451,19 @@ def _resolve_day(value: str) -> str:
 
 
 CALENDAR_START_DAYS = ("Dagl",) + DAY_ORDER
+#: Dygnsskiftet: träffen går till nästa dag en timme före den nya dagens
+#: första tågrörelse, så att nattåg och sena tåg hinner in. Utan tåg den
+#: dagen gäller 05:00.
+DEFAULT_DAY_CHANGE_TIME = "05:00"
+DAY_CHANGE_LEAD_SECONDS = 3600
+
+
+def day_change_time(value: Any) -> str | None:
+    """"5:00" eller "05:00" till "05:00"; None för något annat."""
+    match = re.fullmatch(r"(\d{1,2}):(\d{2})", str(value or "").strip())
+    if not match or int(match[1]) > 23 or int(match[2]) > 59:
+        return None
+    return f"{int(match[1]):02d}:{match[2]}"
 
 
 def calendar_weekday(start_day: str, day_number: int) -> str:

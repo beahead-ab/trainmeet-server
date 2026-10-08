@@ -631,6 +631,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .clock-control-form label { display: grid; gap: .35rem; color: var(--muted); font-size: .78rem; font-weight: 700; }
 .clock-control-actions { display: flex; gap: .55rem; }
 .clock-control-form .form-message { grid-column: 1 / -1; margin: 0; }
+.clock-control-form .time-machine-steps { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
 /* color-scheme makes the browser draw native controls to match. Without it the
    clock-style popup is painted by the OS on its default light background while
    inheriting the toolbar's near-white text, leaving it unreadable. */

@@ -1,10 +1,14 @@
-"""Träffkalendern: dagen går fram vid midnatt, och tidsmaskinen (Casper 2026-10-08).
+"""Träffkalendern: dagen går fram vid dygnsskiftet, och tidsmaskinen (Casper 2026-10-08).
 
-Träffen börjar på en dag admin väljer. Vid varje midnatt går dagen fram och
-tidtabellen för den nya veckodagen gäller, Dagl alltid. På den nya dagen är
-alla statusar för ankomst och avgång nollställda och tågen står där
-tidtabellen säger. Ett tåg som är ute vid midnatt kör klart på gårdagens dag
-först. Tidsmaskinen hoppar till valfri dag och tid; alla tåg följer med.
+Träffen börjar på en dag admin väljer. Vid varje dygnsskifte går dagen fram
+och tidtabellen för den nya veckodagen gäller, Dagl alltid. Skiftet ligger
+en timme före den nya dagens första tågrörelse (en fast tid kan anges):
+mellan midnatt och skiftet är det kvar gårdagens trafikdygn, så att nattåg
+kör klart. Vid
+skiftet är alla statusar för ankomst och avgång nollställda och varje tåg
+står på sin utgångspunkt. Ett tåg som fortfarande är ute kör klart på
+gårdagens dag först, högst en halvtimme. Tidsmaskinen hoppar till valfri dag
+och tid; alla tåg följer med.
 
 Fixturens tåg: 101 går Dagl (A 09:20 → B 09:35), 202 bara söndagar.
 Fixturens trafikdag är Lör.
@@ -16,6 +20,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from runtime_fixture import runtime_package_v3
+from test_timetable_placement import add_service
 from tmbox_gateway.engine import TrafficEngine
 from tmbox_gateway.http_server import HTTPAPIError, HTTPServerConfig, TrainMeetHTTPApplication
 from tmbox_gateway.identity import DeviceKind, IdentityStore, PairedClient, PairingService
@@ -27,12 +32,17 @@ def at(hours, minutes=0, seconds=0):
     return hours * 3600 + minutes * 60 + seconds
 
 
+#: Klockan vid dygnsskiftet nästa morgon, i sekunder sedan träffdagens början:
+#: en timme före söndagens första tågrörelse (101 från A 09:20).
+CHANGE = 86400 + at(8, 20)
+
+
 class _Meet(unittest.TestCase):
     def setUp(self):
         self.temp = TemporaryDirectory()
         self.path = Path(self.temp.name) / "server.db"
         self.runtime = SQLiteRuntimeStore(self.path)
-        self.pub = self.runtime.install(runtime_package_v3())
+        self.pub = self.runtime.install(self.package())
         self.ops = SQLiteOperationsStore(self.path)
         self.ids = IdentityStore(self.path)
         self.app = TrainMeetHTTPApplication(TrafficEngine(self.pub.session_config()), self.ids,
@@ -41,6 +51,9 @@ class _Meet(unittest.TestCase):
         self.app.automatic.set_enabled(False)
         self.admin = self.app.local_admin()
         self.ops.ensure_publication(self.pub)
+
+    def package(self):
+        return runtime_package_v3()
 
     def tearDown(self):
         self.ops.close()
@@ -71,22 +84,24 @@ class _Meet(unittest.TestCase):
         return sorted({str(service["train_number"]) for service in self.app.display_snapshot()["services"]})
 
 
-class MidnightTests(_Meet):
+class DayChangeTests(_Meet):
     def test_the_calendar_starts_on_the_traffic_day_as_day_one(self):
         calendar = self.app.display_snapshot()["calendar"]
         self.assertEqual({key: calendar[key] for key in ("start_day", "day_number", "weekday")}, {"start_day": "Lör", "day_number": 1, "weekday": "Lör"})
         self.assertEqual(calendar["week"], ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"])
         self.assertIsNone(self.app.calendar_tick(), "nothing happens while the clock stands still")
 
-    def test_at_midnight_the_next_day_starts_with_its_own_timetable_and_no_statuses(self):
+    def test_at_the_day_change_the_next_day_starts_with_its_own_timetable_and_no_statuses(self):
         self.run_clock_at(at(9, 30))
         self.depart_101("Lör")
         self.assertEqual(self.live()["movement-101-a"]["departure"], "departed")
-        self.assertIsNone(self.app.calendar_tick(), "not midnight yet")
+        self.assertIsNone(self.app.calendar_tick(), "not the day change yet")
         self.ops.update_tkl_movement(self.pub.publication_id, "Lör", "station-b", "movement-101-b", arrival="arrived",
                                      departure="none", actual_track=None, updated_by="TKL Bor", shift_id=None,
                                      event_type="train.arrived", operator_note=None)
         self.run_clock_at(86400 + 30)
+        self.assertIsNone(self.app.calendar_tick(), "midnight is still yesterday's traffic day")
+        self.run_clock_at(CHANGE + 30)
         result = self.app.calendar_tick()
         self.assertEqual((result["day_number"], result["active_day"]), (2, "Sön"))
         snapshot = self.app.display_snapshot()
@@ -98,8 +113,8 @@ class MidnightTests(_Meet):
         self.assertEqual({p["train_number"]: p["station_id"] for p in self.ops.positions()}.get("101"), "station-a")
         clock = self.ops.clock_status()
         self.assertTrue(clock["running"], "the clock keeps running")
-        self.assertLess(clock["elapsed_seconds"], 120, "and starts the new day from just after midnight")
-        self.assertEqual(clock["time"][:5], "00:00")
+        self.assertLess(clock["elapsed_seconds"], at(8, 20) + 120, "and goes on from the day change")
+        self.assertEqual(clock["time"][:5], "08:20")
         # Gårdagen står kvar som historik.
         rows = self.ops._connection.execute(  # noqa: SLF001
             "SELECT count(*) FROM tkl_events WHERE publication_id=? AND active_day='Lör'", (self.pub.publication_id,)).fetchone()[0]
@@ -111,25 +126,28 @@ class MidnightTests(_Meet):
         self.runtime.set_active_day("Dagl")
         self.run_clock_at(at(9, 30))
         self.depart_101("Dagl")
-        self.run_clock_at(86400 + 5)
+        self.run_clock_at(CHANGE + 5)
         result = self.app.calendar_tick()
         self.assertEqual((result["day_number"], result["active_day"]), (2, "Dagl"))
         self.assertTrue(self.live()["movement-101-a"]["by_timetable"], "yesterday's departure is gone")
 
-    def test_a_train_out_at_midnight_runs_its_course_on_yesterdays_day_first(self):
-        self.run_clock_at(86400 + 60)
+    def test_a_train_out_at_the_day_change_runs_its_course_on_yesterdays_day_first(self):
+        self.run_clock_at(CHANGE + 60)
         with self.ops._lock:  # noqa: SLF001
             self.ops._connection.execute(  # noqa: SLF001
                 "INSERT INTO train_positions(train_number,status,station_id,connection_id,from_station_id,to_station_id,updated_at)"
                 " VALUES('101','connection',NULL,'conn-a-b','station-a','station-b',?)", (_now_iso(),))
         self.assertIsNone(self.app.calendar_tick(), "101 is still on the line")
-        self.assertEqual(self.app.display_snapshot()["calendar"]["day_number"], 1)
+        calendar = self.app.display_snapshot()["calendar"]
+        self.assertEqual((calendar["day_number"], calendar["waiting"]), (1, True), "and the screens say the change waits")
         with self.ops._lock:  # noqa: SLF001
             self.ops._connection.execute("DELETE FROM train_positions WHERE train_number='101'")  # noqa: SLF001
         self.assertEqual(self.app.calendar_tick()["day_number"], 2, "it has arrived: the new day starts")
+        self.assertFalse(self.app.display_snapshot()["calendar"]["waiting"])
 
     def test_a_train_that_never_arrives_does_not_hold_yesterday_forever(self):
-        self.run_clock_at(86400 + self.app.MIDNIGHT_WAIT_LIMIT + 1)
+        self.assertEqual(self.app.DAY_CHANGE_WAIT_LIMIT, 30 * 60, "half an hour, not the six hours after midnight")
+        self.run_clock_at(CHANGE + self.app.DAY_CHANGE_WAIT_LIMIT + 1)
         with self.ops._lock:  # noqa: SLF001
             self.ops._connection.execute(  # noqa: SLF001
                 "INSERT INTO train_positions(train_number,status,station_id,connection_id,from_station_id,to_station_id,updated_at)"
@@ -138,7 +156,7 @@ class MidnightTests(_Meet):
 
     def test_a_tkl_shift_goes_on_into_the_new_day(self):
         shift = self.ops.start_tkl_shift(self.pub.publication_id, "Lör", "station-a", "Anna", "TKL Alvesta")
-        self.run_clock_at(86400 + 5)
+        self.run_clock_at(CHANGE + 5)
         self.app.calendar_tick()
         row = self.ops._connection.execute(  # noqa: SLF001
             "SELECT active_day, status FROM tkl_shifts WHERE shift_id=?", (shift["shift_id"],)).fetchone()
@@ -148,25 +166,138 @@ class MidnightTests(_Meet):
         class Running:
             active = True
         self.app.simulation = Running()
-        self.run_clock_at(86400 + 5)
+        self.run_clock_at(CHANGE + 5)
         self.assertIsNone(self.app.calendar_tick())
 
-    def test_with_fastclock_the_new_day_starts_when_the_clock_turns_over(self):
-        readings = iter([{"running": True, "seconds": at(23, 59, 50), "time": "23:59:50"},
-                         {"running": True, "seconds": 10.0, "time": "00:00:10"}])
+    def test_with_fastclock_the_new_day_starts_when_the_clock_passes_the_day_change_after_midnight(self):
+        self.runtime.set_day_change_time(self.pub.meet_id, "05:00")
+        readings = iter([{"running": True, "seconds": float(at(4, 30)), "time": "04:30:00"},
+                         {"running": True, "seconds": float(at(5, 0, 10)), "time": "05:00:10"},
+                         {"running": True, "seconds": float(at(23, 59, 50)), "time": "23:59:50"},
+                         {"running": True, "seconds": 10.0, "time": "00:00:10"},
+                         {"running": True, "seconds": float(at(4, 59, 50)), "time": "04:59:50"},
+                         {"running": True, "seconds": float(at(5, 0, 10)), "time": "05:00:10"}])
         real = self.ops.clock_status
         self.ops.clock_status = lambda *args, **kwargs: next(readings, None) or real()
+        self.assertIsNone(self.app.calendar_tick())
+        self.assertIsNone(self.app.calendar_tick(), "the first morning is the meet's first day")
+        self.assertIsNone(self.app.calendar_tick())
+        self.assertIsNone(self.app.calendar_tick(), "midnight is still yesterday's traffic day")
         self.assertIsNone(self.app.calendar_tick())
         self.assertEqual(self.app.calendar_tick()["active_day"], "Sön")
 
     def test_the_automatic_stations_start_the_new_day_from_its_beginning(self):
         state = {"key": [self.pub.publication_id, "Lör"], "stations": {"station-a": "tmbox-1"}, "suppressed": [], "start": float(at(9))}
         self.app.automatic._save(state)  # noqa: SLF001
-        self.run_clock_at(86400 + 5)
+        self.run_clock_at(CHANGE + 5)
         self.app.calendar_tick()
         after = self.app.automatic._state(self.pub, "Sön")  # noqa: SLF001
-        self.assertLess(after["start"], 60, "the new day's early trains are sent, not history")
+        self.assertLess(after["start"], at(8, 20) + 60, "the new day's trains are sent from the day change, not history")
         self.assertEqual(after["stations"], {"station-a": "tmbox-1"}, "who works where stays")
+
+
+class DayChangeSettingsTests(_Meet):
+    """Skiftets tid, utgångspunkterna och toasten i vyerna."""
+
+    def package(self):
+        package = runtime_package_v3()
+        # 401 går tidigt, 04:30: skiftet blir 03:30, en timme före.
+        add_service(package, "401", [("station-a", None, "04:30", "track-station-a-1"),
+                                     ("station-b", "04:45", None, "track-station-b-1")])
+        return package
+
+    def test_the_day_change_is_an_hour_before_the_new_days_first_train(self):
+        calendar = self.app.display_snapshot()["calendar"]
+        self.assertEqual((calendar["change_time"], calendar["change_auto"], calendar["change_time_set"]), ("03:30", True, None))
+        self.run_clock_at(86400 + at(3, 29))
+        self.assertIsNone(self.app.calendar_tick(), "midnight until the day change is still yesterday")
+        snapshot = self.app.display_snapshot()
+        self.assertEqual((snapshot["active_day"], snapshot["calendar"]["day_number"]), ("Lör", 1))
+        self.run_clock_at(86400 + at(3, 30, 30))
+        self.assertEqual(self.app.calendar_tick()["day_number"], 2)
+
+    def test_every_train_of_the_new_day_stands_at_its_starting_point(self):
+        self.runtime.set_day_change_time(self.pub.meet_id, "05:00")
+        self.run_clock_at(86400 + at(5, 0, 30))
+        self.assertEqual(self.app.calendar_tick()["day_number"], 2)
+        positions = {p["train_number"]: p["station_id"] for p in self.ops.positions()}
+        self.assertEqual((positions.get("401"), positions.get("101")), ("station-a", "station-a"),
+                         "401 is due at 04:30 but has not left: it waits at its first station")
+        live = self.live()
+        self.assertEqual(live["movement-401-0"]["departure"], "positioned")
+        self.assertNotEqual(live.get("movement-401-1", {}).get("arrival"), "arrived")
+
+    def test_a_fixed_day_change_time_can_be_set_and_cleared(self):
+        result = self.app.save_meet_calendar(self.admin, {"start_day": "Lör", "change_time": "4:15",
+                                                          "meet_generation": self.generation()})
+        self.assertEqual((result["change_time"], result["change_auto"], result["changed"]), ("04:15", False, False),
+                         "a fixed time, and no new day for it")
+        self.run_clock_at(86400 + at(4, 15, 5))
+        self.assertEqual(self.app.calendar_tick()["day_number"], 2)
+        cleared = self.app.save_meet_calendar(self.admin, {"start_day": "Lör", "change_time": "", "meet_generation": self.generation()})
+        self.assertEqual((cleared["change_time"], cleared["change_auto"]), ("03:30", True), "empty: automatic again")
+        for wrong in ("25:00", "kväll", "12"):
+            with self.assertRaises(HTTPAPIError) as raised:
+                self.app.save_meet_calendar(self.admin, {"start_day": "Lör", "change_time": wrong, "meet_generation": self.generation()})
+            self.assertEqual(raised.exception.status, 400, wrong)
+        box = PairedClient(client_id="esp32", display_name="Box", kind=DeviceKind.ESP32_PANEL, panel_ids=("panel-b",),
+                           station_id="station-b", admin_role="")
+        with self.assertRaises(HTTPAPIError) as raised:
+            self.app.save_meet_calendar(box, {"start_day": "Lör", "change_time": "03:00", "meet_generation": self.generation()})
+        self.assertEqual(raised.exception.status, 403)
+        self.assertIsNone(self.runtime.meet_calendar(self.pub.meet_id)["change_time_set"])
+
+    def test_a_day_change_is_announced_to_the_views_and_a_time_machine_jump_is_not(self):
+        self.assertIsNone(self.app.display_snapshot()["calendar"]["last_change"])
+        self.run_clock_at(86400 + at(3, 30, 5))
+        self.app.calendar_tick()
+        last = self.app.display_snapshot()["calendar"]["last_change"]
+        self.assertEqual((last["kind"], last["day_number"], last["weekday"]), ("day_change", 2, "Sön"))
+        self.assertTrue(last["at"].endswith("Z"))
+        self.app.time_machine(self.admin, {"day_number": 4, "time": "10:00", "meet_generation": self.generation()})
+        self.assertEqual(self.app.display_snapshot()["calendar"]["last_change"], last, "the jump is not a day change")
+
+
+class NextDayChangeTimeTests(_Meet):
+    """It is the new day's first train that counts, not today's."""
+
+    def package(self):
+        package = runtime_package_v3()
+        # 808 går bara på söndagar, 06:00. Lördagens första tåg är 101 09:20.
+        add_service(package, "808", [("station-a", None, "06:00", "track-station-a-1"),
+                                     ("station-b", "06:15", None, "track-station-b-1")])
+        for collection in ("services", "routes", "trains"):
+            for item in package[collection]:
+                if item.get("train_number") == "808":
+                    item["days"] = "Sön"
+        return package
+
+    def test_saturday_into_sunday_changes_an_hour_before_sundays_first_train(self):
+        self.assertEqual(self.app.display_snapshot()["calendar"]["change_time"], "05:00")
+        self.run_clock_at(86400 + at(5, 0, 30))
+        self.assertEqual(self.app.calendar_tick()["active_day"], "Sön")
+
+
+class AutomaticChangeTimeTests(_Meet):
+    """The day change follows the next day's first train, day by day."""
+
+    def package(self):
+        package = runtime_package_v3()
+        # 707 går varje dag 00:30, strax efter midnatt.
+        add_service(package, "707", [("station-a", None, "00:30", "track-station-a-1"),
+                                     ("station-b", "00:45", None, "track-station-b-1")])
+        return package
+
+    def test_never_before_midnight_and_five_without_trains(self):
+        self.assertEqual(self.app.display_snapshot()["calendar"]["change_time"], "00:00",
+                         "a train at 00:30: the change at midnight, not the evening before")
+        self.runtime.set_meet_calendar(self.pub.meet_id, "Lör", 1)
+        real = self.app._first_movement_seconds  # noqa: SLF001
+        self.app._first_movement_seconds = lambda publication, day: None  # noqa: SLF001
+        try:
+            self.assertEqual(self.app.display_snapshot()["calendar"]["change_time"], "05:00", "no trains that day")
+        finally:
+            self.app._first_movement_seconds = real  # noqa: SLF001
 
 
 class TimeMachineTests(_Meet):

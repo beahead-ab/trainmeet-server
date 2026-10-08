@@ -139,7 +139,7 @@ async function open(opts = {}) {
         case '/v1/admin/users': data = { role: 'owner', users: [{ user_id: 'u-1', role: 'owner', invitation_pending: false }], user: { user_id: 'u-1', role: 'owner' } }; break;
         case '/v1/clock': if (request.method() === 'POST') { const b = JSON.parse(request.postData() || '{}'); if (b.action === 'start') st.running = true; if (b.action === 'stop') st.running = false; } data = clock(); break;
         case '/v1/clock/source': data = { source: 'internal', clock_name: '', user: '', has_password: false, poll_interval: 2 }; break;
-        case '/v1/display': data = { clock: clock(), meet: { id: 'meet-1', name: 'Grimslöv 2027' }, active_day: 'Dagl', publication_id: 'pub-9', stations, connections, routes, services, train_positions: positions(), connection_states: connectionStates(), connection: { screens: [] }, display: {}, calendar: o.calendar ?? null }; break;
+        case '/v1/display': data = { clock: clock(), meet: { id: 'meet-1', name: 'Grimslöv 2027' }, active_day: 'Dagl', publication_id: 'pub-9', stations, connections, routes, services, train_positions: positions(), connection_states: connectionStates(), connection: { screens: [] }, display: {}, calendar: o.calendar ?? null, server_time: new Date().toISOString() }; break;
         case '/v1/simulation': data = simulation(); break;
         case '/v1/train': {
           const n = url.searchParams.get('number'); const s = services.find(x => x.train_number === n); selectedTrainCalls++;
