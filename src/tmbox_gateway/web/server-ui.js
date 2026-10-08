@@ -138,9 +138,17 @@
     stage.append(header, content, footer);
     // Skärmen är en 1920 × 1080-duk som skalas in. I fönsterläge står
     // verktygsraden kvar ovanför duken, och duken får det som blir över.
+    // En urtavla på en stående skärm (telefon, surfplatta, stående TV) får en
+    // stående duk, 1080 bred och lika hög som skärmen räcker, så att tavlan
+    // fyller bredden i stället för halva den. Siffrorna fyller redan bredden
+    // på den liggande duken.
     const resize = () => {
       const chrome = $("#display-app")?.dataset.chrome === "window" ? ($("#display-toolbar")?.offsetHeight || 0) : 0;
-      const scale = Math.min(innerWidth / 1920, (innerHeight - chrome) / 1080);
+      const height = innerHeight - chrome;
+      const portrait = stage.dataset.kind === "clock" && Boolean($("#clock-view .clock-face")) && height > innerWidth;
+      stage.classList.toggle("sc-portrait", portrait);
+      stage.style.height = portrait ? `${Math.round(1080 * height / innerWidth)}px` : "";
+      const scale = portrait ? innerWidth / 1080 : Math.min(innerWidth / 1920, height / 1080);
       stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
       stage.style.marginTop = `${chrome / 2}px`;
     };

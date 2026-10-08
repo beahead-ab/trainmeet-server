@@ -1229,6 +1229,22 @@ async function fileBase64(file) {
   return btoa(binary);
 }
 
+// Det som fungerar men skalar sämre än det kunde (clock_pack.py): klockan är
+// uppladdad, och listan säger vad som kan göras bättre i paketet.
+function showClockPackWarnings(uploaded) {
+  document.querySelector("#clock-face-warnings")?.remove();
+  const rows = uploaded.flatMap(face => (face.warnings || []).map(warning => uploaded.length > 1 ? `${face.name}: ${warning}` : warning));
+  if (!rows.length) return;
+  const list = document.createElement("ul");
+  list.id = "clock-face-warnings";
+  list.className = "kr-clock-warnings";
+  const title = document.createElement("li");
+  title.className = "kr-clock-warnings__title";
+  title.textContent = t("Uppladdad, men det här skalar sämre än det kunde:");
+  list.append(title, ...rows.map(text => Object.assign(document.createElement("li"), { textContent: text })));
+  document.querySelector("#clock-face-message").after(list);
+}
+
 // Ett eller flera klockpaket, eller en zip med flera: ett i taget till servern.
 // Ett fel stoppar resten och säger vilken fil det gällde.
 document.querySelector("#clock-face-upload-form")?.addEventListener("submit", async event => {
@@ -1241,6 +1257,7 @@ document.querySelector("#clock-face-upload-form")?.addEventListener("submit", as
   if (large) return setMessage(message, "{name} är större än 2 MB.", "error", { name: large.name });
   if (!document.querySelector("#clock-face-rights").checked) return setMessage(message, "Kryssa i att du har rätt att använda urtavlan.", "error");
   if (!beginModalAction(form)) return;
+  document.querySelector("#clock-face-warnings")?.remove();
   const uploaded = [];
   try {
     for (const file of files) {
@@ -1255,6 +1272,7 @@ document.querySelector("#clock-face-upload-form")?.addEventListener("submit", as
     form.reset();
     if (uploaded.length > 1) setMessage(message, "{count} klockor är uppladdade. Välj en som stil ovan.", "success", { count: uploaded.length });
     else setMessage(message, uploaded[0].replaced ? "{name} är uppdaterad." : "{name} är uppladdad. Välj den som stil ovan.", "success", { name: uploaded[0].name });
+    showClockPackWarnings(uploaded);
   } catch (error) {
     endModalAction(form);
     setMessage(message, uploaded.length ? `${t("{count} klockor är uppladdade.", { count: uploaded.length })} ${error.message}` : error.message, "error");
@@ -4677,6 +4695,8 @@ function renderClock(snapshot) {
       ? html`<div class="clock-digital${stopped ? " stopped" : ""}" data-seconds="${showSeconds}"><span class="cd-hm"></span><span class="cd-side"><span class="cd-ap"></span><span class="cd-ss"></span></span></div>`
       : clockSVG(style, darkBackground, showSeconds, stopped);
     target.innerHTML = html`<div class="sc-clock-layout ${digital ? "sc-clock-layout--digital" : "sc-clock-layout--face"}${stopped || externalMissing ? " is-stopped" : ""}">${clock}${status}</div>`;
+    // En urtavla på en stående skärm får en stående duk; siffror en liggande.
+    serverUI.resizeStage?.();
   }
   const digits = target.querySelector(".clock-digital");
   if (digits) {

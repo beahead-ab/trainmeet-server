@@ -64,12 +64,16 @@ def bundle(packs, *, folder="") -> bytes:
     return buffer.getvalue()
 
 
-def png(width, height) -> bytes:
+def png(width, height, *, alpha=True) -> bytes:
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
-    rows = b"".join(b"\x00" + b"\x00" * width * 4 for _ in range(height))
-    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+    channels = 4 if alpha else 3
+    rows = b"".join(b"\x00" + b"\x00" * width * channels for _ in range(height))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6 if alpha else 2, 0, 0, 0))
             + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
+PNG_LAYERS = {"dial": "dial.png", "hour": "hour.svg", "minute": "minute.svg"}
 
 
 class ClockPackFormatTests(unittest.TestCase):
@@ -118,9 +122,16 @@ class ClockPackFormatTests(unittest.TestCase):
     def test_layers_must_be_square_so_the_hands_turn_about_the_centre(self):
         self.rejected(pack({"dial.svg": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"/>'}), "kvadratisk")
         self.rejected(pack({"dial.svg": '<svg xmlns="http://www.w3.org/2000/svg"/>'}), "viewBox saknas")
-        self.rejected(pack({"dial.png": png(64, 32)}, layers={"dial": "dial.png", "hour": "hour.svg", "minute": "minute.svg"}), "kvadratisk")
-        self.assertEqual(read_pack(pack({"dial.png": png(128, 128)}, layers={"dial": "dial.png", "hour": "hour.svg", "minute": "minute.svg"}))
-                         .layers["dial"].content_type, "image/png")
+        self.rejected(pack({"dial.png": png(512, 256)}, layers=PNG_LAYERS), "kvadratisk")
+        self.assertEqual(read_pack(pack({"dial.png": png(1024, 1024)}, layers=PNG_LAYERS)).layers["dial"].content_type, "image/png")
+
+    def test_a_small_png_is_refused_and_one_too_small_for_4k_is_warned_about(self):
+        self.rejected(pack({"dial.png": png(256, 256)}, layers=PNG_LAYERS), "mellan 512 och 4096 px")
+        warned = read_pack(pack({"dial.png": png(512, 512)}, layers=PNG_LAYERS))
+        self.assertEqual(len(warned.warnings), 1)
+        self.assertIn("blir mjuk på en 4K-TV", warned.warnings[0])
+        self.assertEqual(read_pack(pack({"dial.png": png(1024, 1024)}, layers=PNG_LAYERS)).warnings, ())
+
 
     def test_a_broken_or_incomplete_pack_says_what_is_wrong(self):
         self.rejected(b"not a zip", "zip")
@@ -148,11 +159,72 @@ class ClockPackFormatTests(unittest.TestCase):
                 self.assertEqual(clock_pack.main(["check", str(folder)]), 0)
                 self.assertEqual(clock_pack.main(["build", str(folder)]), 0)
             self.assertIn("OK: Exempelur 1.0 (id exempelur)", output.getvalue())
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(clock_pack.main(["preview", str(folder), "-o", str(Path(directory) / "se.html")]), 0)
+            self.assertIn("Exempelur", (Path(directory) / "se.html").read_text())
             self.assertEqual(read_pack((Path(directory) / "mitt-ur.tmclock").read_bytes()).id, "exempelur")
             (folder / "hour.svg").write_text(SQUARE.format("<script/>"))
             with contextlib.redirect_stderr(io.StringIO()) as errors:
                 self.assertEqual(clock_pack.main(["check", str(folder)]), 1)
             self.assertIn("<script>", errors.getvalue())
+
+
+class ScalingWarningTests(unittest.TestCase):
+    """Sådant som fungerar men skalar sämre än det kunde (docs/clock-packs.md):
+    paketet godtas, och varningen säger vad som kan göras bättre."""
+
+    def warnings(self, **files):
+        return read_pack(pack(files)).warnings
+
+    def test_the_example_and_a_clean_pack_have_no_warnings(self):
+        self.assertEqual(read_pack(clock_pack.example_pack()).warnings, ())
+        self.assertEqual(read_pack(pack()).warnings, ())
+
+    def test_text_is_drawn_with_whatever_font_each_screen_has(self):
+        warning, = self.warnings(**{"dial.svg": SQUARE.format('<text x="100" y="30">12</text>')})
+        self.assertIn("dial.svg: text ritas med det typsnitt", warning)
+
+    def test_filters_are_heavy_on_simple_tvs(self):
+        warning, = self.warnings(**{"hour.svg": SQUARE.format('<defs><filter id="f"><feGaussianBlur stdDeviation="2"/></filter></defs>'
+                                                           '<rect width="2" height="80" filter="url(#f)"/>')})
+        self.assertIn("filter", warning)
+
+    def test_lines_thinner_than_half_a_percent_vanish_when_the_clock_is_small(self):
+        warning, = self.warnings(**{"dial.svg": SQUARE.format('<line x1="100" y1="10" x2="100" y2="20" stroke="#000" stroke-width="0.6"/>')})
+        self.assertIn("den tunnaste linjen (0.6) är under 0.5 % av sidan (1)", warning)
+        self.assertEqual(self.warnings(**{"dial.svg": SQUARE.format('<line x1="100" y1="10" x2="100" y2="20" stroke-width="1"/>')}), ())
+        big = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"><line x1="1" y1="1" x2="9" y2="9" style="stroke-width: 3"/></svg>'
+        self.assertEqual(len(self.warnings(**{"dial.svg": big})), 1, "measured against the side, here 1000")
+
+    def test_a_background_in_a_hand_layer_hides_the_dial(self):
+        warning, = self.warnings(**{"minute.svg": SQUARE.format('<rect width="100%" height="100%" fill="#fff"/><rect x="99" y="20" width="2" height="80"/>')})
+        self.assertIn("minute.svg: lagret har en bakgrund som täcker hela ytan", warning)
+        self.assertEqual(self.warnings(**{"minute.svg": SQUARE.format('<rect width="200" height="200" fill="none"/>')}), ())
+
+    def test_a_square_dial_shows_its_corners_but_a_round_one_does_not(self):
+        warning, = self.warnings(**{"dial.svg": SQUARE.format('<rect width="200" height="200" fill="#fff"/>')})
+        self.assertIn("hörnen syns som en fyrkant", warning)
+        self.assertEqual(self.warnings(**{"dial.svg": SQUARE.format('<circle cx="100" cy="100" r="98" fill="#fff"/>')}), ())
+
+    def test_a_png_hand_without_transparency_hides_the_dial(self):
+        result = read_pack(pack({"hour.png": png(1024, 1024, alpha=False)}, layers={"dial": "dial.svg", "hour": "hour.png", "minute": "minute.svg"}))
+        warning, = result.warnings
+        self.assertIn("hour.png: bilden saknar genomskinlighet", warning)
+
+    def test_a_large_layer_is_slow_to_fetch(self):
+        heavy = SQUARE.format('<g>' + '<rect width="1" height="1"/>' * 8000 + '</g>')
+        self.assertTrue(any("kB" in warning for warning in self.warnings(**{"dial.svg": heavy})))
+
+    def test_the_preview_shows_every_pack_at_every_size_with_its_warnings(self):
+        page = clock_pack.preview([read_pack(pack(name="Ur ett")), read_pack(pack({"dial.svg": SQUARE.format('<text>1</text>')}, id="ur-tva", name="Ur två"))])
+        for size in (44, 52, 84, 347, 683, 960):
+            self.assertIn(f"width:{size}px;height:{size}px", page)
+        self.assertEqual(page.count('<div class=face data-face="ur-ett"'), 12, "six sizes on dark and on light")
+        self.assertIn("Ur två", page)
+        self.assertIn("text ritas med det typsnitt", page)
+        self.assertIn("data:image/svg+xml;base64,", page)
+        self.assertIn("TrainMeetClockFace", page, "the hands move as on the screens")
+        self.assertNotIn("<script>alert", page)
 
 
 class ClockFaceServerTests(unittest.TestCase):
@@ -255,6 +327,13 @@ class ClockFaceServerTests(unittest.TestCase):
         self.assertIn("Ta bort några först", str(full.exception))
         self.assertTrue(self.upload(pack(id="ur-3", version="2"))["replaced"], "replacing one still works")
 
+    def test_an_upload_says_what_scales_worse_than_it_could(self):
+        self.connect()
+        result = self.upload(pack({"dial.svg": SQUARE.format('<circle cx="100" cy="100" r="98" fill="#fff"/><text>12</text>')}))
+        warning, = result["uploaded"][0]["warnings"]
+        self.assertIn("dial.svg: text ritas med det typsnitt", warning)
+        self.assertEqual(self.audit("clock_face.uploaded")[0]["warnings"], [warning], "and it is logged")
+
     def test_a_zip_of_several_packs_uploads_them_all(self):
         self.connect()
         result = self.upload(bundle({"a.tmclock": pack(id="ur-a"), "b.tmclock": pack(id="ur-b", name="Ur B")}), file_name="klockor.zip")
@@ -264,7 +343,7 @@ class ClockFaceServerTests(unittest.TestCase):
         styles = self.app.display_snapshot()["clock"]["available_styles"]
         self.assertTrue({"custom:ur-a", "custom:ur-b"} <= set(styles))
         again = self.upload(bundle({"a.tmclock": pack(id="ur-a", version="2")}, folder="klockor/"))
-        self.assertEqual(again["uploaded"], [{"id": "ur-a", "name": "Mitt ur", "replaced": True}], "a zipped folder works too")
+        self.assertEqual(again["uploaded"], [{"id": "ur-a", "name": "Mitt ur", "replaced": True, "warnings": []}], "a zipped folder works too")
 
     def test_one_bad_pack_in_a_zip_stops_them_all_and_says_which(self):
         self.connect()

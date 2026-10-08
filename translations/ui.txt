@@ -1352,3 +1352,4 @@ The file did not arrive complete. Try again.|Filen kom inte fram hel. Försök i
 The clock no longer exists.|Klockan finns inte längre.|Uret findes ikke længere.|Klokken finnes ikke lenger.|Die Uhr gibt es nicht mehr.
 {count} clocks have been uploaded. Choose one as a style above.|{count} klockor är uppladdade. Välj en som stil ovan.|{count} ure er uploadet. Vælg et som stil ovenfor.|{count} klokker er lastet opp. Velg én som stil over.|{count} Uhren wurden hochgeladen. Wähle oben eine als Stil.
 {count} clocks have been uploaded.|{count} klockor är uppladdade.|{count} ure er uploadet.|{count} klokker er lastet opp.|{count} Uhren wurden hochgeladen.
+Uploaded, but this scales worse than it could:|Uppladdad, men det här skalar sämre än det kunde:|Uploadet, men dette skalerer dårligere, end det kunne:|Lastet opp, men dette skalerer dårligere enn det kunne:|Hochgeladen, aber das skaliert schlechter als möglich:

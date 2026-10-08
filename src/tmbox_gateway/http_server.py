@@ -1789,9 +1789,11 @@ class TrainMeetHTTPApplication:
                     actor=client.admin_user_id or "konsol", action="clock_face.uploaded", outcome="ok",
                     detail={"by": client.display_name, "id": pack.id, "name": pack.name, "version": pack.version,
                             "sha256": pack.sha256, "file_name": str(payload.get("file_name") or "")[:120],
-                            "replaced": face["replaced"], "rights_confirmed": True})
+                            "replaced": face["replaced"], "rights_confirmed": True, "warnings": list(pack.warnings)})
+        # Varningarna stoppar inget: de säger vad som skalar sämre än det kunde (docs/clock-packs.md).
         return {"face": self._admin_clock_face(saved[0]), "replaced": saved[0]["replaced"],
-                "uploaded": [{"id": face["id"], "name": face["name"], "replaced": face["replaced"]} for face in saved],
+                "uploaded": [{"id": face["id"], "name": face["name"], "replaced": face["replaced"], "warnings": list(pack.warnings)}
+                             for face, pack in zip(saved, packs)],
                 **self.clock_faces_state(client)}
 
     @announces("clock")
