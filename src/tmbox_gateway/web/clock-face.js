@@ -79,12 +79,19 @@
   /** Lagrets adress, ur den mörka varianten när skärmen är mörk och paketet har en. */
   const layerFor = (face, layer, dark) => layerUrl((dark && face?.dark_layers?.[layer]) || face?.layers?.[layer]);
 
-  /** En uppladdad klocka som SVG-markup, med visarna där app.js vrider dem. */
-  function markup(face, { showSeconds = true, stopped = false, dark = pageIsDark() } = {}) {
+  // Godkännanderutan visar klockan innan den är uppladdad: lagren kommer då
+  // som data-adresser från /v1/clock-faces/check. Bara bilder, inget annat.
+  const previewUrl = (url) => (typeof url === "string" && /^data:image\/(?:svg\+xml|png);base64,[A-Za-z0-9+/=]+$/.test(url) ? url : "");
+
+  /** En uppladdad klocka som SVG-markup, med visarna där app.js vrider dem.
+   *  preview: lagren är data-adresser (godkännanderutan); at: visarna står
+   *  redan på den tiden (sekunder in i dygnet). */
+  function markup(face, { showSeconds = true, stopped = false, dark = pageIsDark(), preview = false, at = null } = {}) {
+    const angles = at === null ? null : handAngles(at, face?.motion);
     const image = (layer, hand) => {
-      const url = layerFor(face, layer, dark);
+      const url = preview ? previewUrl((dark && face?.dark_layers?.[layer]) || face?.layers?.[layer]) : layerFor(face, layer, dark);
       if (!url) return "";
-      const handAttributes = hand ? ` data-clock-hand="${hand}" transform="rotate(0 100 100)"` : "";
+      const handAttributes = hand ? ` data-clock-hand="${hand}" transform="rotate(${angles ? angles[hand] : 0} 100 100)"` : "";
       return `<image href="${escape(url)}" x="0" y="0" width="200" height="200" preserveAspectRatio="xMidYMid meet"${handAttributes}/>`;
     };
     return `<svg class="clock-face clock-face--custom${stopped ? " stopped" : ""}" viewBox="0 0 200 200" role="img" aria-label="${escape(face?.name)}" data-face="${escape(face?.id)}">`
@@ -92,5 +99,5 @@
       + "</svg>";
   }
 
-  return { PREFIX, DEFAULT_MOTION, handAngles, bounceTracker, remember, isCustom, find, all, markup, layerUrl, layerFor, pageIsDark };
+  return { PREFIX, DEFAULT_MOTION, handAngles, bounceTracker, remember, isCustom, find, all, markup, layerUrl, previewUrl, layerFor, pageIsDark };
 });

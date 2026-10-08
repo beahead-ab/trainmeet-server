@@ -65,6 +65,17 @@ def bundle(packs, *, folder="") -> bytes:
     return buffer.getvalue()
 
 
+def approved_upload(data, **payload) -> dict:
+    """Det sidan skickar när admin godkänt varje klocka i filen. En fil som
+    inte går att läsa når aldrig rutan; här godkänns den ändå, så att servern
+    får säga vad som är fel."""
+    try:
+        approved = [found.id for found in clock_pack.read_packs(data)]
+    except ClockPackError:
+        approved = ["mitt-ur", "ur-a", "ur-b"]
+    return {"data": base64.b64encode(data).decode(), "rights_confirmed": True, "approved": approved, **payload}
+
+
 def png(width, height, *, alpha=True) -> bytes:
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
@@ -282,8 +293,7 @@ class ClockFaceServerTests(unittest.TestCase):
     connect = fixture.CloudOnlyDeliveryTests.connect
 
     def upload(self, data=None, client=None, **payload):
-        body = {"file_name": "mitt-ur.tmclock", "data": base64.b64encode(data or pack()).decode(), "rights_confirmed": True, **payload}
-        return self.app.upload_clock_face(client or self.admin, body)
+        return self.app.upload_clock_face(client or self.admin, approved_upload(data or pack(), **{"file_name": "mitt-ur.tmclock", **payload}))
 
     def audit(self, action):
         rows = self.operations._connection.execute("SELECT detail_json FROM audit_events WHERE action = ?", (action,)).fetchall()
@@ -317,6 +327,39 @@ class ClockFaceServerTests(unittest.TestCase):
         self.assertTrue(listed["rights_confirmed_at"])
         self.assertTrue(listed["uploaded_by"])
 
+    def test_the_approval_dialog_sees_each_clock_before_anything_is_saved(self):
+        self.connect()
+        files = bundle({"a.tmclock": pack(id="ur-a", name="Ur A"), "b.tmclock": pack(id="ur-b", name="Ur B")})
+        seq = self.app.changes.seq
+        found = self.app.check_clock_packs(self.admin, {"data": base64.b64encode(files).decode()})["packs"]
+        self.assertEqual([(clock["id"], clock["name"], clock["replaces"]) for clock in found], [("ur-a", "Ur A", False), ("ur-b", "Ur B", False)])
+        self.assertTrue(found[0]["layers"]["dial"].startswith("data:image/svg+xml;base64,"), "a preview before the upload")
+        self.assertEqual((self.runtime.clock_faces(), self.audit("clock_face.uploaded"), self.app.changes.seq), ([], [], seq),
+                         "checking saves nothing, logs nothing and wakes no screen")
+        self.upload(pack(id="ur-a", name="Ur A"))
+        again = {clock["id"]: clock for clock in self.app.check_clock_packs(self.admin, {"data": base64.b64encode(files).decode()})["packs"]}
+        self.assertEqual((again["ur-a"]["replaces"], again["ur-a"]["unchanged"], again["ur-b"]["replaces"]), (True, True, False))
+        terminal = PairedClient("terminal", "TKL", DeviceKind.TKL_TERMINAL, ("panel-a",))
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.app.check_clock_packs(terminal, {"data": base64.b64encode(files).decode()})
+        self.assertEqual(int(refused.exception.status), 403)
+
+    def test_only_the_clocks_approved_one_by_one_are_uploaded(self):
+        self.connect()
+        files = bundle({"a.tmclock": pack(id="ur-a"), "b.tmclock": pack(id="ur-b")})
+        for refused_body in ({"rights_confirmed": True}, {"rights_confirmed": True, "approved": []},
+                             {"rights_confirmed": True, "approved": ["ur-c"]}, {"rights_confirmed": True, "approved": "ur-a"},
+                             {"rights_confirmed": False, "approved": ["ur-a"]}):
+            with self.assertRaises(HTTPAPIError) as refused:
+                self.app.upload_clock_face(self.admin, {"data": base64.b64encode(files).decode(), **refused_body})
+            self.assertEqual(refused.exception.code, "clock_face_rights", refused_body)
+        self.assertEqual(self.runtime.clock_faces(), [])
+        result = self.app.upload_clock_face(self.admin, {"data": base64.b64encode(files).decode(), "rights_confirmed": True, "approved": ["ur-b"]})
+        self.assertEqual([face["id"] for face in result["uploaded"]], ["ur-b"])
+        self.assertEqual([face["id"] for face in self.runtime.clock_faces()], ["ur-b"], "the one not approved stays out")
+        logged, = self.audit("clock_face.uploaded")
+        self.assertEqual((logged["id"], logged["rights_confirmed"]), ("ur-b", True))
+
     def test_only_an_administrator_uploads_lists_or_removes_clocks(self):
         self.connect()
         terminal = PairedClient("terminal", "TKL", DeviceKind.TKL_TERMINAL, ("panel-a",))
@@ -333,7 +376,7 @@ class ClockFaceServerTests(unittest.TestCase):
         self.assertEqual(refused.exception.code, "invalid_clock_pack")
         self.assertIn("<script>", str(refused.exception))
         with self.assertRaises(HTTPAPIError):
-            self.app.upload_clock_face(self.admin, {"data": "not base64!", "rights_confirmed": True})
+            self.app.upload_clock_face(self.admin, {"data": "not base64!", "rights_confirmed": True, "approved": ["mitt-ur"]})
         self.assertEqual(self.runtime.clock_faces(), [])
 
     def test_the_same_id_replaces_the_clock_and_gives_new_addresses(self):
@@ -425,8 +468,9 @@ class ClockFaceServerTests(unittest.TestCase):
 
     def test_the_http_routes_upload_list_and_remove(self):
         self.connect()
-        status, body = dispatch_request(self.app, self.admin, "/v1/clock-faces",
-                                        {"data": base64.b64encode(pack()).decode(), "rights_confirmed": True})
+        status, body = dispatch_request(self.app, self.admin, "/v1/clock-faces/check", {"data": base64.b64encode(pack()).decode()})
+        self.assertEqual((int(status), [found["id"] for found in body["packs"]]), (200, ["mitt-ur"]))
+        status, body = dispatch_request(self.app, self.admin, "/v1/clock-faces", approved_upload(pack()))
         self.assertEqual((int(status), body["face"]["id"]), (200, "mitt-ur"))
         status, body = dispatch_request(self.app, self.admin, "/v1/clock-faces", method="GET")
         self.assertEqual([face["id"] for face in body["faces"]], ["mitt-ur"])
@@ -442,7 +486,7 @@ class BuiltInStyleTests(unittest.TestCase):
     connect = fixture.CloudOnlyDeliveryTests.connect
 
     def upload(self, data):
-        return self.app.upload_clock_face(self.admin, {"data": base64.b64encode(data).decode(), "rights_confirmed": True})
+        return self.app.upload_clock_face(self.admin, approved_upload(data))
 
     def test_only_a_generic_analog_and_a_digital_clock_are_built_in(self):
         self.assertEqual(AVAILABLE_CLOCK_STYLES, ("analog", "digital"))
@@ -497,7 +541,7 @@ class ClockLayerHTTPTests(unittest.TestCase):
 
     def test_a_layer_is_served_as_a_sandboxed_image_that_may_be_cached(self):
         self.connect()
-        face = self.app.upload_clock_face(self.admin, {"data": base64.b64encode(pack()).decode(), "rights_confirmed": True})["face"]
+        face = self.app.upload_clock_face(self.admin, approved_upload(pack()))["face"]
         base = self.serve()
         with urllib.request.urlopen(base + face["layers"]["hour"]) as response:
             headers, body = response.headers, response.read()

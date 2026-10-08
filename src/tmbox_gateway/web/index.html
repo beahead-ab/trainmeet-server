@@ -723,10 +723,13 @@
                 <div class="kr-ph"><span>Egna klockor</span><span class="kr-c">klockpaket (.tmclock) · för alla träffar på servern · väljs som stil ovan</span></div>
                 <div id="clock-faces-list" class="kr-lines"><p class="kr-empty">Inga egna klockor ännu.</p></div>
                 <form id="clock-face-upload-form" class="kr-rows kr-clock-upload" novalidate>
-                  <div class="kr-kv"><label class="kr-k" for="clock-face-file">Klockpaket</label><input id="clock-face-file" class="kr-file" type="file" accept=".tmclock,.zip,application/zip" multiple><span class="kr-m">ett eller flera klockpaket, eller en zip med flera · högst 2 MB per fil</span></div>
-                  <div class="kr-kv"><span class="kr-k">Rätt att använda</span><label class="kr-chk"><input id="clock-face-rights" type="checkbox"><span>Jag har rätt att använda den här urtavlan: den är vår egen formgivning eller licensierad från den som äger den.</span></label></div>
+                  <div id="clock-face-drop" class="kr-drop">
+                    <span class="kr-drop__title">Släpp en eller flera zip-filer här</span>
+                    <span class="kr-m">klockpaket (.tmclock eller .zip) · högst 2 MB per fil · du godkänner varje klocka innan den laddas upp</span>
+                    <label class="kr-btn sm kr-drop__pick"><input id="clock-face-file" class="kr-visually-hidden" type="file" accept=".tmclock,.zip,application/zip" multiple><span>Välj filer</span></label>
+                  </div>
                   <p id="clock-face-message" class="form-message" role="status"></p>
-                  <div class="kr-kv kr-clock-upload__actions"><a class="kr-btn sm" href="/v1/clock-faces/exempelur.tmclock" download>Ladda ner exempelpaketet</a><span class="kr-sp"></span><button class="kr-btn sm primary" type="submit">Ladda upp</button></div>
+                  <div class="kr-kv kr-clock-upload__actions"><a class="kr-btn sm" href="/v1/clock-faces/exempelur.tmclock" download>Ladda ner exempelpaketet</a></div>
                 </form>
                 <div class="kr-pf"><span>Ett klockpaket är bilder och inställningar, ingen kod: tavlan, visarna ritade mot 12 och hur de går. Börja från exempelpaketet; formatet står i docs/clock-packs.md.</span></div>
               </section>
@@ -1001,6 +1004,19 @@
               <div class="modal-actions">
                 <button type="button" class="secondary" data-close-modal>Avbryt</button>
                 <button class="primary" type="submit"><tm-text data-tm-text="Hoppa dit">Hoppa dit</tm-text></button>
+              </div>
+</form>
+</dialog>
+<!-- Egna klockor: varje klocka godkänns för sig innan den laddas upp. -->
+<dialog id="clock-faces-modal" class="admin-modal kr-clock-approve" aria-labelledby="clock-faces-modal-title" data-discard-freely="true"><h2 id="clock-faces-modal-title">Godkänn klockor</h2>
+<form id="clock-faces-approve-form" novalidate>
+              <p>Kryssa i för varje klocka att du har rätt att använda urtavlan: att den är er egen formgivning eller licensierad från den som äger den. Godkännandet sparas med ditt namn och tiden. Bara godkända klockor laddas upp.</p>
+              <label class="kr-chk kr-clock-approve__all"><input id="clock-faces-approve-all" type="checkbox"><span>Markera alla</span></label>
+              <ul id="clock-faces-approve-list" class="kr-clock-approve__list"></ul>
+              <p id="clock-faces-approve-message" class="form-message" role="status"></p>
+              <div class="modal-actions">
+                <button type="button" class="secondary" data-close-modal>Avbryt</button>
+                <button id="clock-faces-approve-submit" class="primary" type="submit" disabled>Ladda upp</button>
               </div>
 </form>
 </dialog>
