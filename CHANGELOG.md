@@ -5,6 +5,29 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Dygnsskiftet kl. 05:00: alla tåg på sin utgångspunkt, med en toast i vyerna
+
+Efter Caspers önskan: dygnsskiftet görs en timme innan trafikdygnet börjar,
+inte vid midnatt, så att nattåg och sena tåg hinner in.
+
+- **Skiftet sker kl. 05:00** (Inställningar → Träff och Cloud → Träffens
+  dagar → Dygnsskifte kl., 00:00–11:59). Mellan midnatt och skiftet är det
+  kvar gårdagens trafikdygn. Klockan går vidare hela tiden.
+- **Vid skiftet** går träffen till nästa dag med den dagens tidtabell
+  (inklusive Dagl), alla ankomst- och avgångsstatusar nollställs och varje
+  tåg ställs på sin utgångspunkt, första stationen och avgångsspåret. Det
+  gäller även ett tåg vars första avgång ligger före skiftet; det kan gå
+  direkt.
+- **Ett tåg som fortfarande är ute på linjen** kör klart på gårdagens dag:
+  skiftet väntar på det, högst en halvtimme (förut sex timmar efter
+  midnatt).
+- **En toast** på Drift, i deltagarvyn, på skärmarna och i webb-TMBoxen:
+  "Nytt trafikdygn: Dag 2 · Sön. Alla tåg står på sin utgångspunkt och
+  statusarna är nollställda." Den visas en gång, också för den som öppnar
+  sidan strax efter skiftet. Medan skiftet väntar säger toasten det.
+- Med FastClock sker skiftet när FastClock passerar skiftets tid efter
+  midnatt. Tidsmaskinen och Ställ klockan fungerar som förut.
+
 ### Webb-TMBoxen visar stationens tidtabell med förseningar, och man väljer hur mycket
 
 Efter Caspers önskan: webb-TMBoxarna och iPhone-appen ska också kunna välja

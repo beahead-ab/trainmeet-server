@@ -21,6 +21,9 @@
       active = Boolean(data.clock?.simulation);
       banner.hidden = !active;
       show(!active ? "" : data.clock.running ? "SIMULERING · Pågår · Vanlig driftdata påverkas inte" : "SIMULERING · Pausad · Vanlig driftdata påverkas inte");
+      // The same picture for others on the page (day-change.js), without a fetch
+      // of their own. Never at the cost of the banner itself.
+      try { document.dispatchEvent(new CustomEvent("trainmeet:display", {detail: data})); } catch {}
     } catch {
       // Never silently remove the warning on a dropped connection.
       if (active) show("SIMULERING · Kontakt med servern saknas");
