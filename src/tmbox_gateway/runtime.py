@@ -932,10 +932,11 @@ class SQLiteRuntimeStore:
             number = max(1, int(saved.get("day_number") or 1))
         except (TypeError, ValueError):
             number = 1
-        change = day_change_time(saved.get("change_time")) or DEFAULT_DAY_CHANGE_TIME
         last = saved.get("last_change") if isinstance(saved.get("last_change"), dict) else None
+        # Dygnsskiftet: en fast tid som admin skrivit in, annars None (en timme
+        # före dagens första tågrörelse; servern räknar ut den, http_server).
         return {"start_day": start, "day_number": number, "weekday": calendar_weekday(start, number), "week": list(DAY_ORDER),
-                "change_time": change, "last_change": last}
+                "change_time_set": day_change_time(saved.get("change_time")), "last_change": last}
 
     def _saved_calendar(self, meet_id: str) -> dict[str, Any]:
         try:
@@ -959,12 +960,16 @@ class SQLiteRuntimeStore:
         return self.meet_calendar(meet_id)
 
     def set_day_change_time(self, meet_id: str, value: Any) -> dict[str, Any]:
-        """När träffen går till nästa dag (Casper 2026-10-08: en timme innan
-        trafikdygnet börjar, så att nattåg hinner in). Förval 05:00."""
+        """En fast tid för dygnsskiftet, eller tomt för automatiskt: en timme
+        före den nya dagens första tågrörelse (Casper 2026-10-08)."""
+        saved = self._saved_calendar(meet_id)
+        if value is None or str(value).strip() == "":
+            saved.pop("change_time", None)
+            self._save_setting("meet_calendar:" + meet_id, json.dumps(saved))
+            return self.meet_calendar(meet_id)
         change = day_change_time(value)
         if change is None:
-            raise RuntimePublicationError("Välj en tid mellan 00:00 och 11:59.")
-        saved = self._saved_calendar(meet_id)
+            raise RuntimePublicationError("Skriv tiden som TT:MM, eller lämna tomt.")
         saved["change_time"] = change
         self._save_setting("meet_calendar:" + meet_id, json.dumps(saved))
         return self.meet_calendar(meet_id)
@@ -1446,16 +1451,17 @@ def _resolve_day(value: str) -> str:
 
 
 CALENDAR_START_DAYS = ("Dagl",) + DAY_ORDER
-#: Dygnsskiftet: träffen går till nästa dag en timme innan trafikdygnet
-#: börjar (runt 06:00), så att nattåg och sena tåg hinner in.
+#: Dygnsskiftet: träffen går till nästa dag en timme före den nya dagens
+#: första tågrörelse, så att nattåg och sena tåg hinner in. Utan tåg den
+#: dagen gäller 05:00.
 DEFAULT_DAY_CHANGE_TIME = "05:00"
+DAY_CHANGE_LEAD_SECONDS = 3600
 
 
 def day_change_time(value: Any) -> str | None:
-    """"5:00" eller "05:00" till "05:00"; None för något annat. Skiftet ligger
-    på natten eller morgonen, 00:00–11:59."""
+    """"5:00" eller "05:00" till "05:00"; None för något annat."""
     match = re.fullmatch(r"(\d{1,2}):(\d{2})", str(value or "").strip())
-    if not match or int(match[1]) > 11 or int(match[2]) > 59:
+    if not match or int(match[1]) > 23 or int(match[2]) > 59:
         return None
     return f"{int(match[1]):02d}:{match[2]}"
 
