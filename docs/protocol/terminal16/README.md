@@ -66,6 +66,10 @@ Exempel, fångade från mosquitto 2026-10-01 (bilden förkortad):
   `rejected` med en ny bild.
 - Ett tågnummer skickas med `#` som `train_number` (1–5 siffror) och
   `entry_context` ur bilden. Siffrorna stannar i boxen tills dess.
+- Ett genomgående tåg som inte har kommit till stationen i systemet ger först
+  *Flytta hit* (`FLYTTA 93 HIT?`), också när det kunde skickas vidare. Först
+  när tåget står här gäller numret avgången (Server 3.24, Benny #170). Före det
+  begärde `93#` nästa station direkt, och tåget hoppade fram med avgången.
 - Är tåget en egen avgång med fri sträcka begär samma tryck klartecken, eller
   reserverar på en direktsträcka (Server 2.1.0). `93#` räcker alltså, och `*`
   återtar förfrågan tills mottagaren har svarat. Allt annat som numret hittar
@@ -74,8 +78,8 @@ Exempel, fångade från mosquitto 2026-10-01 (bilden förkortad):
   skälet, och bilden visar tåget med *Begär klartecken*.
 - Systemet följer spelet i stället för att stoppa det (Server 2.1.0). Klartecken
   krävs för avgång, men inte att tågets ankomst är registrerad: *Rapportera
-  avgång* finns så fort klartecknet finns. Har tåget inte setts komma, hoppar det
-  fram till stationen med avgången. Varje tidigare del av rutten som står öppen
+  avgång* finns så fort klartecknet finns. Har tåget inte setts komma (avgången
+  vald i listan), hoppar det fram till stationen med avgången. Varje tidigare del av rutten som står öppen
   avslutas: en väntande förfrågan återtas, ett klartecken släpps så att sträckan
   blir fri, och avgången där räknas som gjord.
 - En ankomst kan alltid tas emot. Ett tåg som ingen skickat visas med numret och

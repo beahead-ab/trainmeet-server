@@ -18,7 +18,7 @@ from tmbox_gateway.terminal16_demo import demo_lab
 KEY_ORDER = "#*ABCD"
 MODES = {"clearance": "Med klartecken", "direct": "Direkttrafik"}
 # Flows run on the bench's meet with train 55 added, VA -> CDA -> MUN.
-THROUGH = {"genomgaende", "hoppa-fram"}
+THROUGH = {"genomgaende", "flytta-genomgaende"}
 NOTICE_SECONDS, RECEIPT_SECONDS = 3, 5
 
 # Each flow: id, title, mode, the boxes it shows, when to use it, an optional
@@ -135,16 +135,19 @@ FLOWS = [
         ("MUN", "#", "Munkeröd ger klart."),
         ("CDA", "#", "Charlottendal rapporterar avgång. Munkeröd kan ta emot."),
     ]),
-    ("hoppa-fram", "Tåget hoppar fram", "clearance", ["VA", "CDA", "MUN"],
-     "Vagnsta tappade bort 55 och skickade det aldrig, men tåget står i Charlottendal. Charlottendal "
-     "skickar det vidare ändå. Systemet följer med i stället för att stoppa spelet.",
+    ("flytta-genomgaende", "Genomgående tåg som ingen skickat", "clearance", ["VA", "CDA", "MUN"],
+     "Vagnsta tappade bort 55 och skickade det aldrig, men tåget står i Charlottendal. I systemet står "
+     "det kvar i Vagnsta, så Charlottendal flyttar det hit först och skickar det sedan vidare som vanligt "
+     "(Benny #170).",
      None, [
-        ("CDA", "55#", "Charlottendal skriver 55. Inget är på gång, så numret gäller avgången mot Munkeröd "
-                       "och förfrågan går direkt."),
-        ("MUN", "#", "Munkeröd ger klart. #Avg finns direkt, fast tåget aldrig lämnade Vagnsta i systemet."),
-        ("CDA", "#", "Charlottendal rapporterar avgång. Tåget hoppar fram: Vagnstas del räknas som gjord, "
-                     "och Vagnsta har inte längre 55 att skicka."),
-        ("MUN", "#", "Munkeröd tar emot 55."),
+        ("CDA", "55#", "Charlottendal skriver 55. Tåget har inte kommit hit i systemet, så boxen frågar "
+                       "FLYTTA 55 HIT? och begär ingenting av Munkeröd."),
+        ("CDA", "#", "# flyttar 55 hit på planerat spår. Vagnstas del räknas som gjord: Vagnsta får beskedet "
+                     "55 MOTTAGET och har inte längre 55 att skicka."),
+        ("wait", NOTICE_SECONDS, "Efter tre sekunder går Charlottendal tillbaka till översikten."),
+        ("CDA", "55#", "Nu står 55 här, och numret gäller avgången mot Munkeröd. Förfrågan går direkt."),
+        ("MUN", "#", "Munkeröd ger klart."),
+        ("CDA", "#", "Charlottendal rapporterar avgång. Munkeröd kan ta emot."),
     ]),
     ("placera", "Flytta hit ett tåg som ingen skickat", "clearance", ["MUN", "CDA"],
      "Munkeröd skickade aldrig 93, men tåget kom till Charlottendal. Charlottendal flyttar det hit "

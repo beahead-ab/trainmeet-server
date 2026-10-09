@@ -2793,10 +2793,10 @@ globalThis.TMBoxFlows = {
    ]
   },
   {
-   "id": "hoppa-fram",
-   "title": "Tåget hoppar fram",
+   "id": "flytta-genomgaende",
+   "title": "Genomgående tåg som ingen skickat",
    "mode": "Med klartecken",
-   "intro": "Vagnsta tappade bort 55 och skickade det aldrig, men tåget står i Charlottendal. Charlottendal skickar det vidare ändå. Systemet följer med i stället för att stoppa spelet.",
+   "intro": "Vagnsta tappade bort 55 och skickade det aldrig, men tåget står i Charlottendal. I systemet står det kvar i Vagnsta, så Charlottendal flyttar det hit först och skickar det sedan vidare som vanligt (Benny #170).",
    "setup": null,
    "boxes": [
     {
@@ -2853,13 +2853,148 @@ globalThis.TMBoxFlows = {
       "#"
      ],
      "wait": null,
-     "caption": "Charlottendal skriver 55. Inget är på gång, så numret gäller avgången mot Munkeröd och förfrågan går direkt.",
+     "caption": "Charlottendal skriver 55. Tåget har inte kommit hit i systemet, så boxen frågar FLYTTA 55 HIT? och begär ingenting av Munkeröd.",
      "screens": [
       {
        "box": "VA",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
+       ],
+       "changed": false
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "FLYTTA 55 HIT?  ",
+        "#Ja B:Sp   12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "                ",
+        "Nr# A:Kö   12:34"
+       ],
+       "changed": false
+      }
+     ],
+     "meanings": [
+      [
+       "#",
+       "Flytta hit"
+      ],
+      [
+       "*",
+       "Tillbaka"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ],
+      [
+       "B",
+       "Annat ankomstspår"
+      ]
+     ]
+    },
+    {
+     "box": "CDA",
+     "keys": [
+      "#"
+     ],
+     "wait": null,
+     "caption": "# flyttar 55 hit på planerat spår. Vagnstas del räknas som gjord: Vagnsta får beskedet 55 MOTTAGET och har inte längre 55 att skicka.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "55 MOTTAGET     ",
+        "CDA        12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "55 ANK SP2      ",
+        "VA         12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "                ",
+        "Nr# A:Kö   12:34"
+       ],
+       "changed": false
+      }
+     ],
+     "meanings": [
+      [
+       "#",
+       "OK"
+      ],
+      [
+       "*",
+       "Tillbaka"
+      ],
+      [
+       "A",
+       "Förfrågningskö (0 väntar)"
+      ]
+     ]
+    },
+    {
+     "box": null,
+     "keys": [],
+     "wait": 3,
+     "caption": "Efter tre sekunder går Charlottendal tillbaka till översikten.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "55 MOTTAGET     ",
+        "CDA        12:34"
+       ],
+       "changed": false
+      },
+      {
+       "box": "CDA",
+       "lines": [
+        "                ",
+        "Nr# A:Kö   12:34"
+       ],
+       "changed": true
+      },
+      {
+       "box": "MUN",
+       "lines": [
+        "                ",
+        "Nr# A:Kö   12:34"
+       ],
+       "changed": false
+      }
+     ],
+     "meanings": []
+    },
+    {
+     "box": "CDA",
+     "keys": [
+      "5",
+      "5",
+      "#"
+     ],
+     "wait": null,
+     "caption": "Nu står 55 här, och numret gäller avgången mot Munkeröd. Förfrågan går direkt.",
+     "screens": [
+      {
+       "box": "VA",
+       "lines": [
+        "55 MOTTAGET     ",
+        "CDA        12:34"
        ],
        "changed": false
       },
@@ -2909,7 +3044,7 @@ globalThis.TMBoxFlows = {
       "#"
      ],
      "wait": null,
-     "caption": "Munkeröd ger klart. #Avg finns direkt, fast tåget aldrig lämnade Vagnsta i systemet.",
+     "caption": "Munkeröd ger klart.",
      "screens": [
       {
        "box": "VA",
@@ -2917,7 +3052,7 @@ globalThis.TMBoxFlows = {
         "                ",
         "Nr# A:Kö   12:34"
        ],
-       "changed": false
+       "changed": true
       },
       {
        "box": "CDA",
@@ -2965,7 +3100,7 @@ globalThis.TMBoxFlows = {
       "#"
      ],
      "wait": null,
-     "caption": "Charlottendal rapporterar avgång. Tåget hoppar fram: Vagnstas del räknas som gjord, och Vagnsta har inte längre 55 att skicka.",
+     "caption": "Charlottendal rapporterar avgång. Munkeröd kan ta emot.",
      "screens": [
       {
        "box": "VA",
@@ -3008,54 +3143,6 @@ globalThis.TMBoxFlows = {
       [
        "D",
        "Nästa tåg"
-      ]
-     ]
-    },
-    {
-     "box": "MUN",
-     "keys": [
-      "#"
-     ],
-     "wait": null,
-     "caption": "Munkeröd tar emot 55.",
-     "screens": [
-      {
-       "box": "VA",
-       "lines": [
-        "                ",
-        "Nr# A:Kö   12:34"
-       ],
-       "changed": false
-      },
-      {
-       "box": "CDA",
-       "lines": [
-        "55 MOTTAGET     ",
-        "MUN        12:34"
-       ],
-       "changed": true
-      },
-      {
-       "box": "MUN",
-       "lines": [
-        "55 ANK SP2      ",
-        "CDA        12:34"
-       ],
-       "changed": true
-      }
-     ],
-     "meanings": [
-      [
-       "#",
-       "OK"
-      ],
-      [
-       "*",
-       "Tillbaka"
-      ],
-      [
-       "A",
-       "Förfrågningskö (0 väntar)"
       ]
      ]
     }
