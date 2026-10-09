@@ -912,6 +912,7 @@ function openModal(id, trigger = document.activeElement) {
   modalOrigins.set(dialog, trigger);
   if (id === "clock-source-modal") dialog.dataset.meetGeneration = String(state.serverContext?.selected_meet?.generation ?? "");
   if (id === "time-machine-modal") fillTimeMachine();
+  if (id === "new-day-modal") fillNewDay();
   modalSections.set(dialog, trigger?.closest("section"));
   modalValues.set(dialog, [...dialog.querySelectorAll("input, select, textarea")].map((input) => [input, input.value, input.checked]));
   dialog.dataset.dirty = "false";
@@ -1613,7 +1614,7 @@ function restoreSize(bytes) {
 }
 
 const BACKUP_REASONS = {
-  tidsmaskin: "Före tidsmaskinen", nollstallning: "Före nollställningen", startdag: "Före ny startdag",
+  tidsmaskin: "Före tidsmaskinen", nollstallning: "Före nollställningen", startdag: "Före ny startdag", "nytt-dygn": "Före Starta ny dag",
   "lokala-andringar": "Före Återgå till Cloud-versionen", cloud: "Före Ta Cloud-versionen",
 };
 
@@ -2044,6 +2045,42 @@ document.querySelector("#time-machine-form")?.addEventListener("submit", async (
   } finally { endModalAction(form); }
 });
 
+// Starta ny dag (Casper 2026-10-09): i manuellt läge går träffen till nästa
+// dag när admin säger till. Klockan börjar där servern föreslår: efter
+// midnatt där klockan står, annars vid dygnsskiftet. Den kan ändras.
+function fillNewDay() {
+  const calendar = state.overviewSnapshot?.calendar;
+  const next = calendar?.next_day || { day_number: (calendar?.day_number || 1) + 1, weekday: "", time: "05:00" };
+  const day = t("Dag {n} · {day}", { n: next.day_number, day: next.weekday });
+  document.querySelector("#new-day-text").textContent = t("Träffen går till {day} med den dagens tidtabell. Alla tåg ställs på sin utgångspunkt och den nya dagens statusar nollställs. Det som hänt i dag finns kvar i historiken. En säkerhetskopia tas först.", { day });
+  document.querySelector("#new-day-submit").textContent = t("Starta {day}", { day });
+  document.querySelector("#new-day-time").value = next.time || "05:00";
+  document.querySelector("#new-day-modal").dataset.meetGeneration = String(state.serverContext?.selected_meet?.generation ?? "");
+}
+document.querySelector("#new-day-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const message = document.querySelector("#new-day-message");
+  if (!beginModalAction(form)) return;
+  setMessage(message, t("Den nya dagen startas …"), "notice");
+  try {
+    const response = await authorizedFetch("/v1/runtime/new-day", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ time: document.querySelector("#new-day-time").value,
+        meet_generation: Number(form.closest("dialog").dataset.meetGeneration) }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || t("Den nya dagen kunde inte startas."));
+    finishModal(form);
+    setTranslatedMessage(document.querySelector("#overview-clock-message"),
+      t("Dag {n} · {day} har börjat kl. {time}. Alla tåg står på sin utgångspunkt.", { n: payload.day_number, day: payload.active_day, time: payload.clock?.time?.slice(0, 5) || "" }), "success");
+    await refreshServerContext?.();
+    await refreshLocalClock();
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  } finally { endModalAction(form); }
+});
+
 // Träffens startdag (Inställningar → Träff och Cloud).
 function refreshMeetCalendar() {
   const form = document.querySelector("#meet-calendar-form");
@@ -2061,9 +2098,18 @@ function refreshMeetCalendar() {
     ? t("Fast tid. Töm fältet för automatiskt: en timme före första tåget.")
     : t("Tomt: automatiskt, en timme före första tåget ({time})", { time: snapshot.calendar.change_time || "05:00" });
   document.querySelector("#meet-calendar-note").textContent = t("I dag: Dag {n} · {day}", { n: snapshot.calendar.day_number, day: snapshot.calendar.weekday });
+  document.querySelector("#meet-day-change-mode").value = snapshot.calendar.day_change_mode === "auto" ? "auto" : "manual";
+  renderDayChangeModeNote();
   form.hidden = false;
   globalThis.TrainMeetSettings?.rebase(form);
 }
+// Nytt trafikdygn: manuellt med Starta ny dag, eller av sig själv vid dygnsskiftet (dygnet runt).
+function renderDayChangeModeNote() {
+  document.querySelector("#meet-day-change-mode-note").textContent = document.querySelector("#meet-day-change-mode").value === "auto"
+    ? t("Träffen går till nästa dag av sig själv vid dygnsskiftet, när inga tåg är ute på linjen.")
+    : t("Admin startar nästa dag med Starta ny dag på Drift. Från dygnsskiftet påminner Drift om det.");
+}
+document.querySelector("#meet-day-change-mode")?.addEventListener("change", renderDayChangeModeNote);
 document.querySelector("#meet-calendar-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -2073,6 +2119,7 @@ document.querySelector("#meet-calendar-form")?.addEventListener("submit", async 
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ start_day: document.querySelector("#meet-start-day").value,
         change_time: document.querySelector("#meet-day-change").value,
+        day_change_mode: document.querySelector("#meet-day-change-mode").value,
         meet_generation: state.serverContext?.selected_meet?.generation }),
     });
     const payload = await response.json();

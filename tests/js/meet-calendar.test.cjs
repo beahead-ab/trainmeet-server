@@ -64,7 +64,9 @@ const calendar = { start_day: 'Fre', day_number: 2, weekday: 'Lör', week: ['Må
     await page.locator('#meet-day-change').fill('04:15');
     await page.locator('#meet-calendar-form [data-save-submit]').click();
     await page.waitForFunction(() => document.querySelector('#meet-calendar-form [data-save-state]')?.textContent.trim() === 'Sparat');
-    assert.deepEqual(sent[1], ['calendar', { start_day: 'Lör', change_time: '04:15', meet_generation: 7 }]);
+    assert.equal(await page.locator('#meet-day-change-mode').inputValue(), 'manual', 'manual is the default');
+    assert.match(await page.locator('#meet-day-change-mode-note').textContent(), /^Admin startar nästa dag med Starta ny dag på Drift/);
+    assert.deepEqual(sent[1], ['calendar', { start_day: 'Lör', change_time: '04:15', day_change_mode: 'manual', meet_generation: 7 }]);
     assert.equal(await page.locator('.tm-day-change').isVisible(), false, 'no day change, no toast');
     assert.deepEqual(view.errors, []);
     assert.deepEqual(view.violations, []);
@@ -104,5 +106,85 @@ const calendar = { start_day: 'Fre', day_number: 2, weekday: 'Lör', week: ['Må
     await toast.waitFor({ state: 'visible', timeout: 8000 });
     assert.equal(await toast.textContent(), 'Dygnsskiftet väntar på tåg som är ute på linjen.');
   } finally { await waiting.browser.close(); }
+
+  // Starta ny dag (Casper 2026-10-09): i manuellt läge finns knappen på Drift,
+  // och när dygnsskiftet har passerats påminner Drift om det.
+  const manual = { ...calendar, day_change_mode: 'manual', due: true, next_day: { day_number: 3, weekday: 'Sön', time: '00:35' } };
+  const started = [];
+  let refuse = true;
+  const newDay = await open({ route: '/drift', calendar: manual, api: {
+    '/v1/runtime/new-day': (request) => {
+      started.push(JSON.parse(request.postData()));
+      if (refuse) { refuse = false; return { status: 409, data: { error: 'day_still_running', message: 'Tåg 101 är ute på linjen. Vänta tills de har kommit fram, eller använd Tidsmaskinen.' } }; }
+      return { data: { day_number: 3, active_day: 'Sön', clock: { time: '05:40:00' } } };
+    },
+    '/v1/runtime/calendar': (request) => { sent.push(['calendar', JSON.parse(request.postData())]); return { data: { ...manual, day_change_mode: 'auto' } }; },
+  } });
+  try {
+    const { page } = newDay;
+    page.setDefaultTimeout(8000);
+    const due = page.locator('#new-day-due');
+    await due.waitFor({ state: 'visible' });
+    assert.equal(await due.textContent(), 'Dygnsskiftet har passerats · Starta Dag 3 · Sön');
+    assert.equal(await page.locator('#new-day-open').isVisible(), true);
+    await due.click();
+    await page.locator('#new-day-modal[open]').waitFor();
+    assert.match(await page.locator('#new-day-text').textContent(), /^Träffen går till Dag 3 · Sön med den dagens tidtabell\..*En säkerhetskopia tas först\.$/);
+    assert.equal(await page.locator('#new-day-submit').textContent(), 'Starta Dag 3 · Sön');
+    assert.equal(await page.locator('#new-day-time').inputValue(), '00:35', 'the server suggests the time, not the day change');
+    await page.locator('#new-day-time').fill('05:40');
+    await page.locator('#new-day-submit').click();
+    // Ett tåg ute på linjen: dialogen står kvar med skälet.
+    await page.waitForFunction(() => /Tåg 101 är ute på linjen/.test(document.querySelector('#new-day-message')?.textContent || ''));
+    assert.equal(await page.locator('#new-day-modal').evaluate((dialog) => dialog.open), true);
+    await page.locator('#new-day-submit').click();
+    await page.waitForFunction(() => !document.querySelector('#new-day-modal').open);
+    assert.deepEqual(started, [{ time: '05:40', meet_generation: 7 }, { time: '05:40', meet_generation: 7 }]);
+    await page.waitForFunction(() => /Dag 3 · Sön har börjat kl\. 05:40\./.test(document.querySelector('#overview-clock-message')?.textContent || ''));
+    const box = await due.boundingBox(), width = page.viewportSize().width;
+    assert.ok(box.x >= 0 && box.x + box.width <= width, 'the reminder fits');
+
+    // Inställningen: Automatiskt vid dygnsskiftet (dygnet runt).
+    await page.goto(new URL('/installningar#traff', page.url()).href);
+    await page.locator('#meet-calendar-form').waitFor({ state: 'visible' });
+    assert.deepEqual(await page.locator('#meet-day-change-mode option').allTextContents(), ['Manuellt (Starta ny dag)', 'Automatiskt vid dygnsskiftet (dygnet runt)']);
+    await page.locator('#meet-day-change-mode').selectOption('auto');
+    assert.equal(await page.locator('#meet-day-change-mode-note').textContent(), 'Träffen går till nästa dag av sig själv vid dygnsskiftet, när inga tåg är ute på linjen.');
+    await page.locator('#meet-calendar-form [data-save-submit]').click();
+    await page.waitForFunction(() => document.querySelector('#meet-calendar-form [data-save-state]')?.textContent.trim() === 'Sparat');
+    assert.equal(sent.at(-1)[1].day_change_mode, 'auto');
+    assert.deepEqual(newDay.errors, []);
+    assert.deepEqual(newDay.violations, []);
+  } finally { await newDay.browser.close(); }
+
+  // Automatiskt läge: ingen knapp och ingen påminnelse.
+  const auto = await open({ route: '/drift', calendar: { ...manual, day_change_mode: 'auto', due: false } });
+  try {
+    await auto.page.waitForFunction(() => document.querySelector('#overview-day')?.textContent === 'Dag 2 · Lör');
+    // Drift syns (Tidsmaskin finns alltid), men inte Starta ny dag.
+    await auto.page.locator('#time-machine-open').waitFor({ state: 'visible', timeout: 8000 });
+    assert.equal(await auto.page.locator('#new-day-open').isVisible(), false);
+    assert.equal(await auto.page.locator('#new-day-due').isVisible(), false);
+  } finally { await auto.browser.close(); }
+
+  // Manuellt men före dygnsskiftet: knappen men ingen påminnelse.
+  const early = await open({ route: '/drift', calendar: { ...manual, due: false } });
+  try {
+    await early.page.locator('#new-day-open').waitFor({ state: 'visible', timeout: 8000 });
+    assert.equal(await early.page.locator('#new-day-due').isVisible(), false);
+  } finally { await early.browser.close(); }
+
+  // Telefon: med fyra knappar bryts raden, och Tidsmaskin klipps inte bort.
+  const phone = await open({ route: '/drift', width: 390, height: 844, calendar: manual });
+  try {
+    await phone.page.locator('#new-day-due').waitFor({ state: 'visible', timeout: 8000 });
+    const clipped = await phone.page.evaluate(() => {
+      const panel = document.querySelector('#drift-clock').getBoundingClientRect();
+      return [...document.querySelectorAll('.kr-clock-actions button:not([hidden]), #new-day-due')]
+        .filter((node) => { const box = node.getBoundingClientRect(); return box.left < panel.left || box.right > panel.right; }).map((node) => node.id);
+    });
+    assert.deepEqual(clipped, [], 'every clock button and the reminder inside the panel');
+    assert.equal(await phone.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  } finally { await phone.browser.close(); }
   console.log('meet-calendar: ok');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

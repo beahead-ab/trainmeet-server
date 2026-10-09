@@ -144,6 +144,15 @@
     if (start) start.hidden = Boolean(clock.running);
     if (stop) stop.hidden = !clock.running;
     const day = $("#overview-day"); if (day && ctx.snapshot?.active_day) day.textContent = globalThis.meetDayLabel ? globalThis.meetDayLabel(ctx.snapshot) : ctx.snapshot.active_day;
+    // Starta ny dag finns i manuellt läge. När dygnsskiftet har passerats påminner Drift om det.
+    const calendar = ctx.snapshot?.calendar;
+    const manual = calendar?.day_change_mode === "manual";
+    const newDay = $("#new-day-open"), due = $("#new-day-due");
+    if (newDay) newDay.hidden = !manual;
+    if (due) {
+      due.hidden = !(manual && calendar.due);
+      if (!due.hidden) due.textContent = t("Dygnsskiftet har passerats · Starta Dag {n} · {day}", { n: calendar.next_day?.day_number ?? calendar.day_number + 1, day: calendar.next_day?.weekday || "" });
+    }
   }
 
   // ── Nyckeltal ─────────────────────────────────────────────────────────
