@@ -295,3 +295,92 @@ test('nothing breaks on an empty or missing picture', () => {
     assert.equal(model.stats(empty).stations, 0);
   }
 });
+
+// Vilken tur ett tåg på linjen kör. Tåg 7 går a → b två gånger om dagen, och
+// kvällsturen ligger först i bilden, som den gjorde i Caspers tidtabell där
+// morgontåget 319 fick "ank 19:05" klockan 10:26. Tåg 9 vänder: a → b → a → b.
+function twiceADay(overrides = {}) {
+  const service = (id, number, stops) => ({ id, train_number: number, days: 'Dagl', stops });
+  const row = (id, service_id, number, station_id, arrival_time, departure_time) => ({ id, service_id, train_number: number, station_id, arrival_time, departure_time });
+  return snapshot({
+    services: [
+      service('s-7-pm', '7', [stop('a', 0, null, '18:50'), stop('b', 1, '19:05', null)]),
+      service('s-7-am', '7', [stop('a', 0, null, '09:00'), stop('b', 1, '09:20', null)]),
+      service('s-9', '9', [stop('a', 0, null, '08:00'), stop('b', 1, '08:20', '08:25'), stop('a', 2, '08:45', '08:50'), stop('b', 3, '09:10', null)]),
+    ],
+    trains: [
+      row('m-7-pm-a', 's-7-pm', '7', 'a', null, '18:50'), row('m-7-pm-b', 's-7-pm', '7', 'b', '19:05', null),
+      row('m-7-am-a', 's-7-am', '7', 'a', null, '09:00'), row('m-7-am-b', 's-7-am', '7', 'b', '09:20', null),
+      row('m-9-a1', 's-9', '9', 'a', null, '08:00'), row('m-9-b1', 's-9', '9', 'b', '08:20', '08:25'),
+      row('m-9-a2', 's-9', '9', 'a', '08:45', '08:50'), row('m-9-b2', 's-9', '9', 'b', '09:10', null),
+    ],
+    ...overrides,
+  });
+}
+const onLine = (number, extra = {}) => ({ train_number: number, status: 'connection', connection_id: 'c-ab', from_station_id: 'a', to_station_id: 'b', ...extra });
+
+test('the movement that left points out the run the train is on', () => {
+  const snap = twiceADay({ clock: { time: '09:05:00' }, train_positions: [onLine('7', { movement_id: 'm-7-am-a' })] });
+  const [train] = model.trains(snap).onLine;
+  assert.equal(train.movementId, 'm-7-am-a');
+  const leg = model.onLineLeg(snap, train);
+  assert.equal(leg.service.id, 's-7-am');
+  assert.deepEqual([leg.departure_time, leg.arrival_time, leg.departure, leg.arrival], ['09:00', '09:20', 540, 560]);
+  // Kvällsturen när det är den som avgick, även om klockan står på morgonen.
+  const evening = model.onLineLeg(snap, { ...train, movementId: 'm-7-pm-a' });
+  assert.deepEqual([evening.service.id, evening.arrival_time], ['s-7-pm', '19:05']);
+  // Kanalen på sträckan bär också rörelsen.
+  const viaChannel = twiceADay({ clock: { time: '09:05:00' }, connection_states: [{ id: 'c-ab', state: 'occupied',
+    channels: [{ train_number: '7', from_station_id: 'a', to_station_id: 'b', state: 'occupied', movement_id: 'm-7-am-a' }] }] });
+  assert.equal(model.onLineLeg(viaChannel, model.trains(viaChannel).onLine[0]).arrival_time, '09:20');
+});
+
+test('a second call at the same station is told apart by the movement', () => {
+  const snap = twiceADay({ clock: { time: '08:55:00' }, train_positions: [onLine('9', { movement_id: 'm-9-a2' })] });
+  const leg = model.onLineLeg(snap, model.trains(snap).onLine[0]);
+  assert.deepEqual([leg.departure_time, leg.arrival_time], ['08:50', '09:10']);
+  const first = model.onLineLeg(snap, { ...model.trains(snap).onLine[0], movementId: 'm-9-a1' });
+  assert.deepEqual([first.departure_time, first.arrival_time], ['08:00', '08:20']);
+});
+
+test('without a movement the run nearest the actual departure, else nearest the clock, is chosen', () => {
+  const actual = twiceADay({ clock: { time: '09:05:00' }, train_positions: [onLine('7', { departed_seconds: 9 * 3600 + 2 * 60 })] });
+  assert.equal(model.onLineLeg(actual, model.trains(actual).onLine[0]).arrival_time, '09:20');
+  const lateEvening = twiceADay({ clock: { time: '00:10:00' }, train_positions: [onLine('7', { departed_seconds: 18 * 3600 + 58 * 60 })] });
+  assert.equal(model.onLineLeg(lateEvening, model.trains(lateEvening).onLine[0]).arrival_time, '19:05', 'the actual departure counts, not the clock');
+  const morning = twiceADay({ clock: { time: '09:05:00' }, train_positions: [onLine('7')] });
+  assert.equal(model.onLineLeg(morning, model.trains(morning).onLine[0]).arrival_time, '09:20');
+  const evening = twiceADay({ clock: { time: '18:55:00' }, train_positions: [onLine('7')] });
+  assert.equal(model.onLineLeg(evening, model.trains(evening).onLine[0]).arrival_time, '19:05');
+  // En rörelse som inte går att para med tidtabellen stoppar inget: då gäller närmast.
+  const unknown = twiceADay({ clock: { time: '09:05:00' }, train_positions: [onLine('7', { movement_id: 'm-gone' })] });
+  assert.equal(model.onLineLeg(unknown, model.trains(unknown).onLine[0]).arrival_time, '09:20');
+  const mismatch = twiceADay({ clock: { time: '09:05:00' }, train_positions: [onLine('7', { movement_id: 'm-odd' })] });
+  mismatch.trains.push({ id: 'm-odd', service_id: 's-7-am', train_number: '7', station_id: 'a', arrival_time: null, departure_time: '09:01' });
+  assert.equal(model.onLineLeg(mismatch, model.trains(mismatch).onLine[0]).arrival_time, '09:20', 'a movement whose times match no stop');
+  // En äldre bild utan turer: ruttstoppen räcker.
+  const routesOnly = twiceADay({ clock: { time: '18:55:00' }, services: [], train_positions: [onLine('7')],
+    routes: [['s-7-pm', 'a', 0, null, '18:50'], ['s-7-pm', 'b', 1, '19:05', null], ['s-7-am', 'a', 0, null, '09:00'], ['s-7-am', 'b', 1, '09:20', null]]
+      .map(([service_id, station_id, stop_order, arrival_time, departure_time]) => ({ service_id, train_number: '7', station_id, stop_order, arrival_time, departure_time })) });
+  assert.equal(model.onLineLeg(routesOnly, model.trains(routesOnly).onLine[0]).arrival_time, '19:05');
+  // Ett tåg utan sträckan i tidtabellen men med en ankomst till stationen (ett extratåg med bara ruttstopp): ankomsten, utan avgång.
+  const extra = twiceADay({ clock: { time: '14:26:00' }, train_positions: [onLine('900')], routes: [{ train_number: '900', station_id: 'b', arrival_time: '14:20' }] });
+  const arrivalOnly = model.onLineLeg(extra, model.trains(extra).onLine[0]);
+  assert.deepEqual([arrivalOnly.arrival_time, arrivalOnly.departure, arrivalOnly.from], ['14:20', null, null]);
+  assert.deepEqual(model.lateTrains(extra).map((train) => train.trainNumber), ['900']);
+  // Utan sträckan i tidtabellen: inget svar.
+  const elsewhere = twiceADay({ train_positions: [onLine('7', { to_station_id: 'c' })] });
+  assert.equal(model.onLineLeg(elsewhere, model.trains(elsewhere).onLine[0]), null);
+});
+
+test('late is judged on the run the train is on', () => {
+  const onTime = twiceADay({ clock: { time: '09:10:00' }, train_positions: [onLine('7', { movement_id: 'm-7-am-a' })] });
+  assert.deepEqual(model.lateTrains(onTime), []);
+  assert.equal(model.stats(onTime).deviations, 0);
+  const late = twiceADay({ clock: { time: '09:30:00' }, train_positions: [onLine('7', { movement_id: 'm-7-am-a' })] });
+  assert.deepEqual(model.lateTrains(late).map((train) => train.trainNumber), ['7'], 'the morning arrival has passed; the evening one has not');
+  assert.equal(model.stats(late).deviations, 1);
+  const cleared = twiceADay({ clock: { time: '09:30:00' }, connection_states: [{ id: 'c-ab', state: 'reserved',
+    channels: [{ train_number: '7', from_station_id: 'a', to_station_id: 'b', state: 'reserved', movement_id: 'm-7-am-a' }] }] });
+  assert.deepEqual(model.lateTrains(cleared), [], 'a train with a clear has not left');
+});

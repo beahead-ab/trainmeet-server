@@ -1681,17 +1681,32 @@ class TrainMeetHTTPApplication:
 
     def _with_departure_times(self, publication, active_day, connection_states, positions):
         """Träffklockans tid när varje tåg på linjen avgick, så att kartan kan
-        låta det röra sig mot nästa station. Saknas den gäller den planerade."""
+        låta det röra sig mot nästa station. Saknas den gäller den planerade.
+
+        Ett läge som vet vilken rörelse som avgick frågar efter just den. Ett
+        äldre läge utan rörelse frågar efter alla rörelser tåget har på
+        avgångsstationen, för samma nummer kan gå flera gånger om dagen, och
+        den som senast avgick gäller. Förut gällde den sista raden i planen,
+        som för ett morgontåg kunde vara kvällsturen.
+        """
         if self.operations_store is None:
             return connection_states, positions
-        movement_of = {(str(row["train_number"]), str(row["station_id"])): str(row["id"])
-                       for row in publication.payload.get("trains", []) if row.get("id")}
+        movements_of: dict[tuple[str, str], list[str]] = {}
+        for row in publication.payload.get("trains", []):
+            if row.get("id"):
+                movements_of.setdefault((str(row.get("train_number")), str(row.get("station_id"))), []).append(str(row["id"]))
+
+        def candidates(position: dict[str, Any]) -> list[str]:
+            if position.get("status") != "connection":
+                return []
+            if position.get("movement_id"):
+                return [str(position["movement_id"])]
+            return movements_of.get((str(position.get("train_number")), str(position.get("from_station_id"))), [])
+
         wanted = {channel["movement_id"] for state in connection_states for channel in state.get("channels", [])
                   if channel.get("movement_id") and channel.get("state") == "occupied"}
-        wanted |= {movement_of.get((str(position.get("train_number")), str(position.get("from_station_id"))))
-                   for position in positions if position.get("status") == "connection"}
-        departed = self.operations_store.departure_clock_seconds(
-            publication.publication_id, active_day, {movement for movement in wanted if movement})
+        wanted |= {movement for position in positions for movement in candidates(position)}
+        departed = self.operations_store.departure_clock_seconds(publication.publication_id, active_day, wanted)
         if not departed:
             return connection_states, positions
         states = [{**state, "channels": [
@@ -1700,9 +1715,8 @@ class TrainMeetHTTPApplication:
             for channel in state.get("channels", [])]} for state in connection_states]
         moved = []
         for position in positions:
-            movement = movement_of.get((str(position.get("train_number")), str(position.get("from_station_id"))))
-            moved.append({**position, "departed_seconds": departed[movement]}
-                         if position.get("status") == "connection" and movement in departed else position)
+            times = [departed[movement] for movement in candidates(position) if movement in departed]
+            moved.append({**position, "departed_seconds": max(times)} if times else position)
         return states, moved
 
     def traffic_side_state(self, client: PairedClient) -> dict[str, Any]:

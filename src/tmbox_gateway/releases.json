@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.25.1",
+    "date": "2026-10-10",
+    "notes": [
+      "Tåget på linjen visar sin egen turs ankomst"
+    ]
+  },
+  {
     "version": "3.25.0",
     "date": "2026-10-09",
     "notes": [

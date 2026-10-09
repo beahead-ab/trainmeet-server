@@ -3924,39 +3924,39 @@ function topologyTrains(snapshot) {
       if (!channel.train_number || !["reserved", "occupied"].includes(channel.state)) continue;
       seen.add(String(channel.train_number));
       onLine.push({ trainNumber: String(channel.train_number), from: channel.from_station_id, to: channel.to_station_id, departed: channel.state === "occupied",
-        departedSeconds: channel.departed_seconds ?? null });
+        departedSeconds: channel.departed_seconds ?? null, movementId: channel.movement_id ?? null });
     }
   }
   for (const position of snapshot.train_positions || []) {
     const trainNumber = String(position.train_number);
     if (seen.has(trainNumber)) continue;
     if (position.status === "connection") onLine.push({ trainNumber, from: position.from_station_id, to: position.to_station_id, departed: true,
-      departedSeconds: position.departed_seconds ?? null });
+      departedSeconds: position.departed_seconds ?? null, movementId: position.movement_id ?? null });
     else if (position.station_id) atStation.push({ trainNumber, station: position.station_id });
   }
   return { onLine, atStation };
 }
 
+// Vilken tur ett tåg på linjen kör (drift-model, samma svar på Drift, i
+// deltagarvyn och på skärmarna): stoppet det avgick från, det nästa på
+// sträckan, turen de hör till och de planerade tiderna. Rörelsen som avgick
+// pekar ut turen; utan den gäller den tur vars avgång ligger närmast den
+// faktiska, annars närmast klockan. Förut togs den första turen med numret,
+// så ett morgontåg fick kvällsturens ankomst när numret går två gånger om
+// dagen. null när tidtabellen inte har sträckan.
+function onLineLeg(snapshot, train) {
+  return globalThis.TrainMeetDriftModel?.onLineLeg?.(snapshot, train, minuteValue(currentClockTime(snapshot))) ?? null;
+}
 // Hur långt ett avgånget tåg har kommit på sin sträcka, 0–1: tiden sedan
 // avgången (den faktiska i träffklockan, annars den planerade) delat med
 // tidtabellens gångtid till nästa station. Utan tidtabell för sträckan: null.
-function topologyLegTimes(snapshot, trainNumber, from, to) {
-  for (const service of snapshot.services || []) {
-    if (String(service.train_number) !== String(trainNumber)) continue;
-    const stops = [...(service.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
-    const start = stops.findIndex((stop) => stop.station_id === from);
-    if (start < 0) continue;
-    const next = stops.findIndex((stop, index) => index > start && stop.station_id === to);
-    if (next < 0) continue;
-    const departure = minuteValue(stops[start].departure_time || stops[start].arrival_time);
-    const arrival = minuteValue(stops[next].arrival_time || stops[next].departure_time);
-    if (departure === null || arrival === null) continue;
-    return { departure: departure * 60, duration: (((arrival - departure) % 1440 + 1440) % 1440 || 1) * 60 };
-  }
-  return null;
+function topologyLegTimes(snapshot, train) {
+  const leg = onLineLeg(snapshot, train);
+  if (!leg || leg.departure === null) return null;
+  return { departure: leg.departure * 60, duration: (((leg.arrival - leg.departure) % 1440 + 1440) % 1440 || 1) * 60 };
 }
 function topologyProgress(snapshot, train, nowSeconds) {
-  const leg = topologyLegTimes(snapshot, train.trainNumber, train.from, train.to);
+  const leg = topologyLegTimes(snapshot, train);
   if (!leg) return null;
   const actual = train.departedSeconds === null || train.departedSeconds === undefined ? NaN : Number(train.departedSeconds);
   const departed = Number.isFinite(actual) ? ((actual % 86400) + 86400) % 86400 : leg.departure;
@@ -4370,7 +4370,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const clearTo = edgeOf(train.to) + (kr ? 8 : 7) + reach;
     // Ett avgånget tåg rör sig mot nästa station i takt med träffklockan; ett
     // som bara har klart står en bit ut från stationen det ska lämna.
-    const moving = Boolean((kr || options.live) && train.departed && topologyLegTimes(snapshot, train.trainNumber, train.from, train.to));
+    const moving = Boolean((kr || options.live) && train.departed && topologyLegTimes(snapshot, train));
     const travelled = () => {
       const low = Math.min(clear, length / 2), high = Math.max(length - clearTo, low);
       return low + (high - low) * topologyProgress(snapshot, train, topologyClockSeconds(snapshot));
@@ -4607,7 +4607,10 @@ function renderGraph(snapshot) {
     svg.append(svgElement("text", {x:left - 14, y:y(i) + 4.5, "text-anchor":"end", class:"sc-graph-label"}, station.name));
   });
   const trains = svgElement("g", {"clip-path":"url(#screen-graph-clip)"});
-  const active = new Set((snapshot.train_positions || []).filter(p=>p.connection_id).map(p => String(p.train_number)));
+  // Tågen ute på linjen och turen var och en kör: bara den turens linje tänds
+  // och får taggen när samma nummer går flera gånger om dagen.
+  const out = new Map(topologyTrains(snapshot).onLine.filter((train) => train.departed).map((train) => [train.trainNumber, { train, leg: onLineLeg(snapshot, train) }]));
+  const outOn = (service) => { const found = out.get(String(service.train_number)); return found && (!found.leg || found.leg.service.id === service.id) ? found : null; };
   const drawn = [];
   for (const service of graphServices(snapshot)) {
     const points = servicePoints({...service, stops:[...service.stops].sort((a,b)=>a.stop_order-b.stop_order)}, stationIndex);
@@ -4617,7 +4620,7 @@ function renderGraph(snapshot) {
     const centre = (points[0].minute + points.at(-1).minute) / 2;
     const shift = Math.round((now - centre) / 1440) * 1440;
     if (points.at(-1).minute + shift < min || points[0].minute + shift > max) continue;
-    const isOut = active.has(String(service.train_number));
+    const isOut = Boolean(outOn(service));
     const group = svgElement("g",{class:"graph-train-group",role:"button",tabindex:0,"aria-label":t("Tåg {number}", { number: service.train_number })});
     group.dataset.trainNumber=String(service.train_number);
     const line = points.map(p=>`${x(p.minute+shift)},${y(p.station)}`).join(" ");
@@ -4658,14 +4661,13 @@ function renderGraph(snapshot) {
   // Var ett tåg på linjen står: på sin sträcka så långt det kommit sedan den
   // faktiska avgången, som på kartan. Annars där tidtabellen har det nu.
   const leg = (entry) => {
-    const position = (snapshot.train_positions || []).find((p) => p.connection_id && String(p.train_number) === String(entry.service.train_number));
-    const from = stationIndex.get(position?.from_station_id), to = stationIndex.get(position?.to_station_id);
+    const found = outOn(entry.service);
+    const from = stationIndex.get(found?.train.from), to = stationIndex.get(found?.train.to);
     if (from === undefined || to === undefined) return null;
     const end = entry.points.findIndex((p, k) => p.station === to && entry.points.slice(0, k).some((q) => q.station === from));
     if (end < 0) return null;
     const start = entry.points.slice(0, end).map((p) => p.station).lastIndexOf(from);
-    const part = topologyProgress(snapshot, { trainNumber: String(entry.service.train_number), from: position.from_station_id,
-      to: position.to_station_id, departedSeconds: position.departed_seconds }, topologyClockSeconds(snapshot));
+    const part = topologyProgress(snapshot, found.train, topologyClockSeconds(snapshot));
     if (part === null) return null;
     const a = y(entry.points[start].station), b = y(entry.points[end].station);
     return a + (b - a) * part;
@@ -4945,7 +4947,6 @@ function screenFresh(key, signature) {
 function renderDashboard(snapshot) {
   const target = document.querySelector("#dashboard-view");
   const positions = snapshot.train_positions || [];
-  const moving = positions.filter(p => p.connection_id);
   const now = currentClockTime(snapshot).slice(0, 5);
   const onLine = screenOnLine(snapshot);
   const late = onLine.filter((train) => train.late);
@@ -4980,7 +4981,7 @@ function renderDashboard(snapshot) {
   target.innerHTML = html`<div class="dashboard-column">
     <section class="display-card dashboard-clock-card"><div class="dashboard-clock">${escapeHTML(currentClockTime(snapshot).slice(0, 5))}</div><div class="dashboard-clock-meta"><b>${escapeHTML(snapshot.meet?.name || "TrainMeet")}</b><span class="dashboard-run${snapshot.clock?.running ? "" : " is-stopped"}">${snapshot.clock?.running ? `${escapeHTML(t("Klockan går"))} · ${Number(snapshot.clock?.speed || 1)}×` : escapeHTML(t("Klockan är stoppad"))}</span><span class="dashboard-day">${escapeHTML(meetDayLabel(snapshot))}</span></div></section>
     <section class="display-card dashboard-stats">
-      <div class="dashboard-stat"><b>${moving.length}</b><span>tåg på linjen</span></div>
+      <div class="dashboard-stat"><b>${onLine.length}</b><span>tåg på linjen</span></div>
       <div class="dashboard-stat"><b>${positions.filter(p=>p.station_id && !p.connection_id).length}</b><span>inne på stationerna</span></div>
       <div class="dashboard-stat"><b>${staffed == null ? (snapshot.stations?.length || 0) : `${staffed} / ${snapshot.stations?.length || 0}`}</b><span>${staffed == null ? "stationer" : "stationer bemannade"}</span></div>
       <div class="dashboard-stat${late.length ? " warn" : " ok"}"><b>${late.length}</b><span>avvikelser</span></div>
@@ -4997,13 +4998,16 @@ function renderDashboard(snapshot) {
 
 // Trains out on the line, where they run and when they are due: the strip
 // under Banöversikt and Översikt's "På linjen just nu" on the TV screens.
+// Due is the planned arrival on the run the train is actually on (onLineLeg),
+// not the first stop with that number at the station: a number that runs
+// twice a day used to show the evening run's arrival for the morning train.
 function screenOnLine(snapshot) {
   const now = minuteValue(currentClockTime(snapshot)) ?? 0;
   const name = (id) => (snapshot.stations || []).find((station) => station.id === id)?.name || id || "—";
-  return (snapshot.train_positions || []).filter((position) => position.connection_id).map((position) => {
-    const due = (snapshot.routes || []).find((route) => String(route.train_number) === String(position.train_number) && route.station_id === position.to_station_id)?.arrival_time || null;
+  return topologyTrains(snapshot).onLine.filter((train) => train.departed).map((train) => {
+    const due = onLineLeg(snapshot, train)?.arrival_time || null;
     const minute = minuteValue(due);
-    return { train: String(position.train_number), from: name(position.from_station_id), to: name(position.to_station_id), due,
+    return { train: train.trainNumber, from: name(train.from), to: name(train.to), due,
       late: minute != null && minute !== now && (minute - now + 1440) % 1440 > 720 };
   });
 }
