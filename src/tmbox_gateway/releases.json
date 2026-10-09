@@ -1,5 +1,12 @@
 [
   {
+    "version": "3.25.0",
+    "date": "2026-10-09",
+    "notes": [
+      "Starta ny dag: nytt trafikdygn manuellt eller automatiskt"
+    ]
+  },
+  {
     "version": "3.24.0",
     "date": "2026-10-09",
     "notes": [
