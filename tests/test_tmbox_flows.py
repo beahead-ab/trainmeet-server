@@ -73,10 +73,14 @@ class TMBoxFlowsTest(unittest.TestCase):
         self.assertEqual("55 ANK SP2      ", self.lines("genomgaende", 3, "CDA")[0])
         self.assertEqual(["MUN?55          ", "*Åter B:Öv 12:34"], self.lines("genomgaende", 5, "CDA"))
         self.assertEqual(["          55◀CDA", "#In B:Sp   12:34"], self.lines("genomgaende", -1, "MUN"))
-        # Never sent from VA, sent on from CDA all the same: it jumps there.
-        self.assertEqual(["MUN<55          ", "#Avg *Åter 12:34"], self.lines("hoppa-fram", 1, "CDA"))
-        self.assertEqual(["          55◀CDA", "#In B:Sp   12:34"], self.lines("hoppa-fram", 2, "MUN"))
-        self.assertEqual(" " * 16, self.lines("hoppa-fram", 2, "VA")[0])
+        # Never sent from VA: a through train is moved here first, then sent
+        # on (Benny #170); nothing is asked of MUN until it is here.
+        self.assertEqual(["FLYTTA 55 HIT?  ", "#Ja B:Sp   12:34"], self.lines("flytta-genomgaende", 0, "CDA"))
+        self.assertEqual(" " * 16, self.lines("flytta-genomgaende", 0, "MUN")[0])
+        self.assertEqual("55 MOTTAGET     ", self.lines("flytta-genomgaende", 1, "VA")[0], "VA is told, and has nothing to send")
+        self.assertEqual(" " * 16, self.lines("flytta-genomgaende", -1, "VA")[0])
+        self.assertEqual(["MUN?55          ", "*Åter B:Öv 12:34"], self.lines("flytta-genomgaende", 3, "CDA"))
+        self.assertEqual(["          55◀CDA", "#In B:Sp   12:34"], self.lines("flytta-genomgaende", -1, "MUN"))
         # Never sent from MUN: the box asks to move it here (issue #115).
         self.assertEqual(["FLYTTA 93 HIT?  ", "#Ja B:Sp   12:34"], self.lines("placera", 0, "CDA"))
         self.assertEqual("93 ANK SP2      ", self.lines("placera", -1, "CDA")[0])

@@ -345,11 +345,17 @@ class ThroughTrainTests(_Boxes):
     def movement(self, station, movement_id):
         return next(m for m in self.service.snapshot_payload(station)["movements"] if m["id"] == movement_id)
 
-    def test_bennys_102_is_asked_for_at_once_and_jumps_here_when_sent_on(self):
-        # Benny's film: 102 # at VAG gave LEK-102 without a #, and MUN got
-        # nothing. His photos: cleared, but no #Avg and no #In, ever. Since
-        # 2.1.0 102# asks LEK at once, and once cleared it goes; the system
-        # never saw it come, so it jumps here (Casper, 2026-10-02).
+    def test_bennys_102_is_moved_here_first_and_then_asked_for_at_once(self):
+        # Benny #170 (Casper 2026-10-09): the system has 102 at LEK, so 102#
+        # at CDA asks to move it here and asks LEK nothing. Once it is here,
+        # 102# asks LEK at once, and once cleared it goes. (2.1.0 to 3.23 asked
+        # LEK at once and the train jumped here when sent on.)
+        frame = self.lookup("esp8266")
+        self.assertEqual(["FLYTTA 102 HIT? ", "#Ja B:Sp   09:15"], frame["lines"])
+        self.assertEqual(([], 0), (self.service.open_cases(None), self.terminals.frame("esp32")["requests"]["count"]))
+        self.send("esp8266", "#")
+        self.assertEqual("departed", self.movement("station-b", "movement-102-0")["departure"])
+        self.assertEqual("arrived", self.movement("station-a", "movement-102-1")["arrival"])
         frame = self.lookup("esp8266")
         self.assertEqual(["LEK?102         ", "*Åter B:Öv 09:15"], frame["lines"])
         lek = self.terminals.frame("esp32")
@@ -389,21 +395,31 @@ class ThroughTrainTests(_Boxes):
         self.assertTrue(frame["lines"][0].startswith("LEK?102"), frame["lines"])
         self.assertEqual(1, self.terminals.frame("esp32")["requests"]["count"])
 
-    def install_twin(self):
-        """Another train 102, from CDA to LEK: the number alone cannot tell them apart."""
-        package = through_package("through-102-twice")
+    def install_twin(self, *, later=False):
+        """Another train 102, from CDA to LEK: the number alone cannot tell them
+        apart. `later` has it leave CDA two hours later, after Benny's 102."""
+        package = through_package("through-102-twice" + ("-later" if later else ""))
         twin = deepcopy(next(s for s in package["services"] if s["train_number"] == "101"))
         twin.update(id="service-102b", train_number="102")
+        rows = [{**deepcopy(row), "id": row["id"].replace("101", "102b"), "train_number": "102", "service_id": "service-102b"}
+                for row in package["trains"] if row["train_number"] == "101"]
+        if later:
+            two_hours = lambda value: f"{int(value[:2]) + 2:02d}{value[2:]}" if value else value
+            for item in [*rows, *twin["stops"]]:
+                for field in ("arrival_time", "departure_time", "sort_time"):
+                    if field in item:
+                        item[field] = two_hours(item[field])
         package["services"].append(twin)
-        for row in [r for r in package["trains"] if r["train_number"] == "101"]:
-            package["trains"].append({**deepcopy(row), "id": row["id"].replace("101", "102b"),
-                                      "train_number": "102", "service_id": "service-102b"})
+        package["trains"].extend(rows)
         self.fixture.install(package)
         self.terminals = Terminal16Service(self.service)
 
     def test_two_trains_with_one_number_say_so_instead_of_falling_silent(self):
-        self.install_twin()
-        self.assertEqual("FLERA TÅG ADMIN ", self.lookup("esp8266")["lines"][0])
+        for later in (False, True):
+            with self.subTest(later=later):
+                self.install_twin(later=later)
+                # Not FLYTTA 102 HIT? for one of them: the number cannot tell which.
+                self.assertEqual("FLERA TÅG ADMIN ", self.lookup("esp8266")["lines"][0])
 
     def test_of_two_trains_with_one_number_the_one_under_way_is_meant(self):
         self.install_twin()
@@ -445,8 +461,8 @@ class PublicationParsedOnceTests(_Boxes):
             for _ in range(5):
                 self.terminals.frame("esp8266"); self.terminals.frame("esp32")
             # The new publication is the one the boxes see: 102 only exists there.
-            self.assertEqual("LEK?102         ", self.send("esp8266", "#", train_number="102")["frame"]["lines"][0])
-            self.send("esp32", "#")
+            self.assertEqual("FLYTTA 102 HIT? ", self.send("esp8266", "#", train_number="102")["frame"]["lines"][0])
+            self.send("esp8266", "#")
             self.assertEqual(0, parsed.call_count, "the new publication is parsed once, on activation")
 
     def test_nobody_changes_the_shared_publication(self):
@@ -514,15 +530,18 @@ class NeverSentTests(_Boxes):
         self.terminals = Terminal16Service(self.service)
 
     def cleared(self):
-        self.send("esp8266", "#", train_number="103")       # CDA asks LEK at once
+        self.send("esp8266", "#", train_number="103")       # FLYTTA 103 HIT?: VA never sent it
+        self.send("esp8266", "#")                            # moved here
+        self.send("esp8266", "#", train_number="103")       # here now: CDA asks LEK at once
         self.send("esp32", "#")                              # LEK clears
         return self.terminals.frame("esp8266")
 
     def movement(self, station, movement_id):
         return next(m for m in self.service.snapshot_payload(station)["movements"] if m["id"] == movement_id)
 
-    def test_sent_on_it_jumps_here_whoever_was_to_send_it(self):
-        # Whether VA has a box, a TKL shift or nobody makes no difference.
+    def test_moved_here_and_sent_on_whoever_was_to_send_it(self):
+        # Whether VA has a box, a TKL shift or nobody makes no difference
+        # (Benny #170: moved here first, then sent on).
         self.fixture.ids.record_discovery("esp-va", "esp-va", protocol_version=2)
         self.fixture.ids.assign_discovered_device("esp-va", station_id="station-c")
         frame = self.cleared()

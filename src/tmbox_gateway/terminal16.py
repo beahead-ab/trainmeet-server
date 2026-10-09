@@ -158,8 +158,11 @@ class Terminal16Lab:
         A through train has two at its station: in from MUN and on to MUN.
         The one with a case wins (a request to answer, a train to receive or
         an own request); with both under way the arrival comes first, and
-        the departure is under B; with neither, the departure. Until 2.0.2
-        such a number matched twice and the box got no answer at all.
+        the departure is under B; with neither, the arrival, so that a train
+        the system has not seen come is moved here first (FLYTTA 93 HIT?).
+        Once it is here its arrival is done and the number means the
+        departure. Until 2.0.2 such a number matched twice and the box got
+        no answer at all.
         """
         matches = [key for key in self._candidates(terminal) if self.legs[key]["train_number"] == number]
         if len(matches) > 1:
@@ -171,10 +174,19 @@ class Terminal16Lab:
                 arriving = {self.legs[key]["to_movement_id"] for key in active
                             if self.legs[key]["to_station_id"] == terminal.station}
                 return [key for key in active if self.legs[key]["from_movement_id"] not in arriving]
-            # Nothing under way: the station's own departure, which 93# asks
-            # for at once; an arrival only when nothing leaves from here. An
-            # arrival is still in the timetable, to be placed (2.1.0).
+            # Nothing under way. A through train the system has not seen come
+            # is moved here first (FLYTTA 93 HIT?), and the next 93# asks for
+            # the departure; before, 93# asked the next station at once and
+            # the train jumped here when sent on (Benny #170, Casper
+            # 2026-10-09). Only the arrival to the stop it leaves from counts:
+            # a train that starts here and comes back later is here now, and
+            # goes. Two trains with the number stay two (FLERA TÅG ADMIN).
             own = [key for key in matches if self.legs[key]["from_station_id"] == terminal.station]
+            if len(own) == 1:
+                arriving = [key for key in matches if self.legs[key]["to_station_id"] == terminal.station
+                            and self.legs[key]["to_movement_id"] == self.legs[own[0]]["from_movement_id"]]
+                if arriving:
+                    return arriving
             matches = own or matches
         return matches
 

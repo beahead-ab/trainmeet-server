@@ -313,19 +313,35 @@ class Terminal16Tests(unittest.TestCase):
         package["trains"].append({**stop, "id": "93-va", "service_id": "93", "train_number": "93", "days": "Dagl", "track_id": "va-1"})
         self.lab = Terminal16Lab(self.lab.engine, package, {"DEMO-MUN": "mun", "DEMO-CDA": "cda", "DEMO-VA": "va"})
 
-    def test_a_through_train_never_seen_to_come_jumps_here_when_sent_on(self):
-        """Casper, 2026-10-02: MUN lost track and never sent 93, but it is at
-        CDA. CDA asks VA, gets clear and sends it on; the train jumps here."""
+    def test_a_through_train_never_seen_to_come_is_moved_here_first(self):
+        """Benny #170, Casper 2026-10-09: MUN never sent 93, so the system has
+        it at MUN. At CDA 93# asks FLYTTA 93 HIT?, and asks VA nothing; once
+        it is here, the next 93# asks VA at once."""
         self.through93()
-        frame = self.lookup("93")["frame"]                 # asks VA at once, before 93 has come
+        frame = self.lookup("93")["frame"]
+        self.assertEqual("FLYTTA 93 HIT?  ", frame["lines"][0])
+        self.assertEqual("Flytta hit", frame["keys"]["#"]["label"])
+        self.assertEqual(0, self.lab.frame("DEMO-VA")["requests"]["count"], "nothing asked of VA")
+        self.accept("DEMO-CDA", "#")                       # moved here on its planned track
+        self.assertIn("93-mun", self.lab.completed)        # MUN's part is over
+        self.assertNotIn("93-mun", self.lab._candidates(self.lab.terminals["DEMO-MUN"]))
+        self.accept("DEMO-CDA", "#")                       # dismiss the arrival notice
+        frame = self.lookup("93")["frame"]                 # here now: the departure, asked at once
         self.assertTrue(frame["lines"][0].endswith("93?VA"), frame["lines"])
+
+    def test_a_departure_picked_from_the_list_still_takes_the_train_along(self):
+        """The departure picked in the list can still be asked for before the
+        train is seen to come; sent on, it jumps here (Casper, 2026-10-02)."""
+        self.through93()
+        terminal = self.lab.terminals["DEMO-CDA"]
+        terminal.selected, terminal.screen = "93-cda", "detail"
+        self.accept("DEMO-CDA", "#")                       # asks VA
         self.lookup("93", "DEMO-VA"); self.accept("DEMO-VA", "#")
         frame = self.lab.frame("DEMO-CDA")
         self.assertEqual("Rapportera avgång", frame["keys"]["#"]["label"])
         self.assertEqual("           93>VA", frame["lines"][0])
         self.accept("DEMO-CDA", "#")
         self.assertIn("93-mun", self.lab.completed)        # MUN's part is over
-        self.assertNotIn("93-mun", self.lab._candidates(self.lab.terminals["DEMO-MUN"]))
         self.assertEqual("Rapportera ankomst", self.lookup("93", "DEMO-VA")["frame"]["keys"]["#"]["label"])
 
     def test_a_through_train_in_the_usual_order(self):

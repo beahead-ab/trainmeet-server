@@ -5,6 +5,26 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Ett genomgående tåg som inte har kommit flyttas hit först (#170)
+
+Benny skrev numret på ett genomgående tåg på Charlottendal medan tåget enligt
+systemet stod kvar på Vangsta. Boxen begärde då direkt klartecken till
+Salsborg, fast flödesdokumentet visar FLYTTA HIT. Casper valde att flytten
+ska komma först.
+
+- **`93#` på en station dit tåget inte har kommit i systemet** frågar
+  `FLYTTA 93 HIT?`, också när tåget går vidare härifrån. Ingenting begärs av
+  nästa station.
+- **När tåget står här** gäller numret avgången, och `93#` begär klartecken
+  direkt, som förut.
+- **Ett tåg som börjar här och kommer tillbaka senare** med samma nummer står
+  här nu, och numret gäller avgången. Två tåg med samma nummer ger fortfarande
+  FLERA TÅG ADMIN.
+- **Avgången går fortfarande att välja i listan** innan tåget har kommit, och
+  tåget hoppar då fram när det skickas, som sedan 2.1.0.
+- **Flödesdokumentet** har flödet "Genomgående tåg som ingen skickat" i stället
+  för "Tåget hoppar fram".
+
 ### Nollställ träffen börjar på dag 1, och kopian före ett hopp går att hitta
 
 Efter Caspers fråga om hur tidsmaskinen och återställningen av träffen hänger
