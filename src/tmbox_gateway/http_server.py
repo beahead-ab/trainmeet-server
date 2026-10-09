@@ -75,6 +75,7 @@ from .runtime import (
     LEGACY_CLOCK_STYLES,
     MAX_CLOCK_FACES,
     CALENDAR_START_DAYS,
+    DAY_CHANGE_MODES,
     DAY_ORDER,
     LocalEditsConflict,
     COUNTRY_LANGUAGES,
@@ -160,7 +161,7 @@ def _device_state(age: float, heard: bool) -> str:
 #: Skälet till en säkerhetskopia, som det står sist i filnamnet. Listan under
 #: Farozon → Återställ säger det, så att kopian från före ett hopp med
 #: tidsmaskinen går att hitta.
-BACKUP_KINDS = {"tidsmaskinen": "tidsmaskin", "nollställning": "nollstallning", "ny startdag": "startdag",
+BACKUP_KINDS = {"tidsmaskinen": "tidsmaskin", "nollställning": "nollstallning", "ny startdag": "startdag", "nytt dygn": "nytt-dygn",
                 "lokala ändringar kastas": "lokala-andringar", "Cloud-versionen tas": "cloud"}
 
 
@@ -4144,6 +4145,9 @@ class TrainMeetHTTPApplication:
     #: linjen hinner in, men ett som fastnat håller inte kvar gårdagen längre.
     DAY_CHANGE_WAIT_LIMIT = 30 * 60
     _day_change_waiting = False
+    # Manuellt nytt dygn: dygnsskiftets tid har passerats och admin kan
+    # starta nästa dag (en påminnelse på Drift).
+    _day_change_due = False
     _first_movement_cache: dict | None = None
 
     def calendar_state(self) -> dict[str, Any] | None:
@@ -4152,7 +4156,17 @@ class TrainMeetHTTPApplication:
             return None
         calendar = self.runtime_store.meet_calendar(publication.meet_id)
         change, auto = self._day_change_seconds(publication, calendar)
-        return {**calendar, "change_time": _hhmm(change), "change_auto": auto, "waiting": self._day_change_waiting}
+        manual = calendar["day_change_mode"] == "manual"
+        # Starta ny dag föreslår klockslaget: efter midnatt där klockan är,
+        # före midnatt dygnsskiftets tid, en timme före nästa dags första tåg.
+        clock = self.operations_store.clock_status() if self.operations_store else {}
+        elapsed = clock.get("elapsed_seconds")
+        start = (float(elapsed) - 86400 if elapsed is not None and float(elapsed) >= 86400 else change)
+        return {**calendar, "change_time": _hhmm(change), "change_auto": auto,
+                "waiting": self._day_change_waiting and not manual, "due": self._day_change_due and manual,
+                "next_day": {"day_number": calendar["day_number"] + 1,
+                             "weekday": calendar_weekday(calendar["start_day"], calendar["day_number"] + 1),
+                             "time": _hhmm(start)}}
 
     def _first_movement_seconds(self, publication, day: str) -> float | None:
         """Den tidigaste ankomsten eller avgången på dygnet i dagens tidtabell."""
@@ -4246,6 +4260,23 @@ class TrainMeetHTTPApplication:
         return {"day_number": day_number, "active_day": day, "start_day": start, "removed": removed,
                 "meet_generation": updated["generation"]}
 
+    def _trains_on_line(self, publication, day: str) -> list[str]:
+        """Tåg som verkligen har avgått från ett stopp men inte kommit fram
+        till nästa, enligt dagens händelser."""
+        live = self.operations_store.movement_live(publication.publication_id, day)
+        timetable = publication.timetable(active_day=day)
+        out = []
+        for service in timetable.get("services", []):
+            rows = {(str(row.get("station_id")), row.get("arrival_time"), row.get("departure_time")): str(row.get("id"))
+                    for row in timetable.get("trains", []) if row.get("service_id") == service.get("id")}
+            stops = sorted(service.get("stops", []), key=lambda stop: int(stop.get("stop_order", 0)))
+            states = [live.get(rows.get((str(stop.get("station_id")), stop.get("arrival_time"), stop.get("departure_time")), ""), {})
+                      for stop in stops]
+            if any(here.get("departure") == "departed" and not here.get("by_timetable") and after.get("arrival") != "arrived"
+                   for here, after in zip(states, states[1:])):
+                out.append(str(service.get("train_number")))
+        return sorted(set(out))
+
     def _old_day_running(self, publication, day: str) -> bool:
         """Kör gårdagens tåg fortfarande? Ett tåg ute på linjen, en öppen
         klarering eller ett linjebesked som väntar, eller ett tåg som har
@@ -4287,6 +4318,7 @@ class TrainMeetHTTPApplication:
             return None
         calendar = self.runtime_store.meet_calendar(publication.meet_id)
         change, _ = self._day_change_seconds(publication, calendar)
+        manual = calendar["day_change_mode"] == "manual"
         if clock.get("elapsed_seconds") is None:
             # FastClock: ingen löpande tid. Midnatt är när klockan slår om, och
             # skiftet när den sedan passerar skiftets tid.
@@ -4302,6 +4334,12 @@ class TrainMeetHTTPApplication:
             if elapsed < 86400 + change:
                 return self._stop_waiting()
             seconds = elapsed - 86400
+        if manual:
+            # Admin startar nästa dag själv (Starta ny dag). Drift påminner.
+            if not self._day_change_due:
+                self._day_change_due = True
+                self.changes.notify("runtime")
+            return None
         day = self.runtime_store.active_day() or publication.active_day
         with self.engine._lock:
             if seconds < change + self.DAY_CHANGE_WAIT_LIMIT and self._old_day_running(publication, day):
@@ -4331,10 +4369,49 @@ class TrainMeetHTTPApplication:
 
     def _stop_waiting(self) -> None:
         """Klockan är inte vid skiftet (till exempel ställd bakåt): inget väntar."""
-        if self._day_change_waiting:
-            self._day_change_waiting = False
+        if self._day_change_waiting or self._day_change_due:
+            self._day_change_waiting = self._day_change_due = False
             self.changes.notify("runtime")
         return None
+
+    @runtime_command("eu")
+    def start_new_day(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Starta ny dag (Casper 2026-10-09): träffen går till nästa dag med
+        den dagens tidtabell, som vid dygnsskiftet men när admin säger till.
+
+        Klockan står på `time` (förvalt det som calendar_state föreslår) och
+        går vidare om den gick. Den nya dagens statusar nollställs och varje
+        tåg står på sin utgångspunkt; gårdagens historik står kvar. Ett tåg
+        som är ute på linjen hindrar det: det kör klart först. En
+        säkerhetskopia tas först.
+        """
+        self._no_simulation()
+        self._require_admin(client)
+        publication, selected = self._calendar_context(payload)
+        calendar = self.calendar_state()
+        seconds = _clock_time_seconds(payload.get("time") or calendar["next_day"]["time"])
+        if seconds is None:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_time", "Ange tiden som TT:MM.")
+        day = self.runtime_store.active_day() or publication.active_day
+        out = self._trains_on_line(publication, day)
+        if out or self._old_day_running(publication, day):
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "day_still_running",
+                               (f"Tåg {', '.join(out)} är ute på linjen. " if out else "Tåg från i dag är ute på linjen. ")
+                               + "Vänta tills de har kommit fram, eller använd Tidsmaskinen.")
+        written = self._backup_before("nytt dygn")
+        number = calendar["day_number"] + 1
+        first = self._first_departure_seconds(publication, calendar_weekday(calendar["start_day"], number))
+        place = seconds if first is None else max(0.0, min(seconds, first - 1))
+        self._day_change_waiting = self._day_change_due = False
+        self._fastclock_after_midnight = False
+        result = self._enter_day(publication, selected, number, seconds, everything=False, place_seconds=place, announce=True)
+        self.operations_store.record_audit_event(
+            correlation_id=f"meet-day-{publication.publication_id}-{result['day_number']}", source="web-admin",
+            actor=client.admin_user_id or "konsol", action="meet.day_started", outcome="ok",
+            detail={"by": client.display_name, "day_number": result["day_number"], "active_day": result["active_day"],
+                    "time": _hhmm(seconds), "backup": written.name if written else None})
+        return {**result, "clock": self.clock_status(client), "calendar": self.calendar_state(),
+                "backup": written.name if written else None}
 
     @runtime_command("eu")
     def time_machine(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
@@ -4382,6 +4459,18 @@ class TrainMeetHTTPApplication:
                     correlation_id=f"day-change-time-{publication.publication_id}", source="web-admin",
                     actor=client.admin_user_id or "konsol", action="meet.day_change_time", outcome="ok",
                     detail={"by": client.display_name, "change_time": after or "automatiskt"})
+                self.changes.notify("runtime")
+        if "day_change_mode" in payload:
+            mode = payload["day_change_mode"]
+            if mode not in DAY_CHANGE_MODES:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_day_change_mode", "Välj manuellt eller automatiskt nytt trafikdygn.")
+            if self.runtime_store.meet_calendar(publication.meet_id)["day_change_mode"] != mode:
+                self.runtime_store.set_day_change_mode(publication.meet_id, mode)
+                self._day_change_waiting = self._day_change_due = False
+                self.operations_store.record_audit_event(
+                    correlation_id=f"day-change-mode-{publication.publication_id}", source="web-admin",
+                    actor=client.admin_user_id or "konsol", action="meet.day_change_mode", outcome="ok",
+                    detail={"by": client.display_name, "mode": mode})
                 self.changes.notify("runtime")
         calendar = self.calendar_state()
         if start_day == calendar["start_day"]:
@@ -5251,6 +5340,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/runtime/time-machine":
                 self._send_json(HTTPStatus.OK, self.server.application.time_machine(self._authenticated_client(), payload))
+                return
+            if path == "/v1/runtime/new-day":
+                self._send_json(HTTPStatus.OK, self.server.application.start_new_day(self._authenticated_client(), payload))
                 return
             if path == "/v1/runtime/calendar":
                 self._send_json(HTTPStatus.OK, self.server.application.save_meet_calendar(self._authenticated_client(), payload))

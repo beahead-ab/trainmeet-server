@@ -212,7 +212,10 @@ body[data-mode="kor"] #app-view { padding: 14px 20px 24px; max-width: none; }
 .kr-clock-state { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
 .kr-meta { font-size: 12.5px; color: var(--kr-mute); white-space: nowrap; display: inline-flex; align-items: center; }
 .kr-vsep { width: 1px; height: 44px; background: var(--kr-line-2); }
-.kr-clock-actions { display: flex; gap: 8px; }
+.kr-clock-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Påminnelsen om nytt trafikdygn bryter rad på telefon i stället för att klippas. */
+.kr-clock-main, .kr-clock-state { min-width: 0; }
+.kr-clock-state .kr-pill.kr-pill--wrap { height: auto; min-height: 26px; padding: 5px 10px; white-space: normal; line-height: 1.3; text-align: left; }
 .kr-clock-actions [hidden] { display: none; }
 .kr-sim { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
 .kr-sim b { font-weight: 600; }

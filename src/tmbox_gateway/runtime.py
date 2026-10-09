@@ -61,6 +61,9 @@ CONNECTION_CODE_VALIDITY_HOURS = (0, 12, 24, 72, 168)
 DEFAULT_DEVIATION_LEVEL = 2
 DEVIATION_LEVEL_VALUES = {"1", "2", "3", "4", "5"}
 DAY_ORDER = ("Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön")
+#: Hur ett nytt trafikdygn börjar: manuellt (Starta ny dag) eller automatiskt
+#: vid dygnsskiftet.
+DAY_CHANGE_MODES = ("manual", "auto")
 SHORT_DAYS = {
     "M": "Mån",
     "Ti": "Tis",
@@ -949,8 +952,12 @@ class SQLiteRuntimeStore:
         last = saved.get("last_change") if isinstance(saved.get("last_change"), dict) else None
         # Dygnsskiftet: en fast tid som admin skrivit in, annars None (en timme
         # före dagens första tågrörelse; servern räknar ut den, http_server).
+        # Nytt trafikdygn: manuellt med Starta ny dag (förval, Casper
+        # 2026-10-09) eller automatiskt vid dygnsskiftet, som för en
+        # tidtabell som går dygnet runt.
+        mode = saved.get("day_change_mode") if saved.get("day_change_mode") in DAY_CHANGE_MODES else "manual"
         return {"start_day": start, "day_number": number, "weekday": calendar_weekday(start, number), "week": list(DAY_ORDER),
-                "change_time_set": day_change_time(saved.get("change_time")), "last_change": last}
+                "change_time_set": day_change_time(saved.get("change_time")), "last_change": last, "day_change_mode": mode}
 
     def _saved_calendar(self, meet_id: str) -> dict[str, Any]:
         try:
@@ -970,6 +977,14 @@ class SQLiteRuntimeStore:
         saved.update({"start_day": start, "day_number": day_number})
         if last_change is not None:
             saved["last_change"] = last_change
+        self._save_setting("meet_calendar:" + meet_id, json.dumps(saved))
+        return self.meet_calendar(meet_id)
+
+    def set_day_change_mode(self, meet_id: str, mode: str) -> dict[str, Any]:
+        if mode not in DAY_CHANGE_MODES:
+            raise RuntimePublicationError("Välj manuellt eller automatiskt nytt trafikdygn")
+        saved = self._saved_calendar(meet_id)
+        saved["day_change_mode"] = mode
         self._save_setting("meet_calendar:" + meet_id, json.dumps(saved))
         return self.meet_calendar(meet_id)
 
