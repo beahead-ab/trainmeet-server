@@ -351,6 +351,7 @@
                   <button type="button" id="clock-source-open" class="kr-textbtn" data-open-modal="clock-source-modal" title="Byt klockkälla"><span id="clock-source-status">Intern serverklocka</span></button>
                   <span class="kr-dotsep" aria-hidden="true">·</span><span id="overview-day">Dagl</span>
                 </span>
+                <button id="new-day-due" class="kr-pill warn kr-pill--wrap" type="button" data-open-modal="new-day-modal" hidden></button>
               </div>
             </div>
             <span class="kr-vsep" aria-hidden="true"></span>
@@ -358,6 +359,7 @@
               <button id="overview-clock-stop" class="kr-btn danger" type="button">Stoppa klockan</button>
               <button id="overview-clock-start" class="kr-btn primary" type="button" hidden>Starta klockan</button>
               <button id="clock-adjust" class="kr-btn" type="button" data-open-modal="clock-control-form-modal">Justera…</button>
+              <button id="new-day-open" class="kr-btn" type="button" data-open-modal="new-day-modal" title="Gå till nästa dag med den dagens tidtabell" hidden>Starta ny dag…</button>
               <button id="time-machine-open" class="kr-btn" type="button" data-open-modal="time-machine-modal" title="Hoppa till en annan dag och tid; alla tåg följer med">Tidsmaskin…</button>
             </div>
             <span class="kr-vsep" aria-hidden="true"></span>
@@ -649,8 +651,9 @@
                 <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
               </form>
               <form id="meet-calendar-form" class="kr-panel kr-setform" aria-label="Träffens dagar" data-tm-aria-label="Träffens dagar" novalidate hidden>
-                <div class="kr-ph"><span>Träffens dagar</span><span class="kr-c">vid dygnsskiftet går träffen till nästa dag, med den dagens tidtabell</span></div>
+                <div class="kr-ph"><span>Träffens dagar</span><span class="kr-c">varje ny dag går med den dagens tidtabell</span></div>
                 <div class="kr-rows">
+                  <div class="kr-kv"><span class="kr-k">Nytt trafikdygn</span><select id="meet-day-change-mode" class="kr-btn sm" aria-label="Nytt trafikdygn" data-tm-aria-label="Nytt trafikdygn" data-change-label="Nytt trafikdygn"><option value="manual">Manuellt (Starta ny dag)</option><option value="auto">Automatiskt vid dygnsskiftet (dygnet runt)</option></select><span id="meet-day-change-mode-note" class="kr-m"></span></div>
                   <div class="kr-kv"><span class="kr-k">Börjar på</span><select id="meet-start-day" class="kr-btn sm" aria-label="Träffens startdag" data-tm-aria-label="Träffens startdag" data-change-label="Startdag"></select><span id="meet-calendar-note" class="kr-m"></span></div>
                   <div class="kr-kv"><span class="kr-k">Dygnsskifte kl.</span><input id="meet-day-change" class="kr-field kr-w-xs" inputmode="numeric" maxlength="5" autocomplete="off" aria-label="Dygnsskifte" data-tm-aria-label="Dygnsskifte" data-change-label="Dygnsskifte"><span id="meet-day-change-note" class="kr-m"></span></div>
                 </div>
@@ -1004,6 +1007,17 @@
               <div class="modal-actions">
                 <button type="button" class="secondary" data-close-modal>Avbryt</button>
                 <button class="primary" type="submit"><tm-text data-tm-text="Hoppa dit">Hoppa dit</tm-text></button>
+              </div>
+</form>
+</dialog>
+<dialog id="new-day-modal" class="admin-modal" aria-labelledby="new-day-title"><h2 id="new-day-title">Starta ny dag</h2>
+<form id="new-day-form" class="clock-control-form">
+              <p id="new-day-text" class="kr-m"></p>
+              <label><tm-text data-tm-text="Klockan börjar på">Klockan börjar på</tm-text><input id="new-day-time" type="time" step="60" value="05:00" required></label>
+              <p id="new-day-message" class="form-message" role="status"></p>
+              <div class="modal-actions">
+                <button type="button" class="secondary" data-close-modal>Avbryt</button>
+                <button id="new-day-submit" class="primary" type="submit">Starta ny dag</button>
               </div>
 </form>
 </dialog>

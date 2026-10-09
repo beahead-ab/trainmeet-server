@@ -5,6 +5,29 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Starta ny dag: ett nytt trafikdygn när admin säger till, eller automatiskt
+
+Casper ville att den nya dagen ska vara en uttrycklig handling, men att det
+ska gå att välja automatik när tidtabellen går dygnet runt.
+
+- **Inställningar → Träff och Cloud → Nytt trafikdygn** har två val:
+  *Manuellt (Starta ny dag)*, som är förval, och *Automatiskt vid
+  dygnsskiftet (dygnet runt)*, som fungerar som förut.
+- **Manuellt:** Drift har knappen **Starta ny dag…** vid klockan. Dialogen
+  visar vilken dag som börjar ("Starta Dag 2 · Sön") och klockslaget, som
+  kan ändras. Efter midnatt föreslås där klockan står, före midnatt
+  dygnsskiftets tid. Alla tåg ställs på sin utgångspunkt, och den nya dagens
+  statusar nollställs. Det som hänt i dag finns kvar i historiken, och en
+  säkerhetskopia tas först ("Före Starta ny dag").
+- **När dygnsskiftet har passerats** påminner Drift: "Dygnsskiftet har
+  passerats · Starta Dag 2 · Sön". Ingenting byts av sig självt.
+- **Ett tåg som är ute på linjen** hindrar den nya dagen, och dialogen säger
+  vilket. Tidsmaskinen fungerar som förut.
+- API: `POST /v1/runtime/new-day` med `{"time": "05:40", "meet_generation":
+  …}`, administratör; `POST /v1/runtime/calendar` tar `day_change_mode`
+  (`manual` eller `auto`), och `/v1/display` har `calendar.day_change_mode`,
+  `calendar.due` och `calendar.next_day`.
+
 ### Ett genomgående tåg som inte har kommit flyttas hit först (#170)
 
 Benny skrev numret på ett genomgående tåg på Charlottendal medan tåget enligt

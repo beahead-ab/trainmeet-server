@@ -36,6 +36,7 @@ def at(hours, minutes=0, seconds=0):
 #: Klockan vid dygnsskiftet nästa morgon, i sekunder sedan träffdagens början:
 #: en timme före söndagens första tågrörelse (101 från A 09:20).
 CHANGE = 86400 + at(8, 20)
+CHANGE_TIME = "08:20"
 
 
 class _Meet(unittest.TestCase):
@@ -52,6 +53,11 @@ class _Meet(unittest.TestCase):
         self.app.automatic.set_enabled(False)
         self.admin = self.app.local_admin()
         self.ops.ensure_publication(self.pub)
+        if self.day_change_mode:
+            self.runtime.set_day_change_mode(self.pub.meet_id, self.day_change_mode)
+
+    #: Nytt trafikdygn: None är förvalet (manuellt, Starta ny dag).
+    day_change_mode = None
 
     def package(self):
         return runtime_package_v3()
@@ -86,6 +92,8 @@ class _Meet(unittest.TestCase):
 
 
 class DayChangeTests(_Meet):
+    day_change_mode = "auto"
+
     def test_the_calendar_starts_on_the_traffic_day_as_day_one(self):
         calendar = self.app.display_snapshot()["calendar"]
         self.assertEqual({key: calendar[key] for key in ("start_day", "day_number", "weekday")}, {"start_day": "Lör", "day_number": 1, "weekday": "Lör"})
@@ -197,8 +205,101 @@ class DayChangeTests(_Meet):
         self.assertEqual(after["stations"], {"station-a": "tmbox-1"}, "who works where stays")
 
 
+class ManualNewDayTests(_Meet):
+    """Starta ny dag (Casper 2026-10-09): förvalet är att admin startar nästa
+    dag själv. Automatiskt dygnsskifte är ett val, för tidtabeller som går
+    dygnet runt."""
+
+    def new_day(self, client=None, **payload):
+        return self.app.start_new_day(client or self.admin, {"meet_generation": self.generation(), **payload})
+
+    def arrive_101(self, day):
+        self.ops.update_tkl_movement(self.pub.publication_id, day, "station-b", "movement-101-b", arrival="arrived",
+                                     departure="none", actual_track=None, updated_by="TKL Bor", shift_id=None,
+                                     event_type="train.arrived", operator_note=None)
+
+    def test_by_default_the_clock_passing_the_day_change_only_reminds(self):
+        self.assertEqual(self.app.display_snapshot()["calendar"]["day_change_mode"], "manual")
+        self.run_clock_at(CHANGE + 30)
+        self.assertIsNone(self.app.calendar_tick(), "no new day by itself")
+        calendar = self.app.display_snapshot()["calendar"]
+        self.assertEqual((calendar["day_number"], calendar["weekday"], calendar["due"], calendar["waiting"]), (1, "Lör", True, False))
+        self.assertEqual(calendar["next_day"], {"day_number": 2, "weekday": "Sön", "time": CHANGE_TIME},
+                         "after midnight the new day starts where the clock is")
+        self.run_clock_at(at(12, 0))
+        self.assertIsNone(self.app.calendar_tick())
+        self.assertFalse(self.app.display_snapshot()["calendar"]["due"], "set back before the day change: nothing to remind of")
+
+    def test_starting_a_new_day_is_the_day_change_when_admin_says_so(self):
+        self.run_clock_at(at(9, 30))
+        self.depart_101("Lör")
+        self.arrive_101("Lör")
+        self.run_clock_at(86400 + at(6, 0))
+        result = self.new_day()
+        self.assertEqual((result["day_number"], result["active_day"]), (2, "Sön"))
+        snapshot = self.app.display_snapshot()
+        self.assertEqual((snapshot["active_day"], snapshot["calendar"]["day_number"], snapshot["calendar"]["due"]), ("Sön", 2, False))
+        self.assertEqual(self.numbers(), ["101", "202"], "Sunday's trains and the daily ones")
+        self.assertTrue(self.live()["movement-101-a"]["by_timetable"], "statuses start over")
+        self.assertEqual({p["train_number"]: p["station_id"] for p in self.ops.positions()}.get("101"), "station-a")
+        clock = self.ops.clock_status()
+        self.assertEqual((clock["time"][:5], clock["running"]), ("06:00", True), "the clock goes on from where it was")
+        self.assertEqual(snapshot["calendar"]["last_change"]["day_number"], 2, "every view is told")
+        backups = sorted((Path(self.temp.name) / "backups").glob("*.db"))
+        self.assertEqual([backup.kind_of(path) for path in backups], ["nytt-dygn"], "a backup is taken first")
+        logged = self.ops._connection.execute(  # noqa: SLF001
+            "SELECT detail_json FROM audit_events WHERE action='meet.day_started'").fetchall()
+        self.assertEqual(len(logged), 1)
+        rows = self.ops._connection.execute(  # noqa: SLF001
+            "SELECT count(*) FROM tkl_events WHERE publication_id=? AND active_day='Lör'", (self.pub.publication_id,)).fetchone()[0]
+        self.assertEqual(rows, 2, "yesterday stays as history")
+
+    def test_in_the_evening_the_new_day_starts_at_the_time_given(self):
+        self.run_clock_at(at(21, 0))
+        self.assertEqual(self.app.display_snapshot()["calendar"]["next_day"]["time"], CHANGE_TIME,
+                         "before midnight the suggestion is the day change, an hour before the first train")
+        self.new_day(time="07:15")
+        self.assertEqual(self.ops.clock_status()["time"][:5], "07:15")
+        self.assertEqual(self.app.display_snapshot()["calendar"]["day_number"], 2)
+
+    def test_a_train_out_on_the_line_runs_its_course_first(self):
+        self.run_clock_at(at(9, 30))
+        self.depart_101("Lör")
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.new_day()
+        self.assertEqual((int(refused.exception.status), refused.exception.code), (409, "day_still_running"))
+        self.assertEqual(self.app.display_snapshot()["calendar"]["day_number"], 1)
+        self.arrive_101("Lör")
+        self.assertEqual(self.new_day()["day_number"], 2)
+
+    def test_only_an_administrator_with_the_current_meet(self):
+        box = PairedClient("box", "Box", DeviceKind.ESP32_PANEL, ("panel-a",))
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.app.start_new_day(box, {"meet_generation": self.generation()})
+        self.assertEqual(int(refused.exception.status), 403)
+        with self.assertRaises(HTTPAPIError) as stale:
+            self.app.start_new_day(self.admin, {"meet_generation": self.generation() - 1})
+        self.assertEqual(int(stale.exception.status), 409)
+        with self.assertRaises(HTTPAPIError) as bad:
+            self.new_day(time="25:99")
+        self.assertEqual(bad.exception.code, "invalid_time")
+
+    def test_automatic_is_a_setting_for_timetables_around_the_clock(self):
+        changed = self.app.save_meet_calendar(self.admin, {"start_day": "Lör", "day_change_mode": "auto",
+                                                           "meet_generation": self.generation()})
+        self.assertEqual(changed["day_change_mode"], "auto")
+        self.run_clock_at(CHANGE + 30)
+        self.assertEqual(self.app.calendar_tick()["day_number"], 2, "the day changes by itself")
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.app.save_meet_calendar(self.admin, {"start_day": "Sön", "day_change_mode": "ibland",
+                                                     "meet_generation": self.generation()})
+        self.assertEqual(refused.exception.code, "invalid_day_change_mode")
+
+
 class DayChangeSettingsTests(_Meet):
     """Skiftets tid, utgångspunkterna och toasten i vyerna."""
+    day_change_mode = "auto"
+
 
     def package(self):
         package = runtime_package_v3()
@@ -261,6 +362,8 @@ class DayChangeSettingsTests(_Meet):
 
 class NextDayChangeTimeTests(_Meet):
     """It is the new day's first train that counts, not today's."""
+    day_change_mode = "auto"
+
 
     def package(self):
         package = runtime_package_v3()
@@ -307,6 +410,8 @@ class ResetToDayOneTests(_Meet):
 
 class AutomaticChangeTimeTests(_Meet):
     """The day change follows the next day's first train, day by day."""
+    day_change_mode = "auto"
+
 
     def package(self):
         package = runtime_package_v3()

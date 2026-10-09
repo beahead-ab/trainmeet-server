@@ -570,6 +570,22 @@ Användare, där det står "Saknar e-post – kan inte logga in". En ägare utan
 adress använder återställningskommandot nedan med `--email`. Kontrollera därför
 före uppgraderingen att ägaren har en adress.
 
+### Nytt trafikdygn
+
+Träffen räknar dagar från startdagen (Dag 1 · Fre, Dag 2 · Lör …), och varje
+dag går med den veckodagens tidtabell. Under **Inställningar → Träff och
+Cloud → Nytt trafikdygn** väljs hur nästa dag börjar:
+
+- **Manuellt (Starta ny dag)**, förval: admin trycker **Starta ny dag…** vid
+  klockan på Drift. Alla tåg ställs på sin utgångspunkt och den nya dagens
+  statusar nollställs; gårdagens historik står kvar. Efter dygnsskiftets tid
+  påminner Drift om det. Ett tåg ute på linjen måste komma fram först.
+- **Automatiskt vid dygnsskiftet (dygnet runt)**: träffen går till nästa dag
+  av sig själv vid dygnsskiftet, när inga tåg från dagen är ute.
+
+Dygnsskiftets tid är förvalt en timme före den nya dagens första tåg, och kan
+sättas fast under **Dygnsskifte kl.** En säkerhetskopia tas före Starta ny dag.
+
 ### Nollställ träffen
 
 **Inställningar → Farozon → Nollställ träffen** börjar om träffen med samma
@@ -608,8 +624,8 @@ simulering går det inte. API: `POST /v1/server/meet-reset` med
 
 En kopia av databasen tas automatiskt före varje programuppdatering och sparas i
 `backups/` under datamappen. Kopior tas också före tidsmaskinen, en
-nollställning av träffen, en ny startdag, Återgå till Cloud-versionen och Ta
-Cloud-versionen; skälet står sist i filnamnet
+nollställning av träffen, en ny startdag, Starta ny dag, Återgå till
+Cloud-versionen och Ta Cloud-versionen; skälet står sist i filnamnet
 (`trainmeet-20261008-142233-tidsmaskin.db`). De tio senaste behålls, och
 tidsmaskinens fem senaste räknas för sig, så att många hopp aldrig tränger ut
 kopian från före en uppdatering eller en nollställning.

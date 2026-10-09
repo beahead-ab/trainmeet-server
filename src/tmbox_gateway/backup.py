@@ -37,7 +37,7 @@ DEFAULT_KEEP = 10
 #: Varför en kopia togs. Skälet står sist i filnamnet
 #: (trainmeet-20261008-142233-tidsmaskin.db); uppdaterarens kopior och äldre
 #: kopior har inget.
-KINDS = ("tidsmaskin", "nollstallning", "startdag", "lokala-andringar", "cloud")
+KINDS = ("tidsmaskin", "nollstallning", "startdag", "nytt-dygn", "lokala-andringar", "cloud")
 
 #: Tidsmaskinens kopior räknas för sig (Casper 2026-10-08): många hopp i rad
 #: ska aldrig tränga ut kopian från före en uppdatering eller en nollställning.
