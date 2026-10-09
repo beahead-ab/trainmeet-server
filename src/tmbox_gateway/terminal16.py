@@ -8,6 +8,7 @@ movement state machine. The lab refuses a persistent/production engine.
 from collections import OrderedDict
 from copy import deepcopy
 from dataclasses import dataclass, field
+from functools import partial
 from hashlib import sha256
 import json
 import re
@@ -18,7 +19,7 @@ from uuid import uuid4
 from .engine import TrafficEngine
 from .models import ConnectionState as State, DispatchMode
 from .train_routes import resolve_departure, RouteResolutionError
-from .terminal16_glyphs import text_cells, encode_lcd
+from .terminal16_glyphs import encode_lcd, fits_lcd, text_cells
 from .terminal16_i18n import text as translated, notice as translated_notice
 from .display_placement import effective_sides
 
@@ -78,13 +79,31 @@ class Terminal:
     receipts: list[tuple[str, str]] = field(default_factory=list)
     receipt_until: float | None = None
     notice_until: float | None = None
+    # The box's display: 2x16, or 4x20 as on Benny's boxes (TMBox #39).
+    rows: int = 2
+    cols: int = 16
 
 
-def row(left="", right=""):
+#: The displays a box can have, as (rows, cols). Any other size gets 2x16 in
+#: its top left corner.
+GEOMETRIES = ((2, 16), (4, 20))
+
+
+def row(left="", right="", width=16):
     left, right = text_cells(left), text_cells(right)
-    if len(left) + len(right) > 16:
+    if len(left) + len(right) > width:
         raise ValueError("A display row must not truncate an identity")
-    return left + " " * (16 - len(left) - len(right)) + right
+    return left + " " * (width - len(left) - len(right)) + right
+
+
+display_row = row
+
+
+def fit(left="", right="", width=16):
+    """A row whose left text (a name, never an identity) is cut to fit."""
+    right = text_cells(right)
+    room = max(0, width - len(right) - (1 if right else 0))
+    return row(text_cells(left)[:room], right, width)
 
 
 class Terminal16Lab:
@@ -474,11 +493,11 @@ class Terminal16Lab:
         right = [text for text, side in items if side == "right"]
         a = left[0] if left else ""
         b = right[0] if right else ""
-        if a and b and len(a) + len(b) >= 16:
+        if a and b and len(a) + len(b) >= terminal.cols:
             # Preserve full identities. B opens the counted active list; C/D
             # reveals every train without the old unlabelled overview paging.
-            return row(a)
-        return row(a, b)
+            return row(a, width=terminal.cols)
+        return row(a, b, terminal.cols)
 
     def _tracks(self, terminal):
         return self.engine.config.tracks_for_station(terminal.station)
@@ -580,8 +599,64 @@ class Terminal16Lab:
             buttons["B"] = ("tracks", "Placera på spår…")
         return buttons
 
+    def _track_here(self, terminal, leg):
+        """The train's planned track at this station, as the box shows it."""
+        movement_id = leg["from_movement_id"] if leg["from_station_id"] == terminal.station else leg["to_movement_id"]
+        track_id = next((item.get("track_id") for item in self.publication["trains"] if item["id"] == movement_id), None)
+        track = self.engine.config.tracks.get(track_id)
+        return track.display_label if track else ""
+
+    def _state_words(self, leg, own):
+        """What the train waits for, in words: the symbol on row 1 said short."""
+        if not self._is_active(leg):
+            return "Ej begärd" if own else "Ej skickad"
+        state = self._line(leg).state
+        if state == State.REQUESTED:
+            return "Väntar svar" if own else "Vill skicka"
+        if state == State.RESERVED:
+            return "Klar att avgå" if own else "Klarerad"
+        return "Avgått" if own else "På väg hit"
+
+    def _middle_rows(self, terminal, t):
+        """Rows 2 and 3 of a 20x4 box (Benny, TMBox #39). The start screen
+        shows the next two trains; a chosen train shows where it comes from
+        or goes to and when, what it waits for and its track here. A notice
+        keeps them empty, so that it is read alone."""
+        width = terminal.cols
+        empty = row(width=width)
+        if terminal.notice or terminal.receipt_until is not None:
+            # The station the notice is about, by name; its code stays below.
+            code = terminal.receipts[0][1] if terminal.receipt_until is not None else terminal.notice_hint
+            station = (self.engine.config.stations.get(code)
+                       or next((item for item in self.engine.config.stations.values() if item.code == code), None))
+            return [fit(station.name if station else "", "", width), empty]
+        leg = self.legs.get(terminal.selected)
+        if terminal.screen == "overview" or leg is None or terminal.selected in self.completed:
+            if terminal.screen != "overview":
+                return [empty, empty]
+            lines = []
+            for key in [key for key in self._candidates(terminal) if not self._is_active(self.legs[key])][:2]:
+                schedule = self._schedule(terminal, self.legs[key])
+                code = self.engine.config.stations[schedule["other"]].code
+                lines.append(fit(f"{self.legs[key]['train_number']} {t(schedule['label'])} {code}", schedule["time"], width))
+            return (lines + [empty, empty])[:2]
+        own = leg["from_station_id"] == terminal.station
+        schedule = self._schedule(terminal, leg)
+        other = self.engine.config.stations[schedule["other"]].name
+        # "Till Vagnsta 12:38"; a name too long for the word in front stands
+        # alone, and only a name longer than the row is cut.
+        where = t("Till" if own else "Från") + " " + other
+        if len(text_cells(where)) + 1 + len(schedule["time"]) > width:
+            where = other
+        where = fit(where, schedule["time"], width)
+        track = self._track_here(terminal, leg)
+        state = fit(t(self._state_words(leg, own)), t("Sp {track}", track=track) if track else "", width)
+        return [where, state]
+
     def _frame(self, device):
         terminal = self.terminals[device]
+        width = terminal.cols
+        row = partial(display_row, width=width)
         t = lambda key, **values: translated(terminal.language, key, **values)
         self._advance_receipts(terminal)
         buttons = self._buttons(terminal)
@@ -609,7 +684,7 @@ class Terminal16Lab:
             if position:
                 label, side = self._label(terminal.station, selected)
                 counter = f"{position}/{len(requests)}"
-                if len(label) + len(counter) < 16:
+                if len(label) + len(counter) < width:
                     first = row(label, counter) if side == "left" else row(counter, label)
                     hint = "#Ja *Nej"
                 else:
@@ -637,7 +712,7 @@ class Terminal16Lab:
                            else (row(t("LÄGET ÄNDRAT")), "*=Bak"))
         elif terminal.screen == "move" and selected and self._movable(terminal, selected):
             question = t("FLYTTA {number} HIT?", number=selected["train_number"])
-            if len(text_cells(question)) > 16:
+            if len(text_cells(question)) > width:
                 question = t("FLYTTA {number}?", number=selected["train_number"])
             first, hint = row(question), "#Ja B:Sp"
         elif terminal.screen == "tracks":
@@ -659,7 +734,7 @@ class Terminal16Lab:
             if terminal.screen == "active":
                 counter = f"{compact(active_position)}/{compact(len(active))}"
                 hint = {"depart": "#Avg C/D", "arrive": "#In B:Sp"}.get(action, "C/D B:Öv")
-                if len(text_cells(label)) + len(counter) < 16:
+                if len(text_cells(label)) + len(counter) < width:
                     first = row(label, counter) if side == "left" else row(counter, label)
                 else:
                     # Long identities stay intact. Count moves beside the
@@ -698,11 +773,19 @@ class Terminal16Lab:
             status = t("Tåg {number} mottaget i {station}. Meddelandet försvinner automatiskt.", number=number, station=station.name)
         lines = [first, row(hint, clock)]
         entry_lines = [row(t("TÅG: _____")), row(t("#Sök B:Del"), clock)]
+        if terminal.rows == 4:
+            # Rows 2 and 3 of a 20x4 box (Benny, TMBox #39). More than eight
+            # special characters cannot be drawn: then they stay empty.
+            middle = self._middle_rows(terminal, t)
+            lines = [first, *middle, lines[1]]
+            if not fits_lcd(lines):
+                lines = [first, row(), row(), lines[3]]
+            entry_lines = [entry_lines[0], row(), row(), entry_lines[1]]
         return {
-            "profile": "server-16x2-pilot", "device_id": device,
+            "profile": f"server-{terminal.cols}x{terminal.rows}-pilot", "device_id": device,
             "station": self.engine.config.stations[terminal.station].name,
             "station_code": self.engine.config.stations[terminal.station].code,
-            "rows": 2, "cols": 16, "lines": lines, "lcd": encode_lcd(lines),
+            "rows": terminal.rows, "cols": terminal.cols, "lines": lines, "lcd": encode_lcd(lines),
             "view_token": self._token(device, terminal),
             "revision": self.engine.revision, "view_revision": terminal.revision,
             "input_guard_ms": 500,

@@ -36,12 +36,25 @@ def text_cells(value):
     return normalize("NFC", value)
 
 
+#: The displays a frame can be drawn on, as (rows, cols): 16x2, and 20x4 as
+#: on Benny's boxes (TMBox #39).
+GEOMETRIES = {(2, 16), (4, 20)}
+
+
+def _custom(lines):
+    return sorted({char for line in lines for char in line if char in GLYPHS or not 32 <= ord(char) <= 126})
+
+
+def fits_lcd(lines):
+    """Whether the lines need no more than the eight CGRAM slots."""
+    return len(_custom([text_cells(line) for line in lines])) <= 8
+
+
 def encode_lcd(lines):
     normalized = [text_cells(line) for line in lines]
-    if len(normalized) != 2 or any(len(line) != 16 for line in normalized):
-        raise ValueError("Expected two complete 16-cell rows")
-    custom = sorted({char for line in normalized for char in line
-                     if char in GLYPHS or not 32 <= ord(char) <= 126})
+    if (len(normalized), len(normalized[0]) if normalized else 0) not in GEOMETRIES or len({len(line) for line in normalized}) != 1:
+        raise ValueError("Expected complete rows of a 16x2 or 20x4 display")
+    custom = _custom(normalized)
     if any(char not in GLYPHS for char in custom):
         raise ValueError("Unsupported LCD character: " + " ".join(char for char in custom if char not in GLYPHS))
     if len(custom) > 8:

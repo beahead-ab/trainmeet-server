@@ -1,7 +1,8 @@
 """16x2 copy: translated before interpolation, never inside station identities."""
 from .device_ui import LANGUAGES, text as legacy_text
 
-# Swedish | English | Danish | Norwegian | German. LCD hints <= 11 cells.
+# Swedish | English | Danish | Norwegian | German. LCD hints <= 11 cells; the
+# state words on row 3 of a 20x4 box <= 13, beside the track.
 COPY = """Nr# A:Kö|No# A:Q|Nr# A:Kø|Nr# A:Kø|Nr# A:Q
 B:Akt{count} C/D|B:Act{count} C/D|B:Akt{count} C/D|B:Akt{count} C/D|B:Akt{count} C/D
 A:K{count} B:Akt|A:Q{count} B:Act|A:K{count} B:Akt|A:K{count} B:Akt|A:Q{count} B:Akt
@@ -131,6 +132,17 @@ SÖK|FIND|SØG|SØK|SUCHEN
 AVBRYT|CANCEL|ANNULLER|AVBRYT|ABBRECHEN
 SUDDA|ERASE|SLET|SLETT|LÖSCHEN
 SIMULERING|SIMULATION|SIMULERING|SIMULERING|SIMULATION
+Till|To|Til|Til|Nach
+Från|From|Fra|Fra|Von
+Sp {track}|Trk {track}|Sp {track}|Sp {track}|Gl {track}
+Ej begärd|Not asked|Ej anmodet|Ikke bedt om|Ungefragt
+Ej skickad|Not sent|Ej sendt|Ikke sendt|Ungesendet
+Väntar svar|Awaiting OK|Venter svar|Venter svar|Wartet Antw.
+Vill skicka|Asks to send|Vil sende|Vil sende|Will senden
+Klar att avgå|Clear to go|Kan afgå|Kan avgå|Fahrt frei
+Klarerad|Cleared|Klareret|Klarert|Freigegeben
+Avgått|Departed|Afgået|Avgått|Abgefahren
+På väg hit|On its way|På vej|På vei hit|Unterwegs
 Administratören tilldelar station i Inställningar.|The administrator assigns the station in Settings.|Administratoren tildeler stationen under Indstillinger.|Administratoren tildeler stasjonen under Innstillinger.|Der Administrator weist den Bahnhof in den Einstellungen zu.
 Tåg {number} mottaget i {station}. Meddelandet försvinner automatiskt.|Train {number} arrived at {station}. This message closes automatically.|Tog {number} ankommet til {station}. Beskeden lukkes automatisk.|Tog {number} ankommet i {station}. Meldingen lukkes automatisk.|Zug {number} in {station} angekommen. Meldung schließt automatisch.
 """
