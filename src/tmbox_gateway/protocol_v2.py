@@ -726,13 +726,17 @@ class TMBoxStationService:
             )
             self.operations_store.record_traffic_position(
                 str(movement["train_number"]), status="station", station_id=station_id,
+                movement_id=movement_id,
             )
         if action == "train.departed":
+            # The position names the movement that left: the same number can
+            # run several times a day, and only the movement tells the maps
+            # and screens which run, and so which arrival, this is.
             case = cases[0]
             self.operations_store.record_traffic_position(
                 str(movement["train_number"]), status="connection",
                 connection_id=case["connection_id"], from_station_id=station_id,
-                to_station_id=case["to_station_id"],
+                to_station_id=case["to_station_id"], movement_id=movement_id,
             )
         if self.simulation:
             self.simulation.record_action(action, movement_id)

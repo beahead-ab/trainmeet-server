@@ -51,14 +51,14 @@
         if (!channel.train_number || !["reserved", "occupied"].includes(channel.state)) continue;
         seen.add(String(channel.train_number));
         onLine.push({ trainNumber: String(channel.train_number), from: channel.from_station_id, to: channel.to_station_id, departed: channel.state === "occupied",
-          departedSeconds: channel.departed_seconds ?? null });
+          departedSeconds: channel.departed_seconds ?? null, movementId: channel.movement_id ?? null });
       }
     }
     for (const position of snapshot?.train_positions || []) {
       const trainNumber = String(position.train_number);
       if (seen.has(trainNumber)) continue;
       if (position.status === "connection") onLine.push({ trainNumber, from: position.from_station_id, to: position.to_station_id, departed: true,
-        departedSeconds: position.departed_seconds ?? null });
+        departedSeconds: position.departed_seconds ?? null, movementId: position.movement_id ?? null });
       else if (position.station_id) atStation.push({ trainNumber, station: position.station_id });
     }
     return { onLine, atStation };
@@ -84,11 +84,75 @@
     return result;
   }
 
-  /** Tåg på linjen som är senare än tidtabellen (ankomsten har redan passerat). */
+  /** Vilken tur ett tåg på linjen kör: { service, from, to, departure_time,
+   *  arrival_time, departure, arrival } – stoppet det avgick från, det nästa på
+   *  sträckan, turen de hör till och de planerade tiderna ("HH:MM" och minuter).
+   *  Rörelsen som avgick (movementId, ur /v1/display) pekar ut turen exakt. Utan
+   *  den – ett äldre läge, det gamla trafikläget – gäller den tur vars planerade
+   *  avgång ligger närmast den faktiska avgången, annars närmast klockan. Aldrig
+   *  bara den första med numret: samma nummer kan köras flera gånger om dagen,
+   *  och då fick morgontåget kvällsturens ankomst. Finns ingen tur med sträckan
+   *  men en ankomst till stationen (bara ruttstopp, ett extratåg) gäller den,
+   *  utan avgång (from och departure null). null när tidtabellen inte har något. */
+  function onLineLeg(snapshot, train, nowMinutes = null) {
+    const number = String(train?.trainNumber);
+    const movement = train?.movementId === null || train?.movementId === undefined ? null
+      : (snapshot?.trains || []).find((row) => String(row.id) === String(train.movementId)) || null;
+    // Turerna med numret; en äldre bild utan turer har bara ruttstoppen, som grupperas.
+    let runs = (snapshot?.services || []).filter((service) => String(service.train_number) === number);
+    if (!runs.length) {
+      const groups = new Map();
+      for (const route of snapshot?.routes || []) {
+        if (String(route.train_number) !== number) continue;
+        const id = route.service_id || route.train_number;
+        if (!groups.has(id)) groups.set(id, { id, train_number: route.train_number, stops: [] });
+        groups.get(id).stops.push(route);
+      }
+      runs = [...groups.values()];
+    }
+    const collect = (exact) => {
+      const legs = [];
+      for (const service of runs) {
+        if (exact && movement.service_id && service.id !== movement.service_id) continue;
+        const stops = orderedStops(service);
+        stops.forEach((stop, index) => {
+          if (stop.station_id !== train.from) return;
+          if (exact && (hhmm(stop.departure_time) !== hhmm(movement.departure_time) || hhmm(stop.arrival_time) !== hhmm(movement.arrival_time))) return;
+          const next = stops.slice(index + 1).find((later) => later.station_id === train.to);
+          const departure = minutes(stop.departure_time || stop.arrival_time);
+          const arrival = next ? minutes(next.arrival_time || next.departure_time) : null;
+          if (departure === null || arrival === null) return;
+          legs.push({ service, from: stop, to: next, departure, arrival,
+            departure_time: hhmm(stop.departure_time || stop.arrival_time), arrival_time: hhmm(next.arrival_time || next.departure_time) });
+        });
+      }
+      return legs;
+    };
+    const arrivals = () => runs.flatMap((service) => orderedStops(service)
+      .filter((stop) => stop.station_id === train.to && minutes(stop.arrival_time) !== null)
+      .map((stop) => ({ service, from: null, to: stop, departure: null, arrival: minutes(stop.arrival_time), departure_time: "", arrival_time: hhmm(stop.arrival_time) })));
+    const exact = movement ? collect(true) : [];
+    const broad = exact.length ? exact : collect(false);
+    const legs = broad.length ? broad : arrivals();
+    if (legs.length > 1) {
+      const actual = train.departedSeconds === null || train.departedSeconds === undefined ? NaN : Number(train.departedSeconds);
+      const reference = Number.isFinite(actual) ? ((actual % 86400) + 86400) % 86400 / 60 : nowMinutes ?? minutes(snapshot?.clock?.time);
+      if (reference !== null) {
+        const gap = (leg) => { const d = (((leg.departure ?? leg.arrival) - reference) % 1440 + 1440) % 1440; return Math.min(d, 1440 - d); };
+        legs.sort((a, b) => gap(a) - gap(b));
+      }
+    }
+    return legs[0] || null;
+  }
+
+  /** Tåg på linjen som är senare än tidtabellen (ankomsten på turen det kör har redan passerat). */
   function lateTrains(snapshot) {
-    const now = hhmm(snapshot?.clock?.time) || "00:00";
-    return trains(snapshot).onLine.filter((train) => train.departed && (snapshot?.routes || []).some((route) =>
-      String(route.train_number) === train.trainNumber && route.station_id === train.to && route.arrival_time && hhmm(route.arrival_time) < now));
+    const now = minutes(snapshot?.clock?.time);
+    if (now === null) return [];
+    return trains(snapshot).onLine.filter((train) => {
+      const leg = train.departed ? onLineLeg(snapshot, train, now) : null;
+      return leg !== null && leg.arrival < now;
+    });
   }
 
   // ── Stationer och boxar ───────────────────────────────────────────────
@@ -552,7 +616,7 @@
     return result.sort((a, b) => a.rank - b.rank || (a.kind === b.kind ? 0 : a.kind === "train" ? -1 : 1) || compare(a.label, b.label)).slice(0, limit);
   }
 
-  return { compare, minutes, hhmm, services, orderedStops, stationMap, trains, trainStates, stationCounts, lateTrains,
+  return { compare, minutes, hhmm, services, orderedStops, stationMap, trains, trainStates, stationCounts, onLineLeg, lateTrains,
     placement, connectionTone, stationRows, stats, events, stationOrder, routePoints, graph, legProgress, search, LATE_MINUTES, movementOf, trainLive, changeTracker,
     DEVIATION_LEVELS, DEFAULT_DEVIATION_LEVEL, deviationLevel, deviationView };
 });
