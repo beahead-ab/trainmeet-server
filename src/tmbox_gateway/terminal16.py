@@ -57,6 +57,7 @@ SHORT_LABELS = {
     "Flytta hit": "FLYTTA",
     "Lämna till automatiken…": "AUTOMATIK", "Lämna till automatiken": "AUTOMATIK",
     "Ta tillbaka stationen…": "AKTIV", "Ta tillbaka stationen": "AKTIV",
+    "Ställ undan": "UNDAN",
 }
 
 #: How long a notice stays before the box goes back to its start screen by
@@ -313,6 +314,9 @@ class Terminal16Lab:
                         1 if not own and state == State.OCCUPIED else
                         2 if state == State.REQUESTED else 3 if state == State.RESERVED else 4)
             choices.append((priority, self._schedule(terminal, leg)["order"], key))
+        # Last: trains that ended here and wait to be put away.
+        for key in self._to_put_away(terminal):
+            choices.append((5, self._schedule(terminal, self.legs[key])["order"], key))
         return [key for _, _, key in sorted(choices)]
 
     def _open_active(self, terminal, direction=0):
@@ -499,6 +503,11 @@ class Terminal16Lab:
         """May this box leave its station to the automation?"""
         return False
 
+    def _to_put_away(self, terminal) -> list:
+        """Trains that ended their run at this box's station and still stand
+        on its track. The server's runtime knows; the test bench has none."""
+        return []
+
     def _buttons(self, terminal):
         buttons = self._view_buttons(terminal)
         buttons["A"] = ("requests", f"Förfrågningskö ({len(self._requests(terminal))} väntar)")
@@ -549,6 +558,10 @@ class Terminal16Lab:
                            C=("previous_active", "Föregående aktiva tåg"), D=("next_active", "Nästa aktiva tåg"))
             if terminal.selected not in self._active_trains(terminal):
                 return buttons  # Never silently select/confirm another train.
+        if terminal.selected in self._to_put_away(terminal):
+            # Ended here (Casper, 2026-10-10): # puts it away and frees the track.
+            buttons["#"] = ("stable", "Ställ undan")
+            return buttons
         leg = self.legs.get(terminal.selected)
         if not leg or terminal.selected in self.completed:
             return buttons
@@ -678,6 +691,8 @@ class Terminal16Lab:
         elif terminal.screen == "active" and not active_position:
             first = row(t("LÄGET ÄNDRAT" if active else "INGA AKTIVA TÅG"))
             hint = "C/D B:Öv"
+        elif terminal.screen in {"detail", "active"} and buttons.get("#", ("",))[0] == "stable":
+            first, hint = row(t("{number} SLUTAR HÄR", number=selected["train_number"])), "#Undan"
         elif terminal.screen in {"detail", "active", "move"} and selected:
             label, side = self._label(terminal.station, selected)
             first = row(label) if side == "left" else row("", label)
@@ -719,6 +734,8 @@ class Terminal16Lab:
                 status = f"{position}/{len(choices)} · {t(label)} · " + status
                 upcoming = {"position": position, "count": len(choices), "filter": terminal.browse_filter,
                             "kind": schedule["kind"], "time": schedule["time"], "movement_id": terminal.selected}
+        if buttons.get("#", ("",))[0] == "stable" and selected:
+            status = t("Tåg {number} slutar här. # ställer undan det, så blir spåret fritt.", number=selected["train_number"])
         if terminal.screen == "requests":
             status = (t("Förfrågan {position}/{count} · ", position=requests.index(terminal.selected)+1, count=len(requests)) + status
                       if terminal.selected in requests else t("Ingen vald förfrågan. A öppnar kön; B visar översikten."))

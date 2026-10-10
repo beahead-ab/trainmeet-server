@@ -144,6 +144,12 @@ Ta tillbaka stationen|Take the station back|Tag stationen tilbage|Ta tilbake sta
 Automatiken sköter stationen medan du är borta. # bekräftar, * ångrar.|The automation runs the station while you are away. # confirms, * cancels.|Automatikken passer stationen, mens du er væk. # bekræfter, * fortryder.|Automatikken styrer stasjonen mens du er borte. # bekrefter, * angrer.|Die Automatik führt den Bahnhof, während du weg bist. # bestätigt, * bricht ab.
 Ta tillbaka stationen från automatiken? # bekräftar, * ångrar.|Take the station back from the automation? # confirms, * cancels.|Tag stationen tilbage fra automatikken? # bekræfter, * fortryder.|Ta stasjonen tilbake fra automatikken? # bekrefter, * angrer.|Bahnhof von der Automatik zurücknehmen? # bestätigt, * bricht ab.
 Automatiken sköter stationen. # på startbilden tar tillbaka den.|The automation runs the station. # on the start screen takes it back.|Automatikken passer stationen. # på startbilledet tager den tilbage.|Automatikken styrer stasjonen. # på startbildet tar den tilbake.|Die Automatik führt den Bahnhof. # auf dem Startbild nimmt ihn zurück.
+{number} SLUTAR HÄR|{number} ENDS HERE|{number} ENDER HER|{number} ENDER HER|{number} ENDET HIER
+#Undan|#Stable|#Hensæt|#Hensett|#Abstell
+Ställ undan|Put away|Hensæt|Hensett|Abstellen
+UNDAN|STABLE|HENSÆT|HENSETT|ABSTELL
+UNDANSTÄLLT|STABLED|HENSAT|HENSATT|ABGESTELLT
+Tåg {number} slutar här. # ställer undan det, så blir spåret fritt.|Train {number} ends here. # puts it away and frees the track.|Tog {number} ender her. # hensætter det, så sporet bliver frit.|Tog {number} ender her. # hensetter det, så sporet blir fritt.|Zug {number} endet hier. # stellt ihn ab, damit das Gleis frei wird.
 """
 
 MESSAGES = {code: {} for code, _ in LANGUAGES}

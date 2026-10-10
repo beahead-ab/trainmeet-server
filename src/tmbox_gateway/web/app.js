@@ -571,6 +571,7 @@ function renderAutomatic(data) {
     document.querySelector("#automatic-disturbance-seed").value = data.disturbance.seed || "";
     document.querySelector("#automatic-stabling").checked = Boolean(data.disturbance.stabling);
     document.querySelector("#automatic-stabling-minutes").value = String(data.disturbance.stabling_minutes);
+    document.querySelector("#automatic-late-stop").value = String(data.disturbance.late_stop_minutes ?? 2);
     globalThis.TrainMeetSettings?.rebase(disturbance);
   }
   if (disturbance) disturbance.hidden = !data.supported;
@@ -587,7 +588,9 @@ function renderAutomatic(data) {
     const row = document.createElement("div"); row.className = "kr-kv";
     const name = document.createElement("span"); name.className = "kr-k"; name.textContent = station.name;
     const [label, tone] = AUTOMATIC_MODES[station.mode] || [station.mode, ""];
-    const tag = document.createElement("span"); tag.className = `kr-tag ${tone}`.trim(); tag.textContent = t(label);
+    const minutes = globalThis.TrainMeetDriftModel?.takesOverMinutes?.(station) ?? null;
+    const tag = document.createElement("span"); tag.className = `kr-tag ${tone}`.trim();
+    tag.textContent = minutes === null ? t(label) : t("Kontakt saknas – automatik om {n} min", {n: minutes});
     const who = document.createElement("span"); who.className = "kr-m";
     who.textContent = station.mode === "automatic" && station.released_by
       ? t({admin: "lämnad av admin", operator: "lämnad av operatören", lost_contact: "tog över efter tappad kontakt"}[station.released_by] || "")
@@ -664,7 +667,8 @@ document.querySelector("#automatic-disturbance-form")?.addEventListener("submit"
   try {
     await sendAutomatic({ action: "disturbance", profile: document.querySelector("#automatic-disturbance-profile").value,
       where: document.querySelector("#automatic-disturbance-where").value, seed: document.querySelector("#automatic-disturbance-seed").value.trim(),
-      stabling: document.querySelector("#automatic-stabling").checked, stabling_minutes: Number(document.querySelector("#automatic-stabling-minutes").value) });
+      stabling: document.querySelector("#automatic-stabling").checked, stabling_minutes: Number(document.querySelector("#automatic-stabling-minutes").value),
+      late_stop_minutes: Number(document.querySelector("#automatic-late-stop").value) });
     finishModal(form);
   } catch (error) {
     setMessage(form.querySelector(".form-message"), error.message, "error");
@@ -3101,6 +3105,7 @@ function trainNowText(now, stops) {
     case "on_line": return now.since ? t("På linjen {route} · avgick {time}", { route, time: now.since }) : t("På linjen {route}", { route });
     case "at_station": return now.time ? t("Vid {station} · avgår {time}", { station: at, time: now.time }) : t("Vid {station}", { station: at });
     case "arrived": return t("Ankommit {station}", { station: at });
+    case "stabled": return t("Undanställt i {station}", { station: at });
     default: return now.time ? t("Inte avgått · {station} · avgår {time}", { station: at, time: now.time }) : t("Inte avgått · {station}", { station: at });
   }
 }
@@ -3129,7 +3134,7 @@ function trainStopItems(service, { stationButtons = false } = {}) {
   stops.forEach((stop, index) => {
     const item = document.createElement("li");
     const reached = stop.departure === "departed" || stop.arrival === "arrived";
-    const here = ["not_departed", "at_station", "arrived"].includes(now.state) && now.station_id === stop.station_id
+    const here = ["not_departed", "at_station", "arrived", "stabled"].includes(now.state) && now.station_id === stop.station_id
       && (now.state !== "not_departed" || index === 0);
     const leaving = ["waiting", "cleared"].includes(now.state) && now.from_station_id === stop.station_id;
     item.className = ["route-stop", index === 0 ? "first" : "", index === stops.length - 1 ? "last" : "",

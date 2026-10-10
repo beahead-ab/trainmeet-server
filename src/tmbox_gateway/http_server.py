@@ -488,7 +488,7 @@ class TrainMeetHTTPApplication:
             elif action == "manual" and payload.get("confirmed") is True:
                 self.automatic.take_over(str(payload.get("station_id") or ""), str(payload.get("device_id") or ""))
             elif action == "disturbance":
-                self.automatic.set_disturbance({key: payload[key] for key in ("profile", "where", "seed", "stabling", "stabling_minutes") if key in payload})
+                self.automatic.set_disturbance({key: payload[key] for key in ("profile", "where", "seed", "stabling", "stabling_minutes", "late_stop_minutes") if key in payload})
             elif action == "lost_contact":
                 self.automatic.set_lost_contact_minutes(payload.get("minutes"))
             else:
@@ -1596,6 +1596,7 @@ class TrainMeetHTTPApplication:
             positions = []
         clock = self._clock_display(clock)
         movement_live: dict[str, Any] = {}
+        stabled: list[str] = []
         if publication is not None and not (selected and selected["region"] == "us"):
             display = {**display, "traffic_side": self.runtime_store.traffic_side(publication.meet_id, publication.country)["side"],
                        "deviation_level": self.runtime_store.deviation_level(publication.meet_id)["level"]}
@@ -1603,6 +1604,9 @@ class TrainMeetHTTPApplication:
             if self.operations_store is not None:
                 # Vad varje rörelse gjort och när: tidtabellen visar verkliga tider och förseningar.
                 movement_live = self.operations_store.movement_live(publication.publication_id, active_day)
+            if self.automatic is not None:
+                # Tåg som slutat och ställts undan: de står inte längre på trafikspåret.
+                stabled = sorted(self.automatic.stabled_movements(publication, active_day))
         calendar = self.calendar_state() if publication is not None and not (selected and selected["region"] == "us") else None
         return {
             "protocol_version": 1,
@@ -1623,6 +1627,7 @@ class TrainMeetHTTPApplication:
             "clock": clock,
             "train_positions": positions,
             "movement_live": movement_live,
+            "stabled": stabled,
             "connection": self.connection_details(request_host),
             "server_name": self.runtime_store.server_name() if self.runtime_store else self.config.gateway_id,
             "us": self.us_display_snapshot() if selected and selected["region"] == "us" else None,
@@ -2037,7 +2042,38 @@ class TrainMeetHTTPApplication:
             "station_modes": self._neighbour_modes(snapshot, station_id),
             # This station: may it be left to the automation, and is it?
             "automatic": self._own_automatic(station_id),
+            # Trains that end here and are put away (by whom): their track
+            # is free. Additive; older terminals ignore it.
+            "stabled": self._stabled_here(station_id),
         }
+
+    def _stabled_here(self, station_id: str) -> dict[str, str]:
+        publication = self.runtime_store.active() if self.runtime_store is not None else None
+        if self.automatic is None or publication is None:
+            return {}
+        day = self.runtime_store.active_day() or publication.active_day
+        ends = self.automatic.ends_here(publication, day)
+        return {movement: by for movement, by in self.automatic.stabled_by(publication, day).items()
+                if ends.get(movement, {}).get("to_station_id") == station_id}
+
+    @announces("traffic")
+    @runtime_command("eu")
+    def tkl_stable(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """The TKL at the station where a train ended puts it away."""
+        station_id = str(payload.get("station_id") or "")
+        movement_id = str(payload.get("movement_id") or "")
+        self._require_station_access(client, station_id)
+        if not self.automatic:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stabling_unavailable", "Koppla en EU-träff först.")
+        self.station_service.observe_operator(client.client_id, station_id)
+        self._refuse_on_automatic(client, station_id)
+        try:
+            self.automatic.stable(station_id, movement_id, by=client.client_id)
+        except ValueError as error:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stabling_rejected", str(error)) from error
+        if self.on_config_applied:
+            self.on_config_applied()
+        return {"stabled": self._stabled_here(station_id)}
 
     def _own_automatic(self, station_id: str) -> dict[str, Any]:
         if not self.automatic or not self.automatic.running():
@@ -2205,8 +2241,10 @@ class TrainMeetHTTPApplication:
         if actual_track:
             publication = self.runtime_store.active() if self.runtime_store is not None else None
             if publication is not None:
+                released = (self.automatic.stabled_movements(publication, snapshot["active_day"])
+                            if self.automatic is not None else set())
                 conflict = find_track_conflict(
-                    publication.payload["trains"],
+                    [row for row in publication.payload["trains"] if str(row["id"]) not in released],
                     self.operations_store.tkl_station_state(
                         snapshot["publication_id"], snapshot["active_day"], station_id
                     )["movements"],
@@ -3818,6 +3856,7 @@ class TrainMeetHTTPApplication:
 
         cases = ({case["movement_id"]: case for case in self.station_service.open_cases(None)}
                  if self.station_service is not None else {})
+        stabled = self.automatic.stabled_movements(publication, active_day) if self.automatic is not None else set()
         position = next((item for item in (self.operations_store.positions() if self.operations_store else [])
                          if str(item["train_number"]) == number), None)
         # Förseningen ur verkliga tider, som i tidtabellerna (train_live.py).
@@ -3847,13 +3886,13 @@ class TrainMeetHTTPApplication:
                 })
             result.append({
                 "service_id": service.get("id"), "train_type": service.get("train_type", ""), "stops": stops,
-                "now": self._train_now(stops, cases, position),
+                "now": self._train_now(stops, cases, position, stabled),
                 "delay_minutes": self._train_delay(running),
             })
         return {"train_number": number, "active_day": active_day, "services": result}
 
     def _train_now(self, stops: list[dict[str, Any]], cases: dict[str, dict[str, Any]],
-                   position: dict[str, Any] | None) -> dict[str, Any]:
+                   position: dict[str, Any] | None, stabled: set | frozenset = frozenset()) -> dict[str, Any]:
         """Where the train is: the latest thing that happened to it, in order."""
         for index, stop in enumerate(stops):
             case = cases.get(stop["movement_id"]) if stop["movement_id"] else None
@@ -3875,6 +3914,8 @@ class TrainMeetHTTPApplication:
             stop = stops[index]
             if stop["arrival"] == "arrived":
                 last = index == len(stops) - 1
+                if last and stop["movement_id"] in stabled:
+                    return {"state": "stabled", "station_id": stop["station_id"], "time": stop.get("arrival_time")}
                 return {"state": "arrived" if last else "at_station", "station_id": stop["station_id"],
                         "track": stop["actual_track"] or stop["planned_track"],
                         "time": stop.get("arrival_time") if last else stop.get("departure_time")}
@@ -5255,6 +5296,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/tkl/shift/finish":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.finish_tkl_shift(client, payload))
+                return
+            if path == "/v1/tkl/stable":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.tkl_stable(client, payload))
                 return
             if path == "/v1/tkl/automatic":
                 client = self._authenticated_client()

@@ -103,6 +103,7 @@ On the line {route}|På linjen {route}|På strækningen {route}|På strekningen 
 At {station} · departs {time}|Vid {station} · avgår {time}|Ved {station} · afgår {time}|Ved {station} · går {time}|In {station} · fährt ab {time}
 At {station}|Vid {station}|Ved {station}|Ved {station}|In {station}
 Arrived {station}|Ankommit {station}|Ankommet {station}|Ankommet {station}|Angekommen {station}
+Stabled at {station}|Undanställt i {station}|Hensat på {station}|Hensatt på {station}|Abgestellt in {station}
 Not departed · {station} · departs {time}|Inte avgått · {station} · avgår {time}|Ikke afgået · {station} · afgår {time}|Ikke gått · {station} · går {time}|Nicht abgefahren · {station} · fährt ab {time}
 Not departed · {station}|Inte avgått · {station}|Ikke afgået · {station}|Ikke gått · {station}|Nicht abgefahren · {station}
 Train {number}|Tåg {number}|Tog {number}|Tog {number}|Zug {number}

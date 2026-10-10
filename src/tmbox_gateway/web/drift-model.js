@@ -206,6 +206,15 @@
   }
 
   /** Nyckeltalen över sidan: tåg på linjen, inne på station, bemannade, avvikelser. */
+  // En station som tappat kontakten, med automatik efter N minuter: hur många
+  // minuter kvar, räknat från när läget hämtades (fetchedAt, ms). Aldrig
+  // (inställningen 0) ger null: stationen väntar på sin operatör.
+  function takesOverMinutes(auto, fetchedAt, now = Date.now()) {
+    if (auto?.mode !== "disconnected" || typeof auto.takes_over_in !== "number") return null;
+    const left = auto.takes_over_in - Math.max(0, now - (fetchedAt ?? now)) / 1000;
+    return Math.max(1, Math.ceil(left / 60));
+  }
+
   function stats(snapshot, rows = []) {
     const { onLine, atStation } = trains(snapshot);
     const stations = (snapshot?.stations || []).length;
@@ -623,5 +632,5 @@
 
   return { compare, minutes, hhmm, services, orderedStops, stationMap, trains, trainStates, stationCounts, onLineLeg, lateTrains,
     placement, connectionTone, stationRows, stats, events, stationOrder, routePoints, graph, legProgress, search, LATE_MINUTES, movementOf, trainLive, changeTracker,
-    DEVIATION_LEVELS, DEFAULT_DEVIATION_LEVEL, deviationLevel, deviationView };
+    DEVIATION_LEVELS, DEFAULT_DEVIATION_LEVEL, deviationLevel, deviationView, takesOverMinutes };
 });

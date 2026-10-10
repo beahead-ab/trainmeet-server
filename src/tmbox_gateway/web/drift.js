@@ -197,7 +197,10 @@
     // En väntande box som tappat kontakten säger det i stället: den väntar inte längre på något.
     if (row.kind === "waiting" && row.device?.connection?.state !== "lost") return tag("warn", t("Väntar på station"));
     if (row.kind === "automatic" || row.auto?.mode === "automatic") return tag("auto", t("Automatisk"));
-    if (row.auto?.mode === "disconnected") return tag("warn", t("Kontakt saknas – väntar"));
+    if (row.auto?.mode === "disconnected") {
+      const minutes = model.takesOverMinutes(row.auto, ctx.automaticAt);
+      return tag("warn", minutes === null ? t("Kontakt saknas – väntar") : t("Kontakt saknas – automatik om {n} min", { n: minutes }));
+    }
     if (row.kind === "unmanned") return tag("off", t("Obemannad"), false);
     if (row.kind === "operator") return tag("ok", t("Bemannad"));
     const connection = row.device.connection, time = deviceTime(connection), state = connection?.state || "offline";
@@ -264,7 +267,7 @@
       automatic ? t(automatic === 1 ? "1 sköts av automatiken" : "{n} sköts av automatiken", { n: automatic }) : ""].filter(Boolean).join(" · ");
     const sig = [rows.map((row) => [row.key, row.kind, row.tone, row.trains, row.device?.connection?.state, row.device?.connection?.last_seen,
       row.device?.station_side, row.device?.device_code, row.device?.firmware_version, row.placement && [row.placement.left, row.placement.right], row.auto?.mode,
-      row.auto?.operator, row.auto?.available_operators, ctx.automatic?.enabled]), selected, root.lang];
+      row.auto?.operator, row.auto?.available_operators, ctx.automatic?.enabled, model.takesOverMinutes(row.auto, ctx.automaticAt)]), selected, root.lang];
     if (!changed("stations", sig)) return;
     if (!rows.length) { body.replaceChildren(h("tr", {}, h("td", { colspan: 6, class: "kr-empty" }, t("Inga stationer i träffen.")))); return; }
     body.replaceChildren(...rows.map((row) => {
@@ -441,11 +444,12 @@
       case "on_line": return now.since ? t("På linjen {route} · avgick {time}", { route, time: now.since }) : t("På linjen {route}", { route });
       case "at_station": return now.time ? t("Vid {station} · avgår {time}", { station: at, time: now.time }) : t("Vid {station}", { station: at });
       case "arrived": return t("Ankommit {station}", { station: at });
+      case "stabled": return t("Undanställt i {station}", { station: at });
       // The pill beside it already says "Inte avgått"; here only where and when.
       default: return !at ? "" : now.time ? t("Vid {station} · avgår {time}", { station: at, time: now.time }) : t("Vid {station}", { station: at });
     }
   };
-  const NOW_LABEL = { on_line: ["sel", "På linjen"], waiting: ["warn", "Väntar"], cleared: ["sel", "Klart att avgå"], at_station: ["", "På station"], arrived: ["ok", "Ankommit"] };
+  const NOW_LABEL = { on_line: ["sel", "På linjen"], waiting: ["warn", "Väntar"], cleared: ["sel", "Klart att avgå"], at_station: ["", "På station"], arrived: ["ok", "Ankommit"], stabled: ["", "Undanställt"] };
   function closeButton(label, action) {
     const icon = svg("svg", { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 2.4, "stroke-linecap": "round", "aria-hidden": "true" });
     icon.append(svg("path", { d: "M6 6l12 12M18 6L6 18" }));
@@ -483,7 +487,7 @@
     const list = h("div", { class: "kr-stops" });
     stops.forEach((stop, index) => {
       const reached = stop.departure === "departed" || stop.arrival === "arrived";
-      const here = now && ["not_departed", "at_station", "arrived"].includes(now.state) && now.station_id === stop.station_id && (now.state !== "not_departed" || index === 0);
+      const here = now && ["not_departed", "at_station", "arrived", "stabled"].includes(now.state) && now.station_id === stop.station_id && (now.state !== "not_departed" || index === 0);
       const leaving = now && ["waiting", "cleared"].includes(now.state) && now.from_station_id === stop.station_id;
       const track = [stop.planned_track ? t("spår {track}", { track: stop.planned_track }) : "",
         stop.actual_track && stop.actual_track !== stop.planned_track ? t("inne på spår {track}", { track: stop.actual_track }) : ""].filter(Boolean).join(" · ");
@@ -675,14 +679,19 @@
       if (key === "selection") ctx.selection = { train: value.train ?? null, station: value.station ?? null };
       else if (key === "trainDetail") ctx.trainDetail = { number: value.number ?? null, data: value.data ?? null, error: value.error || "" };
       else ctx[key] = value;
+      if (key === "automatic") ctx.automaticAt = Date.now();
     }
     scheduleRender();
   }
 
   // En gång i sekunden medan klockan går: klockan och diagrammet. Diagrammet
   // ritas inte om medan ett tåg i det har fokus från tangentbordet.
-  let ticks = 0;
+  let ticks = 0, seconds = 0;
   function tick() {
+    // Nedräkningen till automatik för en station utan kontakt går i verklig
+    // tid, även när träffklockan står: listan ses över var femtonde sekund.
+    seconds += 1;
+    if (!doc.hidden && seconds % 15 === 0 && (ctx.automatic?.stations || []).some((station) => typeof station.takes_over_in === "number")) scheduleRender();
     const clock = ctx.clock || ctx.snapshot?.clock;
     if (!clock?.running || doc.hidden) return;
     renderClock();

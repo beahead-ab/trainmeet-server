@@ -403,3 +403,14 @@ test('late is judged on the run the train is on', () => {
     channels: [{ train_number: '7', from_station_id: 'a', to_station_id: 'b', state: 'reserved', movement_id: 'm-7-am-a' }] }] });
   assert.deepEqual(model.lateTrains(cleared), [], 'a train with a clear has not left');
 });
+
+test('a station without contact counts down to the automation, or waits', () => {
+  // 4.2.0: "Kontakt saknas – automatik om N min" på Drift, räknat från hämtningen.
+  const fetched = 1_000_000;
+  assert.equal(model.takesOverMinutes({ mode: 'disconnected', takes_over_in: 200 }, fetched, fetched), 4);
+  assert.equal(model.takesOverMinutes({ mode: 'disconnected', takes_over_in: 200 }, fetched, fetched + 90_000), 2, 'counts on without a new fetch');
+  assert.equal(model.takesOverMinutes({ mode: 'disconnected', takes_over_in: 200 }, fetched, fetched + 400_000), 1, 'never below one minute until it switches');
+  assert.equal(model.takesOverMinutes({ mode: 'disconnected', takes_over_in: null }, fetched, fetched), null, 'Aldrig: the station waits');
+  assert.equal(model.takesOverMinutes({ mode: 'manual', takes_over_in: 200 }, fetched, fetched), null);
+  assert.equal(model.takesOverMinutes(null, fetched, fetched), null);
+});
