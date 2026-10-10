@@ -1607,6 +1607,9 @@ class TrainMeetHTTPApplication:
             if self.automatic is not None:
                 # Tåg som slutat och ställts undan: de står inte längre på trafikspåret.
                 stabled = sorted(self.automatic.stabled_movements(publication, active_day))
+                # ... och står inte heller på kartan eller bland tågen inne
+                # på stationen (Casper, 2026-10-10).
+                positions = self._without_stabled(publication, positions, stabled)
         calendar = self.calendar_state() if publication is not None and not (selected and selected["region"] == "us") else None
         return {
             "protocol_version": 1,
@@ -2046,6 +2049,26 @@ class TrainMeetHTTPApplication:
             # is free. Additive; older terminals ignore it.
             "stabled": self._stabled_here(station_id),
         }
+
+    @staticmethod
+    def _without_stabled(publication, positions: list[dict[str, Any]], stabled: list[str]) -> list[dict[str, Any]]:
+        """Positions minus trains put away at the end of their run. A position
+        names its movement; an older one without it is matched on train and
+        station."""
+        if not stabled:
+            return positions
+        away = set(stabled)
+        rows = {str(row["id"]): row for row in publication.payload["trains"]}
+        places = {(str(rows[movement]["train_number"]), rows[movement]["station_id"]) for movement in away if movement in rows}
+
+        def put_away(position):
+            if position.get("status") != "station":
+                return False
+            if position.get("movement_id"):
+                return position["movement_id"] in away
+            return (str(position.get("train_number")), position.get("station_id")) in places
+
+        return [position for position in positions if not put_away(position)]
 
     def _stabled_here(self, station_id: str) -> dict[str, str]:
         publication = self.runtime_store.active() if self.runtime_store is not None else None

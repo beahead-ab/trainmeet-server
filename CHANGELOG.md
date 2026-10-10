@@ -5,6 +5,15 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Undanställda tåg försvinner från kartan
+
+Casper: "ta bort undanställda tåg från kartan". Ett tåg som ställts undan
+efter sin sista ankomst stod kvar vid stationen på kartan och räknades bland
+tågen inne. Nu lämnar `/v1/display` det utanför `train_positions`, så det är
+borta från kartorna på Drift, skärmarna och deltagarvyn, från "inne på
+station" och kolumnen Tåg inne, och från TKL:s karta. Tågpanelen säger
+fortfarande **Undanställt i LEK**, och det lagrade läget ändras inte.
+
 ### Försenade tåg står två minuter, tåg som slutar ställs undan, och Drift räknar ned till automatiken
 
 Casper: "Om ett tåg är sent stannar det några min och sen klareras vidare",
