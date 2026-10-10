@@ -5,6 +5,22 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Loggan syns på server.trainmeet.app, större i sidhuvudet och i inloggningsrutan
+
+Casper: "loggan visas inte. högst upp vill jag ha den större loggan, den får
+plats. samma inloggningsrutan".
+
+- **Rättat:** stationsskylten `web/trainmeet-skylt.svg` (4.1.1) kom aldrig med
+  i det installerade paketet. `pyproject.toml` tog med `web/*.png` men inte
+  `web/*.svg`. Från källkoden syntes loggan, men på Render och på en Pi som
+  installerats med pip var den en trasig bild i sidhuvudet, både i
+  Kontrollrummet och i US-arbetsytan. Ett nytt prov kontrollerar att varje
+  webbfil som servern serverar finns i paketet.
+- **Sidhuvudet:** skylten är 34 px hög i stället för 26 px. I det inloggade
+  sidhuvudet på smal skärm, med två rader, behåller den 26 px så att
+  träffens namn får plats.
+- **Inloggningsrutan:** hela skylten i stället för den lilla TM-ikonen.
+
 ### Undanställda tåg försvinner från kartan
 
 Casper: "ta bort undanställda tåg från kartan". Ett tåg som ställts undan
