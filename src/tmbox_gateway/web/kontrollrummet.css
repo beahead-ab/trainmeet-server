@@ -138,7 +138,7 @@ button.kr-pill.warn:hover { background: var(--kr-amber-soft); filter: brightness
 #app-chrome a { color: var(--kr-ink); }
 #app-chrome .brand-lockup { color: var(--kr-ink); gap: 9px; text-decoration: none; }
 /* Logotypen är stationsskylten (TRAINMEET på blå platta); samma bild i mörkt och ljust. */
-#app-chrome .brand-sign { display: block; height: 26px; width: auto; flex-shrink: 0; }
+#app-chrome .brand-sign { display: block; height: 34px; width: auto; flex-shrink: 0; }
 /* Den kompakta ikonen (TM på plattan) ersätter skylten på en telefon när man är inloggad. */
 #app-chrome .brand-mark--compact { display: none; }
 #app-chrome .tm-logo__lines { font-size: 13px; font-weight: 700; line-height: 1.05; }
@@ -710,7 +710,8 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
   box-shadow: var(--kr-shadow); color: var(--kr-ink); font-family: var(--kr-sans); }
 #login > a[href="/"] { align-self: flex-start; margin: 0 0 20px; font-size: 12.5px; color: var(--kr-mute); text-decoration: none; }
 #login > a[href="/"]:hover, #login > a[href="/"]:focus-visible { color: var(--kr-blue); }
-#login .pairing-icon { width: 40px; height: 40px; margin: 0 0 14px; border-radius: 10px; }
+/* Hela skylten, inte bara TM-ikonen: den får plats i rutan (Casper, 2026-10-10). */
+#login .login-sign { display: block; align-self: flex-start; width: auto; height: 52px; margin: 0 0 18px; }
 #login .eyebrow { margin: 0 0 6px; font: 600 11px/1 var(--kr-mono); letter-spacing: .08em; color: var(--kr-blue); }
 #login h2 { margin: 0 0 8px; font-size: 20px; font-weight: 650; letter-spacing: -.01em; color: var(--kr-ink); }
 #login :is(#login-intro, #redeem-intro, #forgot-intro) > p:not(.eyebrow) { margin: 0 0 22px; font-size: 13px; line-height: 1.55; color: var(--kr-ink-2); }
@@ -769,6 +770,8 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
   #app-chrome .topbar-right { display: contents; }
   #app-chrome .tm-header__spacer { display: none; }
   #app-chrome .brand-lockup { order: 1; margin-right: 6px; }
+  /* Två rader i sidhuvudet: skylten i den mindre höjden så att träffens namn får plats. */
+  body:not([data-signed-in="no"]) #app-chrome .brand-sign { height: 26px; }
   #app-chrome .tm-switch { order: 2; flex: 1 1 0; min-width: 0; }
   #app-chrome #app-meet-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #app-chrome .screen-menu { order: 3; position: static; }
