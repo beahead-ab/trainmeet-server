@@ -49,57 +49,57 @@ class TMBoxFlowsTest(unittest.TestCase):
     def test_the_flows_say_what_casper_asked_for(self):
         """Klarera, ta emot, hitta ett klarerat tåg - and the ways a box says no."""
         self.assertEqual(14, len(self.data["flows"]))
-        self.assertEqual("TÅG: 39___      ", self.lines("klarera", 0, "CDA")[0])
-        # 39# finds the train and asks Vagnsta in one press (Casper, 2026-10-02).
-        self.assertEqual(["           39?VA", "*Åter B:Öv 12:34"], self.lines("klarera", 1, "CDA"))
-        self.assertEqual("CDA?39       1/1", self.lines("klarera", 1, "VA")[0])
-        self.assertEqual("39 MOTTAGET     ", self.lines("klarera", 4, "CDA")[0])
-        self.assertEqual(" " * 16, self.lines("klarera", -1, "CDA")[0])
-        self.assertEqual("39 ANK SP2      ", self.lines("annat-spar", -1, "VA")[0])
-        self.assertEqual("39 NEKAT        ", self.lines("neka", 1, "CDA")[0])
+        self.assertEqual("TÅG: 39___      ", self.lines("klarera", 0, "KNB")[0])
+        # 39# finds the train and asks Dimmeby in one press (Casper, 2026-10-02).
+        self.assertEqual(["           39?DY", "*Åter B:Öv 12:34"], self.lines("klarera", 1, "KNB"))
+        self.assertEqual("KNB?39       1/1", self.lines("klarera", 1, "DY")[0])
+        self.assertEqual("39 MOTTAGET     ", self.lines("klarera", 4, "KNB")[0])
+        self.assertEqual(" " * 16, self.lines("klarera", -1, "KNB")[0])
+        self.assertEqual("39 ANK SP2      ", self.lines("annat-spar", -1, "DY")[0])
+        self.assertEqual("39 NEKAT        ", self.lines("neka", 1, "KNB")[0])
         # Taken back, both stations are told and neither waits for #OK (Benny, 2026-10-03).
-        self.assertEqual(["39 ÅTERTAGET    ", "CDA        12:34"], self.lines("aterta-klartecken", 1, "VA"))
-        self.assertEqual(["39 ÅTERTAGET    ", "VA         12:34"], self.lines("aterta-klartecken", 1, "CDA"))
-        self.assertEqual(["39 ÅTERTAGET    ", "CDA        12:34"], self.lines("aterta-begaran", 1, "VA"))
-        self.assertEqual(" " * 16, self.lines("aterta-begaran", -1, "VA")[0])
-        self.assertEqual("2/2        94?VA", self.lines("tva-forfragningar", 2, "CDA")[0])
-        self.assertEqual("MUN<17       1/2", self.lines("hitta-aktivt", 2, "CDA")[0])
-        self.assertEqual(["           39>VA", "#Avg *Åter 12:34"], self.lines("direkt", 0, "CDA"))
+        self.assertEqual(["39 ÅTERTAGET    ", "KNB        12:34"], self.lines("aterta-klartecken", 1, "DY"))
+        self.assertEqual(["39 ÅTERTAGET    ", "DY         12:34"], self.lines("aterta-klartecken", 1, "KNB"))
+        self.assertEqual(["39 ÅTERTAGET    ", "KNB        12:34"], self.lines("aterta-begaran", 1, "DY"))
+        self.assertEqual(" " * 16, self.lines("aterta-begaran", -1, "DY")[0])
+        self.assertEqual("2/2        94?DY", self.lines("tva-forfragningar", 2, "KNB")[0])
+        self.assertEqual("SVM<17       1/2", self.lines("hitta-aktivt", 2, "KNB")[0])
+        self.assertEqual(["           39>DY", "#Avg *Åter 12:34"], self.lines("direkt", 0, "KNB"))
         # The timetable has the arrivals nobody has sent yet (2.1.0).
-        self.assertEqual("93 ANK     12:40", self.lines("tidtabell", 2, "CDA")[0])
-        self.assertEqual("INGET TÅG       ", self.lines("nej", 0, "CDA")[0])
+        self.assertEqual("93 ANK     12:40", self.lines("tidtabell", 2, "KNB")[0])
+        self.assertEqual("INGET TÅG       ", self.lines("nej", 0, "KNB")[0])
         # A through train in the usual order: the arrival first, then the departure.
-        self.assertEqual("1/1        55?VA", self.lines("genomgaende", 0, "CDA")[0])
-        self.assertEqual("55 ANK SP2      ", self.lines("genomgaende", 3, "CDA")[0])
-        self.assertEqual(["MUN?55          ", "*Åter B:Öv 12:34"], self.lines("genomgaende", 5, "CDA"))
-        self.assertEqual(["          55◀CDA", "#In B:Sp   12:34"], self.lines("genomgaende", -1, "MUN"))
-        # Never sent from VA: a through train is moved here first, then sent
-        # on (Benny #170); nothing is asked of MUN until it is here.
-        self.assertEqual(["FLYTTA 55 HIT?  ", "#Ja B:Sp   12:34"], self.lines("flytta-genomgaende", 0, "CDA"))
-        self.assertEqual(" " * 16, self.lines("flytta-genomgaende", 0, "MUN")[0])
-        self.assertEqual("55 MOTTAGET     ", self.lines("flytta-genomgaende", 1, "VA")[0], "VA is told, and has nothing to send")
-        self.assertEqual(" " * 16, self.lines("flytta-genomgaende", -1, "VA")[0])
-        self.assertEqual(["MUN?55          ", "*Åter B:Öv 12:34"], self.lines("flytta-genomgaende", 3, "CDA"))
-        self.assertEqual(["          55◀CDA", "#In B:Sp   12:34"], self.lines("flytta-genomgaende", -1, "MUN"))
-        # Never sent from MUN: the box asks to move it here (issue #115).
-        self.assertEqual(["FLYTTA 93 HIT?  ", "#Ja B:Sp   12:34"], self.lines("placera", 0, "CDA"))
-        self.assertEqual("93 ANK SP2      ", self.lines("placera", -1, "CDA")[0])
-        self.assertEqual("ANNAN SIDA      ", self.lines("tva-boxar", 0, "CDA-V")[0])
-        self.assertEqual(" " * 16, self.lines("tva-boxar", -1, "CDA-V")[0])
+        self.assertEqual("1/1        55?DY", self.lines("genomgaende", 0, "KNB")[0])
+        self.assertEqual("55 ANK SP2      ", self.lines("genomgaende", 3, "KNB")[0])
+        self.assertEqual(["SVM?55          ", "*Åter B:Öv 12:34"], self.lines("genomgaende", 5, "KNB"))
+        self.assertEqual(["          55◀KNB", "#In B:Sp   12:34"], self.lines("genomgaende", -1, "SVM"))
+        # Never sent from DY: a through train is moved here first, then sent
+        # on (Benny #170); nothing is asked of SVM until it is here.
+        self.assertEqual(["FLYTTA 55 HIT?  ", "#Ja B:Sp   12:34"], self.lines("flytta-genomgaende", 0, "KNB"))
+        self.assertEqual(" " * 16, self.lines("flytta-genomgaende", 0, "SVM")[0])
+        self.assertEqual("55 MOTTAGET     ", self.lines("flytta-genomgaende", 1, "DY")[0], "DY is told, and has nothing to send")
+        self.assertEqual(" " * 16, self.lines("flytta-genomgaende", -1, "DY")[0])
+        self.assertEqual(["SVM?55          ", "*Åter B:Öv 12:34"], self.lines("flytta-genomgaende", 3, "KNB"))
+        self.assertEqual(["          55◀KNB", "#In B:Sp   12:34"], self.lines("flytta-genomgaende", -1, "SVM"))
+        # Never sent from SVM: the box asks to move it here (issue #115).
+        self.assertEqual(["FLYTTA 93 HIT?  ", "#Ja B:Sp   12:34"], self.lines("placera", 0, "KNB"))
+        self.assertEqual("93 ANK SP2      ", self.lines("placera", -1, "KNB")[0])
+        self.assertEqual("ANNAN SIDA      ", self.lines("tva-boxar", 0, "KNB-V")[0])
+        self.assertEqual(" " * 16, self.lines("tva-boxar", -1, "KNB-V")[0])
 
     def test_a_key_the_engine_refuses_stops_the_generator(self):
         """A flow that no longer works must fail, not ship a picture of a refusal."""
-        flow = flows.Flow("clearance", ["CDA", "VA"])
-        with self.assertRaisesRegex(AssertionError, "VA \\*"):
-            flow.press("VA", "*")  # the overview has nothing to go back from
+        flow = flows.Flow("clearance", ["KNB", "DY"])
+        with self.assertRaisesRegex(AssertionError, "DY \\*"):
+            flow.press("DY", "*")  # the overview has nothing to go back from
 
     def test_digits_stay_in_the_box_until_hash(self):
-        flow = flows.Flow("clearance", ["CDA"])
-        flow.press("CDA", "394")
-        self.assertEqual("TÅG: 394__      ", flow.lines("CDA")[0])
+        flow = flows.Flow("clearance", ["KNB"])
+        flow.press("KNB", "394")
+        self.assertEqual("TÅG: 394__      ", flow.lines("KNB")[0])
         self.assertEqual([], flow.lab.engine.audit)
-        flow.press("CDA", "*")
-        self.assertEqual(" " * 16, flow.lines("CDA")[0])
+        flow.press("KNB", "*")
+        self.assertEqual(" " * 16, flow.lines("KNB")[0])
 
 
 if __name__ == "__main__":

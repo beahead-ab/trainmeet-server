@@ -70,37 +70,37 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('#key-help').evaluate(d => d.tagName === 'DETAILS' && d.open), true, 'Key help open on a desktop');
     await page.locator('.box').nth(2).waitFor();
     await open();
-    await select('cda', 'west').selectOption('right');
+    await select('knb', 'west').selectOption('right');
     await page.locator('#placement-cancel').click();
     assert.equal((await state()).placement.revision, 0);
     assert.equal(posts.length, 0, 'Cancel does not send placement or traffic');
-    await key('MUN', '9').click(); await key('MUN', '3').click();
+    await key('SVM', '9').click(); await key('SVM', '3').click();
     assert.equal(posts.length, 0, 'Digits remain local');
     await open();
-    await select('cda', 'west').selectOption('right');
-    await select('mun', 'west').selectOption('left');
+    await select('knb', 'west').selectOption('right');
+    await select('svm', 'west').selectOption('left');
     await screenshot('desktop');
     await save();
     await page.locator('#placement-dialog').waitFor({state: 'hidden'});
-    assert.match(await lcd('MUN').textContent(), /93___/, 'Placement preserves unsent digits');
+    assert.match(await lcd('SVM').textContent(), /93___/, 'Placement preserves unsent digits');
     assert.equal(posts.filter(p => p.endsWith('/api/key')).length, 0);
-    await press('MUN', '#'); await press('MUN', '#');
-    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('93?MUN'));
+    await press('SVM', '#'); await press('SVM', '#');
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-KNB"] .lcd').textContent.includes('93?SVM'));
     await noneDisabled();
     const before = await state();
     const beforeTops = await page.locator('.tmbox-case').evaluateAll(elements => elements.map(e => e.getBoundingClientRect().top));
     assert.ok(Math.max(...beforeTops) - Math.min(...beforeTops) < 1, 'Cases remain aligned');
-    await open(); await select('cda', 'west').selectOption('default'); await save();
+    await open(); await select('knb', 'west').selectOption('default'); await save();
     await page.locator('#placement-dialog').waitFor({state: 'hidden'});
-    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('MUN?93'));
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-KNB"] .lcd').textContent.includes('SVM?93'));
     assert.deepEqual((await state()).audit, before.audit, 'Placement never mutates traffic');
     assert.deepEqual(await presentation(), realBefore, 'Lab never changes real Server placement');
-    await press('CDA', '#'); await press('MUN', '#'); await press('CDA', '#');
-    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-MUN"] .lcd').textContent.includes('MOTTAGET'));
+    await press('KNB', '#'); await press('SVM', '#'); await press('KNB', '#');
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-SVM"] .lcd').textContent.includes('MOTTAGET'));
     await page.locator('#reset-all').click();
     await page.getByText('Alla enheter är nollställda. Inga pågående tågrörelser.', {exact: true}).waitFor();
-    const mun = (await state()).placement.stations.find(s => s.station_id === 'mun');
-    assert.equal(mun.connections[0].side, 'left', 'Clear traffic keeps test placement');
+    const svm = (await state()).placement.stations.find(s => s.station_id === 'svm');
+    assert.equal(svm.connections[0].side, 'left', 'Clear traffic keeps test placement');
     await page.setViewportSize({width: 390, height: 844});
     for (const width of [390, 320]) {
       await page.setViewportSize({width, height: 844});
@@ -114,7 +114,7 @@ const root = path.resolve(__dirname, '../..');
     assert.ok(await page.locator('#placement-dialog').evaluate(d => d.getBoundingClientRect().left >= 0 && d.getBoundingClientRect().right <= innerWidth && d.scrollWidth <= d.clientWidth + 1));
     await page.locator('#placement-default').click();
     await page.locator('#placement-close').click();
-    assert.equal((await state()).placement.stations.find(s => s.station_id === 'mun').connections[0].side, 'left', 'Reset default remains a draft until saved');
+    assert.equal((await state()).placement.stations.find(s => s.station_id === 'svm').connections[0].side, 'left', 'Reset default remains a draft until saved');
     await open();
     // A reset from a second tab invalidates the open draft, not the real meet.
     const response = await page.request.post(labURL + 'api/reset-devices', {headers: {Origin: urls.eu}, data: {}});
@@ -124,71 +124,71 @@ const root = path.resolve(__dirname, '../..');
     await page.keyboard.press('Escape');
     await open(); await page.locator('#placement-default').click(); await save();
     await page.locator('#placement-dialog').waitFor({state: 'hidden'});
-    assert.equal((await state()).placement.stations.find(s => s.station_id === 'mun').connections[0].side, 'right');
+    assert.equal((await state()).placement.stations.find(s => s.station_id === 'svm').connections[0].side, 'right');
 
     // Two approvals must remain accessible from overview, without typing again.
     await page.setViewportSize({width: 1600, height: 1100});
-    for (const [number, receiver] of [['17', 'MUN'], ['39', 'VA']]) {
-      for (const digit of number) await key('CDA', digit).click();
-      await press('CDA', '#'); await press('CDA', '#');
+    for (const [number, receiver] of [['17', 'SVM'], ['39', 'DY']]) {
+      for (const digit of number) await key('KNB', digit).click();
+      await press('KNB', '#'); await press('KNB', '#');
       await page.waitForFunction(s => document.querySelector(`[data-device="DEMO-${s}"] .lcd`).textContent.includes('?'), receiver);
       await press(receiver, '#');
     }
-    await press('CDA', 'B');
-    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('B:Akt2'));
-    assert.match(await lcd('CDA').textContent(), /MUN<17\s+39>VA/);
+    await press('KNB', 'B');
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-KNB"] .lcd').textContent.includes('B:Akt2'));
+    assert.match(await lcd('KNB').textContent(), /SVM<17\s+39>DY/);
     await screenshot('active-overview');
     const activeAudit = (await state()).audit;
-    await press('CDA', 'B');
-    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('1/2'));
-    assert.match(await lcd('CDA').textContent(), /MUN<17/);
+    await press('KNB', 'B');
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-KNB"] .lcd').textContent.includes('1/2'));
+    assert.match(await lcd('KNB').textContent(), /SVM<17/);
     // Browsing answers as soon as the server has: D straight after D, with no
     // half-second wait after each screen change. This was most of what felt slow.
     await settle();
     const browsing = posts.length;
-    await key('CDA', 'D').click();
-    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('2/2'));
-    await key('CDA', 'D').click();
-    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('1/2'));
-    await key('CDA', 'D').click();
-    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('2/2'));
+    await key('KNB', 'D').click();
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-KNB"] .lcd').textContent.includes('2/2'));
+    await key('KNB', 'D').click();
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-KNB"] .lcd').textContent.includes('1/2'));
+    await key('KNB', 'D').click();
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-KNB"] .lcd').textContent.includes('2/2'));
     assert.equal(posts.length, browsing + 3, 'Every browse press was sent');
-    assert.match(await lcd('CDA').textContent(), /39>VA/);
-    await press('CDA', 'C');
+    assert.match(await lcd('KNB').textContent(), /39>DY/);
+    await press('KNB', 'C');
     assert.deepEqual((await state()).audit, activeAudit, 'B/C/D does not alter traffic');
     await screenshot('active-selected');
     await page.setViewportSize({width: 390, height: 844});
-    await key('CDA', 'B').scrollIntoViewIfNeeded();
+    await key('KNB', 'B').scrollIntoViewIfNeeded();
     await screenshot('active-mobile');
     // A departure offered on a new screen waits; pressed at once it does nothing.
     // Pressed from inside the page the moment the new screen is drawn, so the
     // check does not depend on how fast the test itself gets there.
     await settle();
-    await key('CDA', 'D').click();
+    await key('KNB', 'D').click();
     const guardedPosts = posts.length;
     await page.evaluate(() => new Promise(resolve => {
-      const box = document.querySelector('[data-device="DEMO-CDA"]');
+      const box = document.querySelector('[data-device="DEMO-KNB"]');
       const check = () => box.querySelector('.lcd').textContent.includes('2/2')
         ? (box.querySelector('[data-key="#"]').click(), resolve()) : requestAnimationFrame(check);
       check();
     }));
     await page.waitForTimeout(150);
     assert.equal(posts.length, guardedPosts, 'An acting key right after a screen change is not sent');
-    await press('CDA', 'C');
-    await press('CDA', '#');
-    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('MUN◀17'));
+    await press('KNB', 'C');
+    await press('KNB', '#');
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-KNB"] .lcd').textContent.includes('SVM◀17'));
     // The departed train stays selected without '#'. Pressing it anyway, even
     // twice and after the guard, sends nothing - no automatic next departure.
     await settle();
-    const departed = posts.length, departedScreen = await lcd('CDA').textContent();
-    await key('CDA', '#').click(); await key('CDA', '#').click();
+    const departed = posts.length, departedScreen = await lcd('KNB').textContent();
+    await key('KNB', '#').click(); await key('KNB', '#').click();
     await page.waitForTimeout(300);
     assert.equal(posts.length, departed, 'No automatic next departure on doublepress');
-    assert.equal(await lcd('CDA').textContent(), departedScreen);
+    assert.equal(await lcd('KNB').textContent(), departedScreen);
     await noneDisabled();
-    await press('CDA', 'D');
-    await press('CDA', '#');
-    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-CDA"] .lcd').textContent.includes('39▶VA'));
+    await press('KNB', 'D');
+    await press('KNB', '#');
+    await page.waitForFunction(() => document.querySelector('[data-device="DEMO-KNB"] .lcd').textContent.includes('39▶DY'));
 
     // A person flicking through trains as fast as anyone does - seven presses
     // a second - is never refused. The old limit (30 per 10 s) refused the 31st.
@@ -198,7 +198,7 @@ const root = path.resolve(__dirname, '../..');
     page.on('response', onResponse);
     const flicked = posts.length;
     await page.evaluate(() => new Promise(resolve => {
-      const key = document.querySelector('[data-device="DEMO-CDA"] [data-key="D"]');
+      const key = document.querySelector('[data-device="DEMO-KNB"] [data-key="D"]');
       let count = 0;
       const timer = setInterval(() => { key.click(); if (++count === 42) { clearInterval(timer); resolve(); } }, 1000 / 7);
     }));

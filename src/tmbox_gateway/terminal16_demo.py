@@ -19,16 +19,16 @@ from .display_placement import default_side, station_connections, station_overri
 
 
 def demo_lab(mode="clearance", *, through=False):
-    """The test bench's meet. `through` adds train 55, VA -> CDA -> MUN, which
-    arrives at Charlottendal and leaves again with the same number (the flows
+    """The test bench's meet. `through` adds train 55, DY -> KNB -> SVM, which
+    arrives at Knastebo and leaves again with the same number (the flows
     page shows it; the bench's own timetable stays the four trains)."""
     stations = {
-        "mun": StationConfig("mun", "MUN", "Munkeröd"),
-        "cda": StationConfig("cda", "CDA", "Charlottendal"),
-        "va": StationConfig("va", "VA", "Vagnsta"),
+        "svm": StationConfig("svm", "SVM", "Sölvmora"),
+        "knb": StationConfig("knb", "KNB", "Knastebo"),
+        "dy": StationConfig("dy", "DY", "Dimmeby"),
     }
-    connections = {"west": ConnectionConfig("west", "mun", "cda"),
-                   "east": ConnectionConfig("east", "cda", "va")}
+    connections = {"west": ConnectionConfig("west", "svm", "knb"),
+                   "east": ConnectionConfig("east", "knb", "dy")}
     tracks = {f"{station}-{n}": TrackConfig(f"{station}-{n}", str(n), station, sort_order=n)
               for station in stations for n in (1, 2)}
     engine = TrafficEngine(SessionConfig("isolated-16x2", "TMBox 16×2 – separat test",
@@ -44,10 +44,10 @@ def demo_lab(mode="clearance", *, through=False):
                                 "track_type": "single"}
                                for c in connections.values()], "services": [], "trains": []}
     for number, origin, destination, departure, arrival in (
-            ("17", "cda", "mun", "12:35", "12:42"),
-            ("39", "cda", "va", "12:38", "12:46"),
-            ("93", "mun", "cda", "12:32", "12:40"),
-            ("94", "va", "cda", "12:44", "12:52")):
+            ("17", "knb", "svm", "12:35", "12:42"),
+            ("39", "knb", "dy", "12:38", "12:46"),
+            ("93", "svm", "knb", "12:32", "12:40"),
+            ("94", "dy", "knb", "12:44", "12:52")):
         stops = []
         for order, station in enumerate((origin, destination)):
             stop = {"station_id": station, "stop_order": order,
@@ -57,14 +57,14 @@ def demo_lab(mode="clearance", *, through=False):
                                       "train_number": number, "days": "Dagl", "track_id": f"{station}-1"})
         package["services"].append({"id": number, "train_number": number, "days": "Dagl", "stops": stops})
     if through:
-        stops = [{"station_id": "va", "stop_order": 0, "arrival_time": None, "departure_time": "12:36"},
-                 {"station_id": "cda", "stop_order": 1, "arrival_time": "12:41", "departure_time": "12:43"},
-                 {"station_id": "mun", "stop_order": 2, "arrival_time": "12:50", "departure_time": None}]
+        stops = [{"station_id": "dy", "stop_order": 0, "arrival_time": None, "departure_time": "12:36"},
+                 {"station_id": "knb", "stop_order": 1, "arrival_time": "12:41", "departure_time": "12:43"},
+                 {"station_id": "svm", "stop_order": 2, "arrival_time": "12:50", "departure_time": None}]
         for stop in stops:
             package["trains"].append({**stop, "id": f"55-{stop['station_id']}", "service_id": "55",
                                       "train_number": "55", "days": "Dagl", "track_id": f"{stop['station_id']}-2"})
         package["services"].append({"id": "55", "train_number": "55", "days": "Dagl", "stops": stops})
-    return Terminal16Lab(engine, package, {"DEMO-MUN": "mun", "DEMO-CDA": "cda", "DEMO-VA": "va"})
+    return Terminal16Lab(engine, package, {"DEMO-SVM": "svm", "DEMO-KNB": "knb", "DEMO-DY": "dy"})
 
 
 class LabState:

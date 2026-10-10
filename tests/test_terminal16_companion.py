@@ -36,67 +36,67 @@ class CompanionLabTests(unittest.TestCase):
         return {(row["train_number"], row["kind"]): row["state"] for row in self.lab.station_timetable(device)["rows"]}
 
     def test_rows_are_the_stations_trains_in_timetable_order(self):
-        table = self.lab.station_timetable("DEMO-CDA")
-        self.assertEqual(table["station"], {"code": "CDA", "name": "Charlottendal"})
+        table = self.lab.station_timetable("DEMO-KNB")
+        self.assertEqual(table["station"], {"code": "KNB", "name": "Knastebo"})
         self.assertEqual((table["side"], table["clock"]), ("both", "12:34"))
         self.assertEqual([(r["train_number"], r["kind"], r["time"], r["station"]["code"]) for r in table["rows"]],
-                         [("17", "departure", "12:35", "MUN"), ("39", "departure", "12:38", "VA"),
-                          ("93", "arrival", "12:40", "MUN"), ("94", "arrival", "12:52", "VA")])
+                         [("17", "departure", "12:35", "SVM"), ("39", "departure", "12:38", "DY"),
+                          ("93", "arrival", "12:40", "SVM"), ("94", "arrival", "12:52", "DY")])
         self.assertEqual({r["state"] for r in table["rows"]}, {"planned"})
         self.assertEqual({r["selected"] for r in table["rows"]}, {False})
         self.assertEqual(self.lab.engine.audit, [], "reading the timetable changes nothing")
 
     def test_state_follows_the_train_from_request_to_arrival_at_both_ends(self):
-        self.send("DEMO-CDA", "#", train_number="39")  # 39# begär direkt (Server 2.1)
-        self.assertEqual(self.states("DEMO-CDA")[("39", "departure")], "requested")
-        self.assertEqual(self.states("DEMO-VA")[("39", "arrival")], "requested")
-        selected = [r["train_number"] for r in self.lab.station_timetable("DEMO-CDA")["rows"] if r["selected"]]
+        self.send("DEMO-KNB", "#", train_number="39")  # 39# begär direkt (Server 2.1)
+        self.assertEqual(self.states("DEMO-KNB")[("39", "departure")], "requested")
+        self.assertEqual(self.states("DEMO-DY")[("39", "arrival")], "requested")
+        selected = [r["train_number"] for r in self.lab.station_timetable("DEMO-KNB")["rows"] if r["selected"]]
         self.assertEqual(selected, ["39"])
-        self.send("DEMO-VA", "#", train_number="39")
-        self.send("DEMO-VA", "#")
-        self.assertEqual(self.states("DEMO-CDA")[("39", "departure")], "cleared")
-        self.send("DEMO-CDA", "#")
-        self.assertEqual(self.states("DEMO-VA")[("39", "arrival")], "departed")
-        self.send("DEMO-VA", "#")
-        self.assertEqual(self.states("DEMO-CDA")[("39", "departure")], "arrived")
-        self.assertEqual(self.states("DEMO-VA")[("39", "arrival")], "arrived")
-        self.assertEqual(self.states("DEMO-CDA")[("17", "departure")], "planned")
+        self.send("DEMO-DY", "#", train_number="39")
+        self.send("DEMO-DY", "#")
+        self.assertEqual(self.states("DEMO-KNB")[("39", "departure")], "cleared")
+        self.send("DEMO-KNB", "#")
+        self.assertEqual(self.states("DEMO-DY")[("39", "arrival")], "departed")
+        self.send("DEMO-DY", "#")
+        self.assertEqual(self.states("DEMO-KNB")[("39", "departure")], "arrived")
+        self.assertEqual(self.states("DEMO-DY")[("39", "arrival")], "arrived")
+        self.assertEqual(self.states("DEMO-KNB")[("17", "departure")], "planned")
 
     def test_a_box_on_one_side_sees_only_that_sides_trains(self):
-        self.lab.terminals["DEMO-CDA"].side = "left"
-        rows = self.lab.station_timetable("DEMO-CDA")["rows"]
+        self.lab.terminals["DEMO-KNB"].side = "left"
+        rows = self.lab.station_timetable("DEMO-KNB")["rows"]
         self.assertEqual([r["train_number"] for r in rows], ["17", "93"])
         self.assertEqual({r["side"] for r in rows}, {"left"})
 
     def test_every_key_on_every_screen_has_a_short_word(self):
         self.seen.extend(self.lab.frames())
-        self.send("DEMO-CDA", "D")
-        self.send("DEMO-CDA", "B")
-        self.send("DEMO-CDA", "*")
-        self.send("DEMO-CDA", "#", train_number="39")
-        self.send("DEMO-CDA", "*")
-        self.send("DEMO-CDA", "*")
-        self.send("DEMO-VA", "#", train_number="39")
-        self.send("DEMO-VA", "#")
-        self.send("DEMO-CDA", "#")
-        self.send("DEMO-VA", "B")
-        self.send("DEMO-VA", "D")
-        self.send("DEMO-VA", "#")
+        self.send("DEMO-KNB", "D")
+        self.send("DEMO-KNB", "B")
+        self.send("DEMO-KNB", "*")
+        self.send("DEMO-KNB", "#", train_number="39")
+        self.send("DEMO-KNB", "*")
+        self.send("DEMO-KNB", "*")
+        self.send("DEMO-DY", "#", train_number="39")
+        self.send("DEMO-DY", "#")
+        self.send("DEMO-KNB", "#")
+        self.send("DEMO-DY", "B")
+        self.send("DEMO-DY", "D")
+        self.send("DEMO-DY", "#")
         for frame in self.seen:
             for key, info in frame["keys"].items():
                 self.assertTrue(info["short"], (frame["lines"], key, info["label"]))
             self.assertEqual(frame["entry"]["short"], {"#": "SÖK", "*": "AVBRYT", "B": "SUDDA", "A": "KÖ"})
 
     def test_queue_and_active_words_carry_their_counts(self):
-        self.assertEqual(self.lab.frame("DEMO-VA")["keys"]["A"]["short"], "KÖ")
-        self.send("DEMO-CDA", "#", train_number="39")
-        self.assertEqual(self.lab.frame("DEMO-VA")["keys"]["A"]["short"], "KÖ 1")
-        self.send("DEMO-CDA", "B")  # back to the overview, where B lists the active trains
-        self.assertEqual(self.lab.frame("DEMO-CDA")["keys"]["B"]["short"], "AKTIVA 1")
+        self.assertEqual(self.lab.frame("DEMO-DY")["keys"]["A"]["short"], "KÖ")
+        self.send("DEMO-KNB", "#", train_number="39")
+        self.assertEqual(self.lab.frame("DEMO-DY")["keys"]["A"]["short"], "KÖ 1")
+        self.send("DEMO-KNB", "B")  # back to the overview, where B lists the active trains
+        self.assertEqual(self.lab.frame("DEMO-KNB")["keys"]["B"]["short"], "AKTIVA 1")
 
     def test_short_words_follow_the_boxs_language(self):
-        self.lab.terminals["DEMO-CDA"].language = "en"
-        frame = self.lab.frame("DEMO-CDA")
+        self.lab.terminals["DEMO-KNB"].language = "en"
+        frame = self.lab.frame("DEMO-KNB")
         self.assertEqual(frame["keys"]["A"]["short"], "QUEUE")
         self.assertEqual(frame["entry"]["short"]["B"], "ERASE")
 

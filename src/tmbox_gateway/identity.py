@@ -101,7 +101,7 @@ class DisplayCapability:
 
 
 #: Which lines a box at a station handles. Several boxes can share a
-#: station: one for traffic to the left and one to the right, as at Vagnsta.
+#: station: one for traffic to the left and one to the right, as at Dimmeby in the test bench.
 #: Left and right mean the same as on the station's TMBox placement.
 STATION_SIDES = ("both", "left", "right")
 

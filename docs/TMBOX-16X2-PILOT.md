@@ -15,19 +15,19 @@ ofullständiga V2-övergångarna. Presentationen är en ny, serverägd adapter.
 
 ## Testdata och handgrepp
 
-Tre virtuella boxar är förhandstilldelade teststationer: Munkeröd, Charlottendal
-och Vagnsta. Detta är exempeldata, inte den importerade träffens tidtabell.
+Tre virtuella boxar är förhandstilldelade teststationer: Sölvmora, Knastebo
+och Dimmeby. Detta är exempeldata, inte den importerade träffens tidtabell.
 
 Under varje testbox visas en skrivskyddad tidtabell med tydliga tågnummer,
 planerad ankomst/avgång och från-/tillstation. Den byggs av servern från samma
 testdata som terminalen och sorteras efter stationens tider. Hela tidtabellen
 ligger kvar även när tåg har körts; listan är en referens, inte trafikknappar.
 
-1. Charlottendal: `39 #` väljer tåget, sedan ett separat `#` för begäran till Vagnsta.
-2. Vagnsta: förfrågan öppnas automatiskt i ledig översikt. `#` ger klartecken utan tågnummer. `*` öppnar ”Neka?” och `#` bekräftar. `A` hittar alltid tillbaka till förfrågningarna.
-3. Charlottendal: `#` rapporterar faktisk avgång.
-4. Vagnsta: `#` tar emot på planerat spår 1. `B`, `D`, `#` tar emot på spår 2.
-5. Charlottendal får `39 MOTTAGET`, mottagarens kod och fortsatt klocka.
+1. Knastebo: `39 #` väljer tåget, sedan ett separat `#` för begäran till Dimmeby.
+2. Dimmeby: förfrågan öppnas automatiskt i ledig översikt. `#` ger klartecken utan tågnummer. `*` öppnar ”Neka?” och `#` bekräftar. `A` hittar alltid tillbaka till förfrågningarna.
+3. Knastebo: `#` rapporterar faktisk avgång.
+4. Dimmeby: `#` tar emot på planerat spår 1. `B`, `D`, `#` tar emot på spår 2.
+5. Knastebo får `39 MOTTAGET`, mottagarens kod och fortsatt klocka.
    Beskedet försvinner automatiskt efter fem verkliga sekunder, även med
    stoppad träffklocka. Det avslutade tågvalet rensas och kommer inte tillbaka
    på den aktiva displayen. Referenstidtabellen ligger kvar.
@@ -39,8 +39,8 @@ tills boxen återgår till översikten. Flera besked visas i turordning. `#` ell
 Utgången styrs av servern; gamla knappkommandon kan inte få ny betydelse när
 beskedet försvinner. Lokal sifferinmatning bevaras.
 
-Tåg 17 går västerut från Charlottendal till Munkeröd. Tåg 93 går från
-Munkeröd till Charlottendal. Tåg 94 går från Vagnsta till Charlottendal;
+Tåg 17 går västerut från Knastebo till Sölvmora. Tåg 93 går från
+Sölvmora till Knastebo. Tåg 94 går från Dimmeby till Knastebo;
 begär 93 och 94 från avsändarna för att prova två samtidiga förfrågningar.
 Siffror börjar direkt skriva ett nytt tågnummer,
 även från en detaljvy. `#` söker hela numret, utan att samtidigt ändra trafiken.

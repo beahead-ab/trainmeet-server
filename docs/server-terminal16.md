@@ -64,14 +64,14 @@ Från översikten öppnar **B aktiva tåg**. C/D växlar direkt mellan deras
 förfrågningskön för obesvarade inkommande begäranden. Exempel med två klartecken:
 
 ```text
-MUN<17     39>VA
+SVM<17     39>DY
 B:Akt2 C/D 12:35
 ```
 
 Efter B:
 
 ```text
-MUN<17       1/2
+SVM<17       1/2
 #Avg C/D   12:35
 ```
 
@@ -111,7 +111,7 @@ på boxar med Båda sidor. Båda sidor ger samma bilder som före 1.18.0.
 
 Byter man sida startar boxen om sin vy: ett tryck avsett för den gamla sidan
 gör ingenting. Klienter visar sidan efter stationen när den inte är Båda,
-till exempel `VA · Vagnsta · vänster`. Ingen ny firmware behövs.
+till exempel `DY · Dimmeby · vänster`. Ingen ny firmware behövs.
 
 ### Testa placering utan att ändra träffen
 

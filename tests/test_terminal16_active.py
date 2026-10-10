@@ -19,154 +19,154 @@ class ActiveTrainTests(unittest.TestCase):
 
     def ready(self, number, receiver):
         self.lookup(number)                                # asks at once (2.1.0)
-        if self.lab.engine.connections[self.lab.legs[number + "-cda"]["connection_id"]].state == State.REQUESTED:
+        if self.lab.engine.connections[self.lab.legs[number + "-knb"]["connection_id"]].state == State.REQUESTED:
             self.accept(receiver, "#")
 
     def two_ready(self):
-        self.ready("17", "DEMO-MUN")
-        self.ready("39", "DEMO-VA")
-        self.accept("DEMO-CDA", "B")
+        self.ready("17", "DEMO-SVM")
+        self.ready("39", "DEMO-DY")
+        self.accept("DEMO-KNB", "B")
 
     def test_b_opens_first_ready_train_and_cd_switches_without_extra_selection(self):
         self.two_ready()
-        frame = self.lab.frame("DEMO-CDA")
-        self.assertEqual(frame["lines"], ["MUN<17     39>VA", "B:Akt2 C/D 12:34"])
+        frame = self.lab.frame("DEMO-KNB")
+        self.assertEqual(frame["lines"], ["SVM<17     39>DY", "B:Akt2 C/D 12:34"])
         self.assertEqual(frame["keys"]["B"]["label"], "Aktiva tåg (2)")
         before = deepcopy(self.lab.engine.audit)
         for key, number, position in (("B", "17", 1), ("D", "39", 2), ("D", "17", 1), ("C", "39", 2)):
-            frame = self.accept("DEMO-CDA", key)["frame"]
-            self.assertEqual(frame["active"], {"count": 2, "position": position, "movement_id": number + "-cda"})
+            frame = self.accept("DEMO-KNB", key)["frame"]
+            self.assertEqual(frame["active"], {"count": 2, "position": position, "movement_id": number + "-knb"})
             self.assertIn(f"{position}/2", frame["lines"][0])
             self.assertEqual(frame["keys"]["#"]["label"], "Rapportera avgång")
         self.assertEqual(before, self.lab.engine.audit)
 
     def test_departure_pins_identity_and_duplicate_or_fresh_hash_cannot_send_next(self):
         self.two_ready()
-        self.accept("DEMO-CDA", "B")
-        body = {"command_id": uuid4().hex, "view_token": self.lab.frame("DEMO-CDA")["view_token"], "key": "#"}
-        result = self.lab.command("DEMO-CDA", body)
+        self.accept("DEMO-KNB", "B")
+        body = {"command_id": uuid4().hex, "view_token": self.lab.frame("DEMO-KNB")["view_token"], "key": "#"}
+        result = self.lab.command("DEMO-KNB", body)
         self.assertEqual(result["status"], "accepted")
         self.assertNotIn("#", result["frame"]["keys"])
-        self.assertEqual(result["frame"]["active"]["movement_id"], "17-cda")
+        self.assertEqual(result["frame"]["active"]["movement_id"], "17-knb")
         before = deepcopy(self.lab.engine.audit)
-        self.assertEqual(self.lab.command("DEMO-CDA", body)["status"], "accepted")
-        self.assertEqual(self.lab.command("DEMO-CDA", {**body, "command_id": uuid4().hex})["status"], "rejected")
-        self.assertEqual(self.send("DEMO-CDA", "#")["status"], "rejected")
+        self.assertEqual(self.lab.command("DEMO-KNB", body)["status"], "accepted")
+        self.assertEqual(self.lab.command("DEMO-KNB", {**body, "command_id": uuid4().hex})["status"], "rejected")
+        self.assertEqual(self.send("DEMO-KNB", "#")["status"], "rejected")
         self.assertEqual(before, self.lab.engine.audit)
         self.assertEqual(self.lab.engine.connections["east"].state, State.RESERVED)
-        self.assertEqual(self.accept("DEMO-CDA", "D")["frame"]["active"]["movement_id"], "39-cda")
-        self.accept("DEMO-CDA", "#")
+        self.assertEqual(self.accept("DEMO-KNB", "D")["frame"]["active"]["movement_id"], "39-knb")
+        self.accept("DEMO-KNB", "#")
         self.assertEqual(self.lab.engine.connections["east"].state, State.OCCUPIED)
 
     def test_future_trains_and_unanswered_requests_are_not_active(self):
-        self.assertEqual(self.accept("DEMO-CDA", "B")["frame"]["active"]["count"], 0)
-        self.assertNotIn("#", self.lab.frame("DEMO-CDA")["keys"])
-        self.lookup("93", "DEMO-MUN")
-        frame = self.lab.frame("DEMO-CDA")
+        self.assertEqual(self.accept("DEMO-KNB", "B")["frame"]["active"]["count"], 0)
+        self.assertNotIn("#", self.lab.frame("DEMO-KNB")["keys"])
+        self.lookup("93", "DEMO-SVM")
+        frame = self.lab.frame("DEMO-KNB")
         self.assertEqual(frame["requests"]["count"], 1)
         self.assertEqual(frame["active"]["count"], 0)
-        self.accept("DEMO-CDA", "A"); self.accept("DEMO-CDA", "#")
-        self.accept("DEMO-CDA", "*"); self.accept("DEMO-CDA", "B")
-        frame = self.lab.frame("DEMO-CDA")
-        self.assertEqual(frame["active"]["movement_id"], "93-mun")
+        self.accept("DEMO-KNB", "A"); self.accept("DEMO-KNB", "#")
+        self.accept("DEMO-KNB", "*"); self.accept("DEMO-KNB", "B")
+        frame = self.lab.frame("DEMO-KNB")
+        self.assertEqual(frame["active"]["movement_id"], "93-svm")
         self.assertNotIn("#", frame["keys"], "Approval is not arrival")
-        self.accept("DEMO-MUN", "#")
-        self.assertEqual(self.lab.frame("DEMO-CDA")["keys"]["#"]["label"], "Rapportera ankomst")
+        self.accept("DEMO-SVM", "#")
+        self.assertEqual(self.lab.frame("DEMO-KNB")["keys"]["#"]["label"], "Rapportera ankomst")
 
     def test_clear_departure_is_prioritized_over_waiting_outbound(self):
         self.lookup("17")
-        self.ready("39", "DEMO-VA")
-        self.accept("DEMO-CDA", "B")
-        self.assertEqual(self.accept("DEMO-CDA", "B")["frame"]["active"]["movement_id"], "39-cda")
-        frame = self.accept("DEMO-CDA", "D")["frame"]
-        self.assertEqual(frame["active"]["movement_id"], "17-cda")
+        self.ready("39", "DEMO-DY")
+        self.accept("DEMO-KNB", "B")
+        self.assertEqual(self.accept("DEMO-KNB", "B")["frame"]["active"]["movement_id"], "39-knb")
+        frame = self.accept("DEMO-KNB", "D")["frame"]
+        self.assertEqual(frame["active"]["movement_id"], "17-knb")
         self.assertNotIn("#", frame["keys"])
         self.assertIn("*", frame["keys"])
 
     def test_cd_from_overview_opens_active_train_but_hash_keeps_timetable(self):
         self.two_ready()
-        self.assertEqual(self.accept("DEMO-CDA", "D")["frame"]["active"]["movement_id"], "17-cda")
-        self.accept("DEMO-CDA", "B")
-        self.assertEqual(self.accept("DEMO-CDA", "C")["frame"]["active"]["movement_id"], "39-cda")
-        self.accept("DEMO-CDA", "B")
-        frame = self.accept("DEMO-CDA", "#")["frame"]
+        self.assertEqual(self.accept("DEMO-KNB", "D")["frame"]["active"]["movement_id"], "17-knb")
+        self.accept("DEMO-KNB", "B")
+        self.assertEqual(self.accept("DEMO-KNB", "C")["frame"]["active"]["movement_id"], "39-knb")
+        self.accept("DEMO-KNB", "B")
+        frame = self.accept("DEMO-KNB", "#")["frame"]
         self.assertEqual(frame["keys"]["#"]["label"], "Välj tåg")
         self.assertIsNotNone(frame["upcoming"])
 
     def test_same_side_connections_are_all_reachable(self):
-        self.lab.display_sides["cda"]["west"] = "right"
+        self.lab.display_sides["knb"]["west"] = "right"
         self.two_ready()
-        frame = self.lab.frame("DEMO-CDA")
+        frame = self.lab.frame("DEMO-KNB")
         self.assertEqual(frame["active"]["count"], 2)
         self.assertIn("B:Akt2", frame["lines"][1])
-        self.assertIn("17>MUN", self.accept("DEMO-CDA", "B")["frame"]["lines"][0])
-        self.assertIn("39>VA", self.accept("DEMO-CDA", "D")["frame"]["lines"][0])
+        self.assertIn("17>SVM", self.accept("DEMO-KNB", "B")["frame"]["lines"][0])
+        self.assertIn("39>DY", self.accept("DEMO-KNB", "D")["frame"]["lines"][0])
 
     def test_new_request_does_not_replace_active_selection_and_a_is_reachable(self):
-        self.ready("39", "DEMO-VA")
-        self.accept("DEMO-CDA", "B"); self.accept("DEMO-CDA", "B")
-        self.lookup("93", "DEMO-MUN")
-        frame = self.lab.frame("DEMO-CDA")
-        self.assertEqual(frame["active"]["movement_id"], "39-cda")
+        self.ready("39", "DEMO-DY")
+        self.accept("DEMO-KNB", "B"); self.accept("DEMO-KNB", "B")
+        self.lookup("93", "DEMO-SVM")
+        frame = self.lab.frame("DEMO-KNB")
+        self.assertEqual(frame["active"]["movement_id"], "39-knb")
         self.assertEqual(frame["requests"]["count"], 1)
-        self.assertIn("93", self.accept("DEMO-CDA", "A")["frame"]["lines"][0])
-        self.accept("DEMO-CDA", "B")
-        self.assertIn("A:K1 B:Akt", self.lab.frame("DEMO-CDA")["lines"][1])
-        self.assertEqual(self.accept("DEMO-CDA", "B")["frame"]["active"]["movement_id"], "39-cda")
+        self.assertIn("93", self.accept("DEMO-KNB", "A")["frame"]["lines"][0])
+        self.accept("DEMO-KNB", "B")
+        self.assertIn("A:K1 B:Akt", self.lab.frame("DEMO-KNB")["lines"][1])
+        self.assertEqual(self.accept("DEMO-KNB", "B")["frame"]["active"]["movement_id"], "39-knb")
 
     def test_withdrawal_can_be_aborted_and_does_not_change_other_train(self):
-        self.two_ready(); self.accept("DEMO-CDA", "B")
-        self.accept("DEMO-CDA", "*"); self.accept("DEMO-CDA", "*")
-        self.assertEqual(self.lab.terminals["DEMO-CDA"].screen, "active")
-        self.accept("DEMO-CDA", "*"); self.accept("DEMO-CDA", "#")
+        self.two_ready(); self.accept("DEMO-KNB", "B")
+        self.accept("DEMO-KNB", "*"); self.accept("DEMO-KNB", "*")
+        self.assertEqual(self.lab.terminals["DEMO-KNB"].screen, "active")
+        self.accept("DEMO-KNB", "*"); self.accept("DEMO-KNB", "#")
         self.assertEqual(self.lab.engine.connections["west"].state, State.FREE)
         self.assertEqual(self.lab.engine.connections["east"].state, State.RESERVED)
 
     def test_other_box_withdrawal_never_retargets_hash(self):
-        self.two_ready(); self.accept("DEMO-CDA", "B")
-        self.lab.terminals["OTHER"] = deepcopy(self.lab.terminals["DEMO-CDA"])
-        old = self.lab.frame("DEMO-CDA")
+        self.two_ready(); self.accept("DEMO-KNB", "B")
+        self.lab.terminals["OTHER"] = deepcopy(self.lab.terminals["DEMO-KNB"])
+        old = self.lab.frame("DEMO-KNB")
         self.accept("OTHER", "*"); self.accept("OTHER", "#")
-        frame = self.lab.frame("DEMO-CDA")
+        frame = self.lab.frame("DEMO-KNB")
         self.assertIn("LÄGET ÄNDRAT", frame["lines"][0])
         self.assertNotIn("#", frame["keys"])
         self.assertEqual(frame["active"], {"count": 1, "position": 0, "movement_id": None})
-        self.assertEqual(self.lab.command("DEMO-CDA", {"key": "#", "command_id": uuid4().hex, "view_token": old["view_token"]})["status"], "rejected")
-        self.assertEqual(self.send("DEMO-CDA", "#")["status"], "rejected")
-        self.assertEqual(self.accept("DEMO-CDA", "D")["frame"]["active"]["movement_id"], "39-cda")
+        self.assertEqual(self.lab.command("DEMO-KNB", {"key": "#", "command_id": uuid4().hex, "view_token": old["view_token"]})["status"], "rejected")
+        self.assertEqual(self.send("DEMO-KNB", "#")["status"], "rejected")
+        self.assertEqual(self.accept("DEMO-KNB", "D")["frame"]["active"]["movement_id"], "39-knb")
 
     def test_direct_traffic_uses_same_active_navigation(self):
         self.lab = demo_lab("direct")
         self.lab.engine.set_clock_source(lambda: {"configured": True, "running": False, "time": "12:34"})
-        self.two_ready(); self.accept("DEMO-CDA", "B")
-        self.assertEqual(self.lab.frame("DEMO-CDA")["keys"]["#"]["label"], "Rapportera avgång")
-        self.assertEqual(self.lab.frame("DEMO-MUN")["requests"]["count"], 0)
+        self.two_ready(); self.accept("DEMO-KNB", "B")
+        self.assertEqual(self.lab.frame("DEMO-KNB")["keys"]["#"]["label"], "Rapportera avgång")
+        self.assertEqual(self.lab.frame("DEMO-SVM")["requests"]["count"], 0)
 
     def test_all_languages_and_long_identities_preserve_clock_and_counter(self):
         self.two_ready()
         for language, _ in LANGUAGES:
             with self.subTest(language=language):
-                self.lab.terminals["DEMO-CDA"].language = language
-                self.accept("DEMO-CDA", "B")
-                self.accept("DEMO-CDA", "D")
-                self.accept("DEMO-CDA", "B")
-        station = self.lab.engine.config.stations["mun"]
-        self.lab.engine.config.stations["mun"] = replace(station, code="MUNKERÖDSTAD")
+                self.lab.terminals["DEMO-KNB"].language = language
+                self.accept("DEMO-KNB", "B")
+                self.accept("DEMO-KNB", "D")
+                self.accept("DEMO-KNB", "B")
+        station = self.lab.engine.config.stations["svm"]
+        self.lab.engine.config.stations["svm"] = replace(station, code="MUNKERÖDSTAD")
         for language, _ in LANGUAGES:
-            self.lab.terminals["DEMO-CDA"].language = language
-            frame = self.accept("DEMO-CDA", "B")["frame"]
+            self.lab.terminals["DEMO-KNB"].language = language
+            frame = self.accept("DEMO-KNB", "B")["frame"]
             self.assertIn("MUNKERÖDSTAD<17", frame["lines"][0])
             self.assertIn("1/2", frame["lines"][1])
-            self.accept("DEMO-CDA", "B")
+            self.accept("DEMO-KNB", "B")
 
     def test_large_counts_never_overflow_clock(self):
         for language, _ in LANGUAGES:
-            self.lab.terminals["DEMO-CDA"].language = language
-            with patch.object(self.lab, "_active_trains", return_value=["39-cda"] * 123):
-                frame = self.lab.frame("DEMO-CDA")
+            self.lab.terminals["DEMO-KNB"].language = language
+            with patch.object(self.lab, "_active_trains", return_value=["39-knb"] * 123):
+                frame = self.lab.frame("DEMO-KNB")
                 self.assertEqual(len(frame["lines"][1]), 16)
                 self.assertTrue(frame["lines"][1].endswith("12:34"))
                 self.assertIn("99+", frame["lines"][1])
                 self.assertEqual(frame["active"]["count"], 123)
-                with patch.object(self.lab, "_requests", return_value=["93-mun"] * 101):
-                    self.assertEqual(len(self.lab.frame("DEMO-CDA")["lines"][1]), 16)
+                with patch.object(self.lab, "_requests", return_value=["93-svm"] * 101):
+                    self.assertEqual(len(self.lab.frame("DEMO-KNB")["lines"][1]), 16)
