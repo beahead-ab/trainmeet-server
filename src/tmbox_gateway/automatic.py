@@ -50,7 +50,11 @@ REQUEST_LEAD_SECONDS = 120
 DISTURBANCE_SETTING = "automatic_disturbance"
 DISTURBANCE_PROFILES = {"off": (0, 0), "normal": (25, 4), "disrupted": (65, 12)}
 DISTURBANCE_PLACES = ("both", "station", "line")
-DEFAULT_DISTURBANCE = {"profile": "off", "where": "both", "seed": "", "stabling": True, "stabling_minutes": 5}
+# late_stop_minutes: a late train stands this long at an automatic station
+# (or its planned stop if shorter) and is then cleared on, to catch up
+# (Casper, 2026-10-10: "står det några min och sen klareras vidare").
+DEFAULT_DISTURBANCE = {"profile": "off", "where": "both", "seed": "", "stabling": True, "stabling_minutes": 5,
+                       "late_stop_minutes": 2}
 # Automatiken tar över en bemannad station som varit utan kontakt så här många
 # minuter (väggtid). 0 betyder aldrig: stationen väntar på sin operatör.
 LOST_CONTACT_SETTING = "automatic_lost_contact_minutes"
@@ -109,6 +113,8 @@ class AutomaticStations:
             raise ValueError("Undanställningen är på eller av.")
         if type(settings["stabling_minutes"]) is not int or not 1 <= settings["stabling_minutes"] <= 60:
             raise ValueError("Undanställningen sker efter 1–60 spelminuter.")
+        if type(settings["late_stop_minutes"]) is not int or not 1 <= settings["late_stop_minutes"] <= 10:
+            raise ValueError("Ett försenat tåg står 1–10 spelminuter.")
         with self.store.command_lock:
             self.runtime._save_setting(DISTURBANCE_SETTING, json.dumps(settings, ensure_ascii=False, sort_keys=True))
         return settings
@@ -139,9 +145,53 @@ class AutomaticStations:
         return float((1 + value // 100 % limit) * 60) if value % 100 < chance else 0.0
 
     def stabled_movements(self, publication, day) -> set:
-        """Tåg som ställts undan vid en automatisk slutstation: de håller
-        inte längre sitt spår."""
+        """Tåg som ställts undan vid sin slutstation, av automatiken eller av
+        operatören där: de håller inte längre sitt spår."""
         return set(self._state(publication, day).get("stabled", {}))
+
+    def stabled_by(self, publication, day) -> dict:
+        """Who put each train away: the automation, or the box or TKL there."""
+        state = self._state(publication, day)
+        return {movement: state.get("stabled_by", {}).get(movement, ACTOR) for movement in state.get("stabled", {})}
+
+    def ends_here(self, publication, day) -> dict:
+        """Trains whose run ends at a station today, by their arrival there."""
+        rows = {str(row["id"]): row for row in publication.payload["trains"]}
+        return {leg["to_movement_id"]: leg for leg in self.legs(publication, day).values()
+                if not rows.get(leg["to_movement_id"], {}).get("departure_time")}
+
+    def stable(self, station, movement, *, by) -> None:
+        """The operator at a station reports that a train which ended there is
+        put away (Casper, 2026-10-10: "Ska det ställas åt sidan?"). Its track
+        is free again, as when the automation does it at its own stations.
+        Checked now, written after the caller's traffic transaction, as
+        hand_back."""
+        with self.store.command_lock:
+            publication, day = self._require_station(station)
+            leg = self.ends_here(publication, day).get(movement)
+            if leg is None or leg["to_station_id"] != station:
+                raise ValueError("Tåget slutar inte här.")
+            here = self.store.tkl_station_state(publication.publication_id, day, station)["movements"].get(movement, {})
+            if here.get("arrival") != "arrived":
+                raise ValueError("Tåget har inte kommit in.")
+        self.store.after_commit(lambda: self._put_away(station, movement, by))
+
+    def _put_away(self, station, movement, by) -> None:
+        with self.store.command_lock:
+            publication, day = self._context()
+            if publication is None:
+                return
+            state = self._state(publication, day)
+            if movement in state.setdefault("stabled", {}):
+                return
+            seconds = self._seconds(self.store.clock_status())
+            state["stabled"][movement] = seconds
+            state.setdefault("stabled_by", {})[movement] = by
+            self._save(state)
+            self.store.record_audit_event(correlation_id=f"automatic-{publication.publication_id}", source="station",
+                actor=str(by), action="train.stabled", outcome="accepted", station_id=station, movement_id=movement,
+                detail={"game_seconds": seconds, "description": "Ställt undan utanför trafikspåren"})
+        self._changed()
 
     def running(self) -> bool:
         return self.enabled()
@@ -302,6 +352,12 @@ class AutomaticStations:
             except Exception:
                 LOGGER.exception("Kunde inte meddela ändrat automatikläge")
 
+    def _takes_over_in(self, station, state):
+        minutes = self.lost_contact_minutes()
+        if not minutes or self.mode(station, state) != "disconnected":
+            return None
+        return max(0, math.ceil(minutes * 60 - (self.now() - max(self._last_heard(station), self.started))))
+
     def _take_lost_stations(self, state) -> list:
         """Stations whose operator has been out of contact longer than the
         administrator allows go to the automation. Called under the lock."""
@@ -420,17 +476,20 @@ class AutomaticStations:
             self._settings = self.disturbance()
             self._seed = self._settings["seed"] or f"{publication.publication_id}:{day}"
             self._ensure_events()
-            times = {(action, movement): when for action, movement, when in self.store._connection.execute(
-                "SELECT action, movement_id, seconds FROM automatic_events WHERE publication_id=? AND day=?",
-                (publication.publication_id, day))}
             def read():
                 live = {station: self.store.tkl_station_state(publication.publication_id, day, station)["movements"]
                         for station in publication.session_config().stations}
                 cases = {}
                 for case in self.service.open_cases(None):
                     cases.setdefault(case["movement_id"], case)
-                return live, cases
-            live, cases = read()
+                # The real times too: a train that came in during this
+                # round leaves after its stop from that time, not from the
+                # timetable's arrival (it used to leave at once when late).
+                times = {(action, movement): when for action, movement, when in self.store._connection.execute(
+                    "SELECT action, movement_id, seconds FROM automatic_events WHERE publication_id=? AND day=?",
+                    (publication.publication_id, day))}
+                return live, cases, times
+            live, cases, times = read()
             blocked = {}
             for key, leg in sorted(legs.items(), key=lambda item: (item[1]["departure"], item[0])):
                 self._acted = False
@@ -443,7 +502,7 @@ class AutomaticStations:
                     blocked[key] = error.reason
                 if self._acted:
                     # What one train did changes what the next one sees.
-                    live, cases = read()
+                    live, cases, times = read()
             self.blocked = blocked
             if self._settings["stabling"]:
                 self._stable(publication, day, legs, live, times, seconds)
@@ -469,13 +528,14 @@ class AutomaticStations:
             if seconds < arrived + wait:
                 continue
             stabled[movement] = seconds
+            state.setdefault("stabled_by", {})[movement] = ACTOR
             changed = True
             self.store.record_audit_event(correlation_id=f"automatic-{publication.publication_id}", source="automatic",
                 actor=ACTOR, action="automatic.stabled", outcome="accepted", station_id=station, movement_id=movement,
                 detail={"game_seconds": seconds, "description": "Rangerat till uppställning utanför trafikspåren"})
         if changed:
             self._save(state)
-            self.store.after_commit(self.service.notify_changed)
+            self.store.after_commit(self._changed)
 
     def _step(self, key, leg, legs, seconds, state, times, live, cases, publication, day):
         sender, receiver = leg["from_station_id"], leg["to_station_id"]
@@ -536,7 +596,14 @@ class AutomaticStations:
         if live[prior["to_station_id"]].get(prior["to_movement_id"], {}).get("arrival") != "arrived":
             return math.inf
         arrived = times.get(("train.arrived", prior["to_movement_id"]), prior["arrival"])
-        return max(leg["departure"], arrived + leg["dwell"]) + self._delay("station", key)
+        # On time the timetable's departure decides. Late, the train stands
+        # its short stop and goes: never longer than the planned stop.
+        stop = min(leg["dwell"], self._settings_value("late_stop_minutes") * 60)
+        return max(leg["departure"], arrived + stop) + self._delay("station", key)
+
+    def _settings_value(self, key):
+        settings = getattr(self, "_settings", None) or self.disturbance()
+        return settings.get(key, DEFAULT_DISTURBANCE[key])
 
     def _act(self, station, action, **body):
         self._acted = True
@@ -558,6 +625,10 @@ class AutomaticStations:
                 "id": station.id, "name": station.name, "code": station.code,
                 "mode": self.mode(station.id, state),
                 "released_by": state["automatic"].get(station.id, {}).get("by"),
+                # Seconds until the automation takes a station out of
+                # contact; None when it never will (the default) or the
+                # station is not out of contact.
+                "takes_over_in": self._takes_over_in(station.id, state),
                 "operator": state["stations"].get(station.id),
                 "available_operators": sorted(device for device, (assigned, seen) in self.seen.items()
                                               if assigned == station.id and self.now() - seen <= PRESENCE_SECONDS),

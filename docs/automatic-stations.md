@@ -14,7 +14,7 @@ När träffklockan går sköts varje station utan TMBox eller TKL i arbete
 |---|---|
 | Begär avgång | Tidigast 2 spelminuter före avgång. Tåget står på stationen: tågloppets första avgång, eller föregående del har ankommit. |
 | Ge klart | Det planerade mottagningsspåret är ledigt. |
-| Avgång | Klartecken eller direktklarering finns och avgångstiden (efter planerat uppehåll) har nåtts. |
+| Avgång | Klartecken eller direktklarering finns och avgångstiden (efter planerat uppehåll) har nåtts. Ett försenat tåg står 2 spelminuter efter sin verkliga ankomst, eller tidtabellens uppehåll om det är kortare, och går sedan. |
 | Ankomst | Faktisk avgång plus tidtabellens gångtid har passerat. |
 | Nekad begäran | Upprepas inte. En människa får ta ställning. |
 
@@ -31,10 +31,12 @@ När träffklockan går sköts varje station utan TMBox eller TKL i arbete
   En TMBox räknas via sin tilldelning, en TKL via stationen den läser eller
   manövrerar. Inget trafikpass behövs.
 - Tappar operatören kontakten i 45 verkliga sekunder står stationen som
-  **Kontakt saknas – väntar**. En annan box eller TKL på samma station som
+  **Kontakt saknas – väntar**, eller **Kontakt saknas – automatik om N min**
+  när admin valt att automatiken tar över (se nästa punkt). En annan box eller TKL på samma station som
   fortfarande hörs håller stationen bemannad.
-- **Tappad kontakt** under Inställningar → Obemannade stationer: av som förval,
-  då väntar stationen på sin operatör. Väljer admin 2, 5 eller 10 minuter tar
+- **Tappad kontakt** under Inställningar → Obemannade stationer: **Aldrig –
+  stationen väntar på sin operatör** som förval. En station går då aldrig till
+  automatiken av sig själv. Väljer admin 2, 5 eller 10 minuter tar
   automatiken över en station som varit utan kontakt så länge (verkliga
   minuter, räknat tidigast från serverns start). Kommer operatören tillbaka
   står stationen kvar hos automatiken tills den tas tillbaka.
@@ -66,6 +68,32 @@ automatiken även när en box eller TKL är ansluten, och tas tillbaka efteråt.
 - Varje byte skrivs i audit-loggen (`automatic.station_released`,
   `automatic.station_taken_back`) med vem som gjorde det.
 
+## Försenade tåg, störningar och tåg som slutar
+
+Under **Inställningar → Obemannade stationer → Störningar och undanställning**:
+
+- **Försenat tåg:** hur länge ett försenat tåg står vid en automatisk station
+  innan det klareras vidare, 1–10 spelminuter, förval 2. Tidtabellens uppehåll
+  gäller om det är kortare. Ett tåg i tid följer tidtabellen. Tiden räknas från
+  den verkliga ankomsten (före 4.2 kunde ett tåg som kom in sent gå samma
+  sekund, eftersom planerad ankomst användes).
+- **Störningar:** av som förval, normal eller många, vid stationen, på linjen
+  eller båda. Samma scenarionyckel ger samma störningar.
+- **Undanställning:** ett tåg som slutar vid en automatisk station ställs undan
+  efter 5 spelminuter (valbart), så att spåret blir fritt.
+
+Ett tåg som slutar på en **bemannad** station ställer operatören undan:
+
+| Var | Hur |
+|---|---|
+| TMBox, webb-TMBox, iPhone | Tåget står bland de aktiva tågen (`B`) som **101 SLUTAR HÄR**; `#` ställer undan det och boxen kvitterar **UNDANSTÄLLT**. |
+| TKL | `POST /v1/tkl/stable` (nedan). Tågkortet med "Slutar här – ställ undan" och knappen Ställ undan kommer i en egen TKL-version. |
+
+Ett undanställt tåg håller inte längre sitt spår, varken på en automatisk
+eller en bemannad station. Drifts tågpanel säger **Undanställt i LEK**,
+`/v1/display` har dem i `stabled` (rörelse-id), och audit-loggen har
+`train.stabled` med vem som gjorde det.
+
 ## Av och på
 
 Automatiken är på som standard och stängs av under **Inställningar → Obemannade
@@ -92,6 +120,13 @@ TKL: `POST /v1/tkl/automatic {meet_generation, station_id, automatic: true|false
 lämnar stationen eller tar tillbaka den. Bara terminalens egen station; svaret
 är `{automatic: {...}}` som i kontexten.
 
+TKL: `POST /v1/tkl/stable {meet_generation, station_id, movement_id}` ställer
+undan ett tåg som slutat på terminalens station och har kommit in (annars
+`409 stabling_rejected` med skälet). Medan automatiken sköter stationen svarar
+den `409 station_automatic`. Svaret och `/v1/tkl/context` har `stabled`:
+`{movement_id: vem}` för stationens undanställda tåg (`automatik` eller
+klientens id).
+
 TMBox-bilden har `station_mode` (`automatic` eller `manned`) för appar som vill
 visa läget bredvid displayen.
 
@@ -99,4 +134,6 @@ Admin-API: `GET /v1/automatic-stations`, `POST /v1/automatic-stations` med
 `action` = `enable` (`enabled`), `automatic` (`station_id`, `confirmed: true`),
 `manual` (`station_id`, `device_id`, `confirmed: true`) eller `lost_contact`
 (`minutes`: 0, 2, 5 eller 10). Svaret har `lost_contact_minutes` och per station
-`released_by`.
+`released_by` och `takes_over_in`: verkliga sekunder tills automatiken tar över
+en station utan kontakt, eller `null` (Aldrig, eller stationen har kontakt).
+`action` = `disturbance` tar också `late_stop_minutes` (1–10).

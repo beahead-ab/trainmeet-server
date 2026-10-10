@@ -99,11 +99,18 @@ const shots = process.env.SCREENSHOT_DIR || '';
     await admin.locator('#obemannade').waitFor({ state: 'visible' });
     await admin.locator('#automatic-stations').getByText('lämnad av admin').waitFor();
     assert.equal(await admin.locator('#automatic-lost-contact').inputValue(), '0');
+    assert.equal(await admin.locator('#automatic-lost-contact option[value="0"]').innerText(), 'Aldrig – stationen väntar på sin operatör');
     await admin.locator('#automatic-lost-contact').selectOption('5');
     await admin.locator('#automatic-form [type=submit]').click();
     await admin.waitForFunction(() => !document.querySelector('#automatic-form').dataset.dirty);
     assert.equal((await status()).lost_contact_minutes, 5);
     await shot(admin, 'installningar-obemannade');
+    // 4.2.0: ett försenat tåg står 2 spelminuter som förval; admin väljer 1–10.
+    assert.equal(await admin.locator('#automatic-late-stop').inputValue(), '2');
+    await admin.locator('#automatic-late-stop').fill('3');
+    await admin.locator('#automatic-disturbance-form [type=submit]').click();
+    await admin.waitForFunction(() => !document.querySelector('#automatic-disturbance-form').dataset.dirty);
+    assert.equal((await status()).disturbance.late_stop_minutes, 3);
 
     // 5. Tillbaka från toaletten: # frågar, # tar tillbaka stationen.
     await key('#');
@@ -114,7 +121,7 @@ const shots = process.env.SCREENSHOT_DIR || '';
     await shot(box, 'box-aktiv');
 
     assert.deepEqual(errors, []);
-    console.log('station automatic live: box leaves and takes back, Drift Automatik/Aktiv, lost-contact setting');
+    console.log('station automatic live: box leaves and takes back, Drift Automatik/Aktiv, lost-contact setting, late stop');
   } catch (error) {
     console.error('Backend diagnostics:', diagnostics);
     throw error;

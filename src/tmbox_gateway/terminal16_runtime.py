@@ -55,6 +55,18 @@ class RuntimeViews(Terminal16Lab):
         automatic = self.service.automatic
         return bool(automatic and automatic.enabled())
 
+    def _to_put_away(self, terminal):
+        automatic = self.service.automatic
+        if automatic is None:
+            return []
+        publication = self.service.publication()
+        ends = automatic.ends_here(publication, self.day)
+        stabled = automatic.stabled_movements(publication, self.day)
+        return [key for key in self.completed
+                if self.legs[key]["to_station_id"] == terminal.station
+                and self.legs[key]["to_movement_id"] in ends and self.legs[key]["to_movement_id"] not in stabled
+                and self._on_side(terminal, self.legs[key])]
+
     def _token(self, device, terminal):
         # Another box or TKL at the station switching to the automation
         # changes what # and * mean here: a press for the old picture is
@@ -120,6 +132,16 @@ class RuntimeViews(Terminal16Lab):
         if automatic and automatic.automatic_here(terminal.station):
             # Ask first: the operator takes the station back, then acts.
             terminal.return_screen, terminal.screen = terminal.screen, "takeback"
+            return ""
+        if action == "stable":
+            leg = self.legs[terminal.selected]
+            try:
+                automatic.stable(terminal.station, leg["to_movement_id"], by=device)
+            except ValueError as error:
+                return str(error)
+            terminal.notice, terminal.notice_hint = "UNDANSTÄLLT", leg["train_number"]
+            terminal.notice_until = self.now() + NOTICE_SECONDS
+            terminal.screen, terminal.selected = "overview", None
             return ""
         leg = self.legs[terminal.selected]
         case = self.cases.get(terminal.selected)

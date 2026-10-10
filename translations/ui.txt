@@ -501,6 +501,7 @@ Train ready|Tåg klart|Tog klar|Tog klart|Zug bereit
 Request train|Begär tåg|Anmod om tog|Be om tog|Zug anbieten
 Departed|Avgått|Afgået|Avgått|Abgefahren
 Arrived|Ankommit|Ankommet|Ankommet|Angekommen
+Stabled|Undanställt|Hensat|Hensatt|Abgestellt
 Train out|Tåg ut|Tog ude|Tog ut|Zug abgefahren
 Train in|Tåg in|Tog inde|Tog inn|Zug angekommen
 Choose station|Välj station|Vælg station|Velg stasjon|Betriebsstelle auswählen

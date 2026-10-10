@@ -214,15 +214,16 @@ class TMBoxStationService:
 
     def track_conflict(self, publication, day, station_id, movement_id, track_id, actual=False):
         states = self.operations_store.tkl_station_state(publication.publication_id, day, station_id)["movements"]
-        rows = publication.payload["trains"]
+        # Undanställda tåg har lämnat spåret, vid en automatisk slutstation
+        # och där operatören anmält det (4.2.0).
+        released = self.automatic.stabled_movements(publication, day) if self.automatic else set()
+        rows = [r for r in publication.payload["trains"] if str(r["id"]) not in released]
         if actual:
             # An automatic station (#130) goes by actual occupation, not every
             # row of the day sharing a planned track: at an unmanned passing
             # station nearly every train is planned on the same track, and a
             # later one would block the receiver for ever.
-            # Undanställda tåg vid en automatisk slutstation har lämnat spåret.
-            released = self.automatic.stabled_movements(publication, day) if self.automatic else set()
-            rows = [r for r in rows if r["id"] not in released and (
+            rows = [r for r in rows if (
                 states.get(r["id"], {}).get("arrival") == "arrived" or
                 states.get(r["id"], {}).get("departure") in {"positioned", "ready"})]
         return find_track_conflict(rows, states, station_id, day, movement_id, track_id)

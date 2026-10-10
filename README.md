@@ -979,6 +979,7 @@ Viktiga API:er:
 - `POST /v1/tkl/shift/start`
 - `POST /v1/tkl/shift/finish`
 - `POST /v1/tkl/automatic` (lämna stationen till automatiken eller ta tillbaka den)
+- `POST /v1/tkl/stable` (ställ undan ett tåg som slutat på stationen)
 - `POST /v1/tkl/movement`
 - `POST /v1/tkl/clearance`
 - `POST /v1/tkl/line-available`

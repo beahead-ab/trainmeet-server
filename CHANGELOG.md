@@ -5,6 +5,36 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Försenade tåg står två minuter, tåg som slutar ställs undan, och Drift räknar ned till automatiken
+
+Casper: "Om ett tåg är sent stannar det några min och sen klareras vidare",
+"Om ett tåg avslutas på en station … Ska det ställas åt sidan?" och "hur lång
+tid till station blir automatisk, inkludera att den aldrig går till automatik
+automatiskt".
+
+- **Försenat tåg:** vid en automatisk station står ett försenat tåg 2
+  spelminuter, eller tidtabellens uppehåll om det är kortare, och klareras
+  sedan vidare. Ett tåg i tid följer tidtabellen. Tiden väljs 1–10 under
+  Inställningar → Obemannade stationer → Störningar och undanställning.
+- **Rättat:** ett tåg som kom in och skulle vidare i samma varv av automatiken
+  räknades med planerad ankomst, så ett försenat tåg kunde gå samma sekund som
+  det kom in. Nu räknas den verkliga ankomsten.
+- **Tåg som slutar på en bemannad station:** boxen visar det bland de aktiva
+  tågen som **101 SLUTAR HÄR**, och `#` ställer undan det (**UNDANSTÄLLT**).
+  TKL får `POST /v1/tkl/stable` och `stabled` i `/v1/tkl/context`; knappen
+  kommer i en egen TKL-version. Ett undanställt tåg håller inte längre sitt
+  spår, och det gäller nu också på bemannade stationer.
+- **Undanställda tåg syns:** Drifts tågpanel säger **Undanställt i LEK**, både
+  när automatiken och när operatören ställt undan tåget. `/v1/display` har
+  `stabled`.
+- **Tappad kontakt:** valet heter **Aldrig – stationen väntar på sin
+  operatör**, och en station utan kontakt står på Drift som **Kontakt saknas –
+  automatik om N min** när admin valt 2, 5 eller 10 minuter. Nedräkningen går
+  i verklig tid även när träffklockan står. `/v1/automatic-stations` har
+  `takes_over_in` per station.
+- Drifts modellprov (`drift-model.test.cjs`) körs nu i CI; det fanns men låg
+  inte i listan.
+
 ### Ny logotyp: stationsskylten
 
 TrainMeet har fått ny logotyp, en blå stationsskylt med vit kantlinje och
