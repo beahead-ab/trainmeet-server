@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.2.1",
+    "date": "2026-10-10",
+    "notes": [
+      "Undanställda tåg försvinner från kartan"
+    ]
+  },
+  {
     "version": "4.2.0",
     "date": "2026-10-10",
     "notes": [
