@@ -33,6 +33,8 @@ NAVIGATION_ACTIONS = frozenset({
     "requests", "next_request", "previous_request", "active", "next_active", "previous_active",
     "browse", "next", "previous", "filter", "select", "cancel_view", "reject_view",
     "tracks", "next_track", "previous_track",
+    # Only open the question; # on it is the act.
+    "automatic_view", "takeback_view",
 })
 
 # The few words a phone keypad prints under a key (iPhone TMBox). Keyed by the
@@ -53,6 +55,8 @@ SHORT_LABELS = {
     "Rapportera avgång": "AVGÅTT", "Återta klartecken…": "ÅTERTA", "Rapportera ankomst": "INNE",
     "Annat ankomstspår": "SPÅR", "Placera på spår": "PLACERA", "Placera på spår…": "PLACERA",
     "Flytta hit": "FLYTTA",
+    "Lämna till automatiken…": "AUTOMATIK", "Lämna till automatiken": "AUTOMATIK",
+    "Ta tillbaka stationen…": "AKTIV", "Ta tillbaka stationen": "AKTIV",
 }
 
 #: How long a notice stays before the box goes back to its start screen by
@@ -486,6 +490,15 @@ class Terminal16Lab:
     def _planned_track(self, leg):
         return next(r.get("track_id") for r in self.publication["trains"] if r["id"] == leg["to_movement_id"])
 
+    def _automatic_here(self, terminal) -> bool:
+        """Does the automation work this box's station? Only the server's
+        runtime knows; the test bench has no automation."""
+        return False
+
+    def _automatic_offered(self, terminal) -> bool:
+        """May this box leave its station to the automation?"""
+        return False
+
     def _buttons(self, terminal):
         buttons = self._view_buttons(terminal)
         buttons["A"] = ("requests", f"Förfrågningskö ({len(self._requests(terminal))} väntar)")
@@ -496,15 +509,26 @@ class Terminal16Lab:
             return {"#": ("home", "Stäng meddelande"), "*": ("home", "Tillbaka")}
         if terminal.notice:
             return {"#": ("back", "OK"), "*": ("back", "Tillbaka")}
+        # Going to the toilet: * on the start screen leaves the station to
+        # the automation, # takes it back. Each asks first (Casper, 2026-10-10).
+        if terminal.screen == "auto_confirm":
+            return {"#": ("automatic_on", "Lämna till automatiken"), "*": ("back", "Tillbaka")}
+        if terminal.screen == "takeback":
+            return {"#": ("take_back", "Ta tillbaka stationen"), "*": ("back", "Tillbaka")}
         if terminal.screen == "overview":
             primary = ("requests", "Visa väntande förfrågningar") if self._requests(terminal) else ("browse", "Visa kommande tåg")
             active = self._active_trains(terminal)
             # No language menu on the box: the administrator sets each box's
             # language in Server, so the start screen stays simple.
-            return {"#": primary,
-                    "C": ("previous_active", "Föregående aktiva tåg") if active else ("previous", "Föregående tåg"),
-                    "D": ("next_active", "Nästa aktiva tåg") if active else ("next", "Nästa tåg"),
-                    "B": ("active", "Visa aktiva tåg")}
+            buttons = {"#": primary,
+                       "C": ("previous_active", "Föregående aktiva tåg") if active else ("previous", "Föregående tåg"),
+                       "D": ("next_active", "Nästa aktiva tåg") if active else ("next", "Nästa tåg"),
+                       "B": ("active", "Visa aktiva tåg")}
+            if self._automatic_here(terminal):
+                buttons["#"] = ("takeback_view", "Ta tillbaka stationen…")
+            elif self._automatic_offered(terminal):
+                buttons["*"] = ("automatic_view", "Lämna till automatiken…")
+            return buttons
         buttons = {"*": ("back", "Tillbaka")}
         if terminal.screen == "requests":
             buttons.update(B=("home", "Översikt utan trafikändring"))
@@ -603,8 +627,15 @@ class Terminal16Lab:
             hint = t("A:K{count} B:Akt", count=compact(len(requests))) if active else "A:Kö #Visa"
             if len(text_cells(hint)) > 11:
                 hint = t("A{count} B:Akt", count=compact(len(requests)))
+        automatic = self._automatic_here(terminal)
         if terminal.notice:
             first, hint = row(translated_notice(terminal.language, terminal.notice)), terminal.notice_hint
+        elif terminal.screen == "auto_confirm":
+            first, hint = row(t("AUTOMATIK?")), "#Ja *Nej"
+        elif terminal.screen == "takeback":
+            first, hint = row(t("TA TILLBAKA?")), "#Ja *Nej"
+        elif terminal.screen == "overview" and automatic:
+            first, hint = row(t("AUTOMATIK"), self.engine.config.stations[terminal.station].code), "#Aktiv"
         elif terminal.screen == "requests":
             if position:
                 label, side = self._label(terminal.station, selected)
@@ -669,6 +700,12 @@ class Terminal16Lab:
                     if len(text_cells(hint)) > 11:
                         hint = prefix + " " + compact(len(active))
         status = t("Skriv tågnummer direkt, eller bläddra med C/D")
+        if terminal.screen == "auto_confirm":
+            status = t("Automatiken sköter stationen medan du är borta. # bekräftar, * ångrar.")
+        elif terminal.screen == "takeback":
+            status = t("Ta tillbaka stationen från automatiken? # bekräftar, * ångrar.")
+        elif automatic:
+            status = t("Automatiken sköter stationen. # på startbilden tar tillbaka den.")
         upcoming = None
         if selected and terminal.screen != "overview":
             schedule = self._schedule(terminal, selected)
@@ -803,9 +840,13 @@ class Terminal16Lab:
         terminal.notice, terminal.notice_hint = "", ""
         terminal.notice_until = None
         if action == "back":
-            terminal.screen = terminal.return_screen if terminal.screen in {"tracks", "cancel", "reject"} else "overview"
+            terminal.screen = terminal.return_screen if terminal.screen in {"tracks", "cancel", "reject", "takeback"} else "overview"
         elif action == "home":
             terminal.screen = "overview"
+        elif action == "automatic_view":
+            terminal.screen = "auto_confirm"
+        elif action == "takeback_view":
+            terminal.return_screen, terminal.screen = "overview", "takeback"
         elif action in {"requests", "next_request", "previous_request"}:
             self._open_requests(terminal, {"requests": 0, "next_request": 1, "previous_request": -1}[action])
         elif action in {"active", "next_active", "previous_active"}:

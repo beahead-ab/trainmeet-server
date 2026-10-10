@@ -5,6 +5,35 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### En station lämnas till automatiken och tas tillbaka, från boxen, TKL och Drift
+
+Casper: "jag går på toa ett tag". Admin ska kunna ställa en station i
+automatik även när en TKL eller TMBox är ansluten, och operatören själv ska
+kunna göra det från boxen och från TKL.
+
+- **TMBox, webb-TMBox och iPhone:** `*` på startbilden frågar **AUTOMATIK?**
+  och `#` lämnar stationen till automatiken. Startbilden visar då
+  **AUTOMATIK** och stationens kod; `#` frågar **TA TILLBAKA?** och `#` tar
+  tillbaka den. Allt styrs från servern: ingen ny firmware och ingen ny app.
+- **Fråga först:** en trafiktangent på en station som automatiken sköter gör
+  ingenting i trafiken. Den frågar om stationen ska tas tillbaka, och efter
+  `#` står boxen kvar på samma tåg. TKL får `409 station_automatic`.
+- **Drift:** knapparna **Automatik** och **Aktiv** direkt på stationens rad,
+  även med ansluten box. Länken Ta över är borta. En station som bara sköts av
+  sin TKL stod som "Obemannad"; nu **Bemannad**. En box vid en station som
+  automatiken sköter räknas inte som bemannad.
+- **Står kvar över dygnsskiftet:** förut tog en ansluten box tillbaka stationen
+  vid nästa trafikdag.
+- **Tappad kontakt:** ny inställning under Obemannade stationer, av som förval.
+  Med 2, 5 eller 10 minuter tar automatiken över en station som varit utan
+  kontakt så länge. En annan box eller TKL som fortfarande hörs på stationen
+  håller den bemannad.
+- **TKL-API:** `POST /v1/tkl/automatic`, och stationens eget läge i
+  `/v1/tkl/context` som `automatic`. TKL:s knappar kommer i en egen version.
+- **Rättat på vägen:** att lämna eller ta tillbaka en station från en box
+  skrev i körtidsdatabasen mitt i boxens trafiktransaktion och kunde ge
+  "database is locked". Läget sparas nu efter transaktionen.
+
 ### Simuleringsläget är borttaget; obemannade stationer sköts av automatiken
 
 Casper: ta bort simuleringen så länge obemannade stationer fortsätter att bli

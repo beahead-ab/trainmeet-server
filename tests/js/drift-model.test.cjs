@@ -149,6 +149,22 @@ test('stationRows: the automatic stations - unmanned ones are automatic, a box k
   assert.deepEqual(off.map((row) => row.kind), ['box', 'box', 'unmanned'], 'switched off: nothing is automatic');
 });
 
+test('stationRows: a station its TKL works is manned, not unmanned; a box at an automatic station does not man it', () => {
+  // Drift bygger raderna av boxarna; en TKL står inte i den listan. Förut stod
+  // en station som bara hade sin TKL som "Obemannad" (Casper, 2026-10-10).
+  const automatic = {enabled: true, stations: [
+    {id: 'a', mode: 'automatic', operator: null, available_operators: ['d1']},
+    {id: 'b', mode: 'manual', operator: 'tkl-b', available_operators: ['tkl-b']},
+    {id: 'c', mode: 'automatic', operator: null, available_operators: []}]};
+  const devices = [{device_id: 'd1', station_id: 'a', connection: {state: 'online'}}, {device_id: 'd2', station_id: 'a', connection: {state: 'online'}}];
+  const rows = model.stationRows({snapshot: snapshot(), devices, automatic});
+  assert.deepEqual(rows.map((row) => [row.kind, row.station.id, row.tone, row.first]),
+    [['box', 'a', 'ok', true], ['box', 'a', 'ok', false], ['operator', 'b', 'ok', true], ['automatic', 'c', 'auto', true]]);
+  const stats = model.stats(snapshot(), rows);
+  assert.equal(stats.manned, 1, 'only b: the boxes at a are connected but the automation works a');
+  assert.equal(stats.automatic, 2);
+});
+
 test('stats counts trains on the line, cleared, at stations, manned stations and deviations', () => {
   const snap = snapshot({
     clock: {time: '10:30:00'},

@@ -174,9 +174,11 @@
    * En rad per box och station, för tabellen Stationer och boxar.
    *   väntande boxar först (de har ingen station än),
    *   sedan varje station med sin box, eller en rad om stationen saknar box.
-   * kind: waiting | box | automatic | unmanned. `automatic` är
+   * kind: waiting | box | operator | automatic | unmanned. `automatic` är
    * /v1/automatic-stations: en station utan box som automatiken sköter blir
-   * `automatic`; en box på en sådan station står kvar, med `auto` satt.
+   * `automatic`; en box på en sådan station står kvar, med `auto` satt. En
+   * station som sköts av något annat än en box i listan, en TKL, blir
+   * `operator` (förut "Obemannad"). Första raden per station har `first`.
    */
   function stationRows({ snapshot, devices = [], presentation = null, automatic = null }) {
     const counts = stationCounts(snapshot);
@@ -190,14 +192,15 @@
       const base = { station, placement: placement(presentation, station.id), trains: (counts.get(station.id) || []).length };
       const auto = automated.get(station.id);
       if (!here.length) {
-        const kind = auto?.mode === "automatic" ? "automatic" : "unmanned";
-        rows.push({ ...base, key: `station:${station.id}`, kind, device: null,
-          tone: kind === "automatic" ? "auto" : auto?.mode === "disconnected" ? "warn" : "off", auto });
+        const kind = auto?.mode === "automatic" ? "automatic" : auto?.operator ? "operator" : "unmanned";
+        rows.push({ ...base, key: `station:${station.id}`, kind, device: null, first: true,
+          tone: kind === "automatic" ? "auto" : auto?.mode === "disconnected" ? "warn" : kind === "operator" ? "ok" : "off", auto });
         continue;
       }
-      for (const device of here) {
-        rows.push({ ...base, key: `station:${station.id}:${device.device_id}`, kind: "box", device, tone: auto?.mode === "disconnected" ? "warn" : connectionTone(device.connection), auto });
-      }
+      here.forEach((device, index) => {
+        rows.push({ ...base, key: `station:${station.id}:${device.device_id}`, kind: "box", device, first: index === 0,
+          tone: auto?.mode === "disconnected" ? "warn" : connectionTone(device.connection), auto });
+      });
     }
     return rows;
   }
@@ -206,7 +209,9 @@
   function stats(snapshot, rows = []) {
     const { onLine, atStation } = trains(snapshot);
     const stations = (snapshot?.stations || []).length;
-    const manned = new Set(rows.filter((row) => row.station && row.kind === "box" && row.tone === "ok").map((row) => row.station.id));
+    // En box som är ansluten till en station som automatiken sköter bemannar den inte.
+    const manned = new Set(rows.filter((row) => row.station && ["box", "operator"].includes(row.kind) && row.tone === "ok"
+      && row.auto?.mode !== "automatic").map((row) => row.station.id));
     const automatic = new Set(rows.filter((row) => row.station && row.auto?.mode === "automatic").map((row) => row.station.id));
     return {
       onLine: onLine.filter((train) => train.departed).length,

@@ -8,8 +8,13 @@ its own trains when they are ready, and reports an arrival once the
 timetable's running time has passed since the departure.
 
 The first box or TKL that works a station makes it manual. A manual station
-whose operator loses contact waits for that operator; the automation never
-takes a station back by itself. An administrator can hand it back.
+whose operator loses contact waits for that operator, unless the
+administrator has chosen that the automation takes over after some minutes
+without contact. The administrator, and the station's own box, web TMBox,
+iPhone or TKL, can leave the station to the automation ("going to the
+toilet") and take it back; that choice stands until someone changes it, also
+over a new traffic day. While the automation works a station, a traffic key
+on its box or TKL first asks to take the station back (Casper, 2026-10-10).
 
 Disturbances (extra station work, longer running times) and stabling at a
 terminus are the administrator's choice under Settings. There is no separate
@@ -46,6 +51,13 @@ DISTURBANCE_SETTING = "automatic_disturbance"
 DISTURBANCE_PROFILES = {"off": (0, 0), "normal": (25, 4), "disrupted": (65, 12)}
 DISTURBANCE_PLACES = ("both", "station", "line")
 DEFAULT_DISTURBANCE = {"profile": "off", "where": "both", "seed": "", "stabling": True, "stabling_minutes": 5}
+# Automatiken tar över en bemannad station som varit utan kontakt så här många
+# minuter (väggtid). 0 betyder aldrig: stationen väntar på sin operatör.
+LOST_CONTACT_SETTING = "automatic_lost_contact_minutes"
+LOST_CONTACT_CHOICES = (0, 2, 5, 10)
+# Who left a station to the automation: an administrator, the station's own
+# operator, or the automation itself after lost contact.
+RELEASED_BY = ("admin", "operator", "lost_contact")
 
 
 class AutomaticStations:
@@ -60,6 +72,10 @@ class AutomaticStations:
         self._legs: dict[str, dict] = {}
         self._plan_errors: list[str] = []
         self._acted = False
+        # Contact is counted from when this server started: after a restart
+        # nobody has been heard yet, and that is not minutes of silence.
+        self.started = now()
+        self.listeners: list = []
         self._ensure_events()
         service.automatic = self
 
@@ -97,6 +113,20 @@ class AutomaticStations:
             self.runtime._save_setting(DISTURBANCE_SETTING, json.dumps(settings, ensure_ascii=False, sort_keys=True))
         return settings
 
+    def lost_contact_minutes(self) -> int:
+        try:
+            minutes = int(self.runtime._setting(LOST_CONTACT_SETTING) or 0)
+        except ValueError:
+            return 0
+        return minutes if minutes in LOST_CONTACT_CHOICES else 0
+
+    def set_lost_contact_minutes(self, minutes) -> int:
+        if type(minutes) is not int or minutes not in LOST_CONTACT_CHOICES:
+            raise ValueError("Välj av, 2, 5 eller 10 minuter.")
+        with self.store.command_lock:
+            self.runtime._save_setting(LOST_CONTACT_SETTING, str(minutes))
+        return minutes
+
     def _delay(self, kind: str, key: str) -> float:
         """Extra spelsekunder för ett tåg: stationsarbete före avgången
         ("station") eller längre gångtid före ankomsten ("line"). Samma nyckel
@@ -131,6 +161,9 @@ class AutomaticStations:
         key = [publication.publication_id, day]
         if state.get("key") != key:
             state = {"key": key, "stations": {}, "suppressed": [], "start": None}
+        # Stations left to the automation, with who did it. Older states
+        # had none: a handed-back station was only an owner removed.
+        state.setdefault("automatic", {})
         return state
 
     def _save(self, state) -> None:
@@ -157,7 +190,7 @@ class AutomaticStations:
             if publication is None or assigned not in publication.session_config().stations:
                 return
             state = self._state(publication, day)
-            if device in state["suppressed"] or assigned in state["stations"]:
+            if device in state["suppressed"] or assigned in state["stations"] or assigned in state["automatic"]:
                 return
             state["stations"][assigned] = device
             self._save(state)
@@ -168,37 +201,120 @@ class AutomaticStations:
             if publication is None:
                 return "automatic"
             state = self._state(publication, day)
+        if station in state.get("automatic", {}):
+            return "automatic"
         owner = state["stations"].get(station)
         if not owner:
             return "automatic"
-        assigned, seen = self.seen.get(owner, (None, -math.inf))
-        return "manual" if assigned == station and self.now() - seen <= PRESENCE_SECONDS else "disconnected"
+        # The owner is the first client that worked the station. Another box
+        # or TKL there still works it when the owner is gone.
+        return "manual" if self.now() - self._last_heard(station) <= PRESENCE_SECONDS else "disconnected"
 
-    def hand_back(self, station) -> None:
-        """Admin: the station is automatic again until someone takes it over."""
+    def _last_heard(self, station) -> float:
+        return max((seen for assigned, seen in self.seen.values() if assigned == station), default=-math.inf)
+
+    def automatic_here(self, station) -> bool:
+        """What a box or TKL at the station goes by: the automation is on and
+        someone left this station to it. A station nobody has worked yet is
+        automatic too, but the first box or TKL there simply mans it."""
+        if not self.enabled():
+            return False
+        publication, day = self._context()
+        return publication is not None and station in self._state(publication, day)["automatic"]
+
+    def hand_back(self, station, *, by="admin", device=None) -> None:
+        """The station is automatic until someone takes it back: the
+        administrator, its own operator ("going to the toilet") or, after
+        lost contact, the automation itself.
+
+        Checked now, written after the caller's traffic transaction: a box's
+        key press runs inside one on the operations database, and this state
+        lives in the runtime database, a second connection to the same file.
+        """
+        if by not in RELEASED_BY:
+            raise ValueError("Okänt skäl")
         with self.store.command_lock:
-            publication, day = self._require_station(station)
+            self._require_station(station)
+            if by == "operator":
+                if not self.enabled():
+                    raise ValueError("Automatiken är avstängd av administratören.")
+                self._require_present(station, device)
+        self.store.after_commit(lambda: self._release(station, by, device))
+
+    def _release(self, station, by, device) -> None:
+        with self.store.command_lock:
+            publication, day = self._context()
+            if publication is None:
+                return
             state = self._state(publication, day)
+            if station in state["automatic"]:
+                return
             owner = state["stations"].pop(station, None)
-            for device, (assigned, _) in self.seen.items():
-                if assigned == station and device not in state["suppressed"]:
-                    state["suppressed"].append(device)
+            for seen_device, (assigned, _) in self.seen.items():
+                if assigned == station and seen_device not in state["suppressed"]:
+                    state["suppressed"].append(seen_device)
             if owner and owner not in state["suppressed"]:
                 state["suppressed"].append(owner)
+            state["automatic"][station] = {"by": by, "device": device or owner}
             self._save(state)
+            self._audit(publication, "automatic.station_released", station, device or owner or by, {"by": by})
+        self._changed()
 
-    def take_over(self, station, device) -> None:
-        """Admin: a connected box or TKL at the station works it again."""
+    def take_over(self, station, device, *, by="admin") -> None:
+        """A connected box or TKL at the station works it again: chosen by
+        the administrator, or the operator there taking it back. Written
+        after the caller's transaction, like hand_back."""
         with self.store.command_lock:
-            publication, day = self._require_station(station)
-            assigned, seen = self.seen.get(device, (None, -math.inf))
-            if assigned != station or self.now() - seen > PRESENCE_SECONDS:
-                raise ValueError("Klienten måste vara ansluten till stationen.")
+            self._require_station(station)
+            self._require_present(station, device)
+        self.store.after_commit(lambda: self._take(station, device, by))
+
+    def _take(self, station, device, by) -> None:
+        with self.store.command_lock:
+            publication, day = self._context()
+            if publication is None:
+                return
             state = self._state(publication, day)
-            if device in state["suppressed"]:
-                state["suppressed"].remove(device)
+            # Every client at the station works it normally again.
+            state["suppressed"] = [other for other in state["suppressed"]
+                                   if other != device and self.seen.get(other, (None, 0))[0] != station]
+            state["automatic"].pop(station, None)
             state["stations"][station] = device
             self._save(state)
+            self._audit(publication, "automatic.station_taken_back", station, device, {"by": by})
+        self._changed()
+
+    def _require_present(self, station, device) -> None:
+        assigned, seen = self.seen.get(device, (None, -math.inf))
+        if not device or assigned != station or self.now() - seen > PRESENCE_SECONDS:
+            raise ValueError("Klienten måste vara ansluten till stationen.")
+
+    def _audit(self, publication, action, station, actor, detail) -> None:
+        self.store.record_audit_event(correlation_id=f"automatic-{publication.publication_id}", source="automatic",
+            actor=str(actor), action=action, outcome="accepted", station_id=station, detail=detail)
+
+    def _changed(self) -> None:
+        """Boxes redraw (AUTOMATIK on the start screen) and the pages hear it."""
+        self.service.notify_changed()
+        for listener in self.listeners:
+            try:
+                listener()
+            except Exception:
+                LOGGER.exception("Kunde inte meddela ändrat automatikläge")
+
+    def _take_lost_stations(self, state) -> list:
+        """Stations whose operator has been out of contact longer than the
+        administrator allows go to the automation. Called under the lock."""
+        minutes = self.lost_contact_minutes()
+        if not minutes:
+            return []
+        taken = []
+        for station, owner in sorted(state["stations"].items()):
+            if station in state["automatic"]:
+                continue
+            if self.now() - max(self._last_heard(station), self.started) >= minutes * 60:
+                taken.append((station, owner))
+        return taken
 
     def _require_station(self, station):
         publication, day = self._context()
@@ -225,16 +341,25 @@ class AutomaticStations:
             saved = json.loads(self.runtime._setting(STATE_SETTING) or "{}")
         except ValueError:
             saved = {}
+        # A station left to the automation stays so over the new day, until
+        # someone takes it back; before, a box still there took it again.
         state = {"key": [publication.publication_id, day], "stations": saved.get("stations", {}),
-                 "suppressed": [], "start": float(start_seconds)}
+                 "suppressed": [], "start": float(start_seconds), "automatic": saved.get("automatic", {})}
         self._save(state)
         self.blocked.clear()
 
     # ------------------------------------------------------------- traffic
 
     def guard(self, actor, station) -> None:
-        if actor == ACTOR and self.mode(station) != "automatic":
-            raise CommandRejected("automatic_station_manned", "Stationen är bemannad")
+        if actor == ACTOR:
+            if self.mode(station) != "automatic":
+                raise CommandRejected("automatic_station_manned", "Stationen är bemannad")
+            return
+        # A box or TKL at a station the automation works asks first: the
+        # operator takes the station back, then acts (Casper, 2026-10-10).
+        client = self.service.identities.client(actor)
+        if client is not None and client.kind.value not in {"web_admin", "swift_admin"} and self.automatic_here(station):
+            raise CommandRejected("station_automatic", "Automatiken sköter stationen. Ta tillbaka den först.")
 
     def _ensure_events(self) -> None:
         self.store._connection.execute(
@@ -281,6 +406,8 @@ class AutomaticStations:
             if not clock.get("running"):
                 return
             seconds = self._seconds(clock)
+            for station, owner in self._take_lost_stations(self._state(publication, day)):
+                self.hand_back(station, by="lost_contact", device=owner)
             state = self._state(publication, day)
             if state["start"] is None:
                 # Trains planned before the automation first ran are history,
@@ -420,7 +547,7 @@ class AutomaticStations:
     def status(self) -> dict:
         with self.store.command_lock:
             publication, day = self._context()
-            result = {"enabled": self.enabled(),
+            result = {"enabled": self.enabled(), "lost_contact_minutes": self.lost_contact_minutes(),
                       "stations": [], "trains": [], "plan_errors": [], "disturbance": self.disturbance()}
             if publication is None:
                 return result
@@ -430,6 +557,7 @@ class AutomaticStations:
             result["stations"] = [{
                 "id": station.id, "name": station.name, "code": station.code,
                 "mode": self.mode(station.id, state),
+                "released_by": state["automatic"].get(station.id, {}).get("by"),
                 "operator": state["stations"].get(station.id),
                 "available_operators": sorted(device for device, (assigned, seen) in self.seen.items()
                                               if assigned == station.id and self.now() - seen <= PRESENCE_SECONDS),

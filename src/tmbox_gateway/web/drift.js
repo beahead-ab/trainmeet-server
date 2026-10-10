@@ -199,6 +199,7 @@
     if (row.kind === "automatic" || row.auto?.mode === "automatic") return tag("auto", t("Automatisk"));
     if (row.auto?.mode === "disconnected") return tag("warn", t("Kontakt saknas – väntar"));
     if (row.kind === "unmanned") return tag("off", t("Obemannad"), false);
+    if (row.kind === "operator") return tag("ok", t("Bemannad"));
     const connection = row.device.connection, time = deviceTime(connection), state = connection?.state || "offline";
     if (state === "online") return tag("ok", t("Online"));
     if (state === "lost") return tag("warn", t("Ingen kontakt · sist sedd {time}", { time }));
@@ -206,6 +207,7 @@
   }
   function boxCell(row) {
     if (row.kind === "automatic") return h("td", { class: "m" }, t("Automatik"));
+    if (row.kind === "operator") return h("td", { class: "mono", title: row.auto.operator }, row.auto.operator);
     if (!row.device) return h("td", { class: "m" }, "—");
     const side = { left: t("vänster"), right: t("höger") }[row.device.station_side];
     // Firmware för en fysisk box, appversion för iPhone. En webbläsarbox kör
@@ -222,11 +224,27 @@
     return h("td", { class: "mono kr-hide-sm" }, h("button", { type: "button", class: "kr-textbtn mono", title: t("Ändra vänster och höger"),
       on: { click: (event) => hooks.editPlacement?.(row.station.id, event.currentTarget) } }, text));
   }
+  // Automatik eller Aktiv direkt på raden, även när en box eller TKL är
+  // ansluten (Casper, 2026-10-10). Aktiv ger stationen till en ansluten box
+  // eller TKL; finns ingen står bara läget kvar.
+  function modeButton(row) {
+    const auto = ctx.automatic?.enabled ? row.auto : null;
+    if (!auto || !row.station) return null;
+    if (auto.mode !== "automatic") {
+      return row.first ? button(t("Automatik"), { cls: "kr-btn sm", data: { mode: "automatic" },
+        on: { click: (event) => hooks.setStationAutomatic?.(row.station, true, null, event.currentTarget) } }) : null;
+    }
+    const available = auto.available_operators || [];
+    const device = row.device ? (available.includes(row.device.device_id) ? row.device.device_id : null) : available[0];
+    return device ? button(t("Aktiv"), { cls: "kr-btn sm", data: { mode: "active" }, title: t("Ge tillbaka till {device}", { device }),
+      on: { click: (event) => hooks.setStationAutomatic?.(row.station, false, device, event.currentTarget) } }) : null;
+  }
   function actionCell(row) {
-    const cell = h("td", { class: "r" });
+    const cell = h("td", { class: "r kr-actions" });
+    const mode = modeButton(row);
+    if (mode) cell.append(mode);
     if (row.kind === "waiting") cell.append(button(t("Välj station ▾"), { cls: "kr-btn sm primary", on: { click: (event) => hooks.editBox?.(row.device, null, event.currentTarget) } }));
-    else if (row.kind === "automatic") cell.append(button(t("Ta över"), { cls: "kr-linkbtn", on: { click: () => hooks.automaticDetails?.() } }));
-    else if (row.kind === "unmanned") cell.append(button(t("Tilldela"), { cls: "kr-linkbtn", on: { click: (event) => hooks.editBox?.(null, row.station, event.currentTarget) } }));
+    else if (["automatic", "unmanned", "operator"].includes(row.kind)) cell.append(button(t("Tilldela"), { cls: "kr-linkbtn", on: { click: (event) => hooks.editBox?.(null, row.station, event.currentTarget) } }));
     else cell.append(button(t("Redigera"), { cls: "kr-linkbtn", on: { click: (event) => hooks.editBox?.(row.device, row.station, event.currentTarget) } }));
     return cell;
   }
@@ -240,13 +258,13 @@
       tag.replaceChildren(...(waiting ? [dot(), plural(waiting, "{count} box väntar på station", "{count} boxar väntar på station")] : []));
     }
     const stations = ctx.snapshot?.stations?.length || 0;
-    const manned = new Set(rows.filter((row) => row.kind === "box" && row.tone === "ok").map((row) => row.station.id)).size;
-    const automatic = model.stats(ctx.snapshot, rows).automatic;
+    const { manned, automatic } = model.stats(ctx.snapshot, rows);
     const meta = $("#drift-stations-meta");
     if (meta) meta.textContent = [t("{manned} av {total} bemannade", { manned, total: stations }),
       automatic ? t(automatic === 1 ? "1 sköts av automatiken" : "{n} sköts av automatiken", { n: automatic }) : ""].filter(Boolean).join(" · ");
     const sig = [rows.map((row) => [row.key, row.kind, row.tone, row.trains, row.device?.connection?.state, row.device?.connection?.last_seen,
-      row.device?.station_side, row.device?.device_code, row.device?.firmware_version, row.placement && [row.placement.left, row.placement.right], row.auto?.mode]), selected, root.lang];
+      row.device?.station_side, row.device?.device_code, row.device?.firmware_version, row.placement && [row.placement.left, row.placement.right], row.auto?.mode,
+      row.auto?.operator, row.auto?.available_operators, ctx.automatic?.enabled]), selected, root.lang];
     if (!changed("stations", sig)) return;
     if (!rows.length) { body.replaceChildren(h("tr", {}, h("td", { colspan: 6, class: "kr-empty" }, t("Inga stationer i träffen.")))); return; }
     body.replaceChildren(...rows.map((row) => {

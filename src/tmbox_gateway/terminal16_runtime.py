@@ -47,6 +47,21 @@ class RuntimeViews(Terminal16Lab):
     def _is_active(self, leg):
         return leg["from_movement_id"] in self.cases
 
+    def _automatic_here(self, terminal):
+        automatic = self.service.automatic
+        return bool(automatic and automatic.automatic_here(terminal.station))
+
+    def _automatic_offered(self, terminal):
+        automatic = self.service.automatic
+        return bool(automatic and automatic.enabled())
+
+    def _token(self, device, terminal):
+        # Another box or TKL at the station switching to the automation
+        # changes what # and * mean here: a press for the old picture is
+        # refused instead of acting on the new one.
+        mode = "automatic" if self._automatic_here(terminal) else "manned"
+        return sha256(f"{super()._token(device, terminal)}:{mode}".encode()).hexdigest()[:24]
+
     def refresh(self):
         service = self.service
         publication = service.publication()
@@ -90,6 +105,22 @@ class RuntimeViews(Terminal16Lab):
         self.fingerprint = fingerprint
 
     def _traffic(self, device, terminal, action):
+        automatic = self.service.automatic
+        if action in {"automatic_on", "take_back"}:
+            try:
+                if action == "automatic_on":
+                    automatic.hand_back(terminal.station, by="operator", device=device)
+                else:
+                    automatic.take_over(terminal.station, device, by="operator")
+            except ValueError as error:
+                return str(error)
+            terminal.screen = (terminal.return_screen if action == "take_back" and terminal.selected in self.legs
+                               else "overview")
+            return ""
+        if automatic and automatic.automatic_here(terminal.station):
+            # Ask first: the operator takes the station back, then acts.
+            terminal.return_screen, terminal.screen = terminal.screen, "takeback"
+            return ""
         leg = self.legs[terminal.selected]
         case = self.cases.get(terminal.selected)
         body = {}
@@ -170,7 +201,9 @@ class Terminal16Service:
             views = self._views(device)
             if views:
                 frame = views.frame(device)
-                frame.update(profile="server-16x2", **self.service.runtime_scope())
+                # The iPhone shows AUTOMATIK beside the box; older apps ignore it.
+                frame.update(profile="server-16x2", **self.service.runtime_scope(),
+                             station_mode="automatic" if views._automatic_here(views.terminals[device]) else "manned")
                 return frame
             info = self.service.identities.discovered_device_or_none(device)
             language = self.service.device_ui(device)["language"]

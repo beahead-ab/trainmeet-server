@@ -139,12 +139,15 @@ const root = path.resolve(__dirname, '../..');
     assert.match(await page.locator('.lcd').textContent(),/12___/,'Admin language preserves unsent digits');
     await page.locator('.keypad [data-key="*"]').click();
     assert.equal(posts.filter(path=>path==='/v1/tmbox/terminal').length,beforeDigits);
-    // No language menu on the box: * on the start screen does nothing, and
-    // only the administrator changes the language.
+    // No language menu on the box: only the administrator changes the
+    // language. Since 4.1 * on the start screen asks whether to leave the
+    // station to the automation; * again goes back, nothing else changes.
     await page.waitForFunction(()=>document.querySelector('.lcd').textContent.includes('Nr# A:Q'));
     await page.locator('.keypad [data-key="*"]').click();
-    await page.waitForTimeout(300);
-    assert.equal(posts.filter(path=>path==='/v1/tmbox/terminal').length,beforeDigits,'* sends nothing on the start screen');
+    await page.waitForFunction(()=>document.querySelector('.lcd').textContent.includes('AUTOMATIK?'));
+    await page.locator('.keypad [data-key="*"]').click();
+    await page.waitForFunction(()=>document.querySelector('.lcd').textContent.includes('Nr# A:Q'));
+    assert.equal((await (await admin.request.get(urls.eu+'/v1/automatic-stations')).json()).stations.find(s=>s.id==='station-a').mode,'manual','the question changes nothing');
     assert.equal((await admin.request.post(urls.eu+'/v1/devices/language',{data:{device_id:box.client_id,language:'sv'}})).status(),200);
     await page.waitForFunction(()=>document.querySelector('.lcd').textContent.includes('Nr# A:Kö'));
     assert.equal((await page.request.get(urls.eu+'/v1/admin/users',{headers:{Authorization:`Bearer ${box.access_token}`}})).status(),403);
