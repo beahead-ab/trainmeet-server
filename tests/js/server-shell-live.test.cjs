@@ -433,10 +433,9 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#drift-stations .kr-tag.auto').first().waitFor({state: 'visible', timeout: 8000});
     assert.match(await page.locator('#drift-stations-meta').textContent(), /sköts av automatiken/);
     await screenshot('drift-automatic-stations');
-    // Ta över leder till inställningen där en station lämnas till en box.
-    await page.locator('#drift-stations').getByRole('button', {name: 'Ta över', exact: true}).first().click();
-    await page.waitForURL((url) => url.pathname === '/installningar' && url.hash === '#obemannade', {timeout: 8000});
-    await page.locator('#obemannade').waitFor({state: 'visible'});
+    // Automatik och Aktiv sitter direkt på raderna sedan 4.1 (station-automatic-live);
+    // länken Ta över till Inställningar finns inte längre.
+    assert.equal(await page.locator('#drift-stations').getByRole('button', {name: 'Ta över', exact: true}).count(), 0);
     assert.deepEqual(errors, []);
     assert.ok(requests.every(url => url.startsWith(urls.eu + '/') || url.startsWith(urls.us + '/')), 'Unexpected non-fixture network request');
     console.log('LIVE isolated HTTP/SQLite smoke passed:', JSON.stringify(urls), 'EU/US clocks, chooser, Settings TMBox, Home, TKL setup + Home + Settings return, served i18n asset.');

@@ -977,6 +977,7 @@ Viktiga API:er:
 - `GET /v1/tkl/context?station_id=...`
 - `POST /v1/tkl/shift/start`
 - `POST /v1/tkl/shift/finish`
+- `POST /v1/tkl/automatic` (lämna stationen till automatiken eller ta tillbaka den)
 - `POST /v1/tkl/movement`
 - `POST /v1/tkl/clearance`
 - `POST /v1/tkl/line-available`

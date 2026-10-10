@@ -560,15 +560,17 @@ class TMBoxStationService:
             raise CommandRejected("no_active_configuration")
         active_day = self.runtime_store.active_day() or publication.active_day
 
-        if self.automatic:
-            self.automatic.guard(device_id, station_id)
-
         if action in CONFIG_ACTIONS:
             self._check_revision(payload, "config", station_id, self.config_version())
             return {"revision": {"scope": "config", "key": station_id, "value": self.config_version()}}
 
         if action in READ_ACTIONS:
             return {"result": self._lookup(publication, active_day, station_id, payload)}
+
+        # Below this line every action changes the traffic: the automation
+        # only on a station it works, a box or TKL only on one it works.
+        if self.automatic:
+            self.automatic.guard(device_id, station_id)
 
         if action in CLEARANCE_ACTIONS:
             return self._clearance(

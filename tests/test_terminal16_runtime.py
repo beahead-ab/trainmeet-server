@@ -181,10 +181,14 @@ class RuntimeTerminalTests(unittest.TestCase):
         operator needs. The administrator sets each box's language in Server."""
 
         frame = self.terminals.frame("esp8266")
-        self.assertNotIn("*", frame["keys"])
+        # * on the start screen was free once the language menu went. Since
+        # 4.1 it asks whether to leave the station to the automation; it
+        # never chooses a language.
+        self.assertEqual("Lämna till automatiken…", frame["keys"]["*"]["label"])
         self.assertTrue(frame["lines"][1].startswith("Nr# A:Kö"))
-        refused = self.terminals.command("esp8266", {"command_id": uuid4().hex, "view_token": frame["view_token"], "key": "*"})
-        self.assertEqual("rejected", refused["status"])
+        opened = self.terminals.command("esp8266", {"command_id": uuid4().hex, "view_token": frame["view_token"], "key": "*"})
+        self.assertEqual(["AUTOMATIK?", "#Ja *Nej"], [line[:11].strip() for line in opened["frame"]["lines"]])
+        self.terminals.command("esp8266", {"command_id": uuid4().hex, "view_token": opened["frame"]["view_token"], "key": "*"})
         self.fixture.ids.set_device_language("esp8266", "en")
         frame = self.terminals.frame("esp8266")
         self.assertEqual("en", frame["language"])

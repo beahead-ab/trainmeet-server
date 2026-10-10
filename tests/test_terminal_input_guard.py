@@ -23,6 +23,9 @@ TRAFFIC_ACTIONS = {"request", "accept", "reject", "cancel", "depart", "arrive", 
 # Reached only through a few exact paths, so they are pressed on purpose in
 # the scripted tests below rather than hoped for in the random walk.
 SCRIPTED = {"reject_view", "next_request", "previous_request", "tracks", "next_track", "previous_track", "cancel_view"}
+# The test bench has no automation, so its boxes never offer these. Their
+# marks are proven on the server's boxes in test_station_automatic.py.
+NO_AUTOMATION = {"automatic_view", "takeback_view"}
 
 
 class KeysSayWhetherTheyActTests(unittest.TestCase):
@@ -87,7 +90,7 @@ class KeysSayWhetherTheyActTests(unittest.TestCase):
         # De provas skriptat nedan.
         scripted = {"reject", "cancel", "arrive_track"}
         self.assertEqual(TRAFFIC_ACTIONS - scripted, seen & TRAFFIC_ACTIONS - scripted)
-        self.assertLessEqual(NAVIGATION_ACTIONS - seen, SCRIPTED)
+        self.assertLessEqual(NAVIGATION_ACTIONS - seen, SCRIPTED | NO_AUTOMATION)
 
     def walk(self, seed, after_each=lambda: None):
         walk = random.Random(seed)

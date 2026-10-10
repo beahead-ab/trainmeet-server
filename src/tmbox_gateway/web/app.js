@@ -574,6 +574,12 @@ function renderAutomatic(data) {
     globalThis.TrainMeetSettings?.rebase(disturbance);
   }
   if (disturbance) disturbance.hidden = !data.supported;
+  const lost = document.querySelector("#automatic-lost-contact");
+  if (lost && !editorActive(form)) {
+    lost.value = String(data.lost_contact_minutes || 0);
+    globalThis.TrainMeetSettings?.rebase(form);
+  }
+  if (lost) lost.disabled = !data.supported || form.dataset.busy === "true";
   document.querySelector("#automatic-note").textContent = t(!data.supported ? "Koppla en EU-träff först."
     : data.enabled ? "Aktiv när träffklockan går." : "Avstängd.");
   const host = document.querySelector("#automatic-stations");
@@ -582,13 +588,16 @@ function renderAutomatic(data) {
     const name = document.createElement("span"); name.className = "kr-k"; name.textContent = station.name;
     const [label, tone] = AUTOMATIC_MODES[station.mode] || [station.mode, ""];
     const tag = document.createElement("span"); tag.className = `kr-tag ${tone}`.trim(); tag.textContent = t(label);
-    const who = document.createElement("span"); who.className = "kr-m"; who.textContent = station.operator || "";
+    const who = document.createElement("span"); who.className = "kr-m";
+    who.textContent = station.mode === "automatic" && station.released_by
+      ? t({admin: "lämnad av admin", operator: "lämnad av operatören", lost_contact: "tog över efter tappad kontakt"}[station.released_by] || "")
+      : station.operator || "";
     row.append(name, tag, who);
     if (station.mode !== "automatic") {
       const button = document.createElement("button"); button.type = "button"; button.className = "kr-btn sm";
       button.textContent = t("Lämna till automatiken");
       button.addEventListener("click", () => changeAutomatic(button, {action: "automatic", station_id: station.id, confirmed: true},
-        t("Lämna {station} till automatiken? Stationen ger klart och anmäler tåg själv tills en TMBox eller TKL tar över.", {station: station.name})));
+        t("Lämna {station} till automatiken? Stationen ger klart och anmäler tåg själv tills någon tar tillbaka den.", {station: station.name})));
       row.append(button);
     } else for (const device of station.available_operators || []) {
       const button = document.createElement("button"); button.type = "button"; button.className = "kr-btn sm";
@@ -640,6 +649,8 @@ document.querySelector("#automatic-form").addEventListener("submit", async (even
   if (!beginModalAction(form)) return;
   try {
     await sendAutomatic({action: "enable", enabled: document.querySelector("#automatic-enabled").checked});
+    const lost = document.querySelector("#automatic-lost-contact");
+    if (lost) await sendAutomatic({action: "lost_contact", minutes: Number(lost.value)});
     finishModal(form);
   } catch (error) {
     setMessage(form.querySelector(".form-message"), error.message, "error");
@@ -3234,8 +3245,20 @@ if (globalThis.TrainMeetDrift) {
     clear: clearOverviewSelection,
     editBox: openDeviceEditor,
     editPlacement: editDisplayPlacement,
-    // Ta över eller lämna tillbaka en automatisk station: Inställningar → Obemannade stationer.
-    automaticDetails: () => { history.pushState(null, "", "/installningar#obemannade"); applyWorkspaceRoute(); },
+    // Automatik eller Aktiv direkt från raden på Drift (Casper, 2026-10-10).
+    setStationAutomatic: async (station, automatic, device, control) => {
+      if (automatic && !confirm(t("Lämna {station} till automatiken? Stationen ger klart och anmäler tåg själv tills någon tar tillbaka den.", {station: station.name}))) return;
+      if (control) control.disabled = true;
+      try {
+        const response = await authorizedFetch("/v1/automatic-stations", {method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(automatic ? {action: "automatic", station_id: station.id, confirmed: true}
+            : {action: "manual", station_id: station.id, device_id: device, confirmed: true})});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || t("Inställningen kunde inte sparas."));
+        globalThis.TrainMeetDrift?.update({ automatic: data });
+      } catch (error) { alert(error.message); }
+      finally { if (control) control.disabled = false; }
+    },
     dialogOpened: (id) => { if (id === "drift-timetable-dialog") renderRouteExplorer(); },
   });
 }

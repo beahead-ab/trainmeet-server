@@ -454,6 +454,7 @@ class TrainMeetHTTPApplication:
                 SharedPanelTraffic(self.engine, self.station_service)
                 from .automatic import AutomaticStations
                 self.automatic = AutomaticStations(self.station_service)
+                self.automatic.listeners.append(lambda: self.changes.notify("automatic"))
 
     def _eu_runtime_guard(self):
         if not self.lifecycle:
@@ -488,6 +489,8 @@ class TrainMeetHTTPApplication:
                 self.automatic.take_over(str(payload.get("station_id") or ""), str(payload.get("device_id") or ""))
             elif action == "disturbance":
                 self.automatic.set_disturbance({key: payload[key] for key in ("profile", "where", "seed", "stabling", "stabling_minutes") if key in payload})
+            elif action == "lost_contact":
+                self.automatic.set_lost_contact_minutes(payload.get("minutes"))
             else:
                 raise ValueError("Ogiltig åtgärd eller bekräftelse saknas.")
         except ValueError as error:
@@ -2032,7 +2035,46 @@ class TrainMeetHTTPApplication:
             # Who answers at the other end of each line: automatic, manual or
             # disconnected (issue #115). Additive; older terminals ignore it.
             "station_modes": self._neighbour_modes(snapshot, station_id),
+            # This station: may it be left to the automation, and is it?
+            "automatic": self._own_automatic(station_id),
         }
+
+    def _own_automatic(self, station_id: str) -> dict[str, Any]:
+        if not self.automatic or not self.automatic.running():
+            return {"available": False, "active": False}
+        status = next((item for item in self.automatic.status()["stations"] if item["id"] == station_id), {})
+        return {"available": True, "active": status.get("mode") == "automatic", "released_by": status.get("released_by")}
+
+    def _refuse_on_automatic(self, client: PairedClient, station_id: str) -> None:
+        """A TKL at a station the automation works asks to take it back
+        first (Casper, 2026-10-10). The administrator is not asked."""
+        if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN} or not self.automatic:
+            return
+        if self.automatic.automatic_here(station_id):
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "station_automatic", "Automatiken sköter stationen. Ta tillbaka den först.")
+
+    @announces("automatic", "runtime")
+    @runtime_command("eu")
+    def tkl_automatic(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """The station's own TKL leaves it to the automation ("going to the
+        toilet") or takes it back."""
+        station_id = str(payload.get("station_id") or "")
+        self._require_station_access(client, station_id)
+        if not self.automatic:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "automatic_unavailable", "Koppla en EU-träff först.")
+        if type(payload.get("automatic")) is not bool:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_automatic", "Ange automatik på eller av.")
+        self.station_service.observe_operator(client.client_id, station_id)
+        try:
+            if payload["automatic"]:
+                self.automatic.hand_back(station_id, by="operator", device=client.client_id)
+            else:
+                self.automatic.take_over(station_id, client.client_id, by="operator")
+        except ValueError as error:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "automatic_rejected", str(error)) from error
+        if self.on_config_applied:
+            self.on_config_applied()
+        return {"automatic": self._own_automatic(station_id)}
 
     def _neighbour_modes(self, snapshot: dict[str, Any], station_id: str) -> dict[str, str]:
         if not self.automatic or not self.automatic.running():
@@ -2139,6 +2181,7 @@ class TrainMeetHTTPApplication:
         # traffic shift is needed. An active shift only names the operator.
         actor, shift_id = self._tkl_actor(client, snapshot, station_id)
         self.station_service.observe_operator(client.client_id, station_id)
+        self._refuse_on_automatic(client, station_id)
         if self.engine.shared_traffic is not None:
             from .protocol_v2 import CommandRejected
             try:
@@ -2238,6 +2281,7 @@ class TrainMeetHTTPApplication:
                 "Ogiltig sträckåtgärd eller tågnummer",
             )
         self.station_service.observe_operator(client.client_id, station_id)
+        self._refuse_on_automatic(client, station_id)
         with use_correlation(f"tkl-{uuid4().hex[:12]}") as trace:
             accepted, reason = self.engine.perform(
                 station_id=station_id,
@@ -2291,6 +2335,7 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "tkl_unavailable", "TKL-driftlagret är inte tillgängligt")
         station_id = str(payload.get("station_id") or "")
         self._require_station_access(client, station_id)
+        self._refuse_on_automatic(client, station_id)
         snapshot = self.display_snapshot()
         action = str(payload.get("action") or "publish")
         if self.engine.shared_traffic is not None:
@@ -5210,6 +5255,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/tkl/shift/finish":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.finish_tkl_shift(client, payload))
+                return
+            if path == "/v1/tkl/automatic":
+                client = self._authenticated_client()
+                self._send_json(HTTPStatus.OK, self.server.application.tkl_automatic(client, payload))
                 return
             if path == "/v1/tkl/movement":
                 client = self._authenticated_client()
