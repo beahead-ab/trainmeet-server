@@ -4816,6 +4816,9 @@ class TrainMeetHTTPApplication:
             "/assets/fonts/inter-700.woff2": "fonts/inter-700.woff2",
             "/trainmeet-logo.png": "trainmeet-logo.png",
             "/trainmeet-skylt.svg": "trainmeet-skylt.svg",
+            # Produktetiketterna i TMBox-displayens punkter (tools/dot-label.mjs).
+            "/assets/etikett/server.svg": "etikett/server.svg",
+            "/assets/etikett/tmbox.svg": "etikett/tmbox.svg",
             # Webbläsare frågar efter /favicon.ico på egen hand; utan den kan en
             # gammal sparad ikon ligga kvar i fliken.
             "/favicon.ico": "ikon/favicon.ico",

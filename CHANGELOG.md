@@ -5,6 +5,25 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### SERVER och TMBOX i TMBox-displayens punkter bredvid skylten
+
+Casper: SERVER-etiketten var för liten bredvid den nya skylten, och han ville
+se den i samma stil som TMBox-displayen, med punkterna. Han valde varianten
+med 5×7-punkter, 3 px isär.
+
+- **Kontrollrummet:** SERVER ritas som en teckendisplays 5×7-punkter, 21 px
+  hög, i stället för texten i 9,5 px. I det inloggade sidhuvudet med två
+  rader (600–900 px) står skylten ensam, som på telefon, så att träffens
+  namn får plats.
+- **TMBox-sidorna** (`/tmbox/`, Provbänk och Flöden): stationsskylten och
+  TMBOX i samma punkter ersätter TM-ikonen. Rubriken "TMBox · Provbänk"
+  blir "Provbänk", eftersom TMBOX står bredvid. På telefon är skylten 26 px
+  hög och punkterna 2 px isär.
+- `tools/dot-label.mjs` ritar etiketterna, även CLOUD och TKL till de
+  repona. Punkterna ligger på hela pixlar och följer textfärgen i ljust och
+  mörkt tema, eftersom bilden används som CSS-mask. Ett prov kontrollerar
+  att filerna är vad generatorn ger.
+
 ### Loggan syns på server.trainmeet.app, större i sidhuvudet och i inloggningsrutan
 
 Casper: "loggan visas inte. högst upp vill jag ha den större loggan, den får
