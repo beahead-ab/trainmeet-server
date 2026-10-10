@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.2.2",
+    "date": "2026-10-10",
+    "notes": [
+      "Loggan syns på server.trainmeet.app, större i sidhuvudet och i inloggningsrutan"
+    ]
+  },
+  {
     "version": "4.2.1",
     "date": "2026-10-10",
     "notes": [
