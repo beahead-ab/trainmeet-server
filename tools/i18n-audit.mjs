@@ -584,7 +584,10 @@ async function auditTkl(root) {
   const script = path.join(root, 'scripts/i18n-audit.mjs');
   if (!fs.existsSync(script)) return {skipped: 'no scripts/i18n-audit.mjs in ' + root};
   if (!fs.existsSync(path.join(root, 'node_modules/typescript'))) return {skipped: 'run npm install in ' + root};
-  return (await import(pathToFileURL(script).href)).auditTkl({root});
+  // Against the catalogue built here, not TKL's copy of it: a row removed
+  // here that TKL still uses then shows before the copy is synced over.
+  // A TKL from before TKL 0.9.3 ignores the option and audits its copy.
+  return (await import(pathToFileURL(script).href)).auditTkl({root, messages: path.join(repo, 'src/tmbox_gateway/web/i18n-messages.js')});
 }
 
 export async function audit({tkl = path.join(repo, '..', 'trainmeet-tkl'), surfaces = null} = {}) {

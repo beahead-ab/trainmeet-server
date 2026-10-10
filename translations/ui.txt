@@ -711,6 +711,7 @@ Theme|Tema|Tema|Tema|Darstellung
 Run first-time setup again|Kör första installationen igen|Kør førstegangsopsætning igen|Kjør førstegangsoppsett igjen|Ersteinrichtung erneut ausführen
 Software|Programvara|Software|Programvare|Software
 The same A–D connections as the physical TMBox. All commands go through TrainMeet Server.|Samma A–D-anslutningar som den fysiska TMBoxen. Alla kommandon ska gå genom TrainMeet Server.|Samme A–D-forbindelser som den fysiske TMBox. Alle kommandoer går gennem TrainMeet Server.|Samme A–D-tilkoblinger som den fysiske TMBox. Alle kommandoer går gjennom TrainMeet Server.|Dieselben A–D-Anschlüsse wie an der physischen TMBox. Alle Befehle laufen über TrainMeet Server.
+Open full TMBox simulation|Öppna full TMBox-simulering|Åbn fuld TMBox-simulering|Åpne full TMBox-simulering|Vollständige TMBox-Simulation öffnen
 Shift started|Trafikpass startat|Vagt startet|Vakt startet|Schicht begonnen
 Handover note|Överlämningsanteckning|Overdragelsesnotat|Overleveringsnotat|Übergabenotiz
 Optional information for the next operator|Valfri information till nästa operatör|Valgfri information til næste operatør|Valgfri informasjon til neste operatør|Optionale Informationen für den nächsten Bediener
