@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.2.0",
+    "date": "2026-10-10",
+    "notes": [
+      "Försenade tåg står två minuter, tåg som slutar ställs undan, och Drift räknar ned till automatiken"
+    ]
+  },
+  {
     "version": "4.1.1",
     "date": "2026-10-10",
     "notes": [
