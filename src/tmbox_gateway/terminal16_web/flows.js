@@ -5,16 +5,16 @@ globalThis.TMBoxFlows = {
  "clock": "12:34",
  "stations": [
   {
-   "code": "MUN",
-   "name": "Munkeröd"
+   "code": "SVM",
+   "name": "Sölvmora"
   },
   {
-   "code": "CDA",
-   "name": "Charlottendal"
+   "code": "KNB",
+   "name": "Knastebo"
   },
   {
-   "code": "VA",
-   "name": "Vagnsta"
+   "code": "DY",
+   "name": "Dimmeby"
   }
  ],
  "flows": [
@@ -26,21 +26,21 @@ globalThis.TMBoxFlows = {
    "setup": null,
    "boxes": [
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     },
     {
-     "id": "VA",
-     "code": "VA",
-     "label": "VA",
-     "station": "Vagnsta"
+     "id": "DY",
+     "code": "DY",
+     "label": "DY",
+     "station": "Dimmeby"
     }
    ],
    "start": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -48,7 +48,7 @@ globalThis.TMBoxFlows = {
      "changed": true
     },
     {
-     "box": "VA",
+     "box": "DY",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -58,7 +58,7 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "3",
       "9"
@@ -67,7 +67,7 @@ globalThis.TMBoxFlows = {
      "caption": "Skriv tågnumret direkt från översikten. Siffrorna stannar i boxen tills du trycker #.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "TÅG: 39___      ",
         "#Sök B:Del 12:34"
@@ -75,7 +75,7 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -103,25 +103,25 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "# söker tåget och begär klartecken (?) i samma tryck. 39 ska till Vagnsta, som står i översikten och visar förfrågan direkt. * återtar så länge Vagnsta inte har svarat.",
+     "caption": "# söker tåget och begär klartecken (?) i samma tryck. 39 ska till Dimmeby, som står i översikten och visar förfrågan direkt. * återtar så länge Dimmeby inte har svarat.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "           39?VA",
+        "           39?DY",
         "*Åter B:Öv 12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA?39       1/1",
+        "KNB?39       1/1",
         "#Ja *Nej   12:34"
        ],
        "changed": true
@@ -151,25 +151,25 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Vagnsta ger klart med #. Tecknet blir > hos båda.",
+     "caption": "Dimmeby ger klart med #. Tecknet blir > hos båda.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "           39>VA",
+        "           39>DY",
         "#Avg *Åter 12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA>39          ",
+        "KNB>39          ",
         "C/D A:Kö   12:34"
        ],
        "changed": true
@@ -199,25 +199,25 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Charlottendal rapporterar faktisk avgång med #. Sträckan är upptagen (▶) och Vagnsta kan ta emot direkt.",
+     "caption": "Knastebo rapporterar faktisk avgång med #. Sträckan är upptagen (▶) och Dimmeby kan ta emot direkt.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "           39▶VA",
+        "           39▶DY",
         "C/D A:Kö   12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA▶39          ",
+        "KNB▶39          ",
         "#In B:Sp   12:34"
        ],
        "changed": true
@@ -243,26 +243,26 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Vagnsta tar emot på planerat spår med #. Charlottendal får beskedet 39 MOTTAGET med mottagarens kod.",
+     "caption": "Dimmeby tar emot på planerat spår med #. Knastebo får beskedet 39 MOTTAGET med mottagarens kod.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "39 MOTTAGET     ",
-        "VA         12:34"
+        "DY         12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "39 ANK SP1      ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": true
       }
@@ -286,18 +286,18 @@ globalThis.TMBoxFlows = {
      "box": null,
      "keys": [],
      "wait": 3,
-     "caption": "Efter tre sekunder går Vagnsta tillbaka till översikten av sig själv.",
+     "caption": "Efter tre sekunder går Dimmeby tillbaka till översikten av sig själv.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "39 MOTTAGET     ",
-        "VA         12:34"
+        "DY         12:34"
        ],
        "changed": false
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -311,10 +311,10 @@ globalThis.TMBoxFlows = {
      "box": null,
      "keys": [],
      "wait": 2,
-     "caption": "Fem sekunder efter ankomsten försvinner beskedet på Charlottendal, utan kvittering. Sträckan är fri.",
+     "caption": "Fem sekunder efter ankomsten försvinner beskedet på Knastebo, utan kvittering. Sträckan är fri.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -322,7 +322,7 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -339,34 +339,34 @@ globalThis.TMBoxFlows = {
    "title": "Ta emot på ett annat spår",
    "mode": "Med klartecken",
    "intro": "När tåget ska in på ett annat spår än det planerade.",
-   "setup": "39 har fått klart och avgått från Charlottendal mot Vagnsta.",
+   "setup": "39 har fått klart och avgått från Knastebo mot Dimmeby.",
    "boxes": [
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     },
     {
-     "id": "VA",
-     "code": "VA",
-     "label": "VA",
-     "station": "Vagnsta"
+     "id": "DY",
+     "code": "DY",
+     "label": "DY",
+     "station": "Dimmeby"
     }
    ],
    "start": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
-      "           39▶VA",
+      "           39▶DY",
       "C/D A:Kö   12:34"
      ],
      "changed": true
     },
     {
-     "box": "VA",
+     "box": "DY",
      "lines": [
-      "CDA▶39          ",
+      "KNB▶39          ",
       "#In B:Sp   12:34"
      ],
      "changed": true
@@ -374,7 +374,7 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "B"
      ],
@@ -382,15 +382,15 @@ globalThis.TMBoxFlows = {
      "caption": "B väljer annat ankomstspår. Boxen börjar på spår 1.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "           39▶VA",
+        "           39▶DY",
         "C/D A:Kö   12:34"
        ],
        "changed": false
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "39 SPÅR 1       ",
         "#In C/D:Sp 12:34"
@@ -422,7 +422,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "D"
      ],
@@ -430,15 +430,15 @@ globalThis.TMBoxFlows = {
      "caption": "C/D bläddrar bland stationens spår.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "           39▶VA",
+        "           39▶DY",
         "C/D A:Kö   12:34"
        ],
        "changed": false
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "39 SPÅR 2       ",
         "#In C/D:Sp 12:34"
@@ -470,7 +470,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "#"
      ],
@@ -478,18 +478,18 @@ globalThis.TMBoxFlows = {
      "caption": "# tar emot på spår 2. Ankomsten registreras på det spåret.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "39 MOTTAGET     ",
-        "VA         12:34"
+        "DY         12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "39 ANK SP2      ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": true
       }
@@ -516,34 +516,34 @@ globalThis.TMBoxFlows = {
    "title": "Neka en förfrågan",
    "mode": "Med klartecken",
    "intro": "Mottagaren kan inte ta emot tåget just nu.",
-   "setup": "Charlottendal har begärt klartecken för 39.",
+   "setup": "Knastebo har begärt klartecken för 39.",
    "boxes": [
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     },
     {
-     "id": "VA",
-     "code": "VA",
-     "label": "VA",
-     "station": "Vagnsta"
+     "id": "DY",
+     "code": "DY",
+     "label": "DY",
+     "station": "Dimmeby"
     }
    ],
    "start": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
-      "           39?VA",
+      "           39?DY",
       "*Åter B:Öv 12:34"
      ],
      "changed": true
     },
     {
-     "box": "VA",
+     "box": "DY",
      "lines": [
-      "CDA?39       1/1",
+      "KNB?39       1/1",
       "#Ja *Nej   12:34"
      ],
      "changed": true
@@ -551,7 +551,7 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "*"
      ],
@@ -559,15 +559,15 @@ globalThis.TMBoxFlows = {
      "caption": "* på förfrågan frågar först: NEKA 39? Inget är ändrat än.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "           39?VA",
+        "           39?DY",
         "*Åter B:Öv 12:34"
        ],
        "changed": false
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "NEKA 39?        ",
         "#Ja *Nej   12:34"
@@ -591,7 +591,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "#"
      ],
@@ -599,18 +599,18 @@ globalThis.TMBoxFlows = {
      "caption": "# bekräftar. Båda boxarna visar 39 NEKAT med den andra stationen under, och sträckan är fri igen.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "39 NEKAT        ",
-        "VA         12:34"
+        "DY         12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "39 NEKAT        ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": true
       }
@@ -634,10 +634,10 @@ globalThis.TMBoxFlows = {
      "box": null,
      "keys": [],
      "wait": 3,
-     "caption": "Efter tre sekunder går båda tillbaka till översikten av sig själva. Inget besked behöver kvitteras. Charlottendal kan begära igen senare.",
+     "caption": "Efter tre sekunder går båda tillbaka till översikten av sig själva. Inget besked behöver kvitteras. Knastebo kan begära igen senare.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -645,7 +645,7 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -662,34 +662,34 @@ globalThis.TMBoxFlows = {
    "title": "Återta en begäran",
    "mode": "Med klartecken",
    "intro": "Avsändaren ångrar sig innan mottagaren har svarat.",
-   "setup": "Charlottendal har begärt klartecken för 39.",
+   "setup": "Knastebo har begärt klartecken för 39.",
    "boxes": [
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     },
     {
-     "id": "VA",
-     "code": "VA",
-     "label": "VA",
-     "station": "Vagnsta"
+     "id": "DY",
+     "code": "DY",
+     "label": "DY",
+     "station": "Dimmeby"
     }
    ],
    "start": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
-      "           39?VA",
+      "           39?DY",
       "*Åter B:Öv 12:34"
      ],
      "changed": true
     },
     {
-     "box": "VA",
+     "box": "DY",
      "lines": [
-      "CDA?39       1/1",
+      "KNB?39       1/1",
       "#Ja *Nej   12:34"
      ],
      "changed": true
@@ -697,15 +697,15 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "*"
      ],
      "wait": null,
-     "caption": "* frågar först: ÅTER 39? Förfrågan ligger kvar hos Vagnsta tills du bekräftar.",
+     "caption": "* frågar först: ÅTER 39? Förfrågan ligger kvar hos Dimmeby tills du bekräftar.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "ÅTER 39?        ",
         "#Ja *Nej   12:34"
@@ -713,9 +713,9 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA?39       1/1",
+        "KNB?39       1/1",
         "#Ja *Nej   12:34"
        ],
        "changed": false
@@ -737,26 +737,26 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "# återtar. Båda boxarna visar 39 ÅTERTAGET, och förfrågan är borta ur Vagnstas kö.",
+     "caption": "# återtar. Båda boxarna visar 39 ÅTERTAGET, och förfrågan är borta ur Dimmebys kö.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "39 ÅTERTAGET    ",
-        "VA         12:34"
+        "DY         12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "39 ÅTERTAGET    ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": true
       }
@@ -783,7 +783,7 @@ globalThis.TMBoxFlows = {
      "caption": "Efter tre sekunder går båda tillbaka till översikten av sig själva.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -791,7 +791,7 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -808,34 +808,34 @@ globalThis.TMBoxFlows = {
    "title": "Återta ett klartecken före avgång",
    "mode": "Med klartecken",
    "intro": "Tåget har fått klart men ska inte gå ändå. Efter faktisk avgång går det inte att återta.",
-   "setup": "Vagnsta har gett klart för 39.",
+   "setup": "Dimmeby har gett klart för 39.",
    "boxes": [
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     },
     {
-     "id": "VA",
-     "code": "VA",
-     "label": "VA",
-     "station": "Vagnsta"
+     "id": "DY",
+     "code": "DY",
+     "label": "DY",
+     "station": "Dimmeby"
     }
    ],
    "start": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
-      "           39>VA",
+      "           39>DY",
       "#Avg *Åter 12:34"
      ],
      "changed": true
     },
     {
-     "box": "VA",
+     "box": "DY",
      "lines": [
-      "CDA>39          ",
+      "KNB>39          ",
       "C/D A:Kö   12:34"
      ],
      "changed": true
@@ -843,7 +843,7 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "*"
      ],
@@ -851,7 +851,7 @@ globalThis.TMBoxFlows = {
      "caption": "* frågar först: ÅTER 39? Klartecknet gäller tills du bekräftar.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "ÅTER 39?        ",
         "#Ja *Nej   12:34"
@@ -859,9 +859,9 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA>39          ",
+        "KNB>39          ",
         "C/D A:Kö   12:34"
        ],
        "changed": false
@@ -883,26 +883,26 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "# återtar. Båda boxarna visar 39 ÅTERTAGET: Vagnsta ska inte ta emot ett tåg som aldrig gick.",
+     "caption": "# återtar. Båda boxarna visar 39 ÅTERTAGET: Dimmeby ska inte ta emot ett tåg som aldrig gick.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "39 ÅTERTAGET    ",
-        "VA         12:34"
+        "DY         12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "39 ÅTERTAGET    ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": true
       }
@@ -929,7 +929,7 @@ globalThis.TMBoxFlows = {
      "caption": "Efter tre sekunder går båda tillbaka till översikten och sträckan är fri.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -937,7 +937,7 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -953,31 +953,31 @@ globalThis.TMBoxFlows = {
    "id": "tva-forfragningar",
    "title": "Två förfrågningar samtidigt",
    "mode": "Med klartecken",
-   "intro": "Charlottendal får förfrågningar från båda hållen.",
+   "intro": "Knastebo får förfrågningar från båda hållen.",
    "setup": null,
    "boxes": [
     {
-     "id": "MUN",
-     "code": "MUN",
-     "label": "MUN",
-     "station": "Munkeröd"
+     "id": "SVM",
+     "code": "SVM",
+     "label": "SVM",
+     "station": "Sölvmora"
     },
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     },
     {
-     "id": "VA",
-     "code": "VA",
-     "label": "VA",
-     "station": "Vagnsta"
+     "id": "DY",
+     "code": "DY",
+     "label": "DY",
+     "station": "Dimmeby"
     }
    ],
    "start": [
     {
-     "box": "MUN",
+     "box": "SVM",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -985,7 +985,7 @@ globalThis.TMBoxFlows = {
      "changed": true
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -993,7 +993,7 @@ globalThis.TMBoxFlows = {
      "changed": true
     },
     {
-     "box": "VA",
+     "box": "DY",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -1003,33 +1003,33 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "MUN",
+     "box": "SVM",
      "keys": [
       "9",
       "3",
       "#"
      ],
      "wait": null,
-     "caption": "Munkeröd skriver 93 och trycker #: förfrågan går direkt. Charlottendal står i översikten och visar den.",
+     "caption": "Sölvmora skriver 93 och trycker #: förfrågan går direkt. Knastebo står i översikten och visar den.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          93?CDA",
+        "          93?KNB",
         "*Åter B:Öv 12:34"
        ],
        "changed": true
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN?93       1/1",
+        "SVM?93       1/1",
         "#Ja *Nej   12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -1061,35 +1061,35 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "9",
       "4",
       "#"
      ],
      "wait": null,
-     "caption": "Vagnsta begär 94 på samma sätt. Charlottendal stannar på förfrågan den visar; räknaren blir 1/2.",
+     "caption": "Dimmeby begär 94 på samma sätt. Knastebo stannar på förfrågan den visar; räknaren blir 1/2.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          93?CDA",
+        "          93?KNB",
         "*Åter B:Öv 12:34"
        ],
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN?93       1/2",
+        "SVM?93       1/2",
         "#Ja *Nej   12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA?94          ",
+        "KNB?94          ",
         "*Åter B:Öv 12:34"
        ],
        "changed": true
@@ -1119,7 +1119,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "D"
      ],
@@ -1127,25 +1127,25 @@ globalThis.TMBoxFlows = {
      "caption": "D bläddrar till nästa förfrågan i kön, 2/2.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          93?CDA",
+        "          93?KNB",
         "*Åter B:Öv 12:34"
        ],
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "2/2        94?VA",
+        "2/2        94?DY",
         "#Ja *Nej   12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA?94          ",
+        "KNB?94          ",
         "*Åter B:Öv 12:34"
        ],
        "changed": false
@@ -1179,7 +1179,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
@@ -1187,25 +1187,25 @@ globalThis.TMBoxFlows = {
      "caption": "# ger klart för just det visade tåget, 94. Boxen stannar på det tåget.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          93?CDA",
+        "          93?KNB",
         "*Åter B:Öv 12:34"
        ],
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "           94<VA",
+        "           94<DY",
         "C/D A:Kö   12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA<94          ",
+        "KNB<94          ",
         "#Avg *Åter 12:34"
        ],
        "changed": true
@@ -1235,33 +1235,33 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "A"
      ],
      "wait": null,
-     "caption": "A öppnar kön igen. Kvar är 93 från Munkeröd.",
+     "caption": "A öppnar kön igen. Kvar är 93 från Sölvmora.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          93?CDA",
+        "          93?KNB",
         "*Åter B:Öv 12:34"
        ],
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN?93       1/1",
+        "SVM?93       1/1",
         "#Ja *Nej   12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA<94          ",
+        "KNB<94          ",
         "#Avg *Åter 12:34"
        ],
        "changed": false
@@ -1295,7 +1295,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
@@ -1303,25 +1303,25 @@ globalThis.TMBoxFlows = {
      "caption": "# ger klart även för 93.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          93>CDA",
+        "          93>KNB",
         "#Avg *Åter 12:34"
        ],
        "changed": true
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN>93          ",
+        "SVM>93          ",
         "C/D A:Kö   12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA<94          ",
+        "KNB<94          ",
         "#Avg *Åter 12:34"
        ],
        "changed": false
@@ -1357,48 +1357,48 @@ globalThis.TMBoxFlows = {
    "title": "Hitta ett tåg som har fått klart",
    "mode": "Med klartecken",
    "intro": "Klartecknet kommer medan du gör något annat. B visar alla tåg som pågår.",
-   "setup": "Charlottendal har begärt klartecken för 17 mot Munkeröd och 39 mot Vagnsta, och står i översikten.",
+   "setup": "Knastebo har begärt klartecken för 17 mot Sölvmora och 39 mot Dimmeby, och står i översikten.",
    "boxes": [
     {
-     "id": "MUN",
-     "code": "MUN",
-     "label": "MUN",
-     "station": "Munkeröd"
+     "id": "SVM",
+     "code": "SVM",
+     "label": "SVM",
+     "station": "Sölvmora"
     },
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     },
     {
-     "id": "VA",
-     "code": "VA",
-     "label": "VA",
-     "station": "Vagnsta"
+     "id": "DY",
+     "code": "DY",
+     "label": "DY",
+     "station": "Dimmeby"
     }
    ],
    "start": [
     {
-     "box": "MUN",
+     "box": "SVM",
      "lines": [
-      "1/1       17?CDA",
+      "1/1       17?KNB",
       "#Ja *Nej   12:34"
      ],
      "changed": true
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
-      "MUN?17     39?VA",
+      "SVM?17     39?DY",
       "B:Akt2 C/D 12:34"
      ],
      "changed": true
     },
     {
-     "box": "VA",
+     "box": "DY",
      "lines": [
-      "CDA?39       1/1",
+      "KNB?39       1/1",
       "#Ja *Nej   12:34"
      ],
      "changed": true
@@ -1406,33 +1406,33 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "MUN",
+     "box": "SVM",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Munkeröd ger klart för 17.",
+     "caption": "Sölvmora ger klart för 17.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          17<CDA",
+        "          17<KNB",
         "C/D A:Kö   12:34"
        ],
        "changed": true
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN<17     39?VA",
+        "SVM<17     39?DY",
         "B:Akt2 C/D 12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA?39       1/1",
+        "KNB?39       1/1",
         "#Ja *Nej   12:34"
        ],
        "changed": false
@@ -1462,33 +1462,33 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Vagnsta ger klart för 39. Charlottendals översikt visar båda och B:Akt2: två aktiva tåg.",
+     "caption": "Dimmeby ger klart för 39. Knastebos översikt visar båda och B:Akt2: två aktiva tåg.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          17<CDA",
+        "          17<KNB",
         "C/D A:Kö   12:34"
        ],
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN<17     39>VA",
+        "SVM<17     39>DY",
         "B:Akt2 C/D 12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA>39          ",
+        "KNB>39          ",
         "C/D A:Kö   12:34"
        ],
        "changed": true
@@ -1518,7 +1518,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "B"
      ],
@@ -1526,25 +1526,25 @@ globalThis.TMBoxFlows = {
      "caption": "B öppnar de aktiva tågen. Klarerade avgångar kommer först; 1/2 visar vilket du ser. Det går också att skriva tågnumret direkt.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          17<CDA",
+        "          17<KNB",
         "C/D A:Kö   12:34"
        ],
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN<17       1/2",
+        "SVM<17       1/2",
         "#Avg C/D   12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA>39          ",
+        "KNB>39          ",
         "C/D A:Kö   12:34"
        ],
        "changed": false
@@ -1578,33 +1578,33 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "D"
      ],
      "wait": null,
-     "caption": "D går till nästa aktiva tåg, 39 mot Vagnsta.",
+     "caption": "D går till nästa aktiva tåg, 39 mot Dimmeby.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          17<CDA",
+        "          17<KNB",
         "C/D A:Kö   12:34"
        ],
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "2/2        39>VA",
+        "2/2        39>DY",
         "#Avg C/D   12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA>39          ",
+        "KNB>39          ",
         "C/D A:Kö   12:34"
        ],
        "changed": false
@@ -1638,7 +1638,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
@@ -1646,25 +1646,25 @@ globalThis.TMBoxFlows = {
      "caption": "# rapporterar avgång för just det visade tåget. 17 väntar kvar i listan.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          17<CDA",
+        "          17<KNB",
         "C/D A:Kö   12:34"
        ],
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "2/2        39▶VA",
+        "2/2        39▶DY",
         "C/D B:Öv   12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA▶39          ",
+        "KNB▶39          ",
         "#In B:Sp   12:34"
        ],
        "changed": true
@@ -1703,21 +1703,21 @@ globalThis.TMBoxFlows = {
    "setup": null,
    "boxes": [
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     },
     {
-     "id": "VA",
-     "code": "VA",
-     "label": "VA",
-     "station": "Vagnsta"
+     "id": "DY",
+     "code": "DY",
+     "label": "DY",
+     "station": "Dimmeby"
     }
    ],
    "start": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -1725,7 +1725,7 @@ globalThis.TMBoxFlows = {
      "changed": true
     },
     {
-     "box": "VA",
+     "box": "DY",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -1735,27 +1735,27 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "3",
       "9",
       "#"
      ],
      "wait": null,
-     "caption": "Charlottendal skriver 39 och trycker #. På direkttrafik reserverar det sträckan direkt (>). Vagnsta ser tåget som aktivt: B:Akt1.",
+     "caption": "Knastebo skriver 39 och trycker #. På direkttrafik reserverar det sträckan direkt (>). Dimmeby ser tåget som aktivt: B:Akt1.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "           39>VA",
+        "           39>DY",
         "#Avg *Åter 12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA>39          ",
+        "KNB>39          ",
         "B:Akt1 C/D 12:34"
        ],
        "changed": true
@@ -1789,7 +1789,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
@@ -1797,17 +1797,17 @@ globalThis.TMBoxFlows = {
      "caption": "# rapporterar avgång.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "           39▶VA",
+        "           39▶DY",
         "C/D A:Kö   12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA▶39          ",
+        "KNB▶39          ",
         "B:Akt1 C/D 12:34"
        ],
        "changed": true
@@ -1833,25 +1833,25 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "B"
      ],
      "wait": null,
-     "caption": "Vagnsta öppnar det aktiva tåget med B.",
+     "caption": "Dimmeby öppnar det aktiva tåget med B.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "           39▶VA",
+        "           39▶DY",
         "C/D A:Kö   12:34"
        ],
        "changed": false
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA▶39       1/1",
+        "KNB▶39       1/1",
         "#In B:Sp   12:34"
        ],
        "changed": true
@@ -1885,7 +1885,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "#"
      ],
@@ -1893,18 +1893,18 @@ globalThis.TMBoxFlows = {
      "caption": "# tar emot på planerat spår.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "39 MOTTAGET     ",
-        "VA         12:34"
+        "DY         12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "39 ANK SP1      ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": true
       }
@@ -1934,15 +1934,15 @@ globalThis.TMBoxFlows = {
    "setup": null,
    "boxes": [
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     }
    ],
    "start": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -1952,7 +1952,7 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
@@ -1960,7 +1960,7 @@ globalThis.TMBoxFlows = {
      "caption": "# från översikten öppnar stationens kommande tåg, med planerad tid.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "17 AVG     12:35",
         "#Välj A:Kö 12:34"
@@ -1996,7 +1996,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "D"
      ],
@@ -2004,7 +2004,7 @@ globalThis.TMBoxFlows = {
      "caption": "C/D bläddrar.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "39 AVG     12:38",
         "#Välj A:Kö 12:34"
@@ -2040,7 +2040,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "B"
      ],
@@ -2048,7 +2048,7 @@ globalThis.TMBoxFlows = {
      "caption": "B filtrerar, först på ankomster. Även en ankomst som ingen har skickat går att välja och flytta hit.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "93 ANK     12:40",
         "#Välj A:Kö 12:34"
@@ -2084,7 +2084,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "B"
      ],
@@ -2092,7 +2092,7 @@ globalThis.TMBoxFlows = {
      "caption": "B igen visar bara avgångar. Ett tredje B visar alla tåg.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "17 AVG     12:35",
         "#Välj A:Kö 12:34"
@@ -2128,7 +2128,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
@@ -2136,9 +2136,9 @@ globalThis.TMBoxFlows = {
      "caption": "# väljer tåget. Nu kan du begära klartecken för det.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN-17          ",
+        "SVM-17          ",
         "#Beg A:Kö  12:34"
        ],
        "changed": true
@@ -2177,15 +2177,15 @@ globalThis.TMBoxFlows = {
    "setup": null,
    "boxes": [
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     }
    ],
    "start": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -2195,7 +2195,7 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "1",
       "2",
@@ -2206,7 +2206,7 @@ globalThis.TMBoxFlows = {
      "caption": "Ett nummer som inte går vid stationen ger INGET TÅG.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "INGET TÅG       ",
         "           12:34"
@@ -2236,7 +2236,7 @@ globalThis.TMBoxFlows = {
      "caption": "Beskedet försvinner av sig självt efter tre sekunder; # eller * stänger det direkt.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2247,7 +2247,7 @@ globalThis.TMBoxFlows = {
      "meanings": []
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "4"
      ],
@@ -2255,7 +2255,7 @@ globalThis.TMBoxFlows = {
      "caption": "Har du börjat skriva ett fel nummer, suddar B sista siffran …",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "TÅG: 4____      ",
         "#Sök B:Del 12:34"
@@ -2283,7 +2283,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "*"
      ],
@@ -2291,7 +2291,7 @@ globalThis.TMBoxFlows = {
      "caption": "… och * tömmer hela inmatningen. Inget har skickats till servern.",
      "screens": [
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2328,31 +2328,31 @@ globalThis.TMBoxFlows = {
    "id": "genomgaende",
    "title": "Genomgående tåg",
    "mode": "Med klartecken",
-   "intro": "Tåg 55 kommer in från Vagnsta och går vidare mot Munkeröd med samma nummer. Numret gäller det som är på gång: först ankomsten, sedan avgången.",
+   "intro": "Tåg 55 kommer in från Dimmeby och går vidare mot Sölvmora med samma nummer. Numret gäller det som är på gång: först ankomsten, sedan avgången.",
    "setup": null,
    "boxes": [
     {
-     "id": "VA",
-     "code": "VA",
-     "label": "VA",
-     "station": "Vagnsta"
+     "id": "DY",
+     "code": "DY",
+     "label": "DY",
+     "station": "Dimmeby"
     },
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     },
     {
-     "id": "MUN",
-     "code": "MUN",
-     "label": "MUN",
-     "station": "Munkeröd"
+     "id": "SVM",
+     "code": "SVM",
+     "label": "SVM",
+     "station": "Sölvmora"
     }
    ],
    "start": [
     {
-     "box": "VA",
+     "box": "DY",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -2360,7 +2360,7 @@ globalThis.TMBoxFlows = {
      "changed": true
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -2368,7 +2368,7 @@ globalThis.TMBoxFlows = {
      "changed": true
     },
     {
-     "box": "MUN",
+     "box": "SVM",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -2378,33 +2378,33 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "5",
       "5",
       "#"
      ],
      "wait": null,
-     "caption": "Vagnsta begär 55 mot Charlottendal; förfrågan går direkt.",
+     "caption": "Dimmeby begär 55 mot Knastebo; förfrågan går direkt.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA?55          ",
+        "KNB?55          ",
         "*Åter B:Öv 12:34"
        ],
        "changed": true
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "1/1        55?VA",
+        "1/1        55?DY",
         "#Ja *Nej   12:34"
        ],
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2436,31 +2436,31 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Charlottendal står i översikten och ger klart.",
+     "caption": "Knastebo står i översikten och ger klart.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA<55          ",
+        "KNB<55          ",
         "#Avg *Åter 12:34"
        ],
        "changed": true
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "           55<VA",
+        "           55<DY",
         "C/D A:Kö   12:34"
        ],
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2492,31 +2492,31 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Vagnsta rapporterar avgång. Charlottendal kan ta emot direkt.",
+     "caption": "Dimmeby rapporterar avgång. Knastebo kan ta emot direkt.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA◀55          ",
+        "KNB◀55          ",
         "C/D A:Kö   12:34"
        ],
        "changed": true
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "           55◀VA",
+        "           55◀DY",
         "#In B:Sp   12:34"
        ],
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2544,31 +2544,31 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Charlottendal tar emot 55 på planerat spår.",
+     "caption": "Knastebo tar emot 55 på planerat spår.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "55 MOTTAGET     ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": true
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "55 ANK SP2      ",
-        "VA         12:34"
+        "DY         12:34"
        ],
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2595,18 +2595,18 @@ globalThis.TMBoxFlows = {
      "box": null,
      "keys": [],
      "wait": 3,
-     "caption": "Efter tre sekunder går Charlottendal tillbaka till översikten.",
+     "caption": "Efter tre sekunder går Knastebo tillbaka till översikten.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "55 MOTTAGET     ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2614,7 +2614,7 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2625,35 +2625,35 @@ globalThis.TMBoxFlows = {
      "meanings": []
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "5",
       "5",
       "#"
      ],
      "wait": null,
-     "caption": "Nu gäller numret avgången mot Munkeröd, och förfrågan går direkt.",
+     "caption": "Nu gäller numret avgången mot Sölvmora, och förfrågan går direkt.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "55 MOTTAGET     ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN?55          ",
+        "SVM?55          ",
         "*Åter B:Öv 12:34"
        ],
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "1/1       55?CDA",
+        "1/1       55?KNB",
         "#Ja *Nej   12:34"
        ],
        "changed": true
@@ -2683,15 +2683,15 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "MUN",
+     "box": "SVM",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Munkeröd ger klart.",
+     "caption": "Sölvmora ger klart.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2699,17 +2699,17 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN<55          ",
+        "SVM<55          ",
         "#Avg *Åter 12:34"
        ],
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          55<CDA",
+        "          55<KNB",
         "C/D A:Kö   12:34"
        ],
        "changed": true
@@ -2739,15 +2739,15 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Charlottendal rapporterar avgång. Munkeröd kan ta emot.",
+     "caption": "Knastebo rapporterar avgång. Sölvmora kan ta emot.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2755,17 +2755,17 @@ globalThis.TMBoxFlows = {
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN◀55          ",
+        "SVM◀55          ",
         "C/D A:Kö   12:34"
        ],
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          55◀CDA",
+        "          55◀KNB",
         "#In B:Sp   12:34"
        ],
        "changed": true
@@ -2796,31 +2796,31 @@ globalThis.TMBoxFlows = {
    "id": "flytta-genomgaende",
    "title": "Genomgående tåg som ingen skickat",
    "mode": "Med klartecken",
-   "intro": "Vagnsta tappade bort 55 och skickade det aldrig, men tåget står i Charlottendal. I systemet står det kvar i Vagnsta, så Charlottendal flyttar det hit först och skickar det sedan vidare som vanligt (Benny #170).",
+   "intro": "Dimmeby tappade bort 55 och skickade det aldrig, men tåget står i Knastebo. I systemet står det kvar i Dimmeby, så Knastebo flyttar det hit först och skickar det sedan vidare som vanligt (Benny #170).",
    "setup": null,
    "boxes": [
     {
-     "id": "VA",
-     "code": "VA",
-     "label": "VA",
-     "station": "Vagnsta"
+     "id": "DY",
+     "code": "DY",
+     "label": "DY",
+     "station": "Dimmeby"
     },
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     },
     {
-     "id": "MUN",
-     "code": "MUN",
-     "label": "MUN",
-     "station": "Munkeröd"
+     "id": "SVM",
+     "code": "SVM",
+     "label": "SVM",
+     "station": "Sölvmora"
     }
    ],
    "start": [
     {
-     "box": "VA",
+     "box": "DY",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -2828,7 +2828,7 @@ globalThis.TMBoxFlows = {
      "changed": true
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -2836,7 +2836,7 @@ globalThis.TMBoxFlows = {
      "changed": true
     },
     {
-     "box": "MUN",
+     "box": "SVM",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -2846,17 +2846,17 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "5",
       "5",
       "#"
      ],
      "wait": null,
-     "caption": "Charlottendal skriver 55. Tåget har inte kommit hit i systemet, så boxen frågar FLYTTA 55 HIT? och begär ingenting av Munkeröd.",
+     "caption": "Knastebo skriver 55. Tåget har inte kommit hit i systemet, så boxen frågar FLYTTA 55 HIT? och begär ingenting av Sölvmora.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2864,7 +2864,7 @@ globalThis.TMBoxFlows = {
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "FLYTTA 55 HIT?  ",
         "#Ja B:Sp   12:34"
@@ -2872,7 +2872,7 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2900,31 +2900,31 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "# flyttar 55 hit på planerat spår. Vagnstas del räknas som gjord: Vagnsta får beskedet 55 MOTTAGET och har inte längre 55 att skicka.",
+     "caption": "# flyttar 55 hit på planerat spår. Dimmebys del räknas som gjord: Dimmeby får beskedet 55 MOTTAGET och har inte längre 55 att skicka.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "55 MOTTAGET     ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": true
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "55 ANK SP2      ",
-        "VA         12:34"
+        "DY         12:34"
        ],
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2951,18 +2951,18 @@ globalThis.TMBoxFlows = {
      "box": null,
      "keys": [],
      "wait": 3,
-     "caption": "Efter tre sekunder går Charlottendal tillbaka till översikten.",
+     "caption": "Efter tre sekunder går Knastebo tillbaka till översikten.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "55 MOTTAGET     ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2970,7 +2970,7 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -2981,35 +2981,35 @@ globalThis.TMBoxFlows = {
      "meanings": []
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "5",
       "5",
       "#"
      ],
      "wait": null,
-     "caption": "Nu står 55 här, och numret gäller avgången mot Munkeröd. Förfrågan går direkt.",
+     "caption": "Nu står 55 här, och numret gäller avgången mot Sölvmora. Förfrågan går direkt.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "55 MOTTAGET     ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN?55          ",
+        "SVM?55          ",
         "*Åter B:Öv 12:34"
        ],
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "1/1       55?CDA",
+        "1/1       55?KNB",
         "#Ja *Nej   12:34"
        ],
        "changed": true
@@ -3039,15 +3039,15 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "MUN",
+     "box": "SVM",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Munkeröd ger klart.",
+     "caption": "Sölvmora ger klart.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -3055,17 +3055,17 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN<55          ",
+        "SVM<55          ",
         "#Avg *Åter 12:34"
        ],
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          55<CDA",
+        "          55<KNB",
         "C/D A:Kö   12:34"
        ],
        "changed": true
@@ -3095,15 +3095,15 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Charlottendal rapporterar avgång. Munkeröd kan ta emot.",
+     "caption": "Knastebo rapporterar avgång. Sölvmora kan ta emot.",
      "screens": [
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -3111,17 +3111,17 @@ globalThis.TMBoxFlows = {
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
-        "MUN◀55          ",
+        "SVM◀55          ",
         "C/D A:Kö   12:34"
        ],
        "changed": true
       },
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
-        "          55◀CDA",
+        "          55◀KNB",
         "#In B:Sp   12:34"
        ],
        "changed": true
@@ -3152,25 +3152,25 @@ globalThis.TMBoxFlows = {
    "id": "placera",
    "title": "Flytta hit ett tåg som ingen skickat",
    "mode": "Med klartecken",
-   "intro": "Munkeröd skickade aldrig 93, men tåget kom till Charlottendal. Charlottendal flyttar det hit i efterhand, med tidtabellens spår som förslag, och spelet går vidare.",
+   "intro": "Sölvmora skickade aldrig 93, men tåget kom till Knastebo. Knastebo flyttar det hit i efterhand, med tidtabellens spår som förslag, och spelet går vidare.",
    "setup": null,
    "boxes": [
     {
-     "id": "MUN",
-     "code": "MUN",
-     "label": "MUN",
-     "station": "Munkeröd"
+     "id": "SVM",
+     "code": "SVM",
+     "label": "SVM",
+     "station": "Sölvmora"
     },
     {
-     "id": "CDA",
-     "code": "CDA",
-     "label": "CDA",
-     "station": "Charlottendal"
+     "id": "KNB",
+     "code": "KNB",
+     "label": "KNB",
+     "station": "Knastebo"
     }
    ],
    "start": [
     {
-     "box": "MUN",
+     "box": "SVM",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -3178,7 +3178,7 @@ globalThis.TMBoxFlows = {
      "changed": true
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -3188,17 +3188,17 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "9",
       "3",
       "#"
      ],
      "wait": null,
-     "caption": "Charlottendal skriver 93. Boxen frågar FLYTTA 93 HIT?: # flyttar det till planerat spår.",
+     "caption": "Knastebo skriver 93. Boxen frågar FLYTTA 93 HIT?: # flyttar det till planerat spår.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -3206,7 +3206,7 @@ globalThis.TMBoxFlows = {
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "FLYTTA 93 HIT?  ",
         "#Ja B:Sp   12:34"
@@ -3234,7 +3234,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "B"
      ],
@@ -3242,7 +3242,7 @@ globalThis.TMBoxFlows = {
      "caption": "B väljer ett annat spår i stället. Boxen börjar på spår 1.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -3250,7 +3250,7 @@ globalThis.TMBoxFlows = {
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "93 SPÅR 1       ",
         "#In C/D:Sp 12:34"
@@ -3282,7 +3282,7 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "D"
      ],
@@ -3290,7 +3290,7 @@ globalThis.TMBoxFlows = {
      "caption": "C/D bläddrar bland stationens spår.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -3298,7 +3298,7 @@ globalThis.TMBoxFlows = {
        "changed": false
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "93 SPÅR 2       ",
         "#In C/D:Sp 12:34"
@@ -3330,26 +3330,26 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "CDA",
+     "box": "KNB",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "# flyttar 93 hit, på det valda spåret. Munkeröds del räknas som gjord.",
+     "caption": "# flyttar 93 hit, på det valda spåret. Sölvmoras del räknas som gjord.",
      "screens": [
       {
-       "box": "MUN",
+       "box": "SVM",
        "lines": [
         "93 MOTTAGET     ",
-        "CDA        12:34"
+        "KNB        12:34"
        ],
        "changed": true
       },
       {
-       "box": "CDA",
+       "box": "KNB",
        "lines": [
         "93 ANK SP2      ",
-        "MUN        12:34"
+        "SVM        12:34"
        ],
        "changed": true
       }
@@ -3379,27 +3379,27 @@ globalThis.TMBoxFlows = {
    "setup": null,
    "boxes": [
     {
-     "id": "CDA-V",
-     "code": "CDA",
-     "label": "CDA · vänster",
-     "station": "Charlottendal"
+     "id": "KNB-V",
+     "code": "KNB",
+     "label": "KNB · vänster",
+     "station": "Knastebo"
     },
     {
-     "id": "CDA-H",
-     "code": "CDA",
-     "label": "CDA · höger",
-     "station": "Charlottendal"
+     "id": "KNB-H",
+     "code": "KNB",
+     "label": "KNB · höger",
+     "station": "Knastebo"
     },
     {
-     "id": "VA",
-     "code": "VA",
-     "label": "VA",
-     "station": "Vagnsta"
+     "id": "DY",
+     "code": "DY",
+     "label": "DY",
+     "station": "Dimmeby"
     }
    ],
    "start": [
     {
-     "box": "CDA-V",
+     "box": "KNB-V",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -3407,7 +3407,7 @@ globalThis.TMBoxFlows = {
      "changed": true
     },
     {
-     "box": "CDA-H",
+     "box": "KNB-H",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -3415,7 +3415,7 @@ globalThis.TMBoxFlows = {
      "changed": true
     },
     {
-     "box": "VA",
+     "box": "DY",
      "lines": [
       "                ",
       "Nr# A:Kö   12:34"
@@ -3425,17 +3425,17 @@ globalThis.TMBoxFlows = {
    ],
    "steps": [
     {
-     "box": "CDA-V",
+     "box": "KNB-V",
      "keys": [
       "3",
       "9",
       "#"
      ],
      "wait": null,
-     "caption": "Vänsterboxen (mot Munkeröd) söker 39, som går mot Vagnsta. Svaret blir ANNAN SIDA.",
+     "caption": "Vänsterboxen (mot Sölvmora) söker 39, som går mot Dimmeby. Svaret blir ANNAN SIDA.",
      "screens": [
       {
-       "box": "CDA-V",
+       "box": "KNB-V",
        "lines": [
         "ANNAN SIDA      ",
         "           12:34"
@@ -3443,7 +3443,7 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "CDA-H",
+       "box": "KNB-H",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -3451,7 +3451,7 @@ globalThis.TMBoxFlows = {
        "changed": false
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -3481,7 +3481,7 @@ globalThis.TMBoxFlows = {
      "caption": "Beskedet försvinner av sig självt efter tre sekunder.",
      "screens": [
       {
-       "box": "CDA-V",
+       "box": "KNB-V",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -3489,7 +3489,7 @@ globalThis.TMBoxFlows = {
        "changed": true
       },
       {
-       "box": "CDA-H",
+       "box": "KNB-H",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -3497,7 +3497,7 @@ globalThis.TMBoxFlows = {
        "changed": false
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -3508,7 +3508,7 @@ globalThis.TMBoxFlows = {
      "meanings": []
     },
     {
-     "box": "CDA-H",
+     "box": "KNB-H",
      "keys": [
       "3",
       "9",
@@ -3518,7 +3518,7 @@ globalThis.TMBoxFlows = {
      "caption": "Högerboxen hittar tåget och begär klartecken direkt.",
      "screens": [
       {
-       "box": "CDA-V",
+       "box": "KNB-V",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -3526,17 +3526,17 @@ globalThis.TMBoxFlows = {
        "changed": false
       },
       {
-       "box": "CDA-H",
+       "box": "KNB-H",
        "lines": [
-        "           39?VA",
+        "           39?DY",
         "*Åter B:Öv 12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA?39       1/1",
+        "KNB?39       1/1",
         "#Ja *Nej   12:34"
        ],
        "changed": true
@@ -3566,15 +3566,15 @@ globalThis.TMBoxFlows = {
      ]
     },
     {
-     "box": "VA",
+     "box": "DY",
      "keys": [
       "#"
      ],
      "wait": null,
-     "caption": "Vagnsta ger klart. På Charlottendal visar bara högerboxen tåget.",
+     "caption": "Dimmeby ger klart. På Knastebo visar bara högerboxen tåget.",
      "screens": [
       {
-       "box": "CDA-V",
+       "box": "KNB-V",
        "lines": [
         "                ",
         "Nr# A:Kö   12:34"
@@ -3582,17 +3582,17 @@ globalThis.TMBoxFlows = {
        "changed": false
       },
       {
-       "box": "CDA-H",
+       "box": "KNB-H",
        "lines": [
-        "           39>VA",
+        "           39>DY",
         "#Avg *Åter 12:34"
        ],
        "changed": true
       },
       {
-       "box": "VA",
+       "box": "DY",
        "lines": [
-        "CDA>39          ",
+        "KNB>39          ",
         "C/D A:Kö   12:34"
        ],
        "changed": true

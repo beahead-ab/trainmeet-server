@@ -5,6 +5,19 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Provbänken har påhittade stationer
+
+Provbänken (`/tmbox-lab/`) och flödesdokumentet använde Munkeröd,
+Charlottendal och Vagnsta, som finns i modellvärlden. Casper ville ha namn
+som inte finns där. Provbänkens stationer heter nu **Sölvmora (SVM) –
+Knastebo (KNB) – Dimmeby (DY)**, och boxarna DEMO-SVM, DEMO-KNB och DEMO-DY.
+Tågen, tiderna och flödena är desamma. Tidtabeller för riktiga träffar
+påverkas inte.
+
+Slumpvandringen i `test_terminal_input_guard` gick förut en enda väg som
+berodde på boxarnas namn. Nu går den tre vandringar, var och en på en ny
+provbänk, och kräver att de tillsammans når varje åtgärd.
+
 ### Tåget på linjen visar sin egen turs ankomst
 
 Casper såg tåg 319 ute på linjen Charlottendal–Gässlösa med "ank 19:05" när

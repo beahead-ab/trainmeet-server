@@ -1,7 +1,7 @@
 """The TMBox flows page, executed through the real server-16x2 engine.
 
 Every picture on /tmbox-lab/floden is a frame Terminal16Lab produced for a key
-press, with the test bench's data (Munkeröd - Charlottendal - Vagnsta) and a
+press, with the test bench's data (Sölvmora - Knastebo - Dimmeby) and a
 fixed clock. Nothing is drawn by hand: when the engine changes what a box
 shows, the page is regenerated, and tests/test_tmbox_flows.py fails until it is.
 
@@ -17,7 +17,7 @@ from tmbox_gateway.terminal16_demo import demo_lab
 
 KEY_ORDER = "#*ABCD"
 MODES = {"clearance": "Med klartecken", "direct": "Direkttrafik"}
-# Flows run on the bench's meet with train 55 added, VA -> CDA -> MUN.
+# Flows run on the bench's meet with train 55 added, DY -> KNB -> SVM.
 THROUGH = {"genomgaende", "flytta-genomgaende"}
 NOTICE_SECONDS, RECEIPT_SECONDS = 3, 5
 
@@ -27,144 +27,144 @@ NOTICE_SECONDS, RECEIPT_SECONDS = 3, 5
 # Keys are what the operator presses: digits are buffered in the box like on
 # the real one, and "39#" is typing 39 and searching with #.
 FLOWS = [
-    ("klarera", "Klartecken, avgång och ankomst", "clearance", ["CDA", "VA"],
+    ("klarera", "Klartecken, avgång och ankomst", "clearance", ["KNB", "DY"],
      "Det vanliga flödet på en sträcka med klartecken: avsändaren begär, mottagaren ger klart, "
      "avsändaren rapporterar avgång och mottagaren tar emot.",
      None, [
-        ("CDA", "39", "Skriv tågnumret direkt från översikten. Siffrorna stannar i boxen tills du trycker #."),
-        ("CDA", "#", "# söker tåget och begär klartecken (?) i samma tryck. 39 ska till Vagnsta, som står i "
-                     "översikten och visar förfrågan direkt. * återtar så länge Vagnsta inte har svarat."),
-        ("VA", "#", "Vagnsta ger klart med #. Tecknet blir > hos båda."),
-        ("CDA", "#", "Charlottendal rapporterar faktisk avgång med #. Sträckan är upptagen (▶) "
-                     "och Vagnsta kan ta emot direkt."),
-        ("VA", "#", "Vagnsta tar emot på planerat spår med #. Charlottendal får beskedet "
+        ("KNB", "39", "Skriv tågnumret direkt från översikten. Siffrorna stannar i boxen tills du trycker #."),
+        ("KNB", "#", "# söker tåget och begär klartecken (?) i samma tryck. 39 ska till Dimmeby, som står i "
+                     "översikten och visar förfrågan direkt. * återtar så länge Dimmeby inte har svarat."),
+        ("DY", "#", "Dimmeby ger klart med #. Tecknet blir > hos båda."),
+        ("KNB", "#", "Knastebo rapporterar faktisk avgång med #. Sträckan är upptagen (▶) "
+                     "och Dimmeby kan ta emot direkt."),
+        ("DY", "#", "Dimmeby tar emot på planerat spår med #. Knastebo får beskedet "
                     "39 MOTTAGET med mottagarens kod."),
-        ("wait", NOTICE_SECONDS, "Efter tre sekunder går Vagnsta tillbaka till översikten av sig själv."),
+        ("wait", NOTICE_SECONDS, "Efter tre sekunder går Dimmeby tillbaka till översikten av sig själv."),
         ("wait", RECEIPT_SECONDS - NOTICE_SECONDS,
-         "Fem sekunder efter ankomsten försvinner beskedet på Charlottendal, utan kvittering. Sträckan är fri."),
+         "Fem sekunder efter ankomsten försvinner beskedet på Knastebo, utan kvittering. Sträckan är fri."),
     ]),
-    ("annat-spar", "Ta emot på ett annat spår", "clearance", ["CDA", "VA"],
+    ("annat-spar", "Ta emot på ett annat spår", "clearance", ["KNB", "DY"],
      "När tåget ska in på ett annat spår än det planerade.",
-     ([("CDA", "39#"), ("VA", "#"), ("CDA", "#")],
-      "39 har fått klart och avgått från Charlottendal mot Vagnsta."), [
-        ("VA", "B", "B väljer annat ankomstspår. Boxen börjar på spår 1."),
-        ("VA", "D", "C/D bläddrar bland stationens spår."),
-        ("VA", "#", "# tar emot på spår 2. Ankomsten registreras på det spåret."),
+     ([("KNB", "39#"), ("DY", "#"), ("KNB", "#")],
+      "39 har fått klart och avgått från Knastebo mot Dimmeby."), [
+        ("DY", "B", "B väljer annat ankomstspår. Boxen börjar på spår 1."),
+        ("DY", "D", "C/D bläddrar bland stationens spår."),
+        ("DY", "#", "# tar emot på spår 2. Ankomsten registreras på det spåret."),
     ]),
-    ("neka", "Neka en förfrågan", "clearance", ["CDA", "VA"],
+    ("neka", "Neka en förfrågan", "clearance", ["KNB", "DY"],
      "Mottagaren kan inte ta emot tåget just nu.",
-     ([("CDA", "39#")], "Charlottendal har begärt klartecken för 39."), [
-        ("VA", "*", "* på förfrågan frågar först: NEKA 39? Inget är ändrat än."),
-        ("VA", "#", "# bekräftar. Båda boxarna visar 39 NEKAT med den andra stationen under, och sträckan är fri igen."),
+     ([("KNB", "39#")], "Knastebo har begärt klartecken för 39."), [
+        ("DY", "*", "* på förfrågan frågar först: NEKA 39? Inget är ändrat än."),
+        ("DY", "#", "# bekräftar. Båda boxarna visar 39 NEKAT med den andra stationen under, och sträckan är fri igen."),
         ("wait", NOTICE_SECONDS, "Efter tre sekunder går båda tillbaka till översikten av sig själva. "
-                                 "Inget besked behöver kvitteras. Charlottendal kan begära igen senare."),
+                                 "Inget besked behöver kvitteras. Knastebo kan begära igen senare."),
     ]),
-    ("aterta-begaran", "Återta en begäran", "clearance", ["CDA", "VA"],
+    ("aterta-begaran", "Återta en begäran", "clearance", ["KNB", "DY"],
      "Avsändaren ångrar sig innan mottagaren har svarat.",
-     ([("CDA", "39#")], "Charlottendal har begärt klartecken för 39."), [
-        ("CDA", "*", "* frågar först: ÅTER 39? Förfrågan ligger kvar hos Vagnsta tills du bekräftar."),
-        ("CDA", "#", "# återtar. Båda boxarna visar 39 ÅTERTAGET, och förfrågan är borta ur Vagnstas kö."),
+     ([("KNB", "39#")], "Knastebo har begärt klartecken för 39."), [
+        ("KNB", "*", "* frågar först: ÅTER 39? Förfrågan ligger kvar hos Dimmeby tills du bekräftar."),
+        ("KNB", "#", "# återtar. Båda boxarna visar 39 ÅTERTAGET, och förfrågan är borta ur Dimmebys kö."),
         ("wait", NOTICE_SECONDS, "Efter tre sekunder går båda tillbaka till översikten av sig själva."),
     ]),
-    ("aterta-klartecken", "Återta ett klartecken före avgång", "clearance", ["CDA", "VA"],
+    ("aterta-klartecken", "Återta ett klartecken före avgång", "clearance", ["KNB", "DY"],
      "Tåget har fått klart men ska inte gå ändå. Efter faktisk avgång går det inte att återta.",
-     ([("CDA", "39#"), ("VA", "#")], "Vagnsta har gett klart för 39."), [
-        ("CDA", "*", "* frågar först: ÅTER 39? Klartecknet gäller tills du bekräftar."),
-        ("CDA", "#", "# återtar. Båda boxarna visar 39 ÅTERTAGET: Vagnsta ska inte ta emot ett tåg som aldrig gick."),
+     ([("KNB", "39#"), ("DY", "#")], "Dimmeby har gett klart för 39."), [
+        ("KNB", "*", "* frågar först: ÅTER 39? Klartecknet gäller tills du bekräftar."),
+        ("KNB", "#", "# återtar. Båda boxarna visar 39 ÅTERTAGET: Dimmeby ska inte ta emot ett tåg som aldrig gick."),
         ("wait", NOTICE_SECONDS, "Efter tre sekunder går båda tillbaka till översikten och sträckan är fri."),
     ]),
-    ("tva-forfragningar", "Två förfrågningar samtidigt", "clearance", ["MUN", "CDA", "VA"],
-     "Charlottendal får förfrågningar från båda hållen.",
+    ("tva-forfragningar", "Två förfrågningar samtidigt", "clearance", ["SVM", "KNB", "DY"],
+     "Knastebo får förfrågningar från båda hållen.",
      None, [
-        ("MUN", "93#", "Munkeröd skriver 93 och trycker #: förfrågan går direkt. Charlottendal står i "
+        ("SVM", "93#", "Sölvmora skriver 93 och trycker #: förfrågan går direkt. Knastebo står i "
                        "översikten och visar den."),
-        ("VA", "94#", "Vagnsta begär 94 på samma sätt. Charlottendal stannar på förfrågan den visar; "
+        ("DY", "94#", "Dimmeby begär 94 på samma sätt. Knastebo stannar på förfrågan den visar; "
                       "räknaren blir 1/2."),
-        ("CDA", "D", "D bläddrar till nästa förfrågan i kön, 2/2."),
-        ("CDA", "#", "# ger klart för just det visade tåget, 94. Boxen stannar på det tåget."),
-        ("CDA", "A", "A öppnar kön igen. Kvar är 93 från Munkeröd."),
-        ("CDA", "#", "# ger klart även för 93."),
+        ("KNB", "D", "D bläddrar till nästa förfrågan i kön, 2/2."),
+        ("KNB", "#", "# ger klart för just det visade tåget, 94. Boxen stannar på det tåget."),
+        ("KNB", "A", "A öppnar kön igen. Kvar är 93 från Sölvmora."),
+        ("KNB", "#", "# ger klart även för 93."),
     ]),
-    ("hitta-aktivt", "Hitta ett tåg som har fått klart", "clearance", ["MUN", "CDA", "VA"],
+    ("hitta-aktivt", "Hitta ett tåg som har fått klart", "clearance", ["SVM", "KNB", "DY"],
      "Klartecknet kommer medan du gör något annat. B visar alla tåg som pågår.",
-     ([("CDA", "17#"), ("CDA", "B"), ("CDA", "39#"), ("CDA", "B")],
-      "Charlottendal har begärt klartecken för 17 mot Munkeröd och 39 mot Vagnsta, och står i översikten."), [
-        ("MUN", "#", "Munkeröd ger klart för 17."),
-        ("VA", "#", "Vagnsta ger klart för 39. Charlottendals översikt visar båda och B:Akt2: två aktiva tåg."),
-        ("CDA", "B", "B öppnar de aktiva tågen. Klarerade avgångar kommer först; 1/2 visar vilket du ser. "
+     ([("KNB", "17#"), ("KNB", "B"), ("KNB", "39#"), ("KNB", "B")],
+      "Knastebo har begärt klartecken för 17 mot Sölvmora och 39 mot Dimmeby, och står i översikten."), [
+        ("SVM", "#", "Sölvmora ger klart för 17."),
+        ("DY", "#", "Dimmeby ger klart för 39. Knastebos översikt visar båda och B:Akt2: två aktiva tåg."),
+        ("KNB", "B", "B öppnar de aktiva tågen. Klarerade avgångar kommer först; 1/2 visar vilket du ser. "
                      "Det går också att skriva tågnumret direkt."),
-        ("CDA", "D", "D går till nästa aktiva tåg, 39 mot Vagnsta."),
-        ("CDA", "#", "# rapporterar avgång för just det visade tåget. 17 väntar kvar i listan."),
+        ("KNB", "D", "D går till nästa aktiva tåg, 39 mot Dimmeby."),
+        ("KNB", "#", "# rapporterar avgång för just det visade tåget. 17 väntar kvar i listan."),
     ]),
-    ("direkt", "Direkttrafik utan klartecken", "direct", ["CDA", "VA"],
+    ("direkt", "Direkttrafik utan klartecken", "direct", ["KNB", "DY"],
      "På en sträcka med direkttrafik reserverar avsändaren själv. Mottagaren får ingen förfrågan.",
      None, [
-        ("CDA", "39#", "Charlottendal skriver 39 och trycker #. På direkttrafik reserverar det sträckan "
-                       "direkt (>). Vagnsta ser tåget som aktivt: B:Akt1."),
-        ("CDA", "#", "# rapporterar avgång."),
-        ("VA", "B", "Vagnsta öppnar det aktiva tåget med B."),
-        ("VA", "#", "# tar emot på planerat spår."),
+        ("KNB", "39#", "Knastebo skriver 39 och trycker #. På direkttrafik reserverar det sträckan "
+                       "direkt (>). Dimmeby ser tåget som aktivt: B:Akt1."),
+        ("KNB", "#", "# rapporterar avgång."),
+        ("DY", "B", "Dimmeby öppnar det aktiva tåget med B."),
+        ("DY", "#", "# tar emot på planerat spår."),
     ]),
-    ("tidtabell", "Bläddra i tidtabellen", "clearance", ["CDA"],
+    ("tidtabell", "Bläddra i tidtabellen", "clearance", ["KNB"],
      "Välj tåg ur stationens tidtabell i stället för att skriva numret.",
      None, [
-        ("CDA", "#", "# från översikten öppnar stationens kommande tåg, med planerad tid."),
-        ("CDA", "D", "C/D bläddrar."),
-        ("CDA", "B", "B filtrerar, först på ankomster. Även en ankomst som ingen har skickat går att välja och flytta hit."),
-        ("CDA", "B", "B igen visar bara avgångar. Ett tredje B visar alla tåg."),
-        ("CDA", "#", "# väljer tåget. Nu kan du begära klartecken för det."),
+        ("KNB", "#", "# från översikten öppnar stationens kommande tåg, med planerad tid."),
+        ("KNB", "D", "C/D bläddrar."),
+        ("KNB", "B", "B filtrerar, först på ankomster. Även en ankomst som ingen har skickat går att välja och flytta hit."),
+        ("KNB", "B", "B igen visar bara avgångar. Ett tredje B visar alla tåg."),
+        ("KNB", "#", "# väljer tåget. Nu kan du begära klartecken för det."),
     ]),
-    ("nej", "När boxen säger nej", "clearance", ["CDA"],
+    ("nej", "När boxen säger nej", "clearance", ["KNB"],
      "Boxen säger varför ett nummer inte går att välja. Siffrorna skickas först när du trycker #.",
      None, [
-        ("CDA", "123#", "Ett nummer som inte går vid stationen ger INGET TÅG."),
+        ("KNB", "123#", "Ett nummer som inte går vid stationen ger INGET TÅG."),
         ("wait", NOTICE_SECONDS, "Beskedet försvinner av sig självt efter tre sekunder; # eller * stänger det direkt."),
-        ("CDA", "4", "Har du börjat skriva ett fel nummer, suddar B sista siffran …"),
-        ("CDA", "*", "… och * tömmer hela inmatningen. Inget har skickats till servern."),
+        ("KNB", "4", "Har du börjat skriva ett fel nummer, suddar B sista siffran …"),
+        ("KNB", "*", "… och * tömmer hela inmatningen. Inget har skickats till servern."),
     ]),
-    ("genomgaende", "Genomgående tåg", "clearance", ["VA", "CDA", "MUN"],
-     "Tåg 55 kommer in från Vagnsta och går vidare mot Munkeröd med samma nummer. Numret gäller "
+    ("genomgaende", "Genomgående tåg", "clearance", ["DY", "KNB", "SVM"],
+     "Tåg 55 kommer in från Dimmeby och går vidare mot Sölvmora med samma nummer. Numret gäller "
      "det som är på gång: först ankomsten, sedan avgången.",
      None, [
-        ("VA", "55#", "Vagnsta begär 55 mot Charlottendal; förfrågan går direkt."),
-        ("CDA", "#", "Charlottendal står i översikten och ger klart."),
-        ("VA", "#", "Vagnsta rapporterar avgång. Charlottendal kan ta emot direkt."),
-        ("CDA", "#", "Charlottendal tar emot 55 på planerat spår."),
-        ("wait", NOTICE_SECONDS, "Efter tre sekunder går Charlottendal tillbaka till översikten."),
-        ("CDA", "55#", "Nu gäller numret avgången mot Munkeröd, och förfrågan går direkt."),
-        ("MUN", "#", "Munkeröd ger klart."),
-        ("CDA", "#", "Charlottendal rapporterar avgång. Munkeröd kan ta emot."),
+        ("DY", "55#", "Dimmeby begär 55 mot Knastebo; förfrågan går direkt."),
+        ("KNB", "#", "Knastebo står i översikten och ger klart."),
+        ("DY", "#", "Dimmeby rapporterar avgång. Knastebo kan ta emot direkt."),
+        ("KNB", "#", "Knastebo tar emot 55 på planerat spår."),
+        ("wait", NOTICE_SECONDS, "Efter tre sekunder går Knastebo tillbaka till översikten."),
+        ("KNB", "55#", "Nu gäller numret avgången mot Sölvmora, och förfrågan går direkt."),
+        ("SVM", "#", "Sölvmora ger klart."),
+        ("KNB", "#", "Knastebo rapporterar avgång. Sölvmora kan ta emot."),
     ]),
-    ("flytta-genomgaende", "Genomgående tåg som ingen skickat", "clearance", ["VA", "CDA", "MUN"],
-     "Vagnsta tappade bort 55 och skickade det aldrig, men tåget står i Charlottendal. I systemet står "
-     "det kvar i Vagnsta, så Charlottendal flyttar det hit först och skickar det sedan vidare som vanligt "
+    ("flytta-genomgaende", "Genomgående tåg som ingen skickat", "clearance", ["DY", "KNB", "SVM"],
+     "Dimmeby tappade bort 55 och skickade det aldrig, men tåget står i Knastebo. I systemet står "
+     "det kvar i Dimmeby, så Knastebo flyttar det hit först och skickar det sedan vidare som vanligt "
      "(Benny #170).",
      None, [
-        ("CDA", "55#", "Charlottendal skriver 55. Tåget har inte kommit hit i systemet, så boxen frågar "
-                       "FLYTTA 55 HIT? och begär ingenting av Munkeröd."),
-        ("CDA", "#", "# flyttar 55 hit på planerat spår. Vagnstas del räknas som gjord: Vagnsta får beskedet "
+        ("KNB", "55#", "Knastebo skriver 55. Tåget har inte kommit hit i systemet, så boxen frågar "
+                       "FLYTTA 55 HIT? och begär ingenting av Sölvmora."),
+        ("KNB", "#", "# flyttar 55 hit på planerat spår. Dimmebys del räknas som gjord: Dimmeby får beskedet "
                      "55 MOTTAGET och har inte längre 55 att skicka."),
-        ("wait", NOTICE_SECONDS, "Efter tre sekunder går Charlottendal tillbaka till översikten."),
-        ("CDA", "55#", "Nu står 55 här, och numret gäller avgången mot Munkeröd. Förfrågan går direkt."),
-        ("MUN", "#", "Munkeröd ger klart."),
-        ("CDA", "#", "Charlottendal rapporterar avgång. Munkeröd kan ta emot."),
+        ("wait", NOTICE_SECONDS, "Efter tre sekunder går Knastebo tillbaka till översikten."),
+        ("KNB", "55#", "Nu står 55 här, och numret gäller avgången mot Sölvmora. Förfrågan går direkt."),
+        ("SVM", "#", "Sölvmora ger klart."),
+        ("KNB", "#", "Knastebo rapporterar avgång. Sölvmora kan ta emot."),
     ]),
-    ("placera", "Flytta hit ett tåg som ingen skickat", "clearance", ["MUN", "CDA"],
-     "Munkeröd skickade aldrig 93, men tåget kom till Charlottendal. Charlottendal flyttar det hit "
+    ("placera", "Flytta hit ett tåg som ingen skickat", "clearance", ["SVM", "KNB"],
+     "Sölvmora skickade aldrig 93, men tåget kom till Knastebo. Knastebo flyttar det hit "
      "i efterhand, med tidtabellens spår som förslag, och spelet går vidare.",
      None, [
-        ("CDA", "93#", "Charlottendal skriver 93. Boxen frågar FLYTTA 93 HIT?: # flyttar det till planerat spår."),
-        ("CDA", "B", "B väljer ett annat spår i stället. Boxen börjar på spår 1."),
-        ("CDA", "D", "C/D bläddrar bland stationens spår."),
-        ("CDA", "#", "# flyttar 93 hit, på det valda spåret. Munkeröds del räknas som gjord."),
+        ("KNB", "93#", "Knastebo skriver 93. Boxen frågar FLYTTA 93 HIT?: # flyttar det till planerat spår."),
+        ("KNB", "B", "B väljer ett annat spår i stället. Boxen börjar på spår 1."),
+        ("KNB", "D", "C/D bläddrar bland stationens spår."),
+        ("KNB", "#", "# flyttar 93 hit, på det valda spåret. Sölvmoras del räknas som gjord."),
     ]),
-    ("tva-boxar", "Två boxar på samma station", "clearance", ["CDA-V", "CDA-H", "VA"],
+    ("tva-boxar", "Två boxar på samma station", "clearance", ["KNB-V", "KNB-H", "DY"],
      "En station kan ha en box per sida. Varje box hanterar bara tågen på sina sträckor.",
      None, [
-        ("CDA-V", "39#", "Vänsterboxen (mot Munkeröd) söker 39, som går mot Vagnsta. Svaret blir ANNAN SIDA."),
+        ("KNB-V", "39#", "Vänsterboxen (mot Sölvmora) söker 39, som går mot Dimmeby. Svaret blir ANNAN SIDA."),
         ("wait", NOTICE_SECONDS, "Beskedet försvinner av sig självt efter tre sekunder."),
-        ("CDA-H", "39#", "Högerboxen hittar tåget och begär klartecken direkt."),
-        ("VA", "#", "Vagnsta ger klart. På Charlottendal visar bara högerboxen tåget."),
+        ("KNB-H", "39#", "Högerboxen hittar tåget och begär klartecken direkt."),
+        ("DY", "#", "Dimmeby ger klart. På Knastebo visar bara högerboxen tåget."),
     ]),
 ]
 
@@ -177,10 +177,10 @@ class Flow:
         self.lab.engine.set_clock_source(lambda: {"configured": True, "running": False, "time": "12:34"})
         self.time = 0.0
         self.lab.now = lambda: self.time
-        if any(box.startswith("CDA-") for box in boxes):
-            del self.lab.terminals["DEMO-CDA"]
-            self.lab.terminals["DEMO-CDA-V"] = Terminal("cda", side="left")
-            self.lab.terminals["DEMO-CDA-H"] = Terminal("cda", side="right")
+        if any(box.startswith("KNB-") for box in boxes):
+            del self.lab.terminals["DEMO-KNB"]
+            self.lab.terminals["DEMO-KNB-V"] = Terminal("knb", side="left")
+            self.lab.terminals["DEMO-KNB-H"] = Terminal("knb", side="right")
         self.boxes = boxes
         self.digits = {box: "" for box in boxes}
         self.shown = {}
@@ -242,7 +242,7 @@ class Flow:
 
 def box_label(flow, box):
     station = flow.lab.engine.config.stations[flow.lab.terminals[flow.device(box)].station]
-    side = {"CDA-V": " · vänster", "CDA-H": " · höger"}.get(box, "")
+    side = {"KNB-V": " · vänster", "KNB-H": " · höger"}.get(box, "")
     return {"id": box, "code": station.code, "label": station.code + side, "station": station.name}
 
 

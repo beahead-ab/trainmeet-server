@@ -46,7 +46,7 @@ class Terminal16GlyphTests(unittest.TestCase):
             with self.assertRaises(ValueError): encode_lcd(lines)
 
     def test_pilot_and_entry_frames_carry_server_owned_glyphs(self):
-        frame = demo_lab().frame("DEMO-CDA")
+        frame = demo_lab().frame("DEMO-KNB")
         self.assertEqual(frame["lcd"]["encoding"], "hd44780-5x8-cgram-v1")
         self.assertIn("TÅG", frame["entry"]["lines"][0])
         self.assertIn("#Sök", frame["entry"]["lines"][1])

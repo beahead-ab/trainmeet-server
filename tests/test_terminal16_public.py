@@ -104,8 +104,8 @@ class PublicHTTPTests(unittest.TestCase):
         return json.loads(data)
 
     def key(self, cookie, key, number=None):
-        frame = next(f for f in self.state(cookie)["frames"] if f["device_id"] == "DEMO-CDA")
-        body = {"device_id": "DEMO-CDA", "view_token": frame["view_token"], "command_id": str(uuid4()), "key": key}
+        frame = next(f for f in self.state(cookie)["frames"] if f["device_id"] == "DEMO-KNB")
+        body = {"device_id": "DEMO-KNB", "view_token": frame["view_token"], "command_id": str(uuid4()), "key": key}
         if number:
             body.update(train_number=number, entry_context=frame["entry"]["context"])
         status, _, data = self.request("/api/key", cookie=cookie, body=body)
@@ -125,7 +125,7 @@ class PublicHTTPTests(unittest.TestCase):
     def test_state_includes_server_owned_station_timetables(self):
         state = self.state(self.session())
         self.assertEqual(set(state["timetables"]), {frame["device_id"] for frame in state["frames"]})
-        self.assertEqual([row["train_number"] for row in state["timetables"]["DEMO-CDA"]["rows"]], ["17", "39", "93", "94"])
+        self.assertEqual([row["train_number"] for row in state["timetables"]["DEMO-KNB"]["rows"]], ["17", "39", "93", "94"])
         self.assertEqual(state["audit"], [])
 
     def test_two_browsers_are_isolated_and_reset_does_not_affect_other(self):
@@ -154,15 +154,15 @@ class PublicHTTPTests(unittest.TestCase):
         before = self.state(second)["placement"]
         placement = self.state(first)["placement"]
         body = {"epoch": placement["epoch"], "revision": placement["revision"],
-                "stations": {"mun": {}, "cda": {"west": "right"}, "va": {}}}
+                "stations": {"svm": {}, "knb": {"west": "right"}, "dy": {}}}
         self.assertEqual(self.request("/api/display-placement", body=body)[0], 401)
         self.assertEqual(self.request("/api/display-placement", cookie=first, body=body,
                                       headers={"Origin": "https://elsewhere.example"})[0], 403)
         self.assertEqual(self.request("/api/display-placement", cookie=first, body=body)[0], 200)
         self.assertEqual(self.state(second)["placement"], before)
         saved = self.state(first)["placement"]
-        cda = next(station for station in saved["stations"] if station["station_id"] == "cda")
-        self.assertEqual(cda["connections"][0]["side"], "right")
+        knb = next(station for station in saved["stations"] if station["station_id"] == "knb")
+        self.assertEqual(knb["connections"][0]["side"], "right")
         self.assertEqual(self.request(cookie=first)[0], 200)
         self.assertEqual(self.state(first)["placement"], saved)
 
@@ -205,8 +205,8 @@ class PublicHTTPTests(unittest.TestCase):
     def test_cross_browser_frame_cannot_control_other_session(self):
         first, second = self.session(), self.session()
         self.key(first, "#", "39")
-        frame = next(f for f in self.state(first)["frames"] if f["device_id"] == "DEMO-CDA")
-        self.assertEqual(self.request("/api/key", cookie=second, body={"device_id": "DEMO-CDA",
+        frame = next(f for f in self.state(first)["frames"] if f["device_id"] == "DEMO-KNB")
+        self.assertEqual(self.request("/api/key", cookie=second, body={"device_id": "DEMO-KNB",
                          "command_id": "cross-browser", "view_token": frame["view_token"], "key": "#"})[0], 409)
         self.assertEqual(self.state(second)["audit"], [])
 
