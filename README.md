@@ -2,7 +2,9 @@
 
 TrainMeet Server är den lokala, självständiga driftsmiljön för en TrainMeet-träff på Raspberry Pi, Mac eller PC. En server representerar exakt en vald träff åt gången, även när klockan är stoppad. Träffens config publiceras i Cloud; servern äger driftläget, klockan och anslutna enheter och fortsätter fungera utan internet.
 
-[TrainMeet Cloud](https://github.com/beahead-ab/trainmeet-cloud) bygger, validerar och publicerar konfigurationer och tolkar importerade tidtabeller. Själva träffen körs lokalt här. Flödet går bara åt ett håll: Cloud publicerar, den här servern hämtar. Ingenting synkas tillbaka.
+[TrainMeet Cloud](https://cloud.trainmeet.app) bygger, validerar och publicerar konfigurationer och tolkar importerade tidtabeller. Själva träffen körs lokalt här. Flödet går bara åt ett håll: Cloud publicerar, den här servern hämtar. Ingenting synkas tillbaka.
+
+Projektet är öppet och publicerat under MIT-licensen. Koden kan användas, granskas, ändras och distribueras enligt villkoren i [LICENSE](LICENSE).
 
 ## US-körning och språk
 
@@ -471,8 +473,7 @@ TMBox-simulering. De andra delarna installeras separat:
 
 - Den fysiska ESP32/Arduino-boxens firmware finns i
   [trainmeet-tmbox](https://github.com/beahead-ab/trainmeet-tmbox).
-- Den nativa iPhone-appen finns i
-  [trainmeet-iphone](https://github.com/beahead-ab/trainmeet-iphone).
+- Den nativa iPhone-appen, TMBox för iPhone, distribueras separat.
 - [TrainMeet TKL](https://github.com/beahead-ab/trainmeet-tkl) är den separata
   stationsapplikationen. Den installeras separat; Server serverar inte `/tkl/`.
 
@@ -1034,7 +1035,7 @@ python3 -m venv .venv
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Den fysiska boxens firmware finns i [trainmeet-tmbox](https://github.com/beahead-ab/trainmeet-tmbox). Den nativa appen finns separat i [trainmeet-iphone](https://github.com/beahead-ab/trainmeet-iphone).
+Den fysiska boxens firmware finns i [trainmeet-tmbox](https://github.com/beahead-ab/trainmeet-tmbox). Den nativa iPhone-appen distribueras separat.
 
 ## EU eller US följer träffen
 
@@ -1042,3 +1043,7 @@ Trafiktypen väljs för träffen i Cloud, inte med en separat serverväxel.
 Alla arbetsytor använder samma valda träff. Ett uttryckligt träffbyte görs
 under Inställningar och kräver att driftkontrollerna tillåter bytet.
 US-vyerna börjar på engelska. Se [US-pilotens omfattning](docs/TRAINMEET-US.md).
+
+## Licens
+
+MIT © Beahead AB. Se [LICENSE](LICENSE).
