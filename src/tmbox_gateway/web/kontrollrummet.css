@@ -137,6 +137,10 @@ button.kr-pill.warn:hover { background: var(--kr-amber-soft); filter: brightness
 :root[data-kr-theme="light"] #app-chrome { color-scheme: light; }
 #app-chrome a { color: var(--kr-ink); }
 #app-chrome .brand-lockup { color: var(--kr-ink); gap: 9px; text-decoration: none; }
+/* Logotypen är stationsskylten (TRAINMEET på blå platta); samma bild i mörkt och ljust. */
+#app-chrome .brand-sign { display: block; height: 26px; width: auto; flex-shrink: 0; }
+/* Den kompakta ikonen (TM på plattan) ersätter skylten på en telefon när man är inloggad. */
+#app-chrome .brand-mark--compact { display: none; }
 #app-chrome .tm-logo__lines { font-size: 13px; font-weight: 700; line-height: 1.05; }
 #app-chrome .tm-logo__product { color: var(--kr-mute); letter-spacing: .12em; font-size: 9.5px; }
 #app-chrome .tm-switch { border: 0; border-left: 1px solid var(--kr-line-2); border-radius: 0; background: none; padding: 0 0 0 14px; color: var(--kr-ink); gap: 8px; min-width: 0; box-shadow: none; }
@@ -780,6 +784,8 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
 }
 @media (max-width: 600px) {
   body:not([data-signed-in="no"]) #app-chrome .tm-logo__lines { display: none; }
+  body:not([data-signed-in="no"]) #app-chrome .brand-sign { display: none; }
+  body:not([data-signed-in="no"]) #app-chrome .brand-mark--compact { display: block; }
   body:not([data-signed-in="no"]) #app-chrome .brand-lockup { min-width: 0; margin-right: 2px; }
   body:not([data-signed-in="no"]) #app-chrome .tm-switch { border-left: 0; padding-left: 4px; }
   #app-chrome #app-meet-name { font-size: 14px; }
