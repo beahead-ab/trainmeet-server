@@ -205,7 +205,7 @@ const root = path.resolve(__dirname, '../..');
       const where = new URL(request.url()).pathname; if (where.startsWith('/v1/')) list.push(where);
     });
     await drift.waitForTimeout(11000);
-    // Drift asks nothing on its own; only the simulation banner looks every ten seconds.
+    // Drift asks nothing on its own; only display-feed.js looks every ten seconds.
     assert.deepEqual(fetched.get(drift).filter(where => where !== '/v1/display'), [], 'with the stream up, Drift does not poll every five seconds');
     assert.ok(fetched.get(drift).length <= 2, fetched.get(drift).join(' '));
     // In eleven seconds: the TV's own five-second fetch and the banner's ten

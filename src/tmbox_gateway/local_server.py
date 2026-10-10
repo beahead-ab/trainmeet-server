@@ -414,11 +414,6 @@ def _external_clock_loop(application, stop):
             # No request URLs or provider credentials in logs.
             LOGGER.warning("FastClock kunde inte uppdateras; försöker igen")
         try:
-            if application.simulation:
-                application.simulation.tick()
-        except Exception:
-            LOGGER.warning("Simuleringen pausades efter ett simulatorfel")
-        try:
             # Midnatt: träffen går till nästa dag, före automatiken, så att
             # den nya dagens tåg körs från början av dygnet.
             application.calendar_tick()

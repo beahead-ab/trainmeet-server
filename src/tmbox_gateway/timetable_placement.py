@@ -35,7 +35,7 @@ def _seconds(value: Any) -> int | None:
 def _journey(payload: dict[str, Any], service: dict[str, Any], day: str) -> list[dict[str, Any]] | None:
     """Tjänstens stopp i ordning med absoluta tider och rörelsen för varje stopp.
 
-    Samma dygnsräkning som automatiken (simulation.plan_legs). En tjänst där
+    Samma dygnsräkning som automatiken (legs.plan_legs). En tjänst där
     ett stopp inte går att para ihop med exakt en rörelse hoppas över.
     """
     stops = sorted(service.get("stops", []), key=lambda stop: _order(stop.get("stop_order")))

@@ -2,20 +2,21 @@
 
 A station nobody operates still has to answer and send trains, or a manned
 neighbour waits for an answer that never comes. While the meet clock runs,
-every station without a TMBox or TKL in use is automatic and follows the
-simulator's rules on the real traffic: it clears a request when the planned
-track is free, asks for and reports the departure of its own trains when they
-are ready, and reports an arrival once the timetable's running time has
-passed since the departure.
+every station without a TMBox or TKL in use is automatic: it clears a
+request when the planned track is free, asks for and reports the departure of
+its own trains when they are ready, and reports an arrival once the
+timetable's running time has passed since the departure.
 
 The first box or TKL that works a station makes it manual. A manual station
 whose operator loses contact waits for that operator; the automation never
 takes a station back by itself. An administrator can hand it back.
 
-This is not the simulator: no separate database, no invented delays, no
-yard work. The automation acts through the same station commands as a box,
-under its own actor name, and the station service refuses it on a manned
-station.
+Disturbances (extra station work, longer running times) and stabling at a
+terminus are the administrator's choice under Settings. There is no separate
+database: the automation acts on the meet's own traffic through the same
+station commands as a box, under its own actor name, and the station service
+refuses it on a manned station. (The traffic simulation, with its own run
+database, was removed in Server 4.0; this is what remains of it.)
 """
 from __future__ import annotations
 
@@ -27,7 +28,7 @@ from time import monotonic
 
 from .operations import _time_to_seconds
 from .protocol_v2 import CommandRejected
-from .simulation import PRESENCE_SECONDS, plan_legs
+from .legs import PRESENCE_SECONDS, plan_legs
 
 LOGGER = logging.getLogger("tmbox_gateway.automatic")
 
@@ -113,9 +114,7 @@ class AutomaticStations:
         return set(self._state(publication, day).get("stabled", {}))
 
     def running(self) -> bool:
-        """Automatic stations act only in normal operation, never in a simulation."""
-        simulation = self.service.simulation
-        return self.enabled() and not (simulation and simulation.active)
+        return self.enabled()
 
     def _context(self):
         publication = self.service.publication()
@@ -421,8 +420,7 @@ class AutomaticStations:
     def status(self) -> dict:
         with self.store.command_lock:
             publication, day = self._context()
-            simulation = self.service.simulation
-            result = {"enabled": self.enabled(), "simulation": bool(simulation and simulation.active),
+            result = {"enabled": self.enabled(),
                       "stations": [], "trains": [], "plan_errors": [], "disturbance": self.disturbance()}
             if publication is None:
                 return result

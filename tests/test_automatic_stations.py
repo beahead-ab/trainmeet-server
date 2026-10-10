@@ -153,11 +153,6 @@ class AutomaticStationTests(AutomaticFixture):
         self.auto.tick()
         self.assertEqual([], self.service.open_cases(None))
 
-    def test_a_simulation_stops_the_automation(self):
-        self.app.simulation.start({"confirmed": True, "profile": "timetable", "time": "09:17", "speed": 1})
-        self.assertFalse(self.auto.running())
-        self.assertFalse(self.auto.status()["enabled"] and not self.auto.status()["simulation"])
-
     def test_admin_api_reads_and_controls_the_stations(self):
         self.box()
         status = self.app.automatic_stations_status(self.admin)

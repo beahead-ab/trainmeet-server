@@ -115,7 +115,7 @@ class RuntimeViews(Terminal16Lab):
         except CommandRejected as error:
             return {"track_occupied": "Spåret är upptaget", "unknown_track": "Ankomstspåret är inte giltigt",
                     "channel_occupied": "Sträckan är upptagen", "departure_not_reserved": "Klartecken saknas",
-                    "train_not_departed": "Tåget har inte avgått"}.get(error.reason, str(error) if error.reason.startswith("simulation_") else "Läget ändrades. Välj tåget igen.")
+                    "train_not_departed": "Tåget har inte avgått"}.get(error.reason, "Läget ändrades. Välj tåget igen.")
         self.refresh()
         if action == "accept":
             terminal.screen = "detail"
@@ -139,8 +139,7 @@ class Terminal16Service:
         if publication is None:
             return None
         scope = (publication.publication_id, self.service.runtime_store.active_day(),
-                 self.service.runtime_scope().get("meet_generation"),
-                 self.service.simulation.run["id"] if self.service.simulation and self.service.simulation.active else None)
+                 self.service.runtime_scope().get("meet_generation"))
         if scope != self.scope:
             self.views, self.scope = RuntimeViews(self.service, now=self.now), scope
         views = self.views
@@ -172,9 +171,6 @@ class Terminal16Service:
             if views:
                 frame = views.frame(device)
                 frame.update(profile="server-16x2", **self.service.runtime_scope())
-                if self.service.simulation and self.service.simulation.active:
-                    frame["simulation"] = True
-                    frame["status"] = text(frame.get("language", "sv"), "SIMULERING") + " · " + frame.get("status", "")
                 return frame
             info = self.service.identities.discovered_device_or_none(device)
             language = self.service.device_ui(device)["language"]
@@ -189,10 +185,7 @@ class Terminal16Service:
             views = self._views(device)
             if views is None:
                 return {"station": None, "side": None, "clock": None, "revision": 0, "rows": []}
-            result = views.station_timetable(device)
-            if self.service.simulation and self.service.simulation.active:
-                result["simulation"] = True
-            return result
+            return views.station_timetable(device)
 
     def command(self, device, body):
         with self.service.operations_store.command_lock:

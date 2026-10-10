@@ -1,12 +1,14 @@
 # Obemannade stationer i vanlig drift
 
-Gäller från den version som stänger issue #115. Det här är vanlig drift, inte
-trafikspelssimulatorn: samma trafikdatabas, inga påhittade förseningar.
+Gäller från den version som stänger issue #115. Det här är vanlig drift med
+träffens egen trafikdatabas. Trafikspelssimulatorn, som körde i en egen
+databas, togs bort i Server 4.0; automatiken är det som finns kvar av den.
+Störningar och undanställning väljs under Inställningar (se nedan).
 
 ## Vad som händer
 
 När träffklockan går sköts varje station utan TMBox eller TKL i arbete
-**automatiskt** med simulatorns regler. Tider räknas i spelminuter.
+**automatiskt**. Tider räknas i spelminuter.
 
 | Händelse | Villkor |
 |---|---|
@@ -39,8 +41,8 @@ När träffklockan går sköts varje station utan TMBox eller TKL i arbete
 ## Av och på
 
 Automatiken är på som standard och stängs av under **Inställningar → Obemannade
-stationer**. Den gör ingenting medan klockan står still eller medan en simulering
-körs.
+stationer**. Den gör ingenting medan klockan står still. Drift visar vilka
+stationer automatiken sköter ("Automatisk"), och **Ta över** leder hit.
 
 ## Ta emot ett tåg med tvång
 

@@ -11,7 +11,6 @@ from __future__ import annotations
 import unittest
 from http import HTTPStatus
 from pathlib import Path
-from types import SimpleNamespace
 
 from test_pending_revisions import CloudDeliveryFixture, cloud_package, dispatch_request
 from tmbox_gateway.identity import DeviceKind, PairedClient
@@ -152,9 +151,6 @@ class CloudGateTests(CloudDeliveryFixture):
         box = PairedClient(client_id="box", display_name="CDA TMBox", kind=DeviceKind.ESP32_PANEL, panel_ids=("panel-a",))
         status, body = self.decide("take", client=box)
         self.assertEqual((HTTPStatus.FORBIDDEN, "admin_required"), (status, body["code"]))
-        self.application.simulation = SimpleNamespace(active=True)
-        status, body = self.decide("take")
-        self.assertEqual((HTTPStatus.CONFLICT, "simulation_active"), (status, body["code"]))
         self.assertEqual(("cloud-first", 1), (self.runtime.active().publication_id, self.runtime.active().local_revision))
 
     def test_without_a_waiting_version_there_is_nothing_to_choose(self):

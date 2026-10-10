@@ -96,7 +96,7 @@ button.kr-pill:hover { background: var(--kr-panel-3); }
 button.kr-pill.warn:hover { background: var(--kr-amber-soft); filter: brightness(1.12); }
 .kr-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; flex-shrink: 0; }
 .kr-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.kr-tag.ok { color: var(--kr-green); } .kr-tag.off { color: var(--kr-mute); } .kr-tag.warn { color: var(--kr-amber); } .kr-tag.sim { color: var(--kr-blue); }
+.kr-tag.ok { color: var(--kr-green); } .kr-tag.off { color: var(--kr-mute); } .kr-tag.warn { color: var(--kr-amber); } .kr-tag.auto { color: var(--kr-blue); }
 .kr-badge { display: inline-flex; align-items: center; font: 700 12.5px/1.2 var(--kr-num); padding: 2px 7px; border-radius: 6px; background: var(--kr-blue); color: var(--kr-blue-ink); font-variant-numeric: tabular-nums; }
 .kr-badge.hollow { background: transparent; color: var(--kr-blue); box-shadow: inset 0 0 0 1.5px var(--kr-blue); }
 .kr-badge.sel { box-shadow: 0 0 0 2px var(--kr-ink); }
@@ -217,9 +217,6 @@ body[data-mode="kor"] #app-view { padding: 14px 20px 24px; max-width: none; }
 .kr-clock-main, .kr-clock-state { min-width: 0; }
 .kr-clock-state .kr-pill.kr-pill--wrap { height: auto; min-height: 26px; padding: 5px 10px; white-space: normal; line-height: 1.3; text-align: left; }
 .kr-clock-actions [hidden] { display: none; }
-.kr-sim { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
-.kr-sim b { font-weight: 600; }
-.kr-sim-state { color: var(--kr-mute); }
 .kr-stats { display: flex; gap: 28px; }
 .kr-stat { display: flex; flex-direction: column; line-height: 1.1; min-width: 0; }
 .kr-stat b { font: 700 26px/1.1 var(--kr-num); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
@@ -318,7 +315,7 @@ body[data-mode="kor"] #app-view { padding: 14px 20px 24px; max-width: none; }
 .topology-kr .topology-station { fill: var(--topology-bg); stroke: var(--kr-node-line); stroke-width: 2; }
 .topology-screen .topology-station { stroke-width: 2.5; }
 .topology-kr .topology-station.autonomous { stroke-dasharray: 4 3; }
-.topology-kr .topology-station.sim { stroke: var(--kr-blue); }
+.topology-kr .topology-station.auto { stroke: var(--kr-blue); }
 .topology-kr .topology-station.highlighted { stroke: var(--kr-blue); stroke-width: 3; }
 .topology-kr .topology-station-ring { display: none; }
 .topology-kr .topology-node.selected .topology-station-ring { display: inline; fill: none; stroke: var(--kr-blue); stroke-width: 2; opacity: .55; }

@@ -61,7 +61,7 @@ class TrainDetailTests(unittest.TestCase):
                          [stop["movement_id"] for stop in detail["stops"]])
         self.assertEqual({"state": "not_departed", "station_id": "station-b", "track": "1", "time": "09:30"},
                          detail["now"])
-        self.assertIsNone(detail["delay_minutes"], "no simulator, no delay")
+        self.assertIsNone(detail["delay_minutes"], "nothing late yet")
 
     def test_where_the_train_is_follows_each_step(self):
         # LEK requests, CDA gives clear, LEK departs, CDA receives.
@@ -104,13 +104,24 @@ class TrainDetailTests(unittest.TestCase):
         now = self.now()
         self.assertEqual(("on_line", "station-b", "station-a"), (now["state"], now["from_station_id"], now["to_station_id"]))
 
-    def test_the_simulator_gives_the_delay(self):
-        self.app.simulation = SimpleNamespace(status=lambda: {"active": True, "trains": [
-            {"movement_id": "movement-505-b", "status": "in_transit", "delay_seconds": 250},
-            {"movement_id": "movement-101-a", "status": "in_transit", "delay_seconds": 900}]})
-        self.assertEqual(4, self.detail()["delay_minutes"])
-        self.app.simulation = SimpleNamespace(status=lambda: {"active": False})
-        self.assertIsNone(self.detail()["delay_minutes"])
+    def test_the_delay_comes_from_the_real_times(self):
+        """Förut gav bara simuleringen en försening. Nu räknas den ur verkliga
+        tider, som i tidtabellerna: 505 skulle gå från LEK 09:30."""
+        clock = lambda value: self.app.operations_store.configure_clock(time_value=value, running=False)
+        clock("09:29:00")
+        self.assertIsNone(self.detail()["delay_minutes"], "före avgångstiden")
+        clock("09:40:00")
+        self.assertEqual(10, self.detail()["delay_minutes"], "står kvar: beräknad försening")
+        self.send("esp32", "#", train_number="505")
+        self.send("esp8266", "#")
+        clock("09:37:00")
+        self.send("esp32", "#")                                # avgår 09:37, sju minuter sent
+        self.assertEqual("on_line", self.now()["state"])
+        self.assertEqual(7, self.detail()["delay_minutes"], "ute på linjen: verklig avgång")
+        clock("09:48:00")
+        self.send("esp8266", "#")                              # in på CDA, tre minuter sent
+        self.assertEqual("at_station", self.now()["state"])
+        self.assertIsNone(self.detail()["delay_minutes"], "inne på station: ingen markering i panelen")
 
     def test_the_same_number_twice_today_gives_both(self):
         package = through_package()

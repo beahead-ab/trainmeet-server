@@ -360,7 +360,7 @@ const root = path.resolve(__dirname, '../..');
     await login(urls.us);
     assert.equal(await page.locator('#workspace-options').count(),0);
     await page.locator('#server-region').filter({hasText:'US'}).waitFor();
-    for (const id of ['drift-simulation', 'drift-map', 'drift-stations', 'overview-traffic', 'drift-graph']) assert.equal(await page.locator('#' + id).isVisible(), false, id);
+    for (const id of ['drift-map', 'drift-stations', 'overview-traffic', 'drift-graph']) assert.equal(await page.locator('#' + id).isVisible(), false, id);
     await page.locator('#overview-clock-start').click();
     await page.locator('#overview-clock-stop').waitFor({state:'visible'});
     await page.locator('#overview-clock-stop').click();
@@ -417,43 +417,26 @@ const root = path.resolve(__dirname, '../..');
     page.once('dialog', dialog => dialog.accept());
     await page.keyboard.press('Escape');
     await page.locator('#editor').waitFor({ state: 'hidden' });
-    // Take over a running internal clock through the actual confirmation UI.
-    // Cancel must not pause it; successful takeover must leave it paused on return.
     await page.setViewportSize({width: 1200, height: 900});
     // The two localhost fixtures share the cookie host: restore the EU login.
     await login(urls.eu);
+    // Simuleringen är borttagen (4.0): den gamla adressen landar på Drift, och API:t finns inte.
     await page.goto(urls.eu + '/#simulation');
-    await page.locator('#simulation-start-open').waitFor({state: 'visible'});
+    await page.waitForURL((url) => url.pathname === '/drift', {timeout: 8000});
+    assert.equal((await page.request.get(urls.eu + '/v1/simulation')).status(), 404);
+    // Obemannade stationer sköts av automatiken i vanlig drift, och Drift säger det.
     const context = await (await page.request.get(urls.eu + '/v1/server-context')).json();
-    const clockResponse = await page.request.post(urls.eu + '/v1/clock', {data: {
-      action: 'start', meet_generation: context.selected_meet.generation,
+    const enabled = await page.request.post(urls.eu + '/v1/automatic-stations', {data: {
+      action: 'enable', enabled: true, meet_generation: context.selected_meet.generation,
     }});
-    assert.equal(clockResponse.ok(), true);
-    await page.locator('#simulation-start-open').click();
-    const simulationDialog = page.locator('#simulation-start-modal');
-    assert.match(await simulationDialog.innerText(), /Enheterna behåller sina anslutningar/);
-    await simulationDialog.getByRole('button', {name: 'Avbryt', exact: true}).click();
-    assert.equal((await (await page.request.get(urls.eu + '/v1/clock')).json()).running, true);
-    await page.locator('#simulation-start-open').click();
-    await page.locator('#simulation-time').fill('09:17');
-    await page.locator('#simulation-profile').selectOption('timetable');
-    await page.setViewportSize({width: 360, height: 900});
-    const confirm = simulationDialog.getByRole('button', {name: 'Pausa spelet och starta simulering', exact: true});
-    const bounds = await confirm.boundingBox();
-    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 360, 'Takeover button fits mobile');
-    await screenshot('simulation-takeover-mobile');
-    const startResponse = page.waitForResponse(response => response.url() === urls.eu + '/v1/simulation' && response.request().method() === 'POST');
-    await confirm.click();
-    assert.equal((await startResponse).ok(), true);
-    await simulationDialog.waitFor({state: 'hidden'});
-    let simulation = await (await page.request.get(urls.eu + '/v1/simulation')).json();
-    assert.equal(simulation.active, true);
-    await page.locator('#simulation-finish-open').click();
-    await page.locator('#simulation-confirm-submit').click();
-    await page.locator('#simulation-confirm-modal').waitFor({state: 'hidden'});
-    simulation = await (await page.request.get(urls.eu + '/v1/simulation')).json();
-    assert.equal(simulation.active, false);
-    assert.equal(simulation.clock.running, false);
+    assert.equal(enabled.ok(), true);
+    await page.locator('#drift-stations .kr-tag.auto').first().waitFor({state: 'visible', timeout: 8000});
+    assert.match(await page.locator('#drift-stations-meta').textContent(), /sköts av automatiken/);
+    await screenshot('drift-automatic-stations');
+    // Ta över leder till inställningen där en station lämnas till en box.
+    await page.locator('#drift-stations').getByRole('button', {name: 'Ta över', exact: true}).first().click();
+    await page.waitForURL((url) => url.pathname === '/installningar' && url.hash === '#obemannade', {timeout: 8000});
+    await page.locator('#obemannade').waitFor({state: 'visible'});
     assert.deepEqual(errors, []);
     assert.ok(requests.every(url => url.startsWith(urls.eu + '/') || url.startsWith(urls.us + '/')), 'Unexpected non-fixture network request');
     console.log('LIVE isolated HTTP/SQLite smoke passed:', JSON.stringify(urls), 'EU/US clocks, chooser, Settings TMBox, Home, TKL setup + Home + Settings return, served i18n asset.');

@@ -1,4 +1,4 @@
-"""Kör låtsasboxar + tilldelning + simulering + webbläsarpollning, mät allt."""
+"""Kör låtsasboxar + tilldelning + automatiska stationer + webbläsarpollning, mät allt."""
 import json, os, sys, threading, time, urllib.error, urllib.request
 from collections import defaultdict
 from fakebox import Box
@@ -7,7 +7,7 @@ HTTP = "http://127.0.0.1:" + os.environ.get("HTTP_PORT", "18787")
 STATIONS = ["st-cda", "st-lek", "st-vst", "st-kun"]
 
 # Takten avläst ur Bennys journal 22:29:27-22:29:56 (per webbläsare).
-POLL = {"/v1/display": 2.0, "/v1/display/connection": 13.0, "/v1/simulation": 2.5,
+POLL = {"/v1/display": 2.0, "/v1/display/connection": 13.0, "/v1/automatic-stations": 2.5,
         "/v1/devices": 13.0, "/v1/clock": 11.0, "/v1/clock/source": 10.0,
         "/v1/server-context": 13.0, "/v1/cloud/presentation": 12.0, "/v1/info": 13.0,
         "/v1/admin/access": 13.0, "/v1/runtime": 13.0}
@@ -64,11 +64,11 @@ def main():
                 raise
     log(f"{count} boxar tilldelade")
     if speed > 0:
-        status = call("/v1/simulation")
-        if not status.get("active"):
-          call("/v1/simulation", {"action": "start", "confirmed": True, "profile": "timetable", "time": "09:00",
-                                "speed": speed, "meet_generation": status["meet_generation"]})
-        log(f"simulering startad, hastighet {speed}")
+        # Obemannade stationer sköts av automatiken; klockan går från 09:00.
+        generation = call("/v1/server-context")["selected_meet"]["generation"]
+        call("/v1/automatic-stations", {"action": "enable", "enabled": True, "meet_generation": generation})
+        call("/v1/clock", {"action": "start", "time": "09:00", "speed": speed, "meet_generation": generation})
+        log(f"automatiska stationer på, klockan går i {speed}×")
     browsers = [Browser(n) for n in ("kiosk", "admin")] if browsers_on else []
     for b in browsers:
         threading.Thread(target=b.run, daemon=True).start()
@@ -85,7 +85,7 @@ def main():
         for path, values in b.latency.items():
             http.setdefault(path, []).extend(values)
     report = {
-        "boxes": count, "seconds": duration, "sim_speed": speed, "browsers": len(browsers),
+        "boxes": count, "seconds": duration, "clock_speed": speed, "browsers": len(browsers),
         "pings_answered": len(answered), "pings_unanswered": lost,
         "alive_ms": {"p50": pct(answered, .5), "p95": pct(answered, .95), "p99": pct(answered, .99),
                      "max": round(answered[-1] * 1000, 1) if answered else None},

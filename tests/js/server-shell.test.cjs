@@ -553,11 +553,11 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       await page.locator('#overview-station-inspector .kr-aside__name').waitFor();
       await page.evaluate(() => document.querySelector('#connect-terminals').showPopover());
       await page.evaluate(() => document.querySelector('#connect-terminals').hidePopover());
-      for (const id of ['drift-timetable-dialog', 'drift-simulation-dialog']) {
+      for (const id of ['drift-timetable-dialog']) {
         await page.evaluate(id => TrainMeetDrift.openDialog(id), id);
         await page.keyboard.press('Escape');
       }
-      for (const id of ['simulation-start-modal', 'device-form-modal', 'display-placement-modal', 'device-language-modal', 'device-remove-modal', 'clock-control-form-modal', 'clock-source-modal']) {
+      for (const id of ['new-day-modal', 'device-form-modal', 'display-placement-modal', 'device-language-modal', 'device-remove-modal', 'clock-control-form-modal', 'clock-source-modal']) {
         await page.evaluate(id => openModal(id), id);
         await page.evaluate(id => document.getElementById(id).close(), id);
       }
@@ -636,7 +636,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
 
     // Retained dialogs still trap focus and cannot be dismissed during writes.
     const modalIds=await page.locator('dialog.admin-modal').evaluateAll(nodes=>nodes.filter(n=>n.querySelector('form')).map(n=>n.id));
-    assert.ok(modalIds.includes('simulation-start-modal'));
+    assert.ok(modalIds.includes('time-machine-modal'));
     assert.ok(modalIds.includes('device-language-modal'));
     for(const width of [1200,360]){
       await page.setViewportSize({width,height:900});
@@ -727,7 +727,7 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.locator('#server-region').filter({hasText:'US'}).waitFor();
     // The shell shows the US summary at once; Drift hides its panels on its next drawing.
     await page.locator('#us-runtime-summary').waitFor({state:'visible'});
-    for (const id of ['drift-simulation', 'drift-map', 'drift-stations', 'drift-graph', 'overview-traffic', 'drift-stats', 'connect-terminals']) await page.locator('#' + id).waitFor({state:'hidden', timeout: 2000});
+    for (const id of ['drift-map', 'drift-stations', 'drift-graph', 'overview-traffic', 'drift-stats', 'connect-terminals']) await page.locator('#' + id).waitFor({state:'hidden', timeout: 2000});
     assert.equal(calls.some(c=>c[1].includes('local-configuration')||c[1]==='/v1/operating-mode'),false);
     assert.deepEqual(errors,[]);
     await screenshot('server-design');

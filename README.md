@@ -519,7 +519,7 @@ Se [Cloud förbereder, Server kör](docs/CLOUD-ONLY-SERVER.md).
 
 ### Öppna klienter på lokalnätet
 
-- **Starta virtuell TMBox** på deltagarvyn eller i simuleringen öppnar `/tmbox` och skapar en egen
+- **Starta virtuell TMBox** på deltagarvyn öppnar `/tmbox` och skapar en egen
   webbläsaridentitet och visar en boxkod. Precis som en fysisk box väntar den
   på att admin tilldelar station under **Drift → Klienter**. Först då
   kan den påverka trafikspelet. Den kan inte välja station, styra andra boxar
@@ -616,8 +616,8 @@ skärmar och TKL får en ny träffgeneration och hämtar läget på nytt.
 Bekräftelsen är träffens namn. En säkerhetskopia tas först och hamnar bland de
 andra, så att nollställningen går att ångra med Återställ från säkerhetskopia;
 går kopian inte att ta görs ingenting. Läget före nollställningen arkiveras och
-granskningsloggen får en rad (`meet.reset`) med vem som gjorde det. Under en
-simulering går det inte. API: `POST /v1/server/meet-reset` med
+granskningsloggen får en rad (`meet.reset`) med vem som gjorde det. API:
+`POST /v1/server/meet-reset` med
 `{"confirmation": "<träffens namn>"}`, administratör.
 
 ### Återställ från säkerhetskopia
@@ -1019,7 +1019,7 @@ i [den grafiska identiteten](docs/GRAPHIC_IDENTITY.md).
 
 Drift, skärmarna och deltagarvyn uppdateras direkt när något ändras.
 
-- Servern säger till via `GET /v1/events` (Server-Sent Events) att trafiken, klockan, boxarna, träffen eller simuleringen har ändrats. Sidan hämtar då om just det.
+- Servern säger till via `GET /v1/events` (Server-Sent Events) att trafiken, klockan, boxarna, träffen eller de automatiska stationerna har ändrats. Sidan hämtar då om just det.
 - Strömmen bär bara ämnesnamn och kräver ingen inloggning.
 - Utan ström gäller sidornas vanliga intervall: fem sekunder i Drift och deltagarvyn, en sekund på skärmarna. Det händer bakom en proxy som inte släpper igenom strömmen, eller när servern redan har 48 öppna strömmar eller 6 från samma adress.
 - En proxy får inte buffra svaret. Servern skickar `X-Accel-Buffering: no` och en kommentarsrad var 15:e sekund, och avslutar varje ström efter fem minuter. Webbläsaren ansluter då igen.

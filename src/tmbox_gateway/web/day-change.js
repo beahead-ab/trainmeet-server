@@ -4,7 +4,7 @@
  * flyttas till sin utgångspunkt och statusarna nollställs. En toast säger det
  * på Drift, i deltagarvyn, på skärmarna och i webb-TMBoxen, också för den som
  * öppnar sidan strax efter skiftet. Medan skiftet väntar på ett tåg som är
- * ute på linjen syns det också. Bilden kommer från simulation-banner.js, som
+ * ute på linjen syns det också. Bilden kommer från display-feed.js, som
  * redan hämtar /v1/display (händelsen "trainmeet:display").
  */
 (function (root, factory) {

@@ -97,7 +97,6 @@ class TMBoxStationService:
         self._cached_publication_id: tuple[str, int] | None = None
         self._cached_session_config: SessionConfig | None = None
         self.lifecycle = None
-        self.simulation = None
         self.automatic = None
         self._listeners: list[Callable[[], None]] = []
 
@@ -105,8 +104,6 @@ class TMBoxStationService:
         self._listeners.append(listener)
 
     def notify_changed(self) -> None:
-        if self.simulation and self.simulation._initializing:
-            return  # Do not expose a candidate run before its generation fence.
         for listener in self._listeners:
             try:
                 listener()
@@ -212,26 +209,19 @@ class TMBoxStationService:
         return {"meet_generation": selected["generation"], "publication_id": selected["publication_id"]} if selected else {}
 
     def observe_operator(self, device_id, station_id=None):
-        if self.simulation:
-            self.simulation.observe(device_id, station_id)
         if self.automatic:
             self.automatic.observe(device_id, station_id)
 
     def track_conflict(self, publication, day, station_id, movement_id, track_id, actual=False):
         states = self.operations_store.tkl_station_state(publication.publication_id, day, station_id)["movements"]
         rows = publication.payload["trains"]
-        simulating = bool(self.simulation and self.simulation.active)
-        if simulating or actual:
-            # A simulation, and an automatic station (#130), go by actual
-            # occupation, not every row of the day sharing a planned track: at
-            # an unmanned passing station nearly every train is planned on the
-            # same track, and a later one would block the receiver for ever.
-            # Stabled terminal trains in a simulation are off the line.
-            released = ({self.simulation.legs[k]["to_movement_id"] for k in self.simulation.run.get("stabled", {})}
-                        if simulating else set())
+        if actual:
+            # An automatic station (#130) goes by actual occupation, not every
+            # row of the day sharing a planned track: at an unmanned passing
+            # station nearly every train is planned on the same track, and a
+            # later one would block the receiver for ever.
             # Undanställda tåg vid en automatisk slutstation har lämnat spåret.
-            if self.automatic and not simulating:
-                released |= self.automatic.stabled_movements(publication, day)
+            released = self.automatic.stabled_movements(publication, day) if self.automatic else set()
             rows = [r for r in rows if r["id"] not in released and (
                 states.get(r["id"], {}).get("arrival") == "arrived" or
                 states.get(r["id"], {}).get("departure") in {"positioned", "ready"})]
@@ -570,8 +560,6 @@ class TMBoxStationService:
             raise CommandRejected("no_active_configuration")
         active_day = self.runtime_store.active_day() or publication.active_day
 
-        if self.simulation:
-            self.simulation.guard(device_id, station_id, action, payload.get("payload") or {})
         if self.automatic:
             self.automatic.guard(device_id, station_id)
 
@@ -738,8 +726,6 @@ class TMBoxStationService:
                 connection_id=case["connection_id"], from_station_id=station_id,
                 to_station_id=case["to_station_id"], movement_id=movement_id,
             )
-        if self.simulation:
-            self.simulation.record_action(action, movement_id)
         if self.automatic:
             self.automatic.record_action(action, movement_id)
         result = {
@@ -999,8 +985,6 @@ class TMBoxStationService:
             actual_track=state.get("actualTrack") or row.get("track_id"),
             updated_by=actor, shift_id=shift_id, event_type="train.advanced",
             crew_ready=bool(state.get("crewReady", False)), operator_note=None)
-        if self.simulation:
-            self.simulation.record_action("train." + value, movement_id)
         if self.automatic:
             self.automatic.record_action("train." + value, movement_id)
         return False
@@ -1046,7 +1030,7 @@ class TMBoxStationService:
         active_day: str,
         clock: dict[str, Any],
     ) -> None:
-        if (self.simulation and self.simulation.active) or not bool(clock.get("running")):
+        if not bool(clock.get("running")):
             # A stopped meeting clock means the meet is paused. Nothing should
             # lapse while nobody is running trains.
             return

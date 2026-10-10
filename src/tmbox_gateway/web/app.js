@@ -2,160 +2,6 @@ const { t, html } = globalThis.TrainMeetI18n;
 const serverUI = globalThis.TrainMeetServerUI;
 function editorActive(form) { return Boolean(form?.closest("dialog")?.open || form?.dataset.dirty === "true" || form?.dataset.busy === "true"); }
 
-let simulationState = null;
-let simulationConfirmation = null;
-let simulationRefreshing = false;
-let simulationStationSignature = null;
-let simulationTrainSignature = null;
-const simulationReasons = {
-  channel_occupied: "Sträckan är upptagen", track_occupied: "Planerat spår är upptaget",
-  simulation_train_not_ready: "Tåget är inte färdigt", simulation_station_control: "Stationen är manuellt bemannad",
-};
-
-function renderSimulation(data) {
-  simulationState = data;
-  document.querySelector("#simulation-details-open").hidden = !data.active || state.serverContext?.operating_region === "us";
-  const clock = data.clock || {};
-  // Raden i Drift är kort; dag, scenario och eventuell notis ligger i dialogen.
-  const summary = document.querySelector("#simulation-summary");
-  summary.textContent = data.active
-    ? `${clock.running ? t("Går") : t("Pausad")} · ${clock.speed}×`
-    // "av" alone is the preposition "of" in the catalogue; the state has its own word.
-    : t(data.supported ? "avstängd" : "Koppla en EU-träff från Cloud");
-  summary.title = data.active ? "" : t(data.supported ? "Starten pausar spelet och sparar trafikläget." : "Koppla en EU-träff från Cloud för att simulera stationsarbetet.");
-  document.querySelector("#simulation-meta").textContent = data.active
-    ? `${t("Trafikdag")} ${data.day} · ${t("Scenario")} ${data.seed}${data.notice ? " · " + data.notice : ""}`
-    : "";
-  globalThis.TrainMeetDrift?.update({ simulation: data });
-  document.querySelector("#simulation-start-open").hidden = data.active;
-  document.querySelector("#simulation-start-open").disabled = !data.supported;
-  for (const id of ["simulation-pause", "simulation-reset-open", "simulation-finish-open", "simulation-stations-card", "simulation-trains-card"]) document.getElementById(id).hidden = !data.active;
-  document.querySelector("#simulation-pause").textContent = t(clock.running ? "Pausa" : "Fortsätt");
-  const stations = document.querySelector("#simulation-stations");
-  const stationSignature = JSON.stringify([document.documentElement.lang, data.stations]);
-  const names = new Map((data.stations || []).map(station => [station.id, station.code]));
-  if (stationSignature !== simulationStationSignature) {
-    simulationStationSignature = stationSignature;
-    stations.replaceChildren();
-    for (const station of data.stations || []) {
-      const card = document.createElement("div"); card.className = "simulation-station";
-      const title = document.createElement("strong"); title.textContent = `${station.code} · ${station.name}`;
-      const mode = document.createElement("p"); mode.textContent = t({automatic: "Automatisk", manual: "Manuell", disconnected: "Kontakt saknas – väntar"}[station.mode]);
-      card.append(title, mode);
-      if (station.operator) {
-        const operator = document.createElement("p"); operator.textContent = station.operator; card.append(operator);
-        const button = document.createElement("button"); button.type = "button"; button.className = "secondary";
-        button.textContent = t("Lämna till simulatorn");
-        button.addEventListener("click", () => confirmSimulation("automatic", t("Lämna till simulatorn"), `${station.name}: ${t("automatiken fortsätter från nuvarande trafikläge. Den anslutna klienten kan inte längre styra stationen.")}`, station.id));
-        card.append(button);
-      }
-      for (const device of station.available_operators || []) {
-        if (station.operator === device) continue;
-        const button = document.createElement("button"); button.type = "button"; button.className = "secondary";
-        button.textContent = `${t("Låt klient ta över")}: ${device}`;
-        button.addEventListener("click", () => confirmSimulation("manual", t("Lämna till operatör"), `${station.name}: ${device}`, station.id, device));
-        card.append(button);
-      }
-      stations.append(card);
-    }
-  }
-  const trainSignature = JSON.stringify([stationSignature, data.trains]);
-  if (trainSignature === simulationTrainSignature) return;
-  simulationTrainSignature = trainSignature;
-  const trains = document.querySelector("#simulation-trains"); trains.replaceChildren();
-  for (const train of data.trains || []) {
-    const tr = document.createElement("tr");
-    for (const value of [train.train_number, `${names.get(train.from_station_id)} → ${names.get(train.to_station_id)}`,
-      t({waiting: "Väntar", in_transit: "På väg", arrived: "Ankommet", stabled: "Uppställt"}[train.status]),
-      t(simulationReasons[train.reason] || train.reason) || (train.delay_seconds ? `${train.delay_seconds / 60} ${t("min extra stationsarbete")}` : "–")]) {
-      const td = document.createElement("td"); td.textContent = value; tr.append(td);
-    }
-    trains.append(tr);
-  }
-}
-
-async function refreshSimulation() {
-  if (simulationRefreshing || document.body.dataset.mode !== "kor" || state.serverContext?.operating_region === "us") return;
-  simulationRefreshing = true;
-  try {
-    const response = await authorizedFetch("/v1/simulation", {cache: "no-store"});
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || t("Kunde inte läsa simuleringen"));
-    renderSimulation(data);
-  } catch (error) { setMessage(document.querySelector("#simulation-error"), error.message, "error"); }
-  finally { simulationRefreshing = false; }
-}
-
-async function sendSimulation(action, options = {}, context = simulationState) {
-  const response = await authorizedFetch("/v1/simulation", {method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({action, run_id: context?.run_id, meet_generation: context?.meet_generation, ...options})});
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.message || t("Simuleringen kunde inte ändras"));
-  renderSimulation(data);
-  // Run transitions fence old requests. Refresh the shell's command context too.
-  const server = await authorizedFetch("/v1/server-context", {cache: "no-store"});
-  if (server.ok) state.serverContext = await server.json();
-  await refreshLocalClock();
-}
-
-function confirmSimulation(action, title, description, station_id, device_id) {
-  simulationConfirmation = {action, station_id, device_id, context: {...simulationState}};
-  document.querySelector("#simulation-confirm-title").textContent = title;
-  document.querySelector("#simulation-confirm-description").textContent = description;
-  openModal("simulation-confirm-modal");
-}
-
-function bindSimulationUI() {
-  document.querySelector("#simulation-start-open").addEventListener("click", () => {
-    const clock = simulationState?.clock || {};
-    document.querySelector("#simulation-time").value = String(clock.time || "12:00").slice(0, 5);
-    document.querySelector("#simulation-speed").value = clock.speed || 1;
-    document.querySelector("#simulation-day").textContent = `${t("Vald trafikdag")}: ${simulationState?.active_day || "–"}`;
-    simulationConfirmation = {context: {...simulationState}};
-    openModal("simulation-start-modal");
-  });
-  document.querySelector("#simulation-pause").addEventListener("click", async event => {
-    const button = event.currentTarget;
-    button.disabled = true;
-    try { await sendSimulation(simulationState.clock.running ? "pause" : "resume"); }
-    catch (error) { setMessage(document.querySelector("#simulation-error"), error.message, "error"); }
-    finally { button.disabled = false; }
-  });
-  document.querySelector("#simulation-reset-open").addEventListener("click", () => confirmSimulation("reset", t("Återställ vid aktuell tid"),
-    t("Simuleringen pausas och får ett nytt läge enligt tidtabellen vid klockans aktuella tid när du bekräftar. Gamla störningar och förfrågningar ersätts. Stationstilldelningarna behålls. Vanlig drift påverkas inte.")));
-  document.querySelector("#simulation-finish-open").addEventListener("click", () => confirmSimulation("finish", t("Avsluta simulering"),
-    t("Alla klienter återgår till det sparade vanliga spelet med pausad klocka. Anslutningar och stationstilldelningar behålls. Simuleringens data sparas separat.")));
-  for (const id of ["simulation-start-form", "simulation-confirm-form"]) {
-    document.getElementById(id).addEventListener("submit", async event => {
-      event.preventDefault();
-      const form = event.target;
-      if (!beginModalAction(form)) return;
-      try {
-        if (id === "simulation-start-form") await sendSimulation("start", {
-          confirmed: true,
-          time: document.querySelector("#simulation-time").value, speed: Number(document.querySelector("#simulation-speed").value),
-          profile: document.querySelector("#simulation-profile").value, seed: document.querySelector("#simulation-seed").value,
-          stabling_minutes: Number(document.querySelector("#simulation-stabling").value),
-        }, simulationConfirmation.context);
-        else await sendSimulation(simulationConfirmation.action, {confirmed: true, station_id: simulationConfirmation.station_id, device_id: simulationConfirmation.device_id}, simulationConfirmation.context);
-        finishModal(form, t("Simuleringen uppdaterades."));
-      } catch (error) { setMessage(form.querySelector(".form-message"), error.message, "error"); }
-      finally { endModalAction(form); }
-    });
-  }
-  scheduleSimulationRefresh();
-}
-
-// Two seconds while there is no stream; with one, a change arrives at once.
-let simulationTimer = null;
-function scheduleSimulationRefresh() {
-  clearTimeout(simulationTimer);
-  simulationTimer = setTimeout(async () => {
-    await refreshSimulationSerially();
-    scheduleSimulationRefresh();
-  }, globalThis.TrainMeetLive?.connected ? 30000 : 2000);
-}
-
 function createWebClientID() {
   const browserCrypto = globalThis.crypto;
   if (typeof browserCrypto?.randomUUID === "function") {
@@ -673,7 +519,7 @@ function setMode(mode) {
     startTMBoxV2();
   } else if (next === "installningar") showSettings();
   else if (next === "kor" && state.serverContext?.operating_region === "eu") renderOverview(state.overviewSnapshot);
-  if (next === "kor") refreshSimulation();
+  if (next === "kor") refreshAutomatic();
   serverUI.mode(next);
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -687,14 +533,18 @@ function showSettings() {
 let automaticState = null;
 const AUTOMATIC_MODES = {automatic: ["Automatisk", "ok"], manual: ["Manuell", ""], disconnected: ["Kontakt saknas – väntar", "off"]};
 
+// Obemannade stationer: inställningarna, och på Drift vilka stationer som
+// automatiken sköter just nu.
 async function refreshAutomatic() {
-  if (document.body.dataset.mode !== "installningar" || state.serverContext?.operating_region === "us") return;
+  const mode = document.body.dataset.mode;
+  if (!["installningar", "kor"].includes(mode) || state.serverContext?.operating_region === "us") return;
   try {
     const response = await authorizedFetch("/v1/automatic-stations", {cache: "no-store"});
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || t("Kunde inte läsa de obemannade stationerna"));
-    renderAutomatic(data);
-  } catch (error) { setMessage(document.querySelector("#automatic-message"), error.message, "error"); }
+    globalThis.TrainMeetDrift?.update({ automatic: data });
+    if (mode === "installningar") renderAutomatic(data);
+  } catch (error) { if (mode === "installningar") setMessage(document.querySelector("#automatic-message"), error.message, "error"); }
 }
 
 async function sendAutomatic(payload) {
@@ -725,7 +575,7 @@ function renderAutomatic(data) {
   }
   if (disturbance) disturbance.hidden = !data.supported;
   document.querySelector("#automatic-note").textContent = t(!data.supported ? "Koppla en EU-träff först."
-    : data.simulation ? "Pausad medan simuleringen körs." : data.enabled ? "Aktiv när träffklockan går." : "Avstängd.");
+    : data.enabled ? "Aktiv när träffklockan går." : "Avstängd.");
   const host = document.querySelector("#automatic-stations");
   host.replaceChildren(...(data.stations || []).map((station) => {
     const row = document.createElement("div"); row.className = "kr-kv";
@@ -812,7 +662,7 @@ document.querySelector("#automatic-disturbance-form")?.addEventListener("submit"
 
 function applyWorkspaceRoute() {
   let route = location.hash.slice(1);
-  const legacy = {overview: "/drift", traffic: "/drift", settings: "/installningar", simulation: "/drift#drift-simulation", screens: "/installningar#skarmar"};
+  const legacy = {overview: "/drift", traffic: "/drift", settings: "/installningar", simulation: "/drift", screens: "/installningar#skarmar"};
   if (legacy[route]) { history.replaceState(null, "", legacy[route]); route = location.hash.slice(1); }
   if (route === "workspaces") { history.replaceState(null, "", "/"); route = ""; }
   const path = location.pathname.replace(/\/$/, "") || "/";
@@ -996,7 +846,6 @@ function bindAdminModals() {
   document.querySelectorAll("[data-open-modal]").forEach((button) => button.addEventListener("click", () => openModal(button.dataset.openModal, button)));
 }
 bindAdminModals();
-bindSimulationUI();
 document.querySelector("#overview-clock-start").addEventListener("click", () => controlLocalClock({ action: "start" }));
 document.querySelector("#overview-clock-stop").addEventListener("click", () => controlLocalClock({ action: "stop" }));
 
@@ -2504,7 +2353,6 @@ const refreshLocalClockSerially = serially(() => refreshLocalClock());
 const refreshDevicesSerially = serially(() => refreshDevices());
 const refreshRuntimeSerially = serially(() => refreshRuntime());
 const refreshServerContextSerially = serially(() => refreshServerContext());
-const refreshSimulationSerially = serially(() => refreshSimulation());
 const refreshAutomaticSerially = serially(() => refreshAutomatic());
 
 // What changed on the server (/v1/events) is fetched again at once. The timer
@@ -2519,16 +2367,13 @@ function bindAdminLive() {
   live.subscribe((topics) => {
     if (!state.authStatus?.authenticated) return;
     const any = (...names) => names.some((name) => topics.has(name));
-    if (any("runtime", "simulation")) refreshServerContextSerially();
+    if (any("runtime")) refreshServerContextSerially();
     if (any("runtime")) refreshRuntimeSerially();
     if (any("devices")) refreshDevicesSerially();
-    if (any("traffic", "clock", "runtime", "simulation")) refreshLocalClockSerially();
-    // The simulated trains move with the traffic.
-    if (any("simulation", "runtime", "clock", "traffic")) refreshSimulationSerially();
-    if (any("simulation", "runtime", "devices", "traffic")) refreshAutomaticSerially();
+    if (any("traffic", "clock", "runtime", "automatic")) refreshLocalClockSerially();
+    if (any("automatic", "runtime", "devices", "traffic")) refreshAutomaticSerially();
   });
   live.onStatus(() => {
-    scheduleSimulationRefresh();
     if (state.authStatus?.authenticated) scheduleAdminRefresh();
   });
 }
@@ -3389,7 +3234,8 @@ if (globalThis.TrainMeetDrift) {
     clear: clearOverviewSelection,
     editBox: openDeviceEditor,
     editPlacement: editDisplayPlacement,
-    simulationDetails: (trigger) => globalThis.TrainMeetDrift.openDialog("drift-simulation-dialog", trigger),
+    // Ta över eller lämna tillbaka en automatisk station: Inställningar → Obemannade stationer.
+    automaticDetails: () => { history.pushState(null, "", "/installningar#obemannade"); applyWorkspaceRoute(); },
     dialogOpened: (id) => { if (id === "drift-timetable-dialog") renderRouteExplorer(); },
   });
 }
@@ -5398,7 +5244,7 @@ async function initDisplay() {
   window.addEventListener("online", pollDisplay);
   window.addEventListener("pageshow", pollDisplay);
   globalThis.TrainMeetLive?.subscribe((topics) => {
-    if (["traffic", "clock", "runtime", "simulation"].some((name) => topics.has(name))) pollDisplay();
+    if (["traffic", "clock", "runtime", "automatic"].some((name) => topics.has(name))) pollDisplay();
   });
   globalThis.TrainMeetLive?.onStatus(() => { if (!displayRequest) scheduleDisplayPoll(); });
   document.addEventListener("visibilitychange", () => {

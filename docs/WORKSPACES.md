@@ -9,17 +9,18 @@ rättigheter eller trafikmotor. Träffens typ bestämmer EU/US-innehållet.
   banöversikt och anslutningsuppgifter kan läsas utan inloggning. På EU-träffar
   filtrerar ett stationsval på kartan listorna och tidtabellen.
 - `/login`: inloggning för trafikledningen. Efter inloggning öppnas `/drift`.
-- `/drift`: klockstyrning, klienter, trafikläge och simulering.
+- `/drift`: klockstyrning, klienter, trafikläge och vilka stationer automatiken sköter.
 - `/installningar`: träff/Cloud, server, användare, skärmar, språk och uppdatering.
 - `/hjalp`: dokumentation och länk till TMBox-provbänken (`/tmbox-lab/`).
-- `/tmbox/`: virtuell TMBox, startbar från deltagarvyn och simuleringen.
+- `/tmbox/`: virtuell TMBox, startbar från deltagarvyn.
   Den registreras utan administratörsinloggning men kan inte påverka trafiken
   förrän trafikledningen tilldelat en station på Drift.
 - `/us/dispatcher` och `/us/conductor`: de befintliga US-klienterna.
 
 Arbetsytevalet är borttaget. Gamla `/#workspaces` går till `/` och ett sparat
 `trainmeet.workspace` ignoreras/rensas. `/#overview`, `/#settings` och
-`/#simulation` leder till sina nya sidor. `/tkl/` och dess paketerade filer är
+`/#simulation` leder till sina nya sidor (`/#simulation` till `/drift`, sedan
+simuleringen togs bort i 4.0). `/tkl/` och dess paketerade filer är
 borttagna; TKL körs separat. `/v1/tkl/*` behålls för den separata klienten.
 
 ## Träffklocka och skärmar

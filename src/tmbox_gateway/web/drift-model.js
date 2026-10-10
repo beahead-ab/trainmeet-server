@@ -174,11 +174,13 @@
    * En rad per box och station, för tabellen Stationer och boxar.
    *   väntande boxar först (de har ingen station än),
    *   sedan varje station med sin box, eller en rad om stationen saknar box.
-   * kind: waiting | box | simulated | unmanned
+   * kind: waiting | box | automatic | unmanned. `automatic` är
+   * /v1/automatic-stations: en station utan box som automatiken sköter blir
+   * `automatic`; en box på en sådan station står kvar, med `auto` satt.
    */
-  function stationRows({ snapshot, devices = [], presentation = null, simulation = null }) {
+  function stationRows({ snapshot, devices = [], presentation = null, automatic = null }) {
     const counts = stationCounts(snapshot);
-    const simulated = new Map((simulation?.active ? simulation.stations || [] : []).map((station) => [station.id, station]));
+    const automated = new Map((automatic?.enabled ? automatic.stations || [] : []).map((station) => [station.id, station]));
     const rows = [];
     for (const device of devices.filter((item) => !item.station_id)) {
       rows.push({ key: `device:${device.device_id}`, kind: "waiting", station: null, device, tone: "warn", placement: null, trains: null });
@@ -186,35 +188,33 @@
     for (const station of snapshot?.stations || []) {
       const here = devices.filter((device) => device.station_id === station.id);
       const base = { station, placement: placement(presentation, station.id), trains: (counts.get(station.id) || []).length };
-      const sim = simulated.get(station.id);
-      if (sim && sim.mode === "automatic") {
-        rows.push({ ...base, key: `station:${station.id}`, kind: "simulated", device: null, tone: "sim", sim });
-        continue;
-      }
+      const auto = automated.get(station.id);
       if (!here.length) {
-        rows.push({ ...base, key: `station:${station.id}`, kind: "unmanned", device: null, tone: sim?.mode === "disconnected" ? "warn" : "off", sim });
+        const kind = auto?.mode === "automatic" ? "automatic" : "unmanned";
+        rows.push({ ...base, key: `station:${station.id}`, kind, device: null,
+          tone: kind === "automatic" ? "auto" : auto?.mode === "disconnected" ? "warn" : "off", auto });
         continue;
       }
       for (const device of here) {
-        rows.push({ ...base, key: `station:${station.id}:${device.device_id}`, kind: "box", device, tone: sim?.mode === "disconnected" ? "warn" : connectionTone(device.connection), sim });
+        rows.push({ ...base, key: `station:${station.id}:${device.device_id}`, kind: "box", device, tone: auto?.mode === "disconnected" ? "warn" : connectionTone(device.connection), auto });
       }
     }
     return rows;
   }
 
   /** Nyckeltalen över sidan: tåg på linjen, inne på station, bemannade, avvikelser. */
-  function stats(snapshot, rows = [], simulation = null) {
+  function stats(snapshot, rows = []) {
     const { onLine, atStation } = trains(snapshot);
     const stations = (snapshot?.stations || []).length;
     const manned = new Set(rows.filter((row) => row.station && row.kind === "box" && row.tone === "ok").map((row) => row.station.id));
-    const simulatedCount = rows.filter((row) => row.kind === "simulated").length;
+    const automatic = new Set(rows.filter((row) => row.station && row.auto?.mode === "automatic").map((row) => row.station.id));
     return {
       onLine: onLine.filter((train) => train.departed).length,
       cleared: onLine.filter((train) => !train.departed).length,
       atStations: atStation.length,
       manned: manned.size,
       stations,
-      simulated: simulation?.active ? simulatedCount : 0,
+      automatic: automatic.size,
       deviations: lateTrains(snapshot).length,
     };
   }
