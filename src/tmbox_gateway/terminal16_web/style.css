@@ -149,7 +149,13 @@ button, input, select { font: inherit; }
 
 /* Sidhuvud – samma mönster som deltagarvyns .pv-top. */
 .tm-top { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: var(--card); border-bottom: 1px solid var(--border); }
-.tm-top__mark { width: 26px; height: 26px; flex-shrink: 0; }
+/* Stationsskylten och TMBOX i displayens 5×7-punkter (tools/dot-label.mjs);
+   punkterna är en mask över textfärgen. */
+.tm-top__brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding-right: 12px; margin-right: 2px; border-right: 1px solid var(--border); }
+.tm-top__sign { display: block; height: 34px; width: auto; }
+.tm-dotlabel { display: block; width: 87px; height: 21px; flex-shrink: 0; background-color: var(--text-3);
+  -webkit-mask-image: url("/assets/etikett/tmbox.svg"); mask-image: url("/assets/etikett/tmbox.svg");
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
 .tm-top__name { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tm-top__sub { font-size: 12px; color: var(--muted); margin-left: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tm-top__spacer { flex-grow: 1; }
@@ -283,7 +289,9 @@ body[data-terminal="live"] .box-status, body[data-terminal="live"] .box-queue { 
   .tm-help > summary .c, .tm-card__head .c { display: none; }
 }
 @media (max-width: 480px) {
-  body[data-terminal="lab"] .tm-top__live, .tm-top__prefix { display: none; }
+  body[data-terminal="lab"] .tm-top__live { display: none; }
+  .tm-top__sign { height: 26px; }
+  .tm-dotlabel { width: 58px; height: 14px; }
   body[data-terminal="lab"] .tm-top .tm-tag { font-size: 10px; padding: 1px 5px; }
   .tm-top .tm-btn--sm { padding: 4px 8px; }
   .tm-top { gap: 8px; flex-wrap: wrap; row-gap: 8px; }

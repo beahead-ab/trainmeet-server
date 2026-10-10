@@ -143,6 +143,11 @@ button.kr-pill.warn:hover { background: var(--kr-amber-soft); filter: brightness
 #app-chrome .brand-mark--compact { display: none; }
 #app-chrome .tm-logo__lines { font-size: 13px; font-weight: 700; line-height: 1.05; }
 #app-chrome .tm-logo__product { color: var(--kr-mute); letter-spacing: .12em; font-size: 9.5px; }
+/* SERVER i TMBox-displayens 5×7-punkter (Casper, 2026-10-10), i textens färg:
+   bilden är en mask över bakgrundsfärgen. Punkterna ligger 3 px isär. */
+#app-chrome .tm-dotlabel { display: block; width: 105px; height: 21px; flex-shrink: 0; background-color: var(--kr-ink-2);
+  -webkit-mask-image: url("/assets/etikett/server.svg"); mask-image: url("/assets/etikett/server.svg");
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
 #app-chrome .tm-switch { border: 0; border-left: 1px solid var(--kr-line-2); border-radius: 0; background: none; padding: 0 0 0 14px; color: var(--kr-ink); gap: 8px; min-width: 0; box-shadow: none; }
 #app-chrome #app-meet-name { font-size: 15px; font-weight: 700; color: var(--kr-ink); }
 #app-chrome #header-server-meta { display: none; }
@@ -772,6 +777,8 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
   #app-chrome .brand-lockup { order: 1; margin-right: 6px; }
   /* Två rader i sidhuvudet: skylten i den mindre höjden så att träffens namn får plats. */
   body:not([data-signed-in="no"]) #app-chrome .brand-sign { height: 26px; }
+  /* ... och utan SERVER, som på telefon: träffens namn går före. */
+  body:not([data-signed-in="no"]) #app-chrome .tm-logo__lines { display: none; }
   #app-chrome .tm-switch { order: 2; flex: 1 1 0; min-width: 0; }
   #app-chrome #app-meet-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #app-chrome .screen-menu { order: 3; position: static; }
