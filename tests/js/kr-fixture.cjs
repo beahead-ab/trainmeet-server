@@ -94,7 +94,7 @@ function presentation(findings) {
 }
 
 async function open(opts = {}) {
-  const o = { theme: 'dark', width: 1440, height: 900, sim: false, running: true, route: '/drift', lang: 'sv', region: 'eu', findings: true, ...opts };
+  const o = { theme: 'dark', width: 1440, height: 900, running: true, route: '/drift', lang: 'sv', region: 'eu', findings: true, ...opts };
   const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) });
   const context = await browser.newContext({ locale: o.lang === 'sv' ? 'sv-SE' : 'en-GB', viewport: { width: o.width, height: o.height }, deviceScaleFactor: o.dpr || 1 });
   if (o.theme) await context.addInitScript(([t, lang]) => { try { localStorage.setItem('trainmeet.theme', t); localStorage.setItem('trainmeet.language', lang); } catch {} }, [o.theme, o.lang]);
@@ -102,16 +102,11 @@ async function open(opts = {}) {
   const errors = [], violations = [];
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
   page.on('console', m => { if (['error', 'warning'].includes(m.type())) { const t = m.text(); if (!/events|503|Failed to load resource/.test(t)) errors.push(m.type() + ': ' + t); } });
-  const st = { running: o.running, sim: o.sim, devices: deviceRows(), time: o.time || '05:12:40', speed: 4 };
+  const st = { running: o.running, devices: deviceRows(), time: o.time || '05:12:40', speed: 4 };
   const findings = o.findings ? Array.from({ length: 5 }, (_, i) => ({ level: 'observation', rule: 'C', message: `Tåg ${424 + i} följer en annan väg än sin tabell (${i + 1})` })) : [];
   const clock = () => ({ configured: true, running: st.running, time: st.time, speed: st.speed, source: 'internal', external_name: '', available: true, can_control: true, style: 'digital', show_seconds: true });
   const runtime = { configured: true, linked: true, cloud_auto_sync: true, meet_name: 'Grimslöv 2027', active_day: 'Dagl', publication_id: 'pub-9', server_name: 'Raspberry Pi – Grimslöv 2027', central_url: 'https://cloud.trainmeet.example', station_count: 11 };
   const ctx = () => ({ selected_meet: { id: 'meet-1', name: 'Grimslöv 2027', publication_id: 'pub-9', operating_region: o.region, generation: 7, version_number: 9 }, operating_region: o.region, available_workspaces: ['administration', 'tmbox'], public_clients_enabled: true, cloud_update: { linked: true, state: 'ok' } });
-  const simulation = () => st.sim ? {
-    supported: true, active: true, day: 'Dagl', seed: 'S-7', clock: { running: true, time: st.time.slice(0, 5), speed: 4 },
-    stations: [{ id: 'ac', code: 'AC', name: 'Alvesta C', mode: 'automatic' }, { id: 'vax', code: 'VÄX', name: 'Växjö', mode: 'automatic' }, { id: 'cst', code: 'CST', name: 'Stockholm C', mode: 'manual', operator: 'TBX-9F02' }],
-    trains: [{ train_number: '421', from_station_id: 'vax', to_station_id: 'eli', status: 'in_transit', reason: '' }, { train_number: '8282', from_station_id: 'eli', to_station_id: 'ac', status: 'waiting', reason: 'channel_occupied' }],
-  } : { supported: true, active: false };
   let selectedTrainCalls = 0;
   await page.route('**/*', async route => {
     const request = route.request();
@@ -140,7 +135,6 @@ async function open(opts = {}) {
         case '/v1/clock': if (request.method() === 'POST') { const b = JSON.parse(request.postData() || '{}'); if (b.action === 'start') st.running = true; if (b.action === 'stop') st.running = false; } data = clock(); break;
         case '/v1/clock/source': data = { source: 'internal', clock_name: '', user: '', has_password: false, poll_interval: 2 }; break;
         case '/v1/display': data = { clock: clock(), meet: { id: 'meet-1', name: 'Grimslöv 2027' }, active_day: 'Dagl', publication_id: 'pub-9', stations, connections, routes, services, train_positions: positions(), connection_states: connectionStates(), connection: { screens: [] }, display: {}, calendar: o.calendar ?? null, server_time: new Date().toISOString() }; break;
-        case '/v1/simulation': data = simulation(); break;
         case '/v1/train': {
           const n = url.searchParams.get('number'); const s = services.find(x => x.train_number === n); selectedTrainCalls++;
           data = { train_number: n, active_day: 'Dagl', services: s ? [{ service_id: s.id, train_type: 'Persontåg', delay_minutes: 0,

@@ -296,8 +296,6 @@ class CloudConfiguration:
             from .local_edits import edit_count
             return self._local_changes_waiting(publication_id, edit_count(local_layer["edits"]))
         blockers = self._engine_blockers() if not previous or previous["region"] == "eu" else []
-        if getattr(app, "simulation", None) and app.simulation.active:
-            blockers.append("Avsluta simuleringen innan ny config eller annan träff aktiveras.")
         us_session = app.us_store.context("config", True)["session"] if app.us_store else None
         if switching and us_session and us_session["status"] != "closed":
             blockers.append("Avsluta den pågående US-körningen innan du byter träff.")

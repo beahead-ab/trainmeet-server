@@ -3,7 +3,7 @@
 Casper (2026-10-01): "Alla UI ska uppdateras när det sker en ändring
 någonstans, t.ex. trafik." Drift, skärmarna och deltagarvyn frågade servern
 var femte sekund (skärmarna varje sekund). Nu säger servern till direkt vad
-som ändrats – trafik, klocka, boxar, träffen eller simuleringen – och sidan
+som ändrats – trafik, klocka, boxar, träffen eller automatiken – och sidan
 hämtar om just det. Strömmen bär bara ämnesnamn, aldrig data, så den kräver
 ingen inloggning.
 """
@@ -17,7 +17,6 @@ import unittest
 from unittest.mock import patch
 
 import test_shared_traffic
-import test_simulation
 import test_us_http
 from tmbox_gateway import change_feed, http_server
 from tmbox_gateway.change_feed import ChangeFeed
@@ -207,53 +206,17 @@ class WhatChangesTests(unittest.TestCase):
         with self.announces("runtime", "traffic", "clock"):
             self.fixture.install(package)
 
+    def test_automatic_stations_switched(self):
+        """Simuleringen är borttagen; automatiken har ämnet "automatic"."""
+        self.assertNotIn("simulation", change_feed.TOPICS)
+        with self.announces("automatic", "runtime"):
+            self.app.control_automatic_stations(self.admin, {"action": "enable", "enabled": True,
+                                                             "meet_generation": self.generation()})
+
     def test_cloud_auto_sync_switched(self):
         self.app.runtime_store.save_link_token("test-link")
         with self.announces("runtime"):
             self.app.configure_cloud_auto_sync(self.admin, {"enabled": False})
-
-
-class SimulationChangesTests(unittest.TestCase):
-    def setUp(self):
-        self.fixture = test_simulation.SimulationTests()
-        self.fixture.setUp()
-        self.addCleanup(self.fixture.tearDown)
-        self.app = self.fixture.app
-
-    def topics(self, action):
-        since = self.app.changes.seq
-        action()
-        return self.app.changes.wait(since, 0)[1]
-
-    def test_start_and_pause(self):
-        self.assertEqual({"clock", "runtime", "simulation", "traffic"},
-                         set(self.topics(lambda: self.fixture.command("start", confirmed=True, profile="timetable", time="09:17", speed=1))))
-        self.assertIn("simulation", self.topics(lambda: self.fixture.command("pause")))
-
-    def test_a_request_the_simulator_lets_expire(self):
-        """A box asks, nobody answers, the simulator lets the request expire
-        after five game minutes: no command, so the simulator says so."""
-        sim, service = self.fixture.sim, self.fixture.service
-        asking, answering = self.fixture.register("box-a", "station-a"), self.fixture.register()
-        self.fixture.start()
-        for box in (asking, answering):
-            service.observe_operator(box)  # both stations manual: the simulator acts for neither
-        self.fixture.advance(9 * 3600 + 18 * 60)
-        service.execute_station_command(asking, "station-a", "clearance.request",
-            {"movement_id": "movement-101-a", "connection_id": "connection-a-b"})
-        sim.tick()
-        case = service.open_cases(None)[0]
-        self.assertEqual("waiting", case["status"])
-        self.assertIn("traffic", self.topics(lambda: self.fixture.advance(9 * 3600 + 24 * 60)))
-        self.assertEqual("expired", self.fixture.ops.clearance(case["clearance_id"])["status"])
-        self.assertEqual([], service.open_cases(None), "and asks nothing new")
-
-
-    def test_a_train_the_simulator_stables(self):
-        self.fixture.start(time="09:25")
-        self.fixture.advance(9 * 3600 + 35 * 60 + 1)
-        self.assertIn("traffic", self.topics(lambda: self.fixture.advance(9 * 3600 + 40 * 60 + 2)))
-        self.assertIn("movement-101-a", self.fixture.sim.run["stabled"])
 
 
 class USChangesTests(unittest.TestCase):

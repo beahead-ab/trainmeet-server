@@ -1,7 +1,7 @@
 """What changed on the server, for open pages (GET /v1/events).
 
 A page that is told *that* traffic, the clock, the boxes, the meet or the
-simulation changed fetches it again at once, instead of on its next timer.
+automatic stations changed fetches it again at once, instead of on its next timer.
 The feed carries topic names only, never data: anything a page shows it
 still reads from the endpoints it always used, with the access they need.
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 import secrets
 import threading
 
-TOPICS = ("traffic", "clock", "devices", "runtime", "simulation")
+TOPICS = ("traffic", "clock", "devices", "runtime", "automatic")
 
 # Each open page holds one HTTP worker thread. Enough for Drift, the displays
 # and the participants' phones at a meet; past that, a page keeps its timer.

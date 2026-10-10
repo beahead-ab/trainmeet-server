@@ -210,10 +210,10 @@ class JumpBackAlongTheRouteTests(unittest.TestCase):
         self.assertEqual("accepted", self.fixture.v2("train.arrived", {"movement_id": "movement-103-2"}, "esp32")["status"])
         self.assertEqual([], self.service.open_cases(None))
 
-    def test_the_simulation_hears_what_the_jump_recorded(self):
-        self.service.simulation = MagicMock(active=False)
+    def test_the_automatic_stations_hear_what_the_jump_recorded(self):
+        self.service.automatic = MagicMock()
         self.fixture.v2("train.arrived", {"movement_id": "movement-103-2"}, "esp32")
-        recorded = [call.args for call in self.service.simulation.record_action.call_args_list]
+        recorded = [call.args for call in self.service.automatic.record_action.call_args_list]
         for event in (("train.departed", "movement-103-0"), ("train.arrived", "movement-103-1"),
                       ("train.departed", "movement-103-1"), ("train.arrived", "movement-103-2")):
             self.assertIn(event, recorded)

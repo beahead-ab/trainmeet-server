@@ -23,7 +23,7 @@
     <script src="/assets/participant-messages.js" defer></script>
     <script src="/assets/i18n-init.js" defer></script>
     <script src="/assets/live-events.js" defer></script>
-    <script src="/assets/simulation-banner.js" defer></script>
+    <script src="/assets/display-feed.js" defer></script>
     <script src="/assets/day-change.js" defer></script>
   </head>
   <body>
@@ -50,7 +50,6 @@
             <summary aria-label="Öppna menyn">☰</summary>
             <nav aria-label="Servermeny">
               <a href="#settings" id="open-settings">Inställningar</a>
-              <a href="#simulation" id="open-simulation">Simulering</a>
               <a href="#screens">Skärmar</a>
               <button id="logout" type="button">Logga ut</button>
             </nav>
@@ -362,20 +361,9 @@
               <button id="new-day-open" class="kr-btn" type="button" data-open-modal="new-day-modal" title="Gå till nästa dag med den dagens tidtabell" hidden>Starta ny dag…</button>
               <button id="time-machine-open" class="kr-btn" type="button" data-open-modal="time-machine-modal" title="Hoppa till en annan dag och tid; alla tåg följer med">Tidsmaskin…</button>
             </div>
-            <span class="kr-vsep" aria-hidden="true"></span>
-            <div id="drift-simulation" class="kr-sim">
-              <b>Simulering</b>
-              <span id="simulation-summary" class="kr-sim-state" role="status">avstängd</span>
-              <button id="simulation-start-open" class="kr-btn" type="button">Starta…</button>
-              <button id="simulation-pause" class="kr-btn" type="button" hidden>Pausa</button>
-              <button id="simulation-details-open" class="kr-btn" type="button" data-kr-dialog="drift-simulation-dialog" hidden>Stationer och tåg…</button>
-              <button id="simulation-reset-open" class="kr-btn" type="button" hidden>Återställ vid aktuell tid</button>
-              <button id="simulation-finish-open" class="kr-btn" type="button" hidden>Avsluta</button>
-            </div>
             <span class="kr-sp"></span>
             <div id="drift-stats" class="kr-stats" aria-label="Läget just nu"></div>
             <p id="overview-clock-message" class="form-message" role="status"></p>
-            <p id="simulation-error" class="form-message" role="alert"></p>
           </section>
 
           <section id="us-runtime-summary" class="kr-panel hidden">
@@ -499,46 +487,6 @@
             </section>
           </dialog>
 
-          <!-- Simulering · stationer och tåg (när en simulering pågår). -->
-          <dialog id="drift-simulation-dialog" class="kr-dialog kr-dialog--wide" aria-labelledby="drift-simulation-title">
-            <header class="kr-dialog__head"><h2 id="drift-simulation-title">Simulering · stationer och tåg</h2><span id="simulation-meta" class="kr-c"></span><span class="kr-sp"></span><button type="button" class="kr-btn sm" data-close-modal>Stäng</button></header>
-            <article id="simulation-stations-card" class="kr-dialog__body" hidden>
-              <h3>Stationsbemanning</h3>
-              <p>En tilldelad klient tar över automatiskt när den ansluter. Tappad kontakt lämnar stationen väntande – automatiken tar inte över utan ditt beslut.</p>
-              <div id="simulation-stations" class="simulation-stations"></div>
-            </article>
-            <article id="simulation-trains-card" class="kr-dialog__body" hidden>
-              <h3>Tåg och väntelägen</h3>
-              <div class="simulation-table-scroll"><table class="simulation-table"><thead><tr><th>Tåg</th><th>Från → till</th><th>Läge</th><th>Orsak / stationsarbete</th></tr></thead><tbody id="simulation-trains"></tbody></table></div>
-            </article>
-          </dialog>
-
-          <dialog id="simulation-start-modal" class="admin-modal" aria-labelledby="simulation-start-title">
-            <h2 id="simulation-start-title">Starta simulering</h2>
-            <form id="simulation-start-form">
-              <p>Öva på den valda träffens tidtabell. Servern sköter obemannade stationer; anslutna, tilldelade operatörer tar över sin station. Vanlig driftdata hålls separat.</p>
-              <p id="simulation-day"></p>
-              <div class="simulation-fields">
-                <label>Starttid<input id="simulation-time" type="time" required></label>
-                <label>Klockhastighet<input id="simulation-speed" type="number" min="0.1" max="60" step="0.1" required></label>
-                <label>Störningsnivå<select id="simulation-profile"><option value="timetable">Tidtabellstrogen</option><option value="normal" selected>Normal trafik</option><option value="disrupted">Störd trafik</option></select></label>
-                <label>Scenarionyckel (valfritt)<input id="simulation-seed" maxlength="64" placeholder="Samma nyckel ger samma störningar"></label>
-                <label>Undanställning vid slutstation (spelminuter)<input id="simulation-stabling" type="number" min="1" max="60" value="5" required></label>
-              </div>
-              <p>Speltiden styr restider och stationsarbete. Tidigare tåg placeras enligt tidtabellen; tåg på linjen får sin återstående restid. Den externa träffklockan styrs inte.</p>
-              <p>Simuleringen tar över servern och alla anslutna TMBoxar och TKL-terminaler. Det vanliga spelet pausas och dess tåg och klareringar sparas separat. Enheterna behåller sina anslutningar och stationstilldelningar. När simuleringen avslutas återgår du till det sparade spelet, fortfarande pausat.</p>
-              <p>Stoppa eventuella fysiska tåg innan du fortsätter. En extern träffklocka måste vara stoppad; simulatorn styr den inte.</p>
-              <p>På automatiska slutstationer rangeras ankomna tåg till simulerad uppställning utanför trafikspåren efter den valda tiden. På bemannade stationer styr operatören.</p>
-              <p class="form-message" role="alert"></p>
-              <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Pausa spelet och starta simulering</button></div>
-            </form>
-          </dialog>
-          <dialog id="simulation-confirm-modal" class="admin-modal" aria-labelledby="simulation-confirm-title">
-            <h2 id="simulation-confirm-title">Bekräfta</h2>
-            <form id="simulation-confirm-form"><p id="simulation-confirm-description"></p><p class="form-message" role="alert"></p>
-              <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button id="simulation-confirm-submit" type="submit" class="primary">Bekräfta</button></div>
-            </form>
-          </dialog>
 
           <!-- Boxar: placering, enhetskod, borttagning och språk. Öppnas från tabellen. -->
           <dialog id="display-placement-modal" class="admin-modal" aria-labelledby="display-placement-title">

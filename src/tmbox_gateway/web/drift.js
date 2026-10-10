@@ -90,7 +90,7 @@
   // ── Tillstånd ─────────────────────────────────────────────────────────
   const hooks = {};
   const ctx = {
-    snapshot: null, devices: [], presentation: null, simulation: null, clock: null,
+    snapshot: null, devices: [], presentation: null, automatic: null, clock: null,
     selection: { train: null, station: null },
     trainDetail: { number: null, data: null, error: "" },
     us: false,
@@ -158,7 +158,7 @@
   // ── Nyckeltal ─────────────────────────────────────────────────────────
   function renderStats(rows) {
     const host = $("#drift-stats"); if (!host || !ctx.snapshot) return;
-    const s = model.stats(ctx.snapshot, rows, ctx.simulation);
+    const s = model.stats(ctx.snapshot, rows);
     if (!changed("stats", [s, root.lang])) return;
     const stat = (value, label, tone = "", sub = "") => h("div", { class: `kr-stat${tone ? " " + tone : ""}` },
       h("b", {}, String(value), sub ? h("small", {}, sub) : null), h("span", {}, label));
@@ -171,11 +171,12 @@
     const target = $("#overview-topology"), snapshot = ctx.snapshot;
     if (!target || !snapshot || !hooks.renderTopology) return;
     const width = Math.max(280, contentWidth(target.parentElement) || 1200);
-    const simulated = new Set((ctx.simulation?.active ? ctx.simulation.stations || [] : []).filter((station) => station.mode === "automatic").map((station) => station.id));
+    // Stationer som automatiken sköter just nu (Inställningar → Obemannade stationer).
+    const automated = new Set((ctx.automatic?.enabled ? ctx.automatic.stations || [] : []).filter((station) => station.mode === "automatic").map((station) => station.id));
     hooks.renderTopology(snapshot, target, {
       kr: { width },
       selectedTrainNumber: ctx.selection.train, selectedStationID: ctx.selection.station, showBadge: false,
-      stationClass: (station) => (simulated.has(station.id) ? "sim" : ""),
+      stationClass: (station) => (automated.has(station.id) ? "auto" : ""),
       onTrainSelect: (number) => hooks.selectTrain?.(number),
       onStationSelect: (id) => hooks.selectStation?.(id),
       onClear: () => hooks.clear?.(),
@@ -195,8 +196,8 @@
     const tag = (cls, text, dotted = true) => h("span", { class: `kr-tag ${cls}` }, dotted ? dot() : null, text);
     // En väntande box som tappat kontakten säger det i stället: den väntar inte längre på något.
     if (row.kind === "waiting" && row.device?.connection?.state !== "lost") return tag("warn", t("Väntar på station"));
-    if (row.kind === "simulated") return tag("sim", t("Simuleras"));
-    if (row.sim?.mode === "disconnected") return tag("warn", t("Kontakt saknas – väntar"));
+    if (row.kind === "automatic" || row.auto?.mode === "automatic") return tag("auto", t("Automatisk"));
+    if (row.auto?.mode === "disconnected") return tag("warn", t("Kontakt saknas – väntar"));
     if (row.kind === "unmanned") return tag("off", t("Obemannad"), false);
     const connection = row.device.connection, time = deviceTime(connection), state = connection?.state || "offline";
     if (state === "online") return tag("ok", t("Online"));
@@ -204,7 +205,7 @@
     return tag("off", time ? t("Offline sedan {time}", { time }) : t("Offline"));
   }
   function boxCell(row) {
-    if (row.kind === "simulated") return h("td", { class: "m" }, t("Simulator"));
+    if (row.kind === "automatic") return h("td", { class: "m" }, t("Automatik"));
     if (!row.device) return h("td", { class: "m" }, "—");
     const side = { left: t("vänster"), right: t("höger") }[row.device.station_side];
     // Firmware för en fysisk box, appversion för iPhone. En webbläsarbox kör
@@ -224,7 +225,7 @@
   function actionCell(row) {
     const cell = h("td", { class: "r" });
     if (row.kind === "waiting") cell.append(button(t("Välj station ▾"), { cls: "kr-btn sm primary", on: { click: (event) => hooks.editBox?.(row.device, null, event.currentTarget) } }));
-    else if (row.kind === "simulated") cell.append(button(t("Ta över"), { cls: "kr-linkbtn", on: { click: () => hooks.simulationDetails?.() } }));
+    else if (row.kind === "automatic") cell.append(button(t("Ta över"), { cls: "kr-linkbtn", on: { click: () => hooks.automaticDetails?.() } }));
     else if (row.kind === "unmanned") cell.append(button(t("Tilldela"), { cls: "kr-linkbtn", on: { click: (event) => hooks.editBox?.(null, row.station, event.currentTarget) } }));
     else cell.append(button(t("Redigera"), { cls: "kr-linkbtn", on: { click: (event) => hooks.editBox?.(row.device, row.station, event.currentTarget) } }));
     return cell;
@@ -240,12 +241,12 @@
     }
     const stations = ctx.snapshot?.stations?.length || 0;
     const manned = new Set(rows.filter((row) => row.kind === "box" && row.tone === "ok").map((row) => row.station.id)).size;
-    const simulated = rows.filter((row) => row.kind === "simulated").length;
+    const automatic = model.stats(ctx.snapshot, rows).automatic;
     const meta = $("#drift-stations-meta");
     if (meta) meta.textContent = [t("{manned} av {total} bemannade", { manned, total: stations }),
-      simulated ? t(simulated === 1 ? "1 sköts av simulatorn" : "{n} sköts av simulatorn", { n: simulated }) : ""].filter(Boolean).join(" · ");
+      automatic ? t(automatic === 1 ? "1 sköts av automatiken" : "{n} sköts av automatiken", { n: automatic }) : ""].filter(Boolean).join(" · ");
     const sig = [rows.map((row) => [row.key, row.kind, row.tone, row.trains, row.device?.connection?.state, row.device?.connection?.last_seen,
-      row.device?.station_side, row.device?.device_code, row.device?.firmware_version, row.placement && [row.placement.left, row.placement.right], row.sim?.mode]), selected, root.lang];
+      row.device?.station_side, row.device?.device_code, row.device?.firmware_version, row.placement && [row.placement.left, row.placement.right], row.auto?.mode]), selected, root.lang];
     if (!changed("stations", sig)) return;
     if (!rows.length) { body.replaceChildren(h("tr", {}, h("td", { colspan: 6, class: "kr-empty" }, t("Inga stationer i träffen.")))); return; }
     body.replaceChildren(...rows.map((row) => {
@@ -629,10 +630,10 @@
   function render() {
     renderClock();
     // US-träffar har ingen bana, inga stationer och inget diagram i Drift: bara klockan och trafiken i Dispatcher.
-    for (const selector of ["#drift-simulation", "#drift-map", ".kr-split", "#drift-graph", "#drift-stats"]) { const el = $(selector); if (el) el.hidden = ctx.us; }
+    for (const selector of ["#drift-map", ".kr-split", "#drift-graph", "#drift-stats"]) { const el = $(selector); if (el) el.hidden = ctx.us; }
     $("#us-runtime-summary")?.classList.toggle("hidden", !ctx.us);
     if (ctx.us || !ctx.snapshot) return;
-    const rows = model.stationRows({ snapshot: ctx.snapshot, devices: ctx.devices, presentation: ctx.presentation, simulation: ctx.simulation });
+    const rows = model.stationRows({ snapshot: ctx.snapshot, devices: ctx.devices, presentation: ctx.presentation, automatic: ctx.automatic });
     renderStats(rows); renderStations(rows); renderEvents(); renderMap(); renderGraph();
     trainAside(); stationAside(); placeAsides();
   }

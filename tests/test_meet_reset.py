@@ -210,16 +210,12 @@ class MeetResetTests(unittest.TestCase):
         self.assertIn("sudo chown -R trainmeet-server:trainmeet-server", str(raised.exception))
         self.assertEqual("occupied", self.lines()["connection-a-b"], "ingenting togs bort")
 
-    def test_only_an_administrator_and_never_during_a_simulation(self):
+    def test_only_an_administrator(self):
         self.play_for_a_while()
         box = PairedClient(client_id="esp8266", display_name="CDA TMBox", kind=DeviceKind.ESP32_PANEL,
                            panel_ids=("panel-a",))
         with self.assertRaises(HTTPAPIError):
             self.reset(client=box)
-        with patch.object(self.app.simulation, "run", object()), \
-                self.assertRaises(HTTPAPIError) as raised:
-            self.reset()
-        self.assertEqual("simulation_active", raised.exception.code)
         self.assertEqual("occupied", self.lines()["connection-a-b"])
 
     def test_without_a_meet_there_is_nothing_to_reset(self):

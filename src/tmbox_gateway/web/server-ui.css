@@ -115,9 +115,6 @@ label { font-size: 12px; font-weight: 600; gap: 5px; }
 .admin-modal form { gap: 12px; }
 .admin-modal label { font-size: 12px; }
 .modal-actions { margin-top: 16px; padding-top: 12px; gap: 8px; }
-.simulation-fields { gap: 12px; }
-.simulation-station { padding: 8px; }
-.simulation-station p { font-size: 12px; }
 #login, #setup { max-width: 680px; margin: 40px auto; padding: 24px; }
 @media (max-width: 1200px) {
 #header-server-meta { display: none; }

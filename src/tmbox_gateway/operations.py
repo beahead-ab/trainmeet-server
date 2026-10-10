@@ -2183,8 +2183,6 @@ class SQLiteOperationsStore:
 
     def close(self) -> None:
         with self._lock:
-            if getattr(self, "simulation_controller", None):
-                self.simulation_controller.close()
             self._connection.close()
 
     def _upsert_position(

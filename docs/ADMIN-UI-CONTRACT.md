@@ -26,7 +26,7 @@ redan överallt:
 - Dialogreglerna längre ned (Avbryt först, Spara sist, osparade ändringar
   kräver bekräftelse, spärrat läge under sparande) gäller även de dialoger
   Drift öppnar: boxens inställningar, ändra vänster och höger, ta bort box,
-  språk, starta simulering och klocka.
+  språk, Starta ny dag, tidsmaskinen och klocka.
 - Inställningar är undantaget från "redigering sker i en dialog": där är varje
   panel ett eget formulär med Avbryt och Spara som är släckta tills något är
   ändrat, så att man ser vad som är osparat per panel. Avbryt kastar utan

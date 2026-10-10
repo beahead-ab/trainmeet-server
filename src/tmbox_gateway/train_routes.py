@@ -128,7 +128,7 @@ def resolve_arrival(payload: dict, active_day: str, station_id: str, movement_id
 
     None when the train starts here, or its previous stop is not a station of
     the meet: then nobody can report the arrival, and nobody has to. The legs
-    are the ones resolve_departure gives the boxes and the simulation, so a
+    are the ones resolve_departure gives the boxes and the automatic stations, so a
     rule built on this is never stricter than what a box shows.
     """
     rows = [row for row in payload.get("trains", []) if str(row.get("id")) == movement_id]

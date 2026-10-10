@@ -1,19 +1,19 @@
 /* What changed on the server, as it happens (GET /v1/events).
  *
  * The server says only *that* traffic, the clock, the boxes, the meet or the
- * simulation changed. Each page then fetches just that again at once, from
+ * automatic stations changed. Each page then fetches just that again at once, from
  * the endpoints it always used; its own timer stays as a slow fallback, and
  * returns to its usual pace whenever the stream is down.
  *
  * TrainMeetLive.subscribe(callback) opens the stream; callback(topics) gets a
  * Set of topic names, several changes within 250 ms together. A passive
- * subscriber (the simulation banner) listens without opening a stream, so a
+ * subscriber (display-feed.js) listens without opening a stream, so a
  * page that needs none, such as a virtual TMBox, does not take one.
  */
 (() => {
   const COALESCE_MS = 250;
   const RETRY_MS = 30000;
-  const ALL = ["traffic", "clock", "devices", "runtime", "simulation"];
+  const ALL = ["traffic", "clock", "devices", "runtime", "automatic"];
   const subscribers = new Set();
   const statusListeners = new Set();
   let source = null, retryTimer = null, flushTimer = null;

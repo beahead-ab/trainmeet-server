@@ -91,10 +91,10 @@ class ShippedFontsTests(unittest.TestCase):
         self.assertIn(".clock-numeral { font-family: var(--font); }", (WEB / "server-ui.css").read_text(encoding="utf-8"))
 
     def test_scripts_do_not_pick_a_system_font(self):
-        # The simulation banner is styled from JavaScript on every page that
+        # The day-change toast is styled from JavaScript on every page that
         # shows it; it names Inter first like the stylesheets do.
-        banner = (WEB / "simulation-banner.js").read_text(encoding="utf-8")
-        self.assertRegex(banner, r"font:\s*600 15px Inter,")
+        toast = (WEB / "day-change.js").read_text(encoding="utf-8")
+        self.assertRegex(toast, r"font:\s*600 15px/1.4 Inter,")
 
 
 

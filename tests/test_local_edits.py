@@ -14,7 +14,6 @@ import unittest
 from dataclasses import replace
 from http import HTTPStatus
 from pathlib import Path
-from types import SimpleNamespace
 
 from session_fixture import sample_session
 from test_pending_revisions import CloudDeliveryFixture, cloud_package, dispatch_request
@@ -316,16 +315,12 @@ class MeetDataTests(CloudDeliveryFixture):
         status, body = dispatch_request(self.application, self.client, "/v1/meet-data/discard", {"expected_revision": 0})
         self.assertEqual((HTTPStatus.OK, False), (status, body["changed"]), "nothing to discard is not an error")
 
-    def test_only_admin_and_never_during_a_simulation(self):
+    def test_only_admin(self):
         box = PairedClient(client_id="box", display_name="CDA TMBox", kind=DeviceKind.ESP32_PANEL, panel_ids=("panel-a",))
         status, body = dispatch_request(self.application, box, "/v1/meet-data", method="GET")
         self.assertEqual((HTTPStatus.FORBIDDEN, "admin_required"), (status, body["code"]))
         status, body = dispatch_request(self.application, box, "/v1/meet-data/discard", {})
         self.assertEqual((HTTPStatus.FORBIDDEN, "admin_required"), (status, body["code"]))
-        draft = self.get()["draft"]
-        self.application.simulation = SimpleNamespace(active=True)
-        status, body = self.post(draft)
-        self.assertEqual((HTTPStatus.CONFLICT, "simulation_active"), (status, body["code"]))
 
     def test_the_layer_survives_a_restart(self):
         draft = self.get()["draft"]

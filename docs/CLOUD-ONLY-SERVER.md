@@ -98,7 +98,7 @@ Spärrarna gäller bara det som ändras, inte hela banan: ett tåg som är ute p
 linjen, har ett öppet körtillstånd eller väntar på kvittens av ett linjebesked
 kan inte ändras; ett tåg med registrerade driftuppgifter kan inte tas bort; en
 sträcka byter spårtyp bara när den är fri och ingen TMBox vid den är mitt i en
-inmatning. Under en simulering kan inget ändras. Varje sparning är en ny
+inmatning. Varje sparning är en ny
 revision med samma övergångsmärke som en aktivering, och en sida som ligger
 efter får inte spara. API:et är `GET /v1/meet-data`, `POST /v1/meet-data` och
 `POST /v1/meet-data/discard`, bara för admin.

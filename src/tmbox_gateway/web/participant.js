@@ -368,7 +368,7 @@
       $("#pv-clear-station")?.addEventListener("click", () => { selectedStation = null; if (snapshot) { renderTrack(); renderTimetable(); } });
       document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && active) poll(); });
       globalThis.TrainMeetLive?.subscribe((topics) => {
-        if (active && ["traffic", "clock", "runtime", "simulation"].some((name) => topics.has(name))) poll();
+        if (active && ["traffic", "clock", "runtime", "automatic"].some((name) => topics.has(name))) poll();
       });
       // The stream came up or went down: the waiting timer takes the new pace.
       globalThis.TrainMeetLive?.onStatus(() => { if (!request) schedulePoll(); });

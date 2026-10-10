@@ -137,13 +137,16 @@ test('stationRows: waiting boxes first, then every station with its box or as un
   assert.equal(new Set(rows.map((row) => row.key)).size, rows.length);
 });
 
-test('stationRows: an automatic simulated station has no box, a disconnected one warns', () => {
-  const simulation = {active: true, stations: [{id: 'a', mode: 'automatic'}, {id: 'b', mode: 'disconnected'}]};
-  const devices = [{device_id: 'd2', station_id: 'b', connection: {state: 'online'}}];
-  const rows = model.stationRows({snapshot: snapshot(), devices, simulation});
-  assert.deepEqual(rows.map((row) => [row.kind, row.tone]), [['simulated', 'sim'], ['box', 'warn'], ['unmanned', 'off']]);
-  const idle = model.stationRows({snapshot: snapshot(), devices, simulation: {active: false, stations: simulation.stations}});
-  assert.deepEqual(idle.map((row) => row.kind), ['unmanned', 'box', 'unmanned']);
+test('stationRows: the automatic stations - unmanned ones are automatic, a box keeps its row, a lost one warns', () => {
+  // /v1/automatic-stations. Simuleringen gav samma bild förut; nu är det automatiken i vanlig drift.
+  const automatic = {enabled: true, stations: [{id: 'a', mode: 'automatic'}, {id: 'b', mode: 'disconnected'}, {id: 'c', mode: 'automatic'}]};
+  const devices = [{device_id: 'd1', station_id: 'a', connection: {state: 'offline'}}, {device_id: 'd2', station_id: 'b', connection: {state: 'online'}}];
+  const rows = model.stationRows({snapshot: snapshot(), devices, automatic});
+  assert.deepEqual(rows.map((row) => [row.kind, row.station.id, row.tone, row.auto?.mode]),
+    [['box', 'a', 'off', 'automatic'], ['box', 'b', 'warn', 'disconnected'], ['automatic', 'c', 'auto', 'automatic']]);
+  assert.equal(model.stats(snapshot(), rows).automatic, 2, 'a and c are run by the automation');
+  const off = model.stationRows({snapshot: snapshot(), devices, automatic: {enabled: false, stations: automatic.stations}});
+  assert.deepEqual(off.map((row) => row.kind), ['box', 'box', 'unmanned'], 'switched off: nothing is automatic');
 });
 
 test('stats counts trains on the line, cleared, at stations, manned stations and deviations', () => {
@@ -157,7 +160,7 @@ test('stats counts trains on the line, cleared, at stations, manned stations and
     routes: [{train_number: '101', station_id: 'b', arrival_time: '10:20:00'}],
   });
   const rows = model.stationRows({snapshot: snap, devices: [{device_id: 'd1', station_id: 'a', connection: {state: 'online'}}]});
-  assert.deepEqual(model.stats(snap, rows), {onLine: 1, cleared: 1, atStations: 1, manned: 1, stations: 3, simulated: 0, deviations: 1});
+  assert.deepEqual(model.stats(snap, rows), {onLine: 1, cleared: 1, atStations: 1, manned: 1, stations: 3, automatic: 0, deviations: 1});
 });
 
 test('events (whole line): each train’s next event, in time order', () => {

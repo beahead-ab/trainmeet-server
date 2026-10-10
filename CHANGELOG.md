@@ -5,6 +5,37 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Simuleringsläget är borttaget; obemannade stationer sköts av automatiken
+
+Casper: ta bort simuleringen så länge obemannade stationer fortsätter att bli
+automatiska. Det gör de: automatiken i vanlig drift har redan samma
+robotoperatörer, störningar och undanställning som simuleringen hade. Det
+enda simuleringen gav därutöver var en egen databas, och det täcks av
+säkerhetskopiorna (före tidsmaskinen, nollställning och Starta ny dag) och av
+provbänken.
+
+- **Borttaget:** Drift → Simulering med dess dialoger, menyvalet Simulering,
+  banderollen "SIMULERING" på alla sidor och SIMULERING på 16×2-boxarna,
+  `GET`/`POST /v1/simulation`, fältet `simulation` i `/v1/clock`,
+  `/v1/display`, `/v1/server-context` och `/v1/automatic-stations`, och
+  spärrarna "Avsluta simuleringen först". `/#simulation` leder till Drift.
+- **Drift visar automatiken:** en station utan box som automatiken sköter står
+  som "Automatisk", med **Ta över** till Inställningar → Obemannade stationer.
+  En box på en sådan station står kvar med taggen "Automatisk", och raden säger
+  hur många stationer automatiken sköter. Kartan ringar in dem.
+- **Tågpanelens försening** räknas ur verkliga tider, som tidtabellerna, i
+  stället för ur simuleringen: ett tåg som står kvar efter avgångstiden eller
+  är ute på linjen visar hur sent det är.
+- **Händelseströmmen** (`/v1/events`) har ämnet `automatic` i stället för
+  `simulation`.
+- **Gamla körningar** i mappen `simulations/` och filen
+  `*.simulation-control.sqlite3` ligger kvar och raderas inte. En simulering som
+  pågick vid uppgraderingen tas inte upp igen: servern startar i vanlig drift
+  med träffens eget trafikläge. Träffklockan står då kvar där simuleringen
+  pausade den, med "Pausat för simulering", tills admin trycker Start.
+- Riggen (`tools/tmbox-rig`) slår på automatiken och startar klockan i stället
+  för att starta en simulering.
+
 ### Provbänken har påhittade stationer
 
 Provbänken (`/tmbox-lab/`) och flödesdokumentet använde Munkeröd,

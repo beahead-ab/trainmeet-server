@@ -171,13 +171,6 @@ class DayChangeTests(_Meet):
             "SELECT active_day, status FROM tkl_shifts WHERE shift_id=?", (shift["shift_id"],)).fetchone()
         self.assertEqual(tuple(row), ("Sön", "active"))
 
-    def test_no_new_day_during_a_simulation(self):
-        class Running:
-            active = True
-        self.app.simulation = Running()
-        self.run_clock_at(CHANGE + 5)
-        self.assertIsNone(self.app.calendar_tick())
-
     def test_with_fastclock_the_new_day_starts_when_the_clock_passes_the_day_change_after_midnight(self):
         self.runtime.set_day_change_time(self.pub.meet_id, "05:00")
         readings = iter([{"running": True, "seconds": float(at(4, 30)), "time": "04:30:00"},

@@ -556,7 +556,7 @@ export const SURFACES = {
     catalog: ['i18n-messages.js', 'meet-type-messages.js', 'shell-messages.js', 'participant-messages.js'].map(web),
     html: [web('index.html')],
     css: fs.readdirSync(path.join(pkg, 'web')).filter((name) => name.endsWith('.css')).map(web),
-    js: ['app.js', 'drift.js', 'drift-model.js', 'live-events.js', 'participant.js', 'server-ui.js', 'settings.js', 'simulation-banner.js', 'day-change.js', 'clock-face.js', 'kr-theme.js', 'data-page.js'].map(web),
+    js: ['app.js', 'drift.js', 'drift-model.js', 'live-events.js', 'participant.js', 'server-ui.js', 'settings.js', 'display-feed.js', 'day-change.js', 'clock-face.js', 'kr-theme.js', 'data-page.js'].map(web),
     skip: {'app.js': UNREACHABLE_APP},
   },
   'US pages': {
@@ -569,7 +569,7 @@ export const SURFACES = {
     catalog: [web('i18n-messages.js'), web('tmbox-messages.js')].filter((file) => fs.existsSync(file)),
     html: ['index.html', 'live.html', 'floden.html'].map(t16),
     css: ['style.css', 'flows.css'].map(t16),
-    js: ['terminal.js', 'flows-page.js', 'lcd.js'].map(t16).concat([web('simulation-banner.js'), web('day-change.js')]),
+    js: ['terminal.js', 'flows-page.js', 'lcd.js'].map(t16).concat([web('display-feed.js'), web('day-change.js')]),
   },
 };
 // Prose literals that are not UI text, each with the reason.
@@ -584,7 +584,10 @@ async function auditTkl(root) {
   const script = path.join(root, 'scripts/i18n-audit.mjs');
   if (!fs.existsSync(script)) return {skipped: 'no scripts/i18n-audit.mjs in ' + root};
   if (!fs.existsSync(path.join(root, 'node_modules/typescript'))) return {skipped: 'run npm install in ' + root};
-  return (await import(pathToFileURL(script).href)).auditTkl({root});
+  // Against the catalogue built here, not TKL's copy of it: a row removed
+  // here that TKL still uses then shows before the copy is synced over.
+  // A TKL from before TKL 0.9.3 ignores the option and audits its copy.
+  return (await import(pathToFileURL(script).href)).auditTkl({root, messages: path.join(repo, 'src/tmbox_gateway/web/i18n-messages.js')});
 }
 
 export async function audit({tkl = path.join(repo, '..', 'trainmeet-tkl'), surfaces = null} = {}) {

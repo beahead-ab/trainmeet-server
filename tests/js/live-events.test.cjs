@@ -89,7 +89,7 @@ test('back after a gap: everything again if anything was missed, nothing if not'
   stream.fail(false);
   stream.emit('hello', {boot: 'a1', seq: 3});
   advance(250);
-  assert.deepEqual(topics(calls).at(-1), ['clock', 'devices', 'runtime', 'simulation', 'traffic']);
+  assert.deepEqual(topics(calls).at(-1), ['automatic', 'clock', 'devices', 'runtime', 'traffic']);
   stream.fail(false);
   stream.emit('hello', {boot: 'b2', seq: 3});  // a restarted server
   advance(250);

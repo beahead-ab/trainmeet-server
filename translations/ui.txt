@@ -27,11 +27,6 @@ Let a client take over|Låt klient ta över|Lad en klient overtage|La en klient 
 Hand over to an operator|Lämna till operatör|Overlad til en operatør|Overlat til en operatør|An einen Bediener übergeben
 Arrived|Ankommet|Ankommet|Ankommet|Angekommen
 min extra station work|min extra stationsarbete|min. ekstra stationsarbejde|min ekstra stasjonsarbeid|Min. zusätzliche Bahnhofsarbeit
-Could not read the simulation|Kunde inte läsa simuleringen|Kunne ikke læse simuleringen|Kunne ikke lese simuleringen|Die Simulation konnte nicht gelesen werden
-The simulation could not be changed|Simuleringen kunde inte ändras|Simuleringen kunne ikke ændres|Simuleringen kunne ikke endres|Die Simulation konnte nicht geändert werden
-End simulation|Avsluta simulering|Afslut simulering|Avslutt simulering|Simulation beenden
-All clients return to the saved normal game with the clock paused. Connections and station assignments are kept. The simulation's data is stored separately.|Alla klienter återgår till det sparade vanliga spelet med pausad klocka. Anslutningar och stationstilldelningar behålls. Simuleringens data sparas separat.|Alle klienter vender tilbage til det gemte normale spil med uret på pause. Forbindelser og stationstildelinger bevares. Simuleringens data gemmes separat.|Alle klienter går tilbake til det lagrede vanlige spillet med klokken på pause. Tilkoblinger og stasjonstildelinger beholdes. Simuleringens data lagres separat.|Alle Clients kehren zum gespeicherten normalen Spiel mit angehaltener Uhr zurück. Verbindungen und Bahnhofszuweisungen bleiben erhalten. Die Daten der Simulation werden getrennt gespeichert.
-The simulation was updated.|Simuleringen uppdaterades.|Simuleringen blev opdateret.|Simuleringen ble oppdatert.|Die Simulation wurde aktualisiert.
 The code could not be redeemed|Koden gick inte att lösa in|Koden kunne ikke indløses|Koden kunne ikke løses inn|Der Code konnte nicht eingelöst werden
 The password is set. Sign in.|Lösenordet är satt. Logga in.|Adgangskoden er angivet. Log ind.|Passordet er satt. Logg inn.|Das Passwort ist gesetzt. Melde dich an.
 The passwords do not match.|Lösenorden är inte likadana.|Adgangskoderne er ikke ens.|Passordene er ikke like.|Die Passwörter stimmen nicht überein.
@@ -130,7 +125,6 @@ The update did not start: the update service on the server did not respond.|Uppd
 {name} is invited, but the email could not be sent: {problem} Hand over the code.|{name} är inbjuden, men e-posten gick inte iväg: {problem} Lämna över koden.|{name} er inviteret, men e-mailen kunne ikke sendes: {problem} Giv koden videre.|{name} er invitert, men e-posten kunne ikke sendes: {problem} Gi koden videre.|{name} ist eingeladen, aber die E-Mail konnte nicht gesendet werden: {problem} Gib den Code persönlich weiter.
 {name} is invited. Hand over the code.|{name} är inbjuden. Lämna över koden.|{name} er inviteret. Giv koden videre.|{name} er invitert. Gi koden videre.|{name} ist eingeladen. Gib den Code persönlich weiter.
 {count} box awaiting a station|{count} box väntar på station|{count} boks afventer station|{count} boks venter på stasjon|{count} Box wartet auf einen Bahnhof
-1 run by the simulator|1 sköts av simulatorn|1 styres af simulatoren|1 styres av simulatoren|1 vom Simulator gesteuert
 No stations in the meet.|Inga stationer i träffen.|Ingen stationer i træffet.|Ingen stasjoner i treffet.|Keine Bahnhöfe im Treffen.
 {count} deviation|{count} avvikelse|{count} afvigelse|{count} avvik|{count} Abweichung
 {count} deviations|{count} avvikelser|{count} afvigelser|{count} avvik|{count} Abweichungen
@@ -144,9 +138,6 @@ Type|Typ|Type|Type|Typ
 Message|Meddelande|Besked|Melding|Meldung
 Ready|Redo|Klar|Klar|Bereit
 Unsaved changes|Osparade ändringar|Ikke gemte ændringer|Ulagrede endringer|Ungespeicherte Änderungen
-SIMULATION · Running · Normal operating data is not affected|SIMULERING · Pågår · Vanlig driftdata påverkas inte|SIMULERING · I gang · Normale driftsdata påvirkes ikke|SIMULERING · Pågår · Vanlige driftsdata påvirkes ikke|SIMULATION · Läuft · Normale Betriebsdaten bleiben unberührt
-SIMULATION · Paused · Normal operating data is not affected|SIMULERING · Pausad · Vanlig driftdata påverkas inte|SIMULERING · På pause · Normale driftsdata påvirkes ikke|SIMULERING · På pause · Vanlige driftsdata påvirkes ikke|SIMULATION · Pausiert · Normale Betriebsdaten bleiben unberührt
-SIMULATION · No contact with the server|SIMULERING · Kontakt med servern saknas|SIMULERING · Ingen kontakt med serveren|SIMULERING · Ingen kontakt med serveren|SIMULATION · Keine Verbindung zum Server
 Searching for an update|Söker efter uppdatering|Søger efter opdatering|Søker etter oppdatering|Suche nach Update
 Downloading|Hämtar|Henter|Henter|Wird geladen
 Verifying|Verifierar|Verificerer|Verifiserer|Wird geprüft
@@ -1330,6 +1321,7 @@ Day {n} · {day}|Dag {n} · {day}|Dag {n} · {day}|Dag {n} · {day}|Tag {n} · {
 Moving the trains …|Tågen flyttas …|Togene flyttes …|Togene flyttes …|Die Züge werden versetzt …
 The time machine could not jump.|Tidsmaskinen kunde inte hoppa.|Tidsmaskinen kunne ikke springe.|Tidsmaskinen kunne ikke hoppe.|Die Zeitmaschine konnte nicht springen.
 Day {n} · {day} at {time}. Every train is where the timetable says.|Dag {n} · {day} kl. {time}. Alla tåg står där tidtabellen säger.|Dag {n} · {day} kl. {time}. Alle tog står, hvor køreplanen siger.|Dag {n} · {day} kl. {time}. Alle tog står der ruteplanen sier.|Tag {n} · {day} um {time}. Alle Züge stehen, wo der Fahrplan es vorsieht.
+1 run by the automation|1 sköts av automatiken|1 styres af automatikken|1 styres av automatikken|1 von der Automatik gesteuert
 Every day (Dagl)|Alla dagar (Dagl)|Alle dage (Dagl)|Alle dager (Dagl)|Jeden Tag (Dagl)
 Today: Day {n} · {day}|I dag: Dag {n} · {day}|I dag: Dag {n} · {day}|I dag: Dag {n} · {day}|Heute: Tag {n} · {day}
 Disturbances and stabling|Störningar och undanställning|Forstyrrelser og hensætning|Forstyrrelser og hensetting|Störungen und Abstellen
