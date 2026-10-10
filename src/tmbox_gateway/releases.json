@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.0.0",
+    "date": "2026-10-10",
+    "notes": [
+      "Simuleringsläget tas bort; obemannade stationer sköts av automatiken"
+    ]
+  },
+  {
     "version": "3.25.2",
     "date": "2026-10-10",
     "notes": [
