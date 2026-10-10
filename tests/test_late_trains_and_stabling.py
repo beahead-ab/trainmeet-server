@@ -236,6 +236,31 @@ class StabledIsVisibleTests(EndsHereFixture):
         now = self.app.train_detail(self.admin, "101")["services"][0]["now"]
         self.assertEqual(("stabled", "station-b"), (now["state"], now["station_id"]))
 
+    def at_lek(self):
+        return [position["train_number"] for position in self.app.display_snapshot()["train_positions"]
+                if position["status"] == "station" and position["station_id"] == "station-b"]
+
+    def test_a_train_put_away_is_off_the_map(self):
+        """Casper, 2026-10-10: "ta bort undanställda tåg från kartan". The
+        map, the trains-in count and TKL all read /v1/display."""
+        self.run_101_in()
+        self.assertEqual(["101"], self.at_lek(), "in: on the map at LEK")
+        self.advance(at(9, 41))
+        self.assertEqual([], self.at_lek(), "put away: off the map")
+        self.assertEqual("station-b", self.ops.positions()[0]["station_id"], "the stored position is untouched")
+
+    def test_an_older_position_without_its_movement_is_matched_on_train_and_station(self):
+        self.run_101_in()
+        self.advance(at(9, 41))
+        self.ops._connection.execute("UPDATE train_positions SET movement_id=NULL WHERE train_number='101'")  # noqa: SLF001
+        self.assertEqual([], self.at_lek())
+
+    def test_a_train_on_the_line_is_never_hidden(self):
+        positions = [{"train_number": "101", "status": "connection", "station_id": None, "movement_id": "movement-101-b"},
+                     {"train_number": "103", "status": "station", "station_id": "station-b", "movement_id": "movement-103-1"}]
+        kept = self.app._without_stabled(self.pub, positions, ["movement-101-b"])  # noqa: SLF001
+        self.assertEqual(positions, kept)
+
 
 class TakesOverInTests(StationAutomaticFixture):
     def lek(self):

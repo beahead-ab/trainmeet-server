@@ -90,9 +90,11 @@ Ett tåg som slutar på en **bemannad** station ställer operatören undan:
 | TKL | `POST /v1/tkl/stable` (nedan). Tågkortet med "Slutar här – ställ undan" och knappen Ställ undan kommer i en egen TKL-version. |
 
 Ett undanställt tåg håller inte längre sitt spår, varken på en automatisk
-eller en bemannad station. Drifts tågpanel säger **Undanställt i LEK**,
-`/v1/display` har dem i `stabled` (rörelse-id), och audit-loggen har
-`train.stabled` med vem som gjorde det.
+eller en bemannad station. Det står inte heller kvar på kartorna (Drift,
+skärmarna, deltagarvyn och TKL) eller bland tågen inne på stationen:
+`/v1/display` lämnar det utanför `train_positions` och har det i `stabled`
+(rörelse-id). Drifts tågpanel säger **Undanställt i LEK**, och audit-loggen
+har `train.stabled` med vem som gjorde det.
 
 ## Av och på
 
