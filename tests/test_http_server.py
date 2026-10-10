@@ -543,13 +543,18 @@ class HTTPServerTests(unittest.TestCase):
             logo = response.read()
             self.assertEqual(response.headers.get_content_type(), "image/png")
         self.assertTrue(logo.startswith(b"\x89PNG\r\n\x1a\n"))
+        # Sidhuvudets logotyp är stationsskylten, en SVG med konturer (inget typsnittsberoende).
+        self.assertIn('/trainmeet-skylt.svg', html)
+        with urlopen(f"{self.base_url}/trainmeet-skylt.svg", timeout=2) as response:
+            self.assertEqual(response.headers.get_content_type(), "image/svg+xml")
+            self.assertIn(b'<path', response.read())
 
-    def test_every_icon_the_page_names_is_served_and_is_the_meeting_track(self):
+    def test_every_icon_the_page_names_is_served_and_is_the_station_sign(self):
         """Favicon och hemskärmsikon pekar på filer som finns, med rätt typ.
 
         Hemskärmsikonen är kvadratisk utan genomskinlighet (iOS rundar själv
         och lägger svart bakom genomskinliga hörn), och märket är logotypen
-        Mötesspåret: blå platta, orange tåg.
+        Stationsskylten: TM i vitt på blå platta med vit kantlinje.
         """
         import re
         import struct
@@ -558,16 +563,18 @@ class HTTPServerTests(unittest.TestCase):
         links = re.findall(r'<link rel="(icon|apple-touch-icon)"([^>]*)href="([^"]+)"', html)
         self.assertEqual({"icon", "apple-touch-icon"}, {rel for rel, _, _ in links})
         for rel, attributes, href in links:
-            # Före Mötesspåret låg en orange ikon på samma adress, och webbläsarna
-            # visade den kvar i fliken: adressen bär därför ikonens version.
-            self.assertTrue(href.endswith("?v=motesparet"), href)
+            # Före Mötesspåret låg en orange ikon på samma adress, och före skylten
+            # Mötesspåret; webbläsarna visade den gamla kvar i fliken. Adressen
+            # bär därför ikonens version.
+            self.assertTrue(href.endswith("?v=skylten"), href)
             with urlopen(f"{self.base_url}{href}", timeout=2) as response:
                 body = response.read()
                 kind = response.headers.get_content_type()
             if href.split("?")[0].endswith(".svg"):
                 self.assertEqual("image/svg+xml", kind)
                 self.assertIn(b'fill="#1D4ED8"', body)
-                self.assertIn(b'fill="#F7931E"', body)
+                self.assertIn(b'stroke="#FFFFFF"', body)
+                self.assertNotIn(b'#F7931E', body, "skylten har inget orange")
             else:
                 self.assertEqual("image/png", kind)
                 width, height = struct.unpack(">II", body[16:24])
@@ -576,7 +583,7 @@ class HTTPServerTests(unittest.TestCase):
                 else:
                     self.assertEqual(width, height)
 
-    def test_favicon_ico_is_the_meeting_track(self):
+    def test_favicon_ico_is_the_station_sign(self):
         """/favicon.ico finns och bär ikonens egna PNG-filer, 16, 32 och 64 px.
 
         Webbläsare frågar efter /favicon.ico på egen hand (bokmärken, flikar
@@ -607,7 +614,7 @@ class HTTPServerTests(unittest.TestCase):
             hrefs = re.findall(r'<link rel="icon"[^>]*href="([^"]+)"', html)
             self.assertTrue(hrefs, path)
             for href in hrefs:
-                self.assertTrue(href.endswith("?v=motesparet"), (path, href))
+                self.assertTrue(href.endswith("?v=skylten"), (path, href))
                 with urlopen(f"{self.base_url}{href}", timeout=2) as response:
                     self.assertEqual(200, response.status)
 

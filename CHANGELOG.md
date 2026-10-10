@@ -5,6 +5,21 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Ny logotyp: stationsskylten
+
+TrainMeet har fått ny logotyp, en blå stationsskylt med vit kantlinje och
+texten TRAINMEET i smal versal. Den ersätter Mötesspåret (blå platta, orange
+tåg) överallt i servern.
+
+- **Sidhuvudet** i Kontrollrummet och i US-arbetsytan visar skylten
+  (`/trainmeet-skylt.svg`, konturer utan typsnittsberoende) i stället för
+  ikon plus text.
+- **Ikonen** är TM på blå platta med kantlinje: favicon (SVG, PNG,
+  `favicon.ico`), hemskärmsikonen för iPhone, de mörka och enfärgade
+  varianterna och `trainmeet-logo.png` som deltagarvyn och parkopplingen
+  visar. Ikonadresserna bär versionen `?v=skylten` så att webbläsare inte
+  visar den gamla ikonen kvar i fliken.
+
 ### En station lämnas till automatiken och tas tillbaka, från boxen, TKL och Drift
 
 Casper: "jag går på toa ett tag". Admin ska kunna ställa en station i
