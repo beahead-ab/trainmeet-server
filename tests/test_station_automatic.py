@@ -321,5 +321,81 @@ class SignalBoxTests(StationAutomaticFixture):
             self.app.tkl_automatic(self.tkl, {"station_id": "station-b", "automatic": "yes"})
 
 
+class TheShiftEndsTests(StationAutomaticFixture):
+    """Avsluta trafikpasset kan lämna stationen till automatiken, så att tågen
+    inte väntar på nästa operatör (Casper, 2026-10-11). CDA (station-a) är
+    obemannad, LEK (station-b) har en TKL med ett trafikpass."""
+
+    def setUp(self):
+        super().setUp()
+        self.tkl = self.ids.register_client("tkl-lek", "LEK TKL", DeviceKind.TKL_TERMINAL, "secret", ("panel-b",))
+        self.app.tkl_context(self.tkl, "station-b")                  # polling mans it
+        self.shift = self.app.start_tkl_shift(self.tkl, {"station_id": "station-b", "operator_name": "Anna"})["shift"]
+
+    def finish(self, **extra):
+        return self.app.finish_tkl_shift(self.tkl, {"station_id": "station-b", "shift_id": self.shift["shift_id"],
+                                                    "status": "closed", **extra})
+
+    def shift_now(self):
+        return self.ops.tkl_station_state(self.pub.publication_id, self.pub.active_day, "station-b")["shift"]
+
+    def line(self):
+        return next(state["state"] for state in self.app.display_snapshot()["connection_states"]
+                    if state["id"] == "connection-a-b")
+
+    def request_from_cda(self):
+        """CDA's automation asks LEK for 101; LEK is manned, so it waits for the TKL."""
+        self.advance(at(9, 18))
+        self.assertNotEqual("free", self.line())
+
+    def test_ending_the_shift_leaves_the_station_to_the_automation(self):
+        answer = self.finish(automatic=True)
+        self.assertEqual("closed", answer["shift"]["status"])
+        self.assertEqual({"available": True, "active": True, "released_by": "operator"}, answer["automatic"])
+        self.assertIsNone(self.shift_now())
+        self.app.tkl_context(self.tkl, "station-b")                  # the TKL stays open and polls
+        self.assertEqual("automatic", self.auto.mode("station-b"))
+
+    def test_ending_it_without_the_automation_keeps_the_station_manned(self):
+        answer = self.finish()
+        self.assertEqual({"available": True, "active": False, "released_by": None}, answer["automatic"])
+        self.app.tkl_context(self.tkl, "station-b")
+        self.assertEqual("manual", self.auto.mode("station-b"))
+
+    def test_trains_on_the_line_stop_the_end_only_without_the_automation(self):
+        self.request_from_cda()
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.finish()
+        self.assertEqual("tkl_shift_has_open_connections", refused.exception.code)
+        self.assertIsNotNone(self.shift_now())
+        self.finish(automatic=True)
+        self.assertIsNone(self.shift_now())
+        # The automation answers CDA and receives 101 at LEK.
+        self.advance(at(9, 20))
+        self.assertEqual("departed", self.movement("station-a", "movement-101-a")["departure"])
+        self.advance(at(9, 35, 1))
+        self.assertEqual("arrived", self.movement("station-b", "movement-101-b")["arrival"])
+
+    def test_a_station_already_left_to_the_automation_ends_with_trains_on_the_line(self):
+        self.request_from_cda()
+        self.app.tkl_automatic(self.tkl, {"station_id": "station-b", "automatic": True})
+        self.assertEqual("closed", self.finish()["shift"]["status"])
+        self.assertEqual("automatic", self.auto.mode("station-b"))
+
+    def test_refused_while_the_automation_is_switched_off_and_the_shift_goes_on(self):
+        self.auto.set_enabled(False)
+        with self.assertRaises(HTTPAPIError) as refused:
+            self.finish(automatic=True)
+        self.assertEqual("automatic_rejected", refused.exception.code)
+        self.assertIsNotNone(self.shift_now())
+
+    def test_only_an_ended_shift_and_a_yes_or_no(self):
+        for extra in ({"status": "handover", "automatic": True}, {"automatic": "yes"}):
+            with self.assertRaises(HTTPAPIError) as refused:
+                self.finish(**extra)
+            self.assertEqual("invalid_automatic", refused.exception.code)
+        self.assertIsNotNone(self.shift_now())
+
+
 if __name__ == "__main__":
     unittest.main()

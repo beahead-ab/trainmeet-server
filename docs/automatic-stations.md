@@ -122,6 +122,16 @@ TKL: `POST /v1/tkl/automatic {meet_generation, station_id, automatic: true|false
 lämnar stationen eller tar tillbaka den. Bara terminalens egen station; svaret
 är `{automatic: {...}}` som i kontexten.
 
+TKL: `POST /v1/tkl/shift/finish {…, status: "closed", automatic: true}` avslutar
+trafikpasset och lämnar stationen till automatiken i samma steg, så att tågen
+inte väntar på nästa operatör (Casper, 2026-10-11). Stationen lämnas först; går
+den inte att lämna (automatiken avstängd: `409 automatic_rejected`) fortsätter
+passet. Ett avslutat pass utan automatik nekas som förut när tåg är ute eller
+klareringar pågår (`409 tkl_shift_has_open_connections`); med automatiken, eller
+när stationen redan är lämnad till den, gäller inte spärren, eftersom automatiken
+tar över tågen. `automatic` kräver `status: "closed"` (annars
+`400 invalid_automatic`). Svaret har `automatic` som i kontexten.
+
 TKL: `POST /v1/tkl/stable {meet_generation, station_id, movement_id}` ställer
 undan ett tåg som slutat på terminalens station och har kommit in (annars
 `409 stabling_rejected` med skälet). Medan automatiken sköter stationen svarar

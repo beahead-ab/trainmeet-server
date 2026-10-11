@@ -5,6 +5,21 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Avsluta trafikpasset och lämna stationen till automatiken
+
+Casper: "Avsluta trafikpasset ska erbjuda Lämna till automatiken". Förut stod
+stationen bemannad efter ett avslutat pass så länge TKL var öppen, och tågen
+väntade på nästa operatör.
+
+- `POST /v1/tkl/shift/finish` tar `automatic: true` tillsammans med
+  `status: "closed"`: stationen lämnas till automatiken och passet avslutas i
+  samma steg. Går stationen inte att lämna, till exempel när admin har stängt
+  av automatiken, fortsätter passet.
+- Tåg på linjen och pågående klareringar hindrar inte längre ett avslutat pass
+  när automatiken tar över stationen; automatiken sköter dem. Utan automatik
+  gäller spärren som förut.
+- TKL visar valet i en egen version.
+
 ### SERVER och TMBOX i TMBox-displayens punkter bredvid skylten
 
 Casper: SERVER-etiketten var för liten bredvid den nya skylten, och han ville
