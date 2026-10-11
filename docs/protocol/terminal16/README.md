@@ -1,7 +1,7 @@
 # TMBox 16×2-profilen
 
 Normativ text för hur en TMBox med 16×2-display och 4×4-knappsats talar med
-TrainMeet Server, från firmware 0.7.0 och Server 1.10.0. Från Server 4.4.0 och
+TrainMeet Server, från firmware 0.7.0 och Server 1.10.0. Från Server 4.5.0 och
 firmware 0.8.0 gäller samma profil för en box med 20×4-display (§3 och §6) och
 Servern kan tala om för boxen när den ska ge ljud (§6a). Säger koden och den
 här texten olika saker är det en bugg i koden. `tests/test_terminal16_protocol_doc.py`
