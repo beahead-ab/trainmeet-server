@@ -77,6 +77,11 @@ Under **Inställningar → Obemannade stationer → Störningar och undanställn
   gäller om det är kortare. Ett tåg i tid följer tidtabellen. Tiden räknas från
   den verkliga ankomsten (före 4.2 kunde ett tåg som kom in sent gå samma
   sekund, eftersom planerad ankomst användes).
+- **Klartecken efter:** en automatisk station ger klartecken så här många
+  sekunder efter begäran, 0–30, förval 3. Verklig tid, inte träffklockans, så
+  att det syns lika länge i 4× som i 1× att begäran väntar på svar hos grannen
+  (Casper, 2026-10-11: "det gick väldigt snabbt"). Under tiden står
+  **Väntar på klartecken**. 0 svarar direkt, som före 4.4.
 - **Störningar:** av som förval, normal eller många, vid stationen, på linjen
   eller båda. Samma scenarionyckel ger samma störningar.
 - **Undanställning:** ett tåg som slutar vid en automatisk station ställs undan
@@ -148,4 +153,4 @@ Admin-API: `GET /v1/automatic-stations`, `POST /v1/automatic-stations` med
 (`minutes`: 0, 2, 5 eller 10). Svaret har `lost_contact_minutes` och per station
 `released_by` och `takes_over_in`: verkliga sekunder tills automatiken tar över
 en station utan kontakt, eller `null` (Aldrig, eller stationen har kontakt).
-`action` = `disturbance` tar också `late_stop_minutes` (1–10).
+`action` = `disturbance` tar också `late_stop_minutes` (1–10) och `answer_seconds` (0–30).

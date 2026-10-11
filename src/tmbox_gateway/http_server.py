@@ -488,7 +488,7 @@ class TrainMeetHTTPApplication:
             elif action == "manual" and payload.get("confirmed") is True:
                 self.automatic.take_over(str(payload.get("station_id") or ""), str(payload.get("device_id") or ""))
             elif action == "disturbance":
-                self.automatic.set_disturbance({key: payload[key] for key in ("profile", "where", "seed", "stabling", "stabling_minutes", "late_stop_minutes") if key in payload})
+                self.automatic.set_disturbance({key: payload[key] for key in ("profile", "where", "seed", "stabling", "stabling_minutes", "late_stop_minutes", "answer_seconds") if key in payload})
             elif action == "lost_contact":
                 self.automatic.set_lost_contact_minutes(payload.get("minutes"))
             else:

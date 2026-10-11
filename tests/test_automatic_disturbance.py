@@ -16,7 +16,7 @@ import unittest
 from runtime_fixture import runtime_package_v3
 from test_automatic_stations import AutomaticFixture, at
 from test_timetable_placement import add_service
-from tmbox_gateway.automatic import DEFAULT_DISTURBANCE
+from tmbox_gateway.automatic import DEFAULT_DISTURBANCE, DISTURBANCE_SETTING
 from tmbox_gateway.http_server import HTTPAPIError
 from tmbox_gateway.identity import DeviceKind, PairedClient
 
@@ -36,6 +36,7 @@ class DisturbanceTests(AutomaticFixture):
         return self.app.control_automatic_stations(self.admin, {"action": "disturbance", **values})["disturbance"]
 
     def test_the_default_is_no_disturbance_and_stabling_after_five_minutes(self):
+        self.runtime._save_setting(DISTURBANCE_SETTING, "{}")         # nothing chosen, not even the fixture's answer delay
         status = self.app.automatic_stations_status(self.admin)
         self.assertEqual(status["disturbance"], DEFAULT_DISTURBANCE)
         self.assertEqual((DEFAULT_DISTURBANCE["profile"], DEFAULT_DISTURBANCE["stabling"], DEFAULT_DISTURBANCE["stabling_minutes"]),
