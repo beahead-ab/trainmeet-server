@@ -2183,7 +2183,18 @@ class TrainMeetHTTPApplication:
                 "Trafikpasset är inte längre aktivt på den här stationen",
             )
         status = str(payload.get("status") or "")
-        if status == "closed":
+        # Ending the shift may leave the station to the automation, so the
+        # trains do not wait for the next operator (Casper, 2026-10-11).
+        automatic = payload.get("automatic", False)
+        if type(automatic) is not bool:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_automatic", "Ange automatik på eller av.")
+        if automatic and status != "closed":
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_automatic",
+                               "Bara ett avslutat trafikpass lämnar stationen till automatiken.")
+        # The automation takes over the trains on the line, so a station left
+        # to it may close with traffic in progress.
+        left_to_automation = automatic or bool(self.automatic and self.automatic.automatic_here(station_id))
+        if status == "closed" and not left_to_automation:
             related_ids = {
                 connection["id"]
                 for connection in snapshot["connections"]
@@ -2199,6 +2210,19 @@ class TrainMeetHTTPApplication:
                     "tkl_shift_has_open_connections",
                     "Stationen har pågående klareringar eller tåg på linjen och kan inte avslutas",
                 )
+        if automatic:
+            # Left first: should the shift then fail to close, the trains are
+            # still worked, by the automation.
+            if not self.automatic:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "automatic_unavailable", "Koppla en EU-träff först.")
+            self.station_service.observe_operator(client.client_id, station_id)
+            try:
+                self.automatic.hand_back(station_id, by="operator", device=client.client_id)
+            except ValueError as error:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "automatic_rejected", str(error)) from error
+            if self.on_config_applied:
+                self.on_config_applied()
+            self.changes.notify("automatic", "runtime")
         try:
             result = self.operations_store.finish_tkl_shift(
                 str(payload.get("shift_id") or ""),
@@ -2207,7 +2231,7 @@ class TrainMeetHTTPApplication:
             )
         except ValueError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_tkl_shift", str(error)) from error
-        return {"shift": result}
+        return {"shift": result, "automatic": self._own_automatic(station_id)}
 
     def _tkl_actor(self, client: PairedClient, snapshot: dict[str, Any], station_id: str) -> tuple[str, str | None]:
         """Who a TKL step is recorded as: the shift's operator when the
