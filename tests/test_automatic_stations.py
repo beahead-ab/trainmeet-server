@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from runtime_fixture import runtime_package_v3
-from tmbox_gateway.automatic import ACTOR
+from tmbox_gateway.automatic import ACTOR, DISTURBANCE_SETTING
 from tmbox_gateway.engine import TrafficEngine
 from tmbox_gateway.http_server import TrainMeetHTTPApplication, HTTPServerConfig, HTTPAPIError
 from tmbox_gateway.identity import DeviceKind, IdentityStore, PairingService
@@ -35,6 +35,9 @@ class AutomaticFixture(unittest.TestCase):
         self.admin = self.app.local_admin()
         self.time = 1000.0
         self.auto.now = lambda: self.time
+        # The answer delay (3 real seconds by default) has its own tests in
+        # AnswerDelayTests; here the automation answers at once.
+        self.auto.set_disturbance({"answer_seconds": 0})
 
     def package(self):
         return runtime_package_v3()
@@ -166,6 +169,69 @@ class AutomaticStationTests(AutomaticFixture):
         self.assertFalse(status["enabled"])
         with self.assertRaises(HTTPAPIError):
             self.app.control_automatic_stations(self.admin, {"action": "automatic", "station_id": "station-b"})
+
+
+class AnswerDelayTests(AutomaticFixture):
+    """Automatiken ger klartecken några sekunder efter begäran, så att det syns
+    att begäran ligger hos grannen (Casper, 2026-10-11: "det gick väldigt
+    snabbt"). Verklig tid, inte träffklockans: lika länge i 4× som i 1×."""
+
+    def setUp(self):
+        super().setUp()
+        self.auto.set_disturbance({"answer_seconds": 3})
+
+    def case(self):
+        return self.service.open_cases(None)[0]
+
+    def test_three_seconds_unless_the_administrator_chooses_otherwise(self):
+        self.runtime._save_setting(DISTURBANCE_SETTING, "{}")
+        self.assertEqual(3, self.auto.disturbance()["answer_seconds"])
+
+    def test_two_unmanned_stations_wait_three_real_seconds(self):
+        self.advance(at(9, 18))
+        self.assertEqual("waiting", self.case()["status"])
+        self.assertEqual("Väntar på klartecken", self.auto.blocked["movement-101-a"])
+        self.time += 2.9
+        self.advance(at(9, 18, 1))
+        self.assertEqual("waiting", self.case()["status"])
+        self.time += 0.2
+        self.advance(at(9, 18, 2))
+        self.assertEqual("approved", self.case()["status"])
+
+    def test_the_meet_clock_does_not_hurry_the_answer(self):
+        self.advance(at(9, 18))
+        self.advance(at(9, 25))                                       # seven game minutes, no real time
+        self.assertEqual("waiting", self.case()["status"])
+        self.time += 3
+        self.advance(at(9, 25, 1))
+        self.assertEqual("approved", self.case()["status"])
+        self.advance(at(9, 25, 2))
+        self.assertEqual("departed", self.movement("station-a", "movement-101-a")["departure"])
+
+    def test_a_manned_sender_sees_its_request_wait_at_the_neighbour(self):
+        box = self.box("box-a", "station-a")
+        self.advance(at(9, 18))
+        self.service.execute_station_command(box, "station-a", "clearance.request",
+                                             {"movement_id": "movement-101-a", "connection_id": "connection-a-b"})
+        self.advance(at(9, 18, 1))
+        self.assertEqual("waiting", self.case()["status"])
+        self.time += 3
+        self.advance(at(9, 18, 2))
+        self.assertEqual("approved", self.case()["status"])
+
+    def test_zero_answers_at_once(self):
+        self.auto.set_disturbance({"answer_seconds": 0})
+        self.advance(at(9, 18))
+        self.assertEqual("approved", self.case()["status"])
+
+    def test_the_administrator_chooses_zero_to_thirty_whole_seconds(self):
+        answer = self.app.control_automatic_stations(self.admin, {"action": "disturbance", "answer_seconds": 8})
+        self.assertEqual(8, answer["disturbance"]["answer_seconds"])
+        for wrong in (31, -1, "5", 2.5):
+            with self.assertRaises(HTTPAPIError) as refused:
+                self.app.control_automatic_stations(self.admin, {"action": "disturbance", "answer_seconds": wrong})
+            self.assertEqual("automatic_rejected", refused.exception.code)
+        self.assertEqual(8, self.auto.disturbance()["answer_seconds"])
 
 
 class AutomaticReceiverTrackTests(AutomaticFixture):
