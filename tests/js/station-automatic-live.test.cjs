@@ -111,6 +111,12 @@ const shots = process.env.SCREENSHOT_DIR || '';
     await admin.locator('#automatic-disturbance-form [type=submit]').click();
     await admin.waitForFunction(() => !document.querySelector('#automatic-disturbance-form').dataset.dirty);
     assert.equal((await status()).disturbance.late_stop_minutes, 3);
+    // 4.4: automatiken ger klartecken efter 3 verkliga sekunder som förval; admin väljer 0–30.
+    assert.equal(await admin.locator('#automatic-answer-seconds').inputValue(), '3');
+    await admin.locator('#automatic-answer-seconds').fill('5');
+    await admin.locator('#automatic-disturbance-form [type=submit]').click();
+    await admin.waitForFunction(() => !document.querySelector('#automatic-disturbance-form').dataset.dirty);
+    assert.equal((await status()).disturbance.answer_seconds, 5);
 
     // 5. Tillbaka från toaletten: # frågar, # tar tillbaka stationen.
     await key('#');
@@ -121,7 +127,7 @@ const shots = process.env.SCREENSHOT_DIR || '';
     await shot(box, 'box-aktiv');
 
     assert.deepEqual(errors, []);
-    console.log('station automatic live: box leaves and takes back, Drift Automatik/Aktiv, lost-contact setting, late stop');
+    console.log('station automatic live: box leaves and takes back, Drift Automatik/Aktiv, lost-contact setting, late stop, answer delay');
   } catch (error) {
     console.error('Backend diagnostics:', diagnostics);
     throw error;

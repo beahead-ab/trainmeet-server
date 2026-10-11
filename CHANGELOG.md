@@ -28,6 +28,19 @@ Benny (etxbct) i trainmeet-tmbox #39, #43 och #44; Casper godkände förslaget
   återanslutning spelas aldrig. Se protokolltexten §6a.
 - Webbens LCD ritar 20 kolumner när bilden har det.
 
+### Automatiken ger klartecken efter några sekunder
+
+Casper körde en tågklarering från Charlottendal till Vagnsta, som sköts av
+automatiken: "det gick väldigt snabbt … det är nästan svårt att se". Förut
+svarade automatiken inom en halv sekund.
+
+- En automatisk station ger klartecken 3 sekunder efter begäran. Under tiden
+  står **Väntar på klartecken** hos den som begärde, på boxen, i TKL och på
+  Drift.
+- Tiden är verklig, inte träffklockans, så den är lika lång i 4× som i 1×.
+- Admin väljer 0–30 sekunder under **Inställningar → Obemannade stationer →
+  Klartecken efter**. 0 svarar direkt, som förut.
+
 ### Avsluta trafikpasset och lämna stationen till automatiken
 
 Casper: "Avsluta trafikpasset ska erbjuda Lämna till automatiken". Förut stod

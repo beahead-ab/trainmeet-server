@@ -235,6 +235,7 @@ class TimetablePlacementTests(unittest.TestCase):
     def test_automatic_stations_continue_from_the_placed_trains(self):
         self.auto.set_enabled(True)
         self.auto.now = lambda: 1000.0
+        self.auto.set_disturbance({"answer_seconds": 0})        # the answer delay is tested on its own
         self.ops.reset_meet(self.pub, self.day)
         self.auto.forget_meet()
         # Klockan ställs till 09:45: 101 har kommit till B, 301 skulle ha gått

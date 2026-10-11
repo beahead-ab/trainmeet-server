@@ -572,6 +572,7 @@ function renderAutomatic(data) {
     document.querySelector("#automatic-stabling").checked = Boolean(data.disturbance.stabling);
     document.querySelector("#automatic-stabling-minutes").value = String(data.disturbance.stabling_minutes);
     document.querySelector("#automatic-late-stop").value = String(data.disturbance.late_stop_minutes ?? 2);
+    document.querySelector("#automatic-answer-seconds").value = String(data.disturbance.answer_seconds ?? 3);
     globalThis.TrainMeetSettings?.rebase(disturbance);
   }
   if (disturbance) disturbance.hidden = !data.supported;
@@ -668,7 +669,8 @@ document.querySelector("#automatic-disturbance-form")?.addEventListener("submit"
     await sendAutomatic({ action: "disturbance", profile: document.querySelector("#automatic-disturbance-profile").value,
       where: document.querySelector("#automatic-disturbance-where").value, seed: document.querySelector("#automatic-disturbance-seed").value.trim(),
       stabling: document.querySelector("#automatic-stabling").checked, stabling_minutes: Number(document.querySelector("#automatic-stabling-minutes").value),
-      late_stop_minutes: Number(document.querySelector("#automatic-late-stop").value) });
+      late_stop_minutes: Number(document.querySelector("#automatic-late-stop").value),
+      answer_seconds: Number(document.querySelector("#automatic-answer-seconds").value) });
     finishModal(form);
   } catch (error) {
     setMessage(form.querySelector(".form-message"), error.message, "error");

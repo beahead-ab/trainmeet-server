@@ -53,8 +53,12 @@ DISTURBANCE_PLACES = ("both", "station", "line")
 # late_stop_minutes: a late train stands this long at an automatic station
 # (or its planned stop if shorter) and is then cleared on, to catch up
 # (Casper, 2026-10-10: "står det några min och sen klareras vidare").
+# answer_seconds: an automatic station gives the all clear this many real
+# seconds after the request, so that the neighbour sees it wait for an
+# answer (Casper, 2026-10-11: "det gick väldigt snabbt"). Real time, not the
+# meet clock's, so it is as long at 4× as at 1×.
 DEFAULT_DISTURBANCE = {"profile": "off", "where": "both", "seed": "", "stabling": True, "stabling_minutes": 5,
-                       "late_stop_minutes": 2}
+                       "late_stop_minutes": 2, "answer_seconds": 3}
 # Automatiken tar över en bemannad station som varit utan kontakt så här många
 # minuter (väggtid). 0 betyder aldrig: stationen väntar på sin operatör.
 LOST_CONTACT_SETTING = "automatic_lost_contact_minutes"
@@ -76,6 +80,9 @@ class AutomaticStations:
         self._legs: dict[str, dict] = {}
         self._plan_errors: list[str] = []
         self._acted = False
+        # When the automation may answer each waiting request (clearance id →
+        # self.now()), counted from when it first saw the request.
+        self._answer_at: dict[str, float] = {}
         # Contact is counted from when this server started: after a restart
         # nobody has been heard yet, and that is not minutes of silence.
         self.started = now()
@@ -115,6 +122,8 @@ class AutomaticStations:
             raise ValueError("Undanställningen sker efter 1–60 spelminuter.")
         if type(settings["late_stop_minutes"]) is not int or not 1 <= settings["late_stop_minutes"] <= 10:
             raise ValueError("Ett försenat tåg står 1–10 spelminuter.")
+        if type(settings["answer_seconds"]) is not int or not 0 <= settings["answer_seconds"] <= 30:
+            raise ValueError("Automatiken svarar efter 0–30 sekunder.")
         with self.store.command_lock:
             self.runtime._save_setting(DISTURBANCE_SETTING, json.dumps(settings, ensure_ascii=False, sort_keys=True))
         return settings
@@ -504,6 +513,9 @@ class AutomaticStations:
                     # What one train did changes what the next one sees.
                     live, cases, times = read()
             self.blocked = blocked
+            # Requests answered or withdrawn elsewhere are not waited for.
+            waiting = {case["clearance_id"] for case in cases.values() if case["status"] == "waiting"}
+            self._answer_at = {clearance: when for clearance, when in self._answer_at.items() if clearance in waiting}
             if self._settings["stabling"]:
                 self._stable(publication, day, legs, live, times, seconds)
 
@@ -577,7 +589,11 @@ class AutomaticStations:
         if case and case["status"] == "waiting" and self.mode(receiver, state) == "automatic":
             if self.service.track_conflict(publication, day, receiver, leg["to_movement_id"], leg["track_id"], actual=True):
                 return "Mottagningsspåret är upptaget"
+            answer_at = self._answer_at.setdefault(case["clearance_id"], self.now() + self._settings_value("answer_seconds"))
+            if self.now() < answer_at:
+                return "Väntar på klartecken"
             self._act(receiver, "clearance.response", clearance_id=case["clearance_id"], approved=True)
+            self._answer_at.pop(case["clearance_id"], None)
             case = self.store.clearance(case["clearance_id"])
         if automatic_sender and case and case["status"] == "approved" and seconds >= ready:
             self._act(sender, "train.departed", movement_id=key)
