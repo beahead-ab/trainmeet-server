@@ -18,7 +18,7 @@ from uuid import uuid4
 from .engine import TrafficEngine
 from .models import ConnectionState as State, DispatchMode
 from .train_routes import resolve_departure, RouteResolutionError
-from .terminal16_glyphs import text_cells, encode_lcd
+from .terminal16_glyphs import text_cells, encode_lcd, fits_cgram
 from .terminal16_i18n import text as translated, notice as translated_notice
 from .display_placement import effective_sides
 
@@ -64,6 +64,14 @@ SHORT_LABELS = {
 #: itself. Nothing on the box waits for #OK (Casper, 2026-10-03).
 NOTICE_SECONDS = 3
 
+#: What a box can be told to sound, most important first - the same order the
+#: ESP32 firmware uses. The box's own connection lost/restored tones come from
+#: the box itself and rank above and below these.
+ATTENTION_KINDS = ("incoming_request", "request_denied", "request_approved", "incoming_train")
+#: Two signals this close are one moment to the ear: the box plays the more
+#: important one, not both on top of each other.
+ATTENTION_WINDOW_SECONDS = 2
+
 
 @dataclass
 class Terminal:
@@ -83,13 +91,27 @@ class Terminal:
     receipts: list[tuple[str, str]] = field(default_factory=list)
     receipt_until: float | None = None
     notice_until: float | None = None
+    # The display the box announced in its hello: (2, 16) or (4, 20). A box
+    # that says nothing is a 16x2, exactly as before.
+    rows: int = 2
+    cols: int = 16
+    # The latest event worth a sound, numbered so a box plays each one once.
+    attention_seq: int = 0
+    attention_kind: str | None = None
+    attention_at: float | None = None
 
 
-def row(left="", right=""):
+def row(left="", right="", width=16):
     left, right = text_cells(left), text_cells(right)
-    if len(left) + len(right) > 16:
+    if len(left) + len(right) > width:
         raise ValueError("A display row must not truncate an identity")
-    return left + " " * (16 - len(left) - len(right)) + right
+    return left + " " * (width - len(left) - len(right)) + right
+
+
+def centered(text, width):
+    """`text` in the middle of a row; the odd cell, if any, goes to the right."""
+    text = text_cells(text)[:width]
+    return (" " * ((width - len(text)) // 2) + text).ljust(width)
 
 
 class Terminal16Lab:
@@ -119,6 +141,9 @@ class Terminal16Lab:
         self.completed = set()
         self.arrivals = {}
         self.processed = OrderedDict()
+        # Numbers the sounds of all boxes in one series, so that a number is
+        # never reused by a box that is given a new station.
+        self.attention_count = 0
 
     def _token(self, device, terminal):
         return sha256(f"{self.epoch}:{device}:{terminal.station}:{terminal.revision}:{self.engine.revision}".encode()).hexdigest()[:24]
@@ -329,6 +354,8 @@ class Terminal16Lab:
 
     def _notify_request(self, leg):
         for terminal in self.terminals.values():
+            if terminal.station == leg["to_station_id"] and self._on_side(terminal, leg):
+                self._signal(terminal, "incoming_request")
             # An empty queue's INGA FRÅGOR gives way to the request at once.
             if (terminal.station == leg["to_station_id"] and self._on_side(terminal, leg)
                     and terminal.notice in ("", "INGA FRÅGOR")
@@ -453,7 +480,7 @@ class Terminal16Lab:
                     terminal.revision += 1
             self.display_sides = sides
 
-    def _label(self, station, leg):
+    def _label(self, station, leg, width=16):
         own = leg["from_station_id"] == station
         other = leg["to_station_id"] if own else leg["from_station_id"]
         code = self.engine.config.stations[other].code
@@ -468,25 +495,141 @@ class Terminal16Lab:
                       "<" if points_left else ">")
         number = leg["train_number"]
         token = f"{code}{marker}{number}" if side == "left" else f"{number}{marker}{code}"
-        if len(token) > 16:
+        if len(token) > width:
             raise ValueError("Identity requires a longer-identity presentation profile")
         return token, side
 
     def _overview(self, terminal):
+        width = terminal.cols
         items = []
         for key in self.bindings.values():
             leg = self.legs[key]
             if terminal.station in {leg["from_station_id"], leg["to_station_id"]} and self._on_side(terminal, leg):
-                items.append(self._label(terminal.station, leg))
+                items.append(self._label(terminal.station, leg, width))
         left = [text for text, side in items if side == "left"]
         right = [text for text, side in items if side == "right"]
         a = left[0] if left else ""
         b = right[0] if right else ""
-        if a and b and len(a) + len(b) >= 16:
+        if a and b and len(a) + len(b) >= width:
             # Preserve full identities. B opens the counted active list; C/D
             # reveals every train without the old unlabelled overview paging.
-            return row(a)
-        return row(a, b)
+            return row(a, "", width)
+        return row(a, b, width)
+
+    def _idle_titles(self, terminal):
+        """What the empty first row of an idle box can say, best first: the
+        station's name, so whoever stands there can see that the box is on the
+        right station (trainmeet-tmbox #43); the code if the name is too long
+        or has a character the box cannot draw; and nothing, as before."""
+        station = self.engine.config.stations[terminal.station]
+        name = text_cells(station.name)
+        titles = [centered(name, terminal.cols)] if len(name) <= terminal.cols else []
+        return titles + [centered(station.code, terminal.cols), " " * terminal.cols]
+
+    # ------------------------------------------------------------------ 20x4
+
+    def _movement(self, movement_id):
+        return next((item for item in self.publication["trains"] if item["id"] == movement_id), {})
+
+    def _station_named(self, code):
+        """The station whose code a notice carries, if it is a station at all
+        (UNDANSTÄLLT carries a train number)."""
+        return next((station for station in self.engine.config.stations.values() if station.code == code), None)
+
+    @staticmethod
+    def _name_row(station, width):
+        """A station's name on a row of its own, cut only if it is too long."""
+        return text_cells(station.name)[:width].ljust(width)
+
+    @staticmethod
+    def _spread(left, right, width):
+        """`left` and `right` on one row; `left` gives way (is cut) before `right`."""
+        left, right = text_cells(left), text_cells(right)
+        left = left[:max(0, width - len(right) - (1 if right else 0))]
+        return row(left, right, width)
+
+    def _state_word(self, terminal, leg):
+        """Where the train stands, in words, for the third row of a 20x4."""
+        own = leg["from_station_id"] == terminal.station
+        if leg["from_movement_id"] in self.completed:
+            return ""  # Over: it has arrived, nothing is waiting for anyone.
+        state = self._line(leg).state if self._is_active(leg) else State.FREE
+        if state == State.REQUESTED:
+            return "Väntar svar" if own else "Vill skicka"
+        if state == State.RESERVED:
+            return "Klar att avgå" if own else "Klarerad"
+        if state == State.OCCUPIED:
+            return "Avgått" if own else "På väg hit"
+        return "Ej begärd" if own else "Ej skickad"
+
+    def _leg_rows(self, terminal, leg, t):
+        """Rows two and three of a 20x4 for a train: who it goes to or comes
+        from and when, then where it stands and on which track the timetable
+        has it here. Never changes what rows one and four say."""
+        if terminal.rows != 4:
+            return None
+        width = terminal.cols
+        schedule = self._schedule(terminal, leg)
+        outgoing = schedule["kind"] == "departure"
+        name = text_cells(self.engine.config.stations[schedule["other"]].name)
+        # Without room for "Till"/"Från" the row keeps the name; only a name
+        # longer than the row is cut.
+        with_word = t("Till" if outgoing else "Från") + " " + name
+        room = width - len(schedule["time"]) - 1
+        second = row(with_word if len(with_word) <= room else name[:room], schedule["time"], width)
+        movement = self._movement(leg["from_movement_id"] if outgoing else leg["to_movement_id"])
+        labels = {track.id: track.display_label for track in self._tracks(terminal)}
+        track = labels.get(movement.get("track_id"))
+        right = ""
+        if track is not None:
+            word = t("Sp {track}", track=track)
+            right = word if len(word) + 2 <= width else str(track)
+        return second, self._spread(t(self._state_word(terminal, leg)), right, width)
+
+    def _upcoming_rows(self, terminal, t):
+        """The two nearest trains still to come at an idle or busy overview:
+        number, AVG or ANK, the other station's code and the time."""
+        if terminal.rows != 4:
+            return None
+        width = terminal.cols
+        rows = []
+        for key in self._candidates(terminal):
+            leg = self.legs[key]
+            if self._is_active(leg):
+                continue  # Already on the first row.
+            schedule = self._schedule(terminal, leg)
+            code = self.engine.config.stations[schedule["other"]].code
+            rows.append(self._spread(f"{leg['train_number']} {t(schedule['label'])} {code}", schedule["time"], width))
+            if len(rows) == 2:
+                break
+        return rows + [" " * width] * (2 - len(rows))
+
+    # ------------------------------------------------------------- attention
+
+    def _signal(self, terminal, kind):
+        """Something worth a sound happened to this box. Numbered, so the box
+        plays it once, and it never plays what happened before it connected."""
+        now = self.now()
+        current = terminal.attention_kind
+        if (current in ATTENTION_KINDS and terminal.attention_at is not None
+                and now - terminal.attention_at < ATTENTION_WINDOW_SECONDS
+                and ATTENTION_KINDS.index(kind) > ATTENTION_KINDS.index(current)):
+            return
+        self.attention_count += 1
+        terminal.attention_seq, terminal.attention_kind, terminal.attention_at = self.attention_count, kind, now
+
+    def _notify_answer(self, leg, approved):
+        """The sender hears the answer to its request, never the receiver
+        that gave it: the direction of the line says who did what."""
+        for terminal in self.terminals.values():
+            if terminal.station == leg["from_station_id"] and self._on_side(terminal, leg):
+                self._signal(terminal, "request_approved" if approved else "request_denied")
+
+    def _notify_departure(self, leg):
+        """The receiver hears that a train is under way to it."""
+        for terminal in self.terminals.values():
+            if terminal.station == leg["to_station_id"] and self._on_side(terminal, leg):
+                self._signal(terminal, "incoming_train")
 
     def _tracks(self, terminal):
         return self.engine.config.tracks_for_station(terminal.station)
@@ -622,10 +765,18 @@ class Terminal16Lab:
         t = lambda key, **values: translated(terminal.language, key, **values)
         self._advance_receipts(terminal)
         buttons = self._buttons(terminal)
+        # The box's own size: 16x2 as always, or 20x4 when its hello said so.
+        # Rows one and four say what the 16x2 says; two and three are extra.
+        width, height = terminal.cols, terminal.rows
+        row_ = lambda left="", right="": row(left, right, width)
+        room = width - 5  # What a hint may take beside the clock.
+        middle = None  # Rows two and three of a 20x4; None leaves them empty.
         clock = self.engine.meeting_clock()["time"]
         clock = clock if re.fullmatch(r"\d{2}:\d{2}", clock) else "--:--"
         hint = t("Nr# A:Kö")
         first = self._overview(terminal)
+        if terminal.screen == "overview":
+            middle = self._upcoming_rows(terminal, t) if height == 4 else None
         selected = self.legs.get(terminal.selected)
         requests = self._requests(terminal)
         active = self._active_trains(terminal)
@@ -633,69 +784,79 @@ class Terminal16Lab:
         compact = lambda count: str(count) if count < 100 else "99+"
         if terminal.screen == "overview" and active:
             hint = t("B:Akt{count} C/D", count=compact(len(active)))
-            if len(text_cells(hint)) > 11:
+            if len(text_cells(hint)) > room:
                 hint = t("B:Akt{count}", count=compact(len(active)))
         position = requests.index(terminal.selected) + 1 if terminal.selected in requests else 0
         if terminal.screen == "overview" and requests:
             hint = t("A:K{count} B:Akt", count=compact(len(requests))) if active else "A:Kö #Visa"
-            if len(text_cells(hint)) > 11:
+            if len(text_cells(hint)) > room:
                 hint = t("A{count} B:Akt", count=compact(len(requests)))
         automatic = self._automatic_here(terminal)
         if terminal.notice:
-            first, hint = row(translated_notice(terminal.language, terminal.notice)), terminal.notice_hint
+            first, hint = row_(translated_notice(terminal.language, terminal.notice)), terminal.notice_hint
+            named = self._station_named(terminal.notice_hint)
+            middle = [self._name_row(named, width)] if named else None
         elif terminal.screen == "auto_confirm":
-            first, hint = row(t("AUTOMATIK?")), "#Ja *Nej"
+            first, hint = row_(t("AUTOMATIK?")), "#Ja *Nej"
         elif terminal.screen == "takeback":
-            first, hint = row(t("TA TILLBAKA?")), "#Ja *Nej"
+            first, hint = row_(t("TA TILLBAKA?")), "#Ja *Nej"
         elif terminal.screen == "overview" and automatic:
-            first, hint = row(t("AUTOMATIK"), self.engine.config.stations[terminal.station].code), "#Aktiv"
+            first, hint = row_(t("AUTOMATIK"), self.engine.config.stations[terminal.station].code), "#Aktiv"
         elif terminal.screen == "requests":
             if position:
-                label, side = self._label(terminal.station, selected)
+                middle = self._leg_rows(terminal, selected, t)
+                label, side = self._label(terminal.station, selected, width)
                 counter = f"{position}/{len(requests)}"
-                if len(label) + len(counter) < 16:
-                    first = row(label, counter) if side == "left" else row(counter, label)
+                if len(label) + len(counter) < width:
+                    first = row_(label, counter) if side == "left" else row_(counter, label)
                     hint = "#Ja *Nej"
                 else:
                     # Keep long train identities intact; put queue count in the hint.
-                    first = row(label) if side == "left" else row("", label)
+                    first = row_(label) if side == "left" else row_("", label)
                     hint = t("#Ja {count}", count=counter)
             else:
-                first = row(t("INGA FRÅGOR" if not requests else "FRÅGAN ÄNDRAD"))
+                first = row_(t("INGA FRÅGOR" if not requests else "FRÅGAN ÄNDRAD"))
                 hint = "A:Kö *=Bak"
         elif terminal.screen == "browse":
             choices = self._candidates(terminal, filtered=True)
             if terminal.selected in choices:
                 schedule = self._schedule(terminal, selected)
-                first = row(f"{selected['train_number']} {t(schedule['label'])}", schedule["time"])
+                middle = self._leg_rows(terminal, selected, t)
+                first = row_(f"{selected['train_number']} {t(schedule['label'])}", schedule["time"])
                 hint = "#Välj A:Kö"
             else:
-                first = row(t("VÄLJ NÄSTA TÅG" if choices else
+                first = row_(t("VÄLJ NÄSTA TÅG" if choices else
                             {"all": "INGA TÅG", "arrival": "INGA ANKOMSTER", "departure": "INGA AVGÅNGAR"}[terminal.browse_filter]))
                 hint = "C/D A:Kö" if choices else "B:Fil A:Kö"
         elif terminal.screen == "cancel":
-            first, hint = ((row(t("ÅTER {number}?", number=selected['train_number'])), "#Ja *Nej") if "#" in buttons
-                           else (row(t("LÄGET ÄNDRAT")), "*=Bak"))
+            first, hint = ((row_(t("ÅTER {number}?", number=selected['train_number'])), "#Ja *Nej") if "#" in buttons
+                           else (row_(t("LÄGET ÄNDRAT")), "*=Bak"))
+            middle = self._leg_rows(terminal, selected, t) if "#" in buttons else None
         elif terminal.screen == "reject":
-            first, hint = ((row(t("NEKA {number}?", number=selected['train_number'])), "#Ja *Nej") if "#" in buttons
-                           else (row(t("LÄGET ÄNDRAT")), "*=Bak"))
+            first, hint = ((row_(t("NEKA {number}?", number=selected['train_number'])), "#Ja *Nej") if "#" in buttons
+                           else (row_(t("LÄGET ÄNDRAT")), "*=Bak"))
+            middle = self._leg_rows(terminal, selected, t) if "#" in buttons else None
         elif terminal.screen == "move" and selected and self._movable(terminal, selected):
             question = t("FLYTTA {number} HIT?", number=selected["train_number"])
-            if len(text_cells(question)) > 16:
+            if len(text_cells(question)) > width:
                 question = t("FLYTTA {number}?", number=selected["train_number"])
-            first, hint = row(question), "#Ja B:Sp"
+            first, hint = row_(question), "#Ja B:Sp"
+            middle = self._leg_rows(terminal, selected, t)
         elif terminal.screen == "tracks":
             tracks = self._tracks(terminal)
             label = tracks[terminal.track % len(tracks)].display_label
-            first, hint = row(t("{number} SPÅR {track}", number=selected['train_number'], track=label)), "#In C/D:Sp"
+            first, hint = row_(t("{number} SPÅR {track}", number=selected['train_number'], track=label)), "#In C/D:Sp"
+            middle = self._leg_rows(terminal, selected, t)
         elif terminal.screen == "active" and not active_position:
-            first = row(t("LÄGET ÄNDRAT" if active else "INGA AKTIVA TÅG"))
+            first = row_(t("LÄGET ÄNDRAT" if active else "INGA AKTIVA TÅG"))
             hint = "C/D B:Öv"
         elif terminal.screen in {"detail", "active"} and buttons.get("#", ("",))[0] == "stable":
-            first, hint = row(t("{number} SLUTAR HÄR", number=selected["train_number"])), "#Undan"
+            first, hint = row_(t("{number} SLUTAR HÄR", number=selected["train_number"])), "#Undan"
+            middle = self._leg_rows(terminal, selected, t)
         elif terminal.screen in {"detail", "active", "move"} and selected:
-            label, side = self._label(terminal.station, selected)
-            first = row(label) if side == "left" else row("", label)
+            label, side = self._label(terminal.station, selected, width)
+            first = row_(label) if side == "left" else row_("", label)
+            middle = self._leg_rows(terminal, selected, t)
             action = buttons.get("#", ("", ""))[0]
             hint = {"request": "#Beg A:Kö", "accept": "#Ja *Nej", "depart": "#Avg *Åter",
                     "arrive": "#In B:Sp"}.get(action, "*Åter B:Öv" if buttons.get("B", (None,))[0] == "home" else
@@ -705,14 +866,14 @@ class Terminal16Lab:
             if terminal.screen == "active":
                 counter = f"{compact(active_position)}/{compact(len(active))}"
                 hint = {"depart": "#Avg C/D", "arrive": "#In B:Sp"}.get(action, "C/D B:Öv")
-                if len(text_cells(label)) + len(counter) < 16:
-                    first = row(label, counter) if side == "left" else row(counter, label)
+                if len(text_cells(label)) + len(counter) < width:
+                    first = row_(label, counter) if side == "left" else row_(counter, label)
                 else:
                     # Long identities stay intact. Count moves beside the
                     # action; exceptionally large lists show the total here.
                     prefix = t({"depart": "#Avg", "arrive": "#In"}.get(action, "C/D"))
                     hint = prefix + " " + counter
-                    if len(text_cells(hint)) > 11:
+                    if len(text_cells(hint)) > room:
                         hint = prefix + " " + compact(len(active))
         status = t("Skriv tågnummer direkt, eller bläddra med C/D")
         if terminal.screen == "auto_confirm":
@@ -743,20 +904,46 @@ class Terminal16Lab:
             status = (t("Aktivt tåg {position}/{count}", position=active_position, count=len(active)) + " · " + status
                       if active_position else t("Ingen vald aktiv rörelse. C/D väljer; B visar översikten."))
         hint = t(hint)
-        if terminal.receipt_until is not None:
+        # An idle box names its station, so whoever stands there can see that
+        # the box is on the right one (trainmeet-tmbox #43): only the empty
+        # start screen, never a picture that already says something.
+        titles = [first]
+        if (terminal.screen == "overview" and not terminal.notice and not automatic
+                and not first.strip()):
+            titles = self._idle_titles(terminal)
+        receipt = terminal.receipt_until is not None
+        if receipt:
             number, destination = terminal.receipts[0]
             station = self.engine.config.stations[destination]
-            first, hint = row(number + " " + t("MOTTAGET")), station.code
-            if len(text_cells(hint)) > 11:
-                first, hint = row(number, station.code), t("MOTTAGET")
+            middle = [self._name_row(station, width)]
+            first, hint = row_(number + " " + t("MOTTAGET")), station.code
+            if len(text_cells(hint)) > room:
+                first, hint = row_(number, station.code), t("MOTTAGET")
             status = t("Tåg {number} mottaget i {station}. Meddelandet försvinner automatiskt.", number=number, station=station.name)
-        lines = [first, row(hint, clock)]
-        entry_lines = [row(t("TÅG: _____")), row(t("#Sök B:Del"), clock)]
+        blank = " " * width
+        if receipt:
+            titles = [first]
+        for top in titles:
+            if height == 4:
+                lines = [top, *(list(middle or []) + [blank, blank])[:2], row_(hint, clock)]
+                if not fits_cgram(lines):
+                    # Only eight places for own characters: rows two and three
+                    # give way, one and four are always shown.
+                    lines[1] = lines[2] = blank
+            else:
+                lines = [top, row_(hint, clock)]
+            if fits_cgram([lines[0], lines[-1]]):
+                break
+        if height == 4:
+            entry_lines = [row_(t("TÅG: _____")), blank, blank, row_(t("#Sök B:Del"), clock)]
+        else:
+            entry_lines = [row_(t("TÅG: _____")), row_(t("#Sök B:Del"), clock)]
         return {
             "profile": "server-16x2-pilot", "device_id": device,
             "station": self.engine.config.stations[terminal.station].name,
             "station_code": self.engine.config.stations[terminal.station].code,
-            "rows": 2, "cols": 16, "lines": lines, "lcd": encode_lcd(lines),
+            "rows": height, "cols": width, "lines": lines, "lcd": encode_lcd(lines),
+            "attention": {"epoch": self.epoch, "seq": terminal.attention_seq, "kind": terminal.attention_kind},
             "view_token": self._token(device, terminal),
             "revision": self.engine.revision, "view_revision": terminal.revision,
             "input_guard_ms": 500,
@@ -963,4 +1150,9 @@ class Terminal16Lab:
                     other.notice_hint = self.engine.config.stations[leg["to_station_id"]].code
                     other.notice_until = self.now() + NOTICE_SECONDS
                     other.revision += 1
+        # The other station hears what concerns it; the one that acted does not.
+        if action in {"accept", "reject"}:
+            self._notify_answer(leg, action == "accept")
+        elif action == "depart":
+            self._notify_departure(leg)
         return ""

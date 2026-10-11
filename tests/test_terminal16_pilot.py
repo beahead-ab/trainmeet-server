@@ -11,6 +11,12 @@ from tmbox_gateway.terminal16 import Terminal16Lab
 from tmbox_gateway.terminal16_demo import demo_lab, LabServer
 
 
+def idle(name, width=16):
+    """A box with nothing going on names its station on the empty first row
+    (trainmeet-tmbox #43), centred; the odd cell goes to the right."""
+    return (" " * ((width - len(name)) // 2) + name).ljust(width)
+
+
 class Terminal16Tests(unittest.TestCase):
     def setUp(self):
         self.lab = demo_lab()
@@ -44,7 +50,7 @@ class Terminal16Tests(unittest.TestCase):
             self.assertEqual(frame["keys"]["A"]["label"], "Förfrågningskö (0 väntar)")
             self.assertEqual(frame["keys"]["#"]["label"], "Visa kommande tåg")
             self.assertEqual(frame["entry"]["commit"], "#")
-            self.assertEqual(frame["lines"][0], " " * 16)
+            self.assertEqual(frame["lines"][0], idle(frame["station"]))
 
     def test_overview_shows_only_active_traffic_then_becomes_blank(self):
         self.lab.now = lambda: 100
@@ -55,7 +61,7 @@ class Terminal16Tests(unittest.TestCase):
                 self.accept("WATCH-DEMO-DY", "B")
             self.assertEqual(self.lab.frame("WATCH-DEMO-KNB")["lines"][0], f"39{marker}DY".rjust(16))
             self.assertEqual(self.lab.frame("WATCH-DEMO-DY")["lines"][0], f"KNB{marker}39".ljust(16))
-            self.assertEqual(self.lab.frame("DEMO-SVM")["lines"][0], " " * 16)
+            self.assertEqual(self.lab.frame("DEMO-SVM")["lines"][0], idle("Sölvmora"))
         self.lookup("39"); check("?")
         self.lookup("39", "DEMO-DY"); self.accept("DEMO-DY", "#"); check(">")
         self.accept("DEMO-KNB", "#"); check("▶")
@@ -63,7 +69,8 @@ class Terminal16Tests(unittest.TestCase):
         self.assertIn("39 MOTTAGET", self.lab.frame("WATCH-DEMO-KNB")["lines"][0])
         self.lab.now = lambda: 106
         for device in ("WATCH-DEMO-KNB", "WATCH-DEMO-DY", "DEMO-SVM"):
-            self.assertEqual(self.lab.frame(device)["lines"], [" " * 16, "Nr# A:Kö   12:34"])
+            frame = self.lab.frame(device)
+            self.assertEqual(frame["lines"], [idle(frame["station"]), "Nr# A:Kö   12:34"])
 
     def test_overview_becomes_blank_after_cancel_or_rejection(self):
         for actor in ("DEMO-KNB", "DEMO-DY"):
@@ -74,12 +81,12 @@ class Terminal16Tests(unittest.TestCase):
                 if actor == "DEMO-DY":
                     self.lookup("39", actor)
                 self.accept(actor, "*"); self.accept(actor, "#")
-                self.assertEqual(self.lab.frame("WATCH")["lines"][0], " " * 16)
+                self.assertEqual(self.lab.frame("WATCH")["lines"][0], idle("Knastebo"))
 
     def test_extra_inactive_connections_do_not_take_display_space(self):
         # Two connections to the left and one to the right must still be blank at rest.
         self.lab.engine.config.connections["unused-west"] = ConnectionConfig("unused-west", "svm", "knb")
-        self.assertEqual(self.lab.frame("DEMO-KNB")["lines"][0], " " * 16)
+        self.assertEqual(self.lab.frame("DEMO-KNB")["lines"][0], idle("Knastebo"))
         self.lookup("39"); self.accept("DEMO-KNB", "B")
         self.assertEqual(self.lab.frame("DEMO-KNB")["lines"][0], "39?DY".rjust(16))
 
@@ -666,12 +673,12 @@ class Terminal16ReceiptTests(unittest.TestCase):
         self.assertIn("93 MOTTAGET", self.lab.frame("DEMO-SVM")["lines"][0])
         self.now += 0.1
         frame = self.lab.frame("DEMO-SVM")
-        self.assertEqual(frame["lines"][0], " " * 16)
+        self.assertEqual(frame["lines"][0], idle("Sölvmora"))
         self.assertNotIn("93", frame["status"])
         self.assertNotIn("93-svm", self.lab._candidates(self.lab.terminals["DEMO-SVM"]))
         self.assertEqual(len(self.lab.engine.audit), 4)
         self.now += 60
-        self.assertEqual(self.lab.frame("DEMO-SVM")["lines"][0], " " * 16)
+        self.assertEqual(self.lab.frame("DEMO-SVM")["lines"][0], idle("Sölvmora"))
 
     def test_receipt_reaches_all_sender_boxes_but_no_unrelated_station(self):
         self.lab.terminals["SECOND-SVM"] = deepcopy(self.lab.terminals["DEMO-SVM"])
@@ -716,7 +723,7 @@ class Terminal16ReceiptTests(unittest.TestCase):
         self.accept("DEMO-SVM", "#"); self.accept("DEMO-KNB", "#")
         self.assertIn("93 MOTTAGET", self.lab.frame("DEMO-SVM")["lines"][0])
         self.now += 5
-        self.assertEqual(self.lab.frame("DEMO-SVM")["lines"][0], " " * 16)
+        self.assertEqual(self.lab.frame("DEMO-SVM")["lines"][0], idle("Sölvmora"))
         self.assertEqual([event["action"] for event in self.lab.engine.audit], ["request", "depart", "arrive"])
 
     def test_long_station_code_is_not_truncated_and_clock_stays_visible(self):
@@ -744,7 +751,7 @@ class Terminal16ReceiptTests(unittest.TestCase):
         result = self.lab.command("DEMO-SVM", {"command_id": "old-dismiss", "view_token": old, "key": "#"})
         self.assertEqual(result["status"], "rejected")
         self.assertEqual(self.lab.terminals["DEMO-SVM"].screen, "overview")
-        self.assertEqual(result["frame"]["lines"][0], " " * 16)
+        self.assertEqual(result["frame"]["lines"][0], idle("Sölvmora"))
 
     def test_queue_shortcut_dismisses_receipt_without_replaying_it(self):
         self.depart93(); self.accept("DEMO-KNB", "#")
@@ -752,7 +759,7 @@ class Terminal16ReceiptTests(unittest.TestCase):
         self.assertEqual(self.lab.terminals["DEMO-SVM"].screen, "requests")
         self.assertEqual(self.lab.terminals["DEMO-SVM"].receipts, [])
         self.accept("DEMO-SVM", "*")   # INGA FRÅGOR: * (or three seconds) leaves it
-        self.assertEqual(self.lab.frame("DEMO-SVM")["lines"][0], " " * 16)
+        self.assertEqual(self.lab.frame("DEMO-SVM")["lines"][0], idle("Sölvmora"))
 
     def test_multiple_receipts_are_shown_in_order_for_five_seconds_each(self):
         # Two different outbound legs finish while sender works on another view.
@@ -768,7 +775,7 @@ class Terminal16ReceiptTests(unittest.TestCase):
         self.now += 5
         self.assertIn("39 MOTTAGET", self.lab.frame("DEMO-KNB")["lines"][0])
         self.now += 5
-        self.assertEqual(self.lab.frame("DEMO-KNB")["lines"][0], " " * 16)
+        self.assertEqual(self.lab.frame("DEMO-KNB")["lines"][0], idle("Knastebo"))
 
 
 class Terminal16NoticeTests(unittest.TestCase):
@@ -788,7 +795,7 @@ class Terminal16NoticeTests(unittest.TestCase):
         self.now += 2.9
         self.assertEqual("INGA FRÅGOR     ", self.lab.frame("DEMO-KNB")["lines"][0])
         self.now += 0.2
-        self.assertEqual(" " * 16, self.lab.frame("DEMO-KNB")["lines"][0])
+        self.assertEqual(idle("Knastebo"), self.lab.frame("DEMO-KNB")["lines"][0])
         self.assertEqual("overview", self.lab.terminals["DEMO-KNB"].screen)
 
     def test_a_request_replacing_inga_fragor_is_not_sent_home_by_its_timer(self):
@@ -824,7 +831,7 @@ class Terminal16NoticeTests(unittest.TestCase):
                 self.assertTrue(frame["lines"][0].startswith(notice), frame["lines"])
                 self.assertNotIn("#OK", frame["lines"][1])
                 self.now += 3
-                self.assertEqual(" " * 16, self.lab.frame("DEMO-KNB")["lines"][0])
+                self.assertEqual(idle("Knastebo"), self.lab.frame("DEMO-KNB")["lines"][0])
 
 
 class Terminal16RequestQueueTests(unittest.TestCase):
@@ -1103,7 +1110,7 @@ class Terminal16HTTPTests(unittest.TestCase):
                     self.assertEqual(terminal.receipts, [])
                     self.assertIsNone(terminal.receipt_until)
                     self.assertEqual(frame["requests"]["count"], 0)
-                    self.assertEqual(frame["lines"][0], " " * 16)
+                    self.assertEqual(frame["lines"][0], idle(frame["station"]))
                     self.assertNotEqual(frame["entry"]["context"], old_contexts[frame["device_id"]])
                 self.assertEqual(self.server.lab.publication, before.publication)
 

@@ -6,9 +6,17 @@
   function drawLCD(lcd, lines) {
     lcd.replaceChildren();
     lcd.setAttribute("aria-label", lines.join(". "));
+    // 16 cells, always drawn by the style sheet the case look is locked to; a
+    // box that announced a 20x4 widens the grid and shrinks the cells to fit.
+    const columns = Math.max(16, ...lines.map(line => line.normalize("NFC").length));
     for (const line of lines) {
       const row = document.createElement("div"); row.className = "lcd-row";
-      for (const character of line.normalize("NFC")) { const cell = document.createElement("span"); cell.className = "lcd-cell"; cell.textContent = character; row.append(cell); }
+      if (columns > 16) row.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+      for (const character of line.normalize("NFC")) {
+        const cell = document.createElement("span"); cell.className = "lcd-cell"; cell.textContent = character;
+        if (columns > 16) cell.style.fontSize = `clamp(10px, ${(128 / columns).toFixed(2)}cqi, 19px)`;
+        row.append(cell);
+      }
       lcd.append(row);
     }
   }

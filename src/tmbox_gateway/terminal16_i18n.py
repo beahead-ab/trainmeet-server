@@ -2,6 +2,9 @@
 from .device_ui import LANGUAGES, text as legacy_text
 
 # Swedish | English | Danish | Norwegian | German. LCD hints <= 11 cells.
+# The last rows (Till ... Sp {track}) are the two middle rows of a 20x4: who the train
+# goes to or comes from, where it stands and its track. A state word may take 13 cells
+# beside "Sp 99" (tests/test_terminal16_20x4.py checks every language).
 COPY = """Nr# A:Kö|No# A:Q|Nr# A:Kø|Nr# A:Kø|Nr# A:Q
 B:Akt{count} C/D|B:Act{count} C/D|B:Akt{count} C/D|B:Akt{count} C/D|B:Akt{count} C/D
 A:K{count} B:Akt|A:Q{count} B:Act|A:K{count} B:Akt|A:K{count} B:Akt|A:Q{count} B:Akt
@@ -150,6 +153,17 @@ Ställ undan|Put away|Hensæt|Hensett|Abstellen
 UNDAN|STABLE|HENSÆT|HENSETT|ABSTELL
 UNDANSTÄLLT|STABLED|HENSAT|HENSATT|ABGESTELLT
 Tåg {number} slutar här. # ställer undan det, så blir spåret fritt.|Train {number} ends here. # puts it away and frees the track.|Tog {number} ender her. # hensætter det, så sporet bliver frit.|Tog {number} ender her. # hensetter det, så sporet blir fritt.|Zug {number} endet hier. # stellt ihn ab, damit das Gleis frei wird.
+Till|To|Til|Til|Nach
+Från|From|Fra|Fra|Von
+Vill skicka|Asks to send|Vil sende|Vil sende|Will senden
+Väntar svar|Awaiting OK|Venter svar|Venter svar|Wartet Antw.
+Klar att avgå|Ready to go|Kan afgå|Kan avgå|Abfahrbereit
+Klarerad|Cleared|Klareret|Klarert|Freigegeben
+Avgått|Departed|Afgået|Avgått|Abgefahren
+På väg hit|On its way|På vej hertil|På vei hit|Unterwegs
+Ej begärd|Not asked|Ikke anmodet|Ikke bedt om|Keine Anfrage
+Ej skickad|Not sent|Ikke sendt|Ikke sendt|Nicht gesendet
+Sp {track}|Trk {track}|Sp {track}|Sp {track}|Gl {track}
 """
 
 MESSAGES = {code: {} for code, _ in LANGUAGES}

@@ -15,7 +15,7 @@ from .engine import TrafficEngine
 from .models import ConnectionRuntime, ConnectionState
 from .protocol_v2 import CommandRejected
 from .terminal16 import NOTICE_SECONDS, Terminal, Terminal16Lab, row
-from .terminal16_glyphs import encode_lcd
+from .terminal16_glyphs import encode_lcd, GEOMETRIES
 from .terminal16_i18n import text
 
 LOGGER = logging.getLogger("tmbox_gateway.terminal16")
@@ -32,6 +32,7 @@ class RuntimeViews(Terminal16Lab):
         super().__init__(engine, publication, {}, now=now)
         self.lock = service.operations_store.command_lock
         self.cases = {}
+        self._departed = set()
         self.fingerprint = None
         self.refresh()
 
@@ -89,7 +90,9 @@ class RuntimeViews(Terminal16Lab):
         if fingerprint == self.fingerprint:
             return
         old_cases, old_completed = self.cases, self.completed
+        old_departed = self._departed
         self.cases = cases
+        self._departed = {key for key, case in cases.items() if service.case_departed(case)}
         self.bindings = {case["clearance_id"]: key for key, case in cases.items()}
         self.completed = {key for key, leg in self.legs.items()
             if states[leg["from_station_id"]].get(key, {}).get("departure") == "departed"
@@ -100,9 +103,17 @@ class RuntimeViews(Terminal16Lab):
             for key in cases.keys() - old_cases.keys():
                 if cases[key]["status"] == "waiting":
                     self._notify_request(self.legs[key])
+            # An answer is heard by the one who asked, never by the one who
+            # gave it: the direction of the line says who did what.
+            for key in cases.keys() & old_cases.keys():
+                if old_cases[key]["status"] == "waiting" and cases[key]["status"] != "waiting":
+                    self._notify_answer(self.legs[key], True)
+            for key in self._departed - old_departed:
+                self._notify_departure(self.legs[key])
             for key in old_cases.keys() - cases.keys() - self.completed:
                 closed = service.operations_store.clearance(old_cases[key]["clearance_id"])
                 if closed and closed["status"] == "rejected":
+                    self._notify_answer(self.legs[key], False)
                     for terminal in self.terminals.values():
                         if terminal.selected == key and terminal.station == self.legs[key]["from_station_id"]:
                             terminal.notice = self.legs[key]["train_number"] + " NEKAT"
@@ -207,8 +218,14 @@ class Terminal16Service:
             views.terminals[device] = Terminal(station, side=side)
             # A fresh assignment cannot accept a command from the old station.
             views.terminals[device].revision = (terminal.revision + 1) if terminal else 0
-        views.refresh()
         terminal = views.terminals[device]
+        # The size the box announced in its hello: a 20x4 gets pictures for
+        # 20x4, everything else the 16x2 it has always had.
+        geometry = self._geometry(device)
+        if (terminal.rows, terminal.cols) != geometry:
+            terminal.rows, terminal.cols = geometry
+            terminal.revision += 1
+        views.refresh()
         language = self.service.device_ui(device)["language"]
         if terminal.language != language:
             terminal.language = language
@@ -217,6 +234,11 @@ class Terminal16Service:
             views._open_requests(terminal)
             terminal.revision += 1
         return views
+
+    def _geometry(self, device):
+        info = self.service.identities.discovered_device_or_none(device)
+        geometry = (info.display.rows, info.display.cols) if info else (2, 16)
+        return geometry if geometry in GEOMETRIES else (2, 16)
 
     def frame(self, device):
         with self.service.operations_store.command_lock:
@@ -229,8 +251,11 @@ class Terminal16Service:
                 return frame
             info = self.service.identities.discovered_device_or_none(device)
             language = self.service.device_ui(device)["language"]
-            lines = [row(text(language, "VÄNTAR PÅ ADMIN")), row(info.device_code[:16] if info else text(language, "ANSLUTER"))]
-            return {"profile": "server-16x2", "device_id": device, "rows": 2, "cols": 16,
+            rows, cols = self._geometry(device)
+            lines = [row(text(language, "VÄNTAR PÅ ADMIN"), "", cols),
+                     row(info.device_code[:cols] if info else text(language, "ANSLUTER"), "", cols)]
+            lines += [" " * cols] * (rows - 2)
+            return {"profile": "server-16x2", "device_id": device, "rows": rows, "cols": cols,
                     "lines": lines, "lcd": encode_lcd(lines), "keys": {}, "entry": None,
                     "view_token": "", "status": text(language, "Administratören tilldelar station i Inställningar.")}
 
