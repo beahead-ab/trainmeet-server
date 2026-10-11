@@ -5,6 +5,29 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### TMBox med 20×4-skärm, stationsnamn i vila och ljud från Servern
+
+Benny (etxbct) i trainmeet-tmbox #39, #43 och #44; Casper godkände förslaget
+(TMBox-20x4-forslag.pdf, 9 oktober 2026) och valde att namnet ska synas även på
+16×2 och att ljudet följer ESP32:s policy.
+
+- **20×4:** boxen väljer storlek i WiFi-portalen och säger det i `hello`
+  (`display: {rows, cols}`); Servern ritar varje bild i boxens storlek. Rad 1 och 4
+  är det 16×2 säger, rad 2 och 3 är nya: *Till/Från* och den andra stationens
+  namn med tid, läget i ord och planerat spår, på startbilden de två närmaste
+  tågen, och på besked den andra stationens namn. Rad 2 och 3 står tomma i en bild
+  som behöver fler än åtta egna tecken. En box som inte säger något är 16×2.
+- **Stationens namn i vila (#43):** en box utan något tåg på gång visar stationens
+  namn centrerat på rad 1, på 16×2 och 20×4, så att man ser att den står på rätt
+  station. Förkortas till stationskoden om namnet inte ryms. Det är den enda
+  ändringen i en 16×2-bild.
+- **Ljud (#44):** varje bild bär `attention {epoch, seq, kind}`. Servern följer
+  ESP32:s policy: bara förändringar, en begäran hit hörs av mottagaren, svaret av den
+  som frågade, en avgång av mottagaren; det egna är tyst; två ljud inom två sekunder
+  blir det viktigaste; det första efter anslutningen och gamla ljud efter
+  återanslutning spelas aldrig. Se protokolltexten §6a.
+- Webbens LCD ritar 20 kolumner när bilden har det.
+
 ### Avsluta trafikpasset och lämna stationen till automatiken
 
 Casper: "Avsluta trafikpasset ska erbjuda Lämna till automatiken". Förut stod

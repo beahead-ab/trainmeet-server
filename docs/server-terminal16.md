@@ -2,7 +2,11 @@
 
 Gäller från TrainMeet Server 1.10.0 tillsammans med TMBox firmware 0.7.0.
 Uppdatera servern först. ESP8266 och ESP32 använder samma profil och samma
-versionsnummer. En större fysisk display visar tills vidare 16×2-profilen.
+versionsnummer. Från Server 4.4.0 och firmware 0.8.0 kan en ESP8266-box med
+20×4-display välja det i sin WiFi-portal och säga det i `hello`; Servern ritar då
+varje bild i 20×4 (fyra rader, två av dem nya) och en box som inte säger något är
+16×2 som förut. Servern talar också om för boxen när den ska ge ljud. Se
+[profilens normtext](protocol/terminal16/README.md).
 
 ## Tre sätt att köra
 

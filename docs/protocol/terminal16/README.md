@@ -1,7 +1,9 @@
 # TMBox 16×2-profilen
 
 Normativ text för hur en TMBox med 16×2-display och 4×4-knappsats talar med
-TrainMeet Server, från firmware 0.7.0 och Server 1.10.0. Säger koden och den
+TrainMeet Server, från firmware 0.7.0 och Server 1.10.0. Från Server 4.4.0 och
+firmware 0.8.0 gäller samma profil för en box med 20×4-display (§3 och §6) och
+Servern kan tala om för boxen när den ska ge ljud (§6a). Säger koden och den
 här texten olika saker är det en bugg i koden. `tests/test_terminal16_protocol_doc.py`
 jämför tabellen *Värden* nedan med konstanterna i Servern.
 
@@ -31,7 +33,7 @@ Sedan Server 2.0.0 är 16×2-profilen det enda protokollet över MQTT; `tambox/v
 
 | Riktning | Ämne | Innehåll |
 | --- | --- | --- |
-| box → server | `tmbox/terminal/device/<id>/hello` | ny anslutning: kod, modell, version, `boot` |
+| box → server | `tmbox/terminal/device/<id>/hello` | ny anslutning: kod, modell, version, `display`, `boot` |
 | box → server | `tmbox/terminal/device/<id>/presence` | livstecken med `nonce` |
 | box → server | `tmbox/terminal/device/<id>/command` | ett tangenttryck |
 | server → box | `tmbox/terminal/device/<id>/alive` | svar på livstecknet, samma `nonce` |
@@ -42,11 +44,17 @@ Exempel, fångade från mosquitto 2026-10-01 (bilden förkortad):
 
 ```text
 …/hello     {"device_code": "TBX-B57200", "model": "NodeMCU ESP8266 16x2", "firmware_version": "0.7.1", "hardware_version": "server-16x2", "boot": "7cd2916f535b49d2-1"}
+…/hello     {"device_code": "TBX-B57200", "model": "NodeMCU ESP8266 PCF8574", "firmware_version": "0.8.0", "hardware_version": "server-16x2", "display": {"rows": 4, "cols": 20}, "boot": "7cd2916f535b49d2-1"}
 …/presence  {"nonce": "7cd2916f535b49d2-1-p1", "boot": "7cd2916f535b49d2-1"}
 …/alive     {"boot": "7cd2916f535b49d2-1", "nonce": "7cd2916f535b49d2-1-p1"}
 …/command   {"command_id": "7cd2916f535b49d2-1-2", "view_token": "dfe2bb9d4d9a68fe8e5991e3", "key": "#", "train_number": "428", "entry_context": "…", "boot": "7cd2916f535b49d2-1"}
 …/ack       {"status": "accepted", "message": "", "command_id": "7cd2916f535b49d2-1-2", "boot": "7cd2916f535b49d2-1", "frame": {…}}
 ```
+
+`display` är boxens storlek: `{"rows": 2, "cols": 16}` eller `{"rows": 4, "cols": 20}`.
+Boxen väljer den själv, i WiFi-portalen, eftersom en sådan skärm inte kan säga hur
+stor den är. En box som inte skickar `display`, eller skickar något annat, räknas
+som 16×2; den stängs aldrig ute. Administratören ser storleken under Klienter.
 
 ## 4. Session och boot
 
@@ -103,16 +111,61 @@ Exempel, fångade från mosquitto 2026-10-01 (bilden förkortad):
 
 ## 6. Bilden
 
-- `profile` = `server-16x2`, `rows` = 2, `cols` = 16, `lines` = två rader text.
+- `profile` = `server-16x2`. `rows` och `cols` är boxens storlek, 2 × 16 eller
+  4 × 20; `lines` är lika många rader text, alla exakt `cols` tecken långa.
+- På en **16×2** är rad 1 tåget och läget med tecken (`?` begärd, `<` `>` klart,
+  `◀` `▶` på väg), kön eller frågan, och rad 2 tangenterna och klockan. En box
+  utan något tåg på gång står på startbilden med **stationens namn centrerat på
+  rad 1** (förkortat till stationskoden om namnet inte ryms), så att man ser att
+  boxen står på rätt station.
+- På en **20×4** är rad 1 och rad 4 exakt vad 16×2:ans rad 1 och 2 säger, med
+  klockan längst till höger. Rad 2 och 3 är nya. På ett valt tåg är rad 2 *Till*
+  eller *Från* och den andra stationens namn med planerad tid; rad 3 är läget i ord
+  (*Ej begärd*, *Väntar svar*, *Klar att avgå*, *Avgått* för en egen avgång; *Ej
+  skickad*, *Vill skicka*, *Klarerad*, *På väg hit* för en ankomst hit) och planerat
+  spår här (*Sp 1*). Ryms inte ordet framför står bara namnet; bara ett namn längre
+  än raden kortas. På startbilden är rad 2 och 3 de två närmaste tågen som inte
+  redan står på rad 1: nummer, `AVG` eller `ANK`, den andra stationens kod och tiden.
+  Ett besked (MOTTAGET, NEKAT, ÅTERTAGET, ANK SP2 …) har den andra stationens namn
+  på rad 2 och en tom rad 3, så att beskedet läses för sig. Inmatningen har tomma
+  rad 2 och 3; siffrorna ligger på rad 1, kolumn 6–10, som på 16×2.
+- En skärm har bara åtta platser för egna tecken. Behövs fler i en bild, eller ett
+  tecken boxen inte kan rita, står rad 2 och 3 tomma i just den bilden; rad 1 och 4
+  visas alltid.
 - `lcd` = färdiga tecken för HD44780 (`hd44780-5x8-cgram-v1`), högst 8 egna
   tecken (`glyphs`).
 - `keys` = de tangenter som gör något just nu: `{label, short, acts}`. `acts` är sant
   när tangenten ändrar trafiken. `short` är ett ord på högst tolv tecken som en
   telefon skriver under tangenten (KÖ 1, GE KLART, AVGÅTT); boxen bortser från det. Efter ett skärmbyte väntar klienten
   `input_guard_ms` innan en tangent med `acts` skickas; bläddring svarar direkt.
+- `attention` = vad boxen ska ge ljud för, se §6a.
 - `entry` = inmatningen av tågnummer: `context`, `max_length`, `row`, `column`,
   `commit` (`#`), `cancel` (`*`), `erase` (`B`), `shortcut` (`A`),
   `labels` och `short` för samma fyra tangenter under inmatning.
+
+## 6a. Ljud
+
+Servern talar om *vad* boxen ska ge ljud för; boxen bestämmer toner och spelar dem
+på sin summer. Varje bild bär
+
+```text
+"attention": {"epoch": "<serverns serie>", "seq": 7, "kind": "incoming_request"}
+```
+
+- `kind` är `incoming_request` (en begäran hit), `request_denied` (någon nekade din
+  begäran), `request_approved` (någon gav klart på din begäran), `incoming_train` (ett
+  tåg är på väg hit) eller `null`. Ordningen är också vikten: den första är viktigast.
+  Boxens egna `ConnectionLost` och `ConnectionRestored` kommer från boxen själv.
+- Bara förändringar är nyheter. Det första `attention` en box får efter `hello` är
+  utgångsläget och är **tyst**; därefter spelas en ton när `epoch` är densamma och
+  `seq` har ändrats till ett värde utom 0 med ett `kind`. Ett annat `epoch` (Servern
+  har startat om, eller ny träff eller dag) är ett nytt utgångsläge, aldrig ett ljud.
+  Ett ljud från före anslutningen spelas aldrig i efterhand.
+- Riktningen avgör vem som hör: begäran hör mottagaren, svaret hör den som frågade och
+  avgången hör mottagaren. Den som själv gjorde det hör ingenting. ÅTERTAGET, ankomst
+  och besked ger inget ljud.
+- Två ljud inom `ATTENTION_WINDOW_SECONDS` är ett tillfälle: boxen får det viktigaste,
+  inte båda ovanpå varandra. `seq` räknas upp i en serie för alla boxar och återanvänds aldrig.
 
 ## 7. Tidsgränser i boxen (firmware)
 
@@ -162,5 +215,6 @@ samma tangentregler över HTTP i stället för MQTT. De får ingen egen trafiklo
 | `input_guard_ms` | 500 |
 | `NOTICE_SECONDS` | 3 |
 | `entry.max_length` | 5 |
+| `ATTENTION_WINDOW_SECONDS` | 2 |
 | `DEVICE_ONLINE_SECONDS` | 20 |
 | `DEVICE_OFFLINE_SECONDS` | 900 |

@@ -5,6 +5,7 @@ import threading
 from time import monotonic
 
 from .identity import CLIENT_ID_PATTERN, DisplayCapability
+from .terminal16_glyphs import GEOMETRIES
 
 
 LOGGER = logging.getLogger("tmbox_gateway.terminal16")
@@ -162,7 +163,7 @@ class Terminal16Gateway:
                     self.terminals.service.identities.record_discovery(device, str(body.get("device_code") or device),
                         model=str(body.get("model") or "TMBox 16×2")[:80], firmware_version=str(body.get("firmware_version") or "")[:32],
                         hardware_version=str(body.get("hardware_version") or "server-16x2")[:80],
-                        protocol_version=2, display=DisplayCapability(rows=2, cols=16, charset="cgram"))
+                        protocol_version=2, display=self._display(body.get("display")))
                 except Exception:
                     self._forget(device, body["boot"])
                     raise
@@ -189,6 +190,16 @@ class Terminal16Gateway:
                 answer = self.terminals.command(device, {key: value for key, value in body.items() if key != "boot"})
                 self.publish(self.PREFIX + device + "/ack", {**answer, "boot": body["boot"], "command_id": body.get("command_id")}, False)
                 self.tick()
+
+    @staticmethod
+    def _display(announced):
+        """The size a box says it has: 16x2 or 20x4. Silence, or anything else,
+        is a 16x2 - the box is never locked out for announcing something odd."""
+        geometry = (2, 16)
+        if isinstance(announced, dict):
+            candidate = (announced.get("rows"), announced.get("cols"))
+            geometry = next((known for known in GEOMETRIES if candidate == known), geometry)
+        return DisplayCapability(rows=geometry[0], cols=geometry[1], charset="cgram")
 
     def _expire(self):
         for device in list(self.connections):

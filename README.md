@@ -493,10 +493,13 @@ ESP8266- och ESP32-boxar med firmware 0.7 eller senare.
 Simulatorn ger också **uppmärksamhetssignalerna**: en ton och en banderoll när
 en klarering begärs hit, när ett svar på en egen begäran kommer, eller när
 linjen förklaras ledig mot stationen. Policyn är boxens egen — samma
-`AttentionController`, hållen mot samma guldfil — och eftersom hårdvaran ännu
-saknar summer är det här enda stället signalerna går att höra. Det som inte
+`AttentionController`, hållen mot samma guldfil. Det som inte
 låter är minst lika viktigt: en klarering som redan väntade, den första
 ögonblicksbilden efter start, och det tågklareraren själv nyss gjorde är tysta.
+
+En ESP8266-box (serverns 16×2/20×4-profil) har ingen egen policy: Servern
+skickar i bilden vad som ska ge ljud (`attention`), efter samma regler, och boxen
+spelar tonerna på sin summer. Se [profilens normtext](docs/protocol/terminal16/README.md).
 
 Ny publicerad config hämtas och aktiveras utan serveromstart när trafikläget tillåter det. Annars visas vänteläget och orsaken. Manuell kontroll använder samma säkerhetskontroller.
 

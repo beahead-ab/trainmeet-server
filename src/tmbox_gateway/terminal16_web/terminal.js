@@ -172,7 +172,8 @@
     const {card, frame, entry} = model;
     const lines = [...entry.lines(frame)];
     const shown = overlay(model, performance.now());
-    if (shown) lines[1] = boxText(shown, frame.language).padEnd(16);
+    // The waiting text takes the last row, where the keys and the clock are.
+    if (shown) lines[lines.length - 1] = boxText(shown, frame.language).padEnd(frame.cols || 16);
     drawLCD(card.querySelector(".lcd"), lines);
     card.querySelector("h2").textContent = frame.station || t("Väntar på station");
     card.querySelector(".box-code").textContent = live ? identity?.device_code || frame.device_id : frame.device_id;
