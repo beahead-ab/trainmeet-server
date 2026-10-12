@@ -69,6 +69,7 @@ from .us_clock import clock_settings as validate_us_clock_settings
 from .protocol_v2 import TMBoxStationService, find_track_conflict
 from .train_routes import _visits
 from .train_live import expected_time, on_line_trains, train_live
+from . import meet_timeline
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
     CUSTOM_CLOCK_PREFIX,
@@ -4265,10 +4266,13 @@ class TrainMeetHTTPApplication:
         2026-10-08), aldrig före midnatt; utan tåg den dagen 05:00. En fast
         tid som admin skrivit in gäller i stället.
         """
+        return self._day_start_seconds(publication, calendar, calendar["day_number"] + 1)
+
+    def _day_start_seconds(self, publication, calendar: dict[str, Any], day_number: int) -> tuple[float, bool]:
+        """När dag `day_number` börjar, dess dygnsskifte, och om tiden är automatisk."""
         if calendar.get("change_time_set"):
             return _clock_time_seconds(calendar["change_time_set"]) or 0.0, False
-        new_day = calendar_weekday(calendar["start_day"], calendar["day_number"] + 1)
-        first = self._first_movement_seconds(publication, new_day)
+        first = self._first_movement_seconds(publication, calendar_weekday(calendar["start_day"], day_number))
         if first is None:
             return _clock_time_seconds(DEFAULT_DAY_CHANGE_TIME) or 0.0, True
         return max(0.0, first - DAY_CHANGE_LEAD_SECONDS), True
@@ -4470,14 +4474,16 @@ class TrainMeetHTTPApplication:
         place = seconds if first is None else max(0.0, min(seconds, first - 1))
         self._day_change_waiting = self._day_change_due = False
         self._fastclock_after_midnight = False
+        before = self._meet_position()
         result = self._enter_day(publication, selected, number, seconds, everything=False, place_seconds=place, announce=True)
         self.operations_store.record_audit_event(
             correlation_id=f"meet-day-{publication.publication_id}-{result['day_number']}", source="web-admin",
             actor=client.admin_user_id or "konsol", action="meet.day_started", outcome="ok",
             detail={"by": client.display_name, "day_number": result["day_number"], "active_day": result["active_day"],
                     "time": _hhmm(seconds), "backup": written.name if written else None})
+        undo = self._remember_jump("nytt-dygn", written, publication, before)
         return {**result, "clock": self.clock_status(client), "calendar": self.calendar_state(),
-                "backup": written.name if written else None}
+                "backup": written.name if written else None, "undo": undo}
 
     @runtime_command("eu")
     def time_machine(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
@@ -4489,17 +4495,33 @@ class TrainMeetHTTPApplication:
         day_number = payload.get("day_number")
         if type(day_number) is not int or not 1 <= day_number <= 366:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_day_number", "Välj en dag mellan 1 och 366.")
-        seconds = _clock_time_seconds(payload.get("time"))
-        if seconds is None:
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_time", "Ange tiden som TT:MM.")
+        seconds = self._jump_seconds(payload)
+        before = self._meet_position()
         written = self._backup_before("tidsmaskinen")
         result = self._enter_day(publication, selected, day_number, seconds, everything=True)
         self.operations_store.record_audit_event(
             correlation_id=f"time-machine-{publication.publication_id}", source="web-admin",
             actor=client.admin_user_id or "konsol", action="meet.time_machine", outcome="ok",
-            detail={"by": client.display_name, "day_number": day_number, "time": payload.get("time"),
+            detail={"by": client.display_name, "day_number": day_number, "time": _hhmm(seconds),
                     "active_day": result["active_day"], "backup": written.name if written else None})
-        return {**result, "clock": self.clock_status(client), "backup": written.name if written else None}
+        undo = self._remember_jump("tidsmaskin", written, publication, before)
+        return {**result, "clock": self.clock_status(client), "backup": written.name if written else None, "undo": undo}
+
+    def _jump_seconds(self, payload: dict[str, Any]) -> float:
+        """Tiden att hoppa till: `seconds` på dagen, eller `time` som TT:MM.
+
+        Sekunderna kan gå förbi midnatt (högst ett dygn till): natten efter en
+        dag hör till den dagen tills dygnsskiftet, som träffklockans löpande tid.
+        """
+        if "seconds" in payload:
+            value = payload["seconds"]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value < 2 * 86400:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_time", "Tiden ska vara mellan 0 och 48 timmar in på dagen.")
+            return float(int(value) // 60 * 60)
+        seconds = _clock_time_seconds(payload.get("time"))
+        if seconds is None:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_time", "Ange tiden som TT:MM.")
+        return seconds
 
     @runtime_command("eu")
     def save_meet_calendar(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
@@ -4555,6 +4577,154 @@ class TrainMeetHTTPApplication:
         if type(payload.get("meet_generation")) is not int or payload["meet_generation"] != selected["generation"]:
             raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_meet_context", "Läs in aktuell träff först.")
         return publication, selected
+
+    # ------------------------------------------------------- träffens tidslinje
+    #
+    # Drift visar träffens dygn på rad under klockan (Casper 2026-10-12). Admin
+    # drar i tidslinjen och ser hur tågen kommer att stå innan tidsmaskinen
+    # hoppar. Direkt efter ett hopp eller ett nytt dygn kan det ångras: servern
+    # lägger tillbaka kopian som togs före och startar om.
+
+    #: Hur länge Ångra finns efter ett hopp, i sekunder.
+    UNDO_WINDOW = 30 * 60
+    _last_jump: dict | None = None
+
+    def _meet_position(self) -> dict[str, Any] | None:
+        """Var träffen står: dag, veckodag och tid (för Ångra-knappen)."""
+        calendar = self.calendar_state()
+        if calendar is None:
+            return None
+        clock = self.operations_store.clock_status()
+        return {"day_number": calendar["day_number"], "weekday": calendar["weekday"],
+                "time": _hhmm(_clock_seconds(clock)) if clock.get("configured", True) else None}
+
+    def _remember_jump(self, kind: str, written: Path | None, publication, before: dict | None) -> dict[str, Any] | None:
+        """Kom ihåg hoppet så att det kan ångras med kopian som togs före."""
+        if written is None or not self.config.allow_restart:
+            self._last_jump = None
+            return None
+        self._last_jump = {"kind": kind, "backup": written.name, "at": time.monotonic(), "from": before,
+                           "publication": (publication.publication_id, publication.checksum, publication.local_revision),
+                           "admins": self._admin_fingerprint(Path(self.runtime_store.path))}
+        return self._undo_offer()
+
+    def _undo_offer(self) -> dict[str, Any] | None:
+        jump = self._last_jump
+        if jump is None or time.monotonic() - jump["at"] > self.UNDO_WINDOW:
+            return None
+        return {"backup": jump["backup"], "kind": jump["kind"], "from": jump["from"],
+                "seconds_left": int(self.UNDO_WINDOW - (time.monotonic() - jump["at"]))}
+
+    @staticmethod
+    def _admin_fingerprint(database: Path) -> list:
+        """Vilka som har tillgång till servern, för att jämföra med kopian."""
+        connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+        try:
+            rows = []
+            for table in ("admin_access", "admin_users"):
+                try:
+                    rows.append([list(row) for row in connection.execute(f"SELECT * FROM {table} ORDER BY 1")])
+                except sqlite3.OperationalError:
+                    rows.append(None)
+            return rows
+        finally:
+            connection.close()
+
+    def undo_jump(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Ångra det senaste hoppet eller nya dygnet: kopian före läggs tillbaka.
+
+        Det är en återställning från säkerhetskopia, men bara av kopian som
+        hoppet tog, inom en halvtimme, när ingen nyare kopia finns, tidtabellen
+        är densamma och ingen har fått eller förlorat tillgång till servern
+        sedan dess. Annars finns hela listan under Återställ från säkerhetskopia.
+        """
+        self._require_admin(client)
+        if not self.config.allow_restart:
+            raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "undo_unavailable",
+                               "Ångra kräver att servern kan startas om, vilket det här körläget inte tillåter.")
+        jump = self._last_jump
+        if jump is None or self._undo_offer() is None or str(payload.get("backup", "")) != jump["backup"]:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "undo_expired",
+                               "Det finns inget hopp att ångra längre. Äldre lägen finns under Återställ från säkerhetskopia.")
+        newest = backup.available(self._backup_dir())
+        if not newest or newest[0]["name"] != jump["backup"]:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "undo_superseded",
+                               "En nyare säkerhetskopia har tagits sedan hoppet. Välj kopia under Återställ från säkerhetskopia.")
+        publication = self.runtime_store.active() if self.runtime_store else None
+        if publication is None or (publication.publication_id, publication.checksum, publication.local_revision) != jump["publication"]:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "undo_timetable_changed",
+                               "Tidtabellen har ändrats sedan hoppet, så det går inte att ångra här.")
+        try:
+            path = backup.resolve(self._backup_dir(), jump["backup"])
+        except backup.BackupError as error:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "undo_expired", str(error)) from error
+        if self._admin_fingerprint(Path(self.runtime_store.path)) != jump["admins"]:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "undo_access_changed",
+                               "Användarna har ändrats sedan hoppet. Ägaren kan återställa under Återställ från säkerhetskopia.")
+        described = backup.describe(path)
+        if not described["usable"]:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "backup_not_usable",
+                               f"Säkerhetskopian går inte att återställa: {described['problem']}")
+        self._last_jump = None
+        self.operations_store.record_audit_event(
+            correlation_id=f"undo-{jump['backup']}", source="web-admin", actor=client.admin_user_id or "konsol",
+            action="meet.jump_undone", outcome="ok", detail={"by": client.display_name, "backup": jump["backup"], "kind": jump["kind"]})
+        back = jump["from"] or {}
+        return {"status": "restoring", "backup": described, "from": jump["from"],
+                "message": (f"Hoppet ångras: Dag {back.get('day_number')} · {back.get('weekday')} kl. {back.get('time')} "
+                            "läggs tillbaka och servern startar om.") if back else "Hoppet ångras och servern startar om.",
+                "path": str(path)}
+
+    def meet_timeline(self, client: PairedClient, days: int | None = None) -> dict[str, Any]:
+        """Träffens dygn för tidslinjen: när varje dag börjar, trafiken i den och var träffen står.
+
+        Dag d går från sitt dygnsskifte till nästa dags, i dag d:s sekunder
+        (natten efter midnatt är över 86400). Minst tre dagar och dagen efter
+        den pågående visas, fler om webbläsaren ber om dem.
+        """
+        self._require_admin(client)
+        publication = self.runtime_store.active() if self.runtime_store else None
+        selected = self.lifecycle.selected() if self.lifecycle else None
+        if publication is None or self.operations_store is None or (selected and selected["region"] == "us"):
+            return {"supported": False}
+        calendar = self.calendar_state()
+        last_day = min(366, max(3, calendar["day_number"] + 1, int(days or 0)))
+        # Högst en månad åt gången: de senaste 31 dagarna fram till den sista.
+        first_day = max(1, last_day - 30)
+        starts = {number: self._day_start_seconds(publication, calendar, number)[0] for number in range(first_day, last_day + 2)}
+        payload = publication.payload
+        out = []
+        for number in range(first_day, last_day + 1):
+            weekday = calendar_weekday(calendar["start_day"], number)
+            start, end = starts[number], 86400 + starts[number + 1]
+            first, last = meet_timeline.first_and_last(payload, weekday)
+            out.append({"day_number": number, "weekday": weekday, "start": start, "end": end,
+                        "first": first, "last": last,
+                        "density": meet_timeline.traffic_density(payload, weekday, start, end)})
+        clock = self.operations_store.clock_status()
+        return {"supported": True, "days": out, "slot_seconds": meet_timeline.SLOT_SECONDS,
+                "now": {"day_number": calendar["day_number"], "seconds": _clock_seconds(clock),
+                        "running": bool(clock.get("running")), "speed": float(clock.get("speed") or 1.0),
+                        "external": clock.get("elapsed_seconds") is None},
+                "calendar": calendar, "undo": self._undo_offer(),
+                "meet_generation": selected["generation"] if selected else None}
+
+    def time_machine_preview(self, client: PairedClient, day_number: Any, seconds: Any) -> dict[str, Any]:
+        """Hur tågen kommer att stå om tidsmaskinen hoppar till dagen och tiden."""
+        self._require_admin(client)
+        publication = self.runtime_store.active() if self.runtime_store else None
+        if publication is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "runtime_not_configured", "Ingen tidtabell är publicerad")
+        try:
+            number, at = int(day_number), float(seconds)
+        except (TypeError, ValueError):
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_time", "Ange dag och tid.") from None
+        if not 1 <= number <= 366 or not 0 <= at < 2 * 86400:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_time", "Ange en dag mellan 1 och 366 och en tid inom två dygn.")
+        calendar = self.calendar_state()
+        weekday = calendar_weekday(calendar["start_day"], number)
+        return {"day_number": number, "weekday": weekday, "seconds": at, "time": _hhmm(at),
+                **meet_timeline.preview(publication.payload, weekday, at)}
 
     def sync_runtime(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
@@ -4793,6 +4963,7 @@ class TrainMeetHTTPApplication:
             "/assets/app.js": "app.js",
             "/assets/server-ui.js": "server-ui.js",
             "/assets/drift.js": "drift.js",
+            "/assets/meet-timeline.js": "meet-timeline.js",
             "/assets/drift-model.js": "drift-model.js",
             "/assets/settings.js": "settings.js",
             "/assets/data-page.js": "data-page.js",
@@ -5160,6 +5331,19 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK, self.server.application.pending_revision_state(client)
                 )
                 return
+            if path == "/v1/runtime/timeline":
+                client = self._authenticated_client()
+                query = parse_qs(parsed.query)
+                days = query.get("days", [""])[0]
+                self._send_json(HTTPStatus.OK, self.server.application.meet_timeline(
+                    client, int(days) if days.isdigit() else None))
+                return
+            if path == "/v1/runtime/time-machine/preview":
+                client = self._authenticated_client()
+                query = parse_qs(parsed.query)
+                self._send_json(HTTPStatus.OK, self.server.application.time_machine_preview(
+                    client, query.get("day_number", [""])[0], query.get("seconds", [""])[0]))
+                return
             if path == "/v1/build/timetable":
                 client = self._authenticated_client()
                 self._send_json(HTTPStatus.OK, self.server.application.build_timetable(client))
@@ -5413,6 +5597,13 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/runtime/new-day":
                 self._send_json(HTTPStatus.OK, self.server.application.start_new_day(self._authenticated_client(), payload))
+                return
+            if path == "/v1/runtime/undo-jump":
+                response = self.server.application.undo_jump(self._authenticated_client(), payload)
+                # Som Återställ från säkerhetskopia: svaret går ut först, filen
+                # byts när servern har stängt alla anslutningar.
+                self.server.request_restore(Path(str(response.pop("path"))))
+                self._send_json(HTTPStatus.ACCEPTED, response)
                 return
             if path == "/v1/runtime/calendar":
                 self._send_json(HTTPStatus.OK, self.server.application.save_meet_calendar(self._authenticated_client(), payload))
