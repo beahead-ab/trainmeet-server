@@ -580,8 +580,8 @@ Träffen räknar dagar från startdagen (Dag 1 · Fre, Dag 2 · Lör …), och v
 dag går med den veckodagens tidtabell. Under **Inställningar → Träff och
 Cloud → Nytt trafikdygn** väljs hur nästa dag börjar:
 
-- **Manuellt (Starta ny dag)**, förval: admin trycker **Starta ny dag…** vid
-  klockan på Drift. Alla tåg ställs på sin utgångspunkt och den nya dagens
+- **Manuellt (Starta ny dag)**, förval: admin trycker **Starta ny dag…** i
+  **Träffens tid** på Drift. Alla tåg ställs på sin utgångspunkt och den nya dagens
   statusar nollställs; gårdagens historik står kvar. Efter dygnsskiftets tid
   påminner Drift om det. Ett tåg ute på linjen måste komma fram först.
 - **Automatiskt vid dygnsskiftet (dygnet runt)**: träffen går till nästa dag
@@ -590,9 +590,43 @@ Cloud → Nytt trafikdygn** väljs hur nästa dag börjar:
 Dygnsskiftets tid är förvalt en timme före den nya dagens första tåg, och kan
 sättas fast under **Dygnsskifte kl.** En säkerhetskopia tas före Starta ny dag.
 
+### Träffens tid på Drift
+
+Under klockan på Drift ligger träffens dygn på rad (Casper 2026-10-12). Varje
+dygn går från sitt dygnsskifte till nästa dags, med staplar för hur många tåg
+som är i gång varje halvtimme. Den gröna NU-linjen visar var träffen står; ett
+dygn som har passerat sitt skifte men inte startats (manuellt läge) är randigt,
+med en rad om varför tidtabellen visar gårdagens tåg.
+
+**Dra i tidslinjen** för att välja en annan dag och tid, eller använd
+snabbvalen (ett dygn bakåt eller framåt, dygnets början, strax före första
+tåget, nu). Inget ändras medan man drar. Ett kort visar vart hoppet går, hur
+långt det är, hur tågen kommer att stå där (ute på linjen, på station, inte
+börjat, klara för dagen), nästa avgång och vad som händer. Lägena räknas med
+samma regler som tidsmaskinen sedan ställer tågen med. Natten efter midnatt hör
+till dagen före, till dygnsskiftet. Går hoppet till nästa dygn i manuellt läge
+föreslås **Starta … i stället**, som behåller det som hänt. **Hoppa till …**
+gör hoppet: allt som rapporterats tas bort för alla dagar och tågen ställs där
+tidtabellen säger.
+
+Direkt efter ett hopp eller Starta ny dag finns **Ångra** i en halvtimme.
+Servern lägger tillbaka kopian som togs före och startar om (som Återställ från
+säkerhetskopia, men bara den kopian). Det går inte om en nyare kopia har
+tagits, tidtabellen har ändrats eller någon har fått eller förlorat tillgång
+till servern sedan dess, och inte där servern inte kan starta om; då finns hela
+listan under Farozon. **Exakt dag och tid…** öppnar tidsmaskinens dialog, och
+**Börja om från dag 1…** är Nollställ träffen.
+
+API (administratör): `GET /v1/runtime/timeline` (`?days=` för fler dagar, högst
+31 åt gången), `GET /v1/runtime/time-machine/preview?day_number=&seconds=`,
+`POST /v1/runtime/time-machine` med `{"day_number", "seconds"}` (sekunder in på
+dagen, under 48 timmar) eller `{"day_number", "time"}`, och
+`POST /v1/runtime/undo-jump` med `{"backup"}`.
+
 ### Nollställ träffen
 
-**Inställningar → Farozon → Nollställ träffen** börjar om träffen med samma
+**Inställningar → Farozon → Nollställ träffen**, eller **Börja om från dag 1…**
+i Träffens tid på Drift, börjar om träffen med samma
 plan, till exempel efter en provkörning kvällen före. Träffen går tillbaka till
 dag 1 (startdagen), också efter dygnsskiften och hopp med tidsmaskinen, och
 klockan ställs på planens starttid och står still. Allt som hänt tas bort: klareringar, linjebesked,
@@ -638,7 +672,8 @@ Under **Inställningar → Farozon → Återställ från säkerhetskopia** lista
 nyast först, med datum, skäl, var träffen stod (dag, veckodag och klockan),
 vilken träff de bär och storlek, till exempel "Före tidsmaskinen · Dag 1 · Lör
 09:15 · Sommarträffen · 348 kB". Det läses ur kopian, inte ur filnamnet, utom
-skälet. Så ångras ett hopp med tidsmaskinen: välj kopian före hoppet. En kopia
+skälet. Så ångras ett äldre hopp med tidsmaskinen: välj kopian före hoppet (det
+senaste ångras med Ångra i Träffens tid). En kopia
 som inte går att lita på listas ändå, men går inte att välja.
 
 Att återställa byter ut **hela** databasen: träff, tidtabell, användare och

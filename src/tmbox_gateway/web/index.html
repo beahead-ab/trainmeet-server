@@ -359,12 +359,92 @@
               <button id="overview-clock-stop" class="kr-btn danger" type="button">Stoppa klockan</button>
               <button id="overview-clock-start" class="kr-btn primary" type="button" hidden>Starta klockan</button>
               <button id="clock-adjust" class="kr-btn" type="button" data-open-modal="clock-control-form-modal">Justera…</button>
-              <button id="new-day-open" class="kr-btn" type="button" data-open-modal="new-day-modal" title="Gå till nästa dag med den dagens tidtabell" hidden>Starta ny dag…</button>
-              <button id="time-machine-open" class="kr-btn" type="button" data-open-modal="time-machine-modal" title="Hoppa till en annan dag och tid; alla tåg följer med">Tidsmaskin…</button>
             </div>
             <span class="kr-sp"></span>
             <div id="drift-stats" class="kr-stats" aria-label="Läget just nu"></div>
             <p id="overview-clock-message" class="form-message" role="status"></p>
+          </section>
+
+          <!-- Träffens tid (Casper 2026-10-12): dygnen på rad. Admin drar i tidslinjen, ser hur
+               tågen kommer att stå och hoppar först när hon trycker Hoppa. Ritas av meet-timeline.js. -->
+          <section id="drift-timeline" class="kr-panel kr-tl" aria-labelledby="drift-timeline-title">
+            <div class="kr-ph">
+              <h2 id="drift-timeline-title" class="kr-tl__title">Träffens tid</h2>
+              <a id="drift-timeline-mode" class="kr-link" href="/installningar#traff"></a>
+              <span class="kr-sp"></span>
+              <button id="new-day-open" class="kr-btn sm" type="button" data-open-modal="new-day-modal" title="Gå till nästa dag med den dagens tidtabell" hidden>Starta ny dag…</button>
+              <button id="time-machine-open" class="kr-btn sm" type="button" data-open-modal="time-machine-modal" title="Hoppa till en annan dag och tid; alla tåg följer med">Exakt dag och tid…</button>
+              <button id="drift-timeline-reset" class="kr-btn sm danger" type="button" data-open-modal="meet-reset-modal">Börja om från dag 1…</button>
+            </div>
+            <div id="drift-timeline-body" class="kr-tl__body" hidden>
+              <p id="drift-timeline-hint" class="kr-tl__hint">Dra i tidslinjen för att välja en annan dag och tid. Du ser hur tågen kommer att stå innan något ändras – inget händer förrän du trycker Hoppa.</p>
+              <p id="drift-timeline-due" class="kr-tl__due" hidden><span id="drift-timeline-due-text"></span> <a class="kr-link" href="/installningar#traff">Gör det automatiskt i fortsättningen</a></p>
+              <div class="kr-tl__scroll">
+                <div class="kr-tl__axis">
+                  <div id="drift-timeline-days" class="kr-tl__days"></div>
+                  <div class="kr-tl__track">
+                    <div id="drift-timeline-bars" class="kr-tl__bars" aria-hidden="true"></div>
+                    <div id="drift-timeline-marks" class="kr-tl__marks" aria-hidden="true"></div>
+                    <input id="drift-timeline-range" class="kr-tl__range" type="range" min="0" max="86400" step="300" value="0" aria-label="Dag och klockslag att hoppa till" data-tm-aria-label="Dag och klockslag att hoppa till">
+                  </div>
+                  <div id="drift-timeline-ticks" class="kr-tl__ticks" aria-hidden="true"></div>
+                </div>
+              </div>
+              <div class="kr-tl__chips" role="group" aria-label="Snabbval" data-tm-aria-label="Snabbval">
+                <button type="button" class="kr-tl__chip" data-tl-step="-1">‹ 1 dygn bakåt</button>
+                <button type="button" class="kr-tl__chip" data-tl-step="start">Dygnets början</button>
+                <button type="button" class="kr-tl__chip" data-tl-step="first">Strax före första tåget</button>
+                <button type="button" class="kr-tl__chip" data-tl-step="now">Nu</button>
+                <button type="button" class="kr-tl__chip" data-tl-step="1">1 dygn framåt ›</button>
+              </div>
+            </div>
+            <div id="drift-timeline-plan" class="kr-tl__plan" hidden>
+              <div class="kr-tl__col">
+                <span class="kr-tl__eyebrow">Hoppa till</span>
+                <span id="drift-timeline-plan-day" class="kr-tl__plan-day"></span>
+                <span id="drift-timeline-plan-time" class="kr-tl__plan-time"></span>
+                <span id="drift-timeline-plan-night" class="kr-tl__note" hidden></span>
+                <span id="drift-timeline-plan-delta" class="kr-tl__note"></span>
+              </div>
+              <div class="kr-tl__col">
+                <span class="kr-tl__eyebrow">Så står tågen då</span>
+                <div class="kr-tl__counts">
+                  <div class="kr-tl__count"><b id="drift-timeline-on-line">–</b><span>ute på linjen</span></div>
+                  <div class="kr-tl__count"><b id="drift-timeline-at-station">–</b><span>står på station</span></div>
+                  <div class="kr-tl__count"><b id="drift-timeline-not-started">–</b><span>har inte börjat</span></div>
+                  <div class="kr-tl__count"><b id="drift-timeline-finished">–</b><span>klara för dagen</span></div>
+                </div>
+                <span id="drift-timeline-next" class="kr-tl__note"></span>
+              </div>
+              <div class="kr-tl__col kr-tl__col--wide">
+                <span class="kr-tl__eyebrow">Det här händer när du hoppar</span>
+                <ul class="kr-tl__list">
+                  <li id="drift-timeline-plan-place"></li>
+                  <li>Allt som rapporterats tas bort: avgångar, ankomster, klareringar och linjebesked, för alla dagar.</li>
+                  <li id="drift-timeline-plan-clock"></li>
+                  <li id="drift-timeline-plan-backup">En säkerhetskopia tas först. Du kan ångra direkt efteråt.</li>
+                </ul>
+                <div id="drift-timeline-plan-newday" class="kr-tl__alt" hidden>
+                  <span>Vill du bara gå vidare till nästa dygn och behålla det som hänt?</span>
+                  <button id="drift-timeline-newday" class="kr-btn sm" type="button"></button>
+                </div>
+                <div class="kr-tl__actions">
+                  <button id="drift-timeline-jump" class="kr-btn primary" type="button"></button>
+                  <button id="drift-timeline-cancel" class="kr-btn" type="button">Avbryt</button>
+                </div>
+                <p id="drift-timeline-message" class="form-message" role="status"></p>
+              </div>
+            </div>
+            <div id="drift-timeline-undo" class="kr-tl__undo" role="status" hidden>
+              <span id="drift-timeline-undo-text" class="kr-tl__undo-text"></span>
+              <button id="drift-timeline-undo-open" class="kr-btn sm" type="button"></button>
+              <div id="drift-timeline-undo-confirm" class="kr-tl__undo-confirm" hidden>
+                <span>Servern lägger tillbaka kopian från före hoppet och startar om, ungefär tio sekunder. Det som hänt efter hoppet försvinner, och enheter som parkopplats efter hoppet behöver parkopplas igen.</span>
+                <button id="drift-timeline-undo-yes" class="kr-btn sm primary" type="button">Ångra och starta om servern</button>
+                <button id="drift-timeline-undo-no" class="kr-btn sm" type="button">Behåll hoppet</button>
+              </div>
+              <p id="drift-timeline-undo-message" class="form-message" role="status"></p>
+            </div>
           </section>
 
           <section id="us-runtime-summary" class="kr-panel hidden">
@@ -1253,6 +1333,7 @@
     <script src="/assets/settings.js" defer></script>
     <script src="/assets/data-page.js" defer></script>
     <script src="/assets/app.js?v=20261006-1" defer></script>
+    <script src="/assets/meet-timeline.js" defer></script>
     <script src="/assets/participant.js" defer></script>
   </body>
 </html>

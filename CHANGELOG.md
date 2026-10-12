@@ -5,6 +5,26 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Träffens tid: dra mellan dygnen och se vad ett hopp gör
+
+Casper 2026-10-12: det var svårt att hitta och förstå tidsmaskinen och vad som
+startar om. Tidsmaskin, Starta ny dag, Nytt trafikdygn, Nollställ träffen och
+ångra låg på fyra olika ställen.
+
+- **Träffens tid** under klockan på Drift visar träffens dygn på rad, med
+  dygnsskiften, trafiken varje halvtimme och var träffen står. Ett dygn som
+  har passerat sitt skifte men inte startats är randigt, med förklaringen.
+- **Dra i tidslinjen** (eller använd snabbvalen) för att planera ett hopp. Ett
+  kort säger vart, hur långt, hur tågen kommer att stå där och vad som händer.
+  Inget ändras förrän man trycker **Hoppa till …**.
+- **Ångra** direkt efter ett hopp eller Starta ny dag: kopian från före läggs
+  tillbaka och servern startar om. Bara den senaste kopian, i en halvtimme.
+- Starta ny dag, Exakt dag och tid (tidsmaskinens dialog), Nytt trafikdygn och
+  Börja om från dag 1 ligger i samma panel.
+- Tidsmaskinen tar sekunder in på dagen (`seconds`), så att ett hopp kan gå
+  till natten efter midnatt. Nya API:er: `GET /v1/runtime/timeline`,
+  `GET /v1/runtime/time-machine/preview`, `POST /v1/runtime/undo-jump`.
+
 ### TMBox med 20×4-skärm, stationsnamn i vila och ljud från Servern
 
 Benny (etxbct) i trainmeet-tmbox #39, #43 och #44; Casper godkände förslaget
