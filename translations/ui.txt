@@ -1385,6 +1385,7 @@ Show the tracks|Visa spåren|Vis sporene|Vis sporene|Gleise anzeigen
 Hide the tracks|Dölj spåren|Skjul sporene|Skjul sporene|Gleise ausblenden
 Print|Skriv ut|Udskriv|Skriv ut|Drucken
 Print the diagram|Skriv ut diagrammet|Udskriv diagrammet|Skriv ut diagrammet|Diagramm drucken
+Train graph {from} to {to}|Tågdiagram {from} till {to}|Togdiagram {from} til {to}|Togdiagram {from} til {to}|Bildfahrplan {from} bis {to}
 # Träffens tid på Drift: tidslinjen, förhandsvisningen och Ångra (Casper 2026-10-12).
 Meet time|Träffens tid|Træffets tid|Treffets tid|Zeit des Treffens
 Exact day and time…|Exakt dag och tid…|Præcis dag og tid…|Nøyaktig dag og tid…|Genauer Tag und Uhrzeit…
