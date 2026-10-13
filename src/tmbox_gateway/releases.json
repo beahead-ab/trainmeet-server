@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.7.0",
+    "date": "2026-10-14",
+    "notes": [
+      "Tågdiagrammet som en grafisk tidtabell, på Drift och storskärm"
+    ]
+  },
+  {
     "version": "4.6.0",
     "date": "2026-10-12",
     "notes": [
