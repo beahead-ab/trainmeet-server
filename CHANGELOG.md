@@ -5,6 +5,31 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tågdiagrammet som en grafisk tidtabell
+
+Casper tittade på planeringsprogrammets grafiska tidtabeller inför Värnamo
+Moduldagar och ville ha dem som förebild: "de är best practice". Diagrammet
+på Drift och på skärmen ritas nu av samma kod (`train-graph.js`), efter den
+förebilden.
+
+- **Stationerna ligger på avstånd från varandra**: den typiska gångtiden
+  mellan dem, eftersom banan saknar kilometer. En kort sträcka är kort.
+- **En rad per spår.** Knappen Spår fäller ut alla stationer, och ett klick
+  på ett stationsnamn fäller ut just den. Uppehållet ritas som ett vågrätt
+  streck på spåret, så att två tåg på samma spår syns.
+- **Minuterna står vid varje station**, avgången vid sträckans början och
+  ankomsten vid dess slut, och **tågnumret står längs sin linje** på varje
+  delsträcka, i tågtypens färg: rött för persontåg, blått för gods och grönt
+  för arbetståg.
+- **En förgrenad bana ritas som en linje per gren**, med förgreningsstationen
+  i båda. Huvudlinjen är den väg flest tåg kör. Drift visar huvudlinjen tills
+  man väljer en annan linje eller Alla linjer; skärmen visar alla linjer
+  ovanpå varandra och fyller duken exakt, utan något att fälla ihop.
+- **Tidsfönstret** på Drift kan vara 12 timmar, och **Skriv ut** skriver
+  bara diagrammet, liggande och ljust.
+- Nu-linjen, det som har hänt i grått, tåget som är ute på sin sträcka och
+  klick på ett tåg är kvar som förut.
+
 ### Automatiken ger klartecken efter några sekunder
 
 Casper körde en tågklarering från Charlottendal till Vagnsta, som sköts av

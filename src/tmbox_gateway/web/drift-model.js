@@ -547,10 +547,12 @@
     return Math.min(1, Math.max(0, (now - departed) / Math.max(1, to.minute - from.minute)));
   }
 
-  function graph(snapshot, { windowMinutes = 180, train = null, now: liveNow = null } = {}) {
+  function graph(snapshot, { windowMinutes = 180, train = null, now: liveNow = null, all: everyTurn = false } = {}) {
     const stations = stationOrder(snapshot);
     const rowOf = new Map(stations.map((station, index) => [station.id, index]));
-    const lines = services(snapshot).map((service) => ({ service, number: String(service.train_number), points: routePoints(service, rowOf) }))
+    // Drift visar ett tåg per nummer; den grafiska tidtabellen varje tur (`all`).
+    const chosen = everyTurn ? (snapshot?.services || []).filter((service) => String(service.train_number || "").trim()) : services(snapshot);
+    const lines = chosen.map((service) => ({ service, number: String(service.train_number), points: routePoints(service, rowOf), shift: 0 }))
       .filter((line) => line.points.length >= 2);
     // Drift skickar klockan som den går (minuter med decimaler); annars bildens.
     const now = liveNow ?? minutes(snapshot?.clock?.time);
@@ -564,6 +566,7 @@
       for (const line of lines) {
         const centre = (line.points[0].minute + line.points.at(-1).minute) / 2;
         const shift = Math.round((now - centre) / 1440) * 1440;
+        line.shift = shift;
         if (shift) line.points = line.points.map((point) => ({ ...point, minute: point.minute + shift }));
       }
     }

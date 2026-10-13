@@ -527,7 +527,7 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIn('id="users-invite-form-modal"', html)
         self.assertIn('id="language-form"', html)
         self.assertIn('id="language-tiles"', html)
-        for asset in ("i18n.js", "i18n-messages.js", "i18n-init.js", "server-ui.js", "server-ui.css", "server-design.css", "fonts/fonts.css", "fonts/jetbrains-mono-latin-700-normal.woff2", "kontrollrummet.css", "skarmar.css", "deltagare.css", "kr-theme.js", "drift-model.js", "drift.js", "settings.js", "data-page.js", "data-workspace.js"):
+        for asset in ("i18n.js", "i18n-messages.js", "i18n-init.js", "server-ui.js", "server-ui.css", "server-design.css", "fonts/fonts.css", "fonts/jetbrains-mono-latin-700-normal.woff2", "kontrollrummet.css", "skarmar.css", "deltagare.css", "kr-theme.js", "drift-model.js", "train-graph.js", "drift.js", "settings.js", "data-page.js", "data-workspace.js"):
             with urlopen(f"{self.base_url}/assets/{asset}", timeout=2) as response:
                 self.assertEqual(response.status, 200)
                 self.assertTrue(response.read())

@@ -422,14 +422,20 @@
               <span>Tågdiagram</span>
               <span id="drift-graph-meta" class="kr-c"></span>
               <span class="kr-sp"></span>
+              <label class="kr-select-label hidden"><span class="kr-visually-hidden">Linje</span>
+                <select id="drift-graph-line" class="kr-select" aria-label="Linje"></select>
+              </label>
               <label class="kr-select-label"><span class="kr-visually-hidden">Tidsfönster</span>
                 <select id="drift-graph-window" class="kr-select" aria-label="Tidsfönster">
                   <option value="120">2 timmar</option>
                   <option value="180" selected>3 timmar</option>
                   <option value="360">6 timmar</option>
+                  <option value="720">12 timmar</option>
                   <option value="0">Hela dagen</option>
                 </select>
               </label>
+              <button id="drift-graph-tracks" type="button" class="kr-btn sm" aria-pressed="false" title="Visa spåren">Spår</button>
+              <button id="drift-graph-print" type="button" class="kr-btn sm" title="Skriv ut diagrammet">Skriv ut</button>
               <a class="kr-link" href="/display/graph" target="_blank" rel="noopener">Öppna på skärm ↗</a>
             </div>
             <div class="kr-graph">
@@ -1248,6 +1254,7 @@
     <script src="/assets/qrcode.js" defer></script>
     <script src="/assets/clock-face.js" defer></script>
     <script src="/assets/drift-model.js" defer></script>
+    <script src="/assets/train-graph.js" defer></script>
     <script src="/assets/drift.js" defer></script>
     <script src="/assets/server-ui.js" defer></script>
     <script src="/assets/settings.js" defer></script>

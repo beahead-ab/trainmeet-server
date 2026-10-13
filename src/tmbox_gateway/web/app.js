@@ -4380,36 +4380,6 @@ function graphServices(snapshot) {
   return [...groups.values()];
 }
 
-const trainPalette = [
-  "hsl(220 70% 55%)", "hsl(350 70% 55%)", "hsl(140 60% 40%)", "hsl(30 80% 50%)",
-  "hsl(270 60% 55%)", "hsl(180 60% 40%)", "hsl(45 90% 50%)", "hsl(0 0% 50%)",
-];
-
-let graphLastCenteredMinute = null;
-let graphLastCenteredSelection = null;
-
-function servicePoints(service, stationIndex) {
-  const points = [];
-  for (const stop of [...(service.stops || [])].sort((a, b) => a.stop_order - b.stop_order)) {
-    const index = stationIndex.get(stop.station_id);
-    if (index === undefined) continue;
-    const offset = Number(stop.service_day_offset || 0) * 1440;
-    let arrival = minuteValue(stop.arrival_time);
-    let departure = minuteValue(stop.departure_time);
-    if (arrival !== null) arrival += offset;
-    if (departure !== null) {
-      departure += offset;
-      if (arrival !== null && departure < arrival) departure += 1440;
-    }
-    if (arrival !== null) points.push({ minute: arrival, station: index });
-    if (departure !== null && departure !== arrival) points.push({ minute: departure, station: index });
-    if (arrival === null && departure === null && Number.isFinite(Number(stop.service_minute))) {
-      points.push({ minute: Number(stop.service_minute), station: index });
-    }
-  }
-  return points;
-}
-
 function updateDisplayGraphSelection() {
   const active = state.displayHoveredTrainNumber || state.displaySelectedTrainNumber;
   document.querySelectorAll("#graph-svg .graph-train-group").forEach((group) => {
@@ -4451,132 +4421,31 @@ function graphWindowRange(snapshot) {
 
 function renderGraph(snapshot) {
   const svg = document.querySelector("#graph-svg");
+  const lib = globalThis.TrainMeetTrainGraph;
+  if (!svg || !lib) return;
   // Ritas i skissens mått (en skärm 1440 bred) för rutan diagrammet har, som
-  // Banöversikten; SVG:n skalar upp till duken. Bara namnen står till vänster.
+  // Banöversikten; SVG:n skalar upp till duken. Samma ritare som Drift
+  // (train-graph.js), men här ryms allt alltid: varje linje ovanpå varandra
+  // och tillsammans exakt så höga som duken, inget att fälla ihop.
   const width = Math.round((svg.clientWidth || 1840) * SCREEN_MAP_UNITS);
   const height = Math.max(420, Math.round((svg.clientHeight || 850) * SCREEN_MAP_UNITS));
-  const top = 40, bottom = 56, pad = 18;
-  const { now, min, max, span } = graphWindowBounds(snapshot);
-  const stations = orderedStations(snapshot);
-  const longest = Math.max(0, ...stations.map((station) => String(station.name || "").length));
+  const { now, min, max } = graphWindowBounds(snapshot);
+  const longest = Math.max(0, ...(snapshot.stations || []).map((station) => String(station.name || "").length));
   const left = Math.min(260, Math.max(110, Math.round(longest * 7.4) + 28));
-  const stationIndex = new Map(stations.map((s, i) => [s.id, i]));
-  const x = minute => left + (minute - min) / (max - min) * (width - left - 30);
-  const y = i => top + i * (height - top - bottom) / Math.max(1, stations.length - 1);
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`); svg.removeAttribute("width"); svg.removeAttribute("height"); svg.replaceChildren();
-  const defs = svgElement("defs"), clip = svgElement("clipPath", {id: "screen-graph-clip"});
-  clip.append(svgElement("rect", {x: left, y: top - pad - 2, width: width - left, height: height - top - bottom + pad * 2 + 4})); defs.append(clip); svg.append(defs);
-  // Det som redan hänt ligger i en skuggad yta; timmarna är heldragna och
-  // halvtimmarna prickade (hela dygnet: varannan timme, timmarna prickade).
-  svg.append(svgElement("rect", {x:left, y:top - pad, width:Math.max(0, Math.min(x(now), width - 30) - left), height:height - top - bottom + pad * 2, class:"sc-graph-past"}));
-  const gridStep = span <= 360 ? 30 : 60, labelStep = span <= 360 ? 60 : 120;
-  for (let minute = Math.ceil(min / gridStep) * gridStep; minute <= max; minute += gridStep) {
-    const solid = minute % labelStep === 0;
-    svg.append(svgElement("line", {x1:x(minute), x2:x(minute), y1:top - pad, y2:height - bottom + pad, class:`graph-grid graph-col${solid ? "" : " is-half"}`}));
-    if (!solid) continue;
-    const normalized = (Math.floor(minute) % 1440 + 1440) % 1440;
-    svg.append(svgElement("text", {x:x(minute), y:height - 16, "text-anchor":minute <= min ? "start" : minute >= max ? "end" : "middle", class:"sc-graph-time"}, `${String(Math.floor(normalized/60)).padStart(2,"0")}:${String(normalized%60).padStart(2,"0")}`));
-  }
-  stations.forEach((station, i) => {
-    svg.append(svgElement("line", {x1:left, x2:width - 30, y1:y(i), y2:y(i), class:"graph-grid graph-row"}));
-    // Bara namnet, högerställt mot diagrammet; koden står i stationens etikett.
-    svg.append(svgElement("text", {x:left - 14, y:y(i) + 4.5, "text-anchor":"end", class:"sc-graph-label"}, station.name));
-  });
-  const trains = svgElement("g", {"clip-path":"url(#screen-graph-clip)"});
-  // Tågen ute på linjen och turen var och en kör: bara den turens linje tänds
-  // och får taggen när samma nummer går flera gånger om dagen.
-  const out = new Map(topologyTrains(snapshot).onLine.filter((train) => train.departed).map((train) => [train.trainNumber, { train, leg: onLineLeg(snapshot, train) }]));
-  const outOn = (service) => { const found = out.get(String(service.train_number)); return found && (!found.leg || found.leg.service.id === service.id) ? found : null; };
-  const drawn = [];
-  for (const service of graphServices(snapshot)) {
-    const points = servicePoints({...service, stops:[...service.stops].sort((a,b)=>a.stop_order-b.stop_order)}, stationIndex);
-    if (points.length < 2) continue;
-    // Choose the daily occurrence intersecting this rolling window. This also
-    // keeps a 23:55–00:15 train continuous when the clock crosses midnight.
-    const centre = (points[0].minute + points.at(-1).minute) / 2;
-    const shift = Math.round((now - centre) / 1440) * 1440;
-    if (points.at(-1).minute + shift < min || points[0].minute + shift > max) continue;
-    const isOut = Boolean(outOn(service));
-    const group = svgElement("g",{class:"graph-train-group",role:"button",tabindex:0,"aria-label":t("Tåg {number}", { number: service.train_number })});
-    group.dataset.trainNumber=String(service.train_number);
-    const line = points.map(p=>`${x(p.minute+shift)},${y(p.station)}`).join(" ");
-    group.append(svgElement("polyline", {points:line, class:`sc-graph-line${isOut ? " is-out" : ""}`}));
-    group.append(svgElement("polyline",{points:line,fill:"none",stroke:"transparent","stroke-width":14}));
-    const select=()=>{state.displaySelectedTrainNumber=state.displaySelectedTrainNumber===String(service.train_number)?null:String(service.train_number); document.querySelector("#display-train-select").value=state.displaySelectedTrainNumber||"";updateDisplayGraphSelection();renderDisplaySelection(snapshot);};
-    group.addEventListener("click",select);group.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select();}});
-    drawn.push({group, service, points, shift, select, out: isOut});
-    trains.append(group);
-  }
-  // Train numbers: never on top of each other. A train out on the line gets
-  // a blue tag where it is now, on the now line; the others a number with a
-  // dark edge at the first free spot along their own line, or none at all.
-  const labels = svgElement("g", {"clip-path":"url(#screen-graph-clip)"});
-  const layer = (entry) => {
-    const g = svgElement("g", {class: "graph-train-group"});
-    g.dataset.trainNumber = String(entry.service.train_number);
-    g.addEventListener("click", entry.select);
-    labels.append(g);
-    return g;
-  };
-  const placed = [];
-  const free = (b) => b.x1 >= left + 3 && b.x2 <= width - 4 && b.y1 >= top - pad && b.y2 <= height - bottom + pad
-    && placed.every(o => b.x2 + 4 < o.x1 || b.x1 - 4 > o.x2 || b.y2 + 2 < o.y1 || b.y1 - 2 > o.y2);
-  const label = (entry) => {
-    const text = String(entry.service.train_number), w = text.length * 7.2;
-    for (const p of entry.points.filter(p => p.minute + entry.shift >= min && p.minute + entry.shift <= max)) {
-      const px = Math.max(left + 4, x(p.minute + entry.shift) + 5), py = y(p.station);
-      for (const ty of p.station === 0 ? [py + 15, py - 5] : [py - 5, py + 15]) {
-        const b = {x1: px, x2: px + w, y1: ty - 10, y2: ty + 2};
-        if (!free(b)) continue;
-        placed.push(b);
-        layer(entry).append(svgElement("text", {x: px, y: ty, class: `sc-graph-train${entry.out ? " is-out" : ""}`}, text));
-        return;
-      }
-    }
-  };
-  // Var ett tåg på linjen står: på sin sträcka så långt det kommit sedan den
-  // faktiska avgången, som på kartan. Annars där tidtabellen har det nu.
-  const leg = (entry) => {
-    const found = outOn(entry.service);
-    const from = stationIndex.get(found?.train.from), to = stationIndex.get(found?.train.to);
-    if (from === undefined || to === undefined) return null;
-    const end = entry.points.findIndex((p, k) => p.station === to && entry.points.slice(0, k).some((q) => q.station === from));
-    if (end < 0) return null;
-    const start = entry.points.slice(0, end).map((p) => p.station).lastIndexOf(from);
-    const part = topologyProgress(snapshot, found.train, topologyClockSeconds(snapshot));
-    if (part === null) return null;
-    const a = y(entry.points[start].station), b = y(entry.points[end].station);
-    return a + (b - a) * part;
-  };
-  const tag = (entry) => {
-    const pts = entry.points.map(p => ({m: p.minute + entry.shift, y: y(p.station)}));
-    const i = pts.findIndex((p, k) => k < pts.length - 1 && p.m <= now && now <= pts[k + 1].m);
-    const actual = leg(entry);
-    if (i < 0 && actual === null) return label(entry);
-    const a = pts[i], b = pts[i + 1];
-    const yNow = actual ?? (b.m > a.m ? a.y + (b.y - a.y) * (now - a.m) / (b.m - a.m) : a.y);
-    const text = String(entry.service.train_number), w = text.length * 7.2 + 12, h = 18;
-    for (const [bx, by] of [[x(now) - 7 - w, yNow - h / 2], [x(now) + 7, yNow - h / 2], [x(now) - 7 - w, yNow - h / 2 - 22], [x(now) - 7 - w, yNow - h / 2 + 22]]) {
-      const box = {x1: bx, x2: bx + w, y1: by, y2: by + h};
-      if (!free(box)) continue;
-      placed.push(box);
-      const group = layer(entry);
-      group.append(svgElement("rect", {x: bx, y: by, width: w, height: h, rx: 4, class: "sc-graph-tag"}),
-        svgElement("text", {x: bx + w / 2, y: by + 13, "text-anchor": "middle", class: "sc-graph-tag-text"}, text));
-      // Nivå 5 (Allt): förseningen vid tågnumret.
-      const view = graphLives ? TrainMeetDriftModel.deviationView(5, graphLives.get(text)) : null;
-      if (view?.mark) group.append(svgElement("text", {x: bx + w + 3, y: by + 13, class: `graph-train-mark is-${view.mark.tone}`}, view.mark.text));
-      return;
-    }
-    label(entry);
-  };
+  const g = lib.layout(snapshot, { width, height, start: min, end: max, windowMinutes: max - min, now, train: state.displaySelectedTrainNumber,
+    tracks: "none", minutes: true, left, right: 30, top: 34, bottom: 52, gap: 15, title: 26, panelGap: 10 });
   const graphLives = deviationLevelOf(snapshot) >= 5 ? TrainMeetDriftModel.trainLive(snapshot, topologyClockSeconds(snapshot)) : null;
-  drawn.filter(entry => entry.out).forEach(tag);
-  drawn.filter(entry => !entry.out).forEach(label);
-  svg.append(trains, svgElement("line", {x1:x(now), x2:x(now), y1:top - pad, y2:height - bottom + pad, class:"sc-graph-now"}), labels);
-  // The time on the now line, as a yellow tag like the design's.
-  svg.append(svgElement("rect", {x:x(now)-25, y:2, width:50, height:18, rx:4, class:"sc-graph-now-tag"}),
-    svgElement("text",{x:x(now),y:15,"text-anchor":"middle",class:"sc-graph-now-text"},currentClockTime(snapshot).slice(0,5)));
+  const select = (number) => {
+    state.displaySelectedTrainNumber = state.displaySelectedTrainNumber === String(number) ? null : String(number);
+    document.querySelector("#display-train-select").value = state.displaySelectedTrainNumber || "";
+    updateDisplayGraphSelection(); renderDisplaySelection(snapshot);
+  };
+  lib.render(svg, g, { cls: lib.SCREEN, onSelect: select, label: (number) => t("Tåg {number}", { number }), clip: "screen-graph-clip",
+    marks: graphLives ? (number) => TrainMeetDriftModel.deviationView(5, graphLives.get(String(number)))?.mark || null : null });
+  svg.removeAttribute("width"); svg.removeAttribute("height");
+  // Klockan på nu-linjen som skärmens egen, med sekunderna borträknade.
+  const nowText = svg.querySelector(".sc-graph-now-text");
+  if (nowText) nowText.textContent = currentClockTime(snapshot).slice(0, 5);
   updateDisplayGraphSelection();
 }
 
@@ -5214,7 +5083,6 @@ async function initDisplay() {
     if (!displaySnapshot) return;
     if (displayKind === "topology") renderDisplayTopology(displaySnapshot);
     if (displayKind === "graph") {
-      graphLastCenteredSelection = null;
       renderGraph(displaySnapshot);
     }
   });
