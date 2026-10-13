@@ -1385,3 +1385,58 @@ Show the tracks|Visa spåren|Vis sporene|Vis sporene|Gleise anzeigen
 Hide the tracks|Dölj spåren|Skjul sporene|Skjul sporene|Gleise ausblenden
 Print|Skriv ut|Udskriv|Skriv ut|Drucken
 Print the diagram|Skriv ut diagrammet|Udskriv diagrammet|Skriv ut diagrammet|Diagramm drucken
+# Träffens tid på Drift: tidslinjen, förhandsvisningen och Ångra (Casper 2026-10-12).
+Meet time|Träffens tid|Træffets tid|Treffets tid|Zeit des Treffens
+Exact day and time…|Exakt dag och tid…|Præcis dag og tid…|Nøyaktig dag og tid…|Genauer Tag und Uhrzeit…
+Start over from day 1…|Börja om från dag 1…|Begynd forfra fra dag 1…|Begynn på nytt fra dag 1…|Ab Tag 1 neu beginnen…
+Drag the timeline to choose another day and time. You see how the trains will stand before anything changes – nothing happens until you press Jump.|Dra i tidslinjen för att välja en annan dag och tid. Du ser hur tågen kommer att stå innan något ändras – inget händer förrän du trycker Hoppa.|Træk i tidslinjen for at vælge en anden dag og tid. Du ser, hvordan togene vil stå, før noget ændres – intet sker, før du trykker Spring.|Dra i tidslinjen for å velge en annen dag og tid. Du ser hvordan togene vil stå før noe endres – ingenting skjer før du trykker Hopp.|Ziehe an der Zeitleiste, um einen anderen Tag und eine andere Uhrzeit zu wählen. Du siehst, wie die Züge stehen werden, bevor sich etwas ändert – nichts passiert, bis du auf Springen drückst.
+Do it automatically from now on|Gör det automatiskt i fortsättningen|Gør det automatisk fremover|Gjør det automatisk fra nå av|Künftig automatisch erledigen
+Day and time to jump to|Dag och klockslag att hoppa till|Dag og klokkeslæt at springe til|Dag og klokkeslett å hoppe til|Tag und Uhrzeit für den Sprung
+Quick choices|Snabbval|Hurtigvalg|Hurtigvalg|Schnellauswahl
+‹ 1 day back|‹ 1 dygn bakåt|‹ 1 døgn tilbage|‹ 1 døgn tilbake|‹ 1 Tag zurück
+Start of the day|Dygnets början|Døgnets begyndelse|Døgnets begynnelse|Beginn des Tages
+Just before the first train|Strax före första tåget|Lige før det første tog|Like før det første toget|Kurz vor dem ersten Zug
+1 day forward ›|1 dygn framåt ›|1 døgn frem ›|1 døgn fram ›|1 Tag vor ›
+Jump to|Hoppa till|Spring til|Hopp til|Springen zu
+How the trains will stand|Så står tågen då|Sådan står togene da|Slik står togene da|So stehen die Züge dann
+out on the line|ute på linjen|ude på strækningen|ute på linjen|auf der Strecke
+at a station|står på station|holder på station|står på stasjon|stehen im Bahnhof
+not started|har inte börjat|er ikke startet|har ikke startet|noch nicht losgefahren
+done for the day|klara för dagen|færdige for i dag|ferdige for dagen|für heute fertig
+This happens when you jump|Det här händer när du hoppar|Det sker, når du springer|Dette skjer når du hopper|Das passiert beim Springen
+Everything reported is removed: departures, arrivals, clearances and line messages, for all days.|Allt som rapporterats tas bort: avgångar, ankomster, klareringar och linjebesked, för alla dagar.|Alt, der er indrapporteret, fjernes: afgange, ankomster, tilladelser og linjebeskeder, for alle dage.|Alt som er rapportert fjernes: avganger, ankomster, tillatelser og linjebeskjeder, for alle dager.|Alles Gemeldete wird gelöscht: Abfahrten, Ankünfte, Fahrberechtigungen und Streckenmeldungen, für alle Tage.
+A backup is taken first. You can undo right afterwards.|En säkerhetskopia tas först. Du kan ångra direkt efteråt.|Der tages en sikkerhedskopi først. Du kan fortryde lige bagefter.|Det tas en sikkerhetskopi først. Du kan angre rett etterpå.|Zuerst wird eine Sicherung erstellt. Du kannst direkt danach rückgängig machen.
+Just want to move on to the next day and keep what has happened?|Vill du bara gå vidare till nästa dygn och behålla det som hänt?|Vil du bare gå videre til næste døgn og beholde det, der er sket?|Vil du bare gå videre til neste døgn og beholde det som har skjedd?|Möchtest du nur zum nächsten Tag weitergehen und behalten, was passiert ist?
+The server puts back the copy from before the jump and restarts, about ten seconds. What happened after the jump is lost, and devices paired after the jump need to be paired again.|Servern lägger tillbaka kopian från före hoppet och startar om, ungefär tio sekunder. Det som hänt efter hoppet försvinner, och enheter som parkopplats efter hoppet behöver parkopplas igen.|Serveren lægger kopien fra før springet tilbage og genstarter, cirka ti sekunder. Det, der er sket efter springet, forsvinder, og enheder, der er parret efter springet, skal parres igen.|Serveren legger tilbake kopien fra før hoppet og starter på nytt, omtrent ti sekunder. Det som har skjedd etter hoppet forsvinner, og enheter som er paret etter hoppet må pares på nytt.|Der Server spielt die Kopie von vor dem Sprung zurück und startet neu, etwa zehn Sekunden. Was nach dem Sprung passiert ist, geht verloren, und nach dem Sprung gekoppelte Geräte müssen neu gekoppelt werden.
+Undo and restart the server|Ångra och starta om servern|Fortryd og genstart serveren|Angre og start serveren på nytt|Rückgängig machen und Server neu starten
+Keep the jump|Behåll hoppet|Behold springet|Behold hoppet|Sprung behalten
+{n} d|{n} dygn|{n} døgn|{n} døgn|{n} Tg.
+{n} h|{n} h|{n} t|{n} t|{n} Std.
+{n} min|{n} min|{n} min|{n} min|{n} Min.
+New traffic day: automatic at {time}|Nytt trafikdygn: automatiskt kl. {time}|Nyt trafikdøgn: automatisk kl. {time}|Nytt trafikkdøgn: automatisk kl. {time}|Neuer Betriebstag: automatisch um {time}
+New traffic day: manual|Nytt trafikdygn: manuellt|Nyt trafikdøgn: manuelt|Nytt trafikkdøgn: manuelt|Neuer Betriebstag: manuell
+The day change has passed. The meet is still on {day}, so the timetable shows yesterday's trains as departed and arrived. Start the next day with Start new day.|Dygnsskiftet har passerats. Träffen står kvar på {day}, så tidtabellen visar gårdagens tåg som avgångna och ankomna. Starta nästa dag med Starta ny dag.|Døgnskiftet er passeret. Træffet står stadig på {day}, så køreplanen viser gårsdagens tog som afgået og ankommet. Start næste dag med Start ny dag.|Døgnskiftet er passert. Treffet står fortsatt på {day}, så ruteplanen viser gårsdagens tog som avgått og ankommet. Start neste dag med Start ny dag.|Der Tageswechsel ist vorbei. Das Treffen steht noch auf {day}, daher zeigt der Fahrplan die Züge von gestern als abgefahren und angekommen. Starte den nächsten Tag mit Neuen Tag starten.
+{day} at {time}|{day} kl. {time}|{day} kl. {time}|{day} kl. {time}|{day} um {time}
+done|klar|færdig|ferdig|fertig
+in progress|pågår|i gang|pågår|läuft
+coming|kommer|kommer|kommer|folgt
+day change {time}|dygnsskifte {time}|døgnskifte {time}|døgnskifte {time}|Tageswechsel {time}
+NOW {time}|NU {time}|NU {time}|NÅ {time}|JETZT {time}
+The night before {weekday}: night trains belong to {day}.|Natten mot {weekday}: nattåg hör till {day}.|Natten til {weekday}: nattog hører til {day}.|Natten mot {weekday}: nattog hører til {day}.|Die Nacht vor {weekday}: Nachtzüge gehören zu {day}.
+{span} ahead of now|{span} framåt från nu|{span} frem fra nu|{span} fram fra nå|{span} ab jetzt vorwärts
+{span} back from now|{span} bakåt från nu|{span} tilbage fra nu|{span} tilbake fra nå|{span} ab jetzt zurück
+Counting …|Räknar …|Tæller …|Teller …|Wird berechnet …
+Next departure {time} · train {train} {from} → {to}. Trains that should be out on the line are placed at their departure station.|Nästa avgång {time} · tåg {train} {from} → {to}. Tåg som ska vara ute på linjen ställs på sin avgångsstation.|Næste afgang {time} · tog {train} {from} → {to}. Tog, der skulle være ude på strækningen, stilles på deres afgangsstation.|Neste avgang {time} · tog {train} {from} → {to}. Tog som skal være ute på linjen settes på avgangsstasjonen sin.|Nächste Abfahrt {time} · Zug {train} {from} → {to}. Züge, die auf der Strecke sein sollten, werden in ihren Abfahrtsbahnhof gestellt.
+No more departures that day.|Inga fler avgångar det dygnet.|Ikke flere afgange det døgn.|Ingen flere avganger det døgnet.|An diesem Tag keine weiteren Abfahrten.
+All trains are placed where the timetable says on {when}.|Alla tåg ställs där tidtabellen säger {when}.|Alle tog stilles, hvor køreplanen siger {when}.|Alle tog settes der ruteplanen sier {when}.|Alle Züge werden dorthin gestellt, wo der Fahrplan sie für {when} vorsieht.
+The clock goes on from {time}. Boxes in the middle of an entry start over.|Klockan går vidare från {time}. Boxar mitt i en inmatning börjar om.|Uret fortsætter fra {time}. Bokse midt i en indtastning starter forfra.|Klokken går videre fra {time}. Bokser midt i en inntasting begynner på nytt.|Die Uhr läuft ab {time} weiter. Boxen mitten in einer Eingabe beginnen neu.
+The clock stands at {time} until you start it. Boxes in the middle of an entry start over.|Klockan står på {time} tills du startar den. Boxar mitt i en inmatning börjar om.|Uret står på {time}, indtil du starter det. Bokse midt i en indtastning starter forfra.|Klokken står på {time} til du starter den. Bokser midt i en inntasting begynner på nytt.|Die Uhr steht auf {time}, bis du sie startest. Boxen mitten in einer Eingabe beginnen neu.
+Start {day} instead…|Starta {day} i stället…|Start {day} i stedet…|Start {day} i stedet…|Stattdessen {day} starten…
+Jump to {when}|Hoppa till {when}|Spring til {when}|Hopp til {when}|Springe zu {when}
+The last jump can be undone for {n} more minutes.|Det senaste hoppet kan ångras i {n} minuter till.|Det seneste spring kan fortrydes i {n} minutter endnu.|Det siste hoppet kan angres i {n} minutter til.|Der letzte Sprung kann noch {n} Minuten rückgängig gemacht werden.
+Undo – back to Day {n} · {day} {time}|Ångra – tillbaka till Dag {n} · {day} {time}|Fortryd – tilbage til Dag {n} · {day} {time}|Angre – tilbake til Dag {n} · {day} {time}|Rückgängig – zurück zu Tag {n} · {day} {time}
+Done: {when}. All trains stand where the timetable says. A backup was taken first.|Klart: {when}. Alla tåg står där tidtabellen säger. En säkerhetskopia togs först.|Færdig: {when}. Alle tog står, hvor køreplanen siger. Der blev taget en sikkerhedskopi først.|Ferdig: {when}. Alle tog står der ruteplanen sier. Det ble tatt en sikkerhetskopi først.|Fertig: {when}. Alle Züge stehen, wo der Fahrplan es sagt. Zuvor wurde eine Sicherung erstellt.
+Putting back the copy …|Lägger tillbaka kopian …|Lægger kopien tilbage …|Legger tilbake kopien …|Kopie wird zurückgespielt …
+The jump could not be undone.|Hoppet gick inte att ångra.|Springet kunne ikke fortrydes.|Hoppet kunne ikke angres.|Der Sprung konnte nicht rückgängig gemacht werden.
+The jump is undone and the server restarts.|Hoppet ångras och servern startar om.|Springet fortrydes, og serveren genstarter.|Hoppet angres og serveren starter på nytt.|Der Sprung wird rückgängig gemacht und der Server startet neu.
+Planning a jump. The blue part is the time you jump over. Nothing has changed yet.|Planerar ett hopp. Det blå fältet är tiden du hoppar över. Inget är ändrat än.|Planlægger et spring. Det blå felt er den tid, du springer over. Intet er ændret endnu.|Planlegger et hopp. Det blå feltet er tiden du hopper over. Ingenting er endret ennå.|Ein Sprung wird geplant. Der blaue Bereich ist die Zeit, die du überspringst. Noch ist nichts geändert.

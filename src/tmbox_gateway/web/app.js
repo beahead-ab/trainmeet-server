@@ -6136,3 +6136,24 @@ function v2Payload(command) {
   }
   return payload;
 }
+
+// Träffens tid på Drift (meet-timeline.js, Casper 2026-10-12) går genom samma
+// inloggning, dialoger och omstartsväntan som resten av sidan.
+globalThis.TrainMeetApp = {
+  fetch: (path, options) => authorizedFetch(path, options),
+  openModal: (id, trigger) => openModal(id, trigger),
+  setMessage: (element, text, kind, values) => setMessage(element, text, kind, values),
+  async refresh() {
+    await refreshServerContext?.();
+    await refreshLocalClock();
+  },
+  // Som efter Återställ från säkerhetskopia: inloggningen kommer ur databasen
+  // som byts ut, så webbläsaren väntar in servern och frågar om på nytt.
+  async restarting(message) {
+    state.restarting = true;
+    localStorage.removeItem("trainmeet.accessToken");
+    state.token = null;
+    setConnection("waiting", "Återställer och startar om");
+    await waitForServerReturn(message);
+  },
+};

@@ -64,6 +64,12 @@ def two_sided_package():
     return package
 
 
+def idle(name, width=16):
+    """A box with nothing going on names its station on the empty first row
+    (trainmeet-tmbox #43), centred; the odd cell goes to the right."""
+    return (" " * ((width - len(name)) // 2) + name).ljust(width)
+
+
 class TwoSidedStationTests(unittest.TestCase):
     send = test_terminal16_runtime.RuntimeTerminalTests.send
 
@@ -128,7 +134,7 @@ class TwoSidedStationTests(unittest.TestCase):
         self.assertTrue(mun_side["lines"][1].startswith("#Ja *Nej"), mun_side["lines"])
         self.assertEqual(1, both["requests"]["count"])
         self.assertEqual(0, lek_side["requests"]["count"])
-        self.assertEqual("", lek_side["lines"][0].strip(), "nothing pushed to the other side's box")
+        self.assertEqual(idle(lek_side["station"]), lek_side["lines"][0], "nothing pushed to the other side's box")
         self.assertTrue(lek_side["lines"][1].startswith("Nr# A:Kö"), lek_side["lines"])
         self.send("cda-mun", "#")  # Ge klart
         self.send("mun", "#")      # Avgång
@@ -136,7 +142,7 @@ class TwoSidedStationTests(unittest.TestCase):
         self.assertEqual(1, mun_side["active"]["count"])
         self.assertEqual(1, both["active"]["count"])
         self.assertEqual(0, lek_side["active"]["count"])
-        self.assertEqual("", lek_side["lines"][0].strip())
+        self.assertEqual(idle(lek_side["station"]), lek_side["lines"][0])
         self.assertIn("404", mun_side["lines"][0], "still shows the train it cleared")
         self.send("cda-mun", "#")  # Ankomst
         self.assertIn("MOTTAGET", self.terminals.frame("mun")["lines"][0])

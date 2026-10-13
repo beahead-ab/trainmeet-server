@@ -30,6 +30,49 @@ förebilden.
 - Nu-linjen, det som har hänt i grått, tåget som är ute på sin sträcka och
   klick på ett tåg är kvar som förut.
 
+### Träffens tid: dra mellan dygnen och se vad ett hopp gör
+
+Casper 2026-10-12: det var svårt att hitta och förstå tidsmaskinen och vad som
+startar om. Tidsmaskin, Starta ny dag, Nytt trafikdygn, Nollställ träffen och
+ångra låg på fyra olika ställen.
+
+- **Träffens tid** under klockan på Drift visar träffens dygn på rad, med
+  dygnsskiften, trafiken varje halvtimme och var träffen står. Ett dygn som
+  har passerat sitt skifte men inte startats är randigt, med förklaringen.
+- **Dra i tidslinjen** (eller använd snabbvalen) för att planera ett hopp. Ett
+  kort säger vart, hur långt, hur tågen kommer att stå där och vad som händer.
+  Inget ändras förrän man trycker **Hoppa till …**.
+- **Ångra** direkt efter ett hopp eller Starta ny dag: kopian från före läggs
+  tillbaka och servern startar om. Bara den senaste kopian, i en halvtimme.
+- Starta ny dag, Exakt dag och tid (tidsmaskinens dialog), Nytt trafikdygn och
+  Börja om från dag 1 ligger i samma panel.
+- Tidsmaskinen tar sekunder in på dagen (`seconds`), så att ett hopp kan gå
+  till natten efter midnatt. Nya API:er: `GET /v1/runtime/timeline`,
+  `GET /v1/runtime/time-machine/preview`, `POST /v1/runtime/undo-jump`.
+
+### TMBox med 20×4-skärm, stationsnamn i vila och ljud från Servern
+
+Benny (etxbct) i trainmeet-tmbox #39, #43 och #44; Casper godkände förslaget
+(TMBox-20x4-forslag.pdf, 9 oktober 2026) och valde att namnet ska synas även på
+16×2 och att ljudet följer ESP32:s policy.
+
+- **20×4:** boxen väljer storlek i WiFi-portalen och säger det i `hello`
+  (`display: {rows, cols}`); Servern ritar varje bild i boxens storlek. Rad 1 och 4
+  är det 16×2 säger, rad 2 och 3 är nya: *Till/Från* och den andra stationens
+  namn med tid, läget i ord och planerat spår, på startbilden de två närmaste
+  tågen, och på besked den andra stationens namn. Rad 2 och 3 står tomma i en bild
+  som behöver fler än åtta egna tecken. En box som inte säger något är 16×2.
+- **Stationens namn i vila (#43):** en box utan något tåg på gång visar stationens
+  namn centrerat på rad 1, på 16×2 och 20×4, så att man ser att den står på rätt
+  station. Förkortas till stationskoden om namnet inte ryms. Det är den enda
+  ändringen i en 16×2-bild.
+- **Ljud (#44):** varje bild bär `attention {epoch, seq, kind}`. Servern följer
+  ESP32:s policy: bara förändringar, en begäran hit hörs av mottagaren, svaret av den
+  som frågade, en avgång av mottagaren; det egna är tyst; två ljud inom två sekunder
+  blir det viktigaste; det första efter anslutningen och gamla ljud efter
+  återanslutning spelas aldrig. Se protokolltexten §6a.
+- Webbens LCD ritar 20 kolumner när bilden har det.
+
 ### Automatiken ger klartecken efter några sekunder
 
 Casper körde en tågklarering från Charlottendal till Vagnsta, som sköts av

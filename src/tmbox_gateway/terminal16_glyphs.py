@@ -36,12 +36,29 @@ def text_cells(value):
     return normalize("NFC", value)
 
 
+#: The two geometries a box can announce in its hello (rows, columns).
+GEOMETRIES = ((2, 16), (4, 20))
+
+
+def custom_characters(lines):
+    """The characters of `lines` that need a CGRAM slot, in slot order."""
+    return sorted({char for line in (text_cells(line) for line in lines) for char in line
+                   if char in GLYPHS or not 32 <= ord(char) <= 126})
+
+
+def fits_cgram(lines):
+    """Can `lines` be drawn: every character known, and at most eight of them
+    needing one of the eight own-character places?"""
+    custom = custom_characters(lines)
+    return len(custom) <= 8 and all(char in GLYPHS for char in custom)
+
+
 def encode_lcd(lines):
     normalized = [text_cells(line) for line in lines]
-    if len(normalized) != 2 or any(len(line) != 16 for line in normalized):
-        raise ValueError("Expected two complete 16-cell rows")
-    custom = sorted({char for line in normalized for char in line
-                     if char in GLYPHS or not 32 <= ord(char) <= 126})
+    geometry = (len(normalized), len(normalized[0]) if normalized else 0)
+    if geometry not in GEOMETRIES or any(len(line) != geometry[1] for line in normalized):
+        raise ValueError("Expected two complete 16-cell rows or four complete 20-cell rows")
+    custom = custom_characters(normalized)
     if any(char not in GLYPHS for char in custom):
         raise ValueError("Unsupported LCD character: " + " ".join(char for char in custom if char not in GLYPHS))
     if len(custom) > 8:

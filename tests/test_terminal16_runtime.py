@@ -11,6 +11,12 @@ from tmbox_gateway.device_ui import LANGUAGES
 import json
 
 
+def idle(name, width=16):
+    """A box with nothing going on names its station on the empty first row
+    (trainmeet-tmbox #43), centred; the odd cell goes to the right."""
+    return (" " * ((width - len(name)) // 2) + name).ljust(width)
+
+
 class RuntimeTerminalTests(unittest.TestCase):
     def setUp(self):
         self.fixture = test_shared_traffic.SharedTrafficTests()
@@ -635,7 +641,8 @@ class TakenBackTests(_Boxes):
         self.assertEqual(["101 ÅTERTAGET   ", "CDA        09:15"], self.lines("esp32"))
         self.now += 3
         for device in ("esp8266", "esp32"):
-            self.assertEqual(" " * 16, self.lines(device)[0], device)
+            frame = self.terminals.frame(device)
+            self.assertEqual(idle(frame["station"]), frame["lines"][0], device)
         self.assertEqual([], self.service.open_cases(None))
 
     def test_a_request_taken_back_before_the_answer(self):
@@ -660,4 +667,4 @@ class TakenBackTests(_Boxes):
         self.assertEqual(["101 NEKAT       ", "LEK        09:15"], self.lines("esp8266"))
         self.assertEqual(["101 NEKAT       ", "CDA        09:15"], self.lines("esp32"))
         self.now += 3
-        self.assertEqual(" " * 16, self.lines("esp8266")[0])
+        self.assertEqual(idle("Charlottendahl"), self.lines("esp8266")[0])

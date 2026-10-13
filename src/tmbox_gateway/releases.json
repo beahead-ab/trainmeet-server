@@ -1,5 +1,19 @@
 [
   {
+    "version": "4.6.0",
+    "date": "2026-10-12",
+    "notes": [
+      "Träffens tid på Drift: dra mellan dygnen och se vad ett hopp gör"
+    ]
+  },
+  {
+    "version": "4.5.0",
+    "date": "2026-10-11",
+    "notes": [
+      "TMBox: 20×4-skärm, stationsnamn på startbilden och ljudsignal i bilden"
+    ]
+  },
+  {
     "version": "4.4.0",
     "date": "2026-10-11",
     "notes": [
