@@ -12,9 +12,12 @@
  * och körs också i tests/js. `render` ritar SVG:n.
  */
 (function (root, factory) {
-  const api = factory(typeof module === "object" && module.exports ? require("./drift-model.js") : root.TrainMeetDriftModel);
+  // Modellen ligger på globalThis när drift-model.js har laddats före, som i
+  // webbläsaren och där Cloud och TKL laddar filen som modul; i node (proven)
+  // hämtas den med require. Ritaren läggs alltid på globalThis.
+  const api = factory(root.TrainMeetDriftModel || require("./drift-model.js"));
   if (typeof module === "object" && module.exports) module.exports = api;
-  else root.TrainMeetTrainGraph = api;
+  root.TrainMeetTrainGraph = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function (model) {
   "use strict";
 

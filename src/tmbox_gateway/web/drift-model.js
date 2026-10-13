@@ -7,7 +7,9 @@
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
-  else root.TrainMeetDriftModel = api;
+  // Alltid på globalThis också: Cloud och TKL laddar filen som modul men
+  // läser den därifrån, och train-graph.js hittar den där.
+  root.TrainMeetDriftModel = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
