@@ -18,6 +18,8 @@ const L = [['fab', 'fag'], ['fag', 'snm'], ['snm', 'kbg'], ['kbg', 'avk'], ['avk
 const connections = L.map(([a, b, n], i) => ({ id: `c${i}`, station_a_id: a, station_b_id: b, track_type: n === 2 ? 'double' : 'single' }));
 const doubles = connections.filter((c) => c.track_type === 'double').length;
 const order = ['fab', 'fag', 'snm', 'kbg', 'avk', 'sal', 'cda', 'vst', 'bea', 'r', 'nav', 'gsl', 'bsv', 'sns', 'vo', 'mfd', 'odl', 'asb', 'ryt', 'syd'];
+const path = require('node:path');
+const trainGraph = require(path.resolve(__dirname, '../../src/tmbox_gateway/web/train-graph.js'));
 const hhmm = (minute) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
 const T = [['93', -15, ['cda', 'sal', 'avk', 'kbg', 'snm']], ['92', 10, ['sal', 'cda', 'gsl', 'bsv']], ['3571', 10, ['kbg', 'avk', 'sal', 'cda', 'gsl', 'bsv', 'sns', 'mfd']],
   ['8782', 10, ['sns', 'bsv', 'gsl', 'cda', 'sal', 'avk', 'kbg', 'ryt']], ['7101', -15, ['r', 'bea', 'vst', 'cda']], ['4202', 40, ['sns', 'mfd', 'odl']]];
@@ -41,6 +43,11 @@ const display = ({ time = '06:20:00', running = false, speed = 1, side, departed
   connection: { screens: [] }, display: { graph_station_order: order, topology_branch_station_ids: ['ryt', 'syd', 'vo', 'vst', 'bea', 'r', 'nav'],
     ...(side ? { traffic_side: side } : {}) } } });
 const seconds = (value) => value.split(':').reduce((sum, part) => sum * 60 + Number(part), 0);
+// Raderna som sidorna ritar: samma rena uppdelning i linjer som train-graph.js gör, med förgreningsstationen i båda.
+const lines = trainGraph.lines(display()().data);
+const rows = lines.flatMap((line) => line.stations.map((station) => station.name));
+// Drift visar huvudlinjen tills man väljer en annan eller alla.
+const mainRows = lines[0].stations.map((station) => station.name);
 
 // Allt kartan ritar, mätt på skärmen.
 const inspect = (page, selector) => page.evaluate((selector) => {
@@ -114,8 +121,9 @@ function checkMap(map, where) {
       assert.ok(map.classes.includes('topology-kr') && !map.classes.includes('topology-screen'));
       checkMap(map, `Drift (${theme})`);
       // Diagrammet på Drift: namnen när det finns plats, aldrig namn och kod båda.
-      const graph = await drift.page.evaluate(() => ({ names: document.querySelectorAll('#overview-graph .lbl').length, codes: document.querySelectorAll('#overview-graph .cnt').length }));
-      assert.deepEqual(graph, { names: 20, codes: 0 }, 'Drift diagram: names only');
+      // Banan ritas som en linje per gren, ovanpå varandra, med förgreningsstationen i båda.
+      const graph = await drift.page.evaluate(() => ({ names: [...document.querySelectorAll('#overview-graph .lbl')].map((t) => t.textContent), codes: document.querySelectorAll('#overview-graph .cnt').length }));
+      assert.deepEqual(graph, { names: mainRows, codes: 0 }, 'Drift diagram: names only, the main line first');
       assert.deepEqual(drift.errors, []);
       assert.deepEqual(drift.violations, []);
     } finally { await drift.browser.close(); }
@@ -140,7 +148,7 @@ function checkMap(map, where) {
     // Tågdiagrammet på skärmen: bara namn, fönstret en halvtimme före nu, ingen ram.
     const graph = await open({ route: '/display/graph', theme, api: { '/v1/display': display() } });
     try {
-      await graph.page.waitForFunction(() => document.querySelectorAll('#graph-svg .sc-graph-label').length === 20);
+      await graph.page.waitForFunction((count) => document.querySelectorAll('#graph-svg .sc-graph-label').length === count, rows.length);
       const seen = await graph.page.evaluate(() => {
         const labels = [...document.querySelectorAll('#graph-svg .sc-graph-label')];
         const boxes = labels.map((l) => { const b = l.getBBox(); return { x1: b.x, y1: b.y, x2: b.x + b.width, y2: b.y + b.height }; });
@@ -148,7 +156,7 @@ function checkMap(map, where) {
         return { names: labels.map((l) => l.textContent), codes: document.querySelectorAll('#graph-svg .sc-graph-code').length, boxes,
           subtitle: document.querySelector('#screen-meet .sc-subtitle').textContent, frame: { border: s.borderTopWidth, background: s.backgroundColor } };
       });
-      assert.deepEqual(seen.names, order.map((id) => stations.find((s) => s.id === id).name), 'the station names in the diagram order');
+      assert.deepEqual(seen.names, rows, 'the station names line by line, as on Drift');
       assert.equal(seen.codes, 0, 'no station codes in the diagram');
       for (const [i, a] of seen.boxes.entries()) for (const b of seen.boxes.slice(i + 1)) assert.ok(!overlap(a, b), `names on top of each other: ${seen.names[i]}`);
       assert.match(seen.subtitle, /05:45–08:45/, `three hours from half an hour before 06:20: ${seen.subtitle}`);
@@ -270,7 +278,7 @@ function checkMap(map, where) {
   // Diagrammet på Drift i en telefon: koderna i stället för namnen, aldrig båda.
   const phone = await open({ route: '/drift', width: 390, height: 844, api: { '/v1/display': display() } });
   try {
-    await phone.page.waitForFunction(() => document.querySelectorAll('#overview-graph .cnt').length === 20);
+    await phone.page.waitForFunction((count) => document.querySelectorAll('#overview-graph .cnt').length === count, mainRows.length);
     assert.equal(await phone.page.locator('#overview-graph .lbl').count(), 0, 'a phone shows the codes only');
     assert.equal(await phone.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'no sideways scrolling on a phone');
   } finally { await phone.browser.close(); }

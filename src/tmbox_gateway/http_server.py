@@ -4965,6 +4965,7 @@ class TrainMeetHTTPApplication:
             "/assets/drift.js": "drift.js",
             "/assets/meet-timeline.js": "meet-timeline.js",
             "/assets/drift-model.js": "drift-model.js",
+            "/assets/train-graph.js": "train-graph.js",
             "/assets/settings.js": "settings.js",
             "/assets/data-page.js": "data-page.js",
             "/assets/data-workspace.js": "data-workspace.js",

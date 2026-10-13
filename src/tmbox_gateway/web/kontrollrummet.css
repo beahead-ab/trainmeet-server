@@ -304,6 +304,31 @@ body[data-mode="kor"] #app-view { padding: 14px 20px 24px; max-width: none; }
 .tbh { fill: var(--kr-panel); stroke: var(--kr-blue); stroke-width: 2.5; }
 .tbht { fill: var(--kr-blue); font: 700 13px var(--kr-num); font-variant-numeric: tabular-nums; }
 .now { stroke: var(--kr-amber); stroke-width: 3; }
+/* Den grafiska tidtabellen (train-graph.js): spårrader, uppehåll, minuter
+   och tågnumret längs linjen, i tågtypens färg. */
+.gl.trk { stroke: var(--kr-line); stroke-dasharray: 2 4; }
+.kr-graph .tlbl { fill: var(--kr-mute); font: 9.5px var(--kr-mono); }
+.kr-graph .gtitle { fill: var(--kr-ink-2); font: 600 12px var(--kr-sans); letter-spacing: .02em; }
+.kr-graph .lbl[role="button"] { cursor: pointer; }
+.kr-graph .lbl[role="button"]:hover { fill: var(--kr-ink); text-decoration: underline; }
+.pl.is-person { stroke: var(--kr-red); } .pl.is-goods { stroke: var(--kr-blue); } .pl.is-work { stroke: var(--kr-green); }
+.pl.is-person, .pl.is-goods, .pl.is-work { opacity: .72; }
+.pl.lit { opacity: 1; stroke-width: 3; }
+.pl.lit.sel { stroke: var(--kr-ink); stroke-width: 4; }
+.dw { stroke-width: 3.5; stroke-linecap: round; opacity: .9; }
+.dw.is-person { stroke: var(--kr-red); } .dw.is-goods { stroke: var(--kr-blue); } .dw.is-work { stroke: var(--kr-green); }
+.tr-name { font: 600 10px var(--kr-num); fill: var(--kr-mute); paint-order: stroke; stroke: var(--kr-panel); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; font-variant-numeric: tabular-nums; }
+.tr-name.is-person { fill: var(--kr-red); } .tr-name.is-goods { fill: var(--kr-blue); } .tr-name.is-work { fill: var(--kr-green); }
+.tr-min { font: 9px var(--kr-num); fill: var(--kr-mute); paint-order: stroke; stroke: var(--kr-panel); stroke-width: 2.5px; stroke-linejoin: round; pointer-events: none; font-variant-numeric: tabular-nums; }
+.tr-line.selected .tr-name, .tr-line:hover .tr-name { fill: var(--kr-ink); }
+/* Utskriften (drift.js, Skriv ut): diagrammet på en egen sida, ljus och
+   liggande, så brett som papperet. */
+body.kr-print { margin: 0; padding: 0; background: #fff; color: var(--kr-ink); font-family: var(--kr-sans); }
+body.kr-print h1 { font: 600 14px var(--kr-sans); color: var(--kr-ink-2); margin: 0 0 8px; }
+body.kr-print .kr-graph { padding: 0; }
+body.kr-print .kr-graph svg { width: 100%; height: auto; }
+body.kr-print .sh { fill: none; }
+@media print { body.kr-print { -webkit-print-color-adjust: exact; print-color-adjust: exact; } @page { size: landscape; margin: 8mm; } }
 .nowb { fill: var(--kr-amber); }
 .nowt { fill: var(--kr-amber-ink); font: 700 12px var(--kr-num); font-variant-numeric: tabular-nums; }
 

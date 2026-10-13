@@ -95,8 +95,12 @@
     trainDetail: { number: null, data: null, error: "" },
     us: false,
     graphWindow: Number(store.get("trainmeet.driftGraphWindow") ?? 180),
+    graphLine: String(store.get("trainmeet.driftGraphLine") ?? ""),
+    graphTracks: String(store.get("trainmeet.driftGraphTracks") ?? "none"),
+    graphExpanded: new Set(),
   };
-  if (![0, 120, 180, 360].includes(ctx.graphWindow)) ctx.graphWindow = 180;
+  if (![0, 120, 180, 360, 720].includes(ctx.graphWindow)) ctx.graphWindow = 180;
+  if (!["none", "all", "some"].includes(ctx.graphTracks)) ctx.graphTracks = "none";
   let scheduled = false;
   const sigs = new Map();
   // Ritar om en del bara när det den visar har ändrats: annars tappar knappar fokus.
@@ -356,81 +360,52 @@
   }
 
   // ── Tågdiagrammet ─────────────────────────────────────────────────────
-  // Ritat för rutan det faktiskt har: texten blir lika stor oavsett fönster,
-  // och hela diagrammet syns utan att man rullar.
+  // Ritat som planeringsprogrammets grafiska tidtabell (train-graph.js):
+  // stationerna på avstånd, en rad per spår när man fäller ut dem, minuter
+  // vid stationerna och tågnumret längs linjen. Ritat för rutan det faktiskt
+  // har: texten blir lika stor oavsett fönster, och hela diagrammet syns
+  // utan att man rullar. En linje i taget eller alla ovanpå varandra.
+  const graphs = () => globalThis.TrainMeetTrainGraph;
+  function graphTracks() {
+    if (ctx.graphTracks === "all") return "all";
+    return ctx.graphExpanded.size ? ctx.graphExpanded : "none";
+  }
   function renderGraph() {
-    const target = $("#overview-graph"), snapshot = ctx.snapshot; if (!target || !snapshot) return;
+    const target = $("#overview-graph"), snapshot = ctx.snapshot, lib = graphs(); if (!target || !snapshot || !lib) return;
     const live = liveSeconds();
-    const g = model.graph(snapshot, { windowMinutes: ctx.graphWindow, train: ctx.selection.train, now: live === null ? null : live / 60 });
     const width = Math.max(280, contentWidth(target.parentElement) || 1200);
     // Namnen när det finns plats, annars koderna: aldrig båda, det blev plottrigt.
     const showNames = width >= 640;
-    const longest = Math.max(0, ...g.stations.map((station) => String(station.name || "").length));
+    const longest = Math.max(0, ...(snapshot.stations || []).map((station) => String(station.name || "").length));
     const left = showNames ? Math.min(210, Math.max(96, Math.round(longest * 7.2) + 24)) : 64;
-    const right = 18, top = 24, bottom = 22, step = 20;
-    const height = top + (Math.max(g.stations.length, 1) - 1) * step + bottom + 6;
-    const x = (minute) => left + (minute - g.start) / (g.end - g.start) * (width - left - right);
-    const y = (row) => top + row * step;
-    target.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    target.setAttribute("aria-label", t("Tågdiagram {from} till {to}", { from: clockLabel(g.start), to: clockLabel(g.end) }));
-    target.replaceChildren();
-    target.onclick = (event) => { if (event.target === target) hooks.clear?.(); };
-    const parts = [];
+    const lines = lib.lines(snapshot);
+    // Förvalet är huvudlinjen, som planeringsprogrammets blad; "Alla linjer" ritar dem ovanpå varandra.
+    if (ctx.graphLine && ctx.graphLine !== "all" && !lines.some((line) => line.id === ctx.graphLine)) ctx.graphLine = "";
+    const line = ctx.graphLine === "all" ? null : ctx.graphLine || lines[0]?.id || null;
+    const g = lib.layout(snapshot, { width, windowMinutes: ctx.graphWindow, train: ctx.selection.train, now: live === null ? null : live / 60,
+      line, tracks: graphTracks(), minutes: showNames, left, right: 18, gap: showNames ? 22 : 16, trackStep: showNames ? 14 : 11 });
     const lives = levelNow() >= 5 ? model.trainLive(ctx.snapshot, liveSeconds()) : null;
-    // Tiden som redan har gått ligger i en svagt skuggad yta.
-    if (g.now !== null) parts.push(svg("rect", { class: "sh", x: left, y: 4, width: Math.max(0, x(g.now) - left), height: height - 18 }));
-    g.stations.forEach((station, row) => {
-      parts.push(svg("line", { class: "gl", x1: left, y1: y(row), x2: width - right, y2: y(row) }));
-      parts.push(showNames ? svg("text", { class: "lbl s", x: left - 10, y: y(row) + 4.5, "text-anchor": "end" }, station.name)
-        : svg("text", { class: "cnt", x: left - 10, y: y(row) + 4, "text-anchor": "end" }, station.code || ""));
-    });
-    for (let minute = Math.ceil(g.start / 60) * 60; minute <= g.end; minute += 60) {
-      const major = g.end - g.start <= 360 || (minute / 60) % 2 === 0;
-      parts.push(svg("line", { class: `gl ${major ? "h" : "d"}`, x1: x(minute), y1: 4, x2: x(minute), y2: height - 18 }));
-      if (major) parts.push(svg("text", { class: "ax", x: x(minute), y: height - 4, "text-anchor": "middle" }, clockLabel(minute)));
-    }
-    const gray = [], chosen = [], lit = [];
-    const tagWidth = (number) => 14 + String(number).length * 8.4;
-    for (const line of g.lines) {
-      const points = line.points.map((point) => `${x(point.minute).toFixed(1)},${y(point.row)}`).join(" ");
-      const open = (event) => { event.stopPropagation(); hooks.selectTrain?.(line.number); };
-      const group = svg("g", { class: "tr-line", "data-train-number": line.number, role: "button", tabindex: "0", "aria-label": t("Tåg {number}", { number: line.number }) });
-      group.addEventListener("click", open);
-      group.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") open(event); });
-      group.append(svg("polyline", { class: `pl${line.selected ? " lit sel" : ""}`, points }), svg("polyline", { class: "hit", points }));
-      const inside = line.points.find((point) => point.minute >= g.start && point.minute <= g.end);
-      if (inside && !line.selected && !line.segment) group.append(svg("text", { class: "ptxt", x: x(inside.minute) + 7, y: y(inside.row) + 4 }, line.number));
-      (line.selected ? chosen : gray).push(group);
-      // Ett avgånget tåg på nu-linjen där det är nu; ett klart tåg vid avgången.
-      const marker = line.at || (line.selected ? (line.segment ? line.segment[0] : line.points[0]) : line.segment ? line.segment[0] : null);
-      if (line.segment && !line.selected) {
-        const [from, to] = line.segment;
-        const segment = svg("g", { class: "tr-lit", "data-train-number": line.number, role: "button", tabindex: "0", "aria-label": t("Tåg {number}", { number: line.number }) });
-        segment.addEventListener("click", open);
-        segment.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") open(event); });
-        segment.append(svg("polyline", { class: "pl lit", points: `${x(from.minute).toFixed(1)},${y(from.row)} ${x(to.minute).toFixed(1)},${y(to.row)}` }));
-        lit.push(segment);
-      }
-      if (marker) {
-        const w = tagWidth(line.number), cleared = line.state === "cleared" && !line.selected;
-        const mark = svg("g", { class: "tr-tag", "data-train-number": line.number, "pointer-events": "none" });
-        mark.append(svg("rect", { class: `${cleared ? "tbh" : "tb"}${line.selected ? " sel" : ""}`, x: x(marker.minute) - w - 6, y: y(marker.row) - 11, width: w, height: 22, rx: 6 }),
-          svg("text", { class: cleared ? "tbht" : "tbt", x: x(marker.minute) - w / 2 - 6, y: y(marker.row) + 5, "text-anchor": "middle" }, line.number));
-        // Nivå 5 (Allt): förseningen ovanför taggen.
-        const view = lives ? model.deviationView(5, lives.get(String(line.number))) : null;
-        if (view?.mark) mark.append(svg("text", { class: `graph-train-mark is-${view.mark.tone}`, x: x(marker.minute) - w - 6, y: y(marker.row) - 14 }, view.mark.text));
-        lit.push(mark);
-      }
-    }
-    parts.push(...gray, ...chosen, ...lit);
-    if (g.now !== null) {
-      const at = x(g.now);
-      parts.push(svg("line", { class: "now", x1: at, y1: 4, x2: at, y2: height - 18 }), svg("rect", { class: "nowb", x: at - 24, y: 0, width: 48, height: 18, rx: 5 }),
-        svg("text", { class: "nowt", x: at, y: 13, "text-anchor": "middle" }, clockLabel(g.now)));
-    }
-    target.append(...parts);
+    lib.render(target, g, { cls: lib.DRIFT, codes: !showNames, clip: "overview-graph-clip", onSelect: (number) => hooks.selectTrain?.(number),
+      onStation: (stationId) => { ctx.graphTracks = "some"; if (ctx.graphExpanded.has(stationId)) ctx.graphExpanded.delete(stationId); else ctx.graphExpanded.add(stationId); store.set("trainmeet.driftGraphTracks", ctx.graphTracks); renderGraph(); },
+      label: (number) => t("Tåg {number}", { number }), marks: lives ? (number) => model.deviationView(5, lives.get(String(number)))?.mark || null : null });
+    target.setAttribute("aria-label", t("Tågdiagram {from} till {to}", { from: clockLabel(g.start), to: clockLabel(g.end) }));
+    target.onclick = (event) => { if (event.target === target) hooks.clear?.(); };
     const meta = $("#drift-graph-meta");
     if (meta) meta.textContent = `${clockLabel(g.start)}–${clockLabel(g.end)} · ${t("tryck på ett tåg för att tända rutten")}`;
+    // Linjevalet finns bara när banan har mer än en linje.
+    const select = $("#drift-graph-line");
+    if (select) {
+      const wanted = JSON.stringify(lines.map((line) => [line.id, line.name]));
+      if (select.dataset.lines !== wanted) {
+        select.dataset.lines = wanted;
+        const option = (value, text) => { const node = doc.createElement("option"); node.value = value; node.textContent = text; return node; };
+        select.replaceChildren(...lines.map((line) => option(line.id, line.name)), option("all", t("Alla linjer")));
+      }
+      select.value = ctx.graphLine === "all" ? "all" : line || "";
+      select.closest("label")?.classList.toggle("hidden", lines.length < 2);
+    }
+    const tracks = $("#drift-graph-tracks");
+    if (tracks) { tracks.setAttribute("aria-pressed", ctx.graphTracks === "all" ? "true" : "false"); tracks.title = t(ctx.graphTracks === "all" ? "Dölj spåren" : "Visa spåren"); }
   }
 
   // ── Valt tåg och vald station ─────────────────────────────────────────
@@ -629,6 +604,30 @@
       select.value = String(ctx.graphWindow);
       select.addEventListener("change", () => { ctx.graphWindow = Number(select.value); store.set("trainmeet.driftGraphWindow", String(ctx.graphWindow)); renderGraph(); });
     }
+    $("#drift-graph-line")?.addEventListener("change", (event) => { ctx.graphLine = String(event.target.value || ""); store.set("trainmeet.driftGraphLine", ctx.graphLine); renderGraph(); });
+    $("#drift-graph-tracks")?.addEventListener("click", () => { ctx.graphTracks = ctx.graphTracks === "all" ? "none" : "all"; ctx.graphExpanded.clear(); store.set("trainmeet.driftGraphTracks", ctx.graphTracks); renderGraph(); });
+    // Skriv ut: diagrammet på en egen sida, ljus och liggande, med samma
+    // stilmall. Inga inbäddade stilar eller skript, så sidans CSP håller.
+    $("#drift-graph-print")?.addEventListener("click", () => {
+      const svg = $("#overview-graph"), meta = $("#drift-graph-meta");
+      if (!svg) return;
+      const page = globalThis.open("", "_blank");
+      if (!page) return;
+      const title = `${t("Tågdiagram")} · ${ctx.snapshot?.meet?.name || ""} · ${(meta?.textContent || "").split("·")[0].trim()}`.replace(/ · $/, "");
+      const pdoc = page.document;
+      pdoc.open(); pdoc.write("<!doctype html><title></title>"); pdoc.close();
+      pdoc.documentElement.lang = doc.documentElement.lang || "sv";
+      pdoc.documentElement.dataset.krTheme = "light";
+      pdoc.title = title;
+      const link = pdoc.createElement("link"); link.rel = "stylesheet"; link.href = "/assets/kontrollrummet.css";
+      pdoc.head.append(link);
+      pdoc.body.className = "kr-print";
+      const heading = pdoc.createElement("h1"); heading.textContent = title;
+      const holder = pdoc.createElement("div"); holder.className = "kr-graph";
+      holder.append(pdoc.importNode(svg, true));
+      pdoc.body.append(heading, holder);
+      link.addEventListener("load", () => { page.focus(); page.print(); });
+    });
     doc.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || doc.querySelector("dialog[open]")) return;
       let popoverOpen = false;

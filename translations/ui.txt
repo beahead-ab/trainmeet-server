@@ -1379,6 +1379,13 @@ The clock no longer exists.|Klockan finns inte längre.|Uret findes ikke længer
 {count} clocks have been uploaded. Choose one as a style above.|{count} klockor är uppladdade. Välj en som stil ovan.|{count} ure er uploadet. Vælg et som stil ovenfor.|{count} klokker er lastet opp. Velg én som stil over.|{count} Uhren wurden hochgeladen. Wähle oben eine als Stil.
 {count} clocks have been uploaded.|{count} klockor är uppladdade.|{count} ure er uploadet.|{count} klokker er lastet opp.|{count} Uhren wurden hochgeladen.
 Uploaded, but this scales worse than it could:|Uppladdad, men det här skalar sämre än det kunde:|Uploadet, men dette skalerer dårligere, end det kunne:|Lastet opp, men dette skalerer dårligere enn det kunne:|Hochgeladen, aber das skaliert schlechter als möglich:
+All lines|Alla linjer|Alle linjer|Alle linjer|Alle Linien
+Line|Linje|Linje|Linje|Linie
+Show the tracks|Visa spåren|Vis sporene|Vis sporene|Gleise anzeigen
+Hide the tracks|Dölj spåren|Skjul sporene|Skjul sporene|Gleise ausblenden
+Print|Skriv ut|Udskriv|Skriv ut|Drucken
+Print the diagram|Skriv ut diagrammet|Udskriv diagrammet|Skriv ut diagrammet|Diagramm drucken
+Train graph {from} to {to}|Tågdiagram {from} till {to}|Togdiagram {from} til {to}|Togdiagram {from} til {to}|Bildfahrplan {from} bis {to}
 # Träffens tid på Drift: tidslinjen, förhandsvisningen och Ångra (Casper 2026-10-12).
 Meet time|Träffens tid|Træffets tid|Treffets tid|Zeit des Treffens
 Exact day and time…|Exakt dag och tid…|Præcis dag og tid…|Nøyaktig dag og tid…|Genauer Tag und Uhrzeit…

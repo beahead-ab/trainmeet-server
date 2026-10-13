@@ -102,10 +102,11 @@ test('reviewed UI terms have complete five-language rows and consistent paramete
   for(const text of Object.values(context.TrainMeetMessages[key]))assert.deepEqual([...text.matchAll(/\{(\w+)\}/g)].map(match=>match[1]).sort(),expected);
  }
 });
-test('independent Cloud and TKL packages vendor the identical runtime/catalog',()=>{
- for(const project of ['trainmeet-cloud','trainmeet-tkl'])for(const [source,target]of [['i18n.js','core.js'],['i18n-messages.js','messages.js']]) {
-  const file=path.resolve(root,'../../../../',project,'src/i18n',target);
-  if(fs.existsSync(file))assert.equal(fs.readFileSync(file,'utf8'),fs.readFileSync(path.join(root,source),'utf8'));
+test('independent Cloud and TKL packages vendor the identical runtime/catalog and train graph',()=>{
+ // Samma lista som tools/sync-i18n.mjs --siblings kopierar.
+ for(const project of ['trainmeet-cloud','trainmeet-tkl'])for(const [source,target]of [['i18n.js','src/i18n/core.js'],['i18n-messages.js','src/i18n/messages.js'],['drift-model.js','src/graph/drift-model.js'],['train-graph.js','src/graph/train-graph.js']]) {
+  const file=path.resolve(root,'../../../../',project,target);
+  if(fs.existsSync(file))assert.equal(fs.readFileSync(file,'utf8'),fs.readFileSync(path.join(root,source),'utf8'),`${project}/${target} differs: run node tools/sync-i18n.mjs --siblings`);
  }
 });
 test('reset confirmation remains the fixed API value in every UI language',()=>{
