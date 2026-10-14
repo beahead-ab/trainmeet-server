@@ -5,6 +5,30 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Om trafikspelet: berättelsen, instruktionerna och programmet
+
+Casper ville att berättelsen bakom trafikspelet, som Stefans Trafikidé för
+Värnamo Moduldagar, skulle gå att läsa på servern, i TKL och i appen, inte
+bara i Cloud. Cloud skickar nu med träffens texter i paketet, och servern
+visar dem.
+
+- **Boken i sidhuvudet** öppnar Om trafikspelet var man än är: berättelsen,
+  de allmänna instruktionerna, programmet och stationernas instruktioner,
+  var och en i en egen flik. Instruktionerna visas på läsarens språk, och
+  annars på träffens. På en smal skärm, där träffens namn går före, finns
+  Om trafikspelet i Öppna-menyn.
+- **Deltagarvyn** får ett kort med berättelsens början och knappen Läs om
+  trafikspelet, när träffen har några texter.
+- **Stationspanelen på Drift** visar stationens egna instruktioner, till den
+  som sköter stationen.
+- **`/v1/about`** lämnar texterna öppet, som `/v1/display`, och
+  `/v1/display` säger bara vad som finns att läsa (`about`), så att TKL och
+  appen vet om de ska visa Om trafikspelet.
+- Texterna är en liten delmängd av Markdown: rubriker, punkter, numrerade
+  punkter, fet och kursiv stil och länkar. `markdown.js` ritar dem som
+  element och aldrig som markup, och samma fil används i Cloud och TKL.
+- Ett paket från en äldre Cloud saknar texterna, och då syns ingenting nytt.
+
 ### Tågdiagrammet som en grafisk tidtabell
 
 Casper tittade på planeringsprogrammets grafiska tidtabeller inför Värnamo

@@ -488,7 +488,7 @@
     const devices = ctx.devices.filter((device) => device.station_id === station.id);
     const place = model.placement(ctx.presentation, station.id);
     const events = model.events(snapshot, { station: station.id, limit: 5, nowSeconds: liveSeconds() });
-    if (!changed("station-aside", [station.id, here, devices.map((device) => [device.device_code, device.connection?.state]), place, events, ctx.selection.train, root.lang])) return;
+    if (!changed("station-aside", [station.id, here, devices.map((device) => [device.device_code, device.connection?.state]), place, events, ctx.selection.train, root.lang, station.instructions || ""])) return;
     const names = model.stationMap(snapshot);
     const links = (snapshot.connections || []).filter((c) => c.station_a_id === station.id || c.station_b_id === station.id).length;
     const section = (title, ...kids) => h("div", { class: "kr-aside__sec" }, h("h4", {}, title), ...kids);
@@ -497,6 +497,12 @@
         h("div", { class: "kr-aside__row" }, h("b", { class: "kr-aside__name" }, station.name), h("span", { class: "kr-code" }, station.code || "")),
         h("span", { class: "kr-c" }, [plural(here.length, "{count} tåg inne", "{count} tåg inne"), plural(links, "{count} sträcka", "{count} sträckor")].join(" · "))),
       h("span", { class: "kr-sp" }), closeButton(t("Stäng stationspanelen"), () => hooks.selectStation?.(null, true)))];
+    if (String(station.instructions || "").trim() && globalThis.TrainMeetMarkdown) {
+      // Stationens egna instruktioner ur Cloud (Om trafikspelet), till den som sköter den.
+      const text = h("div", { class: "tm-md kr-aside__md" });
+      globalThis.TrainMeetMarkdown.render(text, station.instructions, { headingBase: 5 });
+      body.push(section(t("Stationens instruktioner"), text));
+    }
     body.push(section(t("Tåg inne"), here.length
       ? h("div", { class: "kr-badges" }, here.map((number) => h("button", { type: "button", class: "kr-badgebtn", on: { click: () => hooks.selectTrain?.(number) } }, badge(number, { plain: true, selected: ctx.selection.train === number }))))
       : h("p", { class: "kr-aside__note" }, t("Inga tåg inne."))));

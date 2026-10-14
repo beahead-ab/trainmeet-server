@@ -169,6 +169,8 @@ body[data-mode="kor"] #app-chrome #app-clock { display: none; }
 #app-chrome .screen-menu nav { background: var(--kr-panel); border: 1px solid var(--kr-line-2); border-radius: var(--kr-r-sm); box-shadow: var(--kr-shadow); top: 42px; width: 240px; }
 #app-chrome .screen-menu nav a { color: var(--kr-ink); }
 #app-chrome .screen-menu nav a:hover { background: var(--kr-panel-3); color: var(--kr-ink); text-decoration: none; }
+#app-chrome .screen-menu nav .screen-menu__item { display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 6px; background: none; color: var(--kr-ink); font: inherit; text-align: left; cursor: pointer; }
+#app-chrome .screen-menu nav .screen-menu__item:hover { background: var(--kr-panel-3); }
 #app-chrome .screen-menu nav .tm-eyebrow { color: var(--kr-mute); }
 #app-chrome .screen-menu nav .screen-menu__group { border-top-color: var(--kr-line); }
 #app-chrome .kr-ico-sun, #app-chrome .kr-ico-moon { display: none; }
@@ -809,6 +811,8 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
   #app-chrome .screen-menu { order: 3; position: static; }
   #app-chrome .screen-menu nav { left: auto; right: 12px; top: 48px; }
   #app-chrome #header-data, #app-chrome #header-settings { order: 4; }
+  /* Träffens namn går före: Om trafikspelet nås från Öppna-menyn i två rader. */
+  #app-chrome #header-about { display: none; }
   #app-chrome #header-help { order: 5; }
   #app-chrome #kr-theme-toggle { order: 6; }
   #app-chrome #logout { order: 7; }
@@ -960,3 +964,35 @@ body[data-mode="tidtabell"] #app-view { padding: 20px 24px 28px; max-width: none
   .kr-tl__col + .kr-tl__col { border-left: 0; border-top: 1px solid var(--kr-line-2); }
   .kr-tl__plan, .kr-tl__undo { margin: 4px 10px 12px; }
 }
+
+/* Om trafikspelet (about-view.js): bladet med berättelsen, instruktionerna,
+   programmet och stationernas instruktioner, och texten själv (markdown.js). */
+.tm-about-sheet { width: min(760px, 100vw - 24px); max-height: min(88vh, 900px); padding: 0; border: 1px solid var(--kr-line-2); border-radius: 16px; background: var(--kr-panel); color: var(--kr-ink); box-shadow: var(--kr-shadow); font-family: var(--kr-sans); overflow: hidden; }
+.tm-about-sheet[open] { display: flex; flex-direction: column; }
+.tm-about-sheet::backdrop { background: var(--kr-backdrop); }
+.tm-about-sheet__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 18px 10px; border-bottom: 1px solid var(--kr-line); }
+.tm-about-sheet__head h2 { margin: 2px 0 0; font: 600 18px var(--kr-sans); }
+.tm-about-sheet__meet { color: var(--kr-mute); font: 600 11px var(--kr-sans); letter-spacing: .06em; text-transform: uppercase; }
+.tm-about-sheet__close { border: 0; background: transparent; color: var(--kr-mute); font-size: 24px; line-height: 1; cursor: pointer; padding: 2px 6px; }
+.tm-about-sheet__tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 18px 0; }
+.tm-about-sheet__tab { font: 500 12.5px var(--kr-sans); color: var(--kr-ink-2); background: var(--kr-panel); border: 1px solid var(--kr-line-2); border-radius: 8px; padding: 5px 11px; cursor: pointer; }
+.tm-about-sheet__tab.is-active { background: var(--kr-blue); border-color: var(--kr-blue); color: var(--kr-blue-ink); }
+.tm-about-sheet__body { overflow: auto; padding: 14px 18px 20px; }
+.tm-about-sheet__empty { margin: 0; color: var(--kr-mute); }
+.tm-about-sheet__station + .tm-about-sheet__station { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--kr-line); }
+.tm-about-sheet__station h3 { margin: 0 0 6px; font: 600 14px var(--kr-sans); }
+.tm-about-sheet__station.is-focus h3 { color: var(--kr-blue); }
+.tm-md { font: 14px/1.55 var(--kr-sans); color: var(--kr-ink); overflow-wrap: anywhere; }
+.tm-md > :first-child { margin-top: 0; }
+.tm-md > :last-child { margin-bottom: 0; }
+.tm-md h3, .tm-md h4, .tm-md h5, .tm-md h6 { margin: 1.1em 0 .35em; line-height: 1.25; font-family: var(--kr-sans); color: var(--kr-ink); }
+.tm-md h3 { font-size: 17px; } .tm-md h4 { font-size: 15px; } .tm-md h5, .tm-md h6 { font-size: 14px; }
+.tm-md p { margin: 0 0 .7em; }
+.tm-md ul, .tm-md ol { margin: 0 0 .7em; padding-left: 1.3em; }
+.tm-md li + li { margin-top: .2em; }
+.tm-md hr { border: 0; border-top: 1px solid var(--kr-line); margin: 1em 0; }
+.tm-md code { font: 13px var(--kr-mono); padding: 1px 4px; border-radius: 4px; background: var(--kr-panel-2); }
+.tm-md a { color: var(--kr-blue); }
+.kr-aside__md { font-size: 12.5px; }
+.pv-about__teaser { margin: 0 0 10px; color: var(--kr-ink-2); font-size: 14px; line-height: 1.5; }
+@media (max-width: 640px) { .tm-about-sheet { width: 100vw; max-height: 92vh; margin: auto auto 0; border-radius: 18px 18px 0 0; } }

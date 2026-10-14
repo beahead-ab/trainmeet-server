@@ -84,6 +84,28 @@
     $("#pv-foot-meta").textContent = [snapshot.meet?.version_number ? `${t("Version")} ${snapshot.meet.version_number}` : "", snapshot.server_name, "TrainMeet Server"].filter(Boolean).join(" · ");
     document.querySelectorAll("[data-pv-eu]").forEach((node) => { node.hidden = us; });
     document.querySelectorAll("[data-pv-us]").forEach((node) => { node.hidden = !us; });
+    renderAbout();
+  }
+
+  /** Om trafikspelet: ett kort med berättelsens början, som öppnar bladet. */
+  let aboutTeaser = null;
+  async function renderAbout() {
+    const card = $("#pv-about-card"), summary = snapshot.about || {};
+    if (!card) return;
+    card.hidden = !summary.available;
+    if (!summary.available) return;
+    const key = `${snapshot.publication_id}|${summary.story}`;
+    if (aboutTeaser?.key === key) return;
+    aboutTeaser = { key, text: "" };
+    $("#pv-about-teaser").hidden = !summary.story;
+    if (!summary.story) return;
+    try {
+      const response = await fetch("/v1/about", { cache: "no-store" });
+      const about = response.ok ? await response.json() : null;
+      if (aboutTeaser?.key !== key) return;
+      aboutTeaser.text = about ? globalThis.TrainMeetAbout.teaser(about.about) : "";
+      $("#pv-about-teaser").textContent = aboutTeaser.text;
+    } catch { /* kortet visar knappen ändå */ }
   }
 
   // One clock, in the style the meet has chosen – as on the screens: hours and
@@ -359,6 +381,7 @@
       $("#pv-timetable-toggle")?.addEventListener("click", () => { fullTimetable = !fullTimetable; if (snapshot) renderTimetable(); });
       const sheet = $("#pv-connect-card");
       $("#pv-connect-open")?.addEventListener("click", () => { if (typeof sheet.showModal === "function") sheet.showModal(); else sheet.setAttribute("open", ""); });
+      $("#pv-about-open")?.addEventListener("click", () => globalThis.TrainMeetAbout?.open());
       $("#pv-connect-close")?.addEventListener("click", () => sheet.close());
       sheet?.addEventListener("click", (event) => { if (event.target === sheet) sheet.close(); });
       const viewSheet = $("#pv-view-card");

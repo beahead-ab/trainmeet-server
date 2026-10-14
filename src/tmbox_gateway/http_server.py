@@ -61,7 +61,7 @@ from .local_config import (
 )
 from .models import Command, ConnectionState, InteractionMode, TrackConfig, TrackType, UnknownTrackError, resolve_track_id
 from .observability import log_event, use_correlation
-from . import clock_pack, local_edits
+from . import clock_pack, local_edits, meet_about
 from .local_edits import LocalEditError
 from .operations import SQLiteOperationsStore
 from .us import USStore, USError
@@ -1533,6 +1533,23 @@ class TrainMeetHTTPApplication:
         }
 
     @runtime_view
+    def about_snapshot(self) -> dict[str, Any]:
+        """Om trafikspelet: berättelsen, instruktionerna per språk, programmet och
+        stationernas instruktioner, för deltagarvyn, Drift, TKL och appen.
+
+        Öppen som /v1/display. Träffens språk följer med, så att en läsare vars
+        språk saknas får instruktionerna på träffens.
+        """
+        publication = self.runtime_store.active() if self.runtime_store is not None else None
+        payload = publication.payload if publication is not None else None
+        country = publication.country if publication is not None else "se"
+        return {
+            "publication_id": publication.publication_id if publication is not None else None,
+            "meet": {"name": str((payload or {}).get("meet", {}).get("name") or ""), "language": COUNTRY_LANGUAGES.get(country, "sv")},
+            "about": meet_about.about_of(payload),
+            "stations": meet_about.station_texts(payload),
+        }
+
     def display_snapshot(self, request_host: str = "") -> dict[str, Any]:
         # Screens and the participant view poll this every few seconds: a good
         # moment to let go of virtual boxes nobody assigned (throttled inside).
@@ -1628,6 +1645,8 @@ class TrainMeetHTTPApplication:
             "routes": timetable.get("routes", []),
             "services": timetable.get("services", []),
             "display": display,
+            # Vad som finns under Om trafikspelet; texterna själva i /v1/about.
+            "about": meet_about.summary(publication.payload if publication is not None else None),
             "clock": clock,
             "train_positions": positions,
             "movement_live": movement_live,
@@ -4966,6 +4985,8 @@ class TrainMeetHTTPApplication:
             "/assets/meet-timeline.js": "meet-timeline.js",
             "/assets/drift-model.js": "drift-model.js",
             "/assets/train-graph.js": "train-graph.js",
+            "/assets/markdown.js": "markdown.js",
+            "/assets/about-view.js": "about-view.js",
             "/assets/settings.js": "settings.js",
             "/assets/data-page.js": "data-page.js",
             "/assets/data-workspace.js": "data-workspace.js",
@@ -5152,6 +5173,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     self.server.application.display_snapshot(self.headers.get("Host", "")),
                 )
+                return
+            if path == "/v1/about":
+                self._send_json(HTTPStatus.OK, self.server.application.about_snapshot())
                 return
             if path == "/v1/events":
                 self._serve_events()

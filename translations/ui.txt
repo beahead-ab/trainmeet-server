@@ -1441,3 +1441,16 @@ Putting back the copy …|Lägger tillbaka kopian …|Lægger kopien tilbage …
 The jump could not be undone.|Hoppet gick inte att ångra.|Springet kunne ikke fortrydes.|Hoppet kunne ikke angres.|Der Sprung konnte nicht rückgängig gemacht werden.
 The jump is undone and the server restarts.|Hoppet ångras och servern startar om.|Springet fortrydes, og serveren genstarter.|Hoppet angres og serveren starter på nytt.|Der Sprung wird rückgängig gemacht und der Server startet neu.
 Planning a jump. The blue part is the time you jump over. Nothing has changed yet.|Planerar ett hopp. Det blå fältet är tiden du hoppar över. Inget är ändrat än.|Planlægger et spring. Det blå felt er den tid, du springer over. Intet er ændret endnu.|Planlegger et hopp. Det blå feltet er tiden du hopper over. Ingenting er endret ennå.|Ein Sprung wird geplant. Der blaue Bereich ist die Zeit, die du überspringst. Noch ist nichts geändert.
+# Om trafikspelet: berättelsen, instruktionerna och programmet (Casper 2026-10-14).
+About the meet|Om trafikspelet|Om trafikspillet|Om trafikkspillet|Über das Verkehrsspiel
+The story|Berättelsen|Historien|Historien|Die Geschichte
+Instructions|Instruktioner|Instruktioner|Instruksjoner|Anweisungen
+Programme|Program|Program|Program|Programm
+The stations|Stationerna|Stationerne|Stasjonene|Die Bahnhöfe
+Station instructions|Stationens instruktioner|Stationens instruktioner|Stasjonens instruksjoner|Anweisungen für den Bahnhof
+Instructions for {station}|Instruktioner för {station}|Instruktioner for {station}|Instruksjoner for {station}|Anweisungen für {station}
+Preview|Förhandsvisning|Forhåndsvisning|Forhåndsvisning|Vorschau
+The meet has no story yet.|Trafikspelet har ingen berättelse ännu.|Trafikspillet har ingen historie endnu.|Trafikkspillet har ingen historie ennå.|Das Verkehrsspiel hat noch keine Geschichte.
+Read about the meet|Läs om trafikspelet|Læs om trafikspillet|Les om trafikkspillet|Über das Verkehrsspiel lesen
+Loading the texts …|Läser texterna …|Indlæser teksterne …|Laster tekstene …|Texte werden geladen …
+The texts could not be loaded. Try again.|Texterna gick inte att läsa. Försök igen.|Teksterne kunne ikke indlæses. Prøv igen.|Tekstene kunne ikke lastes. Prøv igjen.|Die Texte konnten nicht geladen werden. Versuche es erneut.

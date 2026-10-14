@@ -104,7 +104,7 @@ test('reviewed UI terms have complete five-language rows and consistent paramete
 });
 test('independent Cloud and TKL packages vendor the identical runtime/catalog and train graph',()=>{
  // Samma lista som tools/sync-i18n.mjs --siblings kopierar.
- for(const project of ['trainmeet-cloud','trainmeet-tkl'])for(const [source,target]of [['i18n.js','src/i18n/core.js'],['i18n-messages.js','src/i18n/messages.js'],['drift-model.js','src/graph/drift-model.js'],['train-graph.js','src/graph/train-graph.js']]) {
+ for(const project of ['trainmeet-cloud','trainmeet-tkl'])for(const [source,target]of [['i18n.js','src/i18n/core.js'],['i18n-messages.js','src/i18n/messages.js'],['drift-model.js','src/graph/drift-model.js'],['train-graph.js','src/graph/train-graph.js'],['markdown.js','src/text/markdown.js']]) {
   const file=path.resolve(root,'../../../../',project,target);
   if(fs.existsSync(file))assert.equal(fs.readFileSync(file,'utf8'),fs.readFileSync(path.join(root,source),'utf8'),`${project}/${target} differs: run node tools/sync-i18n.mjs --siblings`);
  }
