@@ -314,9 +314,11 @@ const root = path.resolve(__dirname, '../..');
     await screenMenu.locator('summary').click();
     assert.equal(await screenMenu.getAttribute('open'),'');
     // The Open menu has the screens and, as its own group, both TMBox pages:
-    // the test bench used to be reachable only from Help.
+    // the test bench used to be reachable only from Help. Träffen holds Om
+    // trafikspelet, which a narrow header reaches only from here.
     assert.equal((await screenMenu.locator('summary').textContent()).trim(),'Öppna på skärm');
-    assert.deepEqual(await screenMenu.locator('nav .tm-eyebrow:visible').allTextContents(),['Skärmar','TMBox']);
+    assert.deepEqual(await screenMenu.locator('nav .tm-eyebrow:visible').allTextContents(),['Skärmar','TMBox','Träffen']);
+    assert.equal((await screenMenu.locator('#menu-about').textContent()).trim(),'Om trafikspelet');
     for(const [href,text] of [['/tmbox/','Virtuell TMBox'],['/tmbox-lab/','Provbänk med testdata']]){
       const link=screenMenu.locator(`nav a[href="${href}"]`);
       assert.equal(await link.isVisible(),true,href);

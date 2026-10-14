@@ -8,7 +8,9 @@ await import('./build-i18n.mjs');
 // Cloud och TKL bär samma körtid och katalog (src/i18n) och samma ritare för
 // tågdiagrammet (src/graph): drift-model.js och train-graph.js, oförändrade.
 export const SHARED = [['i18n.js', 'src/i18n/core.js'], ['i18n-messages.js', 'src/i18n/messages.js'],
-  ['drift-model.js', 'src/graph/drift-model.js'], ['train-graph.js', 'src/graph/train-graph.js']];
+  ['drift-model.js', 'src/graph/drift-model.js'], ['train-graph.js', 'src/graph/train-graph.js'],
+  // Träffens texter (Om trafikspelet) ritas av samma Markdown-delmängd överallt.
+  ['markdown.js', 'src/text/markdown.js']];
 for (const project of process.argv.includes('--siblings') ? ['trainmeet-cloud', 'trainmeet-tkl'] : []) {
   for (const [source, target] of SHARED) {
     const dest = path.join(repo, '..', project, target);
