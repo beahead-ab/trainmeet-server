@@ -5,6 +5,37 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Standardspår när tidtabellen saknar spår, och alla stationens spår
+
+Casper ville att en station ska kunna ha standardspår för persontåg och
+godståg åt vänster och åt höger, med flera spår per ankomst – godståg åt höger
+kommer in på godsbangårdens 11–13 – och egna spår för tåg som bara passerar.
+Spåren väljs i Cloud (Bana → Stationernas sidor → Standardspår) och följer med
+i paketet.
+
+- **Tidtabellens spår går alltid före.** Standardspåren används bara när
+  raden saknar spår, och de skrivs aldrig in i tidtabellen.
+- **Ankomst utan spår** – från TKL, en box eller automatiken – tar stationens
+  första lediga standardspår för tågsorten och färdriktningen. Arbetståg
+  följer godståg, och ett passerande tåg utan egna spår tar persontågens
+  eller godstågens. Förut nekades en sådan ankomst och automatiken hoppade
+  över tåget.
+- **Utplaceringen efter tidtabellen** ställer tåg utan spår på var sitt
+  lediga standardspår.
+- **Boxens spårval** (16×2, 20×4 och iPhone-knappsatsen) visar tågets spår
+  först, sedan stationens standardspår och sist resten, och börjar på tågets
+  spår i stället för på stationens första.
+- **Stationens spår i ordning:** stationens egna först och en driftplats, som
+  godsbangården, efter. Förut blandades de (1, 11, 2, 12).
+- **Tågdiagrammets spårrader** visar alla stationens aktiva spår, även tomma
+  och godsbangårdens, i stationens ordning.
+- **Klienterna får mer:** tidtabellsraderna i `/v1/display` och
+  `/v1/timetable` får `default_tracks`, radens standardspår. Stationens
+  tidtabell för boxar och appen (`/v1/tmbox/terminal/timetable`) får
+  stationens alla spår (`tracks`) och var tåget faktiskt står
+  (`actual_track`).
+- Ett paket utan standardspår beter sig som förut.
+
 ### Om trafikspelet: berättelsen, instruktionerna och programmet
 
 Casper ville att berättelsen bakom trafikspelet, som Stefans Trafikidé för

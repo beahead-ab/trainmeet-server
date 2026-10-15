@@ -31,6 +31,7 @@ import math
 from hashlib import sha256
 from time import monotonic
 
+from . import default_tracks
 from .operations import _time_to_seconds
 from .protocol_v2 import CommandRejected
 from .legs import PRESENCE_SECONDS, plan_legs
@@ -549,6 +550,16 @@ class AutomaticStations:
             self._save(state)
             self.store.after_commit(self._changed)
 
+    def _arrival_track(self, publication, day, receiver, leg):
+        """Det planerade spåret, annars mottagarens första lediga standardspår (4.9.0)."""
+        if leg["track_id"]:
+            return leg["track_id"]
+        row = next((item for item in publication.payload["trains"] if str(item["id"]) == str(leg["to_movement_id"])), None)
+        if row is None:
+            return None
+        return default_tracks.choose(publication.payload, row, lambda track: self.service.track_conflict(
+            publication, day, receiver, leg["to_movement_id"], track, actual=True))
+
     def _step(self, key, leg, legs, seconds, state, times, live, cases, publication, day):
         sender, receiver = leg["from_station_id"], leg["to_station_id"]
         if live[receiver].get(leg["to_movement_id"], {}).get("arrival") == "arrived":
@@ -559,7 +570,8 @@ class AutomaticStations:
             departed = times.get(("train.departed", key), leg["departure"])
             if seconds < departed + leg["duration"] + self._delay("line", key):
                 return "På väg"
-            self._act(receiver, "train.arrived", movement_id=leg["to_movement_id"], track_id=leg["track_id"])
+            self._act(receiver, "train.arrived", movement_id=leg["to_movement_id"],
+                      track_id=self._arrival_track(publication, day, receiver, leg))
             return ""
         case = cases.get(key)
         if case is not None and case["from_station_id"] != sender:
@@ -587,7 +599,8 @@ class AutomaticStations:
             result = self._act(sender, "clearance.request", movement_id=key, connection_id=leg["connection_id"])
             case = self.store.clearance(result["revision"]["key"])
         if case and case["status"] == "waiting" and self.mode(receiver, state) == "automatic":
-            if self.service.track_conflict(publication, day, receiver, leg["to_movement_id"], leg["track_id"], actual=True):
+            track = self._arrival_track(publication, day, receiver, leg)
+            if track is None or self.service.track_conflict(publication, day, receiver, leg["to_movement_id"], track, actual=True):
                 return "Mottagningsspåret är upptaget"
             answer_at = self._answer_at.setdefault(case["clearance_id"], self.now() + self._settings_value("answer_seconds"))
             if self.now() < answer_at:

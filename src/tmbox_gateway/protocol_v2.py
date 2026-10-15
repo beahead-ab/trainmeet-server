@@ -17,6 +17,7 @@ from functools import wraps
 from typing import Any, Callable
 from uuid import uuid4
 
+from . import default_tracks
 from .identity import DisplayCapability, IdentityStore
 from .models import DispatchMode, SessionConfig, TrackType, UnknownTrackError, resolve_track_id
 from .observability import log_event, use_correlation
@@ -658,6 +659,11 @@ class TMBoxStationService:
                 track = resolve_track_id(config.tracks, station_id, str(body.get("track_id") or track or ""))
             except UnknownTrackError as error:
                 raise CommandRejected("unknown_track") from error
+            if track is None:
+                # Tidtabellen säger inget spår: stationens första lediga
+                # standardspår för tågsorten och färdriktningen (4.9.0).
+                track = default_tracks.choose(publication.payload, movement, lambda candidate: self.track_conflict(
+                    publication, active_day, station_id, movement_id, candidate, actual=True))
             if track is None:
                 raise CommandRejected("unknown_track")
             # Another train on the track, on paper or for real, does not stop

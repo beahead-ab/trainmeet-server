@@ -15,6 +15,7 @@ from threading import RLock
 from time import monotonic
 from uuid import uuid4
 
+from . import default_tracks
 from .engine import TrafficEngine
 from .models import ConnectionState as State, DispatchMode
 from .train_routes import resolve_departure, RouteResolutionError
@@ -265,12 +266,17 @@ class Terminal16Lab:
                     "station": {"code": other.code, "name": other.name},
                     "side": self._side(terminal.station, other.id, leg["connection_id"]),
                     "track": labels.get(movement.get("track_id")),
+                    # Där tåget står på riktigt, om det skiljer sig (4.9.0).
+                    "actual_track": labels.get(self._actual_track(terminal.station, movement.get("id"))),
                     "state": state, "selected": terminal.selected == key,
                 }))
             clock = self.engine.meeting_clock()["time"]
             return {"station": {"code": station.code, "name": station.name}, "side": terminal.side,
                     "clock": clock if re.fullmatch(r"\d{2}:\d{2}", str(clock)) else None,
                     "revision": self.engine.revision,
+                    # Stationens alla spår i stationens ordning, även tomma, så
+                    # att Spårbeläggning visar varje spår (4.9.0).
+                    "tracks": [track.display_label for track in self._tracks(terminal)],
                     "rows": [entry for _, _, _, entry in sorted(rows)]}
 
     def timetable(self, device):
@@ -634,8 +640,36 @@ class Terminal16Lab:
     def _tracks(self, terminal):
         return self.engine.config.tracks_for_station(terminal.station)
 
+    def _actual_track(self, station, movement_id):
+        """Spåret tåget tagits emot på i provbänken."""
+        return next((a["track"] for a in self.arrivals.values()
+                     if a["station"] == station and a["movement_id"] == movement_id), None)
+
+    def _occupied(self, station, movement_id, track_id):
+        """Står ett annat tåg på spåret? Provbänken vet det ur sina egna ankomster."""
+        return any(a["station"] == station and a["track"] == track_id and a["movement_id"] != movement_id
+                   for a in self.arrivals.values())
+
     def _planned_track(self, leg):
-        return next(r.get("track_id") for r in self.publication["trains"] if r["id"] == leg["to_movement_id"])
+        """Tidtabellens spår, annars mottagarens första lediga standardspår (4.9.0)."""
+        row = next(r for r in self.publication["trains"] if r["id"] == leg["to_movement_id"])
+        if row.get("track_id"):
+            return row["track_id"]
+        return default_tracks.choose(self.publication, row, lambda track: self._occupied(
+            leg["to_station_id"], leg["to_movement_id"], track))
+
+    def _track_choices(self, terminal):
+        """Spårvalet för det valda tåget: dess spår först, sedan stationens
+        standardspår, sedan resten. Valet börjar på tågets spår (4.9.0)."""
+        tracks = self._tracks(terminal)
+        leg = self.legs.get(terminal.selected)
+        if leg is None or leg["to_station_id"] != terminal.station:
+            return tracks
+        row = next((r for r in self.publication["trains"] if r["id"] == leg["to_movement_id"]), None)
+        by_id = {track.id: track for track in tracks}
+        order = default_tracks.ordered(self._planned_track(leg),
+                                       default_tracks.candidates(self.publication, row) if row else [], by_id)
+        return [by_id[track] for track in order if track in by_id]
 
     def _automatic_here(self, terminal) -> bool:
         """Does the automation work this box's station? Only the server's
@@ -842,8 +876,8 @@ class Terminal16Lab:
                 question = t("FLYTTA {number}?", number=selected["train_number"])
             first, hint = row_(question), "#Ja B:Sp"
             middle = self._leg_rows(terminal, selected, t)
-        elif terminal.screen == "tracks":
-            tracks = self._tracks(terminal)
+        elif terminal.screen == "tracks" and self._track_choices(terminal):
+            tracks = self._track_choices(terminal)
             label = tracks[terminal.track % len(tracks)].display_label
             first, hint = row_(t("{number} SPÅR {track}", number=selected['train_number'], track=label)), "#In C/D:Sp"
             middle = self._leg_rows(terminal, selected, t)
@@ -1073,7 +1107,7 @@ class Terminal16Lab:
             terminal.return_screen = terminal.screen
             terminal.track, terminal.screen = 0, "tracks"
         elif action in {"next_track", "previous_track"}:
-            terminal.track = (terminal.track + (1 if action == "next_track" else -1)) % len(self._tracks(terminal))
+            terminal.track = (terminal.track + (1 if action == "next_track" else -1)) % max(1, len(self._track_choices(terminal)))
         else:
             message = self._traffic(device, terminal, action)
             if message:
@@ -1094,8 +1128,9 @@ class Terminal16Lab:
         refused = lambda reason: {"connection_busy": "Sträckan är upptagen", "departure_not_reserved": "Klartecken saknas",
                                   "train_not_departed": "Tåget har inte avgått"}.get(reason, "Läget har ändrats. Välj tåget igen.")
         if action in {"arrive", "arrive_track"}:
-            arrival_track = (self._tracks(terminal)[terminal.track % len(self._tracks(terminal))].id
-                             if action == "arrive_track" else self._planned_track(leg))
+            choices = self._track_choices(terminal)
+            arrival_track = (choices[terminal.track % len(choices)].id
+                             if action == "arrive_track" and choices else self._planned_track(leg))
             track = self.engine.config.tracks.get(arrival_track)
             if not track or not track.active or track.station_id != terminal.station:
                 return "Ankomstspåret är inte giltigt"

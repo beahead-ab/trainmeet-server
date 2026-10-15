@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from . import default_tracks
 from .models import (
     ConnectionConfig,
     PanelConfig,
@@ -440,6 +441,7 @@ class RuntimePublication:
                 str(value.get("train_number") or ""),
             )
         )
+        defaults = default_tracks.all_candidates(self.payload)
         train_numbers = {str(train["train_number"]) for train in trains}
         routes = [
             route
@@ -464,7 +466,11 @@ class RuntimePublication:
             "stations": self.payload["stations"],
             "tracks": self.payload["tracks"],
             "trains": [
-                {**train, "track": labels.get(str(train.get("track_id")))}
+                {**train, "track": labels.get(str(train.get("track_id"))),
+                 # Stationens standardspår för raden, i stationens ordning
+                 # (4.9.0). Spårvalen visar dem efter tågets eget spår.
+                 **({"default_tracks": [labels[track] for track in defaults[str(train["id"])] if track in labels]}
+                    if str(train.get("id")) in defaults else {})}
                 for train in trains
             ],
             "routes": routes,

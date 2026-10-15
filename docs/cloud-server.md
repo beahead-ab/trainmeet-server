@@ -170,7 +170,10 @@ historikbaserade förslag mellan träffar.
 Konsekvens för TMBox-scopen: `track_preferences` i `docs/tmbox.md` §8 —
 historikbaserade spårförslag rangordnade tilldelat → tidtabell → historik →
 stationsdefault — **utgår**. Historik mellan träffar är meningslös när varje
-träff är unik. Rangordningen tilldelat → tidtabell → stationsdefault står kvar.
+träff är unik. Rangordningen tilldelat → tidtabell → stationsdefault står kvar,
+och stationsdefault finns sedan 4.9.0: stationens standardspår per tågsort och
+färdriktning (`stations[].default_tracks` med `default_track_sides`), se
+`src/tmbox_gateway/default_tracks.py`.
 
 ## Vad som inte ändras
 

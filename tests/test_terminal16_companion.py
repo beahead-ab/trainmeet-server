@@ -118,7 +118,7 @@ class CompanionRuntimeTests(unittest.TestCase):
         self.fixture.tearDown()
 
     def test_unassigned_box_gets_an_empty_timetable(self):
-        self.assertEqual(self.terminals.timetable("nobody"), {"station": None, "side": None, "clock": None, "revision": 0, "rows": []})
+        self.assertEqual(self.terminals.timetable("nobody"), {"station": None, "side": None, "clock": None, "revision": 0, "tracks": [], "rows": []})
 
     def test_live_timetable_reads_the_shared_cases(self):
         before = {r["train_number"]: r["state"] for r in self.terminals.timetable("esp8266")["rows"] if r["kind"] == "departure"}

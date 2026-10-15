@@ -24,6 +24,7 @@ LOGGER = logging.getLogger("tmbox_gateway.terminal16")
 class RuntimeViews(Terminal16Lab):
     def __init__(self, service, *, now=monotonic):
         self.service = service
+        self._states = {}
         publication = deepcopy(service.publication().payload)
         publication["meet"]["active_day"] = service.runtime_store.active_day() or service.publication().active_day
         # A read projection, NOT another traffic authority or persistent engine.
@@ -75,6 +76,15 @@ class RuntimeViews(Terminal16Lab):
         mode = "automatic" if self._automatic_here(terminal) else "manned"
         return sha256(f"{super()._token(device, terminal)}:{mode}".encode()).hexdigest()[:24]
 
+    def _actual_track(self, station, movement_id):
+        """Spåret TKL, en box eller automatiken satt för rörelsen."""
+        return (self._states.get(station, {}).get(movement_id) or {}).get("actualTrack")
+
+    def _occupied(self, station, movement_id, track_id):
+        """Står ett tåg på spåret på riktigt? Samma fråga som ankomsten ställer."""
+        service = self.service
+        return service.track_conflict(service.publication(), self.day, station, movement_id, track_id, actual=True)
+
     def refresh(self):
         service = self.service
         publication = service.publication()
@@ -82,6 +92,7 @@ class RuntimeViews(Terminal16Lab):
             service.runtime_store.display_placement_overrides(publication.meet_id))
         states = {station: service.operations_store.tkl_station_state(
             publication.publication_id, self.day, station)["movements"] for station in self.engine.config.stations}
+        self._states = states
         cases = {case["movement_id"]: case for case in service.open_cases(None)
                  if case["movement_id"] in self.legs
                  and case["connection_id"] == self.legs[case["movement_id"]]["connection_id"]
@@ -162,7 +173,7 @@ class RuntimeViews(Terminal16Lab):
             body = {"movement_id": leg["from_movement_id"], "connection_id": leg["connection_id"]}
         elif action in {"arrive", "arrive_track"}:
             # Also a train never sent in the system: it is placed here (2.1.0).
-            tracks = self._tracks(terminal)
+            tracks = self._track_choices(terminal)
             track = tracks[terminal.track % len(tracks)].id if action == "arrive_track" and tracks else self._planned_track(leg)
             operation, body = "train.arrived", {"movement_id": leg["to_movement_id"], "track_id": track}
         elif case is None:
@@ -264,7 +275,7 @@ class Terminal16Service:
         with self.service.operations_store.command_lock:
             views = self._views(device)
             if views is None:
-                return {"station": None, "side": None, "clock": None, "revision": 0, "rows": []}
+                return {"station": None, "side": None, "clock": None, "revision": 0, "tracks": [], "rows": []}
             return views.station_timetable(device)
 
     def command(self, device, body):
