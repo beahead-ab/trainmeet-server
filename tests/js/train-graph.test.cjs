@@ -92,6 +92,16 @@ test('tracks: the catalogue in its order, plus tracks only the timetable knows',
   assert.equal(graph.trackOf(snapshot()).get('s-1|b'), '3');
 });
 
+test("tracks: every active track, the yard's arrival and departure tracks after the station's own, in the station's order", () => {
+  // Casper 2026-10-15: alla aktuella spår, även tomma; godsbangårdens 11–13 är TKL:s spår.
+  const yard = [['t20', '2', 20, null], ['t10', '1A', 10, null], ['t11', '11', 10, 'rbg'], ['t12', '12', 20, 'rbg'],
+    ['t13', '13', 30, 'rbg'], ['t9', '9', 5, null, false]]
+    .map(([id, label, order, point, active = true]) => ({ id, station_id: 'e', display_label: label, sort_order: order, operating_point_id: point, active }));
+  const byStation = graph.stationTracks(snapshot({ tracks: [...tracks, ...yard],
+    trains: [...trains, { id: 'r8', service_id: 's-8', station_id: 'e', train_number: '8', track: 'X' }] }));
+  assert.deepEqual(byStation.get('e'), ['1A', '2', '11', '12', '13', 'X'], 'no train needs to stand there; 9 is closed');
+});
+
 test('layout: stations lie at their running time apart, never closer than the gap', () => {
   const g = graph.layout(snapshot(), { width: 1000, windowMinutes: 0, now: 615, line: 'a..d', pxPerMinute: 4, gap: 22 });
   const y = Object.fromEntries(g.panels[0].stations.map((entry) => [entry.station.id, entry.y]));

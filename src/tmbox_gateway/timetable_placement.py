@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from . import default_tracks
 from .runtime import matches_active_day
 from .train_routes import _order, _visits
 
@@ -96,6 +97,7 @@ def timetable_positions(payload: dict[str, Any], day: str, clock_seconds: float)
                     or (stop["arrival"] is not None and stop["arrival"] <= clock_seconds)), default=-1)
 
     result = {}
+    standing: dict[str, str] = {}
     for number, runs in journeys.items():
         runs.sort(key=first_time)
         # Samma tågnummer flera gånger samma dag: den körning som har börjat
@@ -132,4 +134,17 @@ def timetable_positions(payload: dict[str, Any], day: str, clock_seconds: float)
                 result[number] = {"station_id": None, "track_id": None, "states": states}
                 continue
         result[number] = {"station_id": here["station_id"], "track_id": here["track_id"], "states": states}
+        standing[number] = here["movement_id"]
+    # Ett tåg utan spår i tidtabellen står på stationens första lediga
+    # standardspår för sin tågsort och färdriktning (4.9.0).
+    used = {(entry["station_id"], str(entry["track_id"])) for entry in result.values() if entry["station_id"] and entry["track_id"]}
+    rows = {str(row["id"]): row for row in payload.get("trains", [])}
+    for number in sorted(standing):
+        entry, movement = result[number], standing[number]
+        if entry["track_id"] or movement not in rows:
+            continue
+        track = default_tracks.choose(payload, rows[movement], lambda candidate: (entry["station_id"], candidate) in used)
+        if track:
+            entry["track_id"] = entry["states"][movement]["track_id"] = track
+            used.add((entry["station_id"], track))
     return result

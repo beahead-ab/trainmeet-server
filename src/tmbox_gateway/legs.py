@@ -5,6 +5,7 @@ They lived in simulation.py until the simulation was removed (Server 4.0).
 """
 from __future__ import annotations
 
+from . import default_tracks
 from .operations import _time_to_seconds
 from .runtime import matches_active_day
 from .train_routes import resolve_departure, RouteResolutionError
@@ -51,12 +52,17 @@ def plan_legs(publication, day):
             if departure is None or arrival is None or not 0 < arrival - departure <= 86400:
                 raise ValueError("Restid saknas eller är orimlig")
             target = movements[leg["to_movement_id"]]
+            planned = {}
             for row in (movement, target):
                 track = publication.track_catalogue().get(row.get("track_id"))
-                if not track or not track.active or track.station_id != row["station_id"]:
+                if track and track.active and track.station_id == row["station_id"]:
+                    planned[str(row["id"])] = row["track_id"]
+                elif not default_tracks.candidates(payload, row):
+                    # Utan planerat spår räcker stationens standardspår (4.9.0).
                     raise ValueError("Aktivt planerat spår saknas")
+            # None: mottagaren tar sitt första lediga standardspår när tåget kommer.
             legs[key] = {**leg, "departure": departure, "arrival": arrival,
-                         "duration": arrival - departure, "track_id": target["track_id"]}
+                         "duration": arrival - departure, "track_id": planned.get(str(target["id"]))}
         except (RouteResolutionError, KeyError, ValueError) as error:
             errors.append(f"Tåg {movement['train_number']} ({key}): {error}")
     incoming = {leg["to_movement_id"]: key for key, leg in legs.items()}

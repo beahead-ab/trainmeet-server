@@ -145,7 +145,8 @@ class SessionConfig:
         """Return a station's tracks in the order a track selector shows them.
 
         sort_order decides, not the label, so 1A can precede 10 even though
-        string sorting disagrees.
+        string sorting disagrees. The station's own tracks come first and an
+        operating point's (RBG 11–13) after, as in Cloud: both number from 10.
         """
         return sorted(
             (
@@ -158,7 +159,7 @@ class SessionConfig:
                     or track.operating_point_id == operating_point_id
                 )
             ),
-            key=lambda track: (track.sort_order, track.display_label),
+            key=lambda track: (track.operating_point_id or "", track.sort_order, track.display_label),
         )
 
     def resolve_track(self, station_id: str, value: str | None) -> str | None:

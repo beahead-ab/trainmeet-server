@@ -195,12 +195,19 @@ samma tangentregler över HTTP i stället för MQTT. De får ingen egen trafiklo
   tangenttryck med `command_id`, `view_token`, `key` och vid inmatning
   `train_number` och `entry_context`, precis som §5.
 - `GET /v1/tmbox/terminal/timetable` hämtar stationens tidtabell för boxens
-  station och sida: `station {code, name}`, `side`, `clock`, `revision` och
-  `rows`. Varje rad har `movement_id`, `train_number`, `kind`
-  (`departure`/`arrival`), `time`, `station {code, name}` (andra änden),
-  `side`, `track`, `state` och `selected`. `state` är `planned`, `requested`,
-  `cleared`, `departed` eller `arrived`. Läsningen ger ingen trafikrätt; utan
-  station är `rows` tom.
+  station och sida: `station {code, name}`, `side`, `clock`, `revision`,
+  `tracks` och `rows`. `tracks` är stationens alla aktiva spår i stationens
+  ordning, även tomma, med driftplatsens (godsbangårdens) sist. Varje rad har
+  `movement_id`, `train_number`, `kind` (`departure`/`arrival`), `time`,
+  `station {code, name}` (andra änden), `side`, `track` (tidtabellens),
+  `actual_track` (där tåget tagits emot eller flyttats, annars `null`),
+  `state` och `selected`. `state` är `planned`, `requested`, `cleared`,
+  `departed` eller `arrived`. Läsningen ger ingen trafikrätt; utan station är
+  `rows` och `tracks` tomma.
+- Spårvalet (B på ett tåg som ska tas emot) visar tågets spår först, sedan
+  stationens standardspår för tåget och sist resten, och börjar på tågets spår.
+  Saknar tidtabellen spår är tågets spår stationens första lediga
+  standardspår.
 - DNS-SD-posten `_tmbox._tcp` pekar på MQTT-porten. TXT `http=<port>` anger
   webbporten, så att iPhone hittar samma server på träffens nät.
 

@@ -222,24 +222,30 @@
 
   // ── Spåren ────────────────────────────────────────────────────────────
 
-  /** stations-id → spårens etiketter i spårkatalogens ordning. */
+  /** stations-id → spårens etiketter i stationens ordning.
+   *
+   * Alla stationens aktiva spår, även de som står tomma: stationens egna
+   * först och en driftplats spår (godsbangårdens ankomst- och avgångsspår)
+   * efter, var för sig i katalogens ordning (4.9.0). Spår som bara står i
+   * tidtabellen, utan katalog, kommer sist. */
   function stationTracks(snapshot) {
     const result = new Map();
-    const catalogue = [...(snapshot?.tracks || [])].filter((track) => track.active !== false && !track.operating_point_id)
-      .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || model.compare(a.display_label, b.display_label));
+    const catalogue = [...(snapshot?.tracks || [])].filter((track) => track.active !== false)
+      .sort((a, b) => String(a.operating_point_id || "").localeCompare(String(b.operating_point_id || ""))
+        || Number(a.sort_order || 0) - Number(b.sort_order || 0) || model.compare(a.display_label, b.display_label));
     for (const track of catalogue) {
       if (!result.has(track.station_id)) result.set(track.station_id, []);
       const label = String(track.display_label || "").trim();
       if (label && !result.get(track.station_id).includes(label)) result.get(track.station_id).push(label);
     }
-    // Spår som bara står i tidtabellen, utan katalog.
+    const extra = new Map();
     for (const row of snapshot?.trains || []) {
       const label = String(row.track || "").trim();
-      if (!label || !row.station_id) continue;
-      if (!result.has(row.station_id)) result.set(row.station_id, []);
-      if (!result.get(row.station_id).includes(label)) result.get(row.station_id).push(label);
+      if (!label || !row.station_id || result.get(row.station_id)?.includes(label)) continue;
+      if (!extra.has(row.station_id)) extra.set(row.station_id, new Set());
+      extra.get(row.station_id).add(label);
     }
-    for (const list of result.values()) list.sort(model.compare);
+    for (const [station, labels] of extra) result.set(station, [...(result.get(station) || []), ...[...labels].sort(model.compare)]);
     return result;
   }
 

@@ -9,11 +9,14 @@ import subprocess
 import tarfile
 
 MODULES = (
-    "__init__", "device_ui", "display", "display_placement", "engine", "models", "observability",
+    "__init__", "default_tracks", "device_ui", "display", "display_placement", "engine", "models", "observability",
     "runtime", "storage", "terminal16", "terminal16_demo", "terminal16_glyphs",
     "terminal16_public", "terminal16_i18n", "train_routes",
 )
+# Standardspåren (default_tracks) läser den delade tidtabellskärnan.
+TIMETABLE_CORE = ("__init__", "default_tracks", "dispatch", "findings", "sanity", "services", "times", "tracks")
 FILES = [f"src/tmbox_gateway/{name}.py" for name in MODULES] + [
+    f"src/tmbox_gateway/timetable_core/{name}.py" for name in TIMETABLE_CORE] + [
     f"src/tmbox_gateway/terminal16_web/{name}" for name in ("index.html", "style.css", "terminal.js")
 ] + ["deploy/terminal16/deploy.py", "deploy/terminal16/update.py", "deploy/terminal16/package.py",
      "deploy/terminal16/README.md", "docs/TMBOX-16X2-PILOT.md"]
