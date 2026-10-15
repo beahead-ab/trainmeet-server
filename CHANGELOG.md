@@ -5,6 +5,14 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Webb-TMBoxens spårval börjar på tågets spår
+
+B öppnar spårväljaren i webb-TMBoxen och i provbänken på tågets eget spår,
+så att A behåller spåret och C bläddrar vidare därifrån. Förut började den
+alltid på stationens första spår. Ett tåg utan spår börjar på det första.
+Det är samma ändring som i boxens firmware (trainmeet-tmbox), och den gyllene
+spårningen `track-picker-starts-on-own-track` håller dem lika.
+
 ### Standardspår när tidtabellen saknar spår, och alla stationens spår
 
 Casper ville att en station ska kunna ha standardspår för persontåg och

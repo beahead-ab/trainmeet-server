@@ -36,6 +36,11 @@
     return (snapshot.movements || []).findIndex((entry) => entry.id === movementId);
   }
 
+  /** The track picker starts on the train's own track; without one, on the first. */
+  function indexOfTrack(tracks, trackId) {
+    return Math.max(0, tracks.findIndex((entry) => entry.id === trackId));
+  }
+
   function nextIndex(current, count) {
     return count === 0 ? -1 : (current + 1) % count;
   }
@@ -195,7 +200,7 @@
             return { outcome: "Send", command: { action, movement_id: movement.id } };
           }
           if (key === "B" && allows(movement, "train.track.change")) {
-            this.view.selected_track = 0;
+            this.view.selected_track = indexOfTrack(tracks, movement.assignedTrackId);
             this.show("TrackPicker", nowMs);
             return { outcome: "Redraw", command: null };
           }
