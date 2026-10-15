@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.9.0",
+    "date": "2026-10-16",
+    "notes": [
+      "Standardspår när tidtabellen saknar spår, och alla stationens spår"
+    ]
+  },
+  {
     "version": "4.8.0",
     "date": "2026-10-14",
     "notes": [
