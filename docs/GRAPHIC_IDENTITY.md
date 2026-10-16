@@ -100,7 +100,7 @@ Samma märke i Drift, på skärmarna och i deltagarvyn, större på en TV:
 Klockan, Banöversikt, Tågdiagram och Översikt ritas på en duk om minst
 1920 × 1080 som skalas in i fönstret (`server-ui.js`, `resizeStage`). Duken
 följer skärmens form, högst 4:3 och 2560 bred: en 16:10-skärm får 1920 × 1200
-i stället för svarta band (4.11.0). Utseendet
+i stället för svarta band (4.12.0). Utseendet
 ligger i `web/skarmar.css`, som laddas efter de äldre stilarken och använder
 samma tokens som Drift.
 

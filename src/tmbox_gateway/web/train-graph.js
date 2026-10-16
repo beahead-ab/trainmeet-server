@@ -251,7 +251,7 @@
 
   /** "tjänst|station" → spår: det spår tåget verkligen fick (TKL:s val eller
    * serverns standardspår, i `movement_live`), annars tidtabellens, annars
-   * stationens första standardspår för raden (4.11.0). */
+   * stationens första standardspår för raden (4.12.0). */
   function trackOf(snapshot) {
     const catalogue = snapshot?.tracks || [];
     const live = snapshot?.movement_live || {};
@@ -463,7 +463,7 @@
     label: "sc-graph-label", code: "sc-graph-code", trackLabel: "sc-graph-track", title: "sc-graph-title", train: "graph-train-group", line: "sc-graph-line", hit: "sc-graph-hit", lit: "graph-train-group is-lit", litLine: "sc-graph-line is-out",
     dwell: "sc-graph-dwell", name: "sc-graph-train", minute: "sc-graph-minute", tag: "graph-train-group", tagBox: "sc-graph-tag", tagText: "sc-graph-tag-text",
     tagBoxCleared: "sc-graph-tag is-cleared", tagTextCleared: "sc-graph-tag-text is-cleared", now: "sc-graph-now", nowBox: "sc-graph-now-tag", nowText: "sc-graph-now-text", tagHeight: 18, labelDy: 5.5,
-    // Storskärmens tågnummer, minuter och klocka är 15 % större än Drifts (4.11.0); skarmar.css har storlekarna.
+    // Storskärmens tågnummer, minuter och klocka är 15 % större än Drifts (4.12.0); skarmar.css har storlekarna.
     // Spårens namn står i en egen kolumn, så att stationens namn inte skrivs över.
     text: 1.15, trackColumn: 24 };
 

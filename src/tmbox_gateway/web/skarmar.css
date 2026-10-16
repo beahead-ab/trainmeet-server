@@ -157,7 +157,7 @@ body.server-display { background: var(--kr-bg); }
 /* ── Tågdiagram ─────────────────────────────────────────────────────── */
 /* I skissens mått (en skärm 1440 bred), uppskalat till duken: bara namn,
    tunna linjer och tågnummer, utan kort och ram. Texten är större än i
-   skissen (4.11.0) så att den läses i hallen: namnen 16, klockslagen 15 och
+   skissen (4.12.0) så att den läses i hallen: namnen 16, klockslagen 15 och
    tågnumren 15 % större än Drifts, som train-graph.js räknar med (SCREEN.text). */
 #graph-scroll { border: 0; border-radius: 0; background: none; }
 .sc-graph-past { fill: color-mix(in srgb, var(--kr-panel) 70%, transparent); }

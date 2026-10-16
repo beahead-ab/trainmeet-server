@@ -256,7 +256,7 @@ function checkMap(map, where) {
       const svg = document.querySelector('#graph-svg');
       const group = [...svg.querySelectorAll('.graph-train-group')].find((el) => el.dataset.trainNumber === '93' && el.querySelector('.sc-graph-tag'));
       const rect = group.querySelector('.sc-graph-tag');
-      // Namnets text står 5,5 under raden på storskärmen (4.11.0); brickan mäts i sin egen höjd.
+      // Namnets text står 5,5 under raden på storskärmen (4.12.0); brickan mäts i sin egen höjd.
       const row = (name) => Number([...svg.querySelectorAll('.sc-graph-label')].find((t) => t.textContent === name).getAttribute('y')) - 5.5;
       return { middle: Number(rect.getAttribute('y')) + Number(rect.getAttribute('height')) / 2, from: row('Ångviken'), to: row('Kristineberg') };
     });

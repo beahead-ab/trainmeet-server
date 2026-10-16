@@ -138,7 +138,7 @@
     stage.append(header, content, footer);
     // Skärmen är en duk på minst 1920 × 1080 som skalas in. Duken följer
     // skärmens form: på en 16:10-skärm blir den 1920 × 1200 i stället för att
-    // få svarta band över och under (4.11.0), och på en bredare skärm bredare,
+    // få svarta band över och under (4.12.0), och på en bredare skärm bredare,
     // högst 4:3 och 2560 bred; en ännu ovanligare skärm får band som förut.
     // I fönsterläge står verktygsraden kvar ovanför duken, och duken får det
     // som blir över. En urtavla på en stående skärm (telefon, surfplatta,

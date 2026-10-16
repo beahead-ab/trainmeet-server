@@ -4499,7 +4499,7 @@ function renderGraph(snapshot) {
   const height = Math.max(420, Math.round((svg.clientHeight || 850) * SCREEN_MAP_UNITS));
   const { now, min, max } = graphWindowBounds(snapshot);
   const longest = Math.max(0, ...(snapshot.stations || []).map((station) => String(station.name || "").length));
-  // Namnen är 16 px på storskärmen (4.11.0), spårens namn 10 i en egen kolumn
+  // Namnen är 16 px på storskärmen (4.12.0), spårens namn 10 i en egen kolumn
   // när någon station är utfälld.
   const tracks = displayGraphTracks();
   const left = Math.min(340, Math.max(120, Math.round(longest * 9.1) + 30 + (tracks === "none" ? 0 : lib.SCREEN.trackColumn)));
@@ -4992,7 +4992,7 @@ function displayGraphWindow() {
   const value = Number(displayStored(DISPLAY_GRAPH_WINDOW_KEY));
   return DISPLAY_GRAPH_WINDOWS.includes(value) ? value : 180;
 }
-// Spårraderna i storskärmens tågdiagram, per skärm (4.11.0): "all", eller
+// Spårraderna i storskärmens tågdiagram, per skärm (4.12.0): "all", eller
 // stationerna som är utfällda.
 function displayGraphTracks() {
   const stored = displayStored(DISPLAY_GRAPH_TRACKS_KEY);

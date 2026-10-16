@@ -1,4 +1,4 @@
-// Storskärmens tågdiagram (4.11.0), efter Caspers skärmbild 2026-10-16:
+// Storskärmens tågdiagram (4.12.0), efter Caspers skärmbild 2026-10-16:
 // duken fyller en 16:10-skärm utan svarta band, texten är större, och
 // skärmen kan fälla ut stationer i spårrader (menyn Spårrader eller ett tryck
 // på stationens namn). Tåget står på det spår det verkligen fick.
