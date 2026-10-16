@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.11.0",
+    "date": "2026-10-16",
+    "notes": [
+      "Ett tryck på klockan visar eller döljer sekunderna"
+    ]
+  },
+  {
     "version": "4.10.1",
     "date": "2026-10-16",
     "notes": [
