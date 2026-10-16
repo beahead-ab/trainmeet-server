@@ -4591,6 +4591,27 @@ function saveDisplayClockPreference(key, value) {
   try { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); } catch {}
 }
 
+// Snabbinställningen (Casper 2026-10-16): ett tryck på klockan visar eller
+// döljer sekunderna, i den här webbläsaren. Det är samma val som Sekunder i
+// storskärmens verktygsrad: tomt följer inställningarna, annars på eller av.
+// Kör och rubrikraden visar minuter tills någon trycker; storskärmen och
+// deltagarvyn följer klockans inställning tills dess.
+globalThis.TrainMeetClockSeconds = {
+  resolve(fallback) {
+    const choice = displayClockPreference().seconds;
+    return choice === "on" ? true : choice === "off" ? false : fallback;
+  },
+  toggle(shown) {
+    saveDisplayClockPreference(DISPLAY_CLOCK_SECONDS_KEY, shown ? "off" : "on");
+    document.dispatchEvent(new CustomEvent("trainmeet:clock-seconds"));
+  },
+};
+document.addEventListener("trainmeet:clock-seconds", () => {
+  if (!displaySnapshot) return;
+  renderClockToolbar(displaySnapshot);
+  renderClock(displaySnapshot);
+});
+
 function resolveClockAppearance(snapshot) {
   globalThis.TrainMeetClockFace?.remember(snapshot.clock?.faces);
   const available = snapshot.clock?.available_styles?.length ? snapshot.clock.available_styles : ["analog", "digital"];
@@ -5128,6 +5149,10 @@ async function initDisplay() {
   };
   displayApp.addEventListener("mousemove", showToolbar);
   displayApp.addEventListener("click", showToolbar);
+  // Ett tryck på storskärmens klocka visar eller döljer sekunderna här.
+  document.querySelector("#clock-view").addEventListener("click", () => {
+    if (displaySnapshot) globalThis.TrainMeetClockSeconds.toggle(resolveClockAppearance(displaySnapshot).showSeconds);
+  });
   displayApp.addEventListener("touchstart", showToolbar, {passive:true});
   document.addEventListener("keydown", showToolbar);
   window.addEventListener("resize", updateChrome);

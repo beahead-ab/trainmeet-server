@@ -119,7 +119,8 @@
     globalThis.TrainMeetClockFace?.remember(clock.faces);
     const style = clock.style || "digital";
     const digital = style === "digital";
-    const showSeconds = clock.show_seconds !== false;
+    // Ett tryck på klockan visar eller döljer sekunderna, i den här webbläsaren.
+    const showSeconds = globalThis.TrainMeetClockSeconds?.resolve(clock.show_seconds !== false) ?? clock.show_seconds !== false;
     const stopped = !clock.running;
     const us = snapshot.meet?.operating_region === "us";
     const meta = [meetDayLabel(snapshot), stopped && clock.stopped_reason ? clock.stopped_reason : clock.source === "fastclock" ? "FastClock" : t("intern klocka")].filter(Boolean).join(" · ");
@@ -377,6 +378,12 @@
       bound = true;
       // Annotate only authored, empty markup once, before any meet data arrives.
       TrainMeetI18n.annotate($("#participant-view"));
+      // Ett tryck på klockan visar eller döljer sekunderna, som på Kör och storskärmen.
+      $("#pv-clock")?.addEventListener("click", () => {
+        const clock = snapshot?.clock || {};
+        globalThis.TrainMeetClockSeconds?.toggle(globalThis.TrainMeetClockSeconds.resolve(clock.show_seconds !== false));
+      });
+      document.addEventListener("trainmeet:clock-seconds", () => renderClockCard());
       $("#pv-timetable-search")?.addEventListener("input", (event) => { query = event.target.value; if (snapshot) renderTimetable(); });
       $("#pv-timetable-toggle")?.addEventListener("click", () => { fullTimetable = !fullTimetable; if (snapshot) renderTimetable(); });
       const sheet = $("#pv-connect-card");

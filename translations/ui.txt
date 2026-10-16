@@ -353,6 +353,8 @@ Delete|Radera|Slet|Slett|Löschen
 Edit|Redigera|Rediger|Rediger|Bearbeiten
 Copy|Kopiera|Kopiér|Kopier|Kopieren
 Copied|Kopierat|Kopieret|Kopiert|Kopiert
+Tap to show the seconds|Tryck för att visa sekunderna|Tryk for at vise sekunderne|Trykk for å vise sekundene|Tippen, um die Sekunden anzuzeigen
+Tap to hide the seconds|Tryck för att dölja sekunderna|Tryk for at skjule sekunderne|Trykk for å skjule sekundene|Tippen, um die Sekunden auszublenden
 Open|Öppna|Åbn|Åpne|Öffnen
 Search|Sök|Søg|Søk|Suchen
 Refresh|Uppdatera|Opdater|Oppdater|Aktualisieren

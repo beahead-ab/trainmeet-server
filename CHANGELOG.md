@@ -5,6 +5,21 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Ett tryck på klockan visar eller döljer sekunderna
+
+Casper: «Klickar man på klockan så togglas sekunder av/på
+(snabbinställning).» Klockan på Kör och i rubrikraden visar timmar och
+minuter som förut; ett tryck på den visar sekunderna, och ett tryck till
+döljer dem. Samma tryck fungerar på storskärmens klocka och i deltagarvyn,
+som följer klockans inställning (*Visa sekundvisare*) tills någon trycker.
+
+- Valet gäller den här webbläsaren och är detsamma som *Sekunder* i
+  storskärmens verktygsrad, som visar vad som är valt.
+- Med sekunderna framme och en snabb klocka (4×) visas varje träffsekund,
+  inte var fjärde.
+- Klockan på Kör och i rubrikraden är en knapp: Enter och mellanslag gör
+  samma sak, och pekaren säger vad ett tryck gör.
+
 ### Webb-TMBoxens spårval börjar på tågets spår
 
 B öppnar spårväljaren i webb-TMBoxen och i provbänken på tågets eget spår,
