@@ -5,6 +5,27 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Storskärmens tågdiagram fyller skärmen, med större text och spårrader
+
+Casper skickade en bild av tågdiagrammet på en 16:10-skärm: svarta band över
+och under, och liten text.
+
+- **Duken följer skärmens form.** En 16:10-skärm får en duk om 1920 × 1200 i
+  stället för 1920 × 1080 med svarta band, och diagrammet blir omkring 14 %
+  högre. Det gäller alla skärmar: Banöversikt, Översikt och klockan också.
+  En bredare skärm får en bredare duk, högst 2560.
+- **Större text i tågdiagrammet:** stationsnamnen 13 → 16, klockslagen
+  12 → 15, linjernas rubriker 12 → 14,5, och tågnummer, minuter och
+  nu-klockan 15 % större. Tågnumren placeras efter den nya storleken, så att
+  de inte krockar med linjerna och minuterna.
+- **Spårrader på storskärmen.** Menyn Spårrader i verktygsraden fäller ut en
+  eller flera stationer, eller alla, i spårrader; ett tryck på stationens
+  namn gör samma sak. Valet sparas per skärm.
+- **Tåget står på det spår det verkligen fick**, i spårraderna på Drift, på
+  storskärmen och i TKL: det spår TKL valde, eller serverns standardspår vid
+  ankomsten. Ett tåg som ännu inte kommit och saknar spår i tidtabellen står
+  på stationens första standardspår för tåget.
+
 ### Ett tryck på klockan visar eller döljer sekunderna
 
 Casper: «Klickar man på klockan så togglas sekunder av/på

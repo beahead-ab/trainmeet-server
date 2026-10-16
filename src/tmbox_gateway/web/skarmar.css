@@ -47,6 +47,13 @@ body.server-display { background: var(--kr-bg); }
 #display-toolbar.tbbar .tbbar__switch nav a { padding: 8px 10px; border-radius: 6px; color: var(--kr-ink-2); font-weight: 500; text-decoration: none; white-space: nowrap; }
 #display-toolbar.tbbar .tbbar__switch nav a:hover { background: var(--kr-panel-3); color: var(--kr-ink); }
 #display-toolbar.tbbar .tbbar__switch nav a[aria-current] { color: var(--kr-ink); font-weight: 700; }
+/* Spårraderna i storskärmens tågdiagram: en kryssruta per station med spår. */
+#display-toolbar.tbbar .tbbar__switch nav label { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: var(--kr-ink-2); font-weight: 500; white-space: nowrap; cursor: pointer; }
+#display-toolbar.tbbar .tbbar__switch nav label:hover { background: var(--kr-panel-3); color: var(--kr-ink); }
+#display-toolbar.tbbar .tbbar__switch nav label.is-all { border-bottom: 1px solid var(--kr-line); border-radius: 6px 6px 0 0; margin-bottom: 2px; }
+#display-toolbar.tbbar .tbbar__switch nav input { accent-color: var(--kr-blue); width: 16px; height: 16px; margin: 0; }
+#display-toolbar.tbbar #display-graph-tracks nav { max-height: 70vh; overflow-y: auto; }
+#display-toolbar.tbbar #display-graph-tracks.hidden { display: none; }
 @media (max-width: 1100px) { #display-toolbar.tbbar #display-day, #display-toolbar.tbbar #display-clock-seconds { display: none; } }
 @media (max-width: 760px) { #display-toolbar.tbbar .tbbar__name, #display-toolbar.tbbar .tbbar__switch, #display-toolbar.tbbar #display-live { display: none; } }
 
@@ -149,29 +156,34 @@ body.server-display { background: var(--kr-bg); }
 
 /* ── Tågdiagram ─────────────────────────────────────────────────────── */
 /* I skissens mått (en skärm 1440 bred), uppskalat till duken: bara namn,
-   tunna linjer och små tågnummer, utan kort och ram. */
+   tunna linjer och tågnummer, utan kort och ram. Texten är större än i
+   skissen (4.12.0) så att den läses i hallen: namnen 16, klockslagen 15 och
+   tågnumren 15 % större än Drifts, som train-graph.js räknar med (SCREEN.text). */
 #graph-scroll { border: 0; border-radius: 0; background: none; }
 .sc-graph-past { fill: color-mix(in srgb, var(--kr-panel) 70%, transparent); }
 .graph-grid { stroke: color-mix(in srgb, var(--kr-line) 60%, transparent); stroke-width: 1; }
 .graph-grid.graph-col { stroke: var(--kr-line-2); }
 .graph-grid.graph-col.is-half { stroke: var(--kr-line); stroke-dasharray: 3 5; }
-.sc-graph-label { font: 500 13px var(--kr-sans); fill: var(--kr-ink-2); }
-.sc-graph-time { font: 12px var(--kr-num); fill: var(--kr-mute); font-variant-numeric: tabular-nums; }
+.sc-graph-label { font: 500 16px var(--kr-sans); fill: var(--kr-ink-2); }
+/* Ett tryck på stationens namn fäller ut eller ihop dess spårrader. */
+.sc-graph-label[role=button] { cursor: pointer; }
+.sc-graph-label[role=button]:focus-visible { outline: 2px solid var(--kr-blue); outline-offset: 2px; }
+.sc-graph-time { font: 15px var(--kr-num); fill: var(--kr-mute); font-variant-numeric: tabular-nums; }
 .sc-graph-line { fill: none; stroke: var(--kr-faint); stroke-width: 1.5; stroke-linejoin: round; }
 .sc-graph-line.is-out { stroke: var(--kr-blue); stroke-width: 2.5; }
 .graph-train-group.selected .sc-graph-line { stroke: var(--kr-ink); stroke-width: 2.5; }
 .graph-train-group.selected .sc-graph-line.is-out { stroke: var(--kr-blue); stroke-width: 3.5; }
-.sc-graph-train { font: 600 11.5px var(--kr-num); fill: var(--kr-mute); stroke: var(--kr-bg); stroke-width: 3px; font-variant-numeric: tabular-nums; }
+.sc-graph-train { font: 600 13.2px var(--kr-num); fill: var(--kr-mute); stroke: var(--kr-bg); stroke-width: 3px; font-variant-numeric: tabular-nums; }
 .sc-graph-train.is-out { fill: var(--kr-blue); }
 .sc-graph-tag { fill: var(--kr-blue); }
-.sc-graph-tag-text { font: 600 11.5px var(--kr-num); fill: var(--kr-blue-ink); font-variant-numeric: tabular-nums; }
+.sc-graph-tag-text { font: 600 13.2px var(--kr-num); fill: var(--kr-blue-ink); font-variant-numeric: tabular-nums; }
 .sc-graph-now { stroke: var(--kr-amber); stroke-width: 2; }
 .sc-graph-now-tag { fill: var(--kr-amber); }
-.sc-graph-now-text { font: 600 11.5px var(--kr-num); fill: var(--kr-amber-ink); font-variant-numeric: tabular-nums; }
+.sc-graph-now-text { font: 600 13.2px var(--kr-num); fill: var(--kr-amber-ink); font-variant-numeric: tabular-nums; }
 /* Den grafiska tidtabellen (train-graph.js) på skärmen: varje linje ovanpå
    varandra, uppehåll, minuter och tågnumret längs linjen i tågtypens färg. */
-.sc-graph-title { font: 600 12px var(--kr-sans); fill: var(--kr-ink-2); letter-spacing: .02em; }
-.sc-graph-track { font: 9px var(--kr-num); fill: var(--kr-mute); }
+.sc-graph-title { font: 600 14.5px var(--kr-sans); fill: var(--kr-ink-2); letter-spacing: .02em; }
+.sc-graph-track { font: 10px var(--kr-num); fill: var(--kr-mute); }
 .graph-grid.graph-track { stroke-dasharray: 2 4; }
 .sc-graph-code { font: 12px var(--kr-mono); fill: var(--kr-mute); }
 .sc-graph-line.is-person { stroke: var(--kr-red); } .sc-graph-line.is-goods { stroke: var(--kr-blue); } .sc-graph-line.is-work { stroke: var(--kr-green); }
@@ -182,7 +194,7 @@ body.server-display { background: var(--kr-bg); }
 .sc-graph-dwell.is-person { stroke: var(--kr-red); } .sc-graph-dwell.is-goods { stroke: var(--kr-blue); } .sc-graph-dwell.is-work { stroke: var(--kr-green); }
 .sc-graph-train.is-person { fill: var(--kr-red); } .sc-graph-train.is-goods { fill: var(--kr-blue); } .sc-graph-train.is-work { fill: var(--kr-green); }
 .sc-graph-train { pointer-events: none; }
-.sc-graph-minute { font: 8.5px var(--kr-num); fill: var(--kr-mute); paint-order: stroke; stroke: var(--kr-bg); stroke-width: 2.5px; stroke-linejoin: round; pointer-events: none; font-variant-numeric: tabular-nums; }
+.sc-graph-minute { font: 10px var(--kr-num); fill: var(--kr-mute); paint-order: stroke; stroke: var(--kr-bg); stroke-width: 2.5px; stroke-linejoin: round; pointer-events: none; font-variant-numeric: tabular-nums; }
 .sc-graph-tag.is-cleared { fill: var(--kr-panel); stroke: var(--kr-blue); stroke-width: 2; }
 .sc-graph-tag-text.is-cleared { fill: var(--kr-blue); }
 .graph-train-group.selected .sc-graph-line { opacity: 1; }

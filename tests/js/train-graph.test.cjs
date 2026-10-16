@@ -92,6 +92,33 @@ test('tracks: the catalogue in its order, plus tracks only the timetable knows',
   assert.equal(graph.trackOf(snapshot()).get('s-1|b'), '3');
 });
 
+test('tracks: the train stands where it really is, else on the timetable track, else on the default track', () => {
+  // Casper 2026-10-16: spårraderna visar det spår TKL faktiskt valde, eller
+  // standardspåret när tidtabellen saknar spår.
+  const rows = [
+    { id: 'r1', service_id: 's-1', station_id: 'b', train_number: '1', track: '3' },
+    { id: 'r2', service_id: 's-2', station_id: 'b', train_number: '2', track: '1' },
+    { id: 'r3', service_id: 's-4', station_id: 'b', train_number: '4', track: null, default_tracks: ['2', '3'] },
+    { id: 'r5', service_id: 's-5', station_id: 'b', train_number: '5', track: null },
+    { id: 'r9', service_id: 's-9', station_id: 'b', train_number: '9', track: '1', default_tracks: ['3'] },
+  ];
+  const live = { r1: { arrival: 'arrived', actual_track: 't2' }, r2: { arrival: 'arrived', actual_track: '3' }, r9: { arrival: 'none', actual_track: null } };
+  const of = graph.trackOf(snapshot({ trains: rows, movement_live: live }));
+  assert.equal(of.get('s-1|b'), '1', "1 is planned on 3 but TKL took track t2, b's track 1");
+  assert.equal(of.get('s-2|b'), '3', 'an older state carries the label itself');
+  assert.equal(of.get('s-4|b'), '2', 'no track in the timetable: the first default track');
+  assert.equal(of.has('s-5|b'), false, 'no track at all: the station row');
+  assert.equal(of.get('s-9|b'), '1', "the timetable's track before the default");
+  assert.equal(graph.trackOf(snapshot({ trains: rows })).get('s-1|b'), '3', 'without live states: the timetable');
+  // Ett id från en annan station ger inte spåret här.
+  assert.equal(graph.trackOf(snapshot({ trains: rows, movement_live: { r1: { actual_track: 'unknown' } } })).get('s-1|b'), '3');
+  // Och tåget ritas på sin verkliga rad.
+  const g = graph.layout(snapshot({ trains: rows, movement_live: live }), { width: 1000, windowMinutes: 0, now: 615, line: 'a..d', tracks: 'all' });
+  const b = g.panels[0].rowOf.get('b');
+  const one = g.trains.find((train) => train.number === '1');
+  assert.equal(one.dwells[0].y, b.tracks.find((track) => track.label === '1').y);
+});
+
 test("tracks: every active track, the yard's arrival and departure tracks after the station's own, in the station's order", () => {
   // Casper 2026-10-15: alla aktuella spår, även tomma; godsbangårdens 11–13 är TKL:s spår.
   const yard = [['t20', '2', 20, null], ['t10', '1A', 10, null], ['t11', '11', 10, 'rbg'], ['t12', '12', 20, 'rbg'],

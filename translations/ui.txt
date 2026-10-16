@@ -1459,3 +1459,6 @@ The meet has no story yet.|Trafikspelet har ingen berättelse ännu.|Trafikspill
 Read about the meet|Läs om trafikspelet|Læs om trafikspillet|Les om trafikkspillet|Über das Verkehrsspiel lesen
 Loading the texts …|Läser texterna …|Indlæser teksterne …|Laster tekstene …|Texte werden geladen …
 The texts could not be loaded. Try again.|Texterna gick inte att läsa. Försök igen.|Teksterne kunne ikke indlæses. Prøv igen.|Tekstene kunne ikke lastes. Prøv igjen.|Die Texte konnten nicht geladen werden. Versuche es erneut.
+Track rows|Spårrader|Sporrækker|Sporrader|Gleiszeilen
+All stations|Alla stationer|Alle stationer|Alle stasjoner|Alle Betriebsstellen
+Track rows in the train graph|Spårrader i tågdiagrammet|Sporrækker i togdiagrammet|Sporrader i togdiagrammet|Gleiszeilen im Bildfahrplan
