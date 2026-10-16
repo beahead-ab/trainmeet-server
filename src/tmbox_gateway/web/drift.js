@@ -80,11 +80,11 @@
     return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
   };
 
-  function formatTime(value, us) {
-    const text = String(value || "").slice(0, 5);
+  function formatTime(value, us, seconds = false) {
+    const text = String(value || "").slice(0, seconds ? 8 : 5);
     if (!us) return text || "--:--";
-    const [hour, minute] = text.split(":");
-    return Number.isFinite(Number(hour)) ? `${Number(hour) % 12 || 12}:${minute} ${Number(hour) >= 12 ? "PM" : "AM"}` : "--:--";
+    const [hour, minute, second] = text.split(":");
+    return Number.isFinite(Number(hour)) ? `${Number(hour) % 12 || 12}:${minute}${second ? `:${second}` : ""} ${Number(hour) >= 12 ? "PM" : "AM"}` : "--:--";
   }
 
   // ── Tillstånd ─────────────────────────────────────────────────────────
@@ -129,16 +129,28 @@
   const clockText = (seconds) => [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, Math.floor(seconds) % 60]
     .map((part) => String(part).padStart(2, "0")).join(":");
 
+  // Sekunderna visas när någon tryckt fram dem på klockan (app.js,
+  // TrainMeetClockSeconds); annars timmar och minuter, som förut.
+  const showsSeconds = () => globalThis.TrainMeetClockSeconds?.resolve(false) ?? false;
+  function renderClockTime() {
+    const clock = ctx.clock || ctx.snapshot?.clock;
+    if (!clock) return;
+    const live = liveSeconds(), seconds = showsSeconds();
+    const time = formatTime(live === null ? clock.time : clockText(live), ctx.us, seconds);
+    const hint = t(seconds ? "Tryck för att dölja sekunderna" : "Tryck för att visa sekunderna");
+    for (const id of ["#overview-clock", "#app-clock"]) {
+      const el = $(id); if (!el) continue;
+      if (el.textContent !== time) el.textContent = time;
+      if (el.title !== hint) el.title = hint;
+      el.classList.toggle("kr-stopped", !clock.running);
+      if (id === "#app-clock") el.classList.toggle("tm-clock--stopped", !clock.running);
+    }
+  }
+
   function renderClock() {
     const clock = ctx.clock || ctx.snapshot?.clock;
     if (!clock) return;
-    const live = liveSeconds();
-    const time = formatTime(live === null ? clock.time : clockText(live), ctx.us);
-    for (const id of ["#overview-clock", "#app-clock"]) {
-      const el = $(id); if (!el) continue;
-      el.textContent = time; el.classList.toggle("kr-stopped", !clock.running);
-      if (id === "#app-clock") el.classList.toggle("tm-clock--stopped", !clock.running);
-    }
+    renderClockTime();
     const state = $("#clock-state");
     if (state) {
       state.className = `kr-pill ${clock.running ? "ok" : "warn"}`;
@@ -601,7 +613,25 @@
     });
   }
 
+  // Ett tryck på klockan, på Kör eller i rubrikraden, visar eller döljer sekunderna.
+  function wireClockSeconds() {
+    const toggle = () => globalThis.TrainMeetClockSeconds?.toggle(showsSeconds());
+    for (const id of ["#overview-clock", "#app-clock"]) {
+      const el = $(id); if (!el) continue;
+      el.setAttribute("role", "button");
+      el.tabIndex = 0;
+      el.addEventListener("click", toggle);
+      el.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggle();
+      });
+    }
+    doc.addEventListener("trainmeet:clock-seconds", () => renderClockTime());
+  }
+
   function wireChrome() {
+    wireClockSeconds();
     $("#kr-theme-toggle")?.addEventListener("click", () => { theme.toggle(); scheduleRender(); });
     theme.set(theme.get(), false);
     $("#drift-events-clear")?.addEventListener("click", () => hooks.clear?.());
@@ -708,7 +738,14 @@
     if (!ctx.us && ticks % 5 === 0) renderEvents();
   }
 
-  function init() { wireChrome(); wireSearch(); wireDialogs(); scheduleRender(); setInterval(tick, 1000); }
+  // Med sekunderna framme och en snabb klocka (4×) visas varje träffsekund,
+  // inte var fjärde: bara siffrorna ritas om, fyra gånger i sekunden.
+  function tickSeconds() {
+    const clock = ctx.clock || ctx.snapshot?.clock;
+    if (!doc.hidden && clock?.running && Number(clock.speed || 1) > 1 && showsSeconds()) renderClockTime();
+  }
+
+  function init() { wireChrome(); wireSearch(); wireDialogs(); scheduleRender(); setInterval(tick, 1000); setInterval(tickSeconds, 250); }
   if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", init); else init();
 
   globalThis.TrainMeetDrift = { hooks, update, render, theme, model, nowText, openDialog, formatTime, get context() { return ctx; } };

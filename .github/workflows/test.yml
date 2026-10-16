@@ -54,4 +54,5 @@ jobs:
           node tests/js/meet-timeline.test.cjs
           node tests/js/double-track-meet.test.cjs
           node tests/js/clock-faces-live.test.cjs
+          node tests/js/clock-seconds-live.test.cjs
           node tests/js/station-automatic-live.test.cjs
