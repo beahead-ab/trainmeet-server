@@ -249,12 +249,29 @@
     return result;
   }
 
-  /** "tjänst|station" → spår, ur tidtabellsraderna. */
+  /** "tjänst|station" → spår: det spår tåget verkligen fick (TKL:s val eller
+   * serverns standardspår, i `movement_live`), annars tidtabellens, annars
+   * stationens första standardspår för raden (4.11.0). */
   function trackOf(snapshot) {
-    const result = new Map();
+    const catalogue = snapshot?.tracks || [];
+    const live = snapshot?.movement_live || {};
+    // Det verkliga spåret är ett id; äldre lägen kan bära spårets namn.
+    const actual = (row) => {
+      const value = String(live[row.id]?.actual_track || "").trim();
+      const track = value && (catalogue.find((entry) => String(entry.id) === value)
+        || catalogue.find((entry) => entry.station_id === row.station_id && String(entry.display_label).trim() === value));
+      return track ? String(track.display_label || "").trim() : "";
+    };
+    const result = new Map(), strength = new Map();
     for (const row of snapshot?.trains || []) {
-      const label = String(row.track || "").trim();
-      if (label && row.service_id && row.station_id) result.set(`${row.service_id}|${row.station_id}`, label);
+      if (!row.service_id || !row.station_id) continue;
+      const key = `${row.service_id}|${row.station_id}`;
+      const found = [actual(row), String(row.track || "").trim(), String(row.default_tracks?.[0] || "").trim()];
+      const index = found.findIndex(Boolean);
+      if (index < 0) continue;
+      // Det verkliga spåret går före tidtabellens, som går före standardspåret.
+      const level = 3 - index;
+      if (level >= (strength.get(key) || 0)) { result.set(key, found[index]); strength.set(key, level); }
     }
     return result;
   }
@@ -445,7 +462,10 @@
   const SCREEN = { past: "sc-graph-past", grid: "graph-grid graph-row", gridMajor: "graph-grid graph-col", gridMinor: "graph-grid graph-col is-half", track: "graph-grid graph-track", axis: "sc-graph-time",
     label: "sc-graph-label", code: "sc-graph-code", trackLabel: "sc-graph-track", title: "sc-graph-title", train: "graph-train-group", line: "sc-graph-line", hit: "sc-graph-hit", lit: "graph-train-group is-lit", litLine: "sc-graph-line is-out",
     dwell: "sc-graph-dwell", name: "sc-graph-train", minute: "sc-graph-minute", tag: "graph-train-group", tagBox: "sc-graph-tag", tagText: "sc-graph-tag-text",
-    tagBoxCleared: "sc-graph-tag is-cleared", tagTextCleared: "sc-graph-tag-text is-cleared", now: "sc-graph-now", nowBox: "sc-graph-now-tag", nowText: "sc-graph-now-text", tagHeight: 18, labelDy: 4.5 };
+    tagBoxCleared: "sc-graph-tag is-cleared", tagTextCleared: "sc-graph-tag-text is-cleared", now: "sc-graph-now", nowBox: "sc-graph-now-tag", nowText: "sc-graph-now-text", tagHeight: 18, labelDy: 5.5,
+    // Storskärmens tågnummer, minuter och klocka är 15 % större än Drifts (4.11.0); skarmar.css har storlekarna.
+    // Spårens namn står i en egen kolumn, så att stationens namn inte skrivs över.
+    text: 1.15, trackColumn: 24 };
 
   /**
    * Ritar geometrin i en SVG. `cls` är klassnamnen (DRIFT eller SCREEN),
@@ -470,7 +490,7 @@
       if (panel.title) parts.push(el("text", { class: cls.title, x: left, y: panel.y0 + 13 }, panel.title));
       for (const entry of panel.stations) {
         parts.push(el("line", { class: cls.grid, x1: left, y1: entry.y, x2: right, y2: entry.y }));
-        const name = el("text", { class: codes ? cls.code : cls.label, x: left - 10, y: entry.y + cls.labelDy, "text-anchor": "end", "data-station-id": entry.station.id },
+        const name = el("text", { class: codes ? cls.code : cls.label, x: left - 10 - (entry.tracks.length ? cls.trackColumn || 0 : 0), y: entry.y + cls.labelDy, "text-anchor": "end", "data-station-id": entry.station.id },
           codes ? entry.station.code || "" : entry.station.name);
         if (onStation) { name.setAttribute("role", "button"); name.setAttribute("tabindex", "0"); name.addEventListener("click", () => onStation(entry.station.id)); name.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onStation(entry.station.id); } }); }
         parts.push(name);
@@ -495,7 +515,9 @@
       }
       return node;
     };
-    const tagWidth = (number) => 14 + String(number).length * 8.4;
+    // Texternas mått följer storleken: storskärmen har större tågnummer och minuter.
+    const k = cls.text || 1;
+    const tagWidth = (number) => 14 + String(number).length * 8.4 * k;
     for (const train of g.trains) {
       const node = group(train, `${cls.train} is-${train.type}`);
       for (const run of train.runs) {
@@ -504,17 +526,17 @@
       }
       for (const dwell of train.dwells) node.append(el("line", { class: `${cls.dwell} is-${train.type}`, x1: dwell.x1.toFixed(1), y1: dwell.y.toFixed(1), x2: dwell.x2.toFixed(1), y2: dwell.y.toFixed(1) }));
       for (const leg of train.legs) {
-        const length = Math.hypot(leg.x2 - leg.x1, leg.y2 - leg.y1), textWidth = String(train.number).length * 6.6 + 6;
+        const length = Math.hypot(leg.x2 - leg.x1, leg.y2 - leg.y1), textWidth = String(train.number).length * 6.6 * k + 6;
         if (length >= textWidth + 10) {
           const mx = (leg.x1 + leg.x2) / 2, my = (leg.y1 + leg.y2) / 2, degrees = angle(leg);
           // Ovanför linjen, vinkelrätt mot den.
-          const radians = degrees * Math.PI / 180, ox = Math.sin(radians) * 7, oy = -Math.cos(radians) * 7;
+          const radians = degrees * Math.PI / 180, ox = Math.sin(radians) * 7 * k, oy = -Math.cos(radians) * 7 * k;
           node.append(el("text", { class: `${cls.name} is-${train.type}`, x: 0, y: 0, "text-anchor": "middle", transform: `translate(${(mx + ox).toFixed(1)} ${(my + oy).toFixed(1)}) rotate(${degrees.toFixed(1)})` }, train.number));
         }
         if (g.options.minutes && Math.abs(leg.y2 - leg.y1) >= 14) {
           const down = leg.y2 > leg.y1;
-          node.append(el("text", { class: cls.minute, x: (leg.x1 + 3).toFixed(1), y: (down ? leg.y1 - 3 : leg.y1 + 10).toFixed(1), "text-anchor": "start" }, leg.dep),
-            el("text", { class: cls.minute, x: (leg.x2 - 3).toFixed(1), y: (down ? leg.y2 + 10 : leg.y2 - 3).toFixed(1), "text-anchor": "end" }, leg.arr));
+          node.append(el("text", { class: cls.minute, x: (leg.x1 + 3).toFixed(1), y: (down ? leg.y1 - 3 : leg.y1 + 10 * k).toFixed(1), "text-anchor": "start" }, leg.dep),
+            el("text", { class: cls.minute, x: (leg.x2 - 3).toFixed(1), y: (down ? leg.y2 + 10 * k : leg.y2 - 3).toFixed(1), "text-anchor": "end" }, leg.arr));
         }
       }
       (train.selected ? chosen : gray).push(node);
@@ -525,10 +547,10 @@
         lit.push(segment);
       }
       if (train.tag) {
-        const w = tagWidth(train.number), h = cls.tagHeight, cleared = train.tag.cleared;
+        const w = tagWidth(train.number), h = cls.tagHeight * k, cleared = train.tag.cleared;
         const mark = el("g", { class: cls.tag, "data-train-number": train.number, "pointer-events": "none" });
         mark.append(el("rect", { class: `${cleared ? cls.tagBoxCleared : cls.tagBox}${train.selected ? " sel" : ""}`, x: (train.tag.x - w - 6).toFixed(1), y: (train.tag.y - h / 2).toFixed(1), width: w, height: h, rx: h > 20 ? 6 : 4 }),
-          el("text", { class: cleared ? cls.tagTextCleared : cls.tagText, x: (train.tag.x - w / 2 - 6).toFixed(1), y: (train.tag.y + 5).toFixed(1), "text-anchor": "middle" }, train.number));
+          el("text", { class: cleared ? cls.tagTextCleared : cls.tagText, x: (train.tag.x - w / 2 - 6).toFixed(1), y: (train.tag.y + 5 * k).toFixed(1), "text-anchor": "middle" }, train.number));
         const text = marks ? marks(train.number) : null;
         if (text) mark.append(el("text", { class: `graph-train-mark is-${text.tone}`, x: (train.tag.x - w - 6).toFixed(1), y: (train.tag.y - h / 2 - 3).toFixed(1) }, text.text));
         lit.push(mark);
@@ -538,8 +560,8 @@
     trainsLayer.append(...gray, ...chosen, ...lit);
     parts.push(trainsLayer);
     if (g.nowX !== null) {
-      parts.push(el("line", { class: cls.now, x1: g.nowX, y1: areaTop, x2: g.nowX, y2: areaBottom }), el("rect", { class: cls.nowBox, x: g.nowX - 24, y: 0, width: 48, height: 18, rx: 5 }),
-        el("text", { class: cls.nowText, x: g.nowX, y: 13, "text-anchor": "middle" }, clockLabel(g.now)));
+      parts.push(el("line", { class: cls.now, x1: g.nowX, y1: areaTop, x2: g.nowX, y2: areaBottom }), el("rect", { class: cls.nowBox, x: g.nowX - 24 * k, y: 0, width: 48 * k, height: 18 * k, rx: 5 }),
+        el("text", { class: cls.nowText, x: g.nowX, y: 13 * k, "text-anchor": "middle" }, clockLabel(g.now)));
     }
     svg.append(...parts);
     return svg;

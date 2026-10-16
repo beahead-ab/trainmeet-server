@@ -4431,16 +4431,21 @@ function renderGraph(snapshot) {
   const height = Math.max(420, Math.round((svg.clientHeight || 850) * SCREEN_MAP_UNITS));
   const { now, min, max } = graphWindowBounds(snapshot);
   const longest = Math.max(0, ...(snapshot.stations || []).map((station) => String(station.name || "").length));
-  const left = Math.min(260, Math.max(110, Math.round(longest * 7.4) + 28));
+  // Namnen är 16 px på storskärmen (4.11.0), spårens namn 10 i en egen kolumn
+  // när någon station är utfälld.
+  const tracks = displayGraphTracks();
+  const left = Math.min(340, Math.max(120, Math.round(longest * 9.1) + 30 + (tracks === "none" ? 0 : lib.SCREEN.trackColumn)));
   const g = lib.layout(snapshot, { width, height, start: min, end: max, windowMinutes: max - min, now, train: state.displaySelectedTrainNumber,
-    tracks: "none", minutes: true, left, right: 30, top: 34, bottom: 52, gap: 15, title: 26, panelGap: 10 });
+    tracks, trackStep: 12, minutes: true, left, right: 30, top: 34, bottom: 52, gap: 20, title: 26, panelGap: 10 });
   const graphLives = deviationLevelOf(snapshot) >= 5 ? TrainMeetDriftModel.trainLive(snapshot, topologyClockSeconds(snapshot)) : null;
   const select = (number) => {
     state.displaySelectedTrainNumber = state.displaySelectedTrainNumber === String(number) ? null : String(number);
     document.querySelector("#display-train-select").value = state.displaySelectedTrainNumber || "";
     updateDisplayGraphSelection(); renderDisplaySelection(snapshot);
   };
-  lib.render(svg, g, { cls: lib.SCREEN, onSelect: select, label: (number) => t("Tåg {number}", { number }), clip: "screen-graph-clip",
+  // Ett tryck på stationens namn fäller ut eller ihop dess spår, som i Spår-menyn.
+  const station = (id) => { toggleDisplayGraphTrack(snapshot, id); renderDisplayGraphTracks(snapshot); renderGraph(snapshot); };
+  lib.render(svg, g, { cls: lib.SCREEN, onSelect: select, onStation: station, label: (number) => t("Tåg {number}", { number }), clip: "screen-graph-clip",
     marks: graphLives ? (number) => TrainMeetDriftModel.deviationView(5, graphLives.get(String(number)))?.mark || null : null });
   svg.removeAttribute("width"); svg.removeAttribute("height");
   // Klockan på nu-linjen som skärmens egen, med sekunderna borträknade.
@@ -4889,6 +4894,7 @@ function deviationLevelOptions(meetLevel, { followMeet = true } = {}) {
 const DISPLAY_THEME_KEY = "trainmeet.displayTheme";
 const DISPLAY_GRAPH_WINDOW_KEY = "trainmeet.displayGraphWindow";
 const DISPLAY_GRAPH_WINDOWS = [120, 180, 360, 1440];
+const DISPLAY_GRAPH_TRACKS_KEY = "trainmeet.displayGraphTracks";
 const DISPLAY_TOOLBAR_HIDE_MS = 4000;
 
 function displayStored(key) { try { return localStorage.getItem(key) || ""; } catch { return ""; } }
@@ -4896,6 +4902,53 @@ function displayStore(key, value) { try { localStorage.setItem(key, value); } ca
 function displayGraphWindow() {
   const value = Number(displayStored(DISPLAY_GRAPH_WINDOW_KEY));
   return DISPLAY_GRAPH_WINDOWS.includes(value) ? value : 180;
+}
+// Spårraderna i storskärmens tågdiagram, per skärm (4.11.0): "all", eller
+// stationerna som är utfällda.
+function displayGraphTracks() {
+  const stored = displayStored(DISPLAY_GRAPH_TRACKS_KEY);
+  if (stored === "all") return "all";
+  try {
+    const ids = JSON.parse(stored || "[]");
+    return Array.isArray(ids) && ids.length ? new Set(ids.map(String)) : "none";
+  } catch { return "none"; }
+}
+// Stationerna som har mer än ett spår; bara de har något att fälla ut.
+function displayTrackStations(snapshot) {
+  const tracks = globalThis.TrainMeetTrainGraph?.stationTracks(snapshot) || new Map();
+  return (snapshot.stations || []).filter((station) => (tracks.get(station.id) || []).length > 1);
+}
+function storeDisplayGraphTracks(snapshot, chosen) {
+  const all = displayTrackStations(snapshot).map((station) => station.id);
+  displayStore(DISPLAY_GRAPH_TRACKS_KEY, all.length && all.every((id) => chosen.has(id)) ? "all" : JSON.stringify([...chosen]));
+}
+function toggleDisplayGraphTrack(snapshot, stationId) {
+  const current = displayGraphTracks();
+  const chosen = current === "all" ? new Set(displayTrackStations(snapshot).map((station) => station.id)) : new Set(current === "none" ? [] : current);
+  if (chosen.has(stationId)) chosen.delete(stationId); else chosen.add(stationId);
+  storeDisplayGraphTracks(snapshot, chosen);
+}
+function renderDisplayGraphTracks(snapshot) {
+  const menu = document.querySelector("#display-graph-tracks");
+  const stations = displayKind === "graph" ? displayTrackStations(snapshot) : [];
+  menu.classList.toggle("hidden", !stations.length);
+  const current = displayGraphTracks();
+  const signature = [stations.map((station) => `${station.id}:${station.name}`).join(","), current instanceof Set ? [...current].join(",") : current,
+    globalThis.TrainMeetI18n?.getLanguage?.() || ""].join("|");
+  const list = document.querySelector("#display-graph-tracks-list");
+  if (list.dataset.signature === signature) return;
+  list.dataset.signature = signature;
+  const option = (label, checked, onChange, extra = "") => {
+    const row = Object.assign(document.createElement("label"), { className: extra });
+    const box = Object.assign(document.createElement("input"), { type: "checkbox", checked });
+    box.addEventListener("change", () => { onChange(box.checked); renderDisplayGraphTracks(snapshot); if (displaySnapshot) renderGraph(displaySnapshot); });
+    row.append(box, document.createTextNode(label));
+    return row;
+  };
+  list.replaceChildren(
+    option(t("Alla stationer"), current === "all", (on) => displayStore(DISPLAY_GRAPH_TRACKS_KEY, on ? "all" : "[]"), "is-all"),
+    ...stations.map((station) => option(station.name, current === "all" || (current instanceof Set && current.has(station.id)),
+      () => toggleDisplayGraphTrack(snapshot, station.id))));
 }
 function displayTheme() {
   const stored = displayStored(DISPLAY_THEME_KEY);
@@ -4988,6 +5041,7 @@ function renderDisplay(snapshot) {
   document.querySelector("#display-clock-seconds").classList.toggle("hidden", !isClock);
   renderDisplaySwitch(snapshot);
   renderDisplayGraphWindow();
+  renderDisplayGraphTracks(snapshot);
   renderDisplayDeviationLevel(snapshot);
   renderDisplayThemeChoice();
   const trainSelect = document.querySelector("#display-train-select");
@@ -5114,7 +5168,7 @@ async function initDisplay() {
     if (displayApp.dataset.chrome !== "fullscreen") return;
     displayToolbarTimer = setTimeout(() => {
       // Raden står kvar medan pekaren är över den eller menyn är öppen.
-      if (toolbar.matches(":hover") || document.querySelector("#display-switch")?.open) { showToolbar(); return; }
+      if (toolbar.matches(":hover") || document.querySelector("#display-switch")?.open || document.querySelector("#display-graph-tracks")?.open) { showToolbar(); return; }
       setToolbar(false);
     }, DISPLAY_TOOLBAR_HIDE_MS);
   };

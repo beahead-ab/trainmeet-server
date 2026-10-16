@@ -136,19 +136,25 @@
     const qr = make("div", "sc-qr"); qr.id = "screen-qr"; qr.hidden = true;
     right.prepend(qr);
     stage.append(header, content, footer);
-    // Skärmen är en 1920 × 1080-duk som skalas in. I fönsterläge står
-    // verktygsraden kvar ovanför duken, och duken får det som blir över.
-    // En urtavla på en stående skärm (telefon, surfplatta, stående TV) får en
-    // stående duk, 1080 bred och lika hög som skärmen räcker, så att tavlan
-    // fyller bredden i stället för halva den. Siffrorna fyller redan bredden
-    // på den liggande duken.
+    // Skärmen är en duk på minst 1920 × 1080 som skalas in. Duken följer
+    // skärmens form: på en 16:10-skärm blir den 1920 × 1200 i stället för att
+    // få svarta band över och under (4.11.0), och på en bredare skärm bredare,
+    // högst 4:3 och 2560 bred; en ännu ovanligare skärm får band som förut.
+    // I fönsterläge står verktygsraden kvar ovanför duken, och duken får det
+    // som blir över. En urtavla på en stående skärm (telefon, surfplatta,
+    // stående TV) får en stående duk, 1080 bred och lika hög som skärmen
+    // räcker, så att tavlan fyller bredden i stället för halva den. Siffrorna
+    // fyller redan bredden på den liggande duken.
     const resize = () => {
       const chrome = $("#display-app")?.dataset.chrome === "window" ? ($("#display-toolbar")?.offsetHeight || 0) : 0;
       const height = innerHeight - chrome;
       const portrait = stage.dataset.kind === "clock" && Boolean($("#clock-view .clock-face")) && height > innerWidth;
       stage.classList.toggle("sc-portrait", portrait);
-      stage.style.height = portrait ? `${Math.round(1080 * height / innerWidth)}px` : "";
-      const scale = portrait ? innerWidth / 1080 : Math.min(innerWidth / 1920, height / 1080);
+      const width = portrait ? 1080 : Math.min(2560, Math.max(1920, Math.round(1080 * innerWidth / Math.max(1, height))));
+      const tall = portrait ? Math.round(1080 * height / Math.max(1, innerWidth)) : Math.min(1440, Math.max(1080, Math.round(width * height / Math.max(1, innerWidth))));
+      stage.style.width = portrait ? "" : `${width}px`;
+      stage.style.height = `${tall}px`;
+      const scale = Math.min(innerWidth / width, height / tall);
       stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
       stage.style.marginTop = `${chrome / 2}px`;
     };
