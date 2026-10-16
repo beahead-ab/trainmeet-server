@@ -111,6 +111,26 @@ class DefaultTrackServerTests(unittest.TestCase):
         self.assertEqual("track-b-12", self.arrive("5103"), "11 is taken by 5101")
         self.assertEqual("track-station-b-2", self.arrive("303"), "a passenger train takes the passenger track")
 
+    def test_the_stations_order_comes_first_and_the_reserve_when_the_box_is_full(self):
+        # Charlottendal: 2b före 2a, och reservspår 3 när rutan är full. Här
+        # godståg åt höger på 12 före 11, och spår 2 som reserv för alla tåg.
+        self.start(package({"goods": {"right": ["track-b-12", "track-b-11"]}, "reserve": ["track-station-b-2"]}))
+        self.assertEqual(["track-b-12", "track-b-11", "track-station-b-2"], default_tracks.candidates(self.pub.payload, self.row("5101")))
+        self.assertEqual(["track-station-b-2"], default_tracks.candidates(self.pub.payload, self.row("303")),
+                         "a passenger train without a box of its own takes the reserve")
+        rows = {(r["train_number"], r["station_id"]): r for r in self.pub.timetable(active_day=self.day)["trains"]}
+        self.assertEqual(["12", "11", "2"], rows[("5101", "station-b")]["default_tracks"])
+        self.assertEqual("track-b-12", self.arrive("5101"), "the station's first choice, not the catalogue's")
+        self.assertEqual("track-b-11", self.arrive("5103"))
+        self.assertEqual("track-station-b-2", self.arrive("303"))
+
+    def test_a_full_box_and_reserve_give_the_first_choice_as_before(self):
+        self.start(package({"goods": {"right": ["track-b-11"]}, "reserve": ["track-b-12"]}))
+        self.assertEqual("track-b-11", self.arrive("5101"))
+        self.assertEqual("track-b-12", self.arrive("5103"), "11 is taken: the reserve")
+        self.assertEqual("track-b-11", default_tracks.choose(self.pub.payload, self.row("5103"), lambda track: True),
+                         "everything taken: the first choice, as with a planned track that is taken")
+
     def test_the_timetables_track_and_a_chosen_track_always_win(self):
         self.start(package())
         self.assertEqual("track-station-b-1", self.arrive("101"), "101 is planned on 1")
