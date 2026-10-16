@@ -20,6 +20,39 @@ som följer klockans inställning (*Visa sekundvisare*) tills någon trycker.
 - Klockan på Kör och i rubrikraden är en knapp: Enter och mellanslag gör
   samma sak, och pekaren säger vad ett tryck gör.
 
+### Bekräftelserutorna: namnet står alltid där, och kan kopieras
+
+Casper fick inte rutan *Börja om träffen från början* att fungera: den sade
+«Skriv – för att bekräfta», och knappen gick inte att trycka på hur namnet än
+skrevs. Rutan öppnad från Kör (*Börja om från dag 1…*) hade aldrig hämtat
+träffens namn; det gjorde bara Inställningar. Nu hämtas namnet varje gång
+rutan öppnas, var den än öppnas från, och går det inte att hämta säger rutan
+det.
+
+Alla tre rutor där man skriver något för att bekräfta – *Nollställ träffen*,
+*Återställ från säkerhetskopia* och *Nollställ träffdata* – har en
+**Kopiera**-knapp bredvid fältet. Den kopierar namnet, eller ordet, som ska
+skrivas, och sätter markören i fältet så att det bara är att klistra in.
+Utan säker anslutning, som en Pi över http, kopieras det ändå; går det inte
+blir namnet markerat så att det kan kopieras från menyn. Bekräftelsen är
+densamma som förut: servern jämför fortfarande det inskrivna med träffens
+namn.
+
+### Standardspår i stationens ordning, och reservspår
+
+Casper beskrev Charlottendal: ett persontåg från vänster tar 1a och står 1a
+upptaget 1b bakom, ett från höger 2b och sedan 2a, passerande tåg sin sidas
+spår och 4 sist, godstågen 11–13, och spår 3 är reserv. Cloud 2.18 låter
+stationen säga just det, och servern följer det.
+
+- **Stationens ordning.** Servern tar det första lediga spåret i den ordning
+  stationen valde dem i Cloud, inte i spårkatalogens ordning.
+- **Reservspår** gäller alla tåg åt båda hållen och tas när spåren i tågets
+  ruta är upptagna: vid ankomst, vid utplaceringen efter tidtabellen, i
+  automatiken och som förslag i spårvalen i TKL och på boxarna, direkt efter
+  standardspåren.
+- Tidtabellskärnan är synkad med Cloud.
+
 ### Webb-TMBoxens spårval börjar på tågets spår
 
 B öppnar spårväljaren i webb-TMBoxen och i provbänken på tågets eget spår,

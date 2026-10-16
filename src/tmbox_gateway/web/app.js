@@ -730,6 +730,7 @@ document.querySelector("#workspace-home").addEventListener("click", (event) => {
 bindUsersSection();
 bindRestore();
 bindMeetReset();
+bindConfirmationCopy();
 
 // Native dialog supplies focus trapping; every editor shares cancellation,
 // dirty-state protection and focus restoration. Background refresh never
@@ -780,6 +781,7 @@ function openModal(id, trigger = document.activeElement) {
   if (id === "clock-source-modal") dialog.dataset.meetGeneration = String(state.serverContext?.selected_meet?.generation ?? "");
   if (id === "time-machine-modal") fillTimeMachine();
   if (id === "new-day-modal") fillNewDay();
+  if (id === "meet-reset-modal" || id === "restore-modal") refreshConfirmationName(dialog);
   modalSections.set(dialog, trigger?.closest("section"));
   modalValues.set(dialog, [...dialog.querySelectorAll("input, select, textarea")].map((input) => [input, input.value, input.checked]));
   dialog.dataset.dirty = "false";
@@ -1555,11 +1557,7 @@ async function refreshBackups() {
     if (!response.ok) return;
     const payload = await response.json();
     if (document.querySelector("#restore-modal").open) return;
-    restore.overwrites = payload.overwrites || "";
-    restoreEl("overwrites").textContent = restore.overwrites || "–";
-    restoreEl("confirmation").placeholder = restore.overwrites || t("Namnet på det som skrivs över");
-    document.querySelector("#meet-reset-name").textContent = restore.overwrites || "–";
-    updateMeetResetButton();
+    setConfirmationName(payload.overwrites || "");
     renderBackups(payload.backups || []);
     renderLastRestore(payload.last_restore || null);
     const latest = (payload.backups || []).map((item) => item.taken_at).filter(Boolean).sort().at(-1);
@@ -1568,6 +1566,76 @@ async function refreshBackups() {
   } catch {
     setMessage(restoreEl("message"), "Säkerhetskopiorna kunde inte läsas", "error");
   }
+}
+
+// Det som skrivs över heter som träffen; samma namn bekräftar Återställ och
+// Nollställ träffen, och båda rutorna har en Kopiera-knapp för det.
+function setConfirmationName(name) {
+  restore.overwrites = name;
+  restoreEl("overwrites").textContent = name || "–";
+  restoreEl("confirmation").placeholder = name || t("Namnet på det som skrivs över");
+  document.querySelector("#meet-reset-name").textContent = name || "–";
+  for (const id of ["restore-overwrites", "meet-reset-name"]) {
+    const button = document.querySelector(`[data-copy-confirmation="${id}"]`);
+    if (button) button.disabled = !name;
+  }
+  updateMeetResetButton();
+  updateRestoreButton();
+}
+
+// Namnet hämtas när rutan öppnas. Nollställ träffen nås också från Kör
+// (Börja om från dag 1…), och där hade bara Inställningar hämtat namnet:
+// rutan visade – och knappen gick aldrig att trycka på.
+async function refreshConfirmationName(dialog) {
+  const message = dialog.id === "meet-reset-modal" ? document.querySelector("#meet-reset-message") : restoreEl("message");
+  try {
+    const response = await authorizedFetch("/v1/server/backups");
+    if (!response.ok) throw new Error(response.statusText);
+    setConfirmationName((await response.json()).overwrites || "");
+  } catch {
+    if (!restore.overwrites) setMessage(message, "Träffens namn kunde inte hämtas. Stäng rutan och öppna den igen.", "error");
+  }
+}
+
+// Kopiera bredvid fältet kopierar namnet, eller ordet, som ska skrivas, så att
+// det kan klistras in. Utan säker anslutning (en Pi över http) finns inget
+// urklipps-API; då kopieras det ur ett dolt fält i rutan, och går inte heller
+// det blir namnet markerat så att det kan kopieras från menyn.
+async function copyConfirmation(button) {
+  const source = document.getElementById(button.dataset.copyConfirmation);
+  const message = document.getElementById(button.dataset.copyMessage);
+  const text = source?.textContent.trim() || "";
+  if (!text || text === "–") return;
+  let copied = false;
+  try { await navigator.clipboard.writeText(text); copied = true; } catch { copied = false; }
+  if (!copied) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.readOnly = true;
+    area.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0";
+    (button.closest("dialog") || document.body).append(area);
+    area.select();
+    area.setSelectionRange(0, text.length);
+    try { copied = document.execCommand("copy"); } catch { copied = false; }
+    area.remove();
+  }
+  if (copied) {
+    if (message) setMessage(message, "Kopierat – klistra in det i rutan", "notice");
+    button.parentElement.querySelector("input")?.focus({ preventScroll: true });
+    return;
+  }
+  const range = document.createRange();
+  range.selectNodeContents(source);
+  getSelection().removeAllRanges();
+  getSelection().addRange(range);
+  if (message) setMessage(message, "Namnet kopierades inte. Det är markerat: kopiera det från menyn.", "error");
+}
+
+function bindConfirmationCopy() {
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest?.("[data-copy-confirmation]");
+    if (button && !button.disabled) copyConfirmation(button);
+  });
 }
 
 function bindRestore() {
@@ -1667,7 +1735,7 @@ function bindMeetReset() {
 // sent NOLLSTÄLL.
 function factoryResetConfirmed() {
   const typed = factoryResetConfirmation.value.trim().toUpperCase();
-  const shown = document.querySelector('label[for="factory-reset-confirmation"] b')?.textContent.trim().toUpperCase();
+  const shown = document.querySelector("#factory-reset-word")?.textContent.trim().toUpperCase();
   return typed === "NOLLSTÄLL" || (!!shown && typed === shown);
 }
 

@@ -172,8 +172,9 @@ historikbaserade spårförslag rangordnade tilldelat → tidtabell → historik 
 stationsdefault — **utgår**. Historik mellan träffar är meningslös när varje
 träff är unik. Rangordningen tilldelat → tidtabell → stationsdefault står kvar,
 och stationsdefault finns sedan 4.9.0: stationens standardspår per tågsort och
-färdriktning (`stations[].default_tracks` med `default_track_sides`), se
-`src/tmbox_gateway/default_tracks.py`.
+färdriktning (`stations[].default_tracks` med `default_track_sides`), i
+stationens valda ordning och sist reservspåren (`default_tracks.reserve`,
+sedan 4.10.0), se `src/tmbox_gateway/default_tracks.py`.
 
 ## Vad som inte ändras
 

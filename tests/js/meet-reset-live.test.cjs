@@ -50,6 +50,39 @@ const root = path.resolve(__dirname, '../..');
     const meet = backups.overwrites;
     assert.ok(meet && meet !== 'TrainMeet Server', 'träffen har ett namn att skriva');
 
+    // Från Kör, på en sida där Inställningar aldrig öppnats: namnet hämtas när
+    // rutan öppnas (förut stod det – och knappen gick inte att trycka på), och
+    // Kopiera ger namnet att klistra in.
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+    await page.goto(base + '/');
+    await page.locator('#drift-timeline-reset').click();
+    const fromDrift = page.locator('#meet-reset-modal');
+    await fromDrift.waitFor({ state: 'visible' });
+    await page.waitForFunction(name => document.querySelector('#meet-reset-name').textContent.trim() === name, meet);
+    const copy = fromDrift.locator('[data-copy-confirmation="meet-reset-name"]');
+    assert.equal(await copy.isDisabled(), false, 'Kopiera går att trycka på när namnet finns');
+    await copy.click();
+    await fromDrift.locator('#meet-reset-message').getByText('Kopierat – klistra in det i rutan').waitFor();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    assert.equal(copied, meet, 'urklippet har träffens namn');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'meet-reset-confirmation', 'fältet har fokus för att klistra in');
+    await page.keyboard.press('ControlOrMeta+V');
+    assert.equal(await fromDrift.locator('#meet-reset-confirmation').inputValue(), meet, 'namnet klistrades in');
+    assert.equal(await fromDrift.locator('#meet-reset-start').isDisabled(), false, 'inklistrat namn låser upp knappen');
+    if (process.env.MEET_RESET_SCREENSHOTS) {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.screenshot({ path: path.join(process.env.MEET_RESET_SCREENSHOTS, 'meet-reset-from-drift-phone.png') });
+      await page.setViewportSize({ width: 1280, height: 900 });
+    }
+    // Utan urklipps-API (en Pi över http) kopieras det ur ett dolt fält i rutan.
+    await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true }));
+    await fromDrift.locator('#meet-reset-confirmation').fill('');
+    await copy.click();
+    await fromDrift.locator('#meet-reset-message.notice').waitFor();
+    // Fältet är tomt igen, så Avbryt stänger utan att fråga.
+    await fromDrift.locator('.modal-actions [data-close-modal]').click();
+    await fromDrift.waitFor({ state: 'hidden' });
+
     await page.goto(base + '/installningar#farozon');
     const row = page.locator('#server-system-settings .kr-rowact').first();
     assert.equal((await row.locator('.kr-k').innerText()).trim(), 'Nollställ träffen', 'först i Farozon');
@@ -103,7 +136,7 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#reset-mode-summary').click();
     const factory = page.locator('#reset-modal');
     await factory.waitFor({ state: 'visible' });
-    const word = (await factory.locator('label[for="factory-reset-confirmation"] b').innerText()).trim();
+    const word = (await factory.locator('#factory-reset-word').innerText()).trim();
     assert.notEqual(word.toUpperCase(), 'NOLLSTÄLL', 'ordet står på tyska');
     const factoryButton = page.locator('#factory-reset-server');
     await factory.locator('#factory-reset-confirmation').fill('fel');
