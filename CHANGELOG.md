@@ -5,6 +5,24 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Bekräftelserutorna: namnet står alltid där, och kan kopieras
+
+Casper fick inte rutan *Börja om träffen från början* att fungera: den sade
+«Skriv – för att bekräfta», och knappen gick inte att trycka på hur namnet än
+skrevs. Rutan öppnad från Kör (*Börja om från dag 1…*) hade aldrig hämtat
+träffens namn; det gjorde bara Inställningar. Nu hämtas namnet varje gång
+rutan öppnas, var den än öppnas från, och går det inte att hämta säger rutan
+det.
+
+Alla tre rutor där man skriver något för att bekräfta – *Nollställ träffen*,
+*Återställ från säkerhetskopia* och *Nollställ träffdata* – har en
+**Kopiera**-knapp bredvid fältet. Den kopierar namnet, eller ordet, som ska
+skrivas, och sätter markören i fältet så att det bara är att klistra in.
+Utan säker anslutning, som en Pi över http, kopieras det ändå; går det inte
+blir namnet markerat så att det kan kopieras från menyn. Bekräftelsen är
+densamma som förut: servern jämför fortfarande det inskrivna med träffens
+namn.
+
 ### Standardspår i stationens ordning, och reservspår
 
 Casper beskrev Charlottendal: ett persontåg från vänster tar 1a och står 1a
