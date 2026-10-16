@@ -148,7 +148,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.goto('http://127.0.0.1:9999/');
     await page.locator('#participant-view').waitFor();
     assert.equal(await page.locator('#application-menu').isVisible(), false);
-    assert.equal(await page.locator('#pv-meet-name').textContent(), 'Demo meet');
+    // The view shows at once; the meet's name comes with the first /v1/display.
+    await page.waitForFunction(() => document.querySelector('#pv-meet-name')?.textContent === 'Demo meet');
     assert.equal(await page.locator('#workspace-options').count(), 0);
     // The connect steps sit behind one button and open as a sheet from the
     // bottom (Deltagare.dc). A box finds the server and needs no address or
