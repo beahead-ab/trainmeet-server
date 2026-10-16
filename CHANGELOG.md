@@ -26,6 +26,39 @@ och under, och liten text.
   ankomsten. Ett tåg som ännu inte kommit och saknar spår i tidtabellen står
   på stationens första standardspår för tåget.
 
+### Ett tryck på klockan visar eller döljer sekunderna
+
+Casper: «Klickar man på klockan så togglas sekunder av/på
+(snabbinställning).» Klockan på Kör och i rubrikraden visar timmar och
+minuter som förut; ett tryck på den visar sekunderna, och ett tryck till
+döljer dem. Samma tryck fungerar på storskärmens klocka och i deltagarvyn,
+som följer klockans inställning (*Visa sekundvisare*) tills någon trycker.
+
+- Valet gäller den här webbläsaren och är detsamma som *Sekunder* i
+  storskärmens verktygsrad, som visar vad som är valt.
+- Med sekunderna framme och en snabb klocka (4×) visas varje träffsekund,
+  inte var fjärde.
+- Klockan på Kör och i rubrikraden är en knapp: Enter och mellanslag gör
+  samma sak, och pekaren säger vad ett tryck gör.
+
+### Bekräftelserutorna: namnet står alltid där, och kan kopieras
+
+Casper fick inte rutan *Börja om träffen från början* att fungera: den sade
+«Skriv – för att bekräfta», och knappen gick inte att trycka på hur namnet än
+skrevs. Rutan öppnad från Kör (*Börja om från dag 1…*) hade aldrig hämtat
+träffens namn; det gjorde bara Inställningar. Nu hämtas namnet varje gång
+rutan öppnas, var den än öppnas från, och går det inte att hämta säger rutan
+det.
+
+Alla tre rutor där man skriver något för att bekräfta – *Nollställ träffen*,
+*Återställ från säkerhetskopia* och *Nollställ träffdata* – har en
+**Kopiera**-knapp bredvid fältet. Den kopierar namnet, eller ordet, som ska
+skrivas, och sätter markören i fältet så att det bara är att klistra in.
+Utan säker anslutning, som en Pi över http, kopieras det ändå; går det inte
+blir namnet markerat så att det kan kopieras från menyn. Bekräftelsen är
+densamma som förut: servern jämför fortfarande det inskrivna med träffens
+namn.
+
 ### Standardspår i stationens ordning, och reservspår
 
 Casper beskrev Charlottendal: ett persontåg från vänster tar 1a och står 1a
