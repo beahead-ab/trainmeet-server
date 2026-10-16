@@ -5,8 +5,9 @@ Cloud skickar stationens standardspår per tågsort och färdriktning
 (`default_track_sides`). Reglerna är timetable_core.default_tracks, samma
 kod som Cloud. Tidtabellens spår går alltid före, och ett standardspår
 skrivs aldrig in i tidtabellen: det blir tågets verkliga spår först när
-tåget tas emot. Det första lediga spåret i rutan vinner; är alla upptagna
-blir det det första, som när ett planerat spår är upptaget.
+tåget tas emot. Det första lediga spåret i rutan vinner, i stationens valda
+ordning, och sedan stationens reservspår; är alla upptagna blir det det
+första, som när ett planerat spår är upptaget.
 """
 from __future__ import annotations
 

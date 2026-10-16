@@ -5,6 +5,21 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Standardspår i stationens ordning, och reservspår
+
+Casper beskrev Charlottendal: ett persontåg från vänster tar 1a och står 1a
+upptaget 1b bakom, ett från höger 2b och sedan 2a, passerande tåg sin sidas
+spår och 4 sist, godstågen 11–13, och spår 3 är reserv. Cloud 2.18 låter
+stationen säga just det, och servern följer det.
+
+- **Stationens ordning.** Servern tar det första lediga spåret i den ordning
+  stationen valde dem i Cloud, inte i spårkatalogens ordning.
+- **Reservspår** gäller alla tåg åt båda hållen och tas när spåren i tågets
+  ruta är upptagna: vid ankomst, vid utplaceringen efter tidtabellen, i
+  automatiken och som förslag i spårvalen i TKL och på boxarna, direkt efter
+  standardspåren.
+- Tidtabellskärnan är synkad med Cloud.
+
 ### Webb-TMBoxens spårval börjar på tågets spår
 
 B öppnar spårväljaren i webb-TMBoxen och i provbänken på tågets eget spår,
