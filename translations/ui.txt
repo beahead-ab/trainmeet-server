@@ -353,6 +353,9 @@ Delete|Radera|Slet|Slett|Löschen
 Edit|Redigera|Rediger|Rediger|Bearbeiten
 Copy|Kopiera|Kopiér|Kopier|Kopieren
 Copied|Kopierat|Kopieret|Kopiert|Kopiert
+Copied – paste it in the box|Kopierat – klistra in det i rutan|Kopieret – indsæt det i feltet|Kopiert – lim det inn i feltet|Kopiert – füge es in das Feld ein
+The name was not copied. It is selected: copy it from the menu.|Namnet kopierades inte. Det är markerat: kopiera det från menyn.|Navnet blev ikke kopieret. Det er markeret: kopiér det fra menuen.|Navnet ble ikke kopiert. Det er markert: kopier det fra menyen.|Der Name wurde nicht kopiert. Er ist markiert: Kopiere ihn über das Menü.
+The meet's name could not be fetched. Close the dialog and open it again.|Träffens namn kunde inte hämtas. Stäng rutan och öppna den igen.|Træffets navn kunne ikke hentes. Luk dialogen, og åbn den igen.|Treffets navn kunne ikke hentes. Lukk dialogen og åpne den igjen.|Der Name des Treffens konnte nicht abgerufen werden. Schließe den Dialog und öffne ihn erneut.
 Open|Öppna|Åbn|Åpne|Öffnen
 Search|Sök|Søg|Søk|Suchen
 Refresh|Uppdatera|Opdater|Oppdater|Aktualisieren
