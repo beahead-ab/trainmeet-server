@@ -725,6 +725,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .display-connection b { color: var(--display-fg); font: 600 15px/1.4 var(--font-mono); letter-spacing: .03em; opacity: .85; }
 .display-selection { position: fixed; z-index: 8; right: 22px; bottom: 22px; display: grid; width: min(420px, calc(100vw - 44px)); gap: 3px; padding: 14px 16px; border: 0; border-radius: 16px; color: var(--display-fg); background: var(--display-card); box-shadow: var(--shadow-md); }
 .display-selection p { margin: 0; color: var(--display-muted); font-size: 9px; font-weight: 700; letter-spacing: .13em; }
+/* Krysset släpper valet och visar alla tåg igen (#196). */
+.display-selection .display-selection__close { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 34px; height: 34px; min-height: 0; padding: 0; border: 0; border-radius: 999px; color: var(--display-muted); background: transparent; font-size: 22px; line-height: 1; cursor: pointer; }
+.display-selection .display-selection__close:hover { color: var(--display-fg); background: color-mix(in srgb, var(--display-fg) 12%, transparent); }
 .display-selection b { font-size: 22px; }
 .display-selection span { color: var(--display-muted); font-size: 12px; }
 .display-selection small { margin-top: 4px; overflow: hidden; color: var(--display-fg); font-size: 10px; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }

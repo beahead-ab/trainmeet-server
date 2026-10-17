@@ -4469,14 +4469,31 @@ function renderDisplaySelection(snapshot) {
   const service = serviceForTrain(snapshot, state.displaySelectedTrainNumber);
   const station = (snapshot.stations || []).find((item) => item.id === state.displaySelectedStationID);
   panel.classList.toggle("hidden", !service && !station);
+  // Krysset släpper valet och visar alla tåg igen (Benny #196).
+  const close = (label) => html`<button type="button" class="display-selection__close" data-display-clear aria-label="${escapeHTML(t(label))}" title="${escapeHTML(t(label))}">×</button>`;
   if (service) {
     const stops = [...(service.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
-    panel.innerHTML = html`<p>TÅG</p><b>${escapeHTML(service.train_number)}</b><span>${stops.length} stopp</span><small>${stops.map((stop) => escapeHTML((snapshot.stations || []).find((item) => item.id === stop.station_id)?.name || "?")).join(" → ")}</small>`;
+    panel.innerHTML = html`${close("Alla tåg")}<p>TÅG</p><b>${escapeHTML(service.train_number)}</b><span>${stops.length} stopp</span><small>${stops.map((stop) => escapeHTML((snapshot.stations || []).find((item) => item.id === stop.station_id)?.name || "?")).join(" → ")}</small>`;
   } else if (station) {
     const rows = stationTrafficRows(snapshot, station.id);
     const connected = (snapshot.connections || []).filter((connection) => connection.station_a_id === station.id || connection.station_b_id === station.id).length;
-    panel.innerHTML = html`<p>STATION</p><b>${escapeHTML(station.name)}</b><span>${escapeHTML(station.code || "–")} · ${rows.length} tåg · ${connected} sträckor</span><small>${rows.slice(0, 4).map((row) => `${escapeHTML(row.trainNumber)} ${escapeHTML(row.kind)} ${escapeHTML(row.time)}`).join(" · ") || t("Inga tidtabellslag")}</small>`;
+    panel.innerHTML = html`${close("Stäng")}<p>STATION</p><b>${escapeHTML(station.name)}</b><span>${escapeHTML(station.code || "–")} · ${rows.length} tåg · ${connected} sträckor</span><small>${rows.slice(0, 4).map((row) => `${escapeHTML(row.trainNumber)} ${escapeHTML(row.kind)} ${escapeHTML(row.time)}`).join(" · ") || t("Inga tidtabellslag")}</small>`;
   }
+}
+
+// Tillbaka till alla tåg (Benny #196): krysset i rutan, Esc, eller ett tryck
+// på en tom yta i diagrammet eller på kartan släpper det valda tåget eller
+// stationen. Förut gick det bara att trycka på samma tåg igen eller välja
+// Alla tåg i verktygsraden, som är dold tills musen rör sig.
+function clearDisplaySelection() {
+  if (!state.displaySelectedTrainNumber && !state.displaySelectedStationID) return;
+  state.displaySelectedTrainNumber = null;
+  state.displaySelectedStationID = null;
+  const select = document.querySelector("#display-train-select");
+  if (select) select.value = "";
+  if (!displaySnapshot) return;
+  if (displayKind === "topology") renderDisplayTopology(displaySnapshot);
+  if (displayKind === "graph") { updateDisplayGraphSelection(); renderDisplaySelection(displaySnapshot); }
 }
 
 // Diagrammets tidsfönster: hela timmar, med "nu" ungefär en tredjedel in.
@@ -4522,6 +4539,9 @@ function renderGraph(snapshot) {
   lib.render(svg, g, { cls: lib.SCREEN, onSelect: select, onStation: station, label: (number) => t("Tåg {number}", { number }), clip: "screen-graph-clip",
     marks: graphLives ? (number) => TrainMeetDriftModel.deviationView(5, graphLives.get(String(number)))?.mark || null : null });
   svg.removeAttribute("width"); svg.removeAttribute("height");
+  // Ett tryck på en tom yta släpper det valda tåget (#196); tågen och
+  // stationsnamnen svarar själva.
+  svg.onclick = (event) => { if (!event.target.closest?.("[role='button']")) clearDisplaySelection(); };
   // Klockan på nu-linjen som skärmens egen, med sekunderna borträknade.
   const nowText = svg.querySelector(".sc-graph-now-text");
   if (nowText) nowText.textContent = currentClockTime(snapshot).slice(0, 5);
@@ -5226,6 +5246,10 @@ async function initDisplay() {
     displayStore(DISPLAY_GRAPH_WINDOW_KEY, event.target.value);
     if (displaySnapshot && displayKind === "graph") renderGraph(displaySnapshot);
   });
+  document.querySelector("#display-selection")?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-display-clear]")) clearDisplaySelection();
+  });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") clearDisplaySelection(); });
   document.querySelector("#display-train-select").addEventListener("change", (event) => {
     state.displaySelectedTrainNumber = event.target.value || null;
     state.displaySelectedStationID = null;
