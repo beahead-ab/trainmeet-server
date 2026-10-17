@@ -392,6 +392,24 @@ class ThroughTrainTests(_Boxes):
         self.assertEqual("102 UPPT SPÅR   ", answer["frame"]["lines"][0])
         self.assertEqual("arrived", self.movement("station-a", "movement-102-1")["arrival"])
 
+    def test_a_free_track_takes_the_train_in_and_names_the_track(self):
+        """Benny #197: 93 came in on 2a, which was free, and the box said
+        UPPT SPÅR. A train due on the same track later in the day counted as
+        standing there; only a train that is there now does."""
+        package = through_package("through-102-later-train")
+        later = next(t for t in package["trains"] if t["id"] == "movement-202-a")     # due on CDA 2 at 10:10
+        later["days"] = "Dagl"
+        next(s for s in package["services"] if s["id"] == later["service_id"])["days"] = "Dagl"
+        self.fixture.install(package)
+        self.terminals = Terminal16Service(self.service)
+        self.lookup("esp32")                                # LEK asks CDA
+        self.lookup("esp8266"); self.send("esp8266", "#")    # CDA clears
+        self.send("esp32", "#")                              # LEK departs
+        answer = self.send("esp8266", "#")                   # CDA takes it in on track 2, free now
+        self.assertEqual("102 ANK SP2     ", answer["frame"]["lines"][0])
+        self.assertEqual(("arrived", "track-station-a-2"),
+                         tuple(self.movement("station-a", "movement-102-1")[k] for k in ("arrival", "actualTrack")))
+
     def test_received_first_then_sent_on(self):
         self.lookup("esp32")
         frame = self.lookup("esp8266")          # the request, not the departure
@@ -581,7 +599,7 @@ class NeverSentTests(_Boxes):
         self.assertEqual("Flytta hit", frame["keys"]["#"]["label"])
         self.assertEqual([], self.service.open_cases(None))   # the lookup sent nothing
         answer = self.send("esp32", "#")
-        self.assertEqual("103 MOTTAGET    ", answer["frame"]["lines"][0])
+        self.assertEqual("103 ANK SP2     ", answer["frame"]["lines"][0])   # the track it came in on (#197)
         self.assertEqual(("arrived", "track-station-b-2"),
                          tuple(self.movement("station-b", "movement-103-2")[k] for k in ("arrival", "actualTrack")))
         # The whole route before it is over: VA and CDA have nothing left of 103.
@@ -608,7 +626,7 @@ class NeverSentTests(_Boxes):
         frame = self.send("esp32", "#", train_number="103")["frame"]
         self.assertEqual("FLYTTA 103 HIT? ", frame["lines"][0])
         answer = self.send("esp32", "#")
-        self.assertEqual("103 MOTTAGET    ", answer["frame"]["lines"][0])
+        self.assertEqual("103 ANK SP2     ", answer["frame"]["lines"][0])
         self.assertEqual("arrived", self.movement("station-b", "movement-103-2")["arrival"])
         self.assertEqual("departed", self.movement("station-a", "movement-103-1")["departure"])
         self.assertEqual([], self.service.open_cases(None))

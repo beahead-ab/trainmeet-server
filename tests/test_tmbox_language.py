@@ -131,6 +131,16 @@ class DeviceCopyCoverageTests(unittest.TestCase):
                     self.assertTrue(key in TERMINAL16[code] or key in MESSAGES[code], key)
 
 
+    def test_the_arrival_track_is_said_in_every_language_and_fits(self):
+        """Benny #197: after #In the box names the track the train came in on."""
+        from tmbox_gateway.terminal16_i18n import notice
+        self.assertEqual("93 ANK SP2a", notice("sv", "93 ANK SP2a"))
+        self.assertEqual("93 ARR TRK2a", notice("en", "93 ANK SP2a"))
+        self.assertEqual("93 AN GL2a", notice("de", "93 ANK SP2a"))
+        for code, _ in LANGUAGES:
+            with self.subTest(language=code):
+                self.assertLessEqual(len(notice(code, "12345 ANK SP12A")), 16)
+
 class LanguageProtocolTests(ProtocolV2Base):
     def test_choice_persists_is_per_device_and_never_changes_traffic(self):
         other = "TMBOX-OTHER"

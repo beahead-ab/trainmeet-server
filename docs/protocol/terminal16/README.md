@@ -94,8 +94,11 @@ som 16×2; den stängs aldrig ute. Administratören ser storleken under Klienter
   i tidtabellen med *Placera på spår*, och `B` väljer annat spår. Ett tåg med
   klartecken men utan rapporterad avgång placeras via `B` och spårvalet, så att
   `#` efter *Ge klart* aldrig tar emot tåget. Tåget hoppar fram på samma sätt.
-- Ett upptaget spår stoppar inte en ankomst. Kvittot blir `<nr> UPPT SPÅR` i
-  stället för `<nr> MOTTAGET`.
+- Kvittot hos den som tar emot säger vilket spår tåget kom in på, till exempel
+  `<nr> ANK SP2a` (Server 4.12.2, Benny #197). Ett upptaget spår stoppar inte
+  en ankomst; kvittot blir då `<nr> UPPT SPÅR`. Upptaget betyder att ett annat
+  tåg står där nu: inne, utställt, eller som börjar här och inte har gått. Ett
+  tåg som ska komma in på spåret senare under dagen räknas inte.
 - Inga besked väntar på `#OK` (Server 2.4.0). Ett besked som `<nr> ÅTERTAGET`,
   `<nr> NEKAT`, `<nr> ANK SP2`, `INGET TÅG` eller `INGA FRÅGOR` har den andra
   stationens kod på rad 2 och försvinner efter `NOTICE_SECONDS`, och boxen går

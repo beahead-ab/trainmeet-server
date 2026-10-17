@@ -44,6 +44,7 @@ LÄGET ÄNDRAT|STATE CHANGED|STATUS ÆNDRET|STATUS ENDRET|STATUS GEÄNDERT
 ÅTER {number}?|UNDO {number}?|FORTRYD {number}?|ANGRE {number}?|ZURÜCK {number}?
 NEKA {number}?|REFUSE {number}?|AFVIS {number}?|AVVIS {number}?|NEIN {number}?
 {number} SPÅR {track}|{number} TRK {track}|{number} SPOR {track}|{number} SPOR {track}|{number} GL {track}
+{number} ANK SP{track}|{number} ARR TRK{track}|{number} ANK SP{track}|{number} ANK SP{track}|{number} AN GL{track}
 MOTTAGET|ARRIVED|ANKOMMET|ANKOMMET|ANGEKOMMEN
 ÅTERTAGET|WITHDRAWN|TRUKKET|TRUKKET|ZURÜCK
 NEKAT|REFUSED|AFVIST|AVVIST|ABGELEHNT
@@ -181,4 +182,6 @@ def notice(language, value):
     number, _, suffix = value.partition(" ")
     if number.isdigit() and suffix in {"MOTTAGET", "ÅTERTAGET", "NEKAT", "UPPT SPÅR"}:
         return number + " " + text(language, suffix)
+    if number.isdigit() and suffix.startswith("ANK SP"):
+        return text(language, "{number} ANK SP{track}", number=number, track=suffix[len("ANK SP"):])
     return text(language, value)

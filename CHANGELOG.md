@@ -5,6 +5,20 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Boxen säger vilket spår tåget kom in på, och UPPT SPÅR bara när spåret är upptaget
+
+Benny (#197): tåg 93 togs in på Charlottendal spår 2a, som var ledigt, men
+boxen svarade «93 UPPT SPÅR». Varningen räknade varje tåg som enligt
+tidtabellen ska stå på samma spår någon gång under dagen, också tåg som ännu
+inte har kommit.
+
+- «UPPT SPÅR» kommer nu bara när ett annat tåg står på spåret: inne,
+  utställt efter tidtabellen, eller ett tåg som börjar på stationen och inte
+  har gått.
+- När spåret är ledigt säger boxen vilket spår tåget kom in på, till exempel
+  «93 ANK SP2a», i stället för «93 MOTTAGET». Texten finns på boxens fem språk.
+  Den som skickade tåget får fortfarande «93 MOTTAGET».
+
 ### Kopiera är en liten ikon direkt efter det som kopieras
 
 Casper: «Kopiera ska vara en liiiten ikon direkt efter texten som ska skrivas

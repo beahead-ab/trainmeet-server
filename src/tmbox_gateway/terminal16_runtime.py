@@ -195,8 +195,13 @@ class RuntimeViews(Terminal16Lab):
         if action == "accept":
             terminal.screen = "detail"
         if action in {"arrive", "arrive_track", "cancel", "reject"}:
-            terminal.notice = f"{leg['train_number']} " + (("UPPT SPÅR" if result.get("track_occupied_by") is not None else "MOTTAGET")
-                                                          if action.startswith("arrive") else "ÅTERTAGET" if action == "cancel" else "NEKAT")
+            # Inne: spåret tåget kom in på, eller UPPT SPÅR om ett annat tåg
+            # står där (Benny #197).
+            arrived = self.engine.config.tracks.get(result.get("track_id") or "")
+            terminal.notice = f"{leg['train_number']} " + (
+                ("UPPT SPÅR" if result.get("track_occupied_by") is not None else
+                 f"ANK SP{arrived.display_label}" if arrived else "MOTTAGET")
+                if action.startswith("arrive") else "ÅTERTAGET" if action == "cancel" else "NEKAT")
             other = leg["to_station_id"] if action == "cancel" else leg["from_station_id"]
             terminal.notice_hint = self.engine.config.stations[other].code
             terminal.notice_until = self.now() + NOTICE_SECONDS
