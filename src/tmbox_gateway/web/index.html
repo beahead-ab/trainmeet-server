@@ -1098,10 +1098,9 @@
                 <h3>Börja om träffen från början</h3>
                 <p>Träffen går tillbaka till dag 1 och klockan till planens starttid, där den står still. Klareringar, linjebesked, TKL:s anteckningar och automatikens tider tas bort, och tågen ställs där tidtabellen säger vid starttiden. En box mitt i en inmatning börjar om.</p>
                 <p>Planen, Cloud-kopplingen, enheterna och deras stationer, användarna och klockans inställningar står kvar. En säkerhetskopia tas först och kan läggas tillbaka med Återställ från säkerhetskopia.</p>
-                <label for="meet-reset-confirmation">Skriv <b id="meet-reset-name">–</b> för att bekräfta</label>
-                <div class="factory-reset-row confirm-row">
-                  <input id="meet-reset-confirmation" autocomplete="off" placeholder="Träffens namn">
-                  <button type="button" class="secondary" data-copy-confirmation="meet-reset-name" data-copy-message="meet-reset-message" disabled>Kopiera</button>
+                <p class="confirm-prompt"><span id="meet-reset-prompt-start">Skriv </span><b id="meet-reset-name">–</b><button type="button" class="confirm-copy" data-copy-confirmation="meet-reset-name" data-copy-input="meet-reset-confirmation" data-copy-message="meet-reset-message" aria-label="Kopiera" title="Kopiera" data-tm-aria-label="Kopiera" data-tm-title="Kopiera" disabled><svg class="confirm-copy__copy" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="confirm-copy__done" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></button><span id="meet-reset-prompt-end"> för att bekräfta</span></p>
+                <div class="factory-reset-row">
+                  <input id="meet-reset-confirmation" aria-labelledby="meet-reset-prompt-start meet-reset-name meet-reset-prompt-end" autocomplete="off" placeholder="Träffens namn">
                 </div>
                 <p id="meet-reset-message" class="form-message" role="status"></p>
               </div>
@@ -1114,10 +1113,9 @@
                 <div id="restore-list" class="restore-list" role="radiogroup" aria-label="Säkerhetskopior" data-tm-aria-label="Säkerhetskopior"></div>
                 <p id="restore-empty" class="restore-empty hidden"><tm-text data-tm-text="Inga säkerhetskopior finns än. Den första tas vid nästa programuppdatering.">Inga säkerhetskopior finns än. Den första tas vid nästa programuppdatering.</tm-text></p>
                 <div id="restore-consequences" class="restore-consequences hidden"></div>
-                <label for="restore-confirmation"><tm-text data-tm-text="Skriv ">Skriv </tm-text><b id="restore-overwrites">–</b><tm-text data-tm-text=" för att bekräfta att den datan skrivs över"> för att bekräfta att den datan skrivs över</tm-text></label>
-                <div class="factory-reset-row confirm-row">
-                  <input id="restore-confirmation" autocomplete="off" placeholder="Namnet på det som skrivs över" data-tm-placeholder="Namnet på det som skrivs över">
-                  <button type="button" class="secondary" data-copy-confirmation="restore-overwrites" data-copy-message="restore-message" disabled><tm-text data-tm-text="Kopiera">Kopiera</tm-text></button>
+                <p class="confirm-prompt"><tm-text id="restore-prompt-start" data-tm-text="Skriv ">Skriv </tm-text><b id="restore-overwrites">–</b><button type="button" class="confirm-copy" data-copy-confirmation="restore-overwrites" data-copy-input="restore-confirmation" data-copy-message="restore-message" aria-label="Kopiera" title="Kopiera" data-tm-aria-label="Kopiera" data-tm-title="Kopiera" disabled><svg class="confirm-copy__copy" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="confirm-copy__done" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></button><tm-text id="restore-prompt-end" data-tm-text=" för att bekräfta att den datan skrivs över"> för att bekräfta att den datan skrivs över</tm-text></p>
+                <div class="factory-reset-row">
+                  <input id="restore-confirmation" aria-labelledby="restore-prompt-start restore-overwrites restore-prompt-end" autocomplete="off" placeholder="Namnet på det som skrivs över" data-tm-placeholder="Namnet på det som skrivs över">
                 </div>
                 <p id="restore-message" class="form-message" role="status"></p>
               </div>
@@ -1125,10 +1123,9 @@
 <dialog id="reset-modal" class="admin-modal" aria-label="Nollställ träffdata"><div class="reset-body">
                 <h3 id="reset-mode-title"><tm-text data-tm-text="Börja om utan att förlora administratörsåtkomsten">Börja om utan att förlora administratörsåtkomsten</tm-text></h3>
                 <p id="reset-mode-description"><tm-text data-tm-text="Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och den aktiva webbinloggningen behålls.">Tar bort träffkonfiguration, lokal trafikhistorik, Cloud-koppling och parkopplade enheter. Administratören, servernamnet och den aktiva webbinloggningen behålls.</tm-text></p>
-                <label for="factory-reset-confirmation"><tm-text data-tm-text="Skriv ">Skriv </tm-text><b id="factory-reset-word"><tm-text data-tm-text="NOLLSTÄLL">NOLLSTÄLL</tm-text></b><tm-text data-tm-text=" för att låsa upp knappen"> för att låsa upp knappen</tm-text></label>
-                <div class="factory-reset-row confirm-row">
-                  <input id="factory-reset-confirmation" autocomplete="off" autocapitalize="characters" placeholder="NOLLSTÄLL" data-tm-placeholder="NOLLSTÄLL">
-                  <button type="button" class="secondary" data-copy-confirmation="factory-reset-word" data-copy-message="factory-reset-message"><tm-text data-tm-text="Kopiera">Kopiera</tm-text></button>
+                <p class="confirm-prompt"><tm-text id="factory-reset-prompt-start" data-tm-text="Skriv ">Skriv </tm-text><b id="factory-reset-word"><tm-text data-tm-text="NOLLSTÄLL">NOLLSTÄLL</tm-text></b><button type="button" class="confirm-copy" data-copy-confirmation="factory-reset-word" data-copy-input="factory-reset-confirmation" data-copy-message="factory-reset-message" aria-label="Kopiera" title="Kopiera" data-tm-aria-label="Kopiera" data-tm-title="Kopiera"><svg class="confirm-copy__copy" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="confirm-copy__done" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></button><tm-text id="factory-reset-prompt-end" data-tm-text=" för att låsa upp knappen"> för att låsa upp knappen</tm-text></p>
+                <div class="factory-reset-row">
+                  <input id="factory-reset-confirmation" aria-labelledby="factory-reset-prompt-start factory-reset-word factory-reset-prompt-end" autocomplete="off" autocapitalize="characters" placeholder="NOLLSTÄLL" data-tm-placeholder="NOLLSTÄLL">
                 </div>
                 <p id="factory-reset-message" class="form-message" role="status"></p>
               </div>

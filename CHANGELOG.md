@@ -5,6 +5,19 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Kopiera är en liten ikon direkt efter namnet
+
+Casper: «Kopiera ska vara en liiiten ikon direkt efter texten som ska skrivas
+in.» I *Nollställ träffen*, *Återställ från säkerhetskopia* och *Nollställ
+träffdata* står en liten kopieringsikon direkt efter namnet, eller ordet, som
+ska skrivas, i stället för knappen Kopiera bredvid fältet. Fältet får hela
+bredden igen.
+
+- Ett tryck kopierar som förut och sätter markören i fältet. Ikonen blir en
+  bock en kort stund.
+- Skärmläsare läser fältet som hela meningen, till exempel «Skriv Grimslöv
+  2026 för att bekräfta», och ikonen som Kopiera.
+
 ### Storskärmens tågdiagram fyller skärmen, med större text och spårrader
 
 Casper skickade en bild av tågdiagrammet på en 16:10-skärm: svarta band över

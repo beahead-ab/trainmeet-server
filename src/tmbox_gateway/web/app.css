@@ -1030,6 +1030,19 @@ body[data-mode="bygg"] .server-admin-shell { flex-direction: column; }
    rutnätet delar den i tre rader: "Skriv" / "NOLLSTÄLL" / "för att
    låsa upp knappen". */
 .reset-body > label { display: block; font-size: 12.5px; color: var(--ink-strong); }
+/* Meningen att skriva av har en liten kopieringsikon direkt efter namnet
+   (Casper 2026-10-17). Meningen är ingen <label>, eftersom en knapp inte får
+   ligga i en; fältet får sitt namn ur meningens delar med aria-labelledby.
+   Ytan att trycka på är större än ikonen. */
+.reset-body > .confirm-prompt { max-width: none; font: 600 12px/1.3 var(--font); color: var(--ink-strong); }
+.reset-body .confirm-prompt .confirm-copy { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 20px; min-width: 0; height: 20px; min-height: 0; margin: -4px 0 -4px 3px; padding: 0; border: 0; border-radius: 5px; color: inherit; background: none; opacity: .7; vertical-align: middle; cursor: pointer; }
+.reset-body .confirm-prompt .confirm-copy::after { content: ""; position: absolute; inset: -10px -8px; }
+.reset-body .confirm-prompt .confirm-copy:hover, .reset-body .confirm-prompt .confirm-copy.is-copied { opacity: 1; background: none; }
+.reset-body .confirm-prompt .confirm-copy:disabled { display: none; }
+.reset-body .confirm-prompt .confirm-copy svg { display: block; }
+.reset-body .confirm-prompt .confirm-copy .confirm-copy__done,
+.reset-body .confirm-prompt .confirm-copy.is-copied .confirm-copy__copy { display: none; }
+.reset-body .confirm-prompt .confirm-copy.is-copied .confirm-copy__done { display: block; }
 .reset-body .form-message { margin: 0; }
 @media (max-width: 700px) {
 .server-identity-form { grid-template-columns: 1fr; }
@@ -1398,9 +1411,6 @@ body[data-signed-in="no"] #logout { display: none; }
 .admin-modal .reset-body h3 { padding-right: 40px; }
 .admin-modal .factory-reset-row { display: block; }
 .admin-modal .factory-reset-row input { width: 100%; }
-/* Det som ska skrivas för att bekräfta kan kopieras: fältet och Kopiera på samma rad, också på en telefon. */
-.admin-modal .factory-reset-row.confirm-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
-.admin-modal .factory-reset-row.confirm-row button { min-height: 44px; }
 .admin-modal [aria-busy="true"], .admin-modal[aria-busy="true"] { cursor: progress; }
 #modal-result { position: fixed; z-index: 100; bottom: 20px; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px); padding: 14px 20px; margin: 0; border: 1px solid #bad4c0; border-radius: 12px; color: #285238; background: #f0f8f2; box-shadow: 0 6px 24px #0002; overflow-wrap: anywhere; pointer-events: none; }
 .admin-modal input, .admin-modal select, .admin-modal textarea { min-width: 0; max-width: 100%; }

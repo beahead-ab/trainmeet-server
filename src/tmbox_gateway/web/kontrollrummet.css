@@ -455,7 +455,7 @@ dialog.kr-dialog #overview-route-search { background: var(--kr-panel-2); color: 
 /* Äldre dialoger (formulär) i kontrollrummets färger */
 dialog.admin-modal { background: var(--kr-panel); color: var(--kr-ink); border: 1px solid var(--kr-line-2); border-radius: var(--kr-r); box-shadow: var(--kr-shadow); font-family: var(--kr-sans); color-scheme: dark; }
 :root[data-kr-theme="light"] dialog.admin-modal { color-scheme: light; }
-dialog.admin-modal h2, dialog.admin-modal h3, dialog.admin-modal label, dialog.admin-modal strong { color: var(--kr-ink); }
+dialog.admin-modal h2, dialog.admin-modal h3, dialog.admin-modal label, dialog.admin-modal .confirm-prompt, dialog.admin-modal strong { color: var(--kr-ink); }
 dialog.admin-modal p { color: var(--kr-ink-2); }
 dialog.admin-modal :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]) { background: var(--kr-panel-2); color: var(--kr-ink); border: 1px solid var(--kr-line-2); border-radius: var(--kr-r-sm); }
 dialog.admin-modal :is(input, select, textarea):disabled { opacity: .5; }

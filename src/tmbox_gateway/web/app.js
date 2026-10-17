@@ -1569,7 +1569,7 @@ async function refreshBackups() {
 }
 
 // Det som skrivs över heter som träffen; samma namn bekräftar Återställ och
-// Nollställ träffen, och båda rutorna har en Kopiera-knapp för det.
+// Nollställ träffen, och båda rutorna har en kopieringsikon efter namnet.
 function setConfirmationName(name) {
   restore.overwrites = name;
   restoreEl("overwrites").textContent = name || "–";
@@ -1597,8 +1597,8 @@ async function refreshConfirmationName(dialog) {
   }
 }
 
-// Kopiera bredvid fältet kopierar namnet, eller ordet, som ska skrivas, så att
-// det kan klistras in. Utan säker anslutning (en Pi över http) finns inget
+// Ikonen efter namnet kopierar namnet, eller ordet, som ska skrivas, så att
+// det kan klistras in i fältet (data-copy-input), som får fokus. Utan säker anslutning (en Pi över http) finns inget
 // urklipps-API; då kopieras det ur ett dolt fält i rutan, och går inte heller
 // det blir namnet markerat så att det kan kopieras från menyn.
 async function copyConfirmation(button) {
@@ -1621,7 +1621,10 @@ async function copyConfirmation(button) {
   }
   if (copied) {
     if (message) setMessage(message, "Kopierat – klistra in det i rutan", "notice");
-    button.parentElement.querySelector("input")?.focus({ preventScroll: true });
+    button.classList.add("is-copied");
+    clearTimeout(button.copiedTimer);
+    button.copiedTimer = setTimeout(() => button.classList.remove("is-copied"), 2000);
+    document.getElementById(button.dataset.copyInput)?.focus({ preventScroll: true });
     return;
   }
   const range = document.createRange();
