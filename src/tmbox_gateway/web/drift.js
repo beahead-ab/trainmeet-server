@@ -604,13 +604,6 @@
       });
       pop.addEventListener("click", (event) => { if (event.target.closest("[data-open-modal]")) pop.hidePopover?.(); });
     }
-    doc.addEventListener("click", async (event) => {
-      const copy = event.target.closest?.("[data-copy]"); if (!copy) return;
-      const source = doc.getElementById(copy.dataset.copy), original = copy.dataset.label || copy.textContent;
-      copy.dataset.label = original;
-      try { await navigator.clipboard.writeText(source.textContent); copy.textContent = t("Kopierat"); } catch { copy.textContent = t("Kopiera inte möjligt"); }
-      setTimeout(() => { copy.textContent = original; }, 2000);
-    });
   }
 
   // Ett tryck på klockan, på Kör eller i rubrikraden, visar eller döljer sekunderna.

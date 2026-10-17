@@ -211,6 +211,30 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     assert.equal(await connect.locator('h3').textContent(), 'Anslut en box');
     await connect.locator('#connect-code').getByText('262-617', { exact: true }).waitFor();
     assert.equal(await connect.locator('#connect-address').textContent(), 'http://192.168.1.20:8787');
+    // Kopiera är en liten ikon direkt efter adressen och efter koden (Casper
+    // 2026-10-17), och ett tryck lägger det i urklippet.
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:9999' });
+    for (const [id, value] of [['connect-address', 'http://192.168.1.20:8787'], ['connect-code', '262-617']]) {
+      const at = await connect.evaluate((card, source) => {
+        const text = card.querySelector('#' + source).getBoundingClientRect();
+        const button = card.querySelector(`[data-copy="${source}"]`);
+        const icon = button.getBoundingClientRect();
+        return { gap: icon.left - text.right, middle: Math.abs((icon.top + icon.bottom) / 2 - (text.top + text.bottom) / 2),
+          width: icon.width, height: icon.height, text: button.textContent.trim(), name: button.getAttribute('aria-label') };
+      }, id);
+      assert.ok(at.gap >= 0 && at.gap <= 6 && at.middle <= 4, `${id}: ikonen direkt efter texten ${JSON.stringify(at)}`);
+      assert.ok(at.width <= 24 && at.height <= 24 && at.text === '' && at.name === 'Kopiera', `${id}: en liten ikon ${JSON.stringify(at)}`);
+      await connect.locator(`[data-copy="${id}"]`).click();
+      await connect.locator(`[data-copy="${id}"].is-copied`).waitFor();
+      assert.equal(await page.evaluate(() => navigator.clipboard.readText()), value, `${id}: urklippet`);
+    }
+    // Utan urklipps-API (en Pi över http) kopieras koden ändå, ur ett dolt fält.
+    await page.waitForFunction(() => !document.querySelector('[data-copy="connect-code"]').classList.contains('is-copied'), null, { timeout: 3000 });
+    const clipboard = await page.evaluate(() => { const saved = navigator.clipboard; Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true }); window.__clipboard = saved; return true; });
+    assert.ok(clipboard);
+    await connect.locator('[data-copy="connect-code"]').click();
+    await connect.locator('[data-copy="connect-code"].is-copied').waitFor();
+    await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { value: window.__clipboard, configurable: true }));
     // Behind Caddy on server.trainmeet.app the box comes in where this page did.
     assert.equal(await page.evaluate(() => connectAddress({host: '10.0.0.5', port: 8787}, 'https://server.trainmeet.app')), 'https://server.trainmeet.app');
     assert.equal(await connect.locator('.kr-steps li').count(), 3);
@@ -581,6 +605,15 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await nav.locator('a[href="/installningar#kod"]').click();
     await page.locator('#connection-code-form').waitFor({state:'visible'});
     assert.equal(await page.locator('#connection-code-form #kod-value').count(), 1);
+    // Kopiera är en liten ikon direkt efter koden, inte en knapp längre bort.
+    const codeIcon = await page.locator('#connection-code-form').evaluate(form => {
+      const code = form.querySelector('#kod-value').getBoundingClientRect();
+      const icon = form.querySelector('[data-copy="kod-value"]').getBoundingClientRect();
+      return { gap: icon.left - code.right, middle: Math.abs((icon.top + icon.bottom) / 2 - (code.top + code.bottom) / 2), width: icon.width,
+        buttons: [...form.querySelectorAll('.kr-codeblock button')].map(button => button.textContent.trim()) };
+    });
+    assert.ok(codeIcon.gap >= 0 && codeIcon.gap <= 8 && codeIcon.middle <= 4 && codeIcon.width <= 24, JSON.stringify(codeIcon));
+    assert.deepEqual(codeIcon.buttons, ['', 'Ny kod'], 'ingen Kopiera-knapp kvar bredvid Ny kod');
     assert.equal(await page.locator('#connection-code-form #connection-badge-validity').count(), 1);
     assert.equal(await page.locator('#traff').isVisible(), false);
     const savebar = form => page.evaluate(selector => { const f = document.querySelector(selector); return { cancel: !f.querySelector('[data-save-cancel]').disabled, save: !f.querySelector('[data-save-submit]').disabled, text: f.querySelector('[data-save-state]').textContent }; }, form);

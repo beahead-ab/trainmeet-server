@@ -559,6 +559,21 @@ body[data-mode="help"] #app-view { padding: 20px; }
 .kr-kv .kr-k { width: 150px; }
 .kr-kv .kr-m, .kr-m { color: var(--kr-mute); font-size: 12.5px; }
 .kr-kv > b, .kr-kv > .kr-val { flex: 0 1 auto; }
+/* Kopiera är en liten ikon direkt efter texten den kopierar (Casper
+   2026-10-17): namnet i bekräftelserutorna, serverns adress och
+   anslutningskoden. Ytan att trycka på är större än ikonen, och ikonen blir en
+   bock en kort stund. Dubbla klassen går före de äldre reglerna för button. */
+button.kr-copy.kr-copy { position: relative; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 20px; min-width: 0; height: 20px; min-height: 0; margin: -4px 0 -4px 3px; padding: 0; border: 0; border-radius: 5px; color: inherit; background: none; opacity: .7; vertical-align: middle; cursor: pointer; }
+button.kr-copy.kr-copy::after { content: ""; position: absolute; inset: -10px -8px; }
+button.kr-copy.kr-copy:hover, button.kr-copy.kr-copy.is-copied { opacity: 1; background: none; }
+button.kr-copy.kr-copy:disabled { display: none; }
+.kr-copy svg { display: block; }
+.kr-copy .kr-copy__done, .kr-copy.is-copied .kr-copy__copy { display: none; }
+.kr-copy.is-copied .kr-copy__done { display: block; }
+.kr-kv > button.kr-copy.kr-copy { margin-left: -8px; }
+.kr-copyable { display: inline-flex; align-items: center; }
+.kr-copyable > button.kr-copy.kr-copy { width: 24px; height: 24px; margin: 0 0 0 6px; }
+.kr-copyable > .kr-copy svg { width: 18px; height: 18px; }
 .kr-lbl { width: 150px; flex-shrink: 0; font-weight: 600; color: var(--kr-ink-2); font-size: 13px; }
 .kr-field { box-sizing: border-box; height: 34px; min-height: 34px; padding: 0 10px; border: 1px solid var(--kr-line-2); border-radius: var(--kr-r-sm); background: var(--kr-panel-2); color: var(--kr-ink); font: 13px var(--kr-sans); min-width: 0; box-shadow: none; }
 .kr-field:focus-visible, .kr-nav:focus-visible { outline: 2px solid var(--kr-blue); outline-offset: 1px; }

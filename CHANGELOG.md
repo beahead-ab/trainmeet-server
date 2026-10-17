@@ -5,18 +5,25 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
-### Kopiera är en liten ikon direkt efter namnet
+### Kopiera är en liten ikon direkt efter det som kopieras
 
 Casper: «Kopiera ska vara en liiiten ikon direkt efter texten som ska skrivas
-in.» I *Nollställ träffen*, *Återställ från säkerhetskopia* och *Nollställ
-träffdata* står en liten kopieringsikon direkt efter namnet, eller ordet, som
-ska skrivas, i stället för knappen Kopiera bredvid fältet. Fältet får hela
-bredden igen.
+in», och det i alla TrainMeets program. Varje Kopiera-knapp är nu en liten
+kopieringsikon direkt efter texten den kopierar:
 
-- Ett tryck kopierar som förut och sätter markören i fältet. Ikonen blir en
-  bock en kort stund.
-- Skärmläsare läser fältet som hela meningen, till exempel «Skriv Grimslöv
-  2026 för att bekräfta», och ikonen som Kopiera.
+- i *Nollställ träffen*, *Återställ från säkerhetskopia* och *Nollställ
+  träffdata*, efter namnet eller ordet som ska skrivas. Fältet får hela
+  bredden igen;
+- under *Anslut en box* på Kör, efter serverns adress och efter
+  anslutningskoden;
+- under Inställningar → Anslutningskod, efter koden.
+
+Ett tryck kopierar och ikonen blir en bock en kort stund; i
+bekräftelserutorna hamnar markören i fältet. Kopieringen fungerar nu också
+utan säker anslutning (en Pi över http) under Anslut en box och
+Anslutningskod, som i bekräftelserutorna; förut stod det «Kopiera inte
+möjligt». Skärmläsare läser bekräftelsefältet som hela meningen, till exempel
+«Skriv Grimslöv 2026 för att bekräfta», och ikonen som Kopiera.
 
 ### Storskärmens tågdiagram fyller skärmen, med större text och spårrader
 
