@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.12.3",
+    "date": "2026-10-17",
+    "notes": [
+      "Tillbaka till alla tåg i tågdiagrammet på storskärmen"
+    ]
+  },
+  {
     "version": "4.12.2",
     "date": "2026-10-17",
     "notes": [
