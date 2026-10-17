@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.12.1",
+    "date": "2026-10-17",
+    "notes": [
+      "Kopiera är en liten ikon direkt efter det som kopieras"
+    ]
+  },
+  {
     "version": "4.12.0",
     "date": "2026-10-16",
     "notes": [
