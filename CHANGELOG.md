@@ -5,6 +5,20 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tillbaka till alla tåg i tågdiagrammet på storskärmen
+
+Benny (#196): i tågdiagrammet på en egen skärm lyste det valda tåget och en
+ruta om tåget stod nere till höger, men det fanns inget synligt sätt att
+komma tillbaka till alla tåg; han laddade om sidan. Nu släpper man valet
+med:
+
+- krysset i rutan nere till höger,
+- Esc,
+- ett tryck på en tom yta i diagrammet,
+- ett tryck på samma tåg igen, som förut.
+
+Krysset finns också i rutan för en vald station på Banöversikten.
+
 ### Boxen säger vilket spår tåget kom in på, och UPPT SPÅR bara när spåret är upptaget
 
 Benny (#197): tåg 93 togs in på Charlottendal spår 2a, som var ledigt, men

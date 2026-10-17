@@ -63,6 +63,50 @@ const display = () => ({ data: {
     assert.deepEqual(fonts, { name: '16px', time: '15px', train: '13.2px' });
     assert.equal(await page.locator('#graph-svg .sc-graph-track').count(), 0, 'no track rows to begin with');
 
+    // Benny #196: ett valt tåg lyser och de andra tonas ner. Tillbaka till alla
+    // tåg med krysset i rutan, med Esc, eller med ett tryck på en tom yta.
+    const panel = page.locator('#display-selection');
+    const dimmed = () => page.locator('#graph-svg .graph-train-group.dimmed').count();
+    const choose = async (number) => {
+      await page.locator(`#graph-svg .graph-train-group[data-train-number="${number}"]`).first().click();
+      await panel.waitFor({ state: 'visible' });
+      assert.ok(await dimmed() > 0, `${number}: the others are dimmed`);
+    };
+    const allBack = async (how) => {
+      await panel.waitFor({ state: 'hidden' });
+      assert.equal(await dimmed(), 0, `${how}: every train is back`);
+      assert.equal(await page.evaluate(() => document.querySelector('#display-train-select').value), '', how);
+    };
+    await choose('91');
+    if (process.env.SCREEN_GRAPH_SHOTS) await page.screenshot({ path: process.env.SCREEN_GRAPH_SHOTS + '/valt-tag.png' });
+    const close = panel.locator('.display-selection__close');
+    assert.equal(await close.getAttribute('aria-label'), 'Alla tåg');
+    // Mätt i dukens egna mått; duken skalas till skärmen.
+    const size = await close.evaluate((button) => [button.offsetWidth, button.offsetHeight]);
+    assert.ok(size[0] >= 32 && size[1] >= 32, `the cross is easy to hit ${size}`);
+    await close.click();
+    await allBack('the cross');
+    await choose('92');
+    await page.keyboard.press('Escape');
+    await allBack('Esc');
+    await choose('93');
+    const empty = await page.evaluate(() => {
+      // En punkt i diagrammet där inget tåg eller namn finns.
+      const svg = document.querySelector('#graph-svg').getBoundingClientRect();
+      for (let y = svg.top + svg.height * 0.9; y > svg.top + 40; y -= 7) for (let x = svg.right - 60; x > svg.left + 200; x -= 13) {
+        const hit = document.elementFromPoint(x, y);
+        if (hit && hit.closest('#graph-svg') && !hit.closest("[role='button']") && !hit.closest('#display-selection')) return { x, y };
+      }
+      return null;
+    });
+    assert.ok(empty, 'an empty spot in the graph');
+    await page.mouse.click(empty.x, empty.y);
+    await allBack('an empty spot');
+    // Ett tryck på samma tåg igen släpper det som förut.
+    await choose('91');
+    await page.locator('#graph-svg .graph-train-group[data-train-number="91"]').first().click();
+    await allBack('the same train again');
+
     // Spårrader: bara stationerna med mer än ett spår.
     const menu = page.locator('#display-graph-tracks');
     assert.equal(await menu.isVisible(), true);
