@@ -534,7 +534,7 @@ class HTTPServerTests(unittest.TestCase):
             with urlopen(f"{self.base_url}/assets/{asset}", timeout=2) as response:
                 self.assertEqual(response.status, 200)
                 self.assertTrue(response.read())
-        for path in ("/drift", "/installningar", "/tidtabell", "/hjalp", "/login", "/setup", "/display/territories"):
+        for path in ("/drift", "/installningar", "/tidtabell", "/hjalp", "/login", "/setup", "/anslut", "/display/territories"):
             with urlopen(f"{self.base_url}{path}", timeout=2) as response:
                 self.assertEqual(response.status, 200)
                 self.assertIn(b"server-ui.js", response.read())

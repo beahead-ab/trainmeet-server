@@ -200,8 +200,9 @@ loginForm.addEventListener("submit", async (event) => {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || t("Inloggningen misslyckades"));
     document.querySelector("#login-password").value = "";
-    // Continue to the protected workspace selected before signing in.
-    if (!location.hash || location.hash === "#workspaces") {
+    // Continue to the protected workspace selected before signing in. /anslut
+    // stays where it is: the participant view links there for the code.
+    if ((!location.hash || location.hash === "#workspaces") && location.pathname.replace(/\/$/, "") !== "/anslut") {
       sessionStorage.setItem("trainmeet.workspace", "administration");
       history.replaceState(null, "", location.pathname + "#overview");
     }
@@ -443,6 +444,7 @@ const WORKSPACE_PANELS = {
   tidtabell: "#data-view",
   tmbox: "#tmbox-v2-view",
   help: "#help-view",
+  anslut: "#connect-view",
 };
 const MODES = ["workspaces", ...Object.keys(WORKSPACE_PANELS)];
 const WORKSPACE_KEY = "trainmeet.workspace";
@@ -520,6 +522,7 @@ function setMode(mode) {
   } else if (next === "installningar") showSettings();
   else if (next === "kor" && state.serverContext?.operating_region === "eu") renderOverview(state.overviewSnapshot);
   if (next === "kor") refreshAutomatic();
+  if (next === "anslut") showConnectPage();
   serverUI.mode(next);
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -688,7 +691,7 @@ function applyWorkspaceRoute() {
     applyWorkspaceRoute();
     return;
   }
-  const protectedMode = {"/drift": "kor", "/installningar": "installningar", "/tidtabell": "tidtabell", "/hjalp": "help", "/login": "kor"}[path];
+  const protectedMode = {"/drift": "kor", "/installningar": "installningar", "/tidtabell": "tidtabell", "/hjalp": "help", "/login": "kor", "/anslut": "anslut"}[path];
   if (protectedMode) {
     if (!state.authStatus?.authenticated) { showLogin(); return; }
     setup.classList.add("hidden"); login.classList.add("hidden"); appView.classList.remove("hidden");
@@ -2947,6 +2950,7 @@ function renderConnectionBadgeSettings(connection) {
   settings?.renderQr(connection);
   renderConnectionCode(connection);
   renderConnectCard(connection);
+  renderConnectPage(connection);
 }
 
 // Inställningar › Anslutningskod: the code itself, whether it still works, and for how long it holds.
@@ -2992,6 +2996,32 @@ function renderConnectCard(connection) {
   document.querySelector("#connect-new-code").hidden = !["valid", "used_up", "expired"].includes(state);
 }
 
+// /anslut (Casper 2026-10-17: "Är man inloggad som admin borde koden synas
+// enklare. Inte i vyn som alla ser men någon sida direkt anslutning till den
+// vy som alla ser"): the address and the code on a page of their own, linked
+// from the participant view and from Drift. Only an administrator reads the code.
+function renderConnectPage(connection, denied = false) {
+  const state = connection?.code_state || "no_meet";
+  const hours = Number(connection?.validity_hours || 0);
+  document.querySelector("#connect-page-address").textContent = connection ? connectAddress(connection, location.origin) : connectAddress({}, location.origin);
+  document.querySelector("#connect-page-code").textContent = state === "valid" ? connection.code : "–";
+  document.querySelector("#connect-page-state").textContent = denied ? "" : state === "valid"
+    ? (hours ? t("Gäller i {hours} timmar", { hours }) : t("Gäller tills vidare"))
+    : state === "expired" ? t("Har gått ut") : state === "used_up" ? t("Fullanvänd") : t("Ingen kod utfärdad");
+  document.querySelector("#connect-page-note").textContent = denied ? t("Bara en administratör ser anslutningskoden. Logga in som administratör.") : t(CONNECT_CODE_NOTES[state] || "");
+  document.querySelector("#connect-page-new-code").hidden = denied || !["valid", "used_up", "expired"].includes(state);
+}
+
+async function showConnectPage() {
+  try {
+    const response = await authorizedFetch("/v1/display/connection", { cache: "no-store" });
+    if (response.status === 403) { renderConnectPage(null, true); return; }
+    const connection = await response.json();
+    if (!response.ok) throw new Error(connection.message || t("Kunde inte läsa anslutningskoden."));
+    renderConnectPage(connection);
+  } catch (error) { document.querySelector("#connect-page-note").textContent = error.message; }
+}
+
 async function renewConnectionCode(button, note) {
   button.disabled = true;
   try {
@@ -3004,6 +3034,7 @@ async function renewConnectionCode(button, note) {
 }
 document.querySelector("#connect-new-code")?.addEventListener("click", (event) => renewConnectionCode(event.currentTarget, document.querySelector("#connect-code-note")));
 document.querySelector("#kod-renew")?.addEventListener("click", (event) => renewConnectionCode(event.currentTarget, document.querySelector("#kod-meta")));
+document.querySelector("#connect-page-new-code")?.addEventListener("click", (event) => renewConnectionCode(event.currentTarget, document.querySelector("#connect-page-note")));
 
 // Klienter › Ställverk (TKL): each paired signal box, its station, whether it
 // is heard, and Ta bort. A removed one can pair again with the code.

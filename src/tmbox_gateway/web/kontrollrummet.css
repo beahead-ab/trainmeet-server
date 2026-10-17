@@ -505,9 +505,9 @@ dialog.admin-modal .form-message.success { color: var(--kr-green); }
  * En sidomeny och ett avsnitt i taget. Varje panel som går att ändra är ett
  * eget formulär med sin egen Avbryt/Spara, och de är släckta tills något är
  * ändrat (web/settings.js räknar). */
-html:has(> body:is([data-mode="installningar"], [data-mode="tidtabell"], [data-mode="help"])), body:is([data-mode="installningar"], [data-mode="tidtabell"], [data-mode="help"]) { background: var(--kr-bg); }
-body:is([data-mode="installningar"], [data-mode="tidtabell"], [data-mode="help"]) { color: var(--kr-ink); color-scheme: dark; }
-:root[data-kr-theme="light"] body:is([data-mode="installningar"], [data-mode="tidtabell"], [data-mode="help"]) { color-scheme: light; }
+html:has(> body:is([data-mode="installningar"], [data-mode="tidtabell"], [data-mode="help"], [data-mode="anslut"])), body:is([data-mode="installningar"], [data-mode="tidtabell"], [data-mode="help"], [data-mode="anslut"]) { background: var(--kr-bg); }
+body:is([data-mode="installningar"], [data-mode="tidtabell"], [data-mode="help"], [data-mode="anslut"]) { color: var(--kr-ink); color-scheme: dark; }
+:root[data-kr-theme="light"] body:is([data-mode="installningar"], [data-mode="tidtabell"], [data-mode="help"], [data-mode="anslut"]) { color-scheme: light; }
 body[data-mode="installningar"] .server-admin-shell, body[data-mode="installningar"] .server-workspace,
 body[data-mode="installningar"] #app-view { width: 100%; max-width: none; margin: 0; padding: 0; }
 body[data-mode="help"] #app-view { padding: 20px; }
@@ -1014,3 +1014,10 @@ body[data-mode="tidtabell"] #app-view { padding: 20px 24px 28px; max-width: none
 .kr-aside__md { font-size: 12.5px; }
 .pv-about__teaser { margin: 0 0 10px; color: var(--kr-ink-2); font-size: 14px; line-height: 1.5; }
 @media (max-width: 640px) { .tm-about-sheet { width: 100vw; max-height: 92vh; margin: auto auto 0; border-radius: 18px 18px 0 0; } }
+
+/* /anslut: serverns adress och anslutningskoden stora nog att läsa av eller kopiera. */
+#connect-view .kr-connect__card { max-width: 760px; }
+#connect-view .kr-connect__body { padding: 6px 18px 18px; }
+#connect-view .kr-kv b { font-size: 20px; }
+#connect-view .kr-kv b.kr-connect__code { font-size: 34px; letter-spacing: .14em; }
+#connect-view .kr-steps { font-size: 14px; }

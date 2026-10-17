@@ -905,6 +905,13 @@ body[data-mode="installningar"] .server-admin-shell {
   margin: 0 auto;
   padding: 22px 22px 48px;
 }
+/* Anslut ett ställverk (/anslut) är en sida som Inställningar, utan sidofält. */
+body[data-mode="anslut"] .server-admin-shell {
+  display: block;
+  width: min(100%, 1400px);
+  margin: 0 auto;
+  padding: 22px 22px 48px;
+}
 /* Kugghjulet i topplocket. Samma form som grannarna, men utan text: det står
    bredvid "Bygg om träffen" och skulle annars tävla med den. */
 /* Utloggad: locket får visa vem servern är och hur den mår, inget att trycka på. */

@@ -1462,3 +1462,12 @@ The texts could not be loaded. Try again.|Texterna gick inte att läsa. Försök
 Track rows|Spårrader|Sporrækker|Sporrader|Gleiszeilen
 All stations|Alla stationer|Alle stationer|Alle stasjoner|Alle Betriebsstellen
 Track rows in the train graph|Spårrader i tågdiagrammet|Sporrækker i togdiagrammet|Sporrader i togdiagrammet|Gleiszeilen im Bildfahrplan
+Connect an interlocking|Anslut ett ställverk|Tilslut et sikringsanlæg|Koble til et sikringsanlegg|Stellwerk verbinden
+address and code for interlockings (TKL) and apps|adress och kod för ställverk (TKL) och appar|adresse og kode til sikringsanlæg (TKL) og apps|adresse og kode for sikringsanlegg (TKL) og apper|Adresse und Code für Stellwerke (TKL) und Apps
+Enter this in the interlocking|Skriv det här i ställverket|Skriv dette i sikringsanlægget|Skriv dette i sikringsanlegget|Dies im Stellwerk eingeben
+Open the TrainMeet connection in the interlocking. In CDA-TKL: Settings → TrainMeet.|Öppna anslutningen till TrainMeet i ställverket. I CDA-TKL: Inställningar → TrainMeet.|Åbn forbindelsen til TrainMeet i sikringsanlægget. I CDA-TKL: Indstillinger → TrainMeet.|Åpne tilkoblingen til TrainMeet i sikringsanlegget. I CDA-TKL: Innstillinger → TrainMeet.|Öffnen Sie im Stellwerk die Verbindung zu TrainMeet. In CDA-TKL: Einstellungen → TrainMeet.
+Enter the address and the code, or copy and paste them. Press Connect.|Skriv adressen och koden, eller kopiera och klistra in dem. Tryck Anslut.|Skriv adressen og koden, eller kopiér og indsæt dem. Tryk Tilslut.|Skriv inn adressen og koden, eller kopier og lim dem inn. Trykk Koble til.|Geben Sie Adresse und Code ein oder kopieren und fügen Sie sie ein. Tippen Sie auf Verbinden.
+To Drift|Till Drift|Til Drift|Til Drift|Zu Drift
+The address and the code on a page of their own ↗|Adressen och koden på en egen sida ↗|Adressen og koden på en side for sig ↗|Adressen og koden på en egen side ↗|Adresse und Code auf einer eigenen Seite ↗
+Only an administrator can see the connection code. Sign in as an administrator.|Bara en administratör ser anslutningskoden. Logga in som administratör.|Kun en administrator kan se tilslutningskoden. Log ind som administrator.|Bare en administrator kan se tilkoblingskoden. Logg inn som administrator.|Nur ein Administrator sieht den Verbindungscode. Melden Sie sich als Administrator an.
+Could not read the connection code.|Kunde inte läsa anslutningskoden.|Kunne ikke læse tilslutningskoden.|Kunne ikke lese tilkoblingskoden.|Der Verbindungscode konnte nicht gelesen werden.

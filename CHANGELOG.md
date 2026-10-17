@@ -5,6 +5,20 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Anslut ett ställverk: adressen och koden på en egen sida
+
+Casper 17 oktober: anslutningskoden fanns under Inställningar, och i Drift
+bakom Anslut en box. "Är man inloggad som admin borde koden synas enklare.
+Inte i vyn som alla ser men någon sida direkt anslutning till den vy som alla
+ser." Nu finns sidan `/anslut`, Anslut ett ställverk, med serverns adress och
+anslutningskoden i stor stil, Kopiera vid båda, kodens giltighet och Ny kod.
+Deltagarvyn har knappen Anslut ett ställverk som leder dit. Utan inloggning
+visas inloggningen först och därefter samma sida, och en användare utan
+administratörsbehörighet får veta att bara en administratör ser koden. Koden
+syns aldrig i deltagarvyn. Drift → Anslut en box länkar också till sidan.
+CDA-TKL 0.82.0 ansluter med just adressen och koden och väljer sin station
+själv. Prov: `tests/js/connect-page-live.test.cjs`.
+
 ### Tillbaka till alla tåg i tågdiagrammet på storskärmen
 
 Benny (#196): i tågdiagrammet på en egen skärm lyste det valda tåget och en

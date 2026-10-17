@@ -4957,7 +4957,7 @@ class TrainMeetHTTPApplication:
             )
 
     def static_asset(self, path: str) -> tuple[bytes, str] | None:
-        if path in {"/drift", "/installningar", "/tidtabell", "/hjalp", "/login", "/setup", "/display/territories"}:
+        if path in {"/drift", "/installningar", "/tidtabell", "/hjalp", "/login", "/setup", "/anslut", "/display/territories"}:
             path = "/index.html"
         if path.startswith("/assets/fonts/"):
             name = path.removeprefix("/assets/fonts/")
