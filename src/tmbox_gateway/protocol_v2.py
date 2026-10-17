@@ -213,13 +213,21 @@ class TMBoxStationService:
         if self.automatic:
             self.automatic.observe(device_id, station_id)
 
-    def track_conflict(self, publication, day, station_id, movement_id, track_id, actual=False):
+    def track_conflict(self, publication, day, station_id, movement_id, track_id, actual=False, present=False):
         states = self.operations_store.tkl_station_state(publication.publication_id, day, station_id)["movements"]
         # Undanställda tåg har lämnat spåret, vid en automatisk slutstation
         # och där operatören anmält det (4.2.0).
         released = self.automatic.stabled_movements(publication, day) if self.automatic else set()
         rows = [r for r in publication.payload["trains"] if str(r["id"]) not in released]
-        if actual:
+        if present:
+            # Tåg som står på spåret nu: inne, utställda, eller som börjar här
+            # och inte har gått. Ett tåg som ska komma in senare under dagen
+            # står inte där (Benny #197: UPPT SPÅR för ett ledigt spår).
+            rows = [r for r in rows if (
+                states.get(r["id"], {}).get("arrival") == "arrived" or
+                states.get(r["id"], {}).get("departure") in {"positioned", "ready"} or
+                not r.get("arrival_time"))]
+        elif actual:
             # An automatic station (#130) goes by actual occupation, not every
             # row of the day sharing a planned track: at an unmanned passing
             # station nearly every train is planned on the same track, and a
@@ -666,9 +674,11 @@ class TMBoxStationService:
                     publication, active_day, station_id, movement_id, candidate, actual=True))
             if track is None:
                 raise CommandRejected("unknown_track")
-            # Another train on the track, on paper or for real, does not stop
-            # the arrival (2.1.0); the answer says so.
-            occupied_by = self.track_conflict(publication, active_day, station_id, movement_id, track)
+            # Another train on the track does not stop the arrival (2.1.0);
+            # the answer says so. Only a train standing there now counts: a
+            # train due on the same track later in the day is not in the way
+            # (Benny #197, UPPT SPÅR for a free track).
+            occupied_by = self.track_conflict(publication, active_day, station_id, movement_id, track, present=True)
 
         if action == CREW_ACTION:
             crew_ready = bool((body.get("crew_ready", True)))
@@ -744,8 +754,10 @@ class TMBoxStationService:
                 "value": int(updated["revision"]),
             }
         }
-        if action == "train.arrived" and occupied_by is not None:
-            result["track_occupied_by"] = str(occupied_by.get("train_number") or "")
+        if action == "train.arrived":
+            result["track_id"] = track
+            if occupied_by is not None:
+                result["track_occupied_by"] = str(occupied_by.get("train_number") or "")
         return result
 
     def _clearance(
