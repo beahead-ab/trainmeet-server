@@ -730,7 +730,7 @@ document.querySelector("#workspace-home").addEventListener("click", (event) => {
 bindUsersSection();
 bindRestore();
 bindMeetReset();
-bindConfirmationCopy();
+bindCopyIcons();
 
 // Native dialog supplies focus trapping; every editor shares cancellation,
 // dirty-state protection and focus restoration. Background refresh never
@@ -1569,7 +1569,7 @@ async function refreshBackups() {
 }
 
 // Det som skrivs över heter som träffen; samma namn bekräftar Återställ och
-// Nollställ träffen, och båda rutorna har en Kopiera-knapp för det.
+// Nollställ träffen, och båda rutorna har en kopieringsikon efter namnet.
 function setConfirmationName(name) {
   restore.overwrites = name;
   restoreEl("overwrites").textContent = name || "–";
@@ -1597,13 +1597,16 @@ async function refreshConfirmationName(dialog) {
   }
 }
 
-// Kopiera bredvid fältet kopierar namnet, eller ordet, som ska skrivas, så att
-// det kan klistras in. Utan säker anslutning (en Pi över http) finns inget
-// urklipps-API; då kopieras det ur ett dolt fält i rutan, och går inte heller
-// det blir namnet markerat så att det kan kopieras från menyn.
-async function copyConfirmation(button) {
-  const source = document.getElementById(button.dataset.copyConfirmation);
-  const message = document.getElementById(button.dataset.copyMessage);
+// Kopiera är en liten ikon direkt efter texten den kopierar. I
+// bekräftelserutorna (data-copy-confirmation) är det namnet, eller ordet, som
+// ska skrivas, och fältet (data-copy-input) får fokus; under Anslut en box och
+// Anslutningskod (data-copy) är det adressen eller koden. Utan säker
+// anslutning (en Pi över http) finns inget urklipps-API; då kopieras det ur
+// ett dolt fält, och går inte heller det blir texten markerad så att den kan
+// kopieras från menyn.
+async function copyFromIcon(button) {
+  const source = document.getElementById(button.dataset.copyConfirmation || button.dataset.copy);
+  const message = document.getElementById(button.dataset.copyMessage || "");
   const text = source?.textContent.trim() || "";
   if (!text || text === "–") return;
   let copied = false;
@@ -1613,7 +1616,7 @@ async function copyConfirmation(button) {
     area.value = text;
     area.readOnly = true;
     area.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0";
-    (button.closest("dialog") || document.body).append(area);
+    (button.closest("dialog, [popover]") || document.body).append(area);
     area.select();
     area.setSelectionRange(0, text.length);
     try { copied = document.execCommand("copy"); } catch { copied = false; }
@@ -1621,7 +1624,10 @@ async function copyConfirmation(button) {
   }
   if (copied) {
     if (message) setMessage(message, "Kopierat – klistra in det i rutan", "notice");
-    button.parentElement.querySelector("input")?.focus({ preventScroll: true });
+    button.classList.add("is-copied");
+    clearTimeout(button.copiedTimer);
+    button.copiedTimer = setTimeout(() => button.classList.remove("is-copied"), 2000);
+    document.getElementById(button.dataset.copyInput || "")?.focus({ preventScroll: true });
     return;
   }
   const range = document.createRange();
@@ -1631,10 +1637,10 @@ async function copyConfirmation(button) {
   if (message) setMessage(message, "Namnet kopierades inte. Det är markerat: kopiera det från menyn.", "error");
 }
 
-function bindConfirmationCopy() {
+function bindCopyIcons() {
   document.addEventListener("click", (event) => {
-    const button = event.target.closest?.("[data-copy-confirmation]");
-    if (button && !button.disabled) copyConfirmation(button);
+    const button = event.target.closest?.("[data-copy-confirmation], [data-copy]");
+    if (button && !button.disabled) copyFromIcon(button);
   });
 }
 

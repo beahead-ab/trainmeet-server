@@ -12,6 +12,29 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '../..');
 
+// Kopiera är en liten ikon direkt efter namnet, eller ordet, som ska skrivas
+// (Casper 2026-10-17), inte en knapp bredvid fältet. Fältet heter
+// fortfarande hela meningen.
+async function iconAfter(dialog, nameId, label) {
+  const at = await dialog.evaluate((element, id) => {
+    const name = element.querySelector('#' + id).getBoundingClientRect();
+    const button = element.querySelector(`[data-copy-confirmation="${id}"]`);
+    const icon = button.getBoundingClientRect();
+    const sentence = button.closest('.confirm-prompt');
+    return { gap: icon.left - name.right, middle: Math.abs((icon.top + icon.bottom) / 2 - (name.top + name.bottom) / 2),
+      width: icon.width, height: icon.height, text: button.textContent.trim(), name: button.getAttribute('aria-label'),
+      beside: element.querySelectorAll('.factory-reset-row button').length, inSentence: Boolean(sentence) };
+  }, nameId);
+  assert.ok(at.inSentence, `${nameId}: ikonen står i meningen`);
+  assert.ok(at.gap >= 0 && at.gap <= 6, `${nameId}: ikonen står direkt efter namnet ${JSON.stringify(at)}`);
+  assert.ok(at.middle <= 4, `${nameId}: på samma rad ${JSON.stringify(at)}`);
+  assert.ok(at.width <= 24 && at.height <= 24, `${nameId}: ikonen är liten ${JSON.stringify(at)}`);
+  assert.equal(at.text, '', `${nameId}: bara en ikon, ingen text`);
+  assert.ok(at.name, `${nameId}: ikonen har ett namn för skärmläsare`);
+  assert.equal(at.beside, 0, `${nameId}: ingen knapp bredvid fältet`);
+  assert.equal(await dialog.getByRole('textbox', { name: label, exact: typeof label === 'string' }).count(), 1, `${nameId}: fältet heter ${label}`);
+}
+
 (async () => {
   const fixture = spawn('python3', [path.join(__dirname, 'server-shell-live-fixture.py')], {
     cwd: root, env: { ...process.env, PYTHONPATH: [path.join(root, 'src'), path.join(root, 'tests')].join(path.delimiter) },
@@ -61,8 +84,10 @@ const root = path.resolve(__dirname, '../..');
     await page.waitForFunction(name => document.querySelector('#meet-reset-name').textContent.trim() === name, meet);
     const copy = fromDrift.locator('[data-copy-confirmation="meet-reset-name"]');
     assert.equal(await copy.isDisabled(), false, 'Kopiera går att trycka på när namnet finns');
+    await iconAfter(fromDrift, 'meet-reset-name', `Skriv ${meet} för att bekräfta`);
     await copy.click();
     await fromDrift.locator('#meet-reset-message').getByText('Kopierat – klistra in det i rutan').waitFor();
+    assert.equal(await copy.evaluate(button => button.classList.contains('is-copied')), true, 'ikonen visar en bock när det är kopierat');
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     assert.equal(copied, meet, 'urklippet har träffens namn');
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'meet-reset-confirmation', 'fältet har fokus för att klistra in');
@@ -129,6 +154,14 @@ const root = path.resolve(__dirname, '../..');
     await page.waitForFunction(() => document.querySelector('#restore-list .restore-row'));
     const newest = await page.locator('#restore-list .restore-row small').first().textContent();
     assert.match(newest, /^Före nollställningen · Dag 1 · \S+ \d\d:\d\d · /, newest);
+    // Återställ har samma ikon efter namnet på det som skrivs över.
+    await page.locator('[data-open-modal="restore-modal"]').click();
+    const restoreDialog = page.locator('#restore-modal');
+    await restoreDialog.waitFor({ state: 'visible' });
+    await page.waitForFunction(name => document.querySelector('#restore-overwrites').textContent.trim() === name, meet);
+    await iconAfter(restoreDialog, 'restore-overwrites', `Skriv ${meet} för att bekräfta att den datan skrivs över`);
+    await restoreDialog.locator('.modal-actions [data-close-modal]').click();
+    await restoreDialog.waitFor({ state: 'hidden' });
     // Nollställ träffdata på tyska: ordet som visas låser upp knappen (#129),
     // och NOLLSTÄLL gör det fortfarande. Knappen trycks inte.
     await page.evaluate(() => localStorage.setItem('trainmeet.language', 'de'));
@@ -138,6 +171,12 @@ const root = path.resolve(__dirname, '../..');
     await factory.waitFor({ state: 'visible' });
     const word = (await factory.locator('#factory-reset-word').innerText()).trim();
     assert.notEqual(word.toUpperCase(), 'NOLLSTÄLL', 'ordet står på tyska');
+    // Ikonen efter ordet kopierar det och sätter markören i fältet.
+    await iconAfter(factory, 'factory-reset-word', new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    await factory.locator('[data-copy-confirmation="factory-reset-word"]').click();
+    await factory.locator('#factory-reset-message.notice').waitFor();
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), word, 'urklippet har ordet');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'factory-reset-confirmation', 'fältet har fokus');
     const factoryButton = page.locator('#factory-reset-server');
     await factory.locator('#factory-reset-confirmation').fill('fel');
     assert.equal(await factoryButton.isDisabled(), true, 'fel ord låser inte upp');
