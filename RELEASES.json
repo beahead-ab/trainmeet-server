@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.12.2",
+    "date": "2026-10-17",
+    "notes": [
+      "Boxen säger vilket spår tåget kom in på, och UPPT SPÅR bara när spåret är upptaget"
+    ]
+  },
+  {
     "version": "4.12.1",
     "date": "2026-10-17",
     "notes": [
