@@ -1462,3 +1462,4 @@ The texts could not be loaded. Try again.|Texterna gick inte att läsa. Försök
 Track rows|Spårrader|Sporrækker|Sporrader|Gleiszeilen
 All stations|Alla stationer|Alle stationer|Alle stasjoner|Alle Betriebsstellen
 Track rows in the train graph|Spårrader i tågdiagrammet|Sporrækker i togdiagrammet|Sporrader i togdiagrammet|Gleiszeilen im Bildfahrplan
+CDA-TKL: enter the address and the code under ⋯ → TrainMeet and press Connect. The interlocking chooses its station itself.|CDA-TKL: skriv adressen och koden under ⋯ → TrainMeet och tryck Anslut. Ställverket väljer sin station själv.|CDA-TKL: skriv adressen og koden under ⋯ → TrainMeet, og tryk Tilslut. Sikringsanlægget vælger selv sin station.|CDA-TKL: skriv inn adressen og koden under ⋯ → TrainMeet og trykk Koble til. Sikringsanlegget velger stasjonen sin selv.|CDA-TKL: Adresse und Code unter ⋯ → TrainMeet eingeben und auf Verbinden tippen. Das Stellwerk wählt seinen Bahnhof selbst.
