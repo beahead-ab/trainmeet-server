@@ -5,6 +5,14 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Anslut en box: raden för CDA-TKL
+
+Casper 17–18 oktober: adressen och koden under Drift → Anslut en box räcker,
+men stegen där (Fortsätt, välj station) gäller inte CDA-TKL. Sedan CDA-TKL
+0.82.0 skriver man bara adressen och koden under ⋯ → TrainMeet och trycker
+Anslut, och ställverket väljer sin station själv. Rutan säger det nu på en
+egen rad under stegen.
+
 ### Tillbaka till alla tåg i tågdiagrammet på storskärmen
 
 Benny (#196): i tågdiagrammet på en egen skärm lyste det valda tåget och en
