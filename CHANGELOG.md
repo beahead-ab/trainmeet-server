@@ -5,6 +5,17 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Privata Wi-Fi-nätverk på Raspberry Pi (#202)
+
+Inställningar → Namn och nätverk får ett Pi-specifikt kort för sparade SSID,
+WPA2/WPA3/öppna nätverk, dolt nätverk och prioritering vid start. Profilerna
+sparas av operativsystemets NetworkManager, helt separat från Träffens Wi-Fi.
+Sparande byter inte aktiv anslutning. Anslut nu är ett bekräftat provbyte med
+90 sekunders återställning i operativsystemet. Lösenord visas aldrig tillbaka.
+Ändringar kräver admin-inloggning och localhost eller konfigurerad lokal
+HTTPS-proxy. Se [Pi-nätverk](docs/RASPBERRY-PI-WIFI.md), inklusive hårdvaruprov
+som återstår före aktivering på riktiga Pi-enheter.
+
 ### Anslut en box: raden för CDA-TKL
 
 Casper 17–18 oktober: adressen och koden under Drift → Anslut en box räcker,

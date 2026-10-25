@@ -851,7 +851,52 @@
                 <p id="server-identity-message" class="form-message" role="status"></p>
                 <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
               </form>
+              <section id="pi-network-panel" class="kr-panel" aria-label="Raspberry Pi · Nätverk" hidden>
+                <div class="kr-ph"><span>Raspberry Pi · Nätverk</span><span class="kr-c">privata anslutningar för denna Pi</span></div>
+                <div class="kr-rows">
+                  <div class="kr-kv"><label for="pi-network-interface" class="kr-k">Nätverkskort</label><select id="pi-network-interface" class="kr-field kr-w-md"></select><span id="pi-network-state"></span></div>
+                  <div class="kr-kv"><span class="kr-k">IP-adress</span><span id="pi-network-address" class="kr-mono" data-no-i18n></span></div>
+                </div>
+                <p class="pi-network-note">Högst upp prioriteras först. En fungerande anslutning byts inte automatiskt. Internet behövs inte.</p>
+                <p class="pi-network-note">Dessa lösenord delas inte med deltagarna. Nätverk med företagsinloggning eller särskilda systeminställningar är skrivskyddade här.</p>
+                <p class="pi-network-note">Ändra nätverk i webbläsaren på Pi:n eller via en konfigurerad HTTPS-anslutning.</p>
+                <div id="pi-network-profiles" class="kr-lines"></div>
+                <p id="pi-network-recovering" class="pi-network-note" role="status" hidden>En nätverksåterställning pågår. Vänta tills den är klar.</p>
+                <div id="pi-network-trial" class="pi-network-note" hidden>
+                  <p id="pi-network-trial-text" role="status"></p>
+                  <button id="pi-network-confirm" class="kr-btn primary" type="button">Behåll anslutningen</button>
+                  <button id="pi-network-rollback" class="kr-btn" type="button">Återställ nu</button>
+                </div>
+                <p id="pi-network-message" class="form-message" role="status"></p>
+                <div class="kr-pf"><button id="pi-network-add" class="kr-btn" type="button">Lägg till nätverk</button><button id="pi-network-scan" class="kr-btn" type="button">Sök nätverk</button><button id="pi-network-refresh" class="kr-btn" type="button">Uppdatera</button></div>
+              </section>
             </section>
+
+            <!-- Private host profiles, never the participant Wi-Fi fields. -->
+            <dialog id="pi-network-edit" class="admin-modal" aria-labelledby="pi-network-edit-title">
+              <h2 id="pi-network-edit-title">Sparat Wi-Fi-nätverk</h2>
+              <form id="pi-network-form">
+                <label for="pi-network-nearby">Närliggande nätverk</label>
+                <select id="pi-network-nearby"><option value="">Skriv SSID manuellt</option></select>
+                <label for="pi-network-ssid">SSID</label><input id="pi-network-ssid" required autocomplete="off">
+                <label for="pi-network-security">Säkerhet</label>
+                <select id="pi-network-security"><option value="wpa2">WPA2 Personal</option><option value="wpa3">WPA3 Personal</option><option value="open">Öppet nätverk</option></select>
+                <label for="pi-network-password">Lösenord</label><input id="pi-network-password" type="password" autocomplete="new-password">
+                <p>Sparat lösenord behålls om fältet lämnas tomt. Vid nytt SSID eller ny säkerhetstyp krävs lösenord igen.</p>
+                <label class="kr-chk"><input id="pi-network-hidden" type="checkbox"><span>Dolt nätverk</span></label>
+                <p id="pi-network-open-warning" hidden>Öppet nätverk saknar kryptering. Välj endast ett nätverk du litar på.</p>
+                <p>Spara ändrar inte den aktiva anslutningen. Listan används vid nästa start eller efter Anslut nu.</p>
+                <p id="pi-network-edit-message" class="form-message" role="status"></p>
+                <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara</button></div>
+              </form>
+            </dialog>
+            <dialog id="pi-network-action" class="admin-modal" aria-labelledby="pi-network-action-title">
+              <h2 id="pi-network-action-title">Bekräfta nätverksåtgärd</h2>
+              <p id="pi-network-action-name" data-no-i18n></p>
+              <p id="pi-network-action-warning"></p>
+              <p id="pi-network-action-message" class="form-message" role="status"></p>
+              <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button id="pi-network-action-submit" type="button" class="primary">Fortsätt</button></div>
+            </dialog>
 
             <!-- 5 · Anslutningskod -->
             <section id="kod" class="kr-setsec" data-section="kod" aria-labelledby="kod-title" hidden>
@@ -1354,6 +1399,7 @@
     <script src="/assets/data-page.js" defer></script>
     <script src="/assets/app.js?v=20261006-1" defer></script>
     <script src="/assets/meet-timeline.js" defer></script>
+    <script src="/assets/pi-network.js" defer></script>
     <script src="/assets/participant.js" defer></script>
   </body>
 </html>
