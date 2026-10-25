@@ -6,7 +6,9 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Keep the runner compatible with the pinned Playwright browser runtime.
+    # ubuntu-latest can move to an OS this Playwright release cannot install on.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
