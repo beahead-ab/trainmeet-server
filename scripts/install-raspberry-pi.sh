@@ -60,7 +60,16 @@ export DEBIAN_FRONTEND=noninteractive
 # which failed the whole update without saying so. A lock timeout covers the
 # case where it does have to run while the system's own apt is busy.
 MISSING=""
-for PACKAGE in avahi-daemon avahi-utils mosquitto python3 python3-venv; do
+NETWORK_SUPPORTED=false
+EXTRA_PACKAGES=""
+# Never replace another distribution's network manager or convert a running
+# network. Only enable this feature on an actual Pi with active NetworkManager.
+if [ -r /proc/device-tree/model ] && grep -q 'Raspberry Pi' /proc/device-tree/model \
+  && systemctl is-active --quiet NetworkManager.service; then
+  NETWORK_SUPPORTED=true
+  EXTRA_PACKAGES=python3-dbus
+fi
+for PACKAGE in avahi-daemon avahi-utils mosquitto python3 python3-venv $EXTRA_PACKAGES; do
   dpkg-query -W -f '${Status}' "$PACKAGE" 2>/dev/null | grep -q 'install ok installed' \
     || MISSING="$MISSING $PACKAGE"
 done
@@ -102,6 +111,9 @@ python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --disable-pip-version-check --quiet 'paho-mqtt>=2.1,<3'
 install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server.conf" /etc/mosquitto/conf.d/trainmeet-server.conf
 install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-server.service" /etc/systemd/system/trainmeet-server.service
+if [ "$NETWORK_SUPPORTED" = true ]; then
+  install -m 0644 "$SERVER_DIR/packaging/raspberry-pi/trainmeet-network.service" /etc/systemd/system/trainmeet-network.service
+fi
 
 # A drop-in overrides the unit we just wrote, and we never install one - so an
 # operator's own file, holding real settings like the bind address and the
@@ -167,6 +179,10 @@ if command -v labwc >/dev/null 2>&1 \
 fi
 
 systemctl daemon-reload
+if [ "$NETWORK_SUPPORTED" = true ]; then
+  systemctl enable trainmeet-network.service
+  systemctl restart trainmeet-network.service
+fi
 systemctl enable --now avahi-daemon.service
 systemctl enable --now mosquitto.service
 systemctl restart mosquitto.service

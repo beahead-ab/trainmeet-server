@@ -48,6 +48,10 @@ Enradarna installerar servern direkt på maskinen, och bara de installationerna
 får knappen **Uppdatera TrainMeet Server** i webbgränssnittet. Docker- och
 Kubernetesinstallationer uppdateras genom ny image respektive Helm-deployment.
 
+På Raspberry Pi OS med NetworkManager kan administratören hantera Pi:ns
+privata Wi-Fi-profiler under **Inställningar → Namn och nätverk**.
+Se [nätverksprioritet och säkert provbyte](docs/RASPBERRY-PI-WIFI.md).
+
 ## Snabbstart för första installationen
 
 TrainMeet består av två installationer. **TrainMeet Server** körs på PC, Mac,

@@ -26,7 +26,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
-from . import backup
+from . import backup, pi_network
 from .engine import TrafficEngine
 from .change_feed import ChangeFeed
 from .cloud_config import CloudConfiguration, MeetChangeRequired
@@ -4988,6 +4988,7 @@ class TrainMeetHTTPApplication:
             "/assets/markdown.js": "markdown.js",
             "/assets/about-view.js": "about-view.js",
             "/assets/settings.js": "settings.js",
+            "/assets/pi-network.js": "pi-network.js",
             "/assets/data-page.js": "data-page.js",
             "/assets/data-workspace.js": "data-workspace.js",
             "/assets/kr-theme.js": "kr-theme.js",
@@ -5073,6 +5074,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path == "/v1/host/wifi":
+                self._send_json(HTTPStatus.OK, self._host_wifi("status", {}))
+                return
             if path == "/tmbox-lab":
                 # The proxy in front of the retired stand-alone test bench did
                 # this; the page loads its script and events relative to the
@@ -5413,6 +5417,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 from .terminal16_embedded import serve
                 return serve(self, "POST")
             payload = self._read_json()
+            if path.startswith("/v1/host/wifi/"):
+                self._send_json(HTTPStatus.OK, self._host_wifi(path.removeprefix("/v1/host/wifi/"), payload, write=True))
+                return
             if path in {"/v1/browser-clients", "/v1/clock/source"}:
                 origin = self.headers.get("Origin")
                 if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get("Sec-Fetch-Site") == "cross-site":
@@ -5877,6 +5884,41 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         if not isinstance(payload, dict):
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_json", "JSON-värdet måste vara ett objekt")
         return payload
+
+    def _host_wifi(self, action: str, payload: dict, *, write: bool = False) -> dict:
+        # Explicit cookie login only: neither setup's LAN bypass nor a paired
+        # WEB_ADMIN device is authority to change host networking.
+        token = self._admin_session_token()
+        user = self.server.application.identities.admin_session_user(token) if token else None
+        if not user:
+            raise HTTPAPIError(HTTPStatus.UNAUTHORIZED, "authentication_required", "Logga in som administratör för att hantera Pi:ns nätverk.")
+        self.server.application._require_admin(self.server.application.local_admin(user))
+        if user.get("role") not in {"owner", "admin"}:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_required", "Administratörsbehörighet krävs.")
+        if write:
+            origin = self.headers.get("Origin")
+            if (self.headers.get("X-TrainMeet-Network") != "1" or
+                    self.headers.get("Content-Type", "").split(";", 1)[0] != "application/json" or
+                    (origin and urlparse(origin).netloc != self.headers.get("Host")) or
+                    self.headers.get("Sec-Fetch-Site") == "cross-site"):
+                raise HTTPAPIError(HTTPStatus.FORBIDDEN, "same_origin_required", "Öppna nätverksinställningarna från denna TrainMeet Server.")
+            # The normal Pi UI is HTTP. Only its local browser may submit
+            # secrets that way. Remote clients need the configured HTTPS proxy;
+            # an untrusted X-Forwarded-Proto or Host: localhost is not enough.
+            if not self._host_wifi_transport_safe():
+                raise HTTPAPIError(HTTPStatus.FORBIDDEN, "secure_connection_required", "Ändra nätverk i webbläsaren på Pi:n eller via en konfigurerad HTTPS-anslutning.")
+        try:
+            return {**pi_network.host_request(action, payload, str(user["user_id"])), "can_manage": self._host_wifi_transport_safe()}
+        except pi_network.NetworkError as error:
+            status = HTTPStatus.SERVICE_UNAVAILABLE if error.code == "host_unavailable" else HTTPStatus.CONFLICT
+            raise HTTPAPIError(status, error.code, str(error)) from None
+
+    def _host_wifi_transport_safe(self) -> bool:
+        configured = self.server.application.config.public_client_origin.rstrip("/")
+        secure_proxy = (configured.startswith("https://") and urlparse(configured).netloc == self.headers.get("Host")
+                        and self._client_address_is_loopback() and self.headers.get("X-Forwarded-Proto") == "https")
+        forwarded = any(self.headers.get(name) for name in ("Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto"))
+        return secure_proxy or (self._client_address_is_loopback() and not forwarded)
 
     def _authenticated_client(self) -> PairedClient:
         authorization = self.headers.get("Authorization", "")

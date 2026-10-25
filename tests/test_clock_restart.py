@@ -109,13 +109,41 @@ class ServerProcessRestartTests(unittest.TestCase):
     """Den riktiga servern: SIGTERM stannar klockan, nästa start låter den gå vidare."""
 
     def setUp(self):
-        if shutil.which("mosquitto") is None:
+        executable = shutil.which("mosquitto")
+        if executable is None:
             raise unittest.SkipTest("mosquitto is not installed")
         self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
         self.state = Path(self.directory.name)
+        # Use a real, loopback-only broker, as the other MQTT integration tests
+        # do. Avoid depending on access to a generated config in /tmp on CI;
+        # this clock test does not need broker persistence.
+        self.mqtt_port = self.free_port()
+        broker = subprocess.Popen(
+            [executable, "-p", str(self.mqtt_port)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        self.addCleanup(self.cleanup_process, broker)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if broker.poll() is not None:
+                self.fail("the test broker exited before starting")
+            try:
+                with socket.create_connection(("127.0.0.1", self.mqtt_port), timeout=0.2):
+                    return
+            except OSError:
+                time.sleep(0.05)
+        self.fail("the test broker did not start")
 
-    def tearDown(self):
-        self.directory.cleanup()
+    @staticmethod
+    def cleanup_process(process):
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate(timeout=5)
 
     @staticmethod
     def free_port():
@@ -124,13 +152,15 @@ class ServerProcessRestartTests(unittest.TestCase):
             return probe.getsockname()[1]
 
     def run_server(self):
-        http, mqtt = self.free_port(), self.free_port()
+        http = self.free_port()
         process = subprocess.Popen(
             [sys.executable, "-m", "tmbox_gateway.local_server", "--state-dir", str(self.state), "--bind", "127.0.0.1",
-             "--http-port", str(http), "--mqtt-port", str(mqtt), "--advertised-host", "127.0.0.1", "--gateway-id", "klockprov"],
+             "--http-port", str(http), "--external-broker", "--mqtt-host", "127.0.0.1", "--mqtt-port", str(self.mqtt_port),
+             "--advertised-host", "127.0.0.1", "--gateway-id", "klockprov"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
             env={**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(SERVER.parents[1]), os.environ.get("PYTHONPATH")]))},
         )
+        self.addCleanup(self.cleanup_process, process)
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
             try:
@@ -138,9 +168,9 @@ class ServerProcessRestartTests(unittest.TestCase):
                     return process
             except OSError:
                 if process.poll() is not None:
-                    self.fail(process.stdout.read())
+                    output, _ = process.communicate(timeout=5)
+                    self.fail(output)
                 time.sleep(0.2)
-        process.kill()
         self.fail("the server did not start")
 
     def stop_server(self, process):

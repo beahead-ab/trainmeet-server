@@ -1,0 +1,29 @@
+[Unit]
+Description=TrainMeet Raspberry Pi Wi-Fi helper
+After=NetworkManager.service
+Requires=NetworkManager.service
+ConditionPathExists=/proc/device-tree/model
+
+[Service]
+Type=simple
+User=root
+Group=trainmeet-server
+RuntimeDirectory=trainmeet-network
+RuntimeDirectoryMode=0750
+Environment=PYTHONPATH=/opt/trainmeet-server/src
+ExecStart=/usr/bin/python3 -m tmbox_gateway.pi_network_host
+Restart=on-failure
+RestartSec=5
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/run/trainmeet-network
+
+[Install]
+WantedBy=multi-user.target
