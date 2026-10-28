@@ -57,6 +57,15 @@ automatiken även när en box eller TKL är ansluten, och tas tillbaka efteråt.
 
 - Valet står kvar, också över dygnsskiftet, tills någon tar tillbaka stationen.
   Förut tog en ansluten box tillbaka stationen vid nästa trafikdag.
+- **AUTOMATIK gäller hela stationen och alla anslutna TKL och TMBoxar.**
+  Det spelar ingen roll vilken enhet som lämnar över; även nytillkomna enheter
+  följer stationens läge. Gamla knapptryckningar från en box före lägesbytet
+  avvisas och boxen får den aktuella bilden.
+- Redan köade förfrågningar prövas vid nästa automatikkörning (normalt inom
+  en halv sekund när träffklockan går), utan en ny fördröjning enligt
+  **Klartecken efter**. Äldsta förfrågan prövas först, före nya tidtabellsärenden.
+  Ett upptaget mottagningsspår håller kvar frågan och prövas igen; andra frågor
+  kan besvaras under tiden. Nya förfrågningar följer den valda svarsfördröjningen.
 - Medan automatiken sköter stationen visar boxen **AUTOMATIK** och stationens
   kod på startbilden. Bläddring och kön fungerar. En trafiktangent frågar först
   **TA TILLBAKA?**; efter `#` står boxen kvar på samma tåg och tangenten kan
