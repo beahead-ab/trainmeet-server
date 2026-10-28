@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.13.1",
+    "date": "2026-10-28",
+    "notes": [
+      "Clarify installation and SSH host key recovery; fix fresh Mac install summary"
+    ]
+  },
+  {
     "version": "4.13.0",
     "date": "2026-10-25",
     "notes": [
