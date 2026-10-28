@@ -123,12 +123,20 @@ for attempt in {1..30}; do
 done
 
 LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "din-macs-ip")
-CONNECTION_CODE=$(tr -cd '0-9' < "$STATE_DIR/connection-code.txt")
+# The server is already healthy. A fresh server has no panels and therefore
+# no connection code yet; this optional summary must not fail installation.
+CONNECTION_CODE=""
+if [[ -r "$STATE_DIR/connection-code.txt" ]]; then
+  CONNECTION_CODE=$(tr -cd '0-9' < "$STATE_DIR/connection-code.txt") || CONNECTION_CODE=""
+fi
 echo
 echo "TrainMeet Server är installerad och startar automatiskt."
 echo "På denna Mac: http://127.0.0.1:8787"
 echo "Från iPhone:  http://${LOCAL_IP}:8787"
-echo "Anslutningskod: ${CONNECTION_CODE}"
+if [[ -n "$CONNECTION_CODE" ]]; then
+  echo "Anslutningskod: ${CONNECTION_CODE}"
+fi
 if [[ -d "$HOME/Library/Application Support/TrainMeet TMBox" ]]; then
   echo "Äldre testdata är bevarad i: $HOME/Library/Application Support/TrainMeet TMBox"
 fi
+

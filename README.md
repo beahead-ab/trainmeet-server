@@ -44,6 +44,13 @@ US startar alltid på amerikansk engelska tills operatören själv väljer annat
 Servern använder port `8787` för webben och `1883` för MQTT. Driftsdata är
 beständig och ska överleva både uppdateringar och omstarter.
 
+Direktinstallationen kräver **Python 3.11 eller senare**. Använd en aktuell
+Raspberry Pi OS-, Debian- eller Ubuntuinstallation och kontrollera
+`python3 --version` före installationen. Linux behöver även `curl` för
+enradaren (`sudo apt-get update` följt av `sudo apt-get install -y curl` om
+det saknas). Internet behövs för installation, programuppdateringar och
+hämtning av config från Cloud; den redan aktiva träffen kan sedan köras lokalt.
+
 Enradarna installerar servern direkt på maskinen, och bara de installationerna
 får knappen **Uppdatera TrainMeet Server** i webbgränssnittet. Docker- och
 Kubernetesinstallationer uppdateras genom ny image respektive Helm-deployment.
@@ -106,6 +113,9 @@ Visa status med `docker compose ps`. Stoppa utan att radera data med
 ### Mac
 
 1. Öppna **Terminal** via Spotlight (`⌘` + mellanslag, skriv `Terminal`).
+   Installera [Homebrew](https://brew.sh/) om det saknas och kör sedan
+   `brew install python mosquitto`. Servern kräver Python **3.11 eller senare**;
+   macOS egen `python3` kan vara för gammal. Kontrollera med `python3 --version`.
 2. Kör installationen. Använd **inte** `sudo` — servern installeras för din
    användare och startar automatiskt när du loggar in:
 
@@ -113,11 +123,12 @@ Visa status med `docker compose ps`. Stoppa utan att radera data med
 curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sh
 ```
 
-   Saknas Mosquitto installeras det automatiskt med [Homebrew](https://brew.sh/).
+   Om Mosquitto saknas kan installeraren lägga in det när Homebrew redan finns.
    Servern och driftsdata hamnar i
    `~/Library/Application Support/TrainMeet Server`.
-3. Öppna `http://127.0.0.1:8787`. Installationen skriver också ut Macens
-   IP-adress och serverns sexsiffriga anslutningskod.
+3. Öppna `http://127.0.0.1:8787` och följ installationsguiden. Installationen
+   visar också Macens IP-adress. Anslutningskoden för TKL visas i webbgränssnittet
+   när den valda träffen har stationspaneler; den är inte Cloud-träffens synkkod.
 4. Uppdatera senare med **Uppdatera TrainMeet Server** under
    **⚙ Inställningar → Programuppdatering**. Databasen säkerhetskopieras först, och
    misslyckas uppdateringen återställs föregående version automatiskt.
@@ -158,18 +169,29 @@ git pull
 
 ### Raspberry Pi
 
-1. Installera Raspberry Pi OS 64-bit och anslut Pi:n till nätverket. Välj
+1. Installera aktuell **Raspberry Pi OS 64-bit** med
+   [Raspberry Pi Imager](https://www.raspberrypi.com/software/). Välj
    **Raspberry Pi OS med skrivbord** om Pi:ns egen skärm automatiskt ska visa
    TrainMeet Server. Lite-versionen passar en skärmlös server.
+   Ange värdnamn (exempelvis `trainmeet`), eget användarnamn, lösenord och
+   Wi-Fi i Imagers anpassning, och aktivera **SSH** om du ska ansluta från
+   en annan dator. Anslut Pi:n till samma nätverk som datorn och TMBoxarna.
+   Se [Raspberry Pis installationsguide](https://www.raspberrypi.com/documentation/computers/getting-started.html)
+   för Imagers inställningar.
 2. Öppna Terminal på Pi:n. Från Mac, Linux eller Windows PowerShell kan du i
    stället ansluta med SSH:
 
 ```sh
-ssh pi@RASPBERRY-PI-IP
+ssh ANVÄNDARE@RASPBERRY-PI-IP
 ```
 
-   Ersätt adressen, exempelvis med `192.168.1.50`. Svara `yes` första gången
-   och skriv sedan Pi-användarens lösenord.
+   Använd kontot du skapade i Imager, exempelvis `ssh admin@192.168.0.160`.
+   Det finns inget förvalt krav på att kontot ska heta `pi`. Kontrollera
+   serverns nyckelfingeravtryck innan du svarar `yes` första gången och skriv
+   sedan Pi-användarens lösenord (inga tecken visas medan du skriver).
+   Får du **REMOTE HOST IDENTIFICATION HAS CHANGED**, följ
+   [SSH-instruktionen nedan](#ssh-varning-remote-host-identification-has-changed)
+   innan du fortsätter. **Installera inte om för att lösa den varningen.**
 3. Installera servern:
 
 ```sh
@@ -192,15 +214,87 @@ sudo reboot
    installationen kan få avstängningen att hänga på startbilden, eftersom
    installationen precis hunnit ändra skrivbordets uppstartsläge.
 
-5. Öppna `http://trainmeet.local:8787` eller adressen som installationen visar.
+5. Öppna adressen som installationen visar, exempelvis
+   `http://192.168.0.160:8787`, och följ installationsguiden.
+   `http://trainmeet.local:8787` fungerar om Pi:ns värdnamn är `trainmeet`
+   och nätverket stöder mDNS. Installeraren byter inte Pi:ns värdnamn.
    På Raspberry Pi OS Desktop öppnas TrainMeet Server automatiskt i Chromium
-   efter omstart. Webbläsaren väntar på servern och återstartas om den stängs.
+   efter omstart när skrivbordet använder **labwc**, som installeraren stöder.
+   Webbläsaren väntar på servern och återstartas om den stängs.
    Genvägen **Starta TrainMeet Server** läggs också på skrivbordet.
 6. Uppdatera i fortsättningen med **Uppdatera TrainMeet Server** under
    **⚙ Inställningar → Programuppdatering** i webbgränssnittet. Data i
    `/var/lib/trainmeet-server` bevaras.
 7. Kontrollera med `systemctl status trainmeet-server`, tryck `q` och avsluta
    SSH med `exit`.
+
+### SSH-varning: REMOTE HOST IDENTIFICATION HAS CHANGED
+
+Det här kan visas **innan du ens har kommit in på servern**:
+
+```text
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+Someone could be eavesdropping on you right now (man-in-the-middle attack)!
+It is also possible that a host key has just been changed.
+Host key for 192.168.0.160 has changed and you have requested strict checking.
+Host key verification failed.
+```
+
+**Installera inte om TrainMeet Server eller Raspberry Pi OS för att lösa
+detta, och radera inte serverns data.** SSH på din dator har en sparad
+värdnyckel för adressen i `known_hosts`, men maskinen på adressen visar nu
+en annan nyckel. Det kan hända efter att SD-kortet/operativsystemet har
+installerats om, värdnycklarna har bytts eller en annan maskin har fått samma
+IP-adress. En vanlig TrainMeet-uppdatering byter inte SSH-värdnycklar.
+Varningen kan också betyda att du ansluter till fel maskin eller att någon
+försöker avlyssna anslutningen.
+
+1. **Kontrollera att det är rätt server.** Kontrollera adressen i routern eller
+   på Pi:ns egen skärm. Läs den nya ED25519-nyckelns fingeravtryck i en terminal
+   direkt på Pi:n, eller via en betrodd konsol hos serverleverantören:
+
+   ```sh
+   sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+   ```
+
+   Jämför `SHA256:…` med fingeravtrycket i SSH-varningen. Fortsätt bara om det
+   stämmer och nyckelbytet är förklarat. Om du inte kan verifiera det, avbryt
+   och utred serverns identitet först. `ssh-keyscan` över samma nätverk är
+   inte en oberoende verifiering.
+2. **Ta bort den gamla posten på datorn du ansluter från**, efter verifieringen.
+   För exemplet ovan kör du i Macens Terminal, Linuxterminalen eller Windows
+   PowerShell:
+
+   ```sh
+   ssh-keygen -R 192.168.0.160 -f "$HOME/.ssh/known_hosts"
+   ```
+
+   Använd adressen och vid behov sökvägen som ditt eget felmeddelande anger.
+   Kommandot tar bort gamla värdnycklar för just den adressen, även hashade
+   poster. Radera inte hela `known_hosts` och ta inte bort ett radnummer
+   manuellt; hänvisningen till exempelvis rad 26 kan ändras.
+3. **Anslut igen:**
+
+   ```sh
+   ssh admin@192.168.0.160
+   ```
+
+   Byt `admin` och IP-adressen till dina egna uppgifter. Kontrollera att det
+   visade fingeravtrycket är det du verifierade i steg 1. Svara därefter
+   `yes` för att spara nyckeln och logga in som vanligt. Fortsätt sedan med
+   installationen, eller öppna den befintliga servern om den redan är installerad.
+
+Ansluter du även med ett värdnamn, exempelvis `trainmeet.local`, och får samma
+varning för det namnet, verifiera samma server och kör
+`ssh-keygen -R trainmeet.local`. För en annan SSH-port än 22 används formen
+`ssh-keygen -R '[192.168.0.160]:2222'`. Stäng inte av kontrollen med
+`StrictHostKeyChecking=no` och använd inte `UserKnownHostsFile=/dev/null`.
+
+Se [OpenSSH:s dokumentation för ssh-keygen](https://man.openbsd.org/ssh-keygen)
+för `-R` och kontroll av fingeravtryck med `-l`.
 
 ### DigitalOcean eller annan Linuxserver via SSH
 
@@ -216,16 +310,31 @@ Exempel:
 ssh -i ~/.ssh/trainmeet_digitalocean root@157.230.109.13
 ```
 
-Svara `yes` första gången. När prompten visar exempelvis
-`root@trainmeet-server:~#` är du inne. Installera eller uppdatera med:
+Kontrollera värdnyckelns fingeravtryck via leverantörens betrodda konsol innan
+du svarar `yes` första gången. Vid ändrad värdnyckel följer du
+[SSH-instruktionen ovan](#ssh-varning-remote-host-identification-has-changed).
+När prompten visar exempelvis `root@trainmeet-server:~#` är du inne.
+Kontrollera att `python3 --version` är **3.11 eller senare** och att `curl`
+finns. Installera med:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sh
 systemctl status trainmeet-server
 ```
 
-Tryck `q` och avsluta med `exit`. På en publik server ska HTTPS/reverse proxy
-användas och MQTT-port `1883` får inte exponeras mot internet.
+Tryck `q` och avsluta med `exit`. För första installationens ägarkonto öppnar
+du sedan en SSH-tunnel från din egen dator (låt terminalen vara öppen):
+
+```sh
+ssh -N -L 18787:127.0.0.1:8787 -i SÖKVÄG-TILL-NYCKEL root@SERVERNS-IP
+```
+
+Öppna `http://127.0.0.1:18787` på din dator och följ installationsguiden.
+För fortsatt extern åtkomst används **HTTPS/reverse proxy** och
+[externt inloggningsläge](#adminåtkomst). Håll direktport `8787` stängd mot
+internet när proxyn används; MQTT-port `1883` får inte exponeras publikt.
+Uppdatera en befintlig installation i **Inställningar → Programuppdatering**
+så att säkerhetskopiering och automatisk återgång vid fel ingår.
 
 ### ESP32/Arduino TMBox
 
@@ -265,8 +374,10 @@ pio run -e esp32-benny -t upload
 ## Raspberry Pi OS 64-bit
 
 Det här är den rekommenderade installationen för en fysisk TrainMeet-server på
-träffens lokala nätverk. Börja med en ren Raspberry Pi OS 64-bit-installation,
-anslut Pi:n till nätverket och kör i terminalen:
+träffens lokala nätverk. För en **ny** server börjar du med aktuell Raspberry
+Pi OS 64-bit enligt [snabbstarten](#raspberry-pi), ansluter till nätverket
+och kör i terminalen. En befintlig server uppdateras via webbgränssnittet;
+skriv inte om SD-kortet för en vanlig uppdatering eller en SSH-nyckelvarning.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh
@@ -283,19 +394,24 @@ systemtjänsten `trainmeet-server` och lagrar driftsdata i
 `/var/lib/trainmeet-server`. Allt startar automatiskt efter en omstart.
 
 På Raspberry Pi OS Desktop konfigurerar installationen dessutom automatisk
-inloggning i skrivbordet och startar Chromium med `http://127.0.0.1:8787/` som
-en maximerad serverapplikation. Sidan visar arbetsytesväljaren utan inloggning.
+inloggning och Chromium-autostart när **labwc** finns. Chromium öppnar
+`http://127.0.0.1:8787/` som en maximerad serverapplikation. Sidan visar
+deltagarvyn utan inloggning.
 Drift och administration kräver inloggning även på maskinen själv, och adminsessionen håller i tolv timmar. Träffens
 skärmvyer under `/display/…` kräver ingen inloggning och påverkas inte.
 På Raspberry Pi OS Lite görs ingen skrivbords- eller webbläsarinstallation.
 
-Öppna därefter `http://trainmeet.local:8787` eller den IP-adress som
-installationsprogrammet skriver ut. Installationsprogrammet visar även serverns
-sexsiffriga anslutningskod.
+Öppna därefter den IP-adress som installationsprogrammet skriver ut.
+`http://trainmeet.local:8787` fungerar om värdnamnet är `trainmeet` och mDNS
+fungerar i nätverket. Anslutningskoden för TKL finns i webbgränssnittet när
+den valda träffen har stationspaneler.
 
 ## Ubuntu, Debian, DigitalOcean eller annan VPS
 
-Samma enradare fungerar på en ren Ubuntu- eller Debianbaserad server:
+Samma enradare fungerar på en aktuell Ubuntu- eller Debianbaserad server med
+systemd, `curl` och **Python 3.11 eller senare**. Kontrollera först
+`python3 --version`; en äldre distributions Python uppgraderas inte
+automatiskt av TrainMeet-installeraren.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sudo sh
@@ -308,9 +424,11 @@ molnserver där du redan är inloggad som `root` kan `sudo` utelämnas:
 curl -fsSL https://raw.githubusercontent.com/beahead-ab/trainmeet-server/main/install.sh | sh
 ```
 
-Öppna sedan `http://SERVERNS-IP:8787`. På en molnserver ska webbport `8787`
-tillåtas i leverantörens brandvägg. Exponera inte MQTT-port `1883` publikt;
-den lösenordsfria MQTT-trafiken är gjord för ett betrott lokalt nät.
+På ett betrott lokalt nät öppnar du `http://SERVERNS-IP:8787`. På en molnserver
+skapar du första ägarkontot via SSH-tunneln i
+[SSH-guiden](#digitalocean-eller-annan-linuxserver-via-ssh) och använder
+HTTPS/reverse proxy för fortsatt extern åtkomst. Öppna inte MQTT-port `1883`
+publikt; den lösenordsfria MQTT-trafiken är gjord för ett betrott lokalt nät.
 
 Manuell installation från en klon används främst vid utveckling:
 
@@ -322,29 +440,42 @@ sudo ./scripts/install-raspberry-pi.sh
 
 ## Mac med Docker och Colima
 
-Det här är den rekommenderade Mac-miljön. Installera först Homebrew om det inte
-redan finns. Klona sedan repot och kör:
+Det här är alternativet för utveckling och test med containrar. För vanlig
+lokal drift på Mac rekommenderas [direktinstallationen](#mac), som även har
+uppdateringsknapp i webben. Installera först Homebrew om det inte redan finns.
+Klona sedan repot:
 
 ```sh
-brew install colima docker docker-compose
+brew install colima docker docker-compose git
 git clone https://github.com/beahead-ab/trainmeet-server.git
 cd trainmeet-server
-./scripts/install-docker-mac.command
 ```
-
-Öppna `http://127.0.0.1:8787`. Compose startar TrainMeet Server och Mosquitto
-som två tjänster med beständiga volymer. Colima startas automatiskt vid
-inloggning och containrarna använder `restart: unless-stopped`.
 
 Containern ser bara sitt eget interna nätverk, inte Macens riktiga
 IP-adress, så anslutningsraden som visas för TMBox-parkoppling behöver få
 veta den explicit. Kör `ipconfig getifaddr en0` för att hitta adressen och
-lägg den i en `.env`-fil i `trainmeet-server`-mappen innan `docker compose
-up`:
+lägg den i en `.env`-fil i `trainmeet-server`-mappen **innan installationsskriptet
+körs**. Använd den aktiva nätverksanslutningens adress om den inte finns på `en0`:
 
 ```
 TRAINMEET_ADVERTISED_HOST=192.168.1.50
 ```
+
+Starta därefter:
+
+```sh
+./scripts/install-docker-mac.command
+```
+
+Öppna `http://127.0.0.1:8787`. Skriptet bygger TrainMeet Server från den
+klonade källkoden och Compose startar servern och Mosquitto som två tjänster
+med beständiga volymer. Colima startas automatiskt vid inloggning och
+containrarna använder `restart: unless-stopped`. Skriptet stänger av den
+vanliga Mac-installationens LaunchAgent om den finns. Den installationens
+driftsdata flyttas inte till Docker; de två har separata datalager.
+
+Uppdatera från samma mapp med `git pull` och sedan
+`./scripts/install-docker-mac.command`.
 
 För en manuell start används `docker compose up --build --detach`, eller
 `docker-compose up --build --detach` när Homebrew har installerat det fristående
@@ -372,6 +503,19 @@ När Docker Engine och Docker Compose redan finns:
 ```sh
 git clone https://github.com/beahead-ab/trainmeet-server.git
 cd trainmeet-server
+```
+
+Skapa först `.env` i `trainmeet-server`-mappen med värdens lokala adress som
+andra enheter faktiskt når. Containern kan inte själv upptäcka den adressen:
+
+```text
+TRAINMEET_ADVERTISED_HOST=192.168.1.50
+```
+
+Hämta och starta sedan den publicerade versionen:
+
+```sh
+docker compose pull
 docker compose up --detach
 ```
 
@@ -384,18 +528,18 @@ källkoden med:
 docker compose up --build --detach
 ```
 
-Visa status med `docker compose ps`. Uppdatera med `git pull` följt av samma
-startkommando. Stoppa utan att radera data med `docker compose down`. Använd
-inte `--volumes` om träffkonfigurationen ska sparas.
+Visa status med `docker compose ps`. Uppdatera från samma mapp med:
 
-Containern ser bara sitt eget interna nätverk, inte värdens riktiga
-IP-adress, så anslutningsraden som visas för TMBox-parkoppling behöver få
-veta den explicit. Lägg värdens IP i en `.env`-fil i `trainmeet-server`-mappen
-innan `docker compose up`:
+```sh
+git pull
+docker compose pull
+docker compose up --detach
+```
 
-```
-TRAINMEET_ADVERTISED_HOST=192.168.1.50
-```
+`git pull` uppdaterar filerna; `docker compose pull` hämtar den nya imagen.
+Om du i stället bygger från källkod används `git pull` följt av
+`docker compose up --build --detach`. Stoppa utan att radera data med
+`docker compose down`. Använd inte `--volumes` om träffkonfigurationen ska sparas.
 
 ## Kubernetes, K3s eller Centrera
 
@@ -1089,3 +1233,4 @@ US-vyerna börjar på engelska. Se [US-pilotens omfattning](docs/TRAINMEET-US.md
 ## Licens
 
 MIT © Beahead AB. Se [LICENSE](LICENSE).
+
