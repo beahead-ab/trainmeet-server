@@ -280,6 +280,41 @@ class SignalBoxTests(StationAutomaticFixture):
         self.assertFalse(answer["automatic"]["active"])
         self.assertEqual("manual", self.auto.mode("station-b"))
 
+    def test_tkl_and_all_boxes_share_the_mode_also_with_an_open_queue(self):
+        boxes = [self.box("box-left"), self.box("box-right")]
+        other = self.box("box-other", "station-a")
+        self.clock(at(9, 18))
+        self.service.execute_station_command(other, "station-a", "clearance.request",
+            {"movement_id": "movement-101-a", "connection_id": "connection-a-b"})
+        stale = {box: self.frame(box) for box in boxes}
+        self.assertTrue(all(frame["keys"]["#"]["label"] == "Ge klart" for frame in stale.values()))
+
+        self.app.tkl_automatic(self.tkl, {"station_id": "station-b", "automatic": True})
+        for box in boxes:
+            self.service.observe_operator(box)
+            self.assertEqual("automatic", self.frame(box)["station_mode"])
+            answer = self.terminals.command(box, {"command_id": uuid4().hex,
+                "view_token": stale[box]["view_token"], "key": "#"})
+            self.assertEqual("rejected", answer["status"])
+            self.assertEqual("automatic", answer["frame"]["station_mode"])
+        self.assertEqual("manned", self.frame(other)["station_mode"])
+        self.assertEqual("waiting", self.service.open_cases(None)[0]["status"])
+        self.auto.tick()
+        self.assertEqual("approved", self.service.open_cases(None)[0]["status"])
+
+        self.app.tkl_automatic(self.tkl, {"station_id": "station-b", "automatic": False})
+        self.assertTrue(all(self.frame(box)["station_mode"] == "manned" for box in boxes))
+
+    def test_a_box_leaves_all_boxes_and_tkl_in_automatic_mode(self):
+        left, right = self.box("box-left"), self.box("box-right")
+        self.leave(left)
+        self.assertTrue(self.app.tkl_context(self.tkl, "station-b")["automatic"]["active"])
+        self.assertEqual("automatic", self.frame(right)["station_mode"])
+        self.press(right, "#")
+        self.press(right, "#")
+        self.assertFalse(self.app.tkl_context(self.tkl, "station-b")["automatic"]["active"])
+        self.assertEqual("manned", self.frame(left)["station_mode"])
+
     def test_a_tkl_step_on_a_station_left_to_the_automation_asks_first(self):
         self.app.tkl_automatic(self.tkl, {"station_id": "station-b", "automatic": True})
         with self.assertRaises(HTTPAPIError) as refused:

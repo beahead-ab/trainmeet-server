@@ -5,6 +5,18 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Stationsgemensam automatik tar hand om väntande förfrågningar
+
+AUTOMATIK gäller stationen och alla dess anslutna TKL och TMBoxar, oavsett
+vilken enhet som lämnar över. Befintliga väntande förfrågningar prövas vid
+nästa automatikkörning utan en ny svarsfördröjning, i förfrågningsordning
+före nya tidtabellsärenden. Ett upptaget mottagningsspår håller kvar just den
+frågan medan andra kan besvaras. Nya frågor följer fortfarande inställningen
+Klartecken efter, och ingen trafik utförs medan träffklockan står still.
+
+Regressionstester täcker flera boxar tillsammans med TKL, gamla knapptryckningar
+efter lägesbyte, köordning, upptaget spår och återupptagning efter paus.
+
 ### Privata Wi-Fi-nätverk på Raspberry Pi (#202)
 
 Inställningar → Namn och nätverk får ett Pi-specifikt kort för sparade SSID,

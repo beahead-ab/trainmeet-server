@@ -318,6 +318,11 @@ class AutomaticStations:
             state["automatic"][station] = {"by": by, "device": device or owner}
             self._save(state)
             self._audit(publication, "automatic.station_released", station, device or owner or by, {"by": by})
+            # Förfrågningarna har redan väntat på operatören. Vid övertagandet
+            # prövas hela kön nästa tick utan en ny konstgjord svarsfördröjning.
+            for case in self.service.open_cases(station):
+                if case["to_station_id"] == station and case["status"] == "waiting":
+                    self._answer_at[case["clearance_id"]] = self.now()
         self._changed()
 
     def take_over(self, station, device, *, by="admin") -> None:
@@ -501,7 +506,16 @@ class AutomaticStations:
                 return live, cases, times
             live, cases, times = read()
             blocked = {}
-            for key, leg in sorted(legs.items(), key=lambda item: (item[1]["departure"], item[0])):
+            # Befintliga frågor går före nya tidtabellsärenden, äldst först.
+            # Ett upptaget spår stoppar bara den frågan, inte resten av kön.
+            def priority(item):
+                key, leg = item
+                case = cases.get(key)
+                if (case and case["status"] == "waiting"
+                        and self.mode(case["to_station_id"], state) == "automatic"):
+                    return (0, case["requested_at"], case["clearance_id"])
+                return (1, leg["departure"], key)
+            for key, leg in sorted(legs.items(), key=priority):
                 self._acted = False
                 try:
                     with self.store.atomic_command():
