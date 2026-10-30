@@ -129,7 +129,7 @@ def parse_status(data):
     weekday = data.get("weekday")
     return {"seconds": parts[0] * 3600 + parts[1] * 60 + (parts[2] if len(parts) > 2 else 0),
             "speed": speed, "running": running, "stopped_reason": str(reason)[:160] if not running else None,
-            "minute_precision": len(parts) == 2 or parts[2] == 0,
+            "minute_precision": len(parts) == 2,
             "weekday": _WEEKDAYS.get(weekday.strip().casefold(), "") if isinstance(weekday, str) else ""}
 
 
@@ -155,6 +155,7 @@ class ExternalClock:
             self.scope, self.settings = scope, dict(settings)
             self.version += 1
             self.sample, self.error, self.last_sync = None, "", None
+            self.received, self.last_seen = 0.0, 0.0
             self.next_poll = 0
             if sample is not None:
                 self._accept(sample)
@@ -223,12 +224,9 @@ class ExternalClock:
             seconds = sample["seconds"] if sample else 0
             if sample and available and sample["running"]:
                 seconds += max(0, self.now() - self.received) * sample["speed"]
-                # A minute-only feed is authoritative about the displayed
-                # minute. Never run a whole minute ahead while waiting for its
-                # next tick; do not snap back to :00 on equal polls either.
-                if sample.get("minute_precision"):
-                    latest_minute = (int(sample["seconds"]) // 60) * 60
-                    seconds = min(seconds, latest_minute + 59.99)
+                # A HH:MM-only provider is sampled at discrete minute
+                # boundaries. Keep the hands advancing at its reported speed
+                # rather than clamping at :59 and jumping back every poll.
             whole = int(seconds) % 86400
             return {"configured": True, "source": "fastclock", "external_name": self.settings["clock_name"],
                     "time": f"{whole // 3600:02}:{whole % 3600 // 60:02}:{whole % 60:02}" if sample else "--:--:--",
