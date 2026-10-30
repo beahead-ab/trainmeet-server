@@ -4724,7 +4724,8 @@ class TrainMeetHTTPApplication:
         return {"supported": True, "days": out, "slot_seconds": meet_timeline.SLOT_SECONDS,
                 "now": {"day_number": calendar["day_number"], "seconds": _clock_seconds(clock),
                         "running": bool(clock.get("running")), "speed": float(clock.get("speed") or 1.0),
-                        "external": clock.get("elapsed_seconds") is None},
+                        "external": clock.get("elapsed_seconds") is None,
+                        "weekday": clock.get("weekday", "")},
                 "calendar": calendar, "undo": self._undo_offer(),
                 "meet_generation": selected["generation"] if selected else None}
 
