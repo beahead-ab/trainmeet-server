@@ -162,3 +162,12 @@ On its way to {station}|På väg mot {station}|På vej mod {station}|På vei mot
 Arrived {time}|Ankom {time}|Ankom {time}|Ankom {time}|Angekommen {time}
 Just now|Nyss|Lige nu|Nettopp|Gerade eben
 estimated|beräknad|beregnet|beregnet|voraussichtlich
+Large screens|Stora vyer|Store visninger|Store visninger|Großansichten
+Share the meet|Dela träffen|Del træffet|Del treffet|Treffen teilen
+Meet link|Länk till träffen|Link til træffet|Lenke til treffet|Link zum Treffen
+Copy link|Kopiera länk|Kopiér link|Kopier lenke|Link kopieren
+Link copied.|Länken är kopierad.|Linket er kopieret.|Lenken er kopiert.|Link kopiert.
+Select and copy the link above.|Markera och kopiera länken ovan.|Markér og kopiér linket ovenfor.|Marker og kopier lenken ovenfor.|Link oben markieren und kopieren.
+QR codes could not be shown. Share the link below.|QR-koderna kunde inte visas. Dela länken nedan.|QR-koderne kunne ikke vises. Del linket nedenfor.|QR-kodene kunne ikke vises. Del lenken nedenfor.|QR-Codes konnten nicht angezeigt werden. Teilen Sie den Link unten.
+The meet's Wi-Fi has not been entered yet.|Träffens Wi-Fi har inte lagts in ännu.|Træffets Wi-Fi er endnu ikke indtastet.|Treffets Wi-Fi er ikke lagt inn ennå.|Das WLAN des Treffens wurde noch nicht eingetragen.
+The Wi-Fi password is not shared. Ask the dispatcher.|Wi-Fi-lösenordet delas inte. Fråga trafikledningen.|Wi-Fi-adgangskoden deles ikke. Spørg trafiklederen.|Wi-Fi-passordet deles ikke. Spør trafikklederen.|Das WLAN-Passwort wird nicht geteilt. Fragen Sie die Zugleitung.
