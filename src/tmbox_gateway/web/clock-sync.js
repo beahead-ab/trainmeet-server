@@ -1,7 +1,7 @@
-/* Shared monotonic presentation clock for Drift, public views and fullscreen.
- * Keep time advancing at the provider's speed. Small clock corrections are
- * slewed into the display; a clock/source/stop change is immediate.
- * Traffic decisions always use the authoritative server, never this clock. */
+/* Monotonic presentation clock: display-only, never makes traffic decisions.
+ * Small corrections are absorbed by changing the hand speed rather than
+ * jumping them backwards at each poll. Major user clock changes are immediate.
+ */
 (function(root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -9,22 +9,24 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function() {
   "use strict";
   const DAY = 86400;
+  const MAX_SLEW_RATE = 0.4;
+  const RESET_THRESHOLD = 120;
+  const wrap = seconds => ((seconds % DAY) + DAY) % DAY;
+  const delta = (target, current) => wrap(target - current + DAY / 2) - DAY / 2;
   function parse(value) {
     const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(String(value || ""));
     return match ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0) : null;
   }
-  function wrap(seconds) { return ((seconds % DAY) + DAY) % DAY; }
-  function delta(target, current) { return wrap(target - current + DAY / 2) - DAY / 2; }
   function create() {
     let anchor = null, correction = 0;
     function seconds(at) {
       if (!anchor) return null;
       const age = anchor.running ? Math.max(0, (at - anchor.at) / 1000) : 0;
       const travel = age * anchor.speed;
-      // At most a 60% rate correction. Even when the provider is behind, the
-      // hands always move forward; never jump backwards on routine polling.
-      const adjustment = Math.sign(correction) * Math.min(Math.abs(correction), age * anchor.speed * 0.6);
-      return wrap(anchor.seconds + travel + adjustment);
+      // Applying a negative correction can only slow the clock, never turn
+      // its hands backwards. Positive corrections accelerate it temporarily.
+      const adjust = Math.sign(correction) * Math.min(Math.abs(correction), travel * MAX_SLEW_RATE);
+      return wrap(anchor.seconds + travel + adjust);
     }
     function accept(clock, at) {
       const reported = parse(clock?.time);
@@ -39,8 +41,7 @@
       }
       const current = seconds(at);
       const error = delta(reported, current);
-      if (Math.abs(error) > 120 || !running) {
-        // Explicit clock reposition or pause: obey the authoritative value.
+      if (!running || Math.abs(error) > RESET_THRESHOLD) {
         anchor = {...anchor, seconds: reported, at};
         correction = 0;
       } else {
