@@ -203,8 +203,8 @@ class USCloudHTTPTests(test_us_http.USHTTPFixture):
         self.assertEqual(before['session']['runs'], after['session']['runs'])
         self.assertEqual(before['clock'], after['clock'])
         self.assertEqual('newer', self.app.lifecycle.selected()['publication_id'])
-        self.assertEqual(1, len(self.downloads))
-        self.assertEqual([True, False], [entry[2] for entry in self.linked_requests])
+        self.assertEqual(2, len(self.downloads))  # Read-only preview followed by claim.
+        self.assertEqual([True, True, False], [entry[2] for entry in self.linked_requests])  # Immediate connect heartbeat.
         self.assertFalse(self.app.auto_sync_cloud_runtime()['pending'])
 
     def test_active_warrant_defers_topology_update_without_resetting_clock_or_session(self):

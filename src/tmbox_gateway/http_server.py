@@ -412,12 +412,25 @@ class TrainMeetHTTPApplication:
                 runtime_store.save_central_url(old_link[0])
                 runtime_store.save_link_token(old_link[1])
                 runtime_store.set_cloud_auto_sync(True)
-        self.runtime_fetcher = runtime_fetcher or (
-            lambda code, url: fetch_runtime_download(
+        self._default_runtime_fetcher = (
+            lambda code, url, expected_checksum=None: fetch_runtime_download(
                 code,
                 url,
                 server_name=(self.runtime_store.server_name() if self.runtime_store else self.config.gateway_id),
+                installation_key=self.runtime_store.installation_key() if self.runtime_store else None,
+                expected_checksum=expected_checksum,
+                previous_link=(self.runtime_store.link_token() if self.runtime_store and
+                               canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url) == url else None),
             )
+        )
+        self.runtime_fetcher = runtime_fetcher or self._default_runtime_fetcher
+        self.runtime_preview_fetcher = lambda code, url: (
+            fetch_runtime_download(code, url, preview=True) if self.runtime_fetcher is self._default_runtime_fetcher
+            else self.runtime_fetcher(code, url)
+        )
+        self.runtime_claim_fetcher = lambda code, url, checksum: (
+            self._default_runtime_fetcher(code, url, checksum) if self.runtime_fetcher is self._default_runtime_fetcher
+            else self.runtime_fetcher(code, url)
         )
         self.linked_runtime_fetcher = linked_runtime_fetcher or (
             lambda token, url, manifest_only: fetch_linked_runtime(
@@ -4752,7 +4765,7 @@ class TrainMeetHTTPApplication:
             try:
                 return self.cloud_config.connect(payload)
             except MeetChangeRequired as error:
-                raise HTTPAPIError(HTTPStatus.CONFLICT, "meet_change_required", str(error)) from error
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "meet_change_required", str(error), details={"confirmation": error.confirmation}) from error
             except (CentralSyncError, RuntimePublicationError, USError) as error:
                 raise HTTPAPIError(HTTPStatus.CONFLICT, "cloud_connection_failed", str(error)) from error
         code = str(payload.get("sync_code", ""))
@@ -5065,10 +5078,11 @@ class TrainMeetHTTPApplication:
 
 
 class HTTPAPIError(RuntimeError):
-    def __init__(self, status: HTTPStatus, code: str, message: str):
+    def __init__(self, status: HTTPStatus, code: str, message: str, *, details: dict | None = None):
         super().__init__(message)
         self.status = status
         self.code = code
+        self.details = details or {}
 
 
 class TrainMeetRequestHandler(BaseHTTPRequestHandler):
@@ -6048,7 +6062,7 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         return cookie.output(header="").strip()
 
     def _send_api_error(self, error: HTTPAPIError) -> None:
-        self._send_json(error.status, {"error": error.code, "message": str(error)})
+        self._send_json(error.status, {"error": error.code, "message": str(error), **error.details})
 
     def _send_unexpected_error(self) -> None:
         """Ett fel ingen förutsåg: hela spåret i loggen och ett JSON-svar som

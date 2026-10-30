@@ -289,10 +289,30 @@ class USStore:
             row = self.db.execute("SELECT session_id FROM us_current WHERE singleton=1").fetchone()
             return self._load(row[0]) if row else None
 
-    def deactivate(self) -> None:
+    def deactivate(self, *, close_session: bool = False) -> None:
         """Archive the current pointer after an explicit, guarded meet switch."""
         with self.lock:
-            self.db.execute("DELETE FROM us_current WHERE singleton=1")
+            self.db.execute("BEGIN IMMEDIATE")
+            try:
+                state = self.current_session()
+                if close_session and state and state["status"] != "closed":
+                    state["status"] = "closed"
+                    for warrant in state["warrants"]:
+                        if warrant["status"] not in TERMINAL:
+                            warrant["status"] = "void"
+                    if state.get("clock"):
+                        state["clock"].update(seconds=clock_status(state["clock"])["seconds"], running=False, anchor=time.time())
+                    state["revision"] += 1
+                    self.db.execute("UPDATE us_sessions SET state_json=?,revision=? WHERE id=?",
+                                    (json.dumps(state, allow_nan=False), state["revision"], state["id"]))
+                    self.db.execute("INSERT INTO us_events(session_id,revision,actor,action,target_id,meet_time,recorded_at,detail_json) VALUES(?,?,?,?,?,?,?,?)",
+                                    (state["id"], state["revision"], "server", "meet_switch", state["id"], clock_status(state["clock"])["time"] if state.get("clock") else "",
+                                     datetime.now(timezone.utc).isoformat(), '{}'))
+                self.db.execute("DELETE FROM us_current WHERE singleton=1")
+                self.db.execute("COMMIT")
+            except Exception:
+                self.db.execute("ROLLBACK")
+                raise
 
     @staticmethod
     def _update_blockers(state: dict | None, package: dict) -> list[str]:

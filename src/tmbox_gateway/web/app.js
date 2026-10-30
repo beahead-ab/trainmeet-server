@@ -1410,48 +1410,81 @@ document.querySelector("#device-remove-form").addEventListener("submit", async (
   } finally { clearTimeout(timeout); endModalAction(form); }
 });
 
+let pendingMeetSwitch = null;
+const meetSwitchForm = document.querySelector("#meet-switch-form");
+const meetSwitchInput = document.querySelector("#meet-switch-confirmation");
+const meetSwitchButton = document.querySelector("#meet-switch-start");
+function updateMeetSwitchButton() {
+  meetSwitchButton.disabled = !pendingMeetSwitch || meetSwitchInput.value !== pendingMeetSwitch.confirmation.name;
+}
+meetSwitchInput.addEventListener("input", updateMeetSwitchButton);
+meetSwitchInput.addEventListener("change", updateMeetSwitchButton);
+document.querySelector("#meet-switch-modal").addEventListener("close", () => {
+  pendingMeetSwitch = null;
+  meetSwitchInput.value = "";
+  updateMeetSwitchButton();
+});
+async function connectRuntime(request, form, confirmation = null) {
+  const message = form.querySelector(".form-message");
+  if (!beginModalAction(form)) return;
+  setMessage(message, confirmation ? "Byter träff …" : "Kontrollerar träffkoden …");
+  let nextConfirmation = null;
+  try {
+    const response = await authorizedFetch("/v1/runtime/sync", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...request, ...(confirmation ? {
+        confirm_meet_change: true, leaving_name: meetSwitchInput.value,
+        leaving_selection: confirmation.selection,
+      } : {}) }),
+    });
+    const payload = await response.json();
+    if (payload.error === "meet_change_required" && payload.confirmation?.name) {
+      nextConfirmation = payload.confirmation;
+      return;
+    }
+    if (!response.ok) throw new Error(payload.message || t("Träffen kunde inte hämtas"));
+    runtimeSyncCodeBoxes.reset();
+    finishModal(form, payload.message || t("3/3 · Cloud-kopplingen är sparad på servern."));
+    await Promise.all([refreshServerContext(), refreshRuntime(), refreshInfo()]);
+  } catch (error) {
+    setMessage(message, error.message, "error");
+    refreshRuntime().catch(() => {});
+  } finally {
+    endModalAction(form);
+    if (nextConfirmation) {
+      const dialog = document.querySelector("#meet-switch-modal");
+      if (form === meetSwitchForm) {
+        // A stale confirmation must be read and entered again.
+        pendingMeetSwitch = { request, confirmation: nextConfirmation };
+        meetSwitchInput.value = "";
+        document.querySelector("#meet-switch-name").textContent = nextConfirmation.name;
+        document.querySelector("#meet-switch-description").textContent = t("Du lämnar {current} och laddar {target}.", { current: nextConfirmation.name, target: nextConfirmation.target_name });
+        setMessage(message, "Träffen ändrades. Bekräfta det aktuella namnet igen.", "notice");
+      } else {
+        form.closest("dialog").close();
+        pendingMeetSwitch = { request, confirmation: nextConfirmation };
+        document.querySelector("#meet-switch-name").textContent = nextConfirmation.name;
+        document.querySelector("#meet-switch-description").textContent = t("Du lämnar {current} och laddar {target}.", { current: nextConfirmation.name, target: nextConfirmation.target_name });
+        meetSwitchInput.value = "";
+        openModal(dialog.id);
+      }
+      updateMeetSwitchButton(); meetSwitchInput.focus();
+    }
+  }
+}
 runtimeForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const syncCode = document.querySelector("#runtime-sync-code").value;
   if (syncCode.length !== 6) {
-    setMessage(runtimeMessage, "Fyll i alla sex siffror i träffkoden.", "error");
-    return;
+    setMessage(runtimeMessage, "Fyll i alla sex siffror i träffkoden.", "error"); return;
   }
-  setMessage(runtimeMessage, "1/3 · Kontaktar Config-servern och kontrollerar träffkoden …");
-  document.querySelector("#cloud-connection-state").textContent = t("Kopplar …");
-  if (!beginModalAction(runtimeForm)) return;
-  let needsSwitch = false;
-  try {
-    const response = await authorizedFetch("/v1/runtime/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        central_url: document.querySelector("#runtime-central-url").value,
-        sync_code: syncCode,
-        confirm_meet_change: document.querySelector("#confirm-meet-change").checked,
-      }),
-    });
-    const payload = await response.json();
-    // The code is for another meet: point at the box that confirms the switch.
-    const confirmSwitch = document.querySelector("#confirm-meet-change");
-    needsSwitch = payload.error === "meet_change_required";
-    confirmSwitch.closest("label").classList.toggle("needs-attention", needsSwitch);
-    if (!response.ok) throw new Error(payload.message || "Träffen kunde inte hämtas");
-    // Never print "undefined": an answer without a message still saved the link.
-    setMessage(runtimeMessage, payload.message ? "3/3 · {message} Cloud-kopplingen är sparad på servern." : "3/3 · Cloud-kopplingen är sparad på servern.",
-      payload.restart_required ? "notice" : "success", payload.message ? { message: payload.message } : undefined);
-    runtimeSyncCodeBoxes.reset();
-    await Promise.all([refreshServerContext(), refreshRuntime(), refreshInfo()]);
-    finishModal(runtimeForm);
-  } catch (error) {
-    setMessage(runtimeMessage, error.message, "error");
-    // A failed attempt leaves the existing link as it was; show that state
-    // rather than "Kopplingen misslyckades" (#128).
-    refreshRuntime().catch(() => { document.querySelector("#cloud-connection-state").textContent = t("Kopplingen misslyckades"); });
-  } finally {
-    endModalAction(runtimeForm);
-    if (needsSwitch) document.querySelector("#confirm-meet-change").focus();
-  }
+  await connectRuntime({ central_url: document.querySelector("#runtime-central-url").value, sync_code: syncCode }, runtimeForm);
+});
+meetSwitchForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!pendingMeetSwitch || meetSwitchButton.disabled) return;
+  const { request, confirmation } = pendingMeetSwitch;
+  await connectRuntime(request, meetSwitchForm, confirmation);
 });
 
 // ── Återställning från säkerhetskopia ──────────────────────────────────
