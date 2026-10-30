@@ -4948,7 +4948,7 @@ function renderConnectionBadge(snapshot) {
 function externalWeekdayName(clock) {
   const week = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
   const index = week.indexOf(clock?.weekday);
-  if (clock?.source !== "fastclock" || index < 0 || !clock?.available) return "";
+  if (clock?.source !== "fastclock" || index < 0) return "";
   const locale = globalThis.TrainMeetI18n?.getLocale?.() || "sv-SE";
   const word = new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" })
     .format(new Date(Date.UTC(2024, 0, index + 1)));
