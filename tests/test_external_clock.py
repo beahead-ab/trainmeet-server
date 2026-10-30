@@ -92,6 +92,36 @@ class ProviderTests(unittest.TestCase):
         self.clock.poll()
         self.assertEqual(self.clock.status()["time"], "09:15:35")
 
+    def test_explicit_zero_second_feed_learns_minute_precision(self):
+        # Some compatible clocks send HH:MM:00 on every request, even at 5x.
+        self.reply = provider_status(time="09:15:00", speed=5)
+        self.clock.poll()
+        self.now += 2
+        self.clock.poll()
+        self.assertEqual(self.clock.status()["time_precision"], "minute")
+        self.assertEqual(self.clock.status()["time"], "09:15:10")
+        self.now += 2
+        self.clock.poll()
+        self.assertEqual(self.clock.status()["time"], "09:15:20")
+        self.reply = provider_status(time="09:16:00", speed=5)
+        self.now += 8
+        before = self.clock.status()["seconds"]
+        self.clock.poll()
+        self.assertGreaterEqual(self.clock.status()["seconds"], before)
+        self.assertEqual(self.clock.status()["speed"], 5)
+
+    def test_precision_capable_clock_stays_precise_at_exact_minute(self):
+        self.reply = provider_status(time="09:14:55", speed=5)
+        self.clock.poll()
+        self.now += 1
+        self.reply = provider_status(time="09:15:00", speed=5)
+        self.clock.poll(force=True)
+        self.assertEqual(self.clock.status()["time_precision"], "second")
+        self.now += 1
+        self.reply = provider_status(time="09:15:05", speed=5)
+        self.clock.poll(force=True)
+        self.assertEqual(self.clock.status()["time_precision"], "second")
+
     def test_no_sample_and_wrong_region_are_distinct(self):
         self.assertEqual(self.clock.status("eu")["time"], "--:--:--")
         self.assertFalse(self.clock.status()["running"])
