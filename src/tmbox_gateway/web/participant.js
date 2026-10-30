@@ -312,6 +312,7 @@
       renderTimetable();
     }
     renderConnect();
+    globalThis.TrainMeetGuest?.render(snapshot);
     $("#pv-live").classList.remove("is-offline");
   }
 
@@ -378,6 +379,7 @@
       bound = true;
       // Annotate only authored, empty markup once, before any meet data arrives.
       TrainMeetI18n.annotate($("#participant-view"));
+      globalThis.TrainMeetGuest?.bind();
       // Ett tryck på klockan visar eller döljer sekunderna, som på Kör och storskärmen.
       $("#pv-clock")?.addEventListener("click", () => {
         const clock = snapshot?.clock || {};
