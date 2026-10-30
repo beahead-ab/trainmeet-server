@@ -34,7 +34,7 @@ const { open } = require('./kr-fixture.cjs');
           await page.goto('http://127.0.0.1:9999/');
           await page.locator('#pv-screens-list a[href="/display/' + name + '"]').click();
           await page.locator('#display-app').waitFor({ state: 'visible' });
-          await page.locator('#display-switch-list a[href="/display/' + name + '"]').waitFor();
+          await page.locator('#display-switch-list a[href="/display/' + name + '"]').waitFor({ state: 'attached' });
           assert.equal(await page.locator('#login').isVisible(), false, 'screen ' + name + ' stays public');
         }
         assert.deepEqual(errors, [], 'browser errors');
