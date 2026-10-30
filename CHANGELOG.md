@@ -5,6 +5,12 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### FastClock-standardadressen finns alltid kvar att kopiera
+
+Klockans inställningar visar alltid `https://fastclock.azurewebsites.net` med
+en kopieringsknapp, även om adressfältet har ändrats eller intern klocka är vald.
+Adressen är fortsatt förvald och kopian kan klistras in om man råkat skriva fel.
+
 ### Stationsgemensam automatik tar hand om väntande förfrågningar
 
 AUTOMATIK gäller stationen och alla dess anslutna TKL och TMBoxar, oavsett
