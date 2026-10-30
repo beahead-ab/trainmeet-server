@@ -602,6 +602,27 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
       ['traff', 'skarmar', 'wifi', 'obemannade', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'visning', 'farozon']);
     assert.equal(await page.locator('#admin-view .kr-setsec').count(), 11);
     assert.equal(await page.locator('#admin-view .kr-setsec:not([hidden])').count(), 1, 'one section at a time');
+    // The clock source must be discoverable under Settings (not just a small link in Drift).
+    await nav.locator('a[href="/installningar#skarmar"]').click();
+    const clockSourceButton = page.locator('#clock-source-settings-open');
+    assert.equal(await clockSourceButton.isVisible(), true);
+    assert.match(await page.locator('#clock-source-settings-status').textContent(), /Intern serverklocka/);
+    await clockSourceButton.click();
+    await page.locator('#clock-source-modal').waitFor({state: 'visible'});
+    assert.deepEqual(await page.locator('#clock-source option').evaluateAll(options => options.map(option => option.value)),
+      ['internal', 'fastclock']);
+    await page.locator('#clock-source').selectOption('fastclock');
+    await page.locator('#fastclock-name').fill('Demo-klocka');
+    await page.locator('#clock-source-form button[type="submit"]').click();
+    await page.locator('#clock-source-modal').waitFor({state: 'hidden'});
+    await page.waitForFunction(() => document.querySelector('#clock-source-settings-status').textContent.includes('Demo-klocka'));
+    assert.equal(clockSettings.source, 'fastclock');
+    await clockSourceButton.click();
+    await page.locator('#clock-source').selectOption('internal');
+    await page.locator('#clock-source-form button[type="submit"]').click();
+    await page.locator('#clock-source-modal').waitFor({state: 'hidden'});
+    await page.waitForFunction(() => document.querySelector('#clock-source-settings-status').textContent.includes('Intern serverklocka'));
+    assert.equal(clockSettings.source, 'internal');
     await nav.locator('a[href="/installningar#kod"]').click();
     await page.locator('#connection-code-form').waitFor({state:'visible'});
     assert.equal(await page.locator('#connection-code-form #kod-value').count(), 1);

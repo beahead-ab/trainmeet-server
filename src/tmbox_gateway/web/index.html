@@ -754,6 +754,19 @@
             <!-- 2 · Skärmar och klocka -->
             <section id="skarmar" class="kr-setsec" data-section="skarmar" aria-labelledby="skarmar-title" hidden>
               <div class="kr-sectitle"><h1 id="skarmar-title">Skärmar och klocka</h1><span>gäller träffens skärmar på alla datorer</span></div>
+              <section id="clock-source-settings" class="kr-panel" aria-label="Träffklockans källa">
+                <div class="kr-ph"><span>Träffklocka</span><span class="kr-c">styr tiden på skärmar, TKL och TMBoxar</span></div>
+                <div class="kr-rows">
+                  <div class="kr-rowact">
+                    <span class="kr-k">Klockkälla</span>
+                    <div class="kr-what">
+                      <span id="clock-source-settings-status">Intern serverklocka</span>
+                      <span class="kr-m">Välj serverns egen klocka eller en extern FastClock för träffen.</span>
+                    </div>
+                    <button id="clock-source-settings-open" class="kr-btn sm" type="button" data-open-modal="clock-source-modal">Anslut träffklocka…</button>
+                  </div>
+                </div>
+              </section>
               <form id="clock-appearance-form" class="kr-panel kr-setform" aria-label="Klockan" novalidate>
                 <div class="kr-ph"><span>Klockan</span><span class="kr-c">standard för alla klockskärmar</span></div>
                 <div class="kr-rows">
