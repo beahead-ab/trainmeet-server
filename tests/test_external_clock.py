@@ -59,6 +59,39 @@ class ProviderTests(unittest.TestCase):
         self.now += 1
         self.assertEqual(self.clock.status()["time"], "00:00:03")
 
+    def test_minute_only_fastclock_does_not_rewind_every_poll(self):
+        self.reply = provider_status(time="09:15", speed=5, weekday="Monday")
+        self.assertTrue(self.clock.poll())
+        self.assertEqual(self.clock.status()["weekday"], "Mån")
+        self.assertEqual(self.clock.status()["time_precision"], "minute")
+        previous = 9 * 3600 + 15 * 60
+        for _ in range(5):
+            self.now += 2
+            self.assertTrue(self.clock.poll())
+            current = self.clock.status()["seconds"]
+            self.assertGreater(current, previous, "equal HH:MM samples must never rewind")
+            previous = current
+        self.reply = provider_status(time="09:16", speed=5, weekday="Monday")
+        self.now += 2
+        self.assertTrue(self.clock.poll())
+        self.assertGreater(self.clock.status()["seconds"], previous)
+        self.assertGreaterEqual(self.clock.status()["seconds"], 9 * 3600 + 16 * 60)
+        self.assertLess(self.clock.status()["seconds"], 9 * 3600 + 16 * 60 + 11)
+        self.now += 2
+        previous = self.clock.status()["seconds"]
+        self.assertTrue(self.clock.poll())
+        self.assertGreater(self.clock.status()["seconds"], previous)
+
+    def test_second_precision_is_followed_exactly(self):
+        self.reply = provider_status(time="09:15:25", speed=5)
+        self.clock.poll()
+        self.assertEqual(self.clock.status()["time"], "09:15:25")
+        self.assertEqual(self.clock.status()["time_precision"], "second")
+        self.now += 2
+        self.reply = provider_status(time="09:15:35", speed=5)
+        self.clock.poll()
+        self.assertEqual(self.clock.status()["time"], "09:15:35")
+
     def test_no_sample_and_wrong_region_are_distinct(self):
         self.assertEqual(self.clock.status("eu")["time"], "--:--:--")
         self.assertFalse(self.clock.status()["running"])
@@ -119,6 +152,25 @@ class ProviderTests(unittest.TestCase):
             with self.assertRaises(FastClockError) as error:
                 provider_request(self.settings)
             self.assertNotIn("secret", str(error.exception))
+
+    def test_custom_https_url_and_url_validation(self):
+        previous = {**self.settings, "user": "Controller", "password": "secret"}
+        settings = validate_settings({"source": "fastclock", "url": "https://clock.example.org/"}, previous)
+        self.assertEqual(settings["url"], "https://clock.example.org")
+        self.assertEqual(settings["password"], "", "changing the provider must revoke old credentials")
+        result = MagicMock()
+        result.read.return_value = json.dumps(provider_status()).encode()
+        with patch("tmbox_gateway.external_clock.build_opener") as opener:
+            opener.return_value.open.return_value.__enter__.return_value = result
+            provider_request({**settings, "clock_name": "A/B"})
+            request = opener.return_value.open.call_args.args[0]
+            self.assertEqual(request.full_url, "https://clock.example.org/api/clocks/A%2FB/time")
+        for bad in ["http://clock.example.org", "https://localhost", "https://127.0.0.1",
+                    "https://10.0.0.1", "https://clock.local", "https://user:pass@clock.example.org",
+                    "https://clock.example.org/path", "https://clock.example.org?token=private",
+                    "https://clock.example.org#fragment", "https://clock.example.org:bad"]:
+            with self.subTest(url=bad), self.assertRaises(FastClockError):
+                validate_settings({"source": "fastclock", "url": bad}, previous)
 
     def test_start_stop_failure_is_not_retried_or_reported_as_success(self):
         self.clock.configure("eu:one", {**self.settings, "user": "Operator"})
