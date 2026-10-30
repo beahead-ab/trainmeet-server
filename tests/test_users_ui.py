@@ -66,7 +66,7 @@ class UsersViewTests(unittest.TestCase):
         view = SCRIPT[SCRIPT.index("function renderUsers()"): SCRIPT.index("function usersButton(")]
         self.assertIn('const owner = users.role === "owner"', view)
         self.assertRegex(view, r'invite-open.*classList\.toggle\("hidden", !owner\)')
-        self.assertIn("if (owner) {", view)
+        self.assertIn("if (canEditUser(user)) {", view)
 
     def test_an_account_without_an_address_is_marked(self) -> None:
         """Kontot är adressen. Ett konto utan, från före version 3, kommer inte

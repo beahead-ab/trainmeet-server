@@ -1475,3 +1475,6 @@ Today: {day}|I dag: {day}|I dag: {day}|I dag: {day}|Heute: {day}
 Monday short|Mån|Man|Man|Mo
 Saturday short|Lör|Lør|Lør|Sa
 Sunday short|Sön|Søn|Søn|So
+
+Only an owner can edit owner accounts or assign the owner role|Bara ägaren kan ändra ägarkonton eller tilldela ägarrollen|Kun ejeren kan ændre ejerkonti eller tildele ejerrollen|Bare eieren kan endre eierkontoer eller tildele eierrollen|Nur Eigentümer können Eigentümerkonten bearbeiten oder die Eigentümerrolle vergeben
+Owners edit all accounts · administrators edit administrators|ägare redigerar alla konton · administratörer redigerar administratörer|ejere redigerer alle konti · administratorer redigerer administratorer|eiere redigerer alle kontoer · administratorer redigerer administratorer|Eigentümer bearbeiten alle Konten · Administratoren bearbeiten Administratoren
