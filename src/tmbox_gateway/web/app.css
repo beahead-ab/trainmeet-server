@@ -1446,3 +1446,7 @@ body[data-mode="skarmar"] .server-admin-shell { padding: 16px 12px 32px; }
 }
 /* #128: the switch confirmation the server asked for. */
 .admin-modal .switch-confirmation.needs-attention { outline: 2px solid var(--warn, #e0a33a); outline-offset: 4px; border-radius: 6px; }
+
+/* Standardadressen och kopieringsknappen ryms även på smala telefoner. */
+.fastclock-default-address { max-width: 100%; }
+.fastclock-default-address code { min-width: 0; overflow-wrap: anywhere; }

@@ -2,6 +2,7 @@
  * never translation keys. Uses the existing TrainMeet localization runtime. */
 (() => {
   const rows = [
+    ["Standardadress för FastClock", "Default FastClock address", "Standardadresse til FastClock", "Standardadresse for FastClock", "Standardadresse für FastClock"],
     ["Automatisk anslutning avstängd", "Automatic connection disabled", "Automatisk tilslutning slået fra", "Automatisk tilkobling slått av", "Automatische Verbindung deaktiviert"],
     ["SSID", "SSID", "SSID", "SSID", "SSID"],
     ["Raspberry Pi · Nätverk","Raspberry Pi · Network","Raspberry Pi · Netværk","Raspberry Pi · Nettverk","Raspberry Pi · Netzwerk"],
