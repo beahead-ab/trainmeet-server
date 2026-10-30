@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="/assets/kontrollrummet.css">
     <link rel="stylesheet" href="/assets/skarmar.css">
     <link rel="stylesheet" href="/assets/deltagare.css">
+    <link rel="stylesheet" href="/assets/guest-share.css">
     <script src="/assets/i18n.js" defer></script>
     <script src="/assets/shell-messages.js" defer></script>
     <script src="/assets/participant-messages.js" defer></script>
@@ -264,6 +265,10 @@
             <!-- Två kolumner på en dator, en på telefonen: pv-col är display: contents där. -->
             <div class="pv-col pv-col--main">
             <section class="pv-panel pv-clock-card" aria-label="Träffklockan" data-tm-aria-label="Träffklockan"><div class="pv-clock" id="pv-clock"></div></section>
+            <section class="pv-panel" id="pv-screens" aria-label="Stora vyer">
+              <div class="pv-head"><span data-tm-text="Stora vyer">Stora vyer</span><span class="pv-spacer"></span><button id="pv-share-open" class="pv-share-open" type="button" aria-haspopup="dialog" data-tm-text="Dela träffen">Dela träffen</button></div>
+              <nav id="pv-screens-list" class="pv-screen-list" aria-label="Stora vyer" data-tm-aria-label="Stora vyer"></nav>
+            </section>
             <section class="pv-panel pv-about" id="pv-about-card" aria-label="Om trafikspelet" data-tm-aria-label="Om trafikspelet" hidden>
               <div class="pv-head"><span data-tm-text="Om trafikspelet">Om trafikspelet</span></div>
               <div class="pv-body"><p id="pv-about-teaser" class="pv-about__teaser"></p><button id="pv-about-open" class="pv-btn" type="button" data-tm-text="Läs om trafikspelet">Läs om trafikspelet</button></div>
@@ -317,7 +322,16 @@
             <div class="pv-head"><span id="pv-view-title">Visning</span><span class="pv-c">gäller den här webbläsaren</span><span class="pv-spacer"></span><button id="pv-view-close" class="pv-x" type="button" aria-label="Stäng" data-tm-aria-label="Stäng">×</button></div>
             <fieldset class="pv-levels"><legend>Förseningar och för tidiga tåg</legend><div id="pv-view-levels" role="radiogroup"></div></fieldset>
           </dialog>
-          <dialog id="pv-connect-card" class="pv-sheet" aria-labelledby="pv-connect-title">
+          <dialog id="pv-share-card" class="pv-sheet pv-share-sheet" aria-labelledby="pv-share-title">
+             <div class="pv-head"><span id="pv-share-title" data-tm-text="Dela träffen">Dela träffen</span><span class="pv-spacer"></span><button id="pv-share-close" class="pv-x" type="button" aria-label="Stäng" data-tm-aria-label="Stäng">×</button></div>
+             <div id="pv-share-codes" class="pv-share-codes" aria-live="polite"></div>
+             <div class="pv-share-link-section">
+               <label for="pv-share-link" data-tm-text="Länk till träffen">Länk till träffen</label>
+               <div class="pv-share-link-row"><input id="pv-share-link" type="text" readonly aria-label="Länk till träffen" data-tm-aria-label="Länk till träffen"><button id="pv-share-copy" type="button" class="pv-btn" data-tm-text="Kopiera länk">Kopiera länk</button></div>
+               <span id="pv-share-copy-status" class="pv-note" role="status" aria-live="polite"></span>
+             </div>
+           </dialog>
+           <dialog id="pv-connect-card" class="pv-sheet" aria-labelledby="pv-connect-title">
             <div class="pv-head"><span id="pv-connect-title">Anslut din TMBox</span><span class="pv-c">tre steg, i den här ordningen</span><span class="pv-spacer"></span><button id="pv-connect-close" class="pv-x" type="button" aria-label="Stäng" data-tm-aria-label="Stäng">×</button></div>
             <div class="pv-steps">
               <div class="pv-step"><div class="n">1</div><div>
@@ -1415,6 +1429,7 @@
     <script src="/assets/app.js?v=20261006-1" defer></script>
     <script src="/assets/meet-timeline.js" defer></script>
     <script src="/assets/pi-network.js" defer></script>
+    <script src="/assets/guest-share.js" defer></script>
     <script src="/assets/participant.js" defer></script>
   </body>
 </html>
