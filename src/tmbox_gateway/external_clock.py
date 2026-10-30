@@ -24,8 +24,11 @@ DEFAULT_SETTINGS = {"source": "internal", "clock_name": "", "url": PROVIDER_URL,
 def normalize_provider_url(value):
     if not isinstance(value, str) or not value or len(value) > 255 or any(ord(c) < 33 for c in value):
         raise FastClockError("Ange en giltig HTTPS-adress till FastClock.")
-    parts = urlsplit(value)
-    host = (parts.hostname or "").lower()
+    try:
+        parts = urlsplit(value)
+        host = (parts.hostname or "").lower()
+    except ValueError:
+        raise FastClockError("Ogiltig FastClock-adress.") from None
     if (parts.scheme != "https" or not host or parts.username is not None or parts.password is not None
             or parts.query or parts.fragment or parts.path not in ("", "/")
             or host == "localhost" or host.endswith((".localhost", ".local", ".internal"))):
@@ -184,7 +187,10 @@ class ExternalClock:
         # Retain the original monotonic anchor until the provider changes minute.
         if (sample.get("minute_precision") and previous and previous.get("minute_precision")
                 and sample["running"] and previous["running"] and sample["speed"] == previous["speed"]
-                and int(sample["seconds"] // 60) == int(previous["seconds"] // 60)):
+                and ((sample["minute_precision"] and previous["minute_precision"]
+                      and int(sample["seconds"] // 60) == int(previous["seconds"] // 60))
+                     or (not sample["minute_precision"] and not previous["minute_precision"]
+                         and sample["seconds"] == previous["seconds"]))):
             self.error = ""
             self.last_seen = now
         else:
@@ -195,7 +201,7 @@ class ExternalClock:
                 # polls. Estimate the provider's minute boundary at their
                 # midpoint. That removes the persistent one-minute lag without
                 # pretending that HH:MM carries an exact second value.
-                seconds_after_boundary = max(0.0, (now - self.last_seen) * sample["speed"] / 2.0)
+                seconds_after_boundary = min(59.0, max(0.0, (now - self.last_seen) * sample["speed"] / 2.0))
                 sample = {**sample, "seconds": sample["seconds"] + seconds_after_boundary}
             self.sample, self.received, self.error = sample, now, ""
             self.last_seen = now
