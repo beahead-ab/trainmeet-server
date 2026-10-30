@@ -31,12 +31,15 @@ def normalize_provider_url(value):
             or host == "localhost" or host.endswith((".localhost", ".local", ".internal"))):
         raise FastClockError("Ange en publik HTTPS-basadress utan sökväg, inloggning eller parametrar.")
     try:
-        if parts.port is not None and not (1 <= parts.port <= 65535):
-            raise ValueError()
+        port = parts.port
+    except ValueError:
+        raise FastClockError("Ogiltig port i FastClock-adressen.") from None
+    if port is not None and not (1 <= port <= 65535):
+        raise FastClockError("Ogiltig port i FastClock-adressen.")
+    try:
         address = ip_address(host)
     except ValueError:
-        if ":" in parts.netloc and parts.port is None:
-            raise FastClockError("Ogiltig FastClock-adress.") from None
+        pass  # Public HTTPS DNS names may be configured by the administrator.
     else:
         if not address.is_global:
             raise FastClockError("FastClock-adressen får inte peka på ett lokalt eller privat nät.")
@@ -126,7 +129,7 @@ def parse_status(data):
     weekday = data.get("weekday")
     return {"seconds": parts[0] * 3600 + parts[1] * 60 + (parts[2] if len(parts) > 2 else 0),
             "speed": speed, "running": running, "stopped_reason": str(reason)[:160] if not running else None,
-            "minute_precision": len(parts) == 2,
+            "minute_precision": len(parts) == 2 or parts[2] == 0,
             "weekday": _WEEKDAYS.get(weekday.strip().casefold(), "") if isinstance(weekday, str) else ""}
 
 
