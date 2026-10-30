@@ -129,9 +129,13 @@ def parse_status(data):
     parts = list(map(int, clock.split(":")))
     running = data["isRunning"] and not data.get("isPaused", False) and not data.get("isCompleted", False)
     reason = data.get("pauseReason") or data.get("stoppingReason") or data.get("message") or ""
+    # Provider messages are independent of run/pause state. Keep the legacy
+    # stopped_reason paused-only, but carry live text all the way to displays.
+    message = str(data.get("message") or reason).strip()[:160] or None
     weekday = data.get("weekday")
     return {"seconds": parts[0] * 3600 + parts[1] * 60 + (parts[2] if len(parts) > 2 else 0),
             "speed": speed, "running": running, "stopped_reason": str(reason)[:160] if not running else None,
+            "message": message,
             "minute_precision": len(parts) == 2,
             "explicit_zero_seconds": len(parts) == 3 and parts[2] == 0,
             "weekday": _WEEKDAYS.get(weekday.strip().casefold(), "") if isinstance(weekday, str) else ""}
@@ -192,6 +196,10 @@ class ExternalClock:
                          and sample["seconds"] == previous["seconds"]))):
             self.error = ""
             self.last_seen = now
+            # Repeated time samples keep their interpolation anchor, while
+            # live text and weekday still follow the newest provider response.
+            self.sample = {**previous, "message": sample.get("message"),
+                           "stopped_reason": sample["stopped_reason"], "weekday": sample.get("weekday", "")}
         else:
             if (sample.get("minute_precision") and previous and previous.get("minute_precision")
                     and sample["running"] and previous["running"] and sample["speed"] == previous["speed"]
@@ -254,6 +262,7 @@ class ExternalClock:
                     "seconds": seconds, "speed": sample["speed"] if sample else 1,
                     "running": bool(available and sample["running"]), "available": available,
                     "can_control": bool(self.settings["user"]), "last_sync": self.last_sync,
+                    "message": sample.get("message") if available else None,
                     "stopped_reason": (sample["stopped_reason"] if available else
                         self.error or "Väntar på FastClock. Senast mottagna tid visas."),
                     "weekday": sample.get("weekday", "") if sample else "",
