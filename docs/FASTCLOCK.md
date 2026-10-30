@@ -5,7 +5,7 @@ Implementerad lokalt 2026-09-19. Inte driftsatt eller provad mot en riktig träf
 ## Anslutning
 
 1. Logga in som administratör på den **lokala TrainMeet Server** som representerar träffen.
-2. Öppna **Inställningar → Träffklocka → Anslut träffklocka**.
+2. Öppna **Inställningar → Skärmar och klocka → Klockkälla → Anslut träffklocka**. Nuvarande källa visas direkt i inställningarna; samma dialog kan nås via klockans källnamn på Drift.
 3. Välj **FastClock · extern träffklocka** och ange klockans exakta namn.
 4. För att bara följa klockan behövs inga styrningsuppgifter. För start/stopp anges FastClock-användare och eventuellt lösenord.
 5. Låt hämtningsintervallet vara 2 sekunder om inget annat behövs. Tryck **Spara**.
