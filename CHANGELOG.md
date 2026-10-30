@@ -5,6 +5,16 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Skrivskyddade gästvyer direkt i helskärm (#209)
+
+Gästsidans stora knapprad ersätts med den diskreta menyn Stora vyer.
+Vald vy öppnas direkt i helskärm och följer träffens inställningar; gäster
+får inga val för klockstil, sekunder, diagramfönster eller andra skärminställningar.
+Byt skärm och Tillbaka finns alltid tillgängliga. Vybyte bevarar helskärmen,
+och webbläsarens bakåt- och framåtknappar fungerar. När webbläsaren saknar
+helskärmsstöd fyller vyn i stället hela webbläsarfönstret. Dela träffen med
+Wi-Fi- och träff-QR finns kvar intill menyn.
+
 ### FastClock-standardadressen finns alltid kvar att kopiera
 
 Klockans inställningar visar alltid `https://fastclock.azurewebsites.net` med

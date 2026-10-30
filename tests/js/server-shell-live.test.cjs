@@ -138,13 +138,15 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await clockScreen.locator('.sc-stopped').isVisible(),true);
     const digits=await clockScreen.locator('.clock-digital').boundingBox();
     assert.ok(digits.x>=0&&digits.x+digits.width<=1920,'The digits with seconds fit the screen');
-    // The toolbar: a full screen hides it after four seconds and brings it back at a movement; a window keeps it.
+    // Guests always have a viewport-filling read-only screen and a persistent way back.
     assert.equal(await clockScreen.locator('#display-app').getAttribute('data-chrome'),'fullscreen');
-    await clockScreen.mouse.move(960,700);
-    await clockScreen.locator('#display-toolbar.hidden-toolbar').waitFor({timeout:9000});
-    await clockScreen.mouse.move(900,720);
-    await clockScreen.locator('#display-toolbar:not(.hidden-toolbar)').waitFor();
-    const windowContext=await browser.newContext({locale:'sv-SE',viewport:{width:1440,height:900},screen:{width:1920,height:1080}});
+    assert.equal(await clockScreen.locator('#display-app').getAttribute('data-read-only'),'true');
+    assert.equal(await clockScreen.locator('#display-guest-back').isVisible(),true);
+    await clockScreen.waitForTimeout(4800);
+    assert.equal(await clockScreen.locator('#display-toolbar.hidden-toolbar').count(),0);
+    assert.equal(await clockScreen.locator('#display-clock-style').isVisible(),false);
+    // Authenticated screens retain their own display settings and window toolbar.
+    const windowContext=await browser.newContext({locale:'sv-SE',viewport:{width:1440,height:900},screen:{width:1920,height:1080},storageState:await page.context().storageState()});
     const windowScreen=await windowContext.newPage();
     await windowScreen.goto(urls.eu+'/display/clock');
     await windowScreen.locator('#display-loading').waitFor({state:'hidden'});
@@ -161,6 +163,8 @@ const root = path.resolve(__dirname, '../..');
       assert.equal(await clockScreen.locator('.clock-face').count(),style==='digital'?0:1);
       assert.ok(await clockScreen.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&document.documentElement.scrollHeight<=innerHeight));
     }
+    // Screen settings below belong to an authenticated operator.
+    await screenContext.addCookies(await page.context().cookies());
     for(const path of ['topology','graph','dashboard']){
       await clockScreen.goto(urls.eu+'/display/'+path);
       await clockScreen.locator('#display-loading').waitFor({state:'hidden'});
