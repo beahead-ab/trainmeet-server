@@ -4996,6 +4996,8 @@ class TrainMeetHTTPApplication:
             "/assets/kontrollrummet.css": "kontrollrummet.css",
             "/assets/skarmar.css": "skarmar.css",
             "/assets/deltagare.css": "deltagare.css",
+            "/assets/guest-share.css": "guest-share.css",
+            "/assets/guest-share.js": "guest-share.js",
             "/assets/participant.js": "participant.js",
             "/assets/participant-messages.js": "participant-messages.js",
             "/assets/tmbox-messages.js": "tmbox-messages.js",
