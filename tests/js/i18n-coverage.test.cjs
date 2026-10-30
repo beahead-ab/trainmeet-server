@@ -25,6 +25,7 @@ test('every page script is audited or has a reason not to be', async () => {
   const audited = new Set(Object.values(SURFACES).flatMap((surface) => [...surface.html, ...surface.js, ...surface.catalog]));
   const reasons = {
     'i18n.js': 'the runtime itself', 'i18n-init.js': 'calls initializeStatic', 'qrcode.js': 'a QR encoder, no text',
+    'clock-sync.js': 'pure numeric interpolation, no user-visible text',
     'us-cloud-messages.js': 'a catalogue', 'tmbox-messages.js': 'a catalogue',
     // Built in Cloud, where its texts are audited (scripts/i18n-audit.mjs); it brings the rows the page lacks.
     'data-workspace.js': "Cloud's Data view",
