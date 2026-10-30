@@ -5004,6 +5004,7 @@ class TrainMeetHTTPApplication:
             "/assets/display-feed.js": "display-feed.js",
             "/assets/day-change.js": "day-change.js",
             "/assets/clock-face.js": "clock-face.js",
+            "/assets/clock-sync.js": "clock-sync.js",
             "/assets/live-events.js": "live-events.js",
             "/assets/i18n.js": "i18n.js",
             "/assets/i18n-messages.js": "i18n-messages.js",
