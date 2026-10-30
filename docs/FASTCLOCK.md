@@ -6,7 +6,7 @@ Implementerad lokalt 2026-09-19. Inte driftsatt eller provad mot en riktig träf
 
 1. Logga in som administratör på den **lokala TrainMeet Server** som representerar träffen.
 2. Öppna **Inställningar → Skärmar och klocka → Klockkälla → Anslut träffklocka**. Nuvarande källa visas direkt i inställningarna; samma dialog kan nås via klockans källnamn på Drift.
-3. Välj **FastClock · extern träffklocka** och ange klockans exakta namn.
+3. Välj **FastClock · extern träffklocka** och ange klockans exakta namn och **FastClock URL**. Förvalt är `https://fastclock.azurewebsites.net`; en annan publik HTTPS-basadress till en kompatibel FastClock-installation kan anges. Länken till API:ts `/api/clocks/{klocknamn}/time` byggs av servern.
 4. För att bara följa klockan behövs inga styrningsuppgifter. För start/stopp anges FastClock-användare och eventuellt lösenord.
 5. Låt hämtningsintervallet vara 2 sekunder om inget annat behövs. Tryck **Spara**.
 6. Servern kontrollerar att klockan kan läsas innan inställningen sparas. Vid fel ligger dialogen och uppgifterna kvar. Avbryt och kryss stänger utan att ändra anslutningen.
@@ -19,13 +19,13 @@ till FastClock själv. Cloud ändras inte.
 
 - **Cloud:** planering och publicerad träffconfig. Inga FastClock-inloggningsuppgifter.
 - **Server:** klocknamn, källa, styrningsuppgifter, hämtning och gemensamt klockläge.
-- **FastClock:** tid, hastighet, paus och start/stopp. Tid/hastighet ändras i FastClock när denna källa är vald.
+- **FastClock:** tid, hastighet (exempelvis 5×), paus, start/stopp och veckodag. Tid/hastighet ändras i FastClock när denna källa är vald, inte på TrainMeet Server. Klockans hastighetsfält är skrivskyddat.
 - **Skärmar/boxar:** visar serverns tid. Klockuppdateringar skickar snapshots, inte nya stationstilldelningar/config.
 
-Kopplingen sparas per träffidentitet och EU/US-region i serverns lokala databas.
+Kopplingen (inklusive FastClock URL) sparas per träffidentitet och EU/US-region i serverns lokala databas.
 En ny publicering av samma träff behåller den. Ett byte till en annan träff
 ärver inte klocknamn eller lösenord. Sena svar från tidigare källa/träff kastas
-bort. Klockans veckodag ändrar inte automatiskt serverns valda trafikdag.
+bort. Klockans veckodag (till exempel `Monday`) visas som **Måndag** i serverns aktuella klock- och dagvyer i stället för *Dag 1*. Den ändrar inte tyst tidtabellens valda trafikdag eller nollställer pågående trafik.
 
 Vid nätfel eller för gammalt svar visas en varning och senast mottagna tid
 fryses. Ingen annan klocka tar tyst över och inget körtillstånd skapas. Servern
@@ -50,8 +50,7 @@ Porteringen utgår från Lovable-projektets `src/hooks/useFastClock.ts` och
 
 Svaret använder `time`, `speed`, `isRunning`, `isPaused`, `isCompleted`,
 `isUnavailable` och stopporsaker. Parametrar URL-kodas. Hämtningen har timeout
-och storleksgräns; omdirigeringar tillåts inte. Den här versionen stöder den
-befintliga FastClock-tjänsten, inte godtyckliga URL:er/andra protokoll.
+och storleksgräns; omdirigeringar tillåts inte. En alternativ HTTPS-basadress stöds för en **kompatibel FastClock-instans**. HTTP, inbyggda inloggningsuppgifter i URL, lokala/privata IP-adresser, interna värdnamn, sökvägar, frågeparametrar och omdirigeringar avvisas. Andra API-protokoll stöds inte.
 
 Styrningsuppgifter skickas bara från servern till denna tjänst via HTTPS vid
 uttryckligt start/stopp. Inställnings-API:t returnerar endast `has_password`,
