@@ -1444,7 +1444,7 @@ async function connectRuntime(request, form, confirmation = null) {
     }
     if (!response.ok) throw new Error(payload.message || t("Träffen kunde inte hämtas"));
     runtimeSyncCodeBoxes.reset();
-    finishModal(form, payload.message || t("Cloud-kopplingen är sparad på servern."));
+    finishModal(form, payload.message || t("3/3 · Cloud-kopplingen är sparad på servern."));
     await Promise.all([refreshServerContext(), refreshRuntime(), refreshInfo()]);
   } catch (error) {
     setMessage(message, error.message, "error");
