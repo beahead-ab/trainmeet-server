@@ -4753,17 +4753,18 @@ function renderClock(snapshot) {
   const darkBackground = !document.querySelector("#display-app").classList.contains("light");
   const stopped = !snapshot.clock?.running;
   const externalMissing = snapshot.clock?.source === "fastclock" && !snapshot.clock.available;
-  const reason = snapshot.clock?.stopped_reason || (externalMissing ? t("Senast mottagna tid visas") : "");
+  const reason = String(snapshot.clock?.message ?? snapshot.clock?.stopped_reason ?? (externalMissing ? t("Senast mottagna tid visas") : "")).trim();
   const meta = `${Number(snapshot.clock?.speed || 1)}× · ${snapshot.clock?.source === "fastclock" ? "FastClock" : t("Intern klocka")}`;
   // Stoppad klocka står still: tiden den visar är tiden den stannade på.
   const since = stopped && !externalMissing && /^\d\d:\d\d/.test(time) ? time.slice(0, 5) : "";
   const renderSignature = [style, globalThis.TrainMeetClockFace?.find(style)?.sha256, darkBackground, showSeconds, stopped, externalMissing, reason, meta, since, us, globalThis.TrainMeetI18n?.getLanguage?.()].join("|");
   if (target.dataset.clockSignature !== renderSignature) {
     target.dataset.clockSignature = renderSignature;
-    // Går klockan fyller siffrorna eller urtavlan skärmen själva; raden under
-    // finns bara för siffror (där den inte kostar storlek) och för en klocka som
-    // stannat eller tappat kontakten.
-    const detail = [since ? `${t("sedan")} <span class="kr-num">${escapeHTML(since)}</span>` : "", escapeHTML(reason)].filter(Boolean).join(" · ");
+    // Clock messages remain visible in both running and stopped states.
+    const detail = since ? `${t("sedan")} <span class="kr-num">${escapeHTML(since)}</span>` : "";
+    // The duplicate makes the loop seamless; assistive technology reads it once.
+    const message = reason
+      ? html`<div class="sc-clock-message" role="status"><div class="sc-clock-message__track"><span class="sc-clock-message__text">${escapeHTML(reason)}</span><span class="sc-clock-message__text" aria-hidden="true">${escapeHTML(reason)}</span></div></div>` : "";
     const status = stopped || externalMissing
       ? html`<div class="sc-stopped"><span class="sc-stopped__dot"></span><span class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan är stoppad")}</span>${detail ? `<span class="sc-stopped__reason">${detail}</span>` : ""}<span class="sc-stopped__meta">${escapeHTML(meta)}</span></div>`
       : digital ? html`<div class="sc-run">${t("Klockan går")} · ${escapeHTML(meta)}</div>` : "";
@@ -4771,9 +4772,13 @@ function renderClock(snapshot) {
     const clock = digital
       ? html`<div class="clock-digital${stopped ? " stopped" : ""}" data-seconds="${showSeconds}"><span class="cd-hm"></span><span class="cd-side"><span class="cd-ap"></span><span class="cd-ss"></span></span></div>`
       : clockSVG(style, darkBackground, showSeconds, stopped);
-    target.innerHTML = html`<div class="sc-clock-layout ${digital ? "sc-clock-layout--digital" : "sc-clock-layout--face"}${stopped || externalMissing ? " is-stopped" : ""}">${clock}${status}</div>`;
+    target.innerHTML = html`<div class="sc-clock-layout ${digital ? "sc-clock-layout--digital" : "sc-clock-layout--face"}${stopped || externalMissing ? " is-stopped" : ""}">${clock}${status}${message}</div>`;
     // En urtavla på en stående skärm får en stående duk; siffror en liggande.
     serverUI.resizeStage?.();
+    const track = target.querySelector(".sc-clock-message__track");
+    // Fixed reading speed in canvas pixels, independent of message length.
+    // The signature guard keeps incoming clock polls from restarting the scroll.
+    track?.getAnimations().forEach(animation => animation.effect.updateTiming({ duration: Math.max(16000, track.scrollWidth / 2 / 48 * 1000) }));
   }
   const digits = target.querySelector(".clock-digital");
   if (digits) {
