@@ -138,6 +138,19 @@ body.server-display { background: var(--kr-bg); }
 .light .sc-stopped { background: var(--kr-amber-soft); }
 .light .sc-stopped__title { color: var(--kr-amber); }
 
+/* Pausorsaken rullar mjukt under klockan, över hela klockvyn. */
+.sc-clock-message { flex-shrink: 0; width: 100%; min-width: 0; overflow: hidden; padding: 16px 0; background: var(--kr-amber-soft); color: var(--kr-ink); font-size: 40px; line-height: 1.3; }
+#display-stage:has(#screen-qr:not([hidden])) .sc-clock-layout:has(.sc-clock-message) { padding-bottom: 120px; gap: 24px; }
+#display-stage:has(#screen-qr:not([hidden])) .sc-clock-layout:has(.sc-clock-message) .clock-face { width: 620px; height: 620px; }
+.sc-clock-message__track { display: flex; width: max-content; min-width: 200%; animation: sc-clock-message-scroll 32s linear infinite; }
+.sc-clock-message__text { flex: 1 0 auto; box-sizing: border-box; padding-inline: 32px 128px; white-space: nowrap; }
+@keyframes sc-clock-message-scroll { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  .sc-clock-message__track { animation: none; display: block; width: 100%; min-width: 0; }
+  .sc-clock-message__text { display: block; white-space: normal; overflow-wrap: anywhere; padding: 0 32px; }
+  .sc-clock-message__text[aria-hidden="true"] { display: none; }
+}
+
 /* På klockskärmen är QR-koderna nere till höger, utan egen ram. */
 #display-stage[data-kind="clock"] .sc-foot { position: absolute; right: 40px; bottom: 28px; }
 #display-stage[data-kind="clock"] .sc-qr { gap: 28px; margin: 0; }
