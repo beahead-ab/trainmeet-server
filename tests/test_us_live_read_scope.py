@@ -17,7 +17,9 @@ class USLiveReadScopeTests(CloudDeliveryFixture):
         self.application.us_store = self.us
         self.package = cloud_package()
         self.application.runtime_fetcher = lambda code, url: CentralRuntimeDownload(deepcopy(self.package), "us-link")
-        self.application.sync_runtime(self.client, {"sync_code": "123456", "confirm_meet_change": True})
+        current = self.application.lifecycle.selected()
+        self.application.sync_runtime(self.client, {"sync_code": "123456", "confirm_meet_change": True,
+            "leaving_selection": current, "leaving_name": (current or {}).get("meet_name") or "BYT"})
         self.actor = self.application.us_access(self.client)[1]
 
     def get(self, path, client=None):

@@ -110,16 +110,16 @@ class TrafficEngine:
                 return CommandAck(command.command_id, "rejected", reason, self.revision, self.revision, {})
             return self._press_locked(command, now=now)
 
-    def adopt_config(self, config: SessionConfig) -> None:
+    def adopt_config(self, config: SessionConfig, *, reset_traffic: bool = False) -> None:
         """Swap a validated idle configuration without replacing gateway objects.
 
         The common lifecycle lock covers the surrounding database transition;
         MQTT and HTTP keep referencing this same engine and revision increases.
         """
         with self._lock:
-            if any(value.state != ConnectionState.FREE for value in self.connections.values()):
+            if not reset_traffic and any(value.state != ConnectionState.FREE for value in self.connections.values()):
                 raise ValueError("Traffic must clear before the configuration changes")
-            if any(value.mode != InteractionMode.IDLE for value in self.panels.values()):
+            if not reset_traffic and any(value.mode != InteractionMode.IDLE for value in self.panels.values()):
                 raise ValueError("Panel interaction must finish before the configuration changes")
             validated = TrafficEngine(config)
             checkpoint = self._checkpoint()

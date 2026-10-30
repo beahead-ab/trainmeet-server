@@ -256,7 +256,26 @@ class SQLiteOperationsStore:
     def ensure_publication(self, publication: RuntimePublication) -> None:
         self._initialize_publication(publication, carry_previous=True)
 
-    def start_meet(self, publication: RuntimePublication) -> None:
+    def leave_meet(self) -> None:
+        """Archive EU time/positions when an explicitly confirmed switch selects US."""
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                clock = self.clock_status()
+                publication_id = clock.get("publication_id")
+                if publication_id:
+                    self._connection.execute("INSERT INTO runtime_meet_archives VALUES(?,?,?,?,?)",
+                        (str(uuid4()), publication_id, json.dumps(clock), json.dumps(self.positions()), _now_iso()))
+                self._connection.execute("UPDATE tkl_shifts SET status='closed',ended_at=?,updated_at=? WHERE status!='closed'", (_now_iso(), _now_iso()))
+                self._connection.execute("DELETE FROM runtime_clock")
+                self._connection.execute("DELETE FROM train_positions")
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+
+    def start_meet(self, publication: RuntimePublication, *, reset_existing: bool = False) -> None:
         """Explicit meet switch: archive runtime, stop clock, don't transfer grants.
 
         Unlike a same-meet config adoption, the operator is selecting a different
@@ -265,9 +284,11 @@ class SQLiteOperationsStore:
         """
         with self._lock:
             blockers = self.start_meet_blockers(publication)
-            if blockers:
+            if blockers and not reset_existing:
                 raise RuntimePublicationError(" ".join(blockers))
             self._initialize_publication(publication, carry_previous=False)
+            if blockers:
+                self.reset_meet(publication)
             # Tågen står där tidtabellen säger vid planens start (#136).
             self.place_trains_by_timetable(publication, publication.active_day, float(_plan_start_seconds(publication)))
 
