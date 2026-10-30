@@ -164,13 +164,13 @@ class ExternalClock:
         # Retain the original monotonic anchor until the provider changes minute.
         if (sample.get("minute_precision") and previous and previous.get("minute_precision")
                 and sample["running"] and previous["running"] and sample["speed"] == previous["speed"]
-                and sample["seconds"] == previous["seconds"]):
+                and int(sample["seconds"] // 60) == int(previous["seconds"] // 60)):
             self.error = ""
             self.last_seen = now
         else:
             if (sample.get("minute_precision") and previous and previous.get("minute_precision")
                     and sample["running"] and previous["running"] and sample["speed"] == previous["speed"]
-                    and sample["seconds"] != previous["seconds"] and self.last_seen):
+                    and int(sample["seconds"] // 60) != int(previous["seconds"] // 60) and self.last_seen):
                 # The minute changed between the last and current successful
                 # polls. Estimate the provider's minute boundary at their
                 # midpoint. That removes the persistent one-minute lag without
