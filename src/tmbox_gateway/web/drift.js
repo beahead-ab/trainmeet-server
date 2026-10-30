@@ -116,15 +116,17 @@
   // Klockan mellan uppdateringarna. app.js hämtar läget när något händer och
   // annars var 30:e sekund; klockan, nu-linjen och tågen på linjen går ändå
   // vidare i takt med träffklockan. Varje ny klocka får sin mottagningstid.
-  let clockSeen = { clock: null, at: 0 };
+  const clockSmoother = globalThis.TrainMeetClockSync.create();
+  let lastClock = null;
   function liveSeconds() {
     const clock = ctx.clock || ctx.snapshot?.clock;
-    const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(String(clock?.time ?? ""));
-    if (!match) return null;
-    if (clockSeen.clock !== clock) clockSeen = { clock, at: performance.now() };
-    const base = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
-    const run = clock.running ? (performance.now() - clockSeen.at) / 1000 * Number(clock.speed || 1) : 0;
-    return ((base + run) % 86400 + 86400) % 86400;
+    if (!clock) return null;
+    const now = performance.now();
+    if (lastClock !== clock) {
+      clockSmoother.accept(clock, now);
+      lastClock = clock;
+    }
+    return clockSmoother.seconds(now);
   }
   const clockText = (seconds) => [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, Math.floor(seconds) % 60]
     .map((part) => String(part).padStart(2, "0")).join(":");
