@@ -1000,6 +1000,7 @@ document.querySelector("#clock-source-form").addEventListener("submit", async ev
   if (source === "fastclock") {
     Object.assign(data, { clock_name: document.querySelector("#fastclock-name").value.trim(),
       user: document.querySelector("#fastclock-user").value.trim(),
+      url: document.querySelector("#fastclock-url").value.trim(),
       poll_interval: Number(document.querySelector("#fastclock-interval").value) });
     const password = document.querySelector("#fastclock-password").value;
     if (password || document.querySelector("#fastclock-clear-password").checked) data.password = document.querySelector("#fastclock-clear-password").checked ? "" : password;
@@ -2037,7 +2038,7 @@ function refreshMeetCalendar() {
   document.querySelector("#meet-day-change-note").textContent = snapshot.calendar.change_time_set
     ? t("Fast tid. Töm fältet för automatiskt: en timme före första tåget.")
     : t("Tomt: automatiskt, en timme före första tåget ({time})", { time: snapshot.calendar.change_time || "05:00" });
-  document.querySelector("#meet-calendar-note").textContent = t("I dag: Dag {n} · {day}", { n: snapshot.calendar.day_number, day: snapshot.calendar.weekday });
+  document.querySelector("#meet-calendar-note").textContent = t("I dag: {day}", { day: meetDayLabel(snapshot) });
   document.querySelector("#meet-day-change-mode").value = snapshot.calendar.day_change_mode === "auto" ? "auto" : "manual";
   renderDayChangeModeNote();
   form.hidden = false;
@@ -2894,6 +2895,7 @@ async function refreshLocalClock() {
       const settings = await sourceResponse.json();
       document.querySelector("#clock-source").value = settings.source || "internal";
       document.querySelector("#fastclock-name").value = settings.clock_name || "";
+      document.querySelector("#fastclock-url").value = settings.url || "https://fastclock.azurewebsites.net";
       document.querySelector("#fastclock-user").value = settings.user || "";
       document.querySelector("#fastclock-password").value = "";
       document.querySelector("#fastclock-clear-password").checked = false;
@@ -3710,10 +3712,7 @@ let displayPollTimer = null;
 let displayRequest = null;
 let displayToolbarTimer = null;
 let displayTickTimer = null;
-let displayClockAnchorSeconds = null;
-let displayClockAnchorAt = null;
-let displayClockAnchorRunning = null;
-let displayClockAnchorSpeed = null;
+const displayClockSynchronizer = globalThis.TrainMeetClockSync.create();
 // Minutvisarens studs för tavlor vars minutvisare hoppar (clock-face.js), en per
 // ritad klocka: skärmens, deltagarvyns och förhandsbildernas stör inte varandra.
 const minuteBounces = new WeakMap();
@@ -4610,38 +4609,18 @@ function parsedClockSeconds(snapshot) {
   return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
 }
 
-function circularClockDelta(left, right) {
-  return ((left - right + 43200) % 86400 + 86400) % 86400 - 43200;
-}
-
 function syncDisplayClock(snapshot, receivedAt = performance.now()) {
-  const serverSeconds = parsedClockSeconds(snapshot);
-  const running = Boolean(snapshot.clock?.running);
-  const speed = Number(snapshot.clock?.speed || 1);
-  const stateChanged = displayClockAnchorRunning !== running || displayClockAnchorSpeed !== speed;
-  let predicted = displayClockAnchorSeconds;
-  if (predicted !== null && displayClockAnchorAt !== null && displayClockAnchorRunning) {
-    predicted += (receivedAt - displayClockAnchorAt) / 1000 * Number(displayClockAnchorSpeed || 1);
-  }
-  const correction = predicted === null ? Infinity : Math.abs(circularClockDelta(serverSeconds, predicted));
-
-  // Servern skickar hela sekunder. Små skillnader lämnas åt den lokala,
-  // monotona klockan så att visarna inte rycker vid varje synkning.
-  if (displayClockAnchorSeconds === null || stateChanged || !running || correction > 1.25) {
-    displayClockAnchorSeconds = serverSeconds;
-    displayClockAnchorAt = receivedAt;
-  }
-  displayClockAnchorRunning = running;
-  displayClockAnchorSpeed = speed;
+  displayClockSynchronizer.accept(snapshot.clock, receivedAt);
 }
 
 function currentClockSeconds(snapshot) {
-  if (displayClockAnchorSeconds === null || displayClockAnchorAt === null) syncDisplayClock(snapshot);
-  let seconds = Number(displayClockAnchorSeconds || 0);
-  if (displayClockAnchorRunning) {
-    seconds += (performance.now() - displayClockAnchorAt) / 1000 * Number(displayClockAnchorSpeed || 1);
+  const now = performance.now();
+  let seconds = displayClockSynchronizer.seconds(now);
+  if (seconds === null) {
+    syncDisplayClock(snapshot, now);
+    seconds = displayClockSynchronizer.seconds(now);
   }
-  return ((seconds % 86400) + 86400) % 86400;
+  return seconds ?? 0;
 }
 
 function formatClockTime(seconds) {
@@ -4964,12 +4943,26 @@ function renderConnectionBadge(snapshot) {
   document.querySelector("#display-connection-code").textContent = connection.code;
 }
 
-// Träffens dag: "Dag 2 · Lör" när träffen har en kalender, annars trafikdagen.
+// FastClock owns the displayed weekday, but never silently changes which
+// timetable day is being operated. That remains an explicit traffic decision.
+function externalWeekdayName(clock) {
+  const week = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
+  const index = week.indexOf(clock?.weekday);
+  if (clock?.source !== "fastclock" || index < 0 || !clock?.available) return "";
+  const locale = globalThis.TrainMeetI18n?.getLocale?.() || "sv-SE";
+  const word = new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" })
+    .format(new Date(Date.UTC(2024, 0, index + 1)));
+  return word.charAt(0).toLocaleUpperCase(locale) + word.slice(1);
+}
+// Träffens dag i alla aktuella statusrader och skärmar.
 function meetDayLabel(snapshot) {
+  const externalDay = externalWeekdayName(snapshot?.clock);
+  if (externalDay) return externalDay;
   const calendar = snapshot?.calendar;
   if (!calendar) return snapshot?.active_day || "";
   return t("Dag {n} · {day}", { n: calendar.day_number, day: calendar.weekday || snapshot.active_day || "" });
 }
+globalThis.meetDayLabel = meetDayLabel;
 
 // ── Hur mycket förseningar och för tidiga tåg som visas ───────────────────
 // Fem nivåer (drift-model.js deviationView). Admin sätter träffens förval
