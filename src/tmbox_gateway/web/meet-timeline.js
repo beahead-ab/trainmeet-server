@@ -29,7 +29,21 @@
   // ── Tid och läge på tidslinjen ────────────────────────────────────────
   const pad = (n) => String(n).padStart(2, "0");
   const clock = (seconds) => { const m = Math.floor(seconds / 60) % 1440; return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
-  const dayLabel = (day) => t("Dag {n} · {day}", { n: day.day_number, day: day.weekday });
+  // While FastClock supplies a weekday, use it for all the displayed days.
+  // Day numbers remain separate identifiers for traffic and time-machine APIs.
+  const dayLabel = (day) => {
+    const now = view.data?.now;
+    const week = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
+    const index = week.indexOf(now?.weekday);
+    if (now?.external && index >= 0) {
+      const offset = (day.day_number - now.day_number) % 7;
+      const date = new Date(Date.UTC(2024, 0, 1 + ((index + offset + 7) % 7)));
+      const locale = globalThis.TrainMeetI18n?.getLocale?.() || "sv-SE";
+      const name = new Intl.DateTimeFormat(locale, {weekday: "long", timeZone: "UTC"}).format(date);
+      return name.charAt(0).toLocaleUpperCase(locale) + name.slice(1);
+    }
+    return t("Dag {n} · {day}", { n: day.day_number, day: day.weekday });
+  };
 
   /** Dygnen med sin plats på axeln: offset är sekunder från första dygnets början. */
   function segments() {

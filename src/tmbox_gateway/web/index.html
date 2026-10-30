@@ -1051,7 +1051,8 @@
   <label>Klockkälla<select id="clock-source"><option value="internal">Intern serverklocka</option><option value="fastclock">FastClock · extern träffklocka</option></select></label>
   <fieldset id="fastclock-fields" hidden disabled>
     <label>Klocknamn<input id="fastclock-name" maxlength="100" autocomplete="off"></label>
-    <p>Servern läser från fastclock.azurewebsites.net. Klocknamnet måste stämma exakt.</p>
+    <label>FastClock URL (HTTPS)<input id="fastclock-url" type="url" maxlength="255" value="https://fastclock.azurewebsites.net" placeholder="https://fastclock.azurewebsites.net" autocomplete="url" required></label>
+    <p>Förvalet är FastClock på Azure. Ange en annan publik HTTPS-basadress om klockan finns på en annan kompatibel server.</p>
     <label>Användare för start/stopp (valfritt)<input id="fastclock-user" maxlength="100" autocomplete="off"></label>
     <label>Lösenord för start/stopp (valfritt)<input id="fastclock-password" type="password" maxlength="256" autocomplete="new-password"></label>
     <p id="fastclock-password-note"></p>
@@ -1402,6 +1403,7 @@
     <script src="/assets/tmbox-attention.js?v=20260821-1" defer></script>
     <script src="/assets/qrcode.js" defer></script>
     <script src="/assets/clock-face.js" defer></script>
+    <script src="/assets/clock-sync.js" defer></script>
     <script src="/assets/drift-model.js" defer></script>
     <script src="/assets/train-graph.js" defer></script>
     <script src="/assets/markdown.js" defer></script>
