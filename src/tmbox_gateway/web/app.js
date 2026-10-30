@@ -2882,6 +2882,11 @@ async function refreshLocalClock() {
     ? `${t("FastClock")} · ${clock.external_name || ""} · ${t(clock.available ? "Ansluten" : "Kontakt saknas – senast mottagna tid visas")}`
     : t("Intern serverklocka");
   sourceStatus.classList.toggle("error", external && !clock.available);
+  const settingsSourceStatus = document.querySelector("#clock-source-settings-status");
+  if (settingsSourceStatus) {
+    settingsSourceStatus.textContent = sourceStatus.textContent;
+    settingsSourceStatus.classList.toggle("error", external && !clock.available);
+  }
   document.querySelector("#clock-adjust").disabled = external;
   if (!document.querySelector("#clock-source-modal").open) {
     const sourceResponse = await authorizedFetch("/v1/clock/source", { cache: "no-store" });
