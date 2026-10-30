@@ -9,7 +9,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function() {
   "use strict";
   const DAY = 86400;
-  const MAX_SLEW_RATE = 0.4;
+  const MAX_SLEW_RATE = 0.5;
   const RESET_THRESHOLD = 120;
   const wrap = seconds => ((seconds % DAY) + DAY) % DAY;
   const delta = (target, current) => wrap(target - current + DAY / 2) - DAY / 2;
