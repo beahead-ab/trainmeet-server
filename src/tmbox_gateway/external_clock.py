@@ -130,6 +130,7 @@ def parse_status(data):
     return {"seconds": parts[0] * 3600 + parts[1] * 60 + (parts[2] if len(parts) > 2 else 0),
             "speed": speed, "running": running, "stopped_reason": str(reason)[:160] if not running else None,
             "minute_precision": len(parts) == 2,
+            "explicit_zero_seconds": len(parts) == 3 and parts[2] == 0,
             "weekday": _WEEKDAYS.get(weekday.strip().casefold(), "") if isinstance(weekday, str) else ""}
 
 
@@ -163,6 +164,21 @@ class ExternalClock:
     def _accept(self, sample):
         now = self.now()
         previous = self.sample
+        # HH:MM:00 on every poll is also a minute-only source, but a
+        # legitimate exact :00 reading on a seconds-capable source must not
+        # be mistaken for coarse precision. Detect repeated zero-second
+        # readings and retain the original monotonic anchor.
+        if (sample.get("explicit_zero_seconds") and previous
+                and sample["running"] and previous["running"]
+                and sample["speed"] == previous["speed"]
+                and int(sample["seconds"] // 60) == int(previous["seconds"] // 60)
+                and (previous.get("explicit_zero_seconds") or previous.get("minute_precision"))):
+            sample["minute_precision"] = True
+            previous["minute_precision"] = True
+        elif (sample.get("explicit_zero_seconds") and previous
+                and previous.get("minute_precision") and sample["running"]
+                and previous["running"] and sample["speed"] == previous["speed"]):
+            sample["minute_precision"] = True
         # Some FastClock instances return HH:MM only. Polling the same value every
         # two seconds must not reset the clock to :00 and make the hands bounce.
         # Retain the original monotonic anchor until the provider changes minute.
