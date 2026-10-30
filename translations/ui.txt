@@ -1472,3 +1472,6 @@ Connect meet clock|Anslut träffklocka|Tilslut træfur|Koble til treffklokke|Mod
 FastClock URL (HTTPS)|FastClock-URL (HTTPS)|FastClock-URL (HTTPS)|FastClock-URL (HTTPS)|FastClock-URL (HTTPS)
 The default is FastClock on Azure. Enter another public HTTPS base address if the clock is hosted on another compatible server.|Förvalet är FastClock på Azure. Ange en annan publik HTTPS-basadress om klockan finns på en annan kompatibel server.|Standard er FastClock på Azure. Angiv en anden offentlig HTTPS-basisadresse, hvis uret ligger på en anden kompatibel server.|Standard er FastClock på Azure. Oppgi en annen offentlig HTTPS-basisadresse hvis klokken kjører på en annen kompatibel server.|Standardmäßig wird FastClock auf Azure verwendet. Gib eine andere öffentliche HTTPS-Basisadresse ein, wenn die Uhr auf einem anderen kompatiblen Server läuft.
 Today: {day}|I dag: {day}|I dag: {day}|I dag: {day}|Heute: {day}
+Monday short|Mån|Man|Man|Mo
+Saturday short|Lör|Lør|Lør|Sa
+Sunday short|Sön|Søn|Søn|So
