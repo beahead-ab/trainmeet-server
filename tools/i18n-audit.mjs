@@ -42,7 +42,7 @@ const pkg = path.join(repo, 'src/tmbox_gateway');
 const NEUTRAL_WORDS = new Set(['TrainMeet', 'Server', 'TMBox', 'TMBoxes', 'TMBoxar', 'TMBoxen', 'TKL', 'Cloud', 'US', 'EU',
   'Wi-Fi', 'WiFi', 'MQTT', 'QR', 'ID', 'OK', 'TWC', 'MP', 'ESP32', 'ESP8266', 'iPhone', 'iOS', 'Android', 'Raspberry', 'Pi',
   'Inter', 'Linux', 'macOS', 'Windows', 'GitHub', 'HTTP', 'HTTPS', 'URL', 'SSID', 'LCD', 'PIN', 'API', 'JSON', 'CSV', 'PDF',
-  'v1', 'v2', 'UTC', 'Train', 'Meet', 'SE', 'DK', 'DE', 'NO', 'GB', 'FastClock', 'TrainMeetMessages', 'build']);
+  'v1', 'v2', 'UTC', 'Train', 'Meet', 'SE', 'DK', 'DE', 'NO', 'GB', 'FastClock', 'TrainMeetMessages', 'build', 'Mån', 'Lör', 'Sön');
 const LETTER = /[A-Za-zÅÄÖåäöÆØæøÜüßÉé]/;
 const WORD = /[A-Za-zÅÄÖåäöÆØæøÜüßÉé0-9-]+/g;
 export function isLanguage(text) {
@@ -556,7 +556,7 @@ export const SURFACES = {
     catalog: ['i18n-messages.js', 'meet-type-messages.js', 'shell-messages.js', 'participant-messages.js'].map(web),
     html: [web('index.html')],
     css: fs.readdirSync(path.join(pkg, 'web')).filter((name) => name.endsWith('.css')).map(web),
-    js: ['app.js', 'drift.js', 'drift-model.js', 'train-graph.js', 'about-view.js', 'markdown.js', 'live-events.js', 'participant.js', 'server-ui.js', 'settings.js', 'pi-network.js', 'display-feed.js', 'day-change.js', 'clock-face.js', 'kr-theme.js', 'data-page.js', 'meet-timeline.js'].map(web),
+    js: ['app.js', 'drift.js', 'drift-model.js', 'train-graph.js', 'about-view.js', 'markdown.js', 'live-events.js', 'participant.js', 'server-ui.js', 'settings.js', 'pi-network.js', 'display-feed.js', 'day-change.js', 'clock-face.js', 'clock-sync.js', 'kr-theme.js', 'data-page.js', 'meet-timeline.js'].map(web),
     skip: {'app.js': UNREACHABLE_APP},
   },
   'US pages': {
