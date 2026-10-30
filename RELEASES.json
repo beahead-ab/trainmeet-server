@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.13.4",
+    "date": "2026-10-30",
+    "notes": [
+      "FastClock: fix minute resets, allow configurable HTTPS URL, and display provider weekday"
+    ]
+  },
+  {
     "version": "4.13.3",
     "date": "2026-10-30",
     "notes": [
