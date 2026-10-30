@@ -80,6 +80,9 @@ class ProviderTests(unittest.TestCase):
         self.now += 2
         previous = self.clock.status()["seconds"]
         self.assertTrue(self.clock.poll())
+        self.assertEqual(self.clock.status()["seconds"], previous,
+                         "a poll at the same instant must not reset time")
+        self.now += 2
         self.assertGreater(self.clock.status()["seconds"], previous)
 
     def test_second_precision_is_followed_exactly(self):
