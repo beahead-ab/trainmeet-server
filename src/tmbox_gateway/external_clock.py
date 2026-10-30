@@ -185,11 +185,10 @@ class ExternalClock:
         # Some FastClock instances return HH:MM only. Polling the same value every
         # two seconds must not reset the clock to :00 and make the hands bounce.
         # Retain the original monotonic anchor until the provider changes minute.
-        if (sample.get("minute_precision") and previous and previous.get("minute_precision")
-                and sample["running"] and previous["running"] and sample["speed"] == previous["speed"]
-                and ((sample["minute_precision"] and previous["minute_precision"]
+        if (previous and sample["running"] and previous["running"] and sample["speed"] == previous["speed"]
+                and ((sample.get("minute_precision") and previous.get("minute_precision")
                       and int(sample["seconds"] // 60) == int(previous["seconds"] // 60))
-                     or (not sample["minute_precision"] and not previous["minute_precision"]
+                     or (not sample.get("minute_precision") and not previous.get("minute_precision")
                          and sample["seconds"] == previous["seconds"]))):
             self.error = ""
             self.last_seen = now
