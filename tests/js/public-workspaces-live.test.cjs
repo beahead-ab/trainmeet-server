@@ -41,9 +41,8 @@ const root = path.resolve(__dirname, '../..');
     await screenshot('participant');
     const admin = await browser.newContext({locale:'sv-SE'});
     assert.equal((await admin.request.post(urls.eu+'/v1/auth/login',{data:{email:'smoke-admin@example.se',password:'isolated-browser-test'}})).status(),200);
-    // The participant view shows the typed Wi-Fi as text, never as a QR: the
-    // reader is already on the network and a TMBox cannot scan. The Wi-Fi QR,
-    // with the password in it, belongs on the screens.
+    // The guest's share sheet reuses the same typed meet Wi-Fi and local QR
+    // generator as the public screens; the TMBox guide remains QR-free.
     const wifi = {screens: ['clock'], wifi_name: 'Träff; ÅÄÖ', wifi_password: 'test-only:secret'};
     assert.equal((await admin.request.post(urls.eu+'/v1/display/connection',{data:wifi})).status(),200);
     await page.reload();
@@ -53,6 +52,15 @@ const root = path.resolve(__dirname, '../..');
     assert.match(await page.locator('#pv-wifi-note').innerText(), /som boxen frågar efter/);
     assert.equal(await page.locator('#pv-connect-card svg').count(), 0);
     await page.locator('#pv-connect-close').click();
+    await page.locator('#pv-share-open').click();
+    await page.locator('#pv-share-card[open]').waitFor();
+    assert.equal(await page.locator('#pv-share-codes svg').count(), 2, 'Guest can share both Wi-Fi and meet');
+    const shareSignature = await page.locator('#pv-share-codes').getAttribute('data-signature');
+    assert.ok(shareSignature.startsWith('WIFI:T:WPA;S:Träff\\\\; ÅÄÖ;P:test-only\\\\:secret;;|'), 'Guest Wi-Fi QR encodes the configured shared network, never a private Pi profile');
+    assert.equal(await page.locator('#pv-share-link').inputValue(), urls.eu + '/', 'Meet QR uses the current host, protocol and port');
+    await page.locator('#pv-share-close').click();
+    assert.equal(await page.locator('#pv-share-card[open]').count(), 0);
+    assert.deepEqual(await page.locator('#pv-screens-list a').evaluateAll(elements => elements.map(x => new URL(x.href).pathname)), ['/display/clock', '/display/dashboard', '/display/topology', '/display/graph']);
     const clockPage = await visitor.newPage();
     await clockPage.setViewportSize({width:1920,height:1080});
     await clockPage.goto(urls.eu+'/display/clock');
