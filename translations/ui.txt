@@ -1463,3 +1463,9 @@ Track rows|Spårrader|Sporrækker|Sporrader|Gleiszeilen
 All stations|Alla stationer|Alle stationer|Alle stasjoner|Alle Betriebsstellen
 Track rows in the train graph|Spårrader i tågdiagrammet|Sporrækker i togdiagrammet|Sporrader i togdiagrammet|Gleiszeilen im Bildfahrplan
 CDA-TKL: enter the address and the code under ⋯ → TrainMeet and press Connect. The interlocking chooses its station itself.|CDA-TKL: skriv adressen och koden under ⋯ → TrainMeet och tryck Anslut. Ställverket väljer sin station själv.|CDA-TKL: skriv adressen og koden under ⋯ → TrainMeet, og tryk Tilslut. Sikringsanlægget vælger selv sin station.|CDA-TKL: skriv inn adressen og koden under ⋯ → TrainMeet og trykk Koble til. Sikringsanlegget velger stasjonen sin selv.|CDA-TKL: Adresse und Code unter ⋯ → TrainMeet eingeben und auf Verbinden tippen. Das Stellwerk wählt seinen Bahnhof selbst.
+Meet clock source|Träffklockans källa|Træfurets kilde|Treffklokkens kilde|Quelle der Modellzeituhr
+Controls the time on screens, TKL and TMBoxes|styr tiden på skärmar, TKL och TMBoxar|styrer tiden på skærme, TKL og TMBoxe|styrer tiden på skjermer, TKL og TMBoxer|steuert die Zeit auf Anzeigen, TKL und TMBoxen
+Choose the server's own clock or an external FastClock for this meet.|Välj serverns egen klocka eller en extern FastClock för träffen.|Vælg serverens eget ur eller et eksternt FastClock til træffet.|Velg serverens egen klokke eller en ekstern FastClock for treffet.|Wähle für dieses Treffen die Serveruhr oder eine externe FastClock.
+Connect meet clock…|Anslut träffklocka…|Tilslut træfur…|Koble til treffklokke…|Modellzeituhr verbinden…
+Internal server clock|Intern serverklocka|Internt serverur|Intern serverklokke|Interne Serveruhr
+Connect meet clock|Anslut träffklocka|Tilslut træfur|Koble til treffklokke|Modellzeituhr verbinden
