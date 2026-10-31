@@ -397,7 +397,7 @@ def _reset_operational_state(database_path: Path, state_directory: Path) -> None
             connection.execute(
                 "DELETE FROM clients WHERE kind NOT IN ('web_admin', 'swift_admin')"
             )
-            connection.execute("DELETE FROM runtime_settings WHERE key NOT IN ('server_name', 'discovery_server_id')")
+            connection.execute("DELETE FROM runtime_settings WHERE key NOT IN ('server_name', 'discovery_server_id', 'cloud_installation_key')")
     finally:
         connection.close()
     (state_directory / "connection-code.txt").unlink(missing_ok=True)

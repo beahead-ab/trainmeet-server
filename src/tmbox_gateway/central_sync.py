@@ -52,6 +52,10 @@ def fetch_runtime_download(
     endpoint_url: str = DEFAULT_RUNTIME_PUBLICATION_URL,
     *,
     server_name: str | None = None,
+    installation_key: str | None = None,
+    previous_link: str | None = None,
+    preview: bool = False,
+    expected_checksum: str | None = None,
     timeout: float = 20,
 ) -> CentralRuntimeDownload:
     code = "".join(character for character in sync_code if character.isdigit())
@@ -62,10 +66,15 @@ def fetch_runtime_download(
     query = {"code": code}
     if server_name and server_name.strip():
         query["server_name"] = server_name.strip()
+    if preview:
+        query["preview"] = "1"
     separator = "&" if "?" in endpoint_url else "?"
     request = Request(
         f"{endpoint_url}{separator}{urlencode(query)}",
-        headers={"Accept": "application/json", "User-Agent": "TrainMeet-Server/0.6"},
+        headers={"Accept": "application/json", "User-Agent": "TrainMeet-Server/0.6",
+                 **({"X-TrainMeet-Installation": installation_key} if installation_key else {}),
+                 **({"X-TrainMeet-Previous-Link": previous_link} if previous_link else {}),
+                 **({"X-TrainMeet-Package-Checksum": expected_checksum} if expected_checksum else {})},
     )
     try:
         with urlopen(request, timeout=timeout) as response:

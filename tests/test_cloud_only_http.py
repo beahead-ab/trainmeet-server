@@ -48,6 +48,10 @@ class CloudOnlyDeliveryTests(unittest.TestCase):
         return CentralRuntimeDownload(copy.deepcopy(self.offered), "test-link")
 
     def connect(self, **data):
+        if data.get("confirm_meet_change"):
+            current = self.app.lifecycle.selected()
+            data.setdefault("leaving_selection", current)
+            data.setdefault("leaving_name", (current or {}).get("meet_name") or "BYT")
         return self.app.sync_runtime(self.admin, {"sync_code": "123456", **data})
 
     def test_cloud_selects_one_meet_hot_without_restart(self):
@@ -70,6 +74,90 @@ class CloudOnlyDeliveryTests(unittest.TestCase):
         again = self.connect()
         self.assertEqual("Den valda configen används redan.", again["message"])
         self.assertTrue(again["linked"])
+
+    def test_switch_requires_exact_name_and_current_selection_before_claim(self):
+        self.connect()
+        current = self.app.lifecycle.selected()
+        self.app.control_clock(self.admin, {"action": "start", "time": "07:00"})
+        before = self.operations._connection.execute("SELECT * FROM runtime_clock").fetchone()
+        self.offered = runtime_package_v3(publication_id="other")
+        self.offered["meet"]["id"] = "other-meet"
+        with patch.object(self.app, "runtime_fetcher") as claim:
+            # Preview is read-only, separate from the claim operation.
+            self.app.runtime_preview_fetcher = lambda *_: CentralRuntimeDownload(copy.deepcopy(self.offered))
+            for extra in ({}, {"confirm_meet_change": True},
+                          {"confirm_meet_change": True, "leaving_name": "wrong", "leaving_selection": current},
+                          {"confirm_meet_change": True, "leaving_name": current["meet_name"], "leaving_selection": {**current, "generation": 0}}):
+                with self.subTest(extra=extra), self.assertRaises(HTTPAPIError) as error:
+                    self.app.sync_runtime(self.admin, {"sync_code": "123456", **extra})
+                self.assertEqual("meet_change_required", error.exception.code)
+                self.assertEqual(current, self.app.lifecycle.selected())
+                self.assertEqual(before, self.operations._connection.execute("SELECT * FROM runtime_clock").fetchone())
+            claim.assert_not_called()
+
+    def test_confirmed_switch_resets_running_clock_and_live_engine_traffic(self):
+        self.connect()
+        self.app.control_clock(self.admin, {"action": "start", "time": "07:00"})
+        self.app.engine.connections["connection-a-b"].state = ConnectionState.OCCUPIED
+        self.identities.register_client("box", "Benny", DeviceKind.ESP32_PANEL, "secret", ("panel-a",), station_id="station-a")
+        self.offered = runtime_package_v3(publication_id="new-meet")
+        self.offered["meet"]["id"] = "other-meet"
+        with patch.object(self.app, "_backup_before", wraps=self.app._backup_before) as backup:
+            result = self.connect(confirm_meet_change=True)
+        self.assertTrue(result["activated"])
+        backup.assert_called_once_with("träffbyte")
+        self.assertFalse(self.operations.clock_status()["running"])
+        self.assertEqual("new-meet", self.operations.clock_status()["publication_id"])
+        self.assertTrue(all(c.state == ConnectionState.FREE for c in self.app.engine.connections.values()))
+        self.assertIsNone(self.identities.client("box").station_id)
+        self.assertIsNone(self.app.lifecycle.transition())
+
+    def test_backup_failure_keeps_old_meet_and_clock(self):
+        self.connect()
+        current = self.app.lifecycle.selected()
+        self.app.control_clock(self.admin, {"action": "start", "time": "07:00"})
+        self.offered = runtime_package_v3(publication_id="other")
+        self.offered["meet"]["id"] = "other-meet"
+        with patch.object(self.app, "_backup_before", side_effect=HTTPAPIError(500, "backup_failed", "failed")):
+            with self.assertRaises(HTTPAPIError):
+                self.connect(confirm_meet_change=True)
+        self.assertEqual(current, self.app.lifecycle.selected())
+        self.assertTrue(self.operations.clock_status()["running"])
+        self.assertIsNone(self.app.lifecycle.transition())
+
+    def test_leaving_us_closes_session_and_stops_its_clock(self):
+        self.offered = us_package()
+        self.connect()
+        self.app.control_clock(self.admin, {"action": "start", "time": "07:00"})
+        old = self.us.current_session()
+        self.assertTrue(old["clock"]["running"])
+        self.offered = runtime_package_v3(publication_id="eu-new")
+        self.connect(confirm_meet_change=True)
+        self.assertIsNone(self.us.current_session())
+        archived = self.us._load(old["id"])
+        self.assertEqual("closed", archived["status"])
+        self.assertFalse(archived["clock"]["running"])
+        self.assertFalse(self.operations.clock_status()["running"])
+
+    def test_return_to_previously_used_meet_starts_fresh(self):
+        self.connect()
+        original = copy.deepcopy(self.offered)
+        self.offered = runtime_package_v3(publication_id="other")
+        self.offered["meet"]["id"] = "other-meet"
+        self.connect(confirm_meet_change=True)
+        self.offered = original
+        self.assertTrue(self.connect(confirm_meet_change=True)["activated"])
+        self.assertFalse(self.operations.clock_status()["running"])
+        self.assertEqual("first", self.app.engine.config.id)
+
+    def test_installation_key_is_persistent_and_not_public_status(self):
+        key = self.runtime.installation_key()
+        second = SQLiteRuntimeStore(self.runtime.path)
+        try:
+            self.assertEqual(key, second.installation_key())
+            self.assertNotIn(key, json.dumps(self.app.server_context(self.admin)))
+        finally:
+            second.close()
 
     def test_tmbox_workspace_requires_eu_meet_and_admin(self):
         self.assertEqual(["administration"], self.app.server_context(self.admin)["available_workspaces"])
@@ -151,7 +239,7 @@ class CloudOnlyDeliveryTests(unittest.TestCase):
         with self.assertRaises(HTTPAPIError) as refused:
             self.connect()
         self.assertEqual("meet_change_required", refused.exception.code)
-        self.assertIn("Kryssa i rutan för att byta träff", str(refused.exception))
+        self.assertEqual(self.app.lifecycle.selected(), refused.exception.details["confirmation"]["selection"])
         result = self.connect(confirm_meet_change=True)
         self.assertEqual("other", self.runtime.active().publication_id)
         self.assertNotIn("bevarats", result["message"])

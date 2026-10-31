@@ -1112,6 +1112,16 @@ class SQLiteRuntimeStore:
         self._save_setting("server_name", value)
         return value
 
+    def installation_key(self) -> str:
+        """Persistent possession credential; never publish it in status responses."""
+        import secrets
+        with self._lock:
+            value = self._setting("cloud_installation_key")
+            if not value:
+                value = secrets.token_urlsafe(36)
+                self._save_setting("cloud_installation_key", value)
+            return value
+
     def server_name(self) -> str | None:
         return self._setting("server_name")
 
