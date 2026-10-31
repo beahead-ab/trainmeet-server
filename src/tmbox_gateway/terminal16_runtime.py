@@ -281,7 +281,19 @@ class Terminal16Service:
             views = self._views(device)
             if views is None:
                 return {"station": None, "side": None, "clock": None, "revision": 0, "tracks": [], "rows": []}
-            return views.station_timetable(device)
+            result = views.station_timetable(device)
+            # Stationens sparade spårvisning (#46). Bara presentation: tangenternas
+            # spårval och trafiken använder fortfarande hela katalogen.
+            publication = self.service.publication()
+            if publication is not None:
+                from . import track_display
+                station = views.terminals[device].station
+                saved = self.service.runtime_store.track_display(publication.meet_id, station)
+                config = views.engine.config
+                result["tracks"] = track_display.visible_labels(config, station, saved)
+                result["track_display"] = track_display.describe(
+                    config, station, saved, track_display.operating_points(publication.payload, station))
+            return result
 
     def command(self, device, body):
         with self.service.operations_store.command_lock:
