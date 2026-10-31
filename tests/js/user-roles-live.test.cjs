@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '../..');
 (async () => {
   const fixture = spawn('python3', [path.join(__dirname, 'account-mail-live-fixture.py')], {
-    cwd: root, env: { ...process.env, PYTHONPATH: [path.join(root, 'src'), path.join(root, 'tests')].join(path.delimiter) },
+    cwd: root, env: { ...process.env, TRAINMEET_TEST_PUBLISHED_MEET: '1', PYTHONPATH: [path.join(root, 'src'), path.join(root, 'tests')].join(path.delimiter) },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   let browser, stderr = '';
@@ -22,6 +22,8 @@ const root = path.resolve(__dirname, '../..');
     browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) });
     const base = urls.offline;
     const setup = await browser.newContext();
+    const meet = (await (await setup.request.get(base + '/v1/workspaces')).json()).selected_meet;
+    assert.ok(Number.isInteger(meet?.generation), 'exercise account editing with a real published meet');
     assert.equal((await setup.request.post(base + '/v1/auth/login', { data: { email: 'casper@example.se', password: 'ett-langt-losenord' } })).status(), 200);
     const accounts = { owner: ['casper@example.se', 'ett-langt-losenord', 'Casper'], admin: ['benny@example.se', 'bennys-losenord', 'Benny'] };
     for (const [name, role] of [['Driver', 'user'], ['Other admin', 'admin'], ['Pending user', 'user'], ['Pending owner', 'owner']]) {
@@ -100,7 +102,9 @@ const root = path.resolve(__dirname, '../..');
           await page.locator('#user-edit-display-name').fill('Driver Updated');
           const saved = page.waitForResponse(r => r.url().endsWith('/v1/account') && r.request().method() === 'POST');
           await page.locator('#user-edit-form button[type="submit"]').click();
-          assert.equal((await saved).status(), 200);
+          const response = await saved;
+          assert.equal(Object.hasOwn(response.request().postDataJSON(), 'meet_generation'), false);
+          assert.equal(response.status(), 200);
           await page.locator('#user-edit-modal').waitFor({ state: 'hidden' });
           await selfRow.getByRole('button', { name: 'Driver Updated', exact: true }).waitFor();
           accounts.user[2] = 'Driver Updated';
