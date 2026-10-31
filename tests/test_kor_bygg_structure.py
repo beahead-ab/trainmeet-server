@@ -90,8 +90,8 @@ class ShellStructureTests(unittest.TestCase):
         self.assertNotIn('href="#workspaces"', self.html)
         self.assertNotIn('data-open-view="admin"', self.html)
 
-    def test_home_is_drift_when_signed_in_and_the_participant_view_otherwise(self):
-        self.assertIn('function workspaceHome() { return state.authStatus?.authenticated ? "/drift" : "/"; }', self.js)
+    def test_home_has_admin_and_participant_containers(self):
+        # Role-specific navigation is exercised by user-roles-live.test.cjs.
         self.assertIn('history.replaceState(null, "", "/drift");', self.js)
         self.assertIn('id="workspace-home"', self.html)
         self.assertIn('id="participant-view"', self.html)

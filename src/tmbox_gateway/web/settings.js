@@ -30,6 +30,7 @@
   }
 
   function show(id = currentSection()) {
+    if (document.body.dataset.accountRole === "user") id = "anvandare";
     for (const section of $$(".kr-setsec")) section.hidden = section.dataset.section !== id;
     for (const link of $$(".kr-nav")) {
       if (link.dataset.section === id) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");

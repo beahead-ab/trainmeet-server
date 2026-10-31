@@ -79,8 +79,9 @@
     $("#pv-region").textContent = us ? "US · TWC" : String(meet.country || "se").toUpperCase();
     const authenticated = typeof state !== "undefined" && Boolean(state?.authStatus?.authenticated);
     const link = $("#pv-login");
-    link.href = authenticated ? "/drift" : "/login";
-    label(link, authenticated ? "Till driften →" : "Logga in");
+    const driver = document.body.dataset.accountRole === "user";
+    link.href = driver ? "/installningar#anvandare" : authenticated ? "/drift" : "/login";
+    label(link, driver ? "Eget konto" : authenticated ? "Till driften →" : "Logga in");
     $("#pv-foot-meta").textContent = [snapshot.meet?.version_number ? `${t("Version")} ${snapshot.meet.version_number}` : "", snapshot.server_name, "TrainMeet Server"].filter(Boolean).join(" · ");
     document.querySelectorAll("[data-pv-eu]").forEach((node) => { node.hidden = us; });
     document.querySelectorAll("[data-pv-us]").forEach((node) => { node.hidden = !us; });
