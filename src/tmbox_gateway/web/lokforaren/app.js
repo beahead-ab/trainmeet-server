@@ -90,6 +90,7 @@
   async function pollClock() {
     try {
       const payload = await api("/v1/driver/clock");
+      noticeBuild(payload.build);
       state.clock = payload.clock;
       if (payload.clock && payload.clock.time) state.sync.accept(payload.clock, performance.now());
       state.clockOkAt = performance.now();
@@ -100,6 +101,30 @@
       clearTimeout(state.clockTimer);
       state.clockTimer = setTimeout(pollClock, CLOCK_POLL);
     }
+  }
+
+  // ── Ny version ─────────────────────────────────────────────────────
+  // Servern säger sin byggstämpel i varje svar om klockan. Skiljer den sig
+  // från sidans laddas appen om: direkt vid start (inget att förlora), annars
+  // när föraren trycker på raden eller kommer tillbaka till appen. Samma
+  // stämpel laddas bara om en gång, så en envis cache kan aldrig ge en loop.
+  const BUILD = document.documentElement.dataset.build || "";
+  function noticeBuild(build) {
+    if (!build || !BUILD || BUILD.startsWith("__") || build === BUILD) return false;
+    state.newBuild = build;
+    return true;
+  }
+  function reloadForBuild() {
+    if (!state.newBuild) return;
+    try {
+      if (sessionStorage.getItem("lf.build") === state.newBuild) return;
+      sessionStorage.setItem("lf.build", state.newBuild);
+    } catch (error) { /* privat läge: ladda om ändå */ }
+    const reload = () => location.reload();
+    const sw = navigator.serviceWorker;
+    if (!sw || !sw.getRegistration) { reload(); return; }
+    sw.getRegistration("/lokforaren/").then((registration) => registration && registration.update())
+      .catch(() => {}).then(reload, reload);
   }
 
   function clockMode() {
@@ -240,14 +265,17 @@
     } else if (mode === "idle" && duty) {
       text = t("Träffklockan har inte startat än.");
       kind = "is-info"; icon = "M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM12 7.5V12l3 2";
-    } else if (duty && state.plan && seconds !== null && app.dataset.screen === "korplan") {
+    } else if (duty && state.plan && seconds !== null && app.dataset.screen === "korplan"
+               && K.axisMinutes(seconds, state.plan) < state.plan.start) {
       const now = K.axisMinutes(seconds, state.plan);
-      if (now < state.plan.start) {
-        text = state.plan.start - now <= 10 ? t("10 min kvar · körplanen öppnades av sig själv") : t("Tjänsten börjar om {time}", {time: left(state.plan.start - now)});
-        kind = "is-info"; icon = "M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0";
-      }
+      text = state.plan.start - now <= 10 ? t("10 min kvar · körplanen öppnades av sig själv") : t("Tjänsten börjar om {time}", {time: left(state.plan.start - now)});
+      kind = "is-info"; icon = "M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0";
+    } else if (state.newBuild) {
+      text = t("Ny version av Lokföraren · tryck för att uppdatera");
+      kind = "is-update"; icon = "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7";
     }
-    const showBanner = Boolean(text) && ["korplan", "countdown", "drivers", "me"].includes(app.dataset.screen);
+    const showBanner = Boolean(text) && (["korplan", "countdown", "drivers", "me"].includes(app.dataset.screen)
+      || (kind === "is-update" && app.dataset.screen === "choose"));
     banner.hidden = !showBanner;
     if (showBanner) {
       banner.className = "lf-banner " + kind;
@@ -338,7 +366,19 @@
     fact(t("Rutt"), route.join(" → "));
     fact(t("Bolag och fordon"), [duty.operator, duty.vehicle, duty.vmax ? "vmax " + duty.vmax : ""].filter(Boolean).join(" · "));
     $("#found-note").hidden = !duty.notes.length;
-    $("#found-note").textContent = duty.notes.join(" ");
+    $("#found-note").textContent = duty.notes.map(note).join(" ");
+    // Förlagan: sidorna i köruppdragets PDF, för den som vill se originalet.
+    const source = $("#found-source");
+    const pages = (duty.source && duty.source.pages || []).filter(Boolean);
+    source.hidden = !(duty.source && duty.source.document_id && pages.length);
+    if (!source.hidden) {
+      const span = pages[0] === pages[pages.length - 1] ? String(pages[0]) : `${pages[0]}–${pages[pages.length - 1]}`;
+      // Helst bara tjänstens egna sidor; annars hela köruppdraget på rätt sida.
+      source.href = duty.source.part
+        ? `/v1/driver/duties/${encodeURIComponent(duty.id)}.pdf`
+        : `/v1/driver/documents/${duty.source.document_id}.pdf#page=${pages[0]}`;
+      source.textContent = t("Förlagan i köruppdraget · sida {pages}", {pages: span});
+    }
     const button = $("#duty-activate");
     button.disabled = false;
     button.textContent = t("Aktivera tjänst {number}", {number: duty.number});
@@ -412,6 +452,10 @@
     return element;
   }
 
+  // Anvisningarna i köruppdraget: de fasta (Rundgång, Förberedelse …) finns
+  // i katalogen, och fri text från planen visas som den står.
+  function note(text) { return t(text); }
+
   function chip(text, parent, extra = "") {
     const element = document.createElement("span");
     element.className = "lf-chip" + extra;
@@ -472,9 +516,9 @@
       el("tl-row__sub", box, sub);
       if (row.notes.length && !isDuty) {
         const chips = el("lf-chips", box);
-        for (const note of row.notes) chip(note, chips);
+        for (const text of row.notes) chip(note(text), chips);
       } else if (row.notes.length && isDuty) {
-        box.querySelector(".tl-row__sub").textContent = [row.station, ...row.notes].join(" · ");
+        box.querySelector(".tl-row__sub").textContent = [row.station, ...row.notes.map(note)].join(" · ");
       }
       parts.rows.push({row, box, end: row.t2 ?? row.t});
       if (row.t2 !== undefined) {
@@ -599,7 +643,7 @@
       chips.replaceChildren();
       if (moment && moment.row.track) chip(t("spår {track}", {track: moment.row.track}), chips, " lf-chip--track");
       if (moment && moment.row.train && ["departure"].includes(moment.kind)) chip(moment.row.train, chips);
-      if (moment) for (const note of moment.row.notes.slice(0, 3)) chip(note, chips);
+      if (moment) for (const text of moment.row.notes.slice(0, 3)) chip(note(text), chips);
     }
     const remaining = $("#next-left");
     if (moment && now !== null) {
@@ -648,7 +692,7 @@
     value.textContent = remaining === null ? "–" : left(remaining);
     value.classList.toggle("is-soon", remaining !== null && remaining <= 10);
     const first = plan.rows[0];
-    $("#countdown-sub").textContent = t("{time} träfftid · {station}", {time: K.label(plan.start), station: first.station}) + (first.notes.length ? " · " + first.notes[0].toLowerCase() : "");
+    $("#countdown-sub").textContent = t("{time} träfftid · {station}", {time: K.label(plan.start), station: first.station}) + (first.notes.length ? " · " + note(first.notes[0]).toLowerCase() : "");
     $("#mark-start").textContent = t("Start {time}", {time: K.label(plan.start)});
     const pct = remaining === null ? 0 : Math.max(0, Math.min(1, (30 - remaining) / 30));
     $("#countdown-fill").style.width = (pct * 100) + "%";
@@ -669,7 +713,7 @@
         const isDuty = row.kind.startsWith("duty");
         what.textContent = isDuty ? KIND[row.kind]() : (row.train && row.kind === "departure" ? t("{train} avgår", {train: row.train}) : KIND[row.kind]() + " " + row.station);
         const small = document.createElement("small");
-        small.textContent = [row.station, ...row.notes].filter(Boolean).join(" · ");
+        small.textContent = [row.station, ...row.notes.map(note)].filter(Boolean).join(" · ");
         what.append(small);
         item.append(time, what);
         list.append(item);
@@ -1194,6 +1238,7 @@
   async function loadSession() {
     try {
       state.session = await api("/v1/driver/session");
+      if (noticeBuild(state.session.build)) { reloadForBuild(); }
       state.offline = false;
       saveOffline();
     } catch (error) {
@@ -1241,6 +1286,7 @@
   }
 
   function bind() {
+    $("#banner").addEventListener("click", () => { if ($("#banner").classList.contains("is-update")) reloadForBuild(); });
     for (const button of document.querySelectorAll(".lf-tab")) {
       button.addEventListener("click", () => {
         state.choosing = false;
@@ -1364,6 +1410,7 @@
     });
     setInterval(() => { fadeDrivers(); if (app.dataset.screen === "me") renderMeClock(); }, 1000);
     document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && state.newBuild) { reloadForBuild(); return; }
       if (document.visibilityState === "visible" && state.session) { pollClock(); refreshPresence(); }
     });
   }
@@ -1373,7 +1420,8 @@
     translateStatic();
     bind();
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/lokforaren/sw.js", {scope: "/lokforaren/"}).catch(() => { /* fungerar utan */ });
+      // updateViaCache "none": webbläsaren frågar alltid servern efter en ny sw.js.
+      navigator.serviceWorker.register("/lokforaren/sw.js", {scope: "/lokforaren/", updateViaCache: "none"}).catch(() => { /* fungerar utan */ });
     }
     loadSession();
     requestAnimationFrame(frame);

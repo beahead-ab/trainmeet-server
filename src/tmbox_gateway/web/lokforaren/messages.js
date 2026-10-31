@@ -4,6 +4,12 @@
 globalThis.LokforarenMessages = {
   "Eget konto": {en: "My account", da: "Egen konto", nb: "Egen konto", de: "Mein Konto"},
   "Körplan": {en: "Run plan", da: "Køreplan", nb: "Kjøreplan", de: "Fahrplan"},
+  // Fasta anvisningar i köruppdragen (planeringsfilen, #225).
+  "Förberedelse": {en: "Preparation", da: "Forberedelse", nb: "Forberedelse", de: "Vorbereitung"},
+  "Avslutning": {en: "Finishing", da: "Afslutning", nb: "Avslutning", de: "Abschluss"},
+  "Rundgång": {en: "Run around", da: "Omløb", nb: "Omløp", de: "Umsetzen"},
+  "Skjut vagnar": {en: "Push the wagons", da: "Skub vognene", nb: "Skyv vognene", de: "Wagen schieben"},
+  "Vänd loket": {en: "Turn the loco", da: "Vend lokomotivet", nb: "Snu lokomotivet", de: "Lok drehen"},
   "Det gick inte. Försök igen.": {en: "That did not work. Try again.", da: "Det lykkedes ikke. Prøv igen.", nb: "Det gikk ikke. Prøv igjen.", de: "Das hat nicht geklappt. Bitte erneut versuchen."},
   "Tjänst {number}": {en: "Duty {number}", da: "Tjeneste {number}", nb: "Tjeneste {number}", de: "Dienst {number}"},
   "Lokföraren": {en: "Lokföraren", da: "Lokföraren", nb: "Lokföraren", de: "Lokföraren"},
@@ -14,6 +20,8 @@ globalThis.LokforarenMessages = {
   "Ingen kontakt med träffklockan": {en: "No contact with the meet clock", da: "Ingen forbindelse til træfuret", nb: "Ingen kontakt med treffklokka", de: "Keine Verbindung zur Modellzeituhr"},
   "Ingen kontakt med träffklockan · fryst {time}": {en: "No contact with the meet clock · frozen at {time}", da: "Ingen forbindelse til træfuret · frosset {time}", nb: "Ingen kontakt med treffklokka · frosset {time}", de: "Keine Verbindung zur Modellzeituhr · angehalten bei {time}"},
   "Träffklockan står still. NU-linjen väntar på den.": {en: "The meet clock is stopped. The NOW line waits for it.", da: "Træfuret står stille. NU-linjen venter på det.", nb: "Treffklokka står stille. NÅ-linjen venter på den.", de: "Die Modellzeituhr steht. Die JETZT-Linie wartet auf sie."},
+  "Förlagan i köruppdraget · sida {pages}": {en: "Original in the duty sheets · page {pages}", da: "Originalen i køreopgaverne · side {pages}", nb: "Originalen i kjøreoppdragene · side {pages}", de: "Original im Dienstplan · Seite {pages}"},
+  "Ny version av Lokföraren · tryck för att uppdatera": {en: "New version of Lokföraren · tap to update", da: "Ny version af Lokföraren · tryk for at opdatere", nb: "Ny versjon av Lokföraren · trykk for å oppdatere", de: "Neue Version von Lokföraren · zum Aktualisieren tippen"},
   "Träffklockan har inte startat än.": {en: "The meet clock has not started yet.", da: "Træfuret er ikke startet endnu.", nb: "Treffklokka har ikke startet ennå.", de: "Die Modellzeituhr läuft noch nicht."},
   "10 min kvar · körplanen öppnades av sig själv": {en: "10 min left · the run plan opened by itself", da: "10 min tilbage · køreplanen åbnede af sig selv", nb: "10 min igjen · kjøreplanen åpnet seg selv", de: "Noch 10 Min. · der Fahrplan hat sich selbst geöffnet"},
   "Tjänsten börjar om {time}": {en: "Duty starts in {time}", da: "Tjenesten begynder om {time}", nb: "Tjenesten begynner om {time}", de: "Dienst beginnt in {time}"},

@@ -5,6 +5,28 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Lokföraren: köruppdrag i Inställningar, vägar dit och en egen app som alltid är aktuell (#225)
+
+Köruppdragen läggs nu in separat på servern under **Inställningar →
+Lokförare och köruppdrag**, från två filer. **Planeringsfilen** (samma JSON
+som går till Cloud) ger alla tjänster exakt: tåg, stationer, spår, tider,
+rundgång, skjut vagnar, förberedelse och avslutning; Värnamos 142 läses på en
+bråkdel av en sekund. **Köruppdragens PDF** (gärna alla 600 sidorna) blir
+förlagan: sidorna för varje tjänst hittas på omslaget och sidfötterna, och
+PDF:en delas i en liten fil per tjänst, så att föraren bara får sina sidor
+(Värnamo: 612 sidor, 142 av 142 tjänster, ungefär 6 sekunder). Allt läses
+i webbläsaren; servern kontrollerar bara formen. Administratören granskar och
+gör sedan köruppdraget uttryckligen tillgängligt för förarna. Inget når
+förarna innan dess, och bara på träffen köruppdraget hör till. Föraren kan
+öppna originalsidorna från sin tjänst, och de fasta anvisningarna (Rundgång,
+Förberedelse …) visas på förarens språk.
+
+Lokföraren går att hitta från träffens publika sida, från inloggningen och,
+för administratörer, från sidhuvudet, menyn och Inställningar med adress och
+QR-kod. Appen har eget namn och egen ikon (LF i stationsskylten). Varje
+version får nya fil-adresser och en ny cache, så en telefon med appen på
+hemskärmen hämtar alltid den nya versionen och en öppen app laddar om sig.
+
 ### Planens tåg, dygn, linjer och speldygn från Cloud (trainmeet-cloud #100)
 
 - **Tidtabellskärnan** är synkad med Cloud 2.25: tåg som delar nummer och

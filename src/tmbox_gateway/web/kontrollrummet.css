@@ -791,6 +791,12 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
 /* Glömt lösenordet? och Jag har en kod på samma rad under inloggningen. */
 #login .login-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; margin: 20px 0 0; padding: 14px 0 0; border-top: 1px solid var(--kr-line); }
 #login .login-links .link-button { width: auto; margin: 0; padding: 0; border-top: 0; }
+#login .login-lokforaren { display: flex; align-items: center; gap: 12px; margin: 16px 0 0; padding: 12px 14px; border: 1px solid var(--kr-line); border-radius: var(--kr-r); color: var(--kr-ink); text-decoration: none; }
+#login .login-lokforaren:hover { border-color: var(--kr-blue); }
+#login .login-lokforaren img { flex: 0 0 28px; border-radius: 7px; }
+#login .login-lokforaren > span:nth-of-type(1) { display: flex; flex-direction: column; gap: 2px; flex: 1; font-size: 12.5px; color: var(--kr-mute); line-height: 1.35; }
+#login .login-lokforaren b { font-size: 13.5px; color: var(--kr-ink); }
+#login .login-lokforaren > span:last-child { color: var(--kr-blue); font-weight: 700; }
 #login .link-button:hover { text-decoration: underline; }
 
 /* ── Sidhuvudet på smal skärm ──────────────────────────────────────────
@@ -829,8 +835,9 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
   #app-chrome .screen-menu { order: 3; position: static; }
   #app-chrome .screen-menu nav { left: auto; right: 12px; top: 48px; }
   #app-chrome #header-data, #app-chrome #header-settings { order: 4; }
-  /* Träffens namn går före: Om trafikspelet nås från Öppna-menyn i två rader. */
-  #app-chrome #header-about { display: none; }
+  /* Träffens namn går före: Om trafikspelet nås från Öppna-menyn i två rader,
+     Lokförare från Inställningar → Lokförare och köruppdrag. */
+  #app-chrome #header-about, #app-chrome #header-lokforare { display: none; }
   #app-chrome #header-help { order: 5; }
   #app-chrome #kr-theme-toggle { order: 6; }
   #app-chrome #logout { order: 7; }
@@ -1020,3 +1027,42 @@ body[data-mode="tidtabell"] #app-view { padding: 20px 24px 28px; max-width: none
 .pi-network-profile > span { color: var(--kr-ink-2); font-size: 12px; }
 .pi-network-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
 .pi-network-note { margin: 12px 16px; font-size: 13px; line-height: 1.5; }
+
+/* ── Inställningar → Lokförare och köruppdrag (#225) ──────────────────── */
+.lf-find { display: flex; gap: 24px; padding: 16px 18px; align-items: flex-start; flex-wrap: wrap; }
+.lf-find__qr { flex: 0 0 148px; width: 148px; height: 148px; padding: 10px; border-radius: 10px; background: #fff; box-sizing: border-box; }
+.lf-find__qr svg { display: block; width: 100%; height: 100%; }
+.lf-find__text { flex: 1 1 280px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.lf-find__link { font: 600 17px/1.3 var(--kr-mono); color: var(--kr-ink); overflow-wrap: anywhere; user-select: all; }
+.lf-find__steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13px; color: var(--kr-ink-2); }
+.lf-find__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.lf-progress { display: flex; flex-direction: column; gap: 6px; margin: 8px 16px 0; }
+.lf-progress[hidden] { display: none; }
+.lf-progress__text { font-size: 12.5px; font-weight: 600; color: var(--kr-ink-2); font-variant-numeric: tabular-nums; }
+.lf-progress__bar { width: 100%; height: 6px; appearance: none; border: 0; border-radius: 3px; background: var(--kr-panel-2); overflow: hidden; }
+.lf-progress__bar::-webkit-progress-bar { background: var(--kr-panel-2); }
+.lf-progress__bar::-webkit-progress-value { background: var(--kr-blue); border-radius: 3px; }
+.lf-progress__bar::-moz-progress-bar { background: var(--kr-blue); border-radius: 3px; }
+#lokforare .form-message:empty { display: none; }
+#lokforare .form-message { margin: 8px 16px 0; }
+.lf-docs td { vertical-align: top; }
+/* Cellerna förblir tabellceller (en flex-cell fyller inte radens höjd). */
+.lf-docs__name, .lf-docs__pdf { white-space: normal !important; min-width: 180px; }
+.lf-docs__name > *, .lf-docs__pdf > * { display: block; }
+.lf-docs__name > * + *, .lf-docs__pdf > * + * { margin-top: 2px; }
+.lf-docs__name b, .lf-docs__pdf b { font-weight: 600; overflow-wrap: anywhere; }
+.lf-docs__steps { margin: 12px 16px 4px; padding-left: 20px; display: grid; gap: 4px; font-size: 13px; color: var(--kr-ink-2); }
+.lf-docs__steps b { color: var(--kr-ink); font-weight: 600; }
+.lf-docs__warn { display: block; margin-top: 4px; }
+.lf-docs__buttons { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.lf-review__name { font-weight: 600; color: var(--kr-ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* id-väljaren går före appens allmänna regel för input. */
+#lokforare #lf-review-search { width: 110px; min-height: 0; height: 28px; padding: 0 9px; border: 1px solid var(--kr-line-2); border-radius: 7px; background: var(--kr-panel-2); color: var(--kr-ink); font: 600 13px var(--kr-sans); font-variant-numeric: tabular-nums; }
+.lf-review__warnings { margin: 10px 16px 0; padding: 10px 12px 10px 28px; border-radius: 8px; background: var(--kr-amber-soft); color: var(--kr-ink-2); font-size: 12.5px; display: grid; gap: 3px; }
+.lf-review__warnings[hidden] { display: none; }
+.lf-review__scroll { max-height: 460px; overflow-y: auto; }
+.lf-review__route { white-space: normal !important; min-width: 220px; }
+.lf-driver { display: flex; align-items: center; gap: 8px; }
+.lf-driver__avatar { width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; object-fit: cover; }
+.lf-driver__initials { display: inline-grid; place-items: center; background: var(--kr-blue-soft); color: var(--kr-blue); font: 700 10px/1 var(--kr-sans); }
+#lokforare #lf-drivers-count { height: 22px; }

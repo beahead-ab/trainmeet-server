@@ -4,7 +4,7 @@
 const assert = require('node:assert/strict');
 const { open } = require('./kr-fixture.cjs');
 
-const SECTIONS = ['traff', 'skarmar', 'wifi', 'obemannade', 'klarering', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'visning', 'farozon'];
+const SECTIONS = ['traff', 'skarmar', 'wifi', 'obemannade', 'klarering', 'lokforare', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'visning', 'farozon'];
 const FORMS = { traff: 'cloud-auto-form', skarmar: 'clock-appearance-form', wifi: 'connection-wifi-form', klarering: 'tellurian-form', server: 'server-identity-form', kod: 'connection-code-form', sprak: 'language-form', visning: 'browser-deviation-form' };
 
 const bar = (page, form) => page.evaluate((id) => {
@@ -19,7 +19,7 @@ const bar = (page, form) => page.evaluate((id) => {
   try {
     await page.locator('#admin-view').waitFor({ state: 'visible' });
 
-    // Nine sections, in three groups, one at a time.
+    // The sections, in three groups, one at a time.
     assert.deepEqual(await page.locator('#settings-nav a.kr-nav').evaluateAll(links => links.map(l => l.dataset.section)), SECTIONS);
     assert.deepEqual(await page.locator('#settings-nav .kr-grp').allTextContents(), ['Träffen', 'Den här servern', 'Webbläsaren']);
     assert.equal(await page.locator('#admin-view .kr-setsec').count(), 12);
