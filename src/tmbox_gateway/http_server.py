@@ -699,6 +699,12 @@ class TrainMeetHTTPApplication:
                         "train_type": train["train_type"] if train else "person"})
         result["deviation_level"] = self.runtime_store.deviation_level(publication.meet_id)["level"]
         result["traffic_day"] = self._traffic_day(publication, day)
+        # Träffklockan i sekunder sedan trafikdygnets midnatt (över 86 400 efter
+        # midnatt), så att en klient räknar rätt kring midnatt med radernas
+        # service_day_offset (trainmeet-tmbox-ios #51).
+        clock = self.operations_store.clock_status()
+        result["clock_elapsed_seconds"] = clock.get("elapsed_seconds")
+        result["clock_time"] = clock.get("time")
         return result
 
     def _traffic_day(self, publication, day: str) -> dict[str, Any]:

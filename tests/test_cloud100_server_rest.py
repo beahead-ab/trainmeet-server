@@ -196,6 +196,38 @@ class BoxAndTklTests(CloudDeliveryFixture):
         self.assertEqual("101", lab._train_text(lab.legs["movement-101-a"], 3), "the number when the name does not fit")
 
 
+class NightTrainTimetableTests(CloudDeliveryFixture):
+    """Boxens tidtabell säger tjänstedygnet per rad (trainmeet-tmbox-ios #51):
+    ett tåg 23:50 som kommer fram 00:05 ligger efter midnatt, inte före."""
+
+    def night(self):
+        package = cloud_package("cloud-night")
+        rows = {row["id"]: row for row in package["trains"]}
+        rows["movement-101-a"].update(departure_time="23:50", sort_time="23:50")
+        rows["movement-101-b"].update(arrival_time="00:05", sort_time="00:05")
+        first, second = package["services"][0]["stops"]
+        first.update(departure_time="23:50", service_minute=1430)
+        second.update(arrival_time="00:05", service_day_offset=1, service_minute=1445)
+        return self.runtime.install(package)
+
+    def test_each_row_carries_its_service_day_and_the_answer_the_clock_in_seconds(self):
+        from tmbox_gateway.engine import TrafficEngine
+        from tmbox_gateway.terminal16 import Terminal16Lab
+        publication = self.night()
+        payload = copy.deepcopy(publication.payload)
+        payload["meet"]["active_day"] = self.runtime.active_day()
+        lab = Terminal16Lab(TrafficEngine(publication.session_config()), payload, {"a": "station-a", "b": "station-b"})
+        [departure] = lab.station_timetable("a")["rows"]
+        [arrival] = lab.station_timetable("b")["rows"]
+        self.assertEqual(("departure", "23:50", 0), (departure["kind"], departure["time"], departure["service_day_offset"]))
+        self.assertEqual(("arrival", "00:05", 1), (arrival["kind"], arrival["time"], arrival["service_day_offset"]))
+        self.application.control_clock(self.client, {"action": "start", "time": "23:55:00", "speed": 1})
+        table = self.application._timetable_with_deviations({"rows": [dict(arrival)]})
+        self.assertGreaterEqual(table["clock_elapsed_seconds"], at("23:55"))
+        self.assertTrue(table["clock_time"].startswith("23:5"))
+        self.assertEqual(1, table["rows"][0]["service_day_offset"], "the field survives the deviation pass")
+
+
 class CorrectionDuringPlayTests(CloudDeliveryFixture):
     def correction(self, change):
         self.offered = cloud_package()

@@ -231,6 +231,11 @@ class Terminal16Lab:
         return matches
 
     @staticmethod
+    def _day_offset(value):
+        """Ett giltigt tjänstedygn (heltal 0 eller större), annars 0."""
+        return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+    @staticmethod
     def _train_text(leg, room):
         """Tågets förkortning när numret delas och den får plats, annars numret."""
         label = leg.get("train_label")
@@ -261,6 +266,10 @@ class Terminal16Lab:
             station = self.engine.config.stations[terminal.station]
             labels = {track.id: track.display_label for track in self._tracks(terminal)}
             movements = {item["id"]: item for item in self.publication["trains"]}
+            # Tjänstedygnet per stopp, som webbens vyer: 0 samma dygn, 1 efter
+            # midnatt inom samma trafikdygn (iOS-appen, trainmeet-tmbox-ios #51).
+            offsets = {(str(service.get("id")), int(stop.get("stop_order") or 0)): stop.get("service_day_offset")
+                       for service in self.publication.get("services", []) for stop in service.get("stops", [])}
             rows = []
             for key, leg in self.legs.items():
                 if terminal.station not in {leg["from_station_id"], leg["to_station_id"]} or not self._on_side(terminal, leg):
@@ -289,6 +298,8 @@ class Terminal16Lab:
                     "track_id": movement.get("track_id") if movement.get("track_id") in labels else None,
                     "actual_track_id": actual if actual in labels else None,
                     "state": state, "selected": terminal.selected == key,
+                    "service_day_offset": self._day_offset(offsets.get(
+                        (str(leg.get("service_id")), int(leg.get("from_stop_order" if outgoing else "to_stop_order") or 0)))),
                 }))
             clock = self.engine.meeting_clock()["time"]
             return {"station": {"code": station.code, "name": station.name}, "side": terminal.side,

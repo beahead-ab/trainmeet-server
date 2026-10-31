@@ -13,6 +13,11 @@ Versionsnumret sätts automatiskt vid merge till main. Se
   visar förkortningen, "IC 116" och "X 116", där två tåg delar nummer.
 - **Planens veckodag i TMBox och TKL.** Boxens tidtabell och TKL får
   trafikdagen och speldygnet; webb-TMBoxen skriver veckodagen i rubriken.
+- **Tider kring midnatt i boxens tidtabell.** Varje rad i
+  `/v1/tmbox/terminal/timetable` har `service_day_offset` (0 samma
+  tjänstedygn, 1 efter midnatt), och svaret har träffklockan i sekunder
+  (`clock_elapsed_seconds`, `clock_time`). Då räknar iPhone-appen ett tåg
+  23:50 → 00:05 rätt. Nya fält; äldre appar ignorerar dem.
 - **Manuella tåg (B4/B5).** Ett tåg som inte kan köras som planen säger – en
   tid saknas, en sträcka mellan två stopp finns inte på banan, negativ
   gångtid, eller Cloud har märkt det manuellt – automatiseras inte. Det listas
