@@ -1598,3 +1598,10 @@ The config for {name} is updated. Ongoing operations have been kept. Published w
 The server now runs {name}. Published with {count} known deviations: those trains are run manually.|Servern kör nu {name}. Publicerad med {count} kända avvikelser: tågen körs manuellt.|Serveren kører nu {name}. Udgivet med {count} kendte afvigelser: togene køres manuelt.|Serveren kjører nå {name}. Publisert med {count} kjente avvik: togene kjøres manuelt.|Der Server führt jetzt {name} aus. Veröffentlicht mit {count} bekannten Abweichungen: diese Züge fahren manuell.
 1 train is run manually|1 tåg körs manuellt|1 tog køres manuelt|1 tog kjøres manuelt|1 Zug fährt manuell
 {count} trains are run manually|{count} tåg körs manuellt|{count} tog køres manuelt|{count} tog kjøres manuelt|{count} Züge fahren manuell
+Icon|Ikon|Ikon|Ikon|Symbol
+the same as in Lokföraren and on the layout|samma som i Lokföraren och på banan|den samme som i Lokföraren og på banen|den samme som i Lokföraren og på banen|dasselbe wie in Lokföraren und auf der Anlage
+Change icon|Byt ikon|Skift ikon|Bytt ikon|Symbol ändern
+Remove icon|Ta bort ikon|Fjern ikon|Fjern ikon|Symbol entfernen
+The picture could not be read. Choose a PNG, JPEG or WebP.|Bilden gick inte att läsa. Välj en PNG, JPEG eller WebP.|Billedet kunne ikke læses. Vælg en PNG, JPEG eller WebP.|Bildet kunne ikke leses. Velg en PNG, JPEG eller WebP.|Das Bild konnte nicht gelesen werden. Wähle ein PNG, JPEG oder WebP.
+The icon is saved. It also shows in Lokföraren.|Ikonen är sparad. Den syns också i Lokföraren.|Ikonet er gemt. Det vises også i Lokföraren.|Ikonet er lagret. Det vises også i Lokföraren.|Das Symbol ist gespeichert. Es erscheint auch in Lokföraren.
+The icon is removed.|Ikonen är borttagen.|Ikonet er fjernet.|Ikonet er fjernet.|Das Symbol ist entfernt.

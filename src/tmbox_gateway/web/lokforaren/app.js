@@ -44,6 +44,9 @@
     for (const element of document.querySelectorAll("[data-t]")) {
       element.textContent = t(element.dataset.t);
     }
+    for (const element of document.querySelectorAll("[data-t-title]")) {
+      element.title = t(element.dataset.tTitle);
+    }
     $("#timeline").setAttribute("aria-label", t("Körplan"));
   }
 
@@ -148,6 +151,15 @@
     const s = Math.floor(seconds);
     return pad(Math.floor(s / 3600) % 24) + ":" + pad(Math.floor(s / 60) % 60) + (withSeconds ? ":" + pad(s % 60) : "");
   }
+  // Sekunderna syns om föraren vill: tryck på klockan eller NU-etiketten,
+  // eller välj under Jag. Valet sparas i telefonen.
+  const withSeconds = () => store.get("seconds", true);
+  function toggleSeconds() {
+    store.set("seconds", !withSeconds());
+    const box = document.getElementById("me-seconds");
+    if (box) box.checked = withSeconds();
+    renderFrame();
+  }
   function left(minutes) {
     const total = Math.max(0, Math.ceil(minutes * 60));
     const h = Math.floor(total / 3600), m = Math.floor(total / 60) % 60, s = total % 60;
@@ -240,7 +252,7 @@
     $("#duty-sub").textContent = sub;
     const mode = clockMode();
     const clock = $("#clock");
-    clock.textContent = hms(seconds);
+    clock.textContent = hms(seconds, withSeconds());
     clock.classList.toggle("is-frozen", mode === "lost");
     const status = $("#clock-status");
     status.className = "lf-status" + ({running: " is-running", stopped: " is-stopped", lost: " is-lost"}[mode] || "");
@@ -257,7 +269,7 @@
     const banner = $("#banner");
     let text = "", kind = "", icon = "";
     if (mode === "lost" && state.session) {
-      text = seconds === null ? t("Ingen kontakt med träffklockan") : t("Ingen kontakt med träffklockan · fryst {time}", {time: hms(seconds)});
+      text = seconds === null ? t("Ingen kontakt med träffklockan") : t("Ingen kontakt med träffklockan · fryst {time}", {time: hms(seconds, withSeconds())});
       kind = "is-lost"; icon = "M12 3.5 2.5 20h19zM12 10v4.2M12 17.4v.01";
     } else if (mode === "stopped") {
       text = t("Träffklockan står still. NU-linjen väntar på den.");
@@ -456,6 +468,79 @@
   // i katalogen, och fri text från planen visas som den står.
   function note(text) { return t(text); }
 
+  // Anvisningar ur planeringsfilen kommer som uppgifter (instructions) och
+  // skrivs här på förarens språk. Fordons- och tågnamn, spår och platser
+  // står som i planen.
+  const DAY_NAMES = {
+    sv: ["M", "Ti", "O", "To", "F", "L", "S"], da: ["M", "Ti", "O", "To", "F", "L", "S"], nb: ["M", "Ti", "O", "To", "F", "L", "S"],
+    en: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"], de: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
+  };
+  function whenText(item) {
+    if (item.days && item.days.length) {
+      const names = DAY_NAMES[language] || DAY_NAMES.sv;
+      const days = [...item.days].sort((a, b) => a - b);
+      const parts = [];
+      for (let i = 0; i < days.length;) {
+        let j = i;
+        while (j + 1 < days.length && days[j + 1] === days[j] + 1) j += 1;
+        if (j - i >= 2) parts.push(names[days[i] - 1] + "–" + names[days[j] - 1]);
+        else for (let k = i; k <= j; k += 1) parts.push(names[days[k] - 1]);
+        i = j + 1;
+      }
+      return parts.join(",");
+    }
+    if (item.sessions && item.sessions.length) return t("pass {list}", {list: item.sessions.join(",")});
+    return "";
+  }
+  function listText(items) {
+    if (items.length < 2) return items[0] || "";
+    return t("{a} och {b}", {a: items.slice(0, -1).join(", "), b: items[items.length - 1]});
+  }
+  const MEET_TEXT = {crosses: "Möter {train} {from}–{to}", overtakes: "Kör förbi {train} {from}–{to}", overtaken_by: "Förbigås av {train} {from}–{to}"};
+  // [fordonen, tåget, vagnarna] för anvisningar som säger vad som görs med fordon.
+  const VEHICLE_TEXT = {
+    couple: ["Koppla {vehicles} till tåget"],
+    uncouple: ["Koppla loss {vehicles} från tåget"],
+    use: ["Använd {vehicles}"],
+    from_parking: ["Före avgång: kör {vehicles} från uppställningen till avgångsspåret", "Före avgång: kör tåget från uppställningen till avgångsspåret", "Före avgång: flytta {vehicles} från uppställningen till avgångsspåret"],
+    to_parking: ["Efter ankomst: kör {vehicles} till uppställningen", "Efter ankomst: kör tåget till uppställningen", "Efter ankomst: flytta {vehicles} till uppställningen"],
+    lift_on: ["Före avgång: lyft på {vehicles} på avgångsspåret", "Före avgång: lyft på tåget på avgångsspåret"],
+    lift_off: ["Efter ankomst: lyft av {vehicles} från ankomstspåret", "Efter ankomst: lyft av tåget från ankomstspåret"],
+    fetch_from_track: ["Före avgång: hämta {vehicles} från spår {track}", "Före avgång: hämta tåget från spår {track}"],
+    put_on_track: ["Efter ankomst: ställ {vehicles} på spår {track}", "Efter ankomst: ställ tåget på spår {track}"],
+  };
+  const PLAIN_TEXT = {
+    exchange_passengers: "Utväxla omstigande resande här", no_exchange: "Inget utbyte",
+    shunt_wagons_to_departure: "Växla vagnarna till avgångsspåret före avgång", shunt_wagons_to_arrival: "Växla vagnarna till sina ankomstspår efter ankomst",
+    circulate: "Gör rundgång", turn: "Vänd loket", turn_and_circulate: "Vänd loket och gör rundgång", push_wagons: "Skjut vagnarna",
+  };
+  function instructionLines(item) {
+    const when = (text, where = item) => { const days = whenText(where); return days ? days + ": " + text : text; };
+    if (MEET_TEXT[item.kind]) return (item.meets || []).map((meet) => when(t(MEET_TEXT[item.kind], meet), meet));
+    let text = "";
+    if (VEHICLE_TEXT[item.kind]) {
+      const [own, train, wagons] = VEHICLE_TEXT[item.kind];
+      const source = item.train && train ? train : item.wagonset && wagons ? wagons : own;
+      text = t(source, {vehicles: listText(item.vehicles || []), track: item.track || ""}) + (item.usage ? " (" + item.usage + ")" : "");
+    } else if (item.kind === "pick_up_key") {
+      text = item.key ? t("Hämta nyckel {key} för att låsa upp {place}", item) : t("Hämta nyckeln för att låsa upp {place}", item);
+    } else if (item.kind === "leave_key") {
+      text = item.key ? t("Lämna nyckel {key} från {place}", item) : t("Lämna nyckeln från {place}", item);
+    } else if (PLAIN_TEXT[item.kind]) {
+      text = t(PLAIN_TEXT[item.kind]);
+    }
+    return text ? [when(text)] : [];
+  }
+  /** Allt som står under en rad i körplanen, på förarens språk. */
+  function noteLines(row) {
+    return [...(row.notes || []).map(note), ...(row.instructions || []).flatMap(instructionLines)];
+  }
+  function noteList(lines, parent) {
+    const list = el("tl-notes", parent);
+    for (const line of lines) el("tl-note", list, line);
+    return list;
+  }
+
   function chip(text, parent, extra = "") {
     const element = document.createElement("span");
     element.className = "lf-chip" + extra;
@@ -514,11 +599,11 @@
       el("tl-row__name", box, isDuty ? KIND[row.kind]() : row.station);
       const sub = [isDuty ? row.station : KIND[row.kind](), row.track ? t("spår {track}", {track: row.track}) : ""].filter(Boolean).join(" · ");
       el("tl-row__sub", box, sub);
-      if (row.notes.length && !isDuty) {
-        const chips = el("lf-chips", box);
-        for (const text of row.notes) chip(note(text), chips);
-      } else if (row.notes.length && isDuty) {
-        box.querySelector(".tl-row__sub").textContent = [row.station, ...row.notes.map(note)].join(" · ");
+      const lines = noteLines(row);
+      if (lines.length && !isDuty) {
+        noteList(lines, box);
+      } else if (lines.length && isDuty) {
+        box.querySelector(".tl-row__sub").textContent = [row.station, ...lines].join(" · ");
       }
       parts.rows.push({row, box, end: row.t2 ?? row.t});
       if (row.t2 !== undefined) {
@@ -557,7 +642,7 @@
       parts.chip.style.transform = `translateY(${nowY}px)`;
       const stopped = clockMode() === "stopped";
       parts.chip.innerHTML = stopped ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"></path></svg>' : "";
-      parts.chip.append(document.createTextNode(hms(seconds, !stopped)));
+      parts.chip.append(document.createTextNode(hms(seconds, !stopped && withSeconds())));
       parts.chip.setAttribute("aria-label", t("Nu, träfftid {time}", {time: hms(seconds)}));
     }
     if (haveTime && (timeline.lastNowY === null || Math.abs(nowY - timeline.lastNowY) > 0.2)) {
@@ -612,7 +697,7 @@
       const arrow = above ? "M12 19V5M6 11l6-6 6 6" : "M12 5v14M6 13l6 6 6-6";
       const target = above ? $("#edge-top-chip") : $("#edge-bottom-chip");
       target.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${arrow}"></path></svg>`;
-      target.append(document.createTextNode(hms(seconds)));
+      target.append(document.createTextNode(hms(seconds, withSeconds())));
     }
     renderNext(now);
   }
@@ -643,7 +728,10 @@
       chips.replaceChildren();
       if (moment && moment.row.track) chip(t("spår {track}", {track: moment.row.track}), chips, " lf-chip--track");
       if (moment && moment.row.train && ["departure"].includes(moment.kind)) chip(moment.row.train, chips);
-      if (moment) for (const text of moment.row.notes.slice(0, 3)) chip(note(text), chips);
+      const momentNotes = $("#next-notes");
+      momentNotes.replaceChildren();
+      if (moment) for (const line of noteLines(moment.row).slice(0, 4)) el("tl-note", momentNotes, line);
+      momentNotes.hidden = !momentNotes.childElementCount;
     }
     const remaining = $("#next-left");
     if (moment && now !== null) {
@@ -692,7 +780,7 @@
     value.textContent = remaining === null ? "–" : left(remaining);
     value.classList.toggle("is-soon", remaining !== null && remaining <= 10);
     const first = plan.rows[0];
-    $("#countdown-sub").textContent = t("{time} träfftid · {station}", {time: K.label(plan.start), station: first.station}) + (first.notes.length ? " · " + note(first.notes[0]).toLowerCase() : "");
+    $("#countdown-sub").textContent = t("{time} träfftid · {station}", {time: K.label(plan.start), station: first.station}) + (noteLines(first).length ? " · " + noteLines(first)[0].toLowerCase() : "");
     $("#mark-start").textContent = t("Start {time}", {time: K.label(plan.start)});
     const pct = remaining === null ? 0 : Math.max(0, Math.min(1, (30 - remaining) / 30));
     $("#countdown-fill").style.width = (pct * 100) + "%";
@@ -713,7 +801,7 @@
         const isDuty = row.kind.startsWith("duty");
         what.textContent = isDuty ? KIND[row.kind]() : (row.train && row.kind === "departure" ? t("{train} avgår", {train: row.train}) : KIND[row.kind]() + " " + row.station);
         const small = document.createElement("small");
-        small.textContent = [row.station, ...row.notes.map(note)].filter(Boolean).join(" · ");
+        small.textContent = [row.station, ...noteLines(row)].filter(Boolean).join(" · ");
         what.append(small);
         item.append(time, what);
         list.append(item);
@@ -1055,6 +1143,7 @@
     $("#change-duty").textContent = duty ? t("Byt tjänst") : t("Välj tjänst");
     $("#me-visible").checked = person.visible;
     $("#me-reminders").checked = store.get("reminders", true);
+    $("#me-seconds").checked = withSeconds();
     $("#me-sound").checked = store.get("sound", true);
     $("#me-language").value = language;
     $("#me-theme").value = store.get("theme", "dark");
@@ -1269,6 +1358,10 @@
   }
 
   function frame() {
+    renderFrame();
+    requestAnimationFrame(frame);
+  }
+  function renderFrame() {
     const seconds = state.session ? clockSeconds() : null;
     if (state.session) {
       renderHeader(seconds);
@@ -1282,7 +1375,6 @@
         remind(seconds);
       }
     }
-    requestAnimationFrame(frame);
   }
 
   function bind() {
@@ -1391,6 +1483,9 @@
       }
     });
     $("#me-reminders").addEventListener("change", (event) => store.set("reminders", event.target.checked));
+    $("#me-seconds").addEventListener("change", (event) => { if (event.target.checked !== withSeconds()) toggleSeconds(); });
+    $("#clock").addEventListener("click", toggleSeconds);
+    $("#timeline").addEventListener("click", (event) => { if (event.target.closest(".tl-nowchip")) toggleSeconds(); });
     $("#me-sound").addEventListener("change", (event) => store.set("sound", event.target.checked));
     $("#me-language").addEventListener("change", (event) => {
       language = event.target.value;

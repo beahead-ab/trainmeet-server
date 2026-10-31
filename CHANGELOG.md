@@ -5,6 +5,27 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Lokföraren: köruppdragens anvisningar på förarens språk, sekunder av och på, ikonen följer kontot (#225)
+
+- **Anvisningarna i köruppdragen** syns nu i körplanen under raden de hör
+  till: möten och förbikörningar med tåg och tider ("Möter RE 2021
+  13:41–13:43"), koppla och koppla loss per veckodag ("Koppla D 1611 till
+  tåget M,O,F"), byt passagerare, hämta fordonet från uppställningsspåret,
+  lyft, rundgång, vända, skjuta vagnar och låsnycklar. De räknas fram ur
+  planeringsfilen efter planeringsprogrammets egna regler och skrivs på
+  förarens språk, så en norsk förare läser "Krysser RE 2021 13:41–13:43" och
+  en svensk "Möter …". Kontrollerat mot Värnamos häfte, alla 142 tjänster.
+  Ett köruppdrag som redan är inlagt får anvisningarna när samma
+  planeringsfil läses in igen under Inställningar → Lokförare och
+  köruppdrag; sidorna och om det är tillgängligt för förarna behålls. Den
+  som redan kör en tjänst ser anvisningarna när hen väljer tjänsten igen.
+- **Sekunder**: tryck på klockan (eller NU-linjens tid) för att visa eller
+  dölja sekunderna, eller välj **Visa sekunder** under Inställningar →
+  Visning. Valet sparas i telefonen.
+- **Ikonen följer kontot**: samma ikon i Lokföraren, på banan och under
+  Användare i serverns admin. Den som har admin kan byta sin egen ikon där,
+  och ser förarnas ikoner i användarlistan.
+
 ### Lokföraren: köruppdrag i Inställningar, vägar dit och en egen app som alltid är aktuell (#225)
 
 Köruppdragen läggs nu in separat på servern under **Inställningar →

@@ -1163,10 +1163,46 @@ class TrainMeetHTTPApplication:
                 "Ägarbehörighet krävs",
             )
 
+    # Kontots ikon är en och samma i Lokföraren och i kontohanteringen: den
+    # ligger hos förarprofilen (DriverStore) under kontots id.
+    def _with_icon(self, user: dict[str, Any] | None) -> dict[str, Any] | None:
+        if user is None:
+            return None
+        profile = self.drivers.profile(str(user["user_id"]))
+        name = str(user.get("display_name") or user.get("email") or "")
+        return user | {
+            "initials": initials(name),
+            "avatar_url": (f"/v1/account/avatars/{user['user_id']}?v={profile['avatar_version']}"
+                           if profile["has_avatar"] else None),
+        }
+
     def admin_users(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
-        return {"users": self.identities.list_admin_users(), "role": client.admin_role,
-                "user_id": client.admin_user_id}
+        return {"users": [self._with_icon(user) for user in self.identities.list_admin_users()],
+                "role": client.admin_role, "user_id": client.admin_user_id}
+
+    def account_avatar(self, client: PairedClient, user_id: str) -> tuple[bytes, str]:
+        """Ikonen för kontohanteringen: administratörer ser allas, andra sin egen."""
+        if client.admin_role not in {"owner", "admin"} and client.admin_user_id != user_id:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "avatar_not_found", "Ikonen finns inte")
+        avatar = self.drivers.avatar(user_id)
+        if avatar is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "avatar_not_found", "Ikonen finns inte")
+        return avatar
+
+    def account_icon(self, client: PairedClient, payload: dict[str, Any] | None) -> dict[str, Any]:
+        """Byt (payload med image) eller ta bort (None) sin egen ikon."""
+        if not client.admin_user_id:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "account_required", "Ett inloggat konto krävs")
+        try:
+            if payload is None:
+                self.drivers.remove_avatar(client.admin_user_id)
+            else:
+                self.drivers.set_avatar(client.admin_user_id, payload.get("image"))
+        except DriverError as error:
+            raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error)) from None
+        self._record_user_change(client, "user.icon_changed" if payload is not None else "user.icon_removed", client.admin_user_id)
+        return {"user": self._with_icon(self.identities.admin_user(client.admin_user_id))}
 
     def create_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
@@ -1353,7 +1389,7 @@ class TrainMeetHTTPApplication:
         if not client.admin_user_id:
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "account_required", "Ett inloggat konto krävs")
         if payload is None:
-            return {"user": self.identities.admin_user(client.admin_user_id)}
+            return {"user": self._with_icon(self.identities.admin_user(client.admin_user_id))}
         if set(payload) - {"display_name", "email", "password"}:
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "account_fields_forbidden", "Bara eget namn, e-post och lösenord får ändras")
         try:
@@ -5682,6 +5718,11 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/account":
                 self._send_json(HTTPStatus.OK, self.server.application.own_account(self._authenticated_client()))
                 return
+            if path.startswith("/v1/account/avatars/"):
+                data, kind = self.server.application.account_avatar(
+                    self._authenticated_client(), path.removeprefix("/v1/account/avatars/"))
+                self._send_bytes(HTTPStatus.OK, data, kind)
+                return
             if path.startswith("/v1/driver/"):
                 self._driver_get(path, parsed.query)
                 return
@@ -6055,6 +6096,13 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             self._guard_user_admin_api(path)
             if path == "/v1/account":
                 self._send_json(HTTPStatus.OK, self.server.application.own_account(self._authenticated_client(), self._read_json()))
+                return
+            if path in {"/v1/account/avatar", "/v1/account/avatar/remove"}:
+                self._driver_admin_same_origin()
+                client = self._authenticated_client()
+                payload = self._read_json()
+                self._send_json(HTTPStatus.OK, self.server.application.account_icon(
+                    client, None if path.endswith("/remove") else payload))
                 return
             if path.startswith("/tmbox-lab/"):
                 from .terminal16_embedded import serve
@@ -6603,7 +6651,7 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         client = self._optional_authenticated_client()
         if not client or client.admin_role != "user":
             return
-        if path == "/v1/account" or path.startswith("/v1/driver/"):
+        if path == "/v1/account" or path.startswith("/v1/account/") or path.startswith("/v1/driver/"):
             return
         if self.command == "GET" and (path in {
             "/v1/auth/status", "/v1/workspaces", "/v1/display", "/v1/about",
@@ -6633,7 +6681,8 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 "authentication_required",
                 "Administratörsinloggning krävs",
             )
-        if client.admin_role == "user" and urlparse(self.path).path != "/v1/account":
+        account = urlparse(self.path).path
+        if client.admin_role == "user" and account != "/v1/account" and not account.startswith("/v1/account/"):
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_required", "Administratörsbehörighet krävs")
         return client
 

@@ -6052,6 +6052,8 @@ function renderUsers() {
     const pending = Boolean(user.invitation_pending);
 
     const name = document.createElement("td");
+    name.className = "users-name";
+    name.append(userAvatar(user));
     const strong = document.createElement("b");
     if (canEditUser(user)) {
       const nameButton = usersButton("Redigera", () => editUser(user));
@@ -6222,9 +6224,71 @@ async function removeUser(user) {
   if (result) finishModal(document.querySelector("#user-edit-form"), t("{name} är borttagen", { name: user.display_name }));
 }
 
+// Kontots ikon, samma som i Lokföraren: bild om det finns en, annars initialerna.
+function userAvatar(user, large = false) {
+  const element = document.createElement("span");
+  element.className = "users-avatar" + (large ? " users-avatar--l" : "");
+  element.setAttribute("aria-hidden", "true");
+  fillUserAvatar(element, user);
+  return element;
+}
+
+function fillUserAvatar(element, user) {
+  element.replaceChildren();
+  if (user?.avatar_url) {
+    const image = document.createElement("img");
+    image.src = user.avatar_url;
+    image.alt = "";
+    element.append(image);
+  } else {
+    element.dataset.noI18n = "";
+    element.textContent = user?.initials || "";
+  }
+}
+
+// En egen bild blir en fyrkantig ikon på 256 px, beskuren från mitten som i Lokföraren.
+async function iconFromFile(file) {
+  const bitmap = await createImageBitmap(file);
+  const side = Math.min(bitmap.width, bitmap.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 256;
+  canvas.getContext("2d").drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 256, 256);
+  bitmap.close?.();
+  for (const quality of [0.86, 0.75, 0.6]) {
+    const data = canvas.toDataURL("image/jpeg", quality);
+    if (data.length * 0.75 < 90 * 1024) return data;
+  }
+  return canvas.toDataURL("image/jpeg", 0.5);
+}
+
+async function saveOwnIcon(file) {
+  const feedback = document.querySelector("#user-edit-modal .modal-feedback");
+  let body = {};
+  try {
+    if (file) body = { image: await iconFromFile(file) };
+  } catch {
+    setMessage(feedback, "Bilden gick inte att läsa. Välj en PNG, JPEG eller WebP.", "error");
+    return;
+  }
+  const result = await usersPost(file ? "/v1/account/avatar" : "/v1/account/avatar/remove", body);
+  if (result?.user) {
+    users.editing = { ...users.editing, ...result.user };
+    renderOwnIcon(users.editing);
+    setMessage(feedback, file ? "Ikonen är sparad. Den syns också i Lokföraren." : "Ikonen är borttagen.", "success");
+  }
+}
+
+function renderOwnIcon(user) {
+  const self = user.user_id === users.userId;
+  document.querySelector("#user-edit-icon").hidden = !self;
+  fillUserAvatar(document.querySelector("#user-edit-icon-preview"), user);
+  document.querySelector("#user-edit-icon-remove").hidden = !user.avatar_url;
+}
+
 function editUser(user) {
   if (!canEditUser(user)) return;
   users.editing = user;
+  renderOwnIcon(user);
   document.querySelector("#user-edit-name").textContent = user.email || t("Saknar e-post – kan inte logga in");
   document.querySelector("#user-edit-display-name").value = user.display_name || "";
   const self = user.user_id === users.userId;
@@ -6243,6 +6307,12 @@ function editUser(user) {
 
 function bindUsersSection() {
   usersEl("invite-form")?.addEventListener("submit", inviteUser);
+  document.querySelector("#user-edit-icon-file")?.addEventListener("change", (event) => {
+    const file = event.target.files[0];
+    event.target.value = "";
+    if (file) saveOwnIcon(file);
+  });
+  document.querySelector("#user-edit-icon-remove")?.addEventListener("click", () => saveOwnIcon(null));
   document.querySelector("#user-edit-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;

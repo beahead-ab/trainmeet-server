@@ -70,6 +70,16 @@ DEMO_DUTY: dict[str, Any] = {
 }
 
 EVENT_KINDS = {"duty_start", "duty_end", "departure", "arrival", "stop", "pass", "note"}
+#: Anvisningarna i ett köruppdrag, som uppgifter Lokföraren skriver på
+#: förarens språk (se lokforaren-koruppdrag.js och docs/LOKFORAREN.md).
+INSTRUCTION_KINDS = {
+    "crosses", "overtakes", "overtaken_by", "exchange_passengers", "no_exchange",
+    "couple", "uncouple", "use", "from_parking", "to_parking", "lift_on", "lift_off",
+    "fetch_from_track", "put_on_track", "shunt_wagons_to_departure", "shunt_wagons_to_arrival",
+    "circulate", "turn", "turn_and_circulate", "push_wagons", "pick_up_key", "leave_key",
+}
+MEET_KINDS = {"crosses", "overtakes", "overtaken_by"}
+INSTRUCTIONS_MAX = 12
 _TIME = re.compile(r"^(\d{1,2}):([0-5]\d)$")
 
 
@@ -115,6 +125,50 @@ def initials(name: str) -> str:
     return (parts[0][0] + parts[-1][0]).upper()
 
 
+def _when(raw: dict[str, Any]) -> dict[str, list[int]]:
+    """Veckodagar (1 = måndag) eller pass som en anvisning gäller."""
+    for key, highest in (("days", 7), ("sessions", 14)):
+        values = raw.get(key)
+        if isinstance(values, list):
+            numbers = sorted({value for value in values if isinstance(value, int) and not isinstance(value, bool)
+                              and 1 <= value <= highest})
+            if numbers:
+                return {key: numbers}
+    return {}
+
+
+def normalize_instruction(raw: Any) -> dict[str, Any] | None:
+    """En anvisning i rätt form, eller None. Okända sorter hoppas över."""
+
+    if not isinstance(raw, dict) or raw.get("kind") not in INSTRUCTION_KINDS:
+        return None
+    instruction: dict[str, Any] = {"kind": raw["kind"]}
+    vehicles = raw.get("vehicles")
+    if isinstance(vehicles, list):
+        names = [_text(name, NAME_MAX) for name in vehicles[:8] if _text(name, NAME_MAX)]
+        if names:
+            instruction["vehicles"] = names
+    for key in ("track", "usage", "key", "place"):
+        if _text(raw.get(key), NAME_MAX):
+            instruction[key] = _text(raw.get(key), NAME_MAX)
+    for flag in ("train", "wagonset"):
+        if raw.get(flag) is True:
+            instruction[flag] = True
+    if raw["kind"] in MEET_KINDS:
+        meets = []
+        for meet in raw.get("meets") or []:
+            if not isinstance(meet, dict) or not _text(meet.get("train"), NAME_MAX):
+                continue
+            start, end = _time(meet.get("from")), _time(meet.get("to"))
+            if not start or not end:
+                continue
+            meets.append({"train": _text(meet.get("train"), NAME_MAX), "from": start, "to": end} | _when(meet))
+        if not meets:
+            return None
+        instruction["meets"] = meets[:INSTRUCTIONS_MAX]
+    return instruction | _when(raw)
+
+
 def normalize_duty(raw: Any) -> dict[str, Any] | None:
     """En förartjänst ur paketet, eller None om den inte går att använda.
 
@@ -150,6 +204,9 @@ def normalize_duty(raw: Any) -> dict[str, Any] | None:
         notes = [_text(note, 120) for note in (item.get("notes") or []) if _text(note, 120)]
         if notes:
             event["notes"] = notes[:6]
+        instructions = [found for found in map(normalize_instruction, item.get("instructions") or []) if found]
+        if instructions:
+            event["instructions"] = instructions[:INSTRUCTIONS_MAX]
         events.append(event)
     if not events:
         return None

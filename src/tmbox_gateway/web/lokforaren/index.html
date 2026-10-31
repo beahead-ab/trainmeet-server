@@ -29,7 +29,7 @@
       <div class="lf-header__sub" id="duty-sub"></div>
     </div>
     <div class="lf-header__clock">
-      <div class="lf-clock" id="clock" aria-live="off">--:--:--</div>
+      <button class="lf-clock" id="clock" type="button" aria-live="off" data-t-title="Tryck för att visa eller dölja sekunderna" title="Tryck för att visa eller dölja sekunderna">--:--:--</button>
       <div class="lf-status" id="clock-status"><span class="lf-status__dot"></span><span id="clock-status-text">–</span></div>
     </div>
   </header>
@@ -106,6 +106,7 @@
         <div class="lf-next__row"><span class="lf-kicker" id="next-label" data-t="NÄSTA">NÄSTA</span><span class="lf-next__left" id="next-left"></span></div>
         <div class="lf-next__row lf-next__main"><span class="lf-next__title" id="next-title"></span><span class="lf-next__time" id="next-time"></span></div>
         <div class="lf-chips" id="next-chips"></div>
+        <div class="tl-notes lf-next__notes" id="next-notes" hidden></div>
         <button class="lf-button lf-button--checkin" type="button" id="open-checkin"><span class="lf-avatar lf-avatar--s" id="checkin-avatar"></span><span id="open-checkin-text"></span></button>
       </section>
     </section>
@@ -165,6 +166,7 @@
               <option value="sv">Svenska</option><option value="da">Dansk</option><option value="nb">Norsk</option><option value="en">English</option><option value="de">Deutsch</option>
             </select>
           </label>
+          <label class="lf-row lf-switch"><span data-t="Visa sekunder">Visa sekunder</span><input type="checkbox" id="me-seconds" role="switch"></label>
           <label class="lf-row"><span data-t="Tema">Tema</span>
             <select id="me-theme">
               <option value="dark" data-t="Mörkt">Mörkt</option><option value="light" data-t="Ljust">Ljust</option><option value="system" data-t="Som telefonen">Som telefonen</option>

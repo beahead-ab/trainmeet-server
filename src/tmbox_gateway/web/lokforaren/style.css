@@ -68,7 +68,7 @@ button { cursor: pointer; }
 .lf-header__title { display: flex; align-items: center; gap: 8px; font-size: 21px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
 .lf-header__sub { font-size: 12.5px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lf-header__clock { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-.lf-clock { font-size: 27px; font-weight: 650; letter-spacing: -.02em; line-height: 30px; }
+.lf-clock { font-size: 27px; font-weight: 650; letter-spacing: -.02em; line-height: 30px; padding: 0; border: 0; background: none; color: inherit; font-family: inherit; font-variant-numeric: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .lf-clock.is-frozen { color: var(--mute); }
 .lf-status { display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--mute); background: var(--panel3); white-space: nowrap; }
 .lf-status__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
@@ -179,6 +179,14 @@ button { cursor: pointer; }
 .tl-row__sub { font-size: 13px; line-height: 18px; color: var(--ink2); }
 .tl-row.is-past .tl-row__name, .tl-row.is-past .tl-row__sub, .tl-dep.is-past { color: var(--mute); }
 .tl-row .lf-chips { margin-top: 7px; text-shadow: none; }
+/* Anvisningarna under en rad, en per rad som i köruppdraget. */
+/* Egen bakgrund: NU-linjen går bakom anvisningarna, inte genom texten. */
+.tl-notes { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; position: relative; z-index: 1; align-self: flex-start; width: fit-content; max-width: 100%; background: var(--bg); border-radius: 4px; text-shadow: none; }
+.tl-notes[hidden] { display: none; }
+.tl-note { font-size: 13px; line-height: 16px; color: var(--ink2); padding-left: 8px; border-left: 2px solid var(--line2); }
+.tl-row.is-past .tl-note { color: var(--mute); }
+.lf-next__notes { margin-top: 8px; }
+.lf-next__notes .tl-note { font-size: 14px; line-height: 18px; color: var(--ink); }
 .tl-dep { position: absolute; left: 106px; right: 16px; font-size: 13px; line-height: 18px; color: var(--ink2); text-shadow: var(--halo); }
 .tl-train { position: absolute; left: 100px; right: 16px; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; }
 .tl-train__nr { font-size: 12.5px; font-weight: 700; letter-spacing: .02em; padding: 3px 8px; border-radius: 6px; background: var(--blue-soft); color: var(--blue); }
@@ -192,7 +200,7 @@ button { cursor: pointer; }
 .tl-nowring { position: absolute; top: 0; left: 78px; width: 12px; height: 12px; margin-top: -6px; border: 2px solid var(--now); border-radius: 50%; background: var(--bg); pointer-events: none; will-change: transform; }
 .lf-nowchip { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 7px; border-radius: 6px; font-size: 12.5px; font-weight: 700; background: var(--now-chip); color: #0b0b0b; white-space: nowrap; }
 .lf-nowchip svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
-.tl-nowchip { position: absolute; top: 0; left: 6px; margin-top: -11px; pointer-events: none; will-change: transform; }
+.tl-nowchip { position: absolute; top: 0; left: 6px; margin-top: -11px; will-change: transform; cursor: pointer; }
 .lf.is-stopped .tl-nowline, .lf.is-lost .tl-nowline { box-shadow: none; }
 .lf.is-lost .tl-nowline { height: 0; margin-top: 0; background: transparent; border-top: 2px dashed var(--now); }
 .lf.is-lost .lf-nowchip { background: var(--panel); color: var(--amber); box-shadow: inset 0 0 0 1.5px var(--now); }

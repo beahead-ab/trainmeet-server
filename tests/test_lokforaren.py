@@ -115,6 +115,31 @@ class DutyShapeTests(unittest.TestCase):
         self.assertIsNone(normalize_duty({"events": [{"kind": "arrival", "time": "10:00"}]}))
 
 
+class InstructionShapeTests(unittest.TestCase):
+    def test_instructions_keep_known_kinds_valid_times_and_days(self) -> None:
+        from tmbox_gateway.driver import normalize_duty
+
+        duty = normalize_duty({"number": "39", "events": [{
+            "kind": "stop", "arrival": "13:41", "departure": "13:44", "station": "Steinsnes",
+            "instructions": [
+                {"kind": "crosses", "meets": [{"train": "NSB L 410", "from": "13:41", "to": "13:43", "days": [2, 4]},
+                                              {"train": "Utan tid", "from": "x", "to": "13:00"}]},
+                {"kind": "couple", "vehicles": ["NSB 02 Di4", ""], "days": [2, 4, 6, 9, True]},
+                {"kind": "fetch_from_track", "train": True, "track": "18", "usage": "Opstilling", "wagonset": "ja"},
+                {"kind": "pick_up_key", "key": "K16", "place": "Hammarlind"},
+                {"kind": "crosses", "meets": []},
+                {"kind": "script", "vehicles": ["<b>"]},
+                "inte en anvisning",
+            ],
+        }]})
+        self.assertEqual([
+            {"kind": "crosses", "meets": [{"train": "NSB L 410", "from": "13:41", "to": "13:43", "days": [2, 4]}]},
+            {"kind": "couple", "vehicles": ["NSB 02 Di4"], "days": [2, 4, 6]},
+            {"kind": "fetch_from_track", "track": "18", "usage": "Opstilling", "train": True},
+            {"kind": "pick_up_key", "key": "K16", "place": "Hammarlind"},
+        ], duty["events"][0]["instructions"])
+
+
 class DriverStoreTests(unittest.TestCase):
     def setUp(self) -> None:
         directory = tempfile.TemporaryDirectory()
@@ -263,6 +288,39 @@ class LokforarenHTTPTests(unittest.TestCase):
         self.assertEqual((200, PNG, "image/png"), (status, payload["raw"], payload["type"]))
         self.assertEqual(401, self.request(user["avatar_url"])[0])
         self.assertEqual(400, self.request("/v1/driver/avatar", {"image": "data:text/html;base64,PGI+"}, cookie=benny)[0])
+
+    def test_the_icon_is_the_same_in_lokforaren_and_in_the_account(self) -> None:
+        anna, benny, maja = self.login("anna"), self.login("benny"), self.login("maja")
+        # Lagd i Lokföraren: syns i användarlistan och i det egna kontot.
+        driver = self.request("/v1/driver/avatar", {"image": data_url("image/png", PNG)}, cookie=benny)[1]["user"]
+        listed = {user["display_name"]: user for user in self.request("/v1/admin/users", cookie=anna)[1]["users"]}
+        self.assertTrue(listed["Benny"]["avatar_url"].startswith(f"/v1/account/avatars/{driver['user_id']}?v="))
+        self.assertIsNone(listed["Anna"]["avatar_url"])
+        self.assertEqual("AN", listed["Anna"]["initials"])
+        own = self.request("/v1/account", cookie=benny)[1]["user"]
+        self.assertEqual(listed["Benny"]["avatar_url"], own["avatar_url"])
+        status, payload, _ = self.request(own["avatar_url"], cookie=benny)
+        self.assertEqual((200, PNG), (status, payload["raw"]))
+        # Administratören ser allas ikoner, en annan förare inte här.
+        self.assertEqual(200, self.request(own["avatar_url"], cookie=anna)[0])
+        self.assertEqual(404, self.request(own["avatar_url"], cookie=maja)[0])
+        self.assertEqual(401, self.request(own["avatar_url"])[0])
+        # Byt i kontot: Lokföraren får samma, med ny version.
+        jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+        changed = self.request("/v1/account/avatar", {"image": data_url("image/jpeg", jpeg)}, cookie=benny)[1]["user"]
+        self.assertNotEqual(own["avatar_url"], changed["avatar_url"])
+        session = self.request("/v1/driver/session", cookie=benny)[1]["user"]
+        status, payload, _ = self.request(session["avatar_url"], cookie=maja)
+        self.assertEqual((200, jpeg, "image/jpeg"), (status, payload["raw"], payload["type"]))
+        self.assertEqual(400, self.request("/v1/account/avatar", {"image": "data:text/html;base64,PGI+"}, cookie=benny)[0])
+        self.assertEqual(403, self.request("/v1/account/avatar", {"image": data_url("image/png", PNG)}, cookie=benny,
+                                           headers={"Origin": "https://evil.example"})[0])
+        # Ta bort i kontot: borta i Lokföraren också.
+        removed = self.request("/v1/account/avatar/remove", {}, cookie=benny)[1]["user"]
+        self.assertIsNone(removed["avatar_url"])
+        self.assertIsNone(self.request("/v1/driver/session", cookie=benny)[1]["user"]["avatar_url"])
+        # Administratören byter sin egen på samma sätt.
+        self.assertTrue(self.request("/v1/account/avatar", {"image": data_url("image/png", PNG)}, cookie=anna)[1]["user"]["avatar_url"])
 
     def test_a_driver_post_from_another_site_is_refused(self) -> None:
         benny = self.login("benny")

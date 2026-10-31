@@ -786,6 +786,16 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
 #login :is(#redeem-form, #forgot-form) .link-button { margin-top: 8px; padding-top: 8px; border-top: 0; color: var(--kr-mute); }
 /* Användarens e-post under namnet i Inställningar → Användare. */
 .users-email { margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--kr-mute); overflow-wrap: anywhere; }
+/* Kontots ikon, samma som i Lokföraren. */
+/* Namncellen bär ikonen till vänster; cellen förblir en tabellcell (ingen flex). */
+.users-name { min-width: 180px; }
+.users-avatar { float: left; width: 30px; height: 30px; margin: 1px 10px 0 0; border-radius: 50%; overflow: hidden; display: inline-grid; place-items: center; background: var(--kr-blue-soft); color: var(--kr-blue); font: 700 11px/1 var(--kr-sans); }
+.users-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.users-avatar--l { float: none; width: 52px; height: 52px; margin: 0; font-size: 17px; flex: 0 0 52px; }
+.users-icon { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 12px; }
+.users-icon[hidden] { display: none; }
+.users-icon__text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 160px; }
+.users-icon__pick { cursor: pointer; }
 /* Utan adress kan kontot inte logga in. Det ska synas för ägaren, som ger det en under Redigera. */
 .users-email.users-no-email { color: var(--kr-amber); font-weight: 600; }
 /* Glömt lösenordet? och Jag har en kod på samma rad under inloggningen. */
