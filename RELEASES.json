@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.13.10",
+    "date": "2026-10-31",
+    "notes": [
+      "Förbered generell ram för externa trafikintegrationer"
+    ]
+  },
+  {
     "version": "4.13.9",
     "date": "2026-10-30",
     "notes": [
