@@ -6,6 +6,7 @@ i tidsordning.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .times import canonical_days, clock_minutes, normalized, safe_id
@@ -29,14 +30,74 @@ def merge_text(left: Any, right: Any) -> str:
     return "\n".join(values)
 
 
-def service_groups(rows: list[dict[str, Any]]) -> dict[tuple[str, str], list[dict[str, Any]]]:
-    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+#: Största tillåtna lucka mellan två stopp i samma tåg när dygnen står i
+#: raderna. Är luckan större stämmer dygnen inte med tiderna längre (någon
+#: har till exempel ändrat en tid i rutnätet) och ordningen räknas fram som
+#: för rader utan dygn.
+EXPLICIT_DAY_GAP = 12 * 60
+
+
+def service_key(row: dict[str, Any]) -> str:
+    """Vad som skiljer två tåg med samma nummer och dagar åt, t.ex. "SJ X"."""
+    return " ".join(str(row.get("service_key") or "").split())
+
+
+def service_label(number: str, key: str) -> str:
+    """Tågets namn i texter: numret, och bolag/förkortning när numret delas."""
+    return f"{number} ({key})" if key else number
+
+
+def service_groups(rows: list[dict[str, Any]]) -> dict[tuple[str, str, str], list[dict[str, Any]]]:
+    """Raderna per tåg: (nummer, trafikdagar, nyckel).
+
+    Nyckeln är tom för de flesta tåg. Den finns bara när två tåg delar nummer
+    och dagar (SJ X 116 och DSB IC 116). En rad utan nyckel hör till det enda
+    tåget med nyckel bland samma nummer och dagar; finns flera sådana tåg kan
+    raden inte placeras och blir ett eget tåg utan nyckel.
+    """
+    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    keys: dict[tuple[str, str], set[str]] = {}
     for row in rows:
-        groups.setdefault((str(row.get("train_number") or ""), canonical_days(str(row.get("days") or "Dagl"))), []).append(row)
+        base = (str(row.get("train_number") or ""), canonical_days(str(row.get("days") or "Dagl")))
+        if service_key(row):
+            keys.setdefault(base, set()).add(service_key(row))
+    for row in rows:
+        number, days = str(row.get("train_number") or ""), canonical_days(str(row.get("days") or "Dagl"))
+        key = service_key(row)
+        if not key and len(keys.get((number, days), ())) == 1:
+            key = next(iter(keys[(number, days)]))
+        groups.setdefault((number, days, key), []).append(row)
     return groups
 
 
+def _absolute_minute(row: dict[str, Any]) -> int | None:
+    """Minuten räknad från tågets trafikdag, när raden bär sitt dygn."""
+    minute, day = clock_minutes(row.get("sort_time")), row.get("day_offset")
+    if minute is None or isinstance(day, bool) or not isinstance(day, int) or not 0 <= day <= 30:
+        return None
+    return day * 24 * 60 + minute
+
+
+def explicit_day_order(rows: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+    """Raderna i körordning efter dygn och tid, om alla tidsatta rader bär dygn som håller.
+
+    Svarar None när ett dygn saknas eller inte stämmer med tiderna, och då
+    gäller den gamla regeln med den längsta luckan.
+    """
+    timed = [row for row in rows if clock_minutes(row.get("sort_time")) is not None]
+    if not timed or any(_absolute_minute(row) is None for row in timed):
+        return None
+    ordered = sorted(timed, key=lambda row: (_absolute_minute(row), str(row.get("id") or "")))
+    minutes = [_absolute_minute(row) for row in ordered]
+    if any(later - earlier > EXPLICIT_DAY_GAP for earlier, later in zip(minutes, minutes[1:])):
+        return None
+    return ordered + [row for row in rows if clock_minutes(row.get("sort_time")) is None]
+
+
 def order_across_midnight(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    explicit = explicit_day_order(rows)
+    if explicit is not None:
+        return explicit
     timed = [(row, clock_minutes(row.get("sort_time"))) for row in rows]
     ordered = sorted(timed, key=lambda item: (item[1] if item[1] is not None else 24 * 60, str(item[0].get("id") or "")))
     if len(ordered) < 2:
@@ -111,9 +172,12 @@ def build_services(rows: list[dict[str, Any]], station_names: dict[str, str]) ->
     routes: list[dict[str, Any]] = []
     groups = service_groups(rows)
     service_ids: dict[str, str] = {}
-    for (number, days), group in groups.items():
-        service_id = safe_id("service", f"{number}-{days}")
+    for (number, days, key), group in groups.items():
+        # Ett tåg utan nyckel behåller sitt gamla id; det med nyckel får den i id:t.
+        service_id = safe_id("service", f"{number}-{days}-{key}" if key else f"{number}-{days}")
         ordered = service_stops(group)
+        explicit = explicit_day_order(ordered) is not None
+        first_day = min((row["day_offset"] for row in ordered if _absolute_minute(row) is not None), default=0) if explicit else 0
         stops = []
         previous_minute: int | None = None
         day_offset = 0
@@ -121,7 +185,10 @@ def build_services(rows: list[dict[str, Any]], station_names: dict[str, str]) ->
             minute = clock_minutes(row.get("sort_time"))
             if minute is None:
                 continue
-            if previous_minute is not None and minute < previous_minute:
+            if explicit:
+                # Dygnet som underlaget anger, räknat från tågets första stopp.
+                day_offset = row["day_offset"] - first_day
+            elif previous_minute is not None and minute < previous_minute:
                 day_offset += 1
             previous_minute = minute
             station_name = row.get("station") or station_names.get(str(row.get("station_id")), "")
@@ -132,6 +199,12 @@ def build_services(rows: list[dict[str, Any]], station_names: dict[str, str]) ->
             routes.append({"id": f"{service_id}-{index}", "service_id": service_id, "train_number": number, "days": days, **stop})
         for row in group:
             service_ids[row["id"]] = service_id
-        services.append({"id": service_id, "train_number": number, "days": days,
-                         "train_type": (ordered[0] if ordered else group[0]).get("train_type") or "person", "stops": stops})
+        service = {"id": service_id, "train_number": number, "days": days,
+                   "train_type": (ordered[0] if ordered else group[0]).get("train_type") or "person", "stops": stops}
+        if key:
+            service["service_key"] = key
+        color = next((str(row.get("train_color")) for row in group if re.fullmatch(r"#[0-9A-Fa-f]{6}", str(row.get("train_color") or ""))), None)
+        if color:
+            service["color"] = color  # tågslagets färg i planen, som i arrangörens grafblad
+        services.append(service)
     return services, routes, service_ids

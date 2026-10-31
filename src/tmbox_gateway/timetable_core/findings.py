@@ -12,11 +12,18 @@ import hashlib
 import json
 import re
 
+from .services import explicit_day_order, service_groups, service_label
 from .times import clock_minutes as _clock_minutes
 
 WEEK = 7 * 1440
 ENGINE_VERSION = 4  # Invalidate persisted reports: v3 per-weekday intervals, v4 the sanity list.
 DAY_NAMES = ('Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön')
+
+
+def train_labels(rows):
+    """Radens tåg som text: numret, med bolag och tågslag när numret delas."""
+    return {row['id']: service_label(number, key)
+            for (number, _days, key), group in service_groups(list(rows)).items() for row in group}
 
 
 def train_number_key(number):
@@ -84,6 +91,11 @@ def ordered_stops(group):
         key = tuple(row.get(k) for k in ('station_id', 'arrival_time', 'departure_time', 'track', 'no_stop'))
         stop = stops.setdefault(key, {'row': row, 'ids': [], 'days': set()}); stop['ids'].append(row['id']); stop['days'].update(days(row.get('days'))[0])
     ordered = sorted(stops.values(), key=lambda s: (sort_minute(s['row']) if sort_minute(s['row']) is not None else 9999, s['row']['id']))
+    # Bär raderna sina dygn (planens "1.00:05") gäller den ordningen.
+    explicit = explicit_day_order([{**s['row'], 'sort_time': s['row'].get('sort_time') if _clock_minutes(s['row'].get('sort_time')) is not None else s['row'].get('arrival_time') or s['row'].get('departure_time')} for s in ordered])
+    if explicit is not None:
+        position = {row['id']: index for index, row in enumerate(explicit)}
+        return sorted(ordered, key=lambda s: position.get(s['row']['id'], len(position)))
     origins = [s for s in ordered if s['row'].get('departure_time') and not s['row'].get('arrival_time')]
     if len(origins) == 1:
         pivot = ordered.index(origins[0]); ordered = ordered[pivot:] + ordered[:pivot]
@@ -190,6 +202,7 @@ def check_draft(draft, *, previous=(), now=None):
         if reached != set(stations): structural('disconnected', 'Banan är inte sammanhängande.')
 
     groups = defaultdict(list)
+    labels = train_labels(rows.values())
     for row in rows.values():
         rid, sid, number = row['id'], row.get('station_id'), str(row.get('train_number') or '')
         if sid not in stations: structural(f'station:{rid}', f'Tåg {number} hänvisar till en okänd station.', [rid]); continue
@@ -201,7 +214,8 @@ def check_draft(draft, *, previous=(), now=None):
             add('D', f'time:{rid}', [number], None, [rid], f'tid saknas eller kan inte tolkas vid {stations[sid].get("name", sid)}.', title=f'Tåg {number}', station=sid)
         elif any(row.get(field) and _clock_minutes(row[field]) is None for field in ('arrival_time', 'departure_time')):
             add('D', f'time:{rid}', [number], None, [rid], 'en angiven tid kan inte tolkas.', title=f'Tåg {number}', station=sid)
-        groups[number].append(row)
+        # Tåg som delar nummer och dagar hålls isär: "116 (SJ X)" och "116 (DSB IC)".
+        groups[labels.get(rid, number)].append(row)
 
     for number, group in sorted(groups.items()):
         # Duplicate imports do not create duplicate visits or lose provenance.
