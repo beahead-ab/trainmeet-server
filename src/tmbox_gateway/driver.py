@@ -27,8 +27,12 @@ from typing import Any
 
 #: En incheckning syns fullt så här länge …
 CHECKIN_VISIBLE = timedelta(minutes=10)
-#: … och tonar sedan ut under så här lång tid.
+#: … och tonar sedan ut under så här lång tid. Båda i spelminuter: på
+#: träffklockan, så att en stoppad klocka håller kvar incheckningen och 4×
+#: tonar ut den fyra gånger så fort.
 CHECKIN_FADE = timedelta(minutes=5)
+#: En incheckning gäller som längst ett dygn i verklig tid, vad klockan än gör.
+CHECKIN_KEPT = timedelta(days=1)
 #: En ikon är en liten bild som webbläsaren redan beskurit och skalat ned.
 AVATAR_MAX_BYTES = 96 * 1024
 AVATAR_TYPES = ("image/png", "image/jpeg", "image/webp")
@@ -135,6 +139,49 @@ def _when(raw: dict[str, Any]) -> dict[str, list[int]]:
             if numbers:
                 return {key: numbers}
     return {}
+
+
+def meet_seconds(clock: dict[str, Any] | None) -> float | None:
+    """Träffklockans löpande sekunder (fortsätter över midnatt), eller
+    klockslaget i sekunder när klockan inte har dem (en extern klocka)."""
+
+    if not clock:
+        return None
+    elapsed = clock.get("elapsed_seconds")
+    if isinstance(elapsed, (int, float)) and not isinstance(elapsed, bool):
+        return float(elapsed)
+    return _clock_seconds(clock.get("time"))
+
+
+def _clock_seconds(value: Any) -> float | None:
+    match = re.match(r"^(\d{1,2}):(\d{2})(?::(\d{2}(?:\.\d+)?))?$", str(value or ""))
+    if not match:
+        return None
+    return int(match[1]) * 3600 + int(match[2]) * 60 + float(match[3] or 0)
+
+
+def game_age(then_seconds: float | None, then_time: str | None, clock: dict[str, Any] | None) -> float | None:
+    """Hur många spelsekunder sedan incheckningen, på träffklockan.
+
+    Med löpande sekunder i båda ändar räknas skillnaden rakt av; annars
+    klockslagen, närmaste vägen runt midnatt. Har klockan ställts tillbaka
+    förbi incheckningen (tidsmaskinen, ett nytt försök) är den inte aktuell
+    längre: None. En minut bakåt räknas som nyss (avrundning, synk).
+    """
+
+    if not clock:
+        return None
+    elapsed = clock.get("elapsed_seconds")
+    if then_seconds is not None and isinstance(elapsed, (int, float)) and not isinstance(elapsed, bool):
+        difference = float(elapsed) - float(then_seconds)
+    else:
+        now, then = _clock_seconds(clock.get("time")), _clock_seconds(then_time)
+        if now is None or then is None:
+            return None
+        difference = (now - then + 43200) % 86400 - 43200
+    if difference < -60:
+        return None
+    return max(0.0, difference)
 
 
 def normalize_instruction(raw: Any) -> dict[str, Any] | None:
@@ -314,6 +361,11 @@ class DriverStore:
             CREATE INDEX IF NOT EXISTS driver_checkins_by_meet ON driver_checkins(meet_key, created_at);
             """
         )
+        # Träffklockans löpande sekunder vid incheckningen (över midnatt och
+        # dygn), så att åldern räknas i spelminuter. Äldre rader har bara klockslaget.
+        columns = {row[1] for row in self._connection.execute("PRAGMA table_info(driver_checkins)")}
+        if "meet_seconds" not in columns:
+            self._connection.execute("ALTER TABLE driver_checkins ADD COLUMN meet_seconds REAL")
 
     def close(self) -> None:
         with self._lock:
@@ -438,7 +490,8 @@ class DriverStore:
     # ------------------------------------------------------- incheckning
 
     def check_in(self, user_id: str, meet_key: str, payload: dict[str, Any], *,
-                 duty: dict[str, Any] | None, meet_time: str | None, now: datetime | None = None) -> dict[str, Any]:
+                 duty: dict[str, Any] | None, meet_time: str | None, meet_seconds: float | None = None,
+                 now: datetime | None = None) -> dict[str, Any]:
         station = _text(payload.get("station"), NAME_MAX)
         if not station:
             raise DriverError(400, "station_required", "Välj stationen du checkar in på")
@@ -454,30 +507,42 @@ class DriverStore:
         with self._lock:
             cursor = self._connection.execute(
                 "INSERT INTO driver_checkins(user_id, meet_key, station, station_id, track, duty_number, train,"
-                " meet_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " meet_time, meet_seconds, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (user_id, meet_key, station, station_id, track, duty["number"] if duty else None, train,
-                 meet_time, _iso(moment)),
+                 meet_time, meet_seconds, _iso(moment)),
             )
             # Bara den senaste platsen räknas. Äldre rader än en dag behövs inte.
             self._connection.execute(
-                "DELETE FROM driver_checkins WHERE created_at < ?", (_iso(moment - timedelta(days=1)),)
+                "DELETE FROM driver_checkins WHERE created_at < ?", (_iso(moment - CHECKIN_KEPT),)
             )
         return {"checkin_id": cursor.lastrowid, "station": station, "station_id": station_id, "track": track,
                 "train": train, "meet_time": meet_time, "created_at": _iso(moment)}
 
-    def latest_checkins(self, meet_key: str, *, now: datetime | None = None) -> dict[str, dict[str, Any]]:
-        """Varje förares senaste incheckning de senaste femton minuterna."""
+    def latest_checkins(self, meet_key: str, *, clock: dict[str, Any] | None = None,
+                        now: datetime | None = None) -> dict[str, dict[str, Any]]:
+        """Varje förares senaste incheckning som fortfarande syns.
+
+        ``age_seconds`` är i spelsekunder när träffklockan finns (``clock``,
+        med ``elapsed_seconds`` eller ``time``), annars i verklig tid. En
+        incheckning syns i CHECKIN_VISIBLE + CHECKIN_FADE av den tiden.
+        """
         moment = now or _now()
-        since = _iso(moment - CHECKIN_VISIBLE - CHECKIN_FADE)
+        since = _iso(moment - CHECKIN_KEPT)
         with self._lock:
             rows = self._connection.execute(
-                "SELECT user_id, station, station_id, track, duty_number, train, meet_time, created_at"
+                "SELECT user_id, station, station_id, track, duty_number, train, meet_time, created_at, meet_seconds"
                 " FROM driver_checkins WHERE meet_key = ? AND created_at >= ? ORDER BY created_at, checkin_id",
                 (meet_key, since),
             ).fetchall()
+        newest = {row[0]: row for row in rows}
+        shown = (CHECKIN_VISIBLE + CHECKIN_FADE).total_seconds()
+        on_the_clock = bool(clock) and clock.get("configured", True) is not False
         latest: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            age = max(0.0, (moment - _parse(row[7])).total_seconds())
-            latest[row[0]] = {"station": row[1], "station_id": row[2], "track": row[3], "duty_number": row[4],
-                              "train": row[5], "meet_time": row[6], "created_at": row[7], "age_seconds": round(age, 1)}
+        for user_id, row in newest.items():
+            age = (game_age(row[8], row[6], clock) if on_the_clock
+                   else max(0.0, (moment - _parse(row[7])).total_seconds()))
+            if age is None or age > shown:
+                continue
+            latest[user_id] = {"station": row[1], "station_id": row[2], "track": row[3], "duty_number": row[4],
+                               "train": row[5], "meet_time": row[6], "created_at": row[7], "age_seconds": round(age, 1)}
         return latest

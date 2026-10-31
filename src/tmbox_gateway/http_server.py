@@ -51,6 +51,7 @@ from .driver import (
     DriverStore,
     duty_summary,
     initials,
+    meet_seconds,
     normalize_duty,
 )
 from .driver_documents import MAX_PDF_BYTES, DriverDocuments
@@ -925,6 +926,46 @@ class TrainMeetHTTPApplication:
         return [{"id": str(station.get("id")), "name": str(station.get("name") or "")} for station in ordered
                 if not station.get("is_autonomous")]
 
+    def _meet_clock(self) -> dict[str, Any]:
+        """Träffklockan med löpande sekunder: incheckningarnas ålder räknas i spelminuter."""
+        return self.clock_status(self.local_admin())
+
+    def _map_drivers(self) -> list[dict[str, Any]]:
+        """Förarna som checkat in och valt att synas, för kartorna i /v1/display:
+        Drift, storskärmarna och deltagarnas sida. Den senaste först."""
+        if self.drivers is None:
+            return []
+        meet_key, _, _ = self._driver_meet()
+        latest = self.drivers.latest_checkins(meet_key, clock=self._meet_clock())
+        if not latest:
+            return []
+        accounts = {str(account["user_id"]): account for account in self.identities.list_admin_users()}
+        drivers = []
+        for user_id, checkin in latest.items():
+            account, profile = accounts.get(user_id), self.drivers.profile(user_id)
+            if account is None or not profile["visible"]:
+                continue
+            name = str(account.get("display_name") or "").strip() or initials(str(account.get("email") or ""))
+            drivers.append({
+                "user_id": user_id, "name": name, "initials": initials(name),
+                "avatar_url": (f"/v1/display/driver-avatars/{user_id}?v={profile['avatar_version']}"
+                               if profile["has_avatar"] else None),
+                "station_id": checkin["station_id"], "station": checkin["station"],
+                "duty_number": checkin["duty_number"], "train": checkin["train"],
+                "meet_time": checkin["meet_time"], "age_seconds": checkin["age_seconds"],
+            })
+        return sorted(drivers, key=lambda driver: driver["age_seconds"])
+
+    def display_driver_avatar(self, user_id: str) -> tuple[bytes, str]:
+        """Ikonen för en förare på kartan. Öppen som /v1/display, men bara för
+        den som checkat in, syns just nu och valt att synas."""
+        if not any(driver["user_id"] == user_id and driver["avatar_url"] for driver in self._map_drivers()):
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "avatar_not_found", "Ikonen finns inte")
+        avatar = self.drivers.avatar(user_id)
+        if avatar is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "avatar_not_found", "Ikonen finns inte")
+        return avatar
+
     def driver_clock(self) -> dict[str, Any]:
         """Träffklockan som förarens telefon följer. Servern är enda källan."""
         clock = self.clock_status(self.local_admin())
@@ -987,20 +1028,21 @@ class TrainMeetHTTPApplication:
     def driver_check_in(self, user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         meet_key, _, _ = self._driver_meet()
         active = self.drivers.active(str(user["user_id"]), meet_key)
-        clock = self.driver_clock()
+        clock = self._meet_clock()
         checkin = self.drivers.check_in(str(user["user_id"]), meet_key, payload,
                                         duty=active["duty"] if active else None,
-                                        meet_time=str(clock.get("time") or "") or None)
+                                        meet_time=str(clock.get("time") or "") or None,
+                                        meet_seconds=meet_seconds(clock) if clock.get("configured") else None)
         return {"checkin": checkin}
 
     def driver_presence(self, user: dict[str, Any]) -> dict[str, Any]:
         """Förarna på träffen: aktiv tjänst och senaste incheckning.
 
         Den som stängt av synligheten syns inte för andra, men alltid för
-        sig själv. En incheckning äldre än femton minuter är borta.
+        sig själv. En incheckning äldre än femton spelminuter är borta.
         """
         meet_key, _, _ = self._driver_meet()
-        latest = self.drivers.latest_checkins(meet_key)
+        latest = self.drivers.latest_checkins(meet_key, clock=self._meet_clock())
         active = self.drivers.active_drivers(meet_key)
         accounts = {str(account["user_id"]): account for account in self.identities.list_admin_users()}
         drivers = []
@@ -1053,7 +1095,7 @@ class TrainMeetHTTPApplication:
         träffens köruppdrag."""
         self._require_admin(client)
         meet_key, meet, _ = self._driver_meet()
-        latest = self.drivers.latest_checkins(meet_key)
+        latest = self.drivers.latest_checkins(meet_key, clock=self._meet_clock())
         active = self.drivers.active_drivers(meet_key)
         drivers = []
         for account in self.identities.list_admin_users():
@@ -2078,10 +2120,16 @@ class TrainMeetHTTPApplication:
                 positions = self._without_stabled(publication, positions, stabled)
         calendar = self.calendar_state() if publication is not None and not (selected and selected["region"] == "us") else None
         trains, services, manual = self._identified(publication, timetable)
+        drivers = self._map_drivers() if not (selected and selected["region"] == "us") else []
         return {
             "protocol_version": 1,
             "revision": self.engine.revision,
             "publication_id": publication_id,
+            # Förarna som checkat in i Lokföraren och valt att synas (kartorna),
+            # och hur länge en incheckning syns och tonar ut, i spelsekunder.
+            "drivers": drivers,
+            "driver_checkin_seconds": {"visible": int(CHECKIN_VISIBLE.total_seconds()),
+                                       "fade": int(CHECKIN_FADE.total_seconds())},
             "meet": meet,
             "active_day": active_day,
             "calendar": calendar,
@@ -5859,6 +5907,11 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     self.server.application.display_snapshot(self.headers.get("Host", "")),
                 )
                 return
+            if path.startswith("/v1/display/driver-avatars/"):
+                data, kind = self.server.application.display_driver_avatar(path.removeprefix("/v1/display/driver-avatars/"))
+                # Kartorna ritas om flera gånger i minuten; adressen har ikonens version.
+                self._send_bytes(HTTPStatus.OK, data, kind, headers={"Cache-Control": "private, max-age=300"})
+                return
             if path == "/v1/about":
                 self._send_json(HTTPStatus.OK, self.server.application.about_snapshot())
                 return
@@ -6663,7 +6716,7 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         if self.command == "GET" and (path in {
             "/v1/auth/status", "/v1/workspaces", "/v1/display", "/v1/about",
             "/v1/events", "/v1/setup", "/v1/info",
-        } or path.startswith("/v1/clock-faces/")):
+        } or path.startswith("/v1/clock-faces/") or path.startswith("/v1/display/driver-avatars/")):
             return
         if self.command == "POST" and path in {"/v1/auth/login", "/v1/auth/logout"}:
             return
@@ -7060,14 +7113,16 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
+        headers = dict(headers or {})
+        # no-store om inget annat sägs; en adress med version får sparas en stund.
+        self.send_header("Cache-Control", headers.pop("Cache-Control", "no-store"))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header(
             "Content-Security-Policy",
             "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'",
         )
-        for name, value in (headers or {}).items():
+        for name, value in headers.items():
             self.send_header(name, value)
         self.end_headers()
         self.wfile.write(data)

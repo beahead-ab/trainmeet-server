@@ -65,6 +65,7 @@
     frozenSeconds: null,
     presence: null,
     presenceAt: 0,
+    presenceClock: null,
     seenCheckins: new Set(),
     popUntil: new Map(),
     chosenDuty: null,
@@ -858,6 +859,7 @@
     try {
       state.presence = await api("/v1/driver/presence");
       state.presenceAt = Date.now();
+      state.presenceClock = clockSeconds();
       for (const driver of state.presence.drivers) {
         if (!driver.checkin) continue;
         const key = driver.user_id + "|" + driver.checkin.created_at;
@@ -877,7 +879,14 @@
   }
 
   function ageOf(driver) {
-    return driver.checkin ? driver.checkin.age_seconds + (Date.now() - state.presenceAt) / 1000 : null;
+    // Spelsekunder: servern räknar åldern på träffklockan, och här räknas den
+    // vidare på samma klocka. Står klockan står åldern; vid 4× går den fyra gånger så fort.
+    if (!driver.checkin) return null;
+    const now = clockSeconds(), then = state.presenceClock;
+    let since = now !== null && then !== null ? now - then : 0;
+    if (since < -43200) since += 86400; // över midnatt
+    if (since > 43200) since -= 86400;
+    return driver.checkin.age_seconds + Math.max(0, since);
   }
   function agoText(age) {
     return age < 60 ? t("nyss") : t("för {n} min", {n: Math.floor(age / 60)});

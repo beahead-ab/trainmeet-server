@@ -272,6 +272,7 @@ button { cursor: pointer; }
 .lf-card > .lf-row:first-child { border-top: 0; }
 .lf-row--buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px 14px 12px; }
 .lf-value { font-size: 14.5px; color: var(--mute); text-align: right; }
+.lf-row--note { margin: 0; padding: 8px 14px 10px; min-height: 0; font-size: 13.5px; line-height: 1.4; color: var(--mute); }
 .lf-value.is-ok { color: var(--green); }
 .lf-row select { min-height: 36px; border-radius: 8px; border: 1px solid var(--line2); background: var(--panel2); color: var(--ink); padding: 0 8px; font-size: 14.5px; }
 .lf-switch input { appearance: none; -webkit-appearance: none; position: relative; flex: 0 0 51px; width: 51px; height: 31px; margin: 0; border-radius: 999px; background: var(--line2); cursor: pointer; transition: background .2s; }

@@ -201,9 +201,16 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
 
 - **Checka in** sparar station, valfritt spår, tjänst, tåg och träfftid. Den
   flyttar aldrig NU-linjen och styr ingenting.
-- En incheckning syns i 10 minuter i verklig tid och tonar sedan ut under 5
-  (`CHECKIN_VISIBLE`, `CHECKIN_FADE` i `driver.py`). Bara den senaste räknas.
-- Den som stänger av **Visa min ikon på banan** syns inte för andra.
+- En incheckning syns i 10 **spelminuter** och tonar sedan ut under 5
+  (`CHECKIN_VISIBLE`, `CHECKIN_FADE` i `driver.py`), räknat på
+  träffklockan: står klockan står incheckningen kvar, och vid 4× är den
+  borta efter knappt fyra riktiga minuter. Incheckningen sparar klockans
+  löpande sekunder (`meet_seconds`, fortsätter över midnatt); en extern
+  klocka utan dem räknas på klockslaget. Ställs klockan tillbaka förbi
+  incheckningen är den inte aktuell längre, och efter ett dygn i verklig
+  tid är den borta vad klockan än gör. Bara den senaste räknas.
+- Den som stänger av **Visa min ikon på banan** syns inte för andra,
+  varken i appen eller på kartorna.
 - Ikonen beskärs och skalas ned i telefonen (canvas, 256 px JPEG). Servern
   tar emot PNG, JPEG eller WebP upp till 96 kB och läser bara filhuvudet.
 - **Ikonen hör till kontot.** Det finns bara en ikon per konto, och samma
@@ -213,17 +220,21 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
   syns då i Lokföraren. Ägare och administratörer ser alla ikoner; andra ser
   bara sin egen via kontot. Utan ikon visas initialerna.
 - Ett borttaget konto lämnar ingen ikon, tjänst eller incheckning efter sig.
-- **Banan i Drift**: ägare och administratörer ser förarna som checkat in
-  på banöversikten i Drift (Kör), med kontots ikon (eller initialerna) vid
-  stationens övre vänstra hörn, sida vid sida, den senaste närmast
-  stationen. Fler än tre blir två och "+N". De tonar ut som i appen: fulla
-  i tio minuter, borta efter femton. Håll pekaren över ikonen för namn,
-  tjänst, tåg och incheckningens träfftid. Den som stängt av **Visa min
-  ikon på banan** syns inte där heller. Kartan hämtar förarna
-  (`/v1/driver-admin/overview`) när servern säger `drivers` på
-  `/v1/events` (tjänst, incheckning, synlighet, ikon) och annars var
-  trettionde sekund. Storskärmarna och deltagarnas sidor är öppna utan
-  inloggning och visar inga förare.
+- **Förarna på kartorna**: den som checkat in och valt att synas står
+  med kontots ikon (eller initialerna) vid stationen på alla kartor:
+  banöversikten i Drift, storskärmarna (Banöversikt och Översikt) och
+  träffens sida för deltagare. Ikonen sitter vid stationens övre vänstra
+  hörn, mitt emot antalsbrickan, sida vid sida med den senaste närmast
+  stationen; fler än tre blir två och "+N". De tonar ut på träffklockan
+  som i appen. Håll pekaren över ikonen för namn, tjänst, tåg och
+  incheckningens träfftid.
+- Förarna kommer med `/v1/display` (`drivers`, med åldern i spelsekunder,
+  och `driver_checkin_seconds`), som kartorna redan hämtar. Servern säger
+  `drivers` på `/v1/events` när en förare väljer tjänst, checkar in, byter
+  synlighet eller ikon, så att sidorna hämtar bilden direkt. Ikonen hämtas
+  från `/v1/display/driver-avatars/{id}`, som är öppen som `/v1/display`
+  men bara lämnar ut ikonen för en förare som står på kartan just nu och
+  valt att synas.
 
 ## API
 
@@ -243,6 +254,13 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
 | GET | `/v1/driver/avatars/{user_id}` | ikonen |
 | GET | `/v1/driver/duties/{tjänst-id}.pdf` | tjänstens egna sidor, om köruppdraget är tillgängligt |
 | GET | `/v1/driver/documents/{id}.pdf` | hela förlagan, om tjänsten saknar egna sidor |
+
+Öppna, utan inloggning:
+
+| Metod | Väg | Vad |
+|---|---|---|
+| GET | `/v1/display` | kartornas bild, med `drivers` (se ovan) |
+| GET | `/v1/display/driver-avatars/{user_id}` | ikonen för en förare på kartan just nu |
 
 Kontots ikon, samma som ovan, för serverns admin:
 

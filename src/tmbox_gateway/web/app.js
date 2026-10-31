@@ -540,7 +540,7 @@ function setMode(mode) {
     startTMBoxV2();
   } else if (next === "installningar") showSettings();
   else if (next === "kor" && state.serverContext?.operating_region === "eu") renderOverview(state.overviewSnapshot);
-  if (next === "kor") { refreshAutomatic(); refreshDriverMap(); }
+  if (next === "kor") refreshAutomatic();
   serverUI.mode(next);
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -567,25 +567,6 @@ async function refreshAutomatic() {
     globalThis.TrainMeetDrift?.update({ automatic: data });
     if (mode === "installningar") renderAutomatic(data);
   } catch (error) { if (mode === "installningar") setMessage(document.querySelector("#automatic-message"), error.message, "error"); }
-}
-
-// Förarna på banan i Drift: de som checkat in i Lokföraren, med kontots ikon.
-// Bara ägare och administratörer får dem. Hämtas när en förare checkar in
-// (/v1/events, "drivers") och annars var trettionde sekund, så att en gammal
-// incheckning hinner tona ut.
-let driverMapTimer = null;
-async function refreshDriverMap() {
-  clearTimeout(driverMapTimer);
-  if (document.body.dataset.mode !== "kor" || !["owner", "admin"].includes(state.authStatus?.role)) return;
-  try {
-    if (!document.hidden) {
-      const response = await authorizedFetch("/v1/driver-admin/overview", {cache: "no-store"});
-      if (!response.ok) return; // ingen behörighet: banan ritas utan förare
-      const data = await response.json();
-      globalThis.TrainMeetDrift?.update({ drivers: {...data, at: Date.now()} });
-    }
-  } catch { /* banan ritas utan förare */ }
-  driverMapTimer = setTimeout(refreshDriverMap, 30000);
 }
 
 async function sendAutomatic(payload) {
@@ -2584,7 +2565,6 @@ const refreshDevicesSerially = serially(() => refreshDevices());
 const refreshRuntimeSerially = serially(() => refreshRuntime());
 const refreshServerContextSerially = serially(() => refreshServerContext());
 const refreshAutomaticSerially = serially(() => refreshAutomatic());
-const refreshDriverMapSerially = serially(() => refreshDriverMap());
 
 // What changed on the server (/v1/events) is fetched again at once. The timer
 // is then only a fallback; while the stream is down it keeps five seconds.
@@ -2601,9 +2581,9 @@ function bindAdminLive() {
     if (any("runtime")) refreshServerContextSerially();
     if (any("runtime")) refreshRuntimeSerially();
     if (any("devices")) refreshDevicesSerially();
-    if (any("traffic", "clock", "runtime", "automatic")) refreshLocalClockSerially();
+    // "drivers": en förare checkade in; banan i Drift får förarna med /v1/display.
+    if (any("traffic", "clock", "runtime", "automatic", "drivers")) refreshLocalClockSerially();
     if (any("automatic", "runtime", "devices", "traffic")) refreshAutomaticSerially();
-    if (any("drivers")) refreshDriverMapSerially();
   });
   live.onStatus(() => {
     if (state.authStatus?.authenticated) scheduleAdminRefresh();
@@ -4297,6 +4277,35 @@ function placeTopologyLabels(items, segments, viewBox, options = {}) {
   }
 }
 
+// Förarna på kartorna (snapshot.drivers i /v1/display): de som checkat in i
+// Lokföraren och valt att synas, på Drift, storskärmarna och deltagarnas sida.
+// Åldern är i spelsekunder när bilden hämtades och räknas vidare på
+// träffklockan, som tågen: fulla i tio spelminuter, sedan tonar de ut under fem.
+function topologyDriverMarks(snapshot) {
+  const drivers = Array.isArray(snapshot?.drivers) ? snapshot.drivers : [];
+  if (!drivers.length) return [];
+  if (!topologyReceivedAt.has(snapshot)) topologyReceivedAt.set(snapshot, performance.now());
+  const since = snapshot.clock?.running
+    ? (performance.now() - topologyReceivedAt.get(snapshot)) / 1000 * Number(snapshot.clock?.speed || 1) : 0;
+  const visible = Number(snapshot.driver_checkin_seconds?.visible) || 600;
+  const fade = Number(snapshot.driver_checkin_seconds?.fade) || 300;
+  const ids = new Set((snapshot.stations || []).map((station) => station.id));
+  const byName = new Map((snapshot.stations || []).map((station) => [String(station.name || "").toLowerCase(), station.id]));
+  const marks = [];
+  for (const driver of drivers) {
+    const age = Number(driver.age_seconds || 0) + since;
+    if (age > visible + fade) continue;
+    const station = ids.has(driver.station_id) ? driver.station_id : byName.get(String(driver.station || "").toLowerCase());
+    if (!station) continue;
+    const k = Math.min(1, Math.max(0, (age - visible) / fade)), eased = k * k * (3 - 2 * k);
+    const title = [driver.name, driver.duty_number ? t("Tjänst {number}", { number: driver.duty_number }) : "", driver.train || "",
+      driver.meet_time ? t("incheckad {time}", { time: String(driver.meet_time).slice(0, 5) }) : ""];
+    marks.push({ station_id: station, user_id: driver.user_id, initials: driver.initials || "", avatar_url: driver.avatar_url || null,
+      title: title.filter(Boolean).join(" · "), opacity: 1 - eased * 0.85, gray: eased, age });
+  }
+  return marks.sort((a, b) => a.age - b.age);
+}
+
 // En förare på banan: ikonen i en cirkel, annars initialerna; "+N" för fler.
 // Bilden klipps med en cirkel som läggs en gång per karta.
 let topologyClipCount = 0;
@@ -4368,6 +4377,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     if (event.target === target) options.onClear?.();
   };
   const stateByID = new Map((snapshot.connection_states || []).map((state) => [state.id, state]));
+  const drivers = options.drivers ?? topologyDriverMarks(snapshot);
   const activeStationIDs = new Set((snapshot.train_positions || []).filter((p) => p.status === "station").map((p) => p.station_id));
   const selectedService = serviceForTrain(snapshot, options.selectedTrainNumber);
   const routeStops = [...(selectedService?.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
@@ -4488,11 +4498,11 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
       group.append(count);
       badge = { x1: cx - width / 2 - 1, y1: cy - r - 1, x2: cx + width / 2 + 1, y2: cy + r + 1 };
     }
-    // Förarna som checkat in här (options.drivers, från Lokföraren): kontots
+    // Förarna som checkat in här (snapshot.drivers, från Lokföraren): kontots
     // ikon på stationens övre vänstra hörn, mitt emot antalsbrickan, sida vid
     // sida. Den senaste närmast stationen; fler än tre blir två och "+N".
     const avoid = [];
-    const here = kr ? (options.drivers || []).filter((driver) => driver.station_id === station.id) : [];
+    const here = kr ? drivers.filter((driver) => driver.station_id === station.id) : [];
     if (here.length) {
       const r = screen ? 16 : 14, step = r * 2 + 3; // sida vid sida, så att alla går att känna igen
       const shown = here.length > 3 ? here.slice(0, 2) : here;
@@ -5709,7 +5719,7 @@ async function initDisplay() {
   window.addEventListener("online", pollDisplay);
   window.addEventListener("pageshow", pollDisplay);
   globalThis.TrainMeetLive?.subscribe((topics) => {
-    if (["traffic", "clock", "runtime", "automatic"].some((name) => topics.has(name))) pollDisplay();
+    if (["traffic", "clock", "runtime", "automatic", "drivers"].some((name) => topics.has(name))) pollDisplay();
   });
   globalThis.TrainMeetLive?.onStatus(() => { if (!displayRequest) scheduleDisplayPoll(); });
   document.addEventListener("visibilitychange", () => {

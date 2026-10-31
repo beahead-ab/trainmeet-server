@@ -1,6 +1,7 @@
 // Lokföraren against a real TrainMeet Server: a driver signs in, chooses
 // duty 132, follows the NOW line at 4×, checks in, sees the others on the
-// layout, saves an icon, shows on the map in Drift and sees a stopped clock.
+// layout, saves an icon, shows on the maps (Drift, big screen, participants)
+// and sees a stopped clock.
 const { chromium } = require('playwright');
 const { spawn } = require('node:child_process');
 const readline = require('node:readline');
@@ -156,7 +157,7 @@ function png(size) {
     await drift.goto(base + '/drift');
     const mark = (who) => drift.locator('#overview-topology .topology-driver', { has: drift.locator('title', { hasText: who }) });
     await mark('Benny').locator('image').waitFor({ state: 'attached' });
-    assert.match(await mark('Benny').locator('image').getAttribute('href'), /^\/v1\/driver\/avatars\/.+\?v=\d+$/);
+    assert.match(await mark('Benny').locator('image').getAttribute('href'), /^\/v1\/display\/driver-avatars\/.+\?v=\d+$/);
     assert.equal(await mark('Maja').locator('text').textContent(), 'MA');
     const stationOf = (who) => mark(who).evaluate((element) => element.closest('.topology-node').getAttribute('aria-label'));
     assert.match(await stationOf('Benny'), new RegExp('^' + stations[1]));
@@ -166,6 +167,29 @@ function png(size) {
       .some((element) => element.querySelector('title')?.textContent.startsWith('Maja') && element.closest('.topology-node').getAttribute('aria-label').startsWith(name)),
     stations[stations.length - 1], { timeout: 8000 });
     await drift.close();
+
+    // 5d. The same on the big screen and the participants' page, without signing in:
+    //     Benny with his icon; Maja, who turns "Show my icon on the layout" off, is gone.
+    const guest = await browser.newContext({ locale: 'sv-SE', viewport: { width: 1600, height: 900 } });
+    const screen = await guest.newPage();
+    screen.on('pageerror', (error) => errors.push(error.message));
+    await screen.goto(base + '/display/topology');
+    const onScreen = (who) => screen.locator('#topology-svg .topology-driver', { has: screen.locator('title', { hasText: who }) });
+    await onScreen('Benny').locator('image').waitFor({ state: 'attached' });
+    assert.equal(await onScreen('Benny').locator('image').evaluate((image) => image.getBBox().width > 0), true);
+    assert.equal(await screen.evaluate(async (url) => (await fetch(url)).status, await onScreen('Benny').locator('image').getAttribute('href')), 200);
+    await onScreen('Maja').waitFor({ state: 'attached' });
+    await majaPage.evaluate(async () => {
+      const response = await fetch('/v1/driver/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visible: false }) });
+      if (!response.ok) throw new Error(await response.text());
+    });
+    await onScreen('Maja').waitFor({ state: 'detached', timeout: 8000 });
+    const participant = await guest.newPage();
+    participant.on('pageerror', (error) => errors.push(error.message));
+    await participant.goto(base + '/');
+    await participant.locator('#pv-topology .topology-driver title', { hasText: 'Benny' }).waitFor({ state: 'attached' });
+    assert.equal(await participant.locator('#pv-topology .topology-driver title', { hasText: 'Maja' }).count(), 0);
+    await guest.close();
     await maja.close();
 
     // 6. A stopped clock stops the line and says so.
@@ -183,7 +207,7 @@ function png(size) {
     const html = fs.readFileSync(path.join(root, 'src/tmbox_gateway/web/lokforaren/index.html'), 'utf8');
     assert.equal(/\sstyle=/.test(html), false);
     assert.deepEqual(errors, []);
-    console.log('lokforaren-live: ok (sign-in, duty 132, NOW line, seconds, check-in, layout, icon in app and account, drivers on the Drift map, stopped clock, English)');
+    console.log('lokforaren-live: ok (sign-in, duty 132, NOW line, seconds, check-in, layout, icon in app and account, drivers on the Drift map, big screen and participants page, stopped clock, English)');
   } finally {
     if (browser) await browser.close();
     fixture.stdin.end();

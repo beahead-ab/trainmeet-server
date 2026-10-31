@@ -171,7 +171,7 @@ class DriverHTTPTests(unittest.TestCase):
                 # Att de bara når det egna kontot prövas i testet nedan.
                 if path.startswith("/v1/driver/") or path.startswith("/v1/account/"):
                     continue
-                if method == "GET" and (path in public or path.startswith("/v1/clock-faces/")):
+                if method == "GET" and (path in public or path.startswith(("/v1/clock-faces/", "/v1/display/driver-avatars/"))):
                     continue
                 if method == "POST" and path in {"/v1/account", "/v1/auth/login", "/v1/auth/logout"}:
                     continue

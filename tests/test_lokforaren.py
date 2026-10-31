@@ -24,7 +24,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from runtime_fixture import runtime_package_v3
 from session_fixture import sample_session
-from tmbox_gateway.driver import DEMO_DUTY, DriverError, DriverStore, normalize_duty
+from tmbox_gateway.driver import DEMO_DUTY, DriverError, DriverStore, game_age, meet_seconds, normalize_duty
 from tmbox_gateway.engine import TrafficEngine
 from tmbox_gateway.http_server import HTTPServerConfig, TrainMeetHTTPApplication, TrainMeetHTTPServer
 from tmbox_gateway.identity import AdminAccessError, IdentityStore, PairingService
@@ -147,12 +147,41 @@ class DriverStoreTests(unittest.TestCase):
         self.store = DriverStore(Path(directory.name) / "trainmeet.db")
         self.addCleanup(self.store.close)
 
-    def test_a_check_in_is_seen_for_fifteen_minutes_of_real_time(self) -> None:
+    def test_without_a_meet_clock_a_check_in_is_seen_for_fifteen_minutes_of_real_time(self) -> None:
         start = datetime(2026, 10, 31, 15, 0, tzinfo=timezone.utc)
         self.store.check_in("u1", "meet", {"station": "Tveiten"}, duty=None, meet_time="17:58:00", now=start)
         self.assertIn("u1", self.store.latest_checkins("meet", now=start + timedelta(minutes=14, seconds=59)))
         self.assertNotIn("u1", self.store.latest_checkins("meet", now=start + timedelta(minutes=15, seconds=1)))
         self.assertNotIn("u1", self.store.latest_checkins("another-meet", now=start))
+
+    def test_on_the_meet_clock_a_check_in_lasts_fifteen_game_minutes(self) -> None:
+        """Spelminuter (Casper 2026-11-01): en stoppad klocka håller kvar
+        incheckningen, och vid 4× är den borta efter knappt fyra riktiga minuter."""
+
+        start = datetime(2026, 10, 31, 15, 0, tzinfo=timezone.utc)
+        clock = lambda seconds: {"configured": True, "elapsed_seconds": seconds,
+                                 "time": f"{int(seconds // 3600) % 24:02d}:{int(seconds // 60) % 60:02d}:00"}
+        self.store.check_in("u1", "meet", {"station": "Tveiten"}, duty=None, meet_time="23:58:00",
+                            meet_seconds=86280, now=start)
+        # Klockan står: tre riktiga timmar senare syns incheckningen fortfarande, nyss.
+        latest = self.store.latest_checkins("meet", clock=clock(86280), now=start + timedelta(hours=3))
+        self.assertEqual(0.0, latest["u1"]["age_seconds"])
+        # Över midnatt: 00:12 nästa dygn är fjorton spelminuter senare.
+        self.assertEqual(840.0, self.store.latest_checkins("meet", clock=clock(87120), now=start)["u1"]["age_seconds"])
+        self.assertNotIn("u1", self.store.latest_checkins("meet", clock=clock(86280 + 901), now=start))
+        # Klockan ställd tillbaka förbi incheckningen: inte aktuell längre.
+        self.assertNotIn("u1", self.store.latest_checkins("meet", clock=clock(80000), now=start))
+        # Ett dygn i verklig tid är gränsen, vad klockan än gör.
+        self.assertNotIn("u1", self.store.latest_checkins("meet", clock=clock(86280), now=start + timedelta(days=1, minutes=1)))
+
+    def test_game_age_from_the_clock_time_when_the_seconds_are_missing(self) -> None:
+        clock = {"configured": True, "time": "00:04:00"}  # en extern klocka har bara klockslaget
+        self.assertEqual(480.0, game_age(None, "23:56:00", clock))
+        self.assertEqual(0.0, game_age(None, "00:04:30", clock))  # en halv minut fram: nyss
+        self.assertIsNone(game_age(None, "00:10:00", clock))
+        self.assertIsNone(game_age(None, None, clock))
+        self.assertEqual(86280.0, meet_seconds({"time": "23:58:00"}))
+        self.assertEqual(90000.5, meet_seconds({"elapsed_seconds": 90000.5, "time": "01:00:00"}))
 
     def test_only_the_latest_place_counts(self) -> None:
         start = datetime(2026, 10, 31, 15, 0, tzinfo=timezone.utc)
@@ -279,6 +308,31 @@ class LokforarenHTTPTests(unittest.TestCase):
         self.assertIn("Benny", [driver["name"] for driver in self.request("/v1/driver/presence", cookie=benny)[1]["drivers"]])
         self.request("/v1/driver/active/end", {}, cookie=benny)
         self.assertIsNone(self.request("/v1/driver/session", cookie=benny)[1]["active"])
+
+    def test_the_maps_show_the_drivers_who_want_to_be_seen(self) -> None:
+        """/v1/display (Drift, storskärmarna, deltagarnas sida) har förarna som
+        checkat in och valt att synas. Ikonen är öppen bara för dem, bara medan
+        de står på kartan."""
+
+        benny, maja = self.login("benny"), self.login("maja")
+        station = runtime_package_v3()["stations"][0]
+        self.request("/v1/driver/avatar", {"image": data_url("image/png", PNG)}, cookie=benny)
+        self.request("/v1/driver/avatar", {"image": data_url("image/png", PNG)}, cookie=maja)
+        self.assertEqual([], self.request("/v1/display")[1]["drivers"])
+        self.request("/v1/driver/active", {"duty_id": "demo-132"}, cookie=benny)
+        self.request("/v1/driver/checkins", {"station": station["name"], "station_id": station["id"]}, cookie=benny)
+        drivers = self.request("/v1/display")[1]["drivers"]
+        self.assertEqual([("Benny", "BE", station["id"], "132")],
+                         [(d["name"], d["initials"], d["station_id"], d["duty_number"]) for d in drivers])
+        self.assertLess(drivers[0]["age_seconds"], 60)
+        status, payload, headers = self.request(drivers[0]["avatar_url"])  # utan inloggning
+        self.assertEqual((200, PNG, "private, max-age=300"), (status, payload["raw"], headers["Cache-Control"]))
+        maja_id = next(user["user_id"] for user in self.identities.list_admin_users() if user["display_name"] == "Maja")
+        self.assertEqual(404, self.request(f"/v1/display/driver-avatars/{maja_id}?v=1")[0])  # inte incheckad
+        # Synligheten av: borta från kartorna, och ikonen lämnas inte ut.
+        self.request("/v1/driver/profile", {"visible": False}, cookie=benny)
+        self.assertEqual([], self.request("/v1/display")[1]["drivers"])
+        self.assertEqual(404, self.request(drivers[0]["avatar_url"])[0])
 
     def test_what_moves_a_driver_on_the_map_is_announced(self) -> None:
         """Banan i Drift hämtar förarna igen när /v1/events säger "drivers":
