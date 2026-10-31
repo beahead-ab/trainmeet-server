@@ -63,6 +63,14 @@ class AdminAccessError(ValueError):
     """Invalid local administrator configuration or credentials."""
 
 
+class AdminUserPermissionError(AdminAccessError):
+    """The actor may not edit this account or assign the requested role."""
+
+
+class AdminUserConflictError(AdminAccessError):
+    """An account change conflicts with the actor's own access."""
+
+
 @dataclass(frozen=True)
 class PairingGrant:
     pairing_id: str
@@ -1160,6 +1168,56 @@ class IdentityStore:
             )
         return self.admin_user(user_id) or {}
 
+    def update_admin_user(
+        self, user_id: str, actor: PairedClient, *, display_name: str | None = None,
+        email: str | None = None, role: str | None = None, password: str | None = None,
+    ) -> dict[str, object]:
+        """Authorize and save the whole editor in one transaction.
+
+        Read both roles while holding the write lock: a demotion or promotion
+        since the request began must not allow editing an owner. A failed
+        field must also leave earlier fields, credentials and sessions intact.
+        """
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                actor_role = actor.admin_role
+                if actor.admin_user_id:
+                    current_actor = self.admin_user(actor.admin_user_id)
+                    actor_role = str(current_actor["role"]) if current_actor else ""
+                target = self.admin_user(user_id)
+                if actor_role not in {"owner", "admin"}:
+                    raise AdminUserPermissionError("Administratörsbehörighet krävs")
+                if target is None:
+                    raise AdminAccessError("Användaren finns inte")
+                if actor_role != "owner" and (target["role"] != "admin" or role not in {None, "admin"}):
+                    raise AdminUserPermissionError("Bara ägaren kan ändra ägarkonton eller tilldela ägarrollen")
+                if actor_role == "owner" and actor.admin_user_id == user_id and role not in {None, "owner"}:
+                    raise AdminUserConflictError(
+                        "Du kan inte ta bort din egen ägarroll. Be en annan ägare göra det."
+                    )
+                if display_name is not None:
+                    self.set_admin_user_display_name(user_id, display_name)
+                if email is not None:
+                    self.set_admin_user_email(user_id, email)
+                    if target["email"] != required_admin_email(email):
+                        self._connection.execute(
+                            "UPDATE admin_users SET reset_code_digest = NULL, reset_expires_at = NULL"
+                            " WHERE user_id = ?", (user_id,),
+                        )
+                if role is not None:
+                    self.set_admin_user_role(user_id, role)
+                # An empty password means keep the current one, including for
+                # direct API callers rather than only the browser editor.
+                if password:
+                    self.set_admin_user_password(user_id, password)
+                result = self.admin_user(user_id) or {}
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+        return result
+
     def issue_admin_password_reset(
         self, email: str, *, now: datetime | None = None
     ) -> tuple[dict[str, object], str] | None:
@@ -1291,7 +1349,9 @@ class IdentityStore:
                 raise AdminAccessError("Användaren finns inte")
             self._connection.execute(
                 "UPDATE admin_users SET password_salt = ?, password_digest = ?,"
-                " updated_at = ?, must_change_password = 0 WHERE user_id = ?",
+                " updated_at = ?, must_change_password = 0,"
+                " setup_code_digest = NULL, setup_expires_at = NULL,"
+                " reset_code_digest = NULL, reset_expires_at = NULL WHERE user_id = ?",
                 (salt, _admin_password_digest(password, salt),
                  datetime.now(timezone.utc).isoformat(), user_id),
             )
