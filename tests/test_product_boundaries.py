@@ -126,10 +126,19 @@ class MailIsTheOnlyWriteTests(unittest.TestCase):
             for node in ast.walk(ast.parse(text)):
                 if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Request"
                         and {keyword.arg for keyword in node.keywords} & {"data", "method"}):
-                    writers.append(path.name)
-        # Inte Cloud: GitHub-releaser och klubbens egen snabbklocka på träffens nät.
-        not_cloud = {"software_update.py", "external_clock.py"}
+                    writers.append(path.relative_to(SOURCE).as_posix())
+        # Inte Cloud: GitHub-releaser, klubbens snabbklocka och den uttryckligt
+        # loopbackbegränsade simulatorn. Matcha exakt sökväg, inte bara filnamn.
+        not_cloud = {"software_update.py", "external_clock.py", "integrations/http_sandbox.py"}
         self.assertEqual(["cloud_mail.py"], [name for name in writers if name not in not_cloud])
+
+    def test_the_sandbox_writer_rejects_cloud_and_other_external_origins(self):
+        from tmbox_gateway.integrations.http_sandbox import HttpSandboxAdapter
+
+        for origin in ("https://cloud.trainmeet.app", "http://example.invalid:80",
+                       "http://localhost:80", "http://127.0.0.1:80@cloud.trainmeet.app"):
+            with self.subTest(origin=origin), self.assertRaises(ValueError):
+                HttpSandboxAdapter(origin, "synthetic-account", "synthetic-password")
 
     def test_the_letter_has_a_fixed_set_of_fields(self):
         from tmbox_gateway.cloud_mail import MAIL_FIELDS
@@ -213,3 +222,46 @@ class ServerHasNoAccountMailTests(unittest.TestCase):
                     token, code,
                     f"{path.name} innehåller {token} - kontomodellen hör hemma i Cloud",
                 )
+
+
+class TellurianIsALocalServiceTests(unittest.TestCase):
+    """Tellurian Dispatch (#222) är en lokal tjänst på träffens nät, inte Cloud.
+
+    D1 gäller oförändrat: klareringstrafik går aldrig till TrainMeet Cloud, och
+    Cloud-modulerna anropar aldrig Tellurian. Servern på Pi:n ansluter till en
+    lokal adress; en publik adress bara med uttryckligt val av testinstans.
+    """
+
+    def test_the_tellurian_client_rejects_cloud_and_public_origins(self):
+        from tmbox_gateway.integrations.tellurian import AddressRejected, check_address
+
+        for origin in ("https://cloud.trainmeet.app", "https://server.trainmeet.app", "https://trainmeet.app"):
+            for test_instance in (False, True):
+                with self.subTest(origin=origin, test_instance=test_instance), self.assertRaises(AddressRejected):
+                    check_address(origin, test_instance=test_instance)
+        for origin in ("http://example.invalid:80", "http://127.0.0.1:80", "http://localhost:5000", "https://8.8.8.8"):
+            with self.subTest(origin=origin), self.assertRaises(AddressRejected):
+                check_address(origin)
+
+    def test_only_the_integration_adapters_open_raw_http_connections(self):
+        users = sorted(path.relative_to(SOURCE).as_posix() for path, text in _python_sources()
+                       if "HTTPConnection" in _code_only(text) or "http.client" in _code_only(text))
+        self.assertEqual(["integrations/http_sandbox.py", "integrations/tellurian.py"], users)
+
+    def test_cloud_modules_never_reach_tellurian(self):
+        for name in ("central_sync.py", "cloud_config.py", "cloud_mail.py"):
+            self.assertNotIn("tellurian", _code_only((SOURCE / name).read_text(encoding="utf-8")).lower(), name)
+
+    def test_shadow_mode_and_the_report_have_no_write_path(self):
+        """Skugga och Testa anslutning är bara läsning; skrivvägen är inte inkopplad (etapp 4)."""
+        tree = ast.parse((SOURCE / "integrations" / "tellurian.py").read_text(encoding="utf-8"))
+        readers = [node for node in tree.body if getattr(node, "name", "") in ("ShadowRunner", "Mirror", "preflight")]
+        self.assertEqual(3, len(readers))
+        for node in readers:
+            calls = {child.func.attr for child in ast.walk(node)
+                     if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute)}
+            self.assertNotIn("post", calls, node.name)
+        for name in ("http_server.py", "integrations/tellurian_service.py"):
+            code = _code_only((SOURCE / name).read_text(encoding="utf-8"))
+            self.assertNotIn("TellurianCommands", code, name)
+            self.assertNotIn(".post(", code, name)
