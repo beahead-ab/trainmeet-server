@@ -462,7 +462,9 @@ class AutomaticStations:
     def legs(self, publication, day):
         key = (publication.publication_id, day, self.service.config_version())
         if key != self._plan_key:
-            self._legs, self._plan_errors = plan_legs(publication, day)
+            # Tåg som inte kan köras automatiseras inte; de körs av människor
+            # och stoppar ingenting annat (Cloud #100 B5).
+            self._legs, self._plan_errors = plan_legs(publication, day, self.runtime.manual_trains(publication))
             self._plan_key = key
         return self._legs
 

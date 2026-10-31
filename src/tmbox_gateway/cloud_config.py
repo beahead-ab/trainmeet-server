@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import threading
 import time
@@ -15,6 +16,8 @@ from .engine import TrafficEngine
 from .models import ConnectionState, InteractionMode, unconfigured_session
 from .runtime import RuntimePublication, RuntimePublicationError
 from .us import USError, validate_package
+
+LOGGER = logging.getLogger("tmbox_gateway.cloud_config")
 
 
 
@@ -278,12 +281,40 @@ class CloudConfiguration:
                     if (region, meet_id) != (selected["region"], selected["meet_id"]):
                         raise CentralSyncError("Cloud skickade en annan träff. Byt träff uttryckligen under Inställningar.")
                     result = self._deliver(download.package)
+                if result.get("correction_possible"):
+                    # Rättelse under pågående spel (Cloud #100 B6): tågen som
+                    # rättelsen rör får den nu, om de inte är på väg. Utanför
+                    # träffens lås, i samma ordning som en lokal ändring.
+                    result = {**result, **self._correct_during_play(download.package)}
                 self.last_checked_at = datetime.now(timezone.utc).isoformat()
                 return {"checked": True, "update_available": result.get("pending", False), **result, **self.status()}
             except (CentralSyncError, RuntimePublicationError, USError) as error:
                 self.state, self.message = "error", str(error)
                 self.message_template, self.message_values = "", {}
                 raise
+
+    def _correct_during_play(self, package):
+        """Lägg en väntande Cloud-version på de tåg den rör, utan att nollställa något.
+
+        Hela versionen tas först när trafiken är lugn, som förut. Under tiden
+        gäller rättelsen för tågen den ändrar, så länge inget av dem är ute på
+        linjen eller har en öppen klarering; då väntar den tills de har kommit
+        fram. Allt annat i versionen (stationer, sträckor, paneler) väntar.
+        """
+        try:
+            outcome = self.app.apply_cloud_correction(package=package)
+        except Exception:
+            LOGGER.exception("Rättelsen från Cloud kunde inte läggas på")
+            return {}
+        if outcome.get("applied") and outcome.get("count"):
+            self._report("corrected", "Rättelsen från Cloud gäller nu för {count} tåg. Pågående tåg är orörda; hela versionen tas när trafiken är lugn.",
+                         count=outcome["count"])
+        elif outcome.get("applied") and outcome.get("already"):
+            self._report("corrected", "Rättelsen från Cloud gäller. Hela versionen tas när trafiken är lugn.")
+        elif outcome.get("blocked"):
+            self._report("waiting", "Ny config hämtad – väntar: {blockers}", blockers=outcome["blocked"])
+        return {"correction": outcome, "message": self.message,
+                "message_template": self.message_template, "message_values": self.message_values}
 
     def _engine_blockers(self):
         engine = self.app.engine
@@ -326,7 +357,10 @@ class CloudConfiguration:
         # admin redan har valt att ta just den här versionen.
         local_layer = (self.store.local_edits(old_publication.publication_id)
                        if region == "eu" and old_publication is not None and not switching else None)
-        if local_layer is not None and (self.store.local_decision(publication_id) or {}).get("decision") != "take":
+        # En rättelse från Cloud som redan ligger på (B6) är Clouds egen: den
+        # ersätts av hela versionen utan att admin behöver välja.
+        cloud_layer = bool(local_layer and str(local_layer.get("actor") or "").startswith("cloud:"))
+        if local_layer is not None and not cloud_layer and (self.store.local_decision(publication_id) or {}).get("decision") != "take":
             from .local_edits import edit_count
             return self._local_changes_waiting(publication_id, edit_count(local_layer["edits"]))
         blockers = self._engine_blockers() if not switching and (not previous or previous["region"] == "eu") else []
@@ -344,7 +378,9 @@ class CloudConfiguration:
             self.store._save_setting("cloud_pending_region", region)
             self._report("waiting", "Ny config hämtad – väntar: {blockers}", blockers=" ".join(dict.fromkeys(blockers)))
             return {"pending": True, "publication_id": publication_id, "message": self.message,
-                    "message_template": self.message_template, "message_values": self.message_values}
+                    "message_template": self.message_template, "message_values": self.message_values,
+                    # Samma träff i EU: tågen som versionen rättar kan få den nu (B6).
+                    "correction_possible": bool(region == "eu" and old_publication is not None)}
         ticket = app.lifecycle.begin_transition(region, meet_id, publication_id, meet_name=name, allow_switch=allow_switch)
         # A failure after this point leaves the durable marker in place. Do not
         # claim rollback across separate SQLite connections or accept traffic.
@@ -397,9 +433,18 @@ class CloudConfiguration:
         self.store._save_setting("cloud_pending_region", "")
         self.store.clear_pending()
         self.store.clear_local_decision()
-        if switching:
+        manual = len(self.store.manual_trains(self.store.active())) if region == "eu" else 0
+        # Tåg som inte kan köras stoppar inte publiceringen; de körs manuellt
+        # och beskedet säger hur många (Cloud #100 B5).
+        if switching and manual:
+            self._report("current", "Servern kör nu {name}. Publicerad med {count} kända avvikelser: tågen körs manuellt.",
+                         name=name, count=manual)
+        elif switching:
             # A different meet starts from its own plan; nothing was kept (#128).
             self._report("current", "Servern kör nu {name}.", name=name)
+        elif manual:
+            self._report("current", "Config för {name} är uppdaterad. Pågående drift har bevarats. Publicerad med {count} kända avvikelser: tågen körs manuellt.",
+                         name=name, count=manual)
         else:
             self._report("current", "Config för {name} är uppdaterad. Pågående drift har bevarats.", name=name)
         return {"pending": False, "activated": True, "publication_id": publication_id,

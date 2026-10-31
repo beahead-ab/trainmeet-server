@@ -22,6 +22,8 @@ from .train_routes import resolve_departure, RouteResolutionError
 from .terminal16_glyphs import text_cells, encode_lcd, fits_cgram
 from .terminal16_i18n import text as translated, notice as translated_notice
 from .display_placement import effective_sides
+from .runtime import matches_active_day
+from .train_identity import shared_labels
 
 
 # Det command() hanterar utan _traffic: de ändrar vad boxen visar, aldrig
@@ -138,6 +140,13 @@ class Terminal16Lab:
                     continue
                 if leg["status"] == "resolved":
                     self.legs[movement["id"]] = leg
+        # Två tåg med samma nummer samma dag (DSB IC 116 och SJ X 116, Cloud
+        # #100): raden visar förkortningen, "IC 116", där den får plats.
+        labels = shared_labels([service for service in publication.get("services", [])
+                                if matches_active_day(str(service.get("days", "Dagl")), self.day)])
+        for leg in self.legs.values():
+            if str(leg.get("service_id")) in labels:
+                leg["train_label"] = labels[str(leg["service_id"])]["short_label"]
         self.bindings = {}  # connection -> exact departure movement, not just train number
         self.completed = set()
         self.arrivals = {}
@@ -220,6 +229,12 @@ class Terminal16Lab:
                     return arriving
             matches = own or matches
         return matches
+
+    @staticmethod
+    def _train_text(leg, room):
+        """Tågets förkortning när numret delas och den får plats, annars numret."""
+        label = leg.get("train_label")
+        return label if label and len(text_cells(label)) <= room else leg["train_number"]
 
     @staticmethod
     def _short(t, key, action, label, requests, active):
@@ -610,7 +625,9 @@ class Terminal16Lab:
                 continue  # Already on the first row.
             schedule = self._schedule(terminal, leg)
             code = self.engine.config.stations[schedule["other"]].code
-            rows.append(self._spread(f"{leg['train_number']} {t(schedule['label'])} {code}", schedule["time"], width))
+            word = t(schedule['label'])
+            room = width - len(text_cells(schedule["time"])) - 1 - len(text_cells(f" {word} {code}"))
+            rows.append(self._spread(f"{self._train_text(leg, room)} {word} {code}", schedule["time"], width))
             if len(rows) == 2:
                 break
         return rows + [" " * width] * (2 - len(rows))
@@ -861,7 +878,9 @@ class Terminal16Lab:
             if terminal.selected in choices:
                 schedule = self._schedule(terminal, selected)
                 middle = self._leg_rows(terminal, selected, t)
-                first = row_(f"{selected['train_number']} {t(schedule['label'])}", schedule["time"])
+                word = t(schedule['label'])
+                room = width - len(text_cells(schedule["time"])) - 1 - len(text_cells(f" {word}"))
+                first = row_(f"{self._train_text(selected, room)} {word}", schedule["time"])
                 hint = "#Välj A:Kö"
             else:
                 first = row_(t("VÄLJ NÄSTA TÅG" if choices else
