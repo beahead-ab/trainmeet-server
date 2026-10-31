@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.14.0",
+    "date": "2026-10-31",
+    "notes": [
+      "Träffklockan: meddelanden som glas, NoReason syns aldrig"
+    ]
+  },
+  {
     "version": "4.13.10",
     "date": "2026-10-31",
     "notes": [
