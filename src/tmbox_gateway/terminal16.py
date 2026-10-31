@@ -254,6 +254,7 @@ class Terminal16Lab:
                 outgoing = schedule["kind"] == "departure"
                 other = self.engine.config.stations[schedule["other"]]
                 movement = movements.get(leg["from_movement_id"] if outgoing else leg["to_movement_id"], {})
+                actual = self._actual_track(terminal.station, movement.get("id"))
                 line = self._line(leg)
                 active = self._is_active(leg)
                 state = ("arrived" if key in self.completed else
@@ -267,7 +268,11 @@ class Terminal16Lab:
                     "side": self._side(terminal.station, other.id, leg["connection_id"]),
                     "track": labels.get(movement.get("track_id")),
                     # Där tåget står på riktigt, om det skiljer sig (4.9.0).
-                    "actual_track": labels.get(self._actual_track(terminal.station, movement.get("id"))),
+                    "actual_track": labels.get(actual),
+                    # Spårens id:n, för spårvisningen (#46): lika etiketter
+                    # på olika driftplatser är olika spår.
+                    "track_id": movement.get("track_id") if movement.get("track_id") in labels else None,
+                    "actual_track_id": actual if actual in labels else None,
                     "state": state, "selected": terminal.selected == key,
                 }))
             clock = self.engine.meeting_clock()["time"]
