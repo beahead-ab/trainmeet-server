@@ -1,15 +1,25 @@
-/* Public screens and share sheet, kept separate from operating controls. */
-#participant-view .pv-screen-list {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 14px 14px;
+/* A small screen menu; sharing stays beside it instead of a row of modules. */
+#participant-view .pv-screen-actions {
+  display: flex; align-items: center; gap: 18px; padding: 0 2px;
 }
-#participant-view .pv-screen-link {
-  min-width: 0; min-height: 42px; display: flex; align-items: center; justify-content: center;
-  padding: 8px 10px; border: 1px solid var(--kr-line-2); border-radius: var(--kr-r-sm);
-  background: var(--kr-panel-2); font-size: 13px; font-weight: 600; color: var(--kr-ink);
-  text-align: center; text-decoration: none;
+#participant-view .pv-screens-menu { position: relative; }
+#participant-view .pv-screens-menu summary {
+  list-style: none; padding: 6px 2px; color: var(--kr-mute);
+  font: 600 12.5px var(--kr-sans); cursor: pointer;
 }
-#participant-view .pv-screen-link:hover { background: var(--kr-panel-3); text-decoration: none; }
-#participant-view .pv-screen-link:focus-visible { outline: 2px solid var(--kr-blue); outline-offset: 2px; }
+#participant-view .pv-screens-menu summary::-webkit-details-marker { display: none; }
+#participant-view .pv-screens-menu summary:focus-visible { outline: 2px solid var(--kr-blue); outline-offset: 2px; }
+#participant-view .pv-screens-menu nav {
+  position: absolute; top: 100%; left: 0; z-index: 30; width: 200px;
+  padding: 5px; border: 1px solid var(--kr-line-2); border-radius: var(--kr-r-sm);
+  background: var(--kr-panel); box-shadow: 0 8px 24px #0003;
+}
+#participant-view .pv-screens-menu nav a {
+  display: block; padding: 10px 12px; border-radius: 4px; color: var(--kr-ink);
+  font-size: 13px; text-decoration: none;
+}
+#participant-view .pv-screens-menu nav a:hover,
+#participant-view .pv-screens-menu nav a:focus-visible { background: var(--kr-panel-3); }
 #participant-view .pv-share-open {
   border: 0; background: transparent; color: var(--kr-blue);
   font: 600 12.5px var(--kr-sans); cursor: pointer; padding: 4px;
@@ -46,9 +56,6 @@
   padding: 0 10px; background: var(--kr-panel-2); color: var(--kr-ink); font-size: 12px;
 }
 #participant-view #pv-share-copy-status { min-height: 1em; }
-@media (min-width: 600px) {
-  #participant-view .pv-screen-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
 @media (max-width: 430px) {
   #participant-view .pv-share-codes { gap: 8px; padding: 12px 10px; }
   #participant-view .pv-share-qr, #participant-view .pv-share-empty { padding: 8px; gap: 8px; }
@@ -56,3 +63,24 @@
   #participant-view .pv-share-link-row { flex-wrap: wrap; }
   #participant-view .pv-share-link-row input { flex-basis: 100%; min-height: 40px; }
 }
+
+/* Guests see the meet's choices. Only Back and the compact screen menu remain,
+   including when native fullscreen is unavailable on a phone or local browser. */
+#display-app[data-read-only="true"] #display-toolbar {
+  left: auto; right: max(12px, env(safe-area-inset-right)); top: max(12px, env(safe-area-inset-top));
+  height: auto; min-height: 0; padding: 0; border: 0; background: transparent; backdrop-filter: none;
+}
+#display-app[data-read-only="true"] #display-toolbar > :not(#display-switch) { display: none !important; }
+#display-app[data-read-only="true"] #display-toolbar #display-switch { display: block; }
+#display-app[data-read-only="true"] #display-toolbar.hidden-toolbar { opacity: 1; pointer-events: auto; transform: none; }
+#display-app[data-read-only="true"] #display-switch summary,
+#display-guest-back {
+  min-height: 36px; padding: 8px 12px; border: 1px solid var(--display-line);
+  background: var(--display-card); color: var(--display-fg); border-radius: 6px; font-size: 12px;
+}
+#display-app[data-read-only="true"] #display-switch nav { left: auto; right: 0; }
+#display-guest-back {
+  position: fixed; z-index: 51; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top));
+  text-decoration: none;
+}
+#display-app[data-read-only="true"] #display-stage .sc-top { opacity: 1; }

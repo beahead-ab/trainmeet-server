@@ -5,6 +5,22 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Skrivskyddade gästvyer direkt i helskärm (#209)
+
+Gästsidans stora knapprad ersätts med den diskreta menyn Stora vyer.
+Vald vy öppnas direkt i helskärm och följer träffens inställningar; gäster
+får inga val för klockstil, sekunder, diagramfönster eller andra skärminställningar.
+Byt skärm och Tillbaka finns alltid tillgängliga. Vybyte bevarar helskärmen,
+och webbläsarens bakåt- och framåtknappar fungerar. När webbläsaren saknar
+helskärmsstöd fyller vyn i stället hela webbläsarfönstret. Dela träffen med
+Wi-Fi- och träff-QR finns kvar intill menyn.
+
+Gästläget gäller bara vyer som öppnas under Stora vyer. Storskärmar i lokalen
+som öppnas med sin egen adress (bokmärkta eller i kioskläge), inloggade och
+webbläsare med egna sparade skärmval behåller sina val – klockstil, sekunder,
+diagramfönster, tema och avvikelsenivå – och sin vanliga verktygsrad. Klockan
+krymper inte för gästens knappar: de ligger i hörnen ovanför klockan.
+
 ### Träffklockan: meddelanden som glas, och NoReason syns aldrig (#223)
 
 Klockskärmen visade en brun remsa med «NoReason» under en gående klocka, och
