@@ -267,10 +267,13 @@
             <!-- Två kolumner på en dator, en på telefonen: pv-col är display: contents där. -->
             <div class="pv-col pv-col--main">
             <section class="pv-panel pv-clock-card" aria-label="Träffklockan" data-tm-aria-label="Träffklockan"><div class="pv-clock" id="pv-clock"></div></section>
-            <section class="pv-panel" id="pv-screens" aria-label="Skärmar">
-              <div class="pv-head"><span data-tm-text="Skärmar">Skärmar</span><span class="pv-spacer"></span><button id="pv-share-open" class="pv-share-open" type="button" aria-haspopup="dialog" data-tm-text="Dela träffen">Dela träffen</button></div>
-              <nav id="pv-screens-list" class="pv-screen-list" aria-label="Skärmar" data-tm-aria-label="Skärmar"></nav>
-            </section>
+            <div id="pv-screens" class="pv-screen-actions">
+              <details id="pv-screens-menu" class="tm-dropdown pv-screens-menu">
+                <summary><span data-tm-text="Stora vyer">Stora vyer</span> ▾</summary>
+                <nav id="pv-screens-list" aria-label="Skärmar" data-tm-aria-label="Skärmar"></nav>
+              </details>
+              <button id="pv-share-open" class="pv-share-open" type="button" aria-haspopup="dialog" data-tm-text="Dela träffen">Dela träffen</button>
+            </div>
             <section class="pv-panel pv-about" id="pv-about-card" aria-label="Om trafikspelet" data-tm-aria-label="Om trafikspelet" hidden>
               <div class="pv-head"><span data-tm-text="Om trafikspelet">Om trafikspelet</span></div>
               <div class="pv-body"><p id="pv-about-teaser" class="pv-about__teaser"></p><button id="pv-about-open" class="pv-btn" type="button" data-tm-text="Läs om trafikspelet">Läs om trafikspelet</button></div>
@@ -1418,10 +1421,11 @@
         </form>
       </dialog>
       <section id="display-app" class="display-app hidden">
+        <a id="display-guest-back" href="/" class="kr-btn sm hidden">← <tm-text data-tm-text="Tillbaka">Tillbaka</tm-text></a>
         <header id="display-toolbar" class="display-toolbar tbbar">
           <a href="/" class="kr-btn sm display-back"><tm-text data-tm-text="← Server">← Server</tm-text></a>
           <strong id="display-title" class="tbbar__name"><tm-text data-tm-text="Lokal trafik">Lokal trafik</tm-text></strong>
-          <details id="display-switch" class="tbbar__switch">
+          <details id="display-switch" class="tbbar__switch tm-dropdown">
             <summary class="kr-btn sm"><tm-text data-tm-text="Byt skärm">Byt skärm</tm-text> ▾</summary>
             <nav id="display-switch-list" aria-label="Byt skärm" data-tm-aria-label="Byt skärm"></nav>
           </details>

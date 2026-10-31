@@ -23,7 +23,6 @@
     host.dataset.signature = signature;
     host.replaceChildren(...kinds.map((kind) => {
       const link = document.createElement("a");
-      link.className = "pv-screen-link";
       link.href = "/display/" + kind;
       link.textContent = t(screens[kind]);
       return link;
@@ -119,6 +118,15 @@
     $("#pv-share-close")?.addEventListener("click", () => dialog.close());
     dialog?.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
     $("#pv-share-copy")?.addEventListener("click", copyLink);
+    // Keep the selected view in this document: a page navigation would discard
+    // the user's gesture and leave native fullscreen before the view opens.
+    $("#participant-view")?.addEventListener("click", (event) => {
+      const link = event.target.closest("a");
+      if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      const url = new URL(link.href, location.href);
+      if (url.origin !== location.origin || !url.pathname.startsWith("/display/")) return;
+      if (globalThis.TrainMeetDisplays?.openGuest(url.pathname)) event.preventDefault();
+    });
   }
 
   globalThis.TrainMeetGuest = {
