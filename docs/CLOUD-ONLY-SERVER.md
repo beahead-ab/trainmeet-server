@@ -20,7 +20,8 @@ och publiceras i Cloud. Serverns byggläge och lokala import-/redigeringsvägar
 Servern behåller driftåtgärderna: klockstyrning, tågrapporter, klareringar,
 track warrants, extra tåg, operatörstilldelningar och TMBox-kopplingar.
 TMBoxarnas stationstilldelning är en lokal driftinställning, inte en ändring
-av banan. Serverkonton, enhetsidentiteter och nätverksinställningar hör till
+av banan. Detsamma gäller stationens [spårvisning](tmbox-sparvisning.md) i
+TMBox-appen: ett lokalt presentationsval som aldrig skickas till Cloud. Serverkonton, enhetsidentiteter och nätverksinställningar hör till
 servern och skapas inte om för varje träff.
 
 ## Anslutning och uppdateringar
@@ -44,10 +45,16 @@ felaktigt paket eller en hämtning från en koppling som under tiden ändrats f�
 inte ersätta den aktiva träffen. En annan träff får inte smygas in genom
 automatisk synkronisering.
 
-## E-post via Cloud: det enda som går uppåt
+## Det som går uppåt: e-post och klockans livetrafik
 
 Synken går bara Cloud → Server. Servern skickar aldrig upp konfiguration, träffdata
-eller historik. Ett undantag finns, och det är smalt: en kopplad server kan be
+eller historik. Två undantag finns, och båda är smala. Var och en har sin egen
+modul med ett enda anrop, och `test_product_boundaries` vaktar att det inte
+blir fler.
+
+### E-post via Cloud
+
+En kopplad server kan be
 Cloud skicka **en inbjudan** eller **en kod för nytt lösenord** till en av
 serverns användare (`POST /api/server-mail`, i `cloud_mail.py`).
 
@@ -58,7 +65,33 @@ serverns användare (`POST /api/server-mail`, i `cloud_mail.py`).
 - Utan koppling eller internet fungerar allt som förut: koden visas för ägaren
   och lämnas över på plats, och `tmbox_gateway.recover` finns på serverdatorn.
 - `test_product_boundaries` vaktar både att synken bara läser och att
-  `cloud_mail.py` är den enda modul som skriver till Cloud.
+  `cloud_mail.py` och `cloud_live.py` är de enda moduler som skriver till Cloud.
+
+### Livetrafik från klockan via Cloud
+
+Casper beslutade den 29 oktober om ett smalt undantag från D1 (#205, #206):
+en egen kanal **bara för livetrafik från Apple Watch** (`cloud_live.py`).
+Kontraktet är [docs/apple-watch-relay-push.md](apple-watch-relay-push.md).
+
+- **Reläet.** Servern håller en utgående, autentiserad long-poll mot Cloud
+  (`POST /api/server-relay`). Det klockan skickar till serverns reläadress i
+  Cloud lämnas i utbytet och körs här, med samma box-nyckel, samma behörighet
+  och samma kod som när boxen ringer direkt. Bara sex anrop går den vägen
+  (`RELAY_ROUTES`): boxens bild, tryck, stationstidtabell och träffklockan,
+  och i steg 3 push-registrering och svar på en notis. Inte administrationen,
+  inte `POST /v1/clock`. Ingen port öppnas på träffen.
+- **Push.** Händelserna boxen redan låter för (begäran hit, nekad, klart, tåg
+  på väg) skickas till Cloud (`POST /api/server-push`) med bara fälten i
+  `EVENT_FIELDS`: händelsetyp, tågnummer, stationskoder, förfrågans id, ett
+  engångsbevis, språk, livslängd och boxens push-token. Ge klart och Neka från
+  notisen kommer tillbaka som `POST /v1/tmbox/answer` och avgör bara den
+  förfrågan, bara medan den väntar.
+- Allt är avstängt tills administratören slår på **Apple Watch via Cloud**
+  under Inställningar → Träff och Cloud (`POST /v1/cloud/live`). Utan koppling
+  eller internet fungerar allt som förut: klockan går genom telefonen.
+- Nycklar, push-token och engångsbevis loggas aldrig.
+- D1 och dess negativa tester gäller för allt annat. Förslagskön är borttagen
+  och förblir det; `POST /v1/cloud/changes` svarar 404.
 
 ## Säker aktivering
 
@@ -117,6 +150,53 @@ gäller nu och vilka lokala ändringar som försvinner. Admin väljer med
 
 Kastas de lokala ändringarna medan en version väntar tas den som vanligt så fort
 banan är fri. Utan lokala ändringar fungerar allt som förut.
+
+### Rättelse från Cloud under pågående spel (Cloud #100 B6)
+
+En ny Cloud-version för samma träff väntar som förut tills banan är fri. Rättar
+den bara tidtabellen – tider, spår, dagar, borttagna tåg eller spårtyp, alltså
+det en lokal ändring får ändra – läggs den under tiden på de tåg den rör, som ett
+lager på den aktiva publiceringen med `actor` `cloud:<publicerings-id>`. Samma
+publicerings-id och samma rader: pågående tåg, klareringar, TKL och boxar står
+kvar, och ingenting nollställs.
+
+Spärrarna prövar hela det tåg som ändras: är det ute på linjen, har det en öppen
+klarering eller ett obekräftat linjebesked väntar rättelsen tills tåget har
+kommit fram. Ändrar versionen något annat (stationer, sträckor, paneler, spår,
+nya tåg eller nya fält) väntar hela versionen som förut. Lokala ändringar som
+admin har gjort ersätts aldrig av en rättelse; då gäller valet *Ta
+Cloud-versionen* eller *Behåll mina ändringar*.
+
+När banan är fri tas hela versionen utan att admin behöver välja, eftersom
+lagret är Clouds egen rättelse. Statusraden säger *Rättelsen från Cloud gäller
+nu för N tåg*, och `local_edits.source` är `cloud` för ett sådant lager.
+
+## Tåg som delar nummer och manuella tåg (Cloud #100)
+
+**Delade nummer.** Två tåg som delar nummer samma dag (DSB IC 116 och SJ X 116)
+har var sin tjänst med `service_key`. Servern håller isär dem överallt:
+förseningar (`train_live`) räknas per tåg och numret ensamt gäller det tåg som
+är på väg. `/v1/display` ger raderna och tjänsterna `train_label` ("DSB IC 116"),
+`short_label` ("IC 116") och `service_key`; TMBox-tidtabellen och TKL
+(`/v1/tkl/context`, `train_labels`) visar förkortningen, och TMBox-skärmen visar
+den där den får plats. Ett nummer som bara ett tåg har ser ut som förut.
+
+**Trafikdagen.** TMBox-tidtabellen och TKL får `traffic_day` med trafikdagen
+(planens veckodag när träffen följer planens kalender), veckodagen och
+speldygnets nummer.
+
+**Manuella tåg (B4/B5).** Ett tåg som inte kan köras som planen säger körs av
+människor: en tid saknas, två stopp i följd saknar sträcka på banan, gångtiden
+är negativ, eller Cloud har märkt tjänsten `manual: true` (med `manual_reason`
+eller `manual_reasons`). Tåget automatiseras inte, listas med skälen
+(`manual_trains` i `/v1/display`, `manual`/`manual_reasons` på rader och
+tjänster, `manual_movements` i TKL, märkt i webb-TMBoxens tidtabell och på
+Drift) och stoppar aldrig klockan, publiceringen eller något annat tåg.
+Aktiveringen säger *Publicerad med N kända avvikelser*.
+
+Reglerna gäller från den publicering som aktiveras med den här versionen av
+servern. En träff som redan pågick före uppdateringen kör som förut tills den
+publiceras på nytt, och ett äldre paket utan de nya fälten fungerar som förut.
 
 ### Sidan Tidtabell (`/tidtabell`)
 

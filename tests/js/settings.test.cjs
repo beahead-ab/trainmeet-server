@@ -4,8 +4,8 @@
 const assert = require('node:assert/strict');
 const { open } = require('./kr-fixture.cjs');
 
-const SECTIONS = ['traff', 'skarmar', 'wifi', 'obemannade', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'visning', 'farozon'];
-const FORMS = { traff: 'cloud-auto-form', skarmar: 'clock-appearance-form', wifi: 'connection-wifi-form', server: 'server-identity-form', kod: 'connection-code-form', sprak: 'language-form', visning: 'browser-deviation-form' };
+const SECTIONS = ['traff', 'skarmar', 'wifi', 'obemannade', 'klarering', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'visning', 'farozon'];
+const FORMS = { traff: 'cloud-auto-form', skarmar: 'clock-appearance-form', wifi: 'connection-wifi-form', klarering: 'tellurian-form', server: 'server-identity-form', kod: 'connection-code-form', sprak: 'language-form', visning: 'browser-deviation-form' };
 
 const bar = (page, form) => page.evaluate((id) => {
   const f = document.getElementById(id);
@@ -22,7 +22,7 @@ const bar = (page, form) => page.evaluate((id) => {
     // Nine sections, in three groups, one at a time.
     assert.deepEqual(await page.locator('#settings-nav a.kr-nav').evaluateAll(links => links.map(l => l.dataset.section)), SECTIONS);
     assert.deepEqual(await page.locator('#settings-nav .kr-grp').allTextContents(), ['Träffen', 'Den här servern', 'Webbläsaren']);
-    assert.equal(await page.locator('#admin-view .kr-setsec').count(), 11);
+    assert.equal(await page.locator('#admin-view .kr-setsec').count(), 12);
     for (const section of SECTIONS) {
       await page.locator(`#settings-nav a[data-section="${section}"]`).click();
       await page.waitForFunction(id => !document.getElementById(id).hidden, section);
@@ -147,7 +147,7 @@ const bar = (page, form) => page.evaluate((id) => {
     await search.press('Enter');
     await page.waitForFunction(() => !document.getElementById('anvandare').hidden);
     assert.equal(await search.inputValue(), '');
-    assert.equal(await page.locator('#settings-nav a.kr-nav:not([hidden])').count(), 11);
+    assert.equal(await page.locator('#settings-nav a.kr-nav:not([hidden])').count(), 12);
 
     // The update section: nothing is offered that cannot run, and the steps
     // only show while an update is going on.

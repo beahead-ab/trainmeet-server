@@ -207,6 +207,20 @@ samma tangentregler över HTTP i stället för MQTT. De får ingen egen trafiklo
   `state` och `selected`. `state` är `planned`, `requested`, `cleared`,
   `departed` eller `arrived`. Läsningen ger ingen trafikrätt; utan station är
   `rows` och `tracks` tomma.
+- Tiderna gäller tjänstedygnet. Varje rad har `service_day_offset`: `0` för
+  samma tjänstedygn och `1` för ett stopp efter midnatt inom samma trafikdygn
+  (samma värde som webbens vyer använder per stopp). Ett tåg 23:50 vars nästa
+  stopp är 00:05 har alltså `1` på 00:05-raden, och raderna står i den
+  ordningen. Svaret har också `clock_elapsed_seconds`, träffklockan i sekunder
+  sedan trafikdygnets midnatt (över 86 400 efter midnatt, `null` utan klocka),
+  och `clock_time` (`HH:MM:SS`). Planerad minut = `service_day_offset` × 1 440 +
+  tidens minuter, att jämföra med `clock_elapsed_seconds` / 60. Fälten är nya;
+  äldre klienter ignorerar dem.
+- Cloud #100: en rad vars tåg delar nummer med ett annat samma dag har
+  `train_label` ("IC 116") och `service_key` ("DSB IC"); ett tåg som körs
+  manuellt har `manual: true` och `manual_reasons`. Svaret har `traffic_day`
+  {`day`, `weekday`, `day_number`}: trafikdagen (planens veckodag när träffen
+  följer planens kalender) och speldygnet.
 - Spårvalet (B på ett tåg som ska tas emot) visar tågets spår först, sedan
   stationens standardspår för tåget och sist resten, och börjar på tågets spår.
   Saknar tidtabellen spår är tågets spår stationens första lediga

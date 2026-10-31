@@ -683,6 +683,17 @@ document.querySelector("#automatic-disturbance-form")?.addEventListener("submit"
 });
 
 function applyWorkspaceRoute() {
+  const kind = displayRouteKind(location.pathname);
+  if (kind) {
+    displayKind = kind;
+    initDisplay();
+    return;
+  }
+  if (displayActive) {
+    stopDisplay();
+    // A bookmarked screen starts without the participant/admin bootstrap.
+    if (!state.serverContext) { bootstrap(); return; }
+  }
   let route = location.hash.slice(1);
   const legacy = {overview: "/drift", traffic: "/drift", settings: "/installningar", simulation: "/drift", screens: "/installningar#skarmar"};
   if (legacy[route]) { history.replaceState(null, "", legacy[route]); route = location.hash.slice(1); }
@@ -1862,6 +1873,53 @@ document.querySelector("#cloud-auto-form").addEventListener("submit", async (eve
   } finally { endModalAction(form); }
 });
 
+// Apple Watch via Cloud (#205, #206): klockan når servern genom Cloud och får
+// notiser. Av tills administratören slår på det; texten säger var det står.
+const CLOUD_LIVE_RELAY = {
+  off: "Av. Klockan går via telefonen på träffens nät.",
+  unlinked: "Koppla servern till Cloud först.",
+  connecting: "Ansluter till Cloud …",
+  connected: "Ansluten. Klockan når servern via Cloud.",
+  cloud_disabled: "Cloud har inte reläet påslaget.",
+  link_rejected: "Cloud känner inte igen kopplingen. Koppla om servern.",
+  error: "Cloud nås inte just nu. Servern försöker igen.",
+};
+const CLOUD_LIVE_PUSH = { on: "Notiser: på.", cloud_not_configured: "Notiser: inte konfigurerat i Cloud." };
+
+async function refreshCloudLive() {
+  const form = document.querySelector("#cloud-live-form");
+  if (!form || editorActive(form)) return;
+  const response = await authorizedFetch("/v1/cloud/live", {cache: "no-store"});
+  if (!response.ok) { form.hidden = true; return; }
+  const payload = await response.json();
+  const input = document.querySelector("#cloud-live-enabled");
+  input.checked = Boolean(payload.enabled);
+  input.disabled = !payload.linked && !payload.enabled;
+  const relay = t(CLOUD_LIVE_RELAY[payload.relay?.state] || CLOUD_LIVE_RELAY.error);
+  const push = CLOUD_LIVE_PUSH[payload.push?.state];
+  document.querySelector("#cloud-live-status").textContent = push ? `${relay} ${t(push)}` : relay;
+  form.hidden = false;
+  globalThis.TrainMeetSettings?.rebase(form);
+}
+
+document.querySelector("#cloud-live-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const enabled = document.querySelector("#cloud-live-enabled").checked;
+  if (!beginModalAction(form)) return;
+  try {
+    const response = await authorizedFetch("/v1/cloud/live", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || t("Inställningen kunde inte sparas."));
+    finishModal(form);
+  } catch (error) {
+    setMessage(form.querySelector(".form-message"), error.message, "error");
+  } finally { endModalAction(form); }
+  await refreshCloudLive();
+});
+
 // Vilken sida tågen går på vid dubbelspår (kartorna). Förvalet följer
 // träffens land; en träff vars moduler är byggda annorlunda väljer själv.
 async function refreshTrafficSide() {
@@ -2772,6 +2830,7 @@ async function refreshRuntime() {
   if (state.runtime.central_url && !input.closest("dialog")?.open) input.value = state.runtime.central_url;
   renderCloudStatus();
   await refreshCloudPresentation();
+  await refreshCloudLive();
 }
 
 let cloudPresentation = null;
@@ -3744,9 +3803,34 @@ function escapeHTML(value) {
 }
 
 
-const displayKind = location.pathname.startsWith("/display/")
-  ? location.pathname.split("/").filter(Boolean).pop()
-  : null;
+const DISPLAY_KINDS = ["topology", "graph", "clock", "dashboard", "territories"];
+function displayRouteKind(path) {
+  const match = /^\/display\/([^/]+)\/?$/.exec(path);
+  return match && DISPLAY_KINDS.includes(match[1]) ? match[1] : null;
+}
+let displayKind = displayRouteKind(location.pathname);
+let displayReadOnly = false;
+let displayActive = false;
+let displayInitialized = false;
+let displayWakeLock = null;
+let displayChromeUpdate = null;
+let displayFullscreenExit = null;
+
+// Guest mode (#209) is for a visitor who opens a view from Stora vyer on the
+// participant page; the meet's QR codes lead there. The history entry carries
+// the mark, so reload, Back and Forward keep it. A screen opened by its own
+// address (bookmarked or kiosk in the hall), a signed-in browser and a browser
+// with its own screen choices stay the meet's screen: own settings, toolbar.
+const GUEST_DISPLAY_MARK = "trainmeetGuestDisplay";
+function displayHasOwnSettings() {
+  // Seconds are left out: the participant view and Drift share that choice,
+  // so a guest who tapped the clock there is still a guest.
+  const keys = [DISPLAY_CLOCK_STYLE_KEY, DISPLAY_GRAPH_WINDOW_KEY, DISPLAY_GRAPH_TRACKS_KEY, DISPLAY_THEME_KEY, DISPLAY_DEVIATION_LEVEL_KEY];
+  try { return keys.some((key) => localStorage.getItem(key)); } catch { return false; }
+}
+function displayGuestEntry() {
+  return history.state?.[GUEST_DISPLAY_MARK] === true && !displayHasOwnSettings();
+}
 
 const svgNS = "http://www.w3.org/2000/svg";
 let displaySnapshot = null;
@@ -4610,7 +4694,7 @@ function renderGraph(snapshot) {
   };
   // Ett tryck på stationens namn fäller ut eller ihop dess spår, som i Spår-menyn.
   const station = (id) => { toggleDisplayGraphTrack(snapshot, id); renderDisplayGraphTracks(snapshot); renderGraph(snapshot); };
-  lib.render(svg, g, { cls: lib.SCREEN, onSelect: select, onStation: station, label: (number) => t("Tåg {number}", { number }), clip: "screen-graph-clip",
+  lib.render(svg, g, { cls: lib.SCREEN, onSelect: select, onStation: displayReadOnly ? undefined : station, label: (number) => t("Tåg {number}", { number }), clip: "screen-graph-clip",
     marks: graphLives ? (number) => TrainMeetDriftModel.deviationView(5, graphLives.get(String(number)))?.mark || null : null });
   svg.removeAttribute("width"); svg.removeAttribute("height");
   // Ett tryck på en tom yta släpper det valda tåget (#196); tågen och
@@ -4734,6 +4818,7 @@ const DISPLAY_CLOCK_SECONDS_KEY = "trainmeet.displayClockSeconds";
 const LEGACY_SCREEN_STYLES = Object.fromEntries(["stationsur", "swedish", "norwegian", "danish", "german", "finnish", "polish", "dutch",
   "french", "italian", "american"].map(style => [style, `custom:${style}`]).concat([["swiss", "custom:sbb"]]));
 function displayClockPreference() {
+  if (displayActive && displayReadOnly) return { style: "", seconds: "" };
   try {
     const style = localStorage.getItem(DISPLAY_CLOCK_STYLE_KEY) || "";
     return { style: LEGACY_SCREEN_STYLES[style] || style, seconds: localStorage.getItem(DISPLAY_CLOCK_SECONDS_KEY) || "" };
@@ -5097,6 +5182,7 @@ const DEVIATION_LEVEL_HINTS = {
   5: "Allt från 1 min, även för tidig ankomst och vid tågen på kartan",
 };
 function deviationOwnLevel(key = displayKind ? DISPLAY_DEVIATION_LEVEL_KEY : DEVIATION_LEVEL_KEY) {
+  if (displayActive && displayReadOnly) return "";
   try { return localStorage.getItem(key) || ""; } catch { return ""; }
 }
 function deviationLevelOf(snapshot) { return TrainMeetDriftModel.deviationLevel(snapshot, deviationOwnLevel()); }
@@ -5129,8 +5215,8 @@ const DISPLAY_GRAPH_WINDOWS = [120, 180, 360, 1440];
 const DISPLAY_GRAPH_TRACKS_KEY = "trainmeet.displayGraphTracks";
 const DISPLAY_TOOLBAR_HIDE_MS = 4000;
 
-function displayStored(key) { try { return localStorage.getItem(key) || ""; } catch { return ""; } }
-function displayStore(key, value) { try { localStorage.setItem(key, value); } catch { /* privat läge: gäller bara den här sidan */ } }
+function displayStored(key) { if (displayActive && displayReadOnly) return ""; try { return localStorage.getItem(key) || ""; } catch { return ""; } }
+function displayStore(key, value) { if (displayActive && displayReadOnly) return; try { localStorage.setItem(key, value); } catch { /* privat läge: gäller bara den här sidan */ } }
 function displayGraphWindow() {
   const value = Number(displayStored(DISPLAY_GRAPH_WINDOW_KEY));
   return DISPLAY_GRAPH_WINDOWS.includes(value) ? value : 180;
@@ -5214,7 +5300,7 @@ function renderDisplayThemeChoice() {
 // Tågdiagrammet på skärmen går med klockan varje sekund, som på Drift, och
 // inte bara när en ny bild hämtas.
 setInterval(() => {
-  if (displayKind === "graph" && displaySnapshot?.clock?.running && !document.hidden) renderGraph(displaySnapshot);
+  if (displayActive && displayKind === "graph" && displaySnapshot?.clock?.running && !document.hidden) renderGraph(displaySnapshot);
 }, 1000);
 
 function renderDisplayDeviationLevel(snapshot) {
@@ -5290,6 +5376,7 @@ function renderDisplay(snapshot) {
   renderConnectionBadge(snapshot);
   const ids = { topology: "topology-svg", graph: "graph-scroll", clock: "clock-view", dashboard: "dashboard-view", territories:"territories-view" };
   for (const id of Object.values(ids)) document.querySelector(`#${id}`).classList.toggle("hidden", id !== ids[displayKind]);
+  serverUI.resizeStage?.();
   if (displayKind === "topology") renderDisplayTopology(snapshot);
   if (displayKind === "graph") renderGraph(snapshot);
   if (displayKind === "territories") serverUI.us(snapshot.us, true);
@@ -5307,10 +5394,12 @@ function renderDisplay(snapshot) {
 // The clock runs on locally; with the stream up a change arrives at once.
 function scheduleDisplayPoll() {
   clearTimeout(displayPollTimer);
+  if (!displayActive) return;
   displayPollTimer = setTimeout(pollDisplay, globalThis.TrainMeetLive?.connected ? 5000 : 1000);
 }
 
 async function pollDisplay() {
+  if (!displayActive) return;
   clearTimeout(displayPollTimer);
   displayRequest?.abort();
   const request = new AbortController();
@@ -5344,12 +5433,111 @@ async function pollDisplay() {
   }
 }
 
+// Opening from a guest link happens synchronously in the user's gesture. Keep
+// the document alive so switching screens also keeps native fullscreen.
+function openGuestDisplay(path) {
+  const kind = displayRouteKind(path);
+  // Signed in, or a browser set up as a screen: open it as that screen.
+  if (!kind || state.authStatus?.authenticated || displayHasOwnSettings()) return false;
+  if (location.pathname !== path) history.pushState({ [GUEST_DISPLAY_MARK]: true }, "", path);
+  displayKind = kind;
+  initDisplay();
+  const app = document.querySelector("#display-app");
+  const enter = () => {
+    try {
+      if (!document.fullscreenElement) app.requestFullscreen?.()?.catch(() => {});
+    } catch { /* CSS still fills the viewport when native fullscreen is unavailable. */ }
+  };
+  // Leaving a view a moment ago may still be exiting fullscreen; enter after it.
+  if (displayFullscreenExit) displayFullscreenExit.then(enter); else enter();
+  return true;
+}
+globalThis.TrainMeetDisplays = { openGuest: openGuestDisplay };
+
+function stopDisplay() {
+  displayActive = false;
+  displayKind = null;
+  clearTimeout(displayPollTimer);
+  clearTimeout(displayToolbarTimer);
+  cancelAnimationFrame(displayTickTimer);
+  displayRequest?.abort();
+  displayRequest = null;
+  displayWakeLock?.release().catch(() => {});
+  displayWakeLock = null;
+  if (document.fullscreenElement === document.querySelector("#display-app")) {
+    // exitFullscreen() settles after the participant view is back.
+    const exit = displayFullscreenExit = document.exitFullscreen().catch(() => {}).finally(() => {
+      if (displayFullscreenExit === exit) displayFullscreenExit = null;
+    });
+  }
+  document.querySelector("#display-app").classList.add("hidden");
+  document.body.classList.remove("server-display");
+  document.title = "TrainMeet Server";
+}
+
+function animateDisplayClock() {
+  if (!displayActive) return;
+  if (displaySnapshot && displayKind === "clock") renderClock(displaySnapshot);
+  displayTickTimer = requestAnimationFrame(animateDisplayClock);
+}
+
 async function initDisplay() {
-  serverUI.initDisplay();
+  displayActive = true;
+  globalThis.TrainMeetParticipant?.stop();
+  document.body.classList.add("server-display");
   const displayApp = document.querySelector("#display-app");
   displayApp.classList.remove("hidden");
+  // A bookmarked or kiosk screen in the hall keeps its own choices (#209).
+  const guestEntry = displayGuestEntry();
+  if (guestEntry) {
+    // Fail closed while a reloaded guest view checks the session: a guest
+    // never briefly sees the screen settings.
+    displayReadOnly = true;
+    displayApp.dataset.readOnly = "true";
+    if (!state.authStatus) {
+      try { await refreshAuthStatus(); } catch { /* public snapshot remains available */ }
+      if (!displayActive) return;
+    }
+  }
+  displayReadOnly = guestEntry && !state.authStatus?.authenticated;
+  displayApp.dataset.readOnly = String(displayReadOnly);
+  document.querySelector("#display-guest-back").classList.toggle("hidden", !displayReadOnly);
+  document.querySelector(".display-back").href = workspaceHome();
+  state.displaySelectedTrainNumber = null;
+  state.displaySelectedStationID = null;
+  state.displayHoveredTrainNumber = null;
+  cancelAnimationFrame(displayTickTimer);
+  displayTickTimer = requestAnimationFrame(animateDisplayClock);
+  if (!displayWakeLock) navigator.wakeLock?.request("screen").then((lock) => {
+    if (displayActive) displayWakeLock = lock;
+    else lock.release().catch(() => {});
+  }).catch(() => {});
+  if (displayInitialized) {
+    applyDisplayTheme(displayTheme());
+    displayChromeUpdate?.();
+    displayApp.dispatchEvent(new Event("mousemove"));
+    if (displaySnapshot) renderDisplay(displaySnapshot);
+    pollDisplay();
+    return;
+  }
+  displayInitialized = true;
+  serverUI.initDisplay();
   applyDisplayTheme(displayTheme());
   document.title = `TrainMeet · ${t("Skärm")}`;
+  document.querySelector("#display-switch-list").addEventListener("click", (event) => {
+    const link = event.target.closest("a");
+    if (!displayReadOnly || !link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    if (openGuestDisplay(new URL(link.href).pathname)) {
+      event.preventDefault();
+      document.querySelector("#display-switch").open = false;
+    }
+  });
+  document.querySelector("#display-guest-back").addEventListener("click", (event) => {
+    event.preventDefault();
+    history.pushState(null, "", "/");
+    applyWorkspaceRoute();
+    document.querySelector("#pv-screens-menu summary")?.focus();
+  });
   document.querySelector("#display-theme").addEventListener("change", (event) => {
     displayStore(DISPLAY_THEME_KEY, event.target.value);
     applyDisplayTheme(event.target.value);
@@ -5399,9 +5587,10 @@ async function initDisplay() {
   // I helskärm kommer raden tillbaka vid rörelse och döljs efter fyra sekunder;
   // i fönster står den kvar.
   const showToolbar = () => {
+    if (!displayActive) return;
     clearTimeout(displayToolbarTimer);
     setToolbar(true);
-    if (displayApp.dataset.chrome !== "fullscreen") return;
+    if (displayReadOnly || displayApp.dataset.chrome !== "fullscreen") return;
     displayToolbarTimer = setTimeout(() => {
       // Raden står kvar medan pekaren är över den eller menyn är öppen.
       if (toolbar.matches(":hover") || document.querySelector("#display-switch")?.open || document.querySelector("#display-graph-tracks")?.open) { showToolbar(); return; }
@@ -5409,30 +5598,25 @@ async function initDisplay() {
     }, DISPLAY_TOOLBAR_HIDE_MS);
   };
   const updateChrome = () => {
-    const full = displayIsFullscreen();
+    const full = displayReadOnly || displayIsFullscreen();
     displayApp.dataset.chrome = full ? "fullscreen" : "window";
     fullscreenButton.querySelector("tm-text").textContent = t(full ? "Avsluta helskärm" : "Helskärm");
     fullscreenButton.querySelector("tm-text").dataset.tmText = full ? "Avsluta helskärm" : "Helskärm";
     showToolbar();
     serverUI.resizeStage?.();
   };
+  displayChromeUpdate = updateChrome;
   displayApp.addEventListener("mousemove", showToolbar);
   displayApp.addEventListener("click", showToolbar);
   // Ett tryck på storskärmens klocka visar eller döljer sekunderna här.
   document.querySelector("#clock-view").addEventListener("click", () => {
-    if (displaySnapshot) globalThis.TrainMeetClockSeconds.toggle(resolveClockAppearance(displaySnapshot).showSeconds);
+    if (!displayReadOnly && displaySnapshot) globalThis.TrainMeetClockSeconds.toggle(resolveClockAppearance(displaySnapshot).showSeconds);
   });
   displayApp.addEventListener("touchstart", showToolbar, {passive:true});
   document.addEventListener("keydown", showToolbar);
   window.addEventListener("resize", updateChrome);
   document.addEventListener("fullscreenchange", updateChrome);
   updateChrome();
-  try { await navigator.wakeLock?.request("screen"); } catch {}
-  const animateClock = () => {
-    if (displaySnapshot && displayKind === "clock") renderClock(displaySnapshot);
-    displayTickTimer = requestAnimationFrame(animateClock);
-  };
-  displayTickTimer = requestAnimationFrame(animateClock);
   window.addEventListener("online", pollDisplay);
   window.addEventListener("pageshow", pollDisplay);
   globalThis.TrainMeetLive?.subscribe((topics) => {
@@ -5445,7 +5629,7 @@ async function initDisplay() {
   pollDisplay();
 }
 
-if (displayKind && ["topology", "graph", "clock", "dashboard", "territories"].includes(displayKind)) initDisplay();
+if (displayKind) initDisplay();
 else bootstrap();
 
 /* ---------------------------------------------------------------- TMBox v2
