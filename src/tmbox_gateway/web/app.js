@@ -206,6 +206,7 @@ loginForm.addEventListener("submit", async (event) => {
       history.replaceState(null, "", location.pathname + "#overview");
     }
     await refreshAuthStatus();
+    if (isDriverUser()) history.replaceState(null, "", "/installningar#anvandare");
     const installation = await refreshSetupStatus();
     if (installation.required) {
       showSetup(installation);
@@ -462,7 +463,21 @@ function storedMode() { sessionStorage.removeItem(WORKSPACE_KEY); return "worksp
 // "/" is for guests. Signed in, home is Drift: the logo, the screens' back link
 // and "/" itself all lead there, so an administrator never lands on the
 // participant view by accident. Signing out leads back to it.
-function workspaceHome() { return state.authStatus?.authenticated ? "/drift" : "/"; }
+function isDriverUser() { return state.authStatus?.authenticated && state.authStatus.role === "user"; }
+function renderAccountNavigation() {
+  for (const [selector, text] of [
+    ["#open-settings", isDriverUser() ? "Eget konto" : "Inställningar"],
+    ['#settings-nav [data-section="anvandare"]', isDriverUser() ? "Eget konto" : "Användare"],
+    ["#anvandare-title", isDriverUser() ? "Eget konto" : "Användare"],
+    ["#user-edit-title", isDriverUser() ? "Eget konto" : "Redigera användare"],
+  ]) {
+    const node = document.querySelector(selector);
+    node.dataset.tmText = text;
+    node.textContent = t(text);
+  }
+  document.querySelector("#open-settings").href = isDriverUser() ? "/installningar#anvandare" : "#settings";
+}
+function workspaceHome() { return state.authStatus?.authenticated && !isDriverUser() ? "/drift" : "/"; }
 
 function availableWorkspaces() {
   // Fail closed: a stale browser choice must not grant a role or select EU/US.
@@ -470,7 +485,7 @@ function availableWorkspaces() {
 }
 
 async function refreshServerContext() {
-  const response = await authorizedFetch(state.authStatus?.authenticated ? "/v1/server-context" : "/v1/workspaces", { cache: "no-store" });
+  const response = await authorizedFetch(state.authStatus?.authenticated && !isDriverUser() ? "/v1/server-context" : "/v1/workspaces", { cache: "no-store" });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || "Serverns träff kunde inte läsas.");
   state.serverContext = payload;
@@ -497,6 +512,7 @@ globalThis.TrainMeetI18n.subscribe(() => {
   globalThis.TrainMeetParticipant?.refresh();
   renderCloudStatus();
   renderUsers();
+  renderAccountNavigation();
   renderCloudPresentation();
   configureResetMode();
 });
@@ -525,6 +541,7 @@ function setMode(mode) {
 }
 
 function showSettings() {
+  if (isDriverUser()) { globalThis.TrainMeetSettings?.show("anvandare"); refreshUsers(); return; }
   globalThis.TrainMeetSettings?.show();
   Promise.allSettled([checkSoftwareUpdate(), refreshUsers(), refreshBackups(), refreshRuntime(), refreshDevices(), refreshAutomatic(), refreshTrafficSide(), refreshDeviationLevel()]);
 }
@@ -683,7 +700,13 @@ function applyWorkspaceRoute() {
   if (legacy[route]) { history.replaceState(null, "", legacy[route]); route = location.hash.slice(1); }
   if (route === "workspaces") { history.replaceState(null, "", "/"); route = ""; }
   const path = location.pathname.replace(/\/$/, "") || "/";
-  if (state.authStatus?.authenticated && path === "/" && !route) {
+  if (isDriverUser() && (path !== "/" || route)) {
+    history.replaceState(null, "", "/installningar#anvandare");
+    setup.classList.add("hidden"); login.classList.add("hidden"); appView.classList.remove("hidden");
+    setMode("installningar");
+    return;
+  }
+  if (!isDriverUser() && state.authStatus?.authenticated && path === "/" && !route) {
     history.replaceState(null, "", "/drift");
     applyWorkspaceRoute();
     return;
@@ -2427,7 +2450,7 @@ async function openApplication() {
   logoutButton.classList.toggle("hidden", !state.authStatus?.authenticated);
   try {
     await refreshServerContext();
-    if (!state.authStatus?.authenticated) {
+    if (!state.authStatus?.authenticated || isDriverUser()) {
       applyWorkspaceRoute();
       setConnection("online", "Lokalt ansluten");
       return;
@@ -3579,6 +3602,8 @@ async function refreshAuthStatus() {
   // The address field is left alone. The application never fills it in -
   // the browser's own password manager may still offer a saved login, which
   // is the user's choice rather than ours.
+  document.body.dataset.accountRole = state.authStatus.role || "";
+  renderAccountNavigation();
   configureResetMode();
   return state.authStatus;
 }
@@ -5778,26 +5803,33 @@ function bindTMBoxPanes() {
 // på plats; har den inbjudne en e-postadress och servern är kopplad till
 // TrainMeet Cloud skickas den också dit.
 //
-// Ägare hanterar alla konton; administratörer redigerar administratörer.
-// Inbjudan, borttagning och tilldelning av ägarrollen är ägarens uppgifter.
+// Servern avgör rättigheterna; klienten speglar rollerna och det egna kontot.
 
 const users = { list: [], role: "admin", code: null };
 
 function canEditUser(user) {
-  return users.role === "owner" || (users.role === "admin" && user.role === "admin");
+  return users.role === "owner" || (users.role === "admin" && user.role !== "owner")
+    || (users.role === "user" && user.user_id === users.userId);
 }
 
 function usersEl(name) {
   return document.querySelector(`#users-${name}`);
 }
 
+function userRoleLabel(role) { return t({owner: "Ägare", admin: "Administratör", user: "Användare"}[role]); }
+
+function fillRoleOptions(select, current) {
+  const roles = users.role === "owner" ? ["owner", "admin", "user"] : users.role === "admin" ? ["admin", "user"] : ["user"];
+  select.replaceChildren(...roles.map(role => new Option(userRoleLabel(role), role)));
+  select.value = current;
+}
+
 function renderUsers() {
   const body = usersEl("rows");
   if (!body) return;
-  const owner = users.role === "owner";
-
-  usersEl("role-chip").textContent = owner ? t("Ägare") : t("Administratör");
-  usersEl("invite-open")?.classList.toggle("hidden", !owner);
+  usersEl("role-chip").textContent = userRoleLabel(users.role);
+  usersEl("invite-open")?.classList.toggle("hidden", !["owner", "admin"].includes(users.role));
+  fillRoleOptions(usersEl("invite-role"), "admin");
 
   body.replaceChildren(...users.list.map((user) => {
     const tr = document.createElement("tr");
@@ -5833,7 +5865,7 @@ function renderUsers() {
     const role = document.createElement("td");
     const chip = document.createElement("span");
     chip.className = user.role === "owner" ? "kr-pill sel" : "kr-pill";
-    chip.textContent = user.role === "owner" ? t("Ägare") : t("Administratör");
+    chip.textContent = userRoleLabel(user.role);
     role.append(chip);
     tr.append(role);
 
@@ -5891,15 +5923,15 @@ function mailBody(body) {
 async function refreshUsers() {
   const message = usersEl("message");
   try {
-    const response = await authorizedFetch("/v1/admin/users");
+    const response = await authorizedFetch(isDriverUser() ? "/v1/account" : "/v1/admin/users");
     if (!response.ok) {
       setMessage(message, "Användarna kunde inte läsas", "error");
       return;
     }
     const payload = await response.json();
-    users.list = payload.users || [];
-    users.role = payload.role || "admin";
-    users.userId = payload.user_id;
+    users.list = payload.users || (payload.user ? [payload.user] : []);
+    users.role = payload.role || payload.user?.role || "admin";
+    users.userId = payload.user_id || payload.user?.user_id;
     // Meddelandet lämnas som det är: varje åtgärd hämtar listan på nytt, och
     // en nollställning här skulle sudda kvittot i samma andetag som det sätts.
     renderUsers();
@@ -5938,15 +5970,15 @@ async function usersPost(path, body, whenOk) {
 async function inviteUser(event) {
   event.preventDefault();
   const name = usersEl("invite-name").value.trim();
-  const owner = usersEl("invite-owner").checked;
+  const role = usersEl("invite-role").value;
   const email = usersEl("invite-email").value.trim();
   const result = await usersPost(
     "/v1/admin/users",
-    mailBody({ display_name: name, role: owner ? "owner" : "admin", email }),
+    mailBody({ display_name: name, role, email }),
     (payload) => {
       usersEl("invite-name").value = "";
       usersEl("invite-email").value = "";
-      usersEl("invite-owner").checked = false;
+      usersEl("invite-role").value = "admin";
       setMessage(usersEl("message"), ...mailReceipt(name, payload.mail));
     },
   );
@@ -5979,20 +6011,17 @@ function editUser(user) {
   users.editing = user;
   document.querySelector("#user-edit-name").textContent = user.email || t("Saknar e-post – kan inte logga in");
   document.querySelector("#user-edit-display-name").value = user.display_name || "";
-  document.querySelector("#user-edit-role").value = user.role;
-  const owner = users.role === "owner";
   const self = user.user_id === users.userId;
   const role = document.querySelector("#user-edit-role");
-  role.disabled = !owner || self;
-  role.querySelector('option[value="owner"]').hidden = !owner;
-  role.querySelector('option[value="owner"]').disabled = !owner;
+  fillRoleOptions(role, user.role);
+  role.disabled = self;
   document.querySelector("#user-edit-email").value = user.email || "";
   document.querySelector("#user-edit-password").value = "";
   document.querySelector("#user-edit-password-confirm").value = "";
   document.querySelector("#user-delete-confirm").checked = false;
   document.querySelector("#user-edit-delete").disabled = true;
-  document.querySelector("#user-edit-reissue").hidden = !owner || !user.invitation_pending;
-  document.querySelector("#user-edit-removal").hidden = !owner || self;
+  document.querySelector("#user-edit-reissue").hidden = !["owner", "admin"].includes(users.role) || !user.invitation_pending;
+  document.querySelector("#user-edit-removal").hidden = !["owner", "admin"].includes(users.role) || self;
   openModal("user-edit-modal");
 }
 
@@ -6015,7 +6044,8 @@ function bindUsersSection() {
     if (email !== (users.editing.email || "")) body.email = email;
     if (password) body.password = password;
     const ownPasswordChanged = Boolean(password) && users.editing.user_id === users.userId;
-    const result = await usersPost("/v1/admin/users/update", body);
+    if (isDriverUser()) delete body.user_id;
+    const result = await usersPost(isDriverUser() ? "/v1/account" : "/v1/admin/users/update", body);
     if (result) {
       document.querySelector("#user-edit-password").value = "";
       document.querySelector("#user-edit-password-confirm").value = "";

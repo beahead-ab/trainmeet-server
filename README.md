@@ -853,8 +853,8 @@ lades tillbaka, eller i rött med skälet och att databasen är som före förs�
 **Med e-post.** Servern har ingen egen e-post, men en server som är kopplad
 till en träff i TrainMeet Cloud kan be Cloud skicka två brev:
 
-- **En inbjudan.** Under Inställningar → Användare anger ägaren namn och
-  e-postadress för den som bjuds in. Koden skickas dit och visas ändå på
+- **En inbjudan.** Under Inställningar → Användare anger ägaren eller en
+  administratör namn och e-postadress för den som bjuds in. Koden skickas dit och visas ändå på
   skärmen, så att den kan lämnas över på plats.
 - **En kod för nytt lösenord.** När någon väljer **Glömt lösenordet?** på
   inloggningen och anger sin e-postadress skickas en kod dit, om det finns ett
@@ -877,17 +877,34 @@ Hur det fungerar:
   `docs/EPOST-OCH-KONTON.md` §10 i Cloud-repot, och kräver TrainMeet Cloud
   1.15 eller senare.
 
+### Användare
+
 Under **Inställningar → Användare** öppnar du ett konto genom att klicka på
 namnet eller **Redigera**. Namn, e-postadress, roll och ett valfritt nytt
 lösenord sparas tillsammans. Lämna lösenordsfältet tomt för att behålla det
 nuvarande lösenordet. En adress kan bytas men inte tas bort.
 
-Ägare kan redigera alla konton, även andra ägare. Administratörer kan redigera
-sig själva och andra administratörer, men aldrig ägare eller tilldela
-ägarrollen. Bara ägare kan bjuda in, ta bort och ändra roller. Du kan inte ta
-bort ditt eget konto eller din egen ägarroll, och servern behåller alltid
-minst en ägare som kan logga in. En framtida vanlig användarroll ger ingen
-rätt att administrera administratörer eller ägare; den rollen införs inte här.
+Servern har tre roller:
+
+- **Ägare** kan bjuda in, redigera och ta bort alla konton och tilldela alla
+  tre roller. Det egna kontot och den egna ägarrollen kan inte tas bort.
+  Minst en ägare som kan logga in finns alltid kvar.
+- **Administratör** kan bjuda in, redigera namn, e-post och lösenord, byta roll
+  och ta bort administratörer och användare. Bara Administratör och Användare
+  får tilldelas. Ägarkonton är skyddade, och det egna kontot kan inte tas bort
+  eller byta roll.
+- **Användare** är i dag lokförare, med rättigheten **Lokföraren**
+  (`can_use_driver`). Ägare och administratörer har också den rättigheten.
+  Användaren kan bara ändra sitt eget namn, e-post och lösenord under
+  **Eget konto**. Fram till Lokföraren-PWA:n finns visas därutöver bara
+  träffens publika skärmar, som för gäster. Alla admin- och trafikstyrnings-API
+  svarar med 403 för användarkonton, även om klienten manipuleras.
+
+Rollväljaren visar bara roller som den inloggade får tilldela och är låst på
+ett eget konto. Ta bort och Ny inbjudningskod visas bara för tillåtna konton.
+Behörighet kontrolleras på servern i samma transaktion som kontot ändras.
+Befintliga SQLite-databaser migreras genom tabellombyggnad av rollens CHECK;
+konton, lösenord, inbjudningar och sessioner behålls.
 
 Felaktiga uppgifter eller nekad behörighet lämnar hela kontot oförändrat.
 Ett nytt lösenord avslutar kontots befintliga sessioner och ogiltigförklarar
