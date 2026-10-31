@@ -5,6 +5,25 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Träffklockan: meddelanden som glas, och NoReason syns aldrig (#223)
+
+Klockskärmen visade en brun remsa med «NoReason» under en gående klocka, och
+både remsan och stoppblocket krympte urtavlan. Nu tar inget meddelande höjd
+eller yta från klockan: utan meddelande får klockan hela skärmen.
+
+- **Information** från FastClock ligger i mörkt halvgenomskinligt glas med vit
+  text i nedre vänstra hörnet, mitt emot QR-koderna, högst två rader.
+- **Stoppad klocka** visas i rött glas över urtavlans nedre halva (under
+  siffrorna på den digitala klockan). Utan orsak står bara «Klockan är stoppad».
+- **Dagens slut** (FastClocks `isCompleted` eller paus av typen `Closing`) är
+  tyst: en liten etikett i hörnet och en dämpad klocka, inget larm.
+
+Källan tolkas nu efter klockans läge: `message` är bara FastClocks fria text,
+pausorsaken gäller bara en paus och stopporsaken bara ett stopp. Platshållare
+som `None`, `NoReason` och `SelectStopReason` blir ingenting, kända koder
+översätts (Lunch → Lunchpaus, Derailment → Urspårning) och okända koder visas
+aldrig. Deltagarvyn använder samma tolkning.
+
 ### FastClock-standardadressen finns alltid kvar att kopiera
 
 Klockans inställningar visar alltid `https://fastclock.azurewebsites.net` med

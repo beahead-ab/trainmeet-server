@@ -49,7 +49,7 @@ class ProviderTests(unittest.TestCase):
     def test_live_messages_follow_provider_through_pause_resume_and_clear(self):
         for payload, text in (
             (provider_status(message="Trafiken börjar strax"), "Trafiken börjar strax"),
-            (provider_status(isPaused=True, pauseReason="Lunch"), "Lunch"),
+            (provider_status(isPaused=True, pauseReason="Lunch"), None),
             (provider_status(message="Körningen fortsätter"), "Körningen fortsätter"),
             (provider_status(message="Ändrat meddelande"), "Ändrat meddelande"),
             (provider_status(message="   "), None),
@@ -63,13 +63,47 @@ class ProviderTests(unittest.TestCase):
                 self.assertEqual(status["running"], not payload.get("isPaused", False))
                 if status["running"]:
                     self.assertIsNone(status["stopped_reason"])
+                else:
+                    self.assertEqual(status["stopped_reason"], "Lunch")
 
     def test_message_and_pause_reason_are_separate(self):
         status = parse_status(provider_status(isPaused=True, pauseReason="Lunch", message="Vi börjar 13:00"))
         self.assertEqual(status["message"], "Vi börjar 13:00")
         self.assertEqual(status["stopped_reason"], "Lunch")
-        self.assertEqual(parse_status(provider_status(stoppingReason="Information"))["message"], "Information")
         self.assertEqual(len(parse_status(provider_status(message="a" * 500))["message"]), 160)
+
+    def test_reasons_never_become_a_message_and_placeholders_say_nothing(self):
+        # Issue #223: a running clock showed "NoReason" in a band under the face.
+        running = parse_status(provider_status(pauseReason="None", stoppingReason="NoReason", message=""))
+        self.assertIsNone(running["message"])
+        self.assertIsNone(running["stopped_reason"])
+        self.assertIsNone(parse_status(provider_status(stoppingReason="Derailment"))["message"],
+                          "a stop reason is not shown while the clock runs")
+        for placeholder in ("NoReason", "SelectStopReason", "None", "  ", "N/A", "no_reason"):
+            with self.subTest(placeholder=placeholder):
+                stopped = parse_status(provider_status(isRunning=False, stoppingReason=placeholder, message=placeholder))
+                self.assertFalse(stopped["running"])
+                self.assertEqual(stopped["stopped_reason"], "")
+                self.assertIsNone(stopped["message"])
+
+    def test_each_reason_belongs_to_its_own_state(self):
+        paused = parse_status(provider_status(isPaused=True, pauseReason="Coffe", stoppingReason="Derailment"))
+        self.assertEqual(paused["stopped_reason"], "Coffe")
+        stopped = parse_status(provider_status(isRunning=False, pauseReason="Lunch", stoppingReason="Derailment"))
+        self.assertEqual(stopped["stopped_reason"], "Derailment")
+        done = parse_status(provider_status(isCompleted=True, stoppingReason="Derailment"))
+        self.assertFalse(done["running"])
+        self.assertTrue(done["completed"])
+        self.assertEqual(done["stopped_reason"], "")
+        self.assertFalse(parse_status(provider_status())["completed"])
+
+    def test_completed_reaches_the_status(self):
+        self.reply = provider_status(isCompleted=True)
+        self.clock.poll(force=True)
+        self.assertTrue(self.clock.status()["completed"])
+        self.reply = provider_status()
+        self.clock.poll(force=True)
+        self.assertFalse(self.clock.status()["completed"])
 
     def test_message_change_does_not_reset_clock_interpolation(self):
         self.reply = provider_status(time="09:15", message="Första meddelandet")

@@ -135,7 +135,7 @@ const root = path.resolve(__dirname, '../..');
     // Hours and minutes large, the seconds small beside them, so that the seconds always fit.
     await clockScreen.locator('.clock-digital .cd-hm').filter({hasText:'14:26'}).waitFor();
     assert.equal((await clockScreen.locator('.clock-digital .cd-ss').textContent()).trim(),'00');
-    assert.equal(await clockScreen.locator('.sc-stopped').isVisible(),true);
+    assert.equal(await clockScreen.locator('.sc-notice--stop').isVisible(),true);
     const digits=await clockScreen.locator('.clock-digital').boundingBox();
     assert.ok(digits.x>=0&&digits.x+digits.width<=1920,'The digits with seconds fit the screen');
     // The toolbar: a full screen hides it after four seconds and brings it back at a movement; a window keeps it.

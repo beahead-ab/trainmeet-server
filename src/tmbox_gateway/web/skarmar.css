@@ -91,10 +91,11 @@ body.server-display { background: var(--kr-bg); }
 
 /* ── Klockskärmen ───────────────────────────────────────────────────── */
 #clock-view { display: flex; width: 100%; height: 100%; }
-.sc-clock-layout { gap: 36px; }
-.sc-clock-layout .clock-face { width: 960px; height: 960px; }
-.sc-clock-layout.is-stopped .clock-face { width: 700px; height: 700px; }
+.sc-clock-layout { position: relative; gap: 36px; }
+/* Klockan har samma storlek oavsett läge och meddelanden (#223). */
+.sc-clock-layout .clock-face, .sc-clock-layout.is-stopped .clock-face { width: 960px; height: 960px; }
 .sc-clock-layout .clock-face.stopped { opacity: .5; }
+.sc-clock-layout.is-quiet .clock-digital { opacity: .5; }
 
 /* Urtavlan: tokens, inte fasta färger. Stationsuret har alltid ljus tavla. */
 .clock-face { --cf-face: var(--kr-panel); --cf-bezel: var(--kr-line-2); --cf-mark: var(--kr-ink); --cf-hand: var(--kr-ink); --cf-num: var(--kr-ink-2); }
@@ -128,29 +129,61 @@ body.server-display { background: var(--kr-bg); }
 .light .sc-run, .light .sc-run::before { color: var(--kr-green); }
 .light .sc-run::before { background: var(--kr-green); }
 
-/* Stoppad klocka: gul ruta med orsak, hastighet och källa. */
-.sc-clock-layout .sc-stopped { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; max-width: 1560px; padding: 18px 28px; border: 0; border-radius: 16px; background: var(--kr-amber-soft); color: var(--kr-amber); }
-.sc-stopped::before { content: none; }
-.sc-stopped__dot { width: 16px; height: 16px; border-radius: 50%; background: var(--kr-amber); flex-shrink: 0; }
-.sc-stopped__title { font-size: 28px; font-weight: 600; color: var(--kr-amber); line-height: 1.2; }
-.sc-stopped__reason, .sc-stopped__meta { font-size: 22px; font-weight: 500; color: var(--kr-mute); }
-.sc-stopped__reason { overflow-wrap: anywhere; max-width: 1000px; }
-.light .sc-stopped { background: var(--kr-amber-soft); }
-.light .sc-stopped__title { color: var(--kr-amber); }
-
-/* FastClock-meddelanden rullar under klockan, även medan den går. */
-.sc-clock-layout:has(.sc-clock-message) .clock-face { width: 700px; height: 700px; }
-.sc-clock-message { flex-shrink: 0; width: 100%; min-width: 0; overflow: hidden; padding: 16px 0; background: var(--kr-amber-soft); color: var(--kr-ink); font-size: 40px; line-height: 1.3; }
-#display-stage:has(#screen-qr:not([hidden])) .sc-clock-layout:has(.sc-clock-message) { padding-bottom: 120px; gap: 24px; }
-#display-stage:has(#screen-qr:not([hidden])) .sc-clock-layout:has(.sc-clock-message) .clock-face { width: 620px; height: 620px; }
-.sc-clock-message__track { display: flex; width: max-content; min-width: 200%; animation: sc-clock-message-scroll 32s linear infinite; }
-.sc-clock-message__text { flex: 1 0 auto; box-sizing: border-box; padding-inline: 32px 128px; white-space: nowrap; }
-@keyframes sc-clock-message-scroll { to { transform: translateX(-50%); } }
-@media (prefers-reduced-motion: reduce) {
-  .sc-clock-message__track { animation: none; display: block; width: 100%; min-width: 0; }
-  .sc-clock-message__text { display: block; white-space: normal; overflow-wrap: anywhere; padding: 0 32px; }
-  .sc-clock-message__text[aria-hidden="true"] { display: none; }
+/* Meddelanden som glas (#223). De ligger i ett eget lager, absolut mot
+ * klocklayouten (dukens inre yta, samma kanter som QR-koderna), och tar
+ * aldrig höjd eller yta från klockan. Utan meddelande syns ingenting.
+ *   Stopp: rött glas över urtavlans nedre halva (siffror: under siffrorna).
+ *   Information: mörkt glas i nedre vänstra hörnet, mitt emot QR-koderna.
+ *   Tyst (dagens slut): en liten mörk etikett på samma plats, klockan dämpad.
+ * Glaset är mörkt och vitt även i ljust tema: det ska läsas över vad som helst. */
+.sc-notice {
+  position: absolute; z-index: 2; box-sizing: border-box; display: flex; color: #fff;
+  border: 1px solid rgba(255, 255, 255, .12); box-shadow: 0 14px 44px rgba(0, 0, 0, .45);
+  -webkit-backdrop-filter: blur(22px) saturate(140%); backdrop-filter: blur(22px) saturate(140%);
+  font-family: var(--kr-sans); animation: sc-notice-in .24s ease-out both;
 }
+@keyframes sc-notice-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .sc-notice { animation: none; } }
+.sc-notice__label { display: inline-flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; line-height: 1.2; letter-spacing: .16em; text-transform: uppercase; color: rgba(255, 255, 255, .88); }
+.sc-notice__pause {
+  flex-shrink: 0; width: 64px; height: 64px; border-radius: 50%;
+  background: linear-gradient(#fff, #fff) 21px 19px / 8px 26px no-repeat, linear-gradient(#fff, #fff) 35px 19px / 8px 26px no-repeat, rgba(255, 255, 255, .16);
+}
+
+.sc-notice--stop {
+  left: 0; right: 0; top: calc(50% + 150px); margin: 0 auto; width: max-content; min-width: 480px; max-width: 760px;
+  align-items: center; gap: 24px; padding: 24px 34px 26px 26px; border-radius: 22px;
+  background: rgba(190, 30, 36, .82); border-color: rgba(255, 255, 255, .2);
+}
+.sc-notice--stop .sc-notice__body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sc-notice--stop .sc-notice__text { font-size: 52px; font-weight: 700; line-height: 1.08; overflow-wrap: anywhere; }
+.sc-notice--stop.is-long .sc-notice__text { font-size: 38px; }
+.sc-notice--stop.is-short { min-width: 0; height: 84px; gap: 18px; padding: 0 36px 0 18px; border-radius: 42px; }
+.sc-notice--stop.is-short .sc-notice__pause { width: 50px; height: 50px; background-position: 16px 15px, 28px 15px, 0 0; background-size: 6px 20px, 6px 20px, auto; }
+.sc-notice--stop.is-short .sc-notice__text { font-size: 36px; white-space: nowrap; }
+.sc-clock-layout--digital .sc-notice--stop { top: auto; bottom: 0; }
+
+.sc-notice--info {
+  left: 0; bottom: 0; max-width: 600px; flex-direction: column; gap: 10px; padding: 20px 26px 22px; border-radius: 20px;
+  background: rgba(26, 28, 34, .74);
+}
+.sc-notice--info .sc-notice__label { font-size: 15px; color: rgba(255, 255, 255, .66); }
+.sc-notice__i { width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .7); display: inline-flex; align-items: center; justify-content: center; }
+.sc-notice__i::before { content: "i"; font: 700 14px/1 var(--kr-sans); color: rgba(255, 255, 255, .85); }
+.sc-notice--info .sc-notice__text {
+  font-size: 34px; font-weight: 500; line-height: 1.22; color: rgba(255, 255, 255, .96); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.sc-notice--info.is-long .sc-notice__text { font-size: 28px; }
+
+.sc-notice--quiet {
+  left: 0; bottom: 0; align-items: center; gap: 12px; height: 56px; padding: 0 22px 0 12px; border-radius: 28px;
+  background: rgba(26, 28, 34, .6); box-shadow: none; color: rgba(255, 255, 255, .82); font-size: 22px; font-weight: 600; white-space: nowrap;
+}
+.sc-notice--quiet .sc-notice__pause { width: 32px; height: 32px; background-position: 10px 9px, 18px 9px, 0 0; background-size: 4px 14px, 4px 14px, auto; }
+
+/* Stående skärm: hörnet är för smalt för både meddelande och QR-koder. */
+#display-stage.sc-portrait .sc-notice--info { right: 0; bottom: 192px; max-width: none; }
 
 /* På klockskärmen är QR-koderna nere till höger, utan egen ram. */
 #display-stage[data-kind="clock"] .sc-foot { position: absolute; right: 40px; bottom: 28px; }
