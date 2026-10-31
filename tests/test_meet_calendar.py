@@ -496,3 +496,40 @@ class DayFixes(_Meet):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlannedWeekTests(unittest.TestCase):
+    """Planens speldygn från Cloud (clock.traffic_week, #100): förval, aldrig före admins val."""
+
+    def store(self, week):
+        temp = TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        runtime = SQLiteRuntimeStore(Path(temp.name) / "server.db")
+        self.addCleanup(runtime.close)
+        package = runtime_package_v3()
+        if week is not None:
+            package["clock"]["traffic_week"] = week
+        return runtime, runtime.install(package)
+
+    def test_the_plans_weekday_and_round_the_clock_traffic_are_the_defaults(self):
+        runtime, publication = self.store({"start_weekday": 1, "days": 6, "runs_over_midnight": True})
+        calendar = runtime.meet_calendar(publication.meet_id)
+        self.assertEqual(("Mån", 1, "Mån", "auto"), (calendar["start_day"], calendar["day_number"], calendar["weekday"], calendar["day_change_mode"]))
+        self.assertEqual("Tis", calendar_weekday(calendar["start_day"], 2))
+
+    def test_what_admin_chose_wins_over_the_plan(self):
+        runtime, publication = self.store({"start_weekday": 1, "runs_over_midnight": True})
+        runtime.set_meet_calendar(publication.meet_id, "Fre", 2)
+        runtime.set_day_change_mode(publication.meet_id, "manual")
+        calendar = runtime.meet_calendar(publication.meet_id)
+        self.assertEqual(("Fre", 2, "manual"), (calendar["start_day"], calendar["day_number"], calendar["day_change_mode"]))
+
+    def test_without_a_plan_week_nothing_changes(self):
+        runtime, publication = self.store(None)
+        calendar = runtime.meet_calendar(publication.meet_id)
+        self.assertEqual("manual", calendar["day_change_mode"])
+        self.assertEqual(runtime.active_day() or "Dagl", calendar["start_day"])
+
+    def test_nonsense_in_the_plan_week_is_ignored(self):
+        runtime, publication = self.store({"start_weekday": 9, "runs_over_midnight": "ja"})
+        self.assertEqual("manual", runtime.meet_calendar(publication.meet_id)["day_change_mode"])

@@ -5,6 +5,26 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Planens tåg, dygn, linjer och speldygn från Cloud (trainmeet-cloud #100)
+
+- **Tidtabellskärnan** är synkad med Cloud 2.25: tåg som delar nummer och
+  trafikdagar (SJ X 116 och DSB IC 116 i Värnamo) är två tjänster med
+  `service_key`, och planens dygn efter midnatt (`day_offset` på raden)
+  ordnar tåget när de stämmer med tiderna. Tåg med unikt nummer behåller sina
+  tjänste-id:n. Samma regler gäller när tidtabellen ändras lokalt.
+- **Grafen på Drift och storskärmen** ritar planens grafiska linjer när paketet
+  har dem (`display.plan_lines`): bladen heter som arrangörens ("1: Danmark"),
+  stationerna står på planens km och tågen har tågslagets färg ur planen
+  (`color` på tjänsten). Tåg som delar nummer märks "DSB IC 116". Filen
+  `web/train-graph.js` är densamma som Clouds `src/graph/train-graph.js`.
+- **Banöversikten** på Drift och skärmarna ritar stationerna där arrangörens
+  karta har dem när paketet har `display.reference_layout` (läst ur
+  planeringsprogrammets Banan-PDF i Cloud), och sträckorna får planens
+  linjefärg som ett band under rälsen. Utan kartan ritas banan som förut.
+- **Kalendern** tar planens speldygn som förval (`clock.traffic_week`):
+  startdagen blir planens veckodag och nytt trafikdygn sker automatiskt när
+  trafiken går dygnet runt. Det admin redan valt gäller före planen.
+
 ### Lokföraren: förarens app med körplan, NU-linje och incheckning på banan (#225, #226)
 
 Förare har en egen app på `/lokforaren/`, installerbar på telefonens hemskärm.
