@@ -287,11 +287,6 @@ button, input, select { font: inherit; }
 .sc-row:last-child { border-bottom: 0; }
 .sc-run { display: inline-flex; align-items: center; gap: 12px; color: var(--sc-ok); font-weight: 600; }
 .sc-run::before { content: ""; width: 18px; height: 18px; border-radius: 50%; background: var(--sc-ok); }
-.sc-stopped { display: flex; align-items: center; gap: 24px; padding: 24px 32px; border-radius: 24px; background: var(--sc-warn-bg); border: 3px solid var(--sc-warn); }
-.sc-stopped::before { content: ""; width: 24px; height: 24px; border-radius: 50%; background: var(--sc-warn); flex-shrink: 0; }
-.sc-stopped__title { font-size: 52px; font-weight: 700; color: var(--sc-warn); line-height: 1.1; }
-.sc-stopped__reason { font-size: 34px; color: var(--sc-text); }
-.sc-stopped__meta { font-size: 28px; color: var(--sc-muted); }
 .sc-digital { font-family: var(--font-mono); font-weight: 700; line-height: 1; letter-spacing: -.02em; color: #fff; }
 .sc-digital--big { font-size: var(--sc-fs-clock); }
 .sc-digital--side { font-size: 200px; }

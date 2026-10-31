@@ -4775,6 +4775,61 @@ function clockDigitParts(time, us, showSeconds) {
   return { hm: `${us ? hour : String(hour).padStart(2, "0")}:${match[2]}`, ss: showSeconds ? (match[3] ?? "00") : "", ap };
 }
 
+// Vad klockan säger, sorterat efter hur mycket plats det får (#223). Inget av
+// det tar höjd från klockan: stopp ligger i rött glas över urtavlan,
+// information i mörkt glas i hörnet mitt emot QR-koderna, och ren status som
+// dagens slut står tyst på samma plats. FastClocks koder enligt Tellurians API.
+const CLOCK_REASONS = {
+  breakfast: "Frukostpaus", lunch: "Lunchpaus", dinner: "Middagspaus", coffe: "Fikapaus", coffee: "Fikapaus",
+  meeting: "Möte", stationcontrol: "Problem på en station", pointproblem: "Växelfel", trackproblem: "Spårfel",
+  boostererror: "Boosterfel", loconeterror: "LocoNet-fel", cablingerror: "Kabelfel",
+  centralerror: "Fel i digitalcentralen", delays: "Förseningar", drivershortage: "Brist på lokförare",
+  derailment: "Urspårning",
+};
+const CLOCK_QUIET_REASONS = { closing: "Dagens spel slut", endofday: "Dagens spel slut", completed: "Dagens spel slut" };
+// Källan fyller sina fält även när den inte har något att säga.
+const CLOCK_PLACEHOLDERS = new Set(["", "none", "noreason", "selectstopreason", "other", "null", "undefined", "na", "unknown"]);
+
+function clockReason(raw) {
+  const text = String(raw ?? "").replace(/\s+/g, " ").trim();
+  const key = text.toLowerCase().replace(/[\s_./-]/g, "");
+  if (CLOCK_PLACEHOLDERS.has(key)) return { level: "none", text: "" };
+  if (CLOCK_QUIET_REASONS[key]) return { level: "quiet", text: t(CLOCK_QUIET_REASONS[key]) };
+  if (CLOCK_REASONS[key]) return { level: "text", text: t(CLOCK_REASONS[key]) };
+  // Ett ord i CamelCase, VERSALER eller med understreck är en kod vi inte
+  // känner, inte text för en skärm. Den visas aldrig.
+  if (!text.includes(" ") && (/[a-z][A-Z]/.test(text) || text.includes("_") || /^[A-Z0-9]{4,}$/.test(text))) return { level: "none", text: "" };
+  return { level: "text", text };
+}
+
+// Körläget bestämmer: går klockan visas aldrig någon stopporsak.
+function clockNotices(clock, externalMissing) {
+  const notices = { stop: null, info: "", quiet: "" };
+  if (externalMissing) notices.stop = { title: t("Kontakt saknas"), text: t("Senast mottagna tid visas") };
+  else if (clock?.completed) notices.quiet = t("Dagens spel slut");
+  else if (!clock?.running) {
+    const reason = clockReason(clock?.stopped_reason);
+    if (reason.level === "quiet") notices.quiet = reason.text;
+    else notices.stop = { title: t("Klockan är stoppad"), text: reason.text };
+  }
+  const message = clockReason(clock?.message);
+  if (message.level === "quiet") notices.quiet ||= message.text;
+  else if (message.text && message.text !== notices.stop?.text) notices.info = message.text;
+  return notices;
+}
+
+function clockNoticeHTML(notices) {
+  const stop = notices.stop;
+  const stopHTML = !stop ? "" : stop.text
+    ? html`<div class="sc-notice sc-notice--stop${stop.text.length > 22 ? " is-long" : ""}" role="status"><span class="sc-notice__pause" aria-hidden="true"></span><span class="sc-notice__body"><span class="sc-notice__label">${escapeHTML(stop.title)}</span><span class="sc-notice__text">${escapeHTML(stop.text)}</span></span></div>`
+    : html`<div class="sc-notice sc-notice--stop is-short" role="status"><span class="sc-notice__pause" aria-hidden="true"></span><span class="sc-notice__text">${escapeHTML(stop.title)}</span></div>`;
+  const infoHTML = notices.info
+    ? html`<div class="sc-notice sc-notice--info${notices.info.length > 60 ? " is-long" : ""}" role="status"><span class="sc-notice__label"><span class="sc-notice__i" aria-hidden="true"></span>${escapeHTML(t("Information"))}</span><span class="sc-notice__text">${escapeHTML(notices.info)}</span></div>` : "";
+  const quietHTML = notices.quiet && !notices.info
+    ? html`<div class="sc-notice sc-notice--quiet" role="status"><span class="sc-notice__pause" aria-hidden="true"></span><span class="sc-notice__text">${escapeHTML(notices.quiet)}</span></div>` : "";
+  return stopHTML + infoHTML + quietHTML;
+}
+
 function renderClock(snapshot) {
   const target = document.querySelector("#clock-view");
   const us = snapshot.meet?.operating_region === "us";
@@ -4786,32 +4841,21 @@ function renderClock(snapshot) {
   const darkBackground = !document.querySelector("#display-app").classList.contains("light");
   const stopped = !snapshot.clock?.running;
   const externalMissing = snapshot.clock?.source === "fastclock" && !snapshot.clock.available;
-  const reason = String(snapshot.clock?.message ?? snapshot.clock?.stopped_reason ?? (externalMissing ? t("Senast mottagna tid visas") : "")).trim();
   const meta = `${Number(snapshot.clock?.speed || 1)}× · ${snapshot.clock?.source === "fastclock" ? "FastClock" : t("Intern klocka")}`;
-  // Stoppad klocka står still: tiden den visar är tiden den stannade på.
-  const since = stopped && !externalMissing && /^\d\d:\d\d/.test(time) ? time.slice(0, 5) : "";
-  const renderSignature = [style, globalThis.TrainMeetClockFace?.find(style)?.sha256, darkBackground, showSeconds, stopped, externalMissing, reason, meta, since, us, globalThis.TrainMeetI18n?.getLanguage?.()].join("|");
+  const notices = clockNotices(snapshot.clock, externalMissing);
+  const renderSignature = [style, globalThis.TrainMeetClockFace?.find(style)?.sha256, darkBackground, showSeconds, stopped, externalMissing, JSON.stringify(notices), meta, us, globalThis.TrainMeetI18n?.getLanguage?.()].join("|");
   if (target.dataset.clockSignature !== renderSignature) {
     target.dataset.clockSignature = renderSignature;
-    // Clock messages remain visible in both running and stopped states.
-    const detail = since ? `${t("sedan")} <span class="kr-num">${escapeHTML(since)}</span>` : "";
-    // The duplicate makes the loop seamless; assistive technology reads it once.
-    const message = reason
-      ? html`<div class="sc-clock-message" role="status"><div class="sc-clock-message__track"><span class="sc-clock-message__text">${escapeHTML(reason)}</span><span class="sc-clock-message__text" aria-hidden="true">${escapeHTML(reason)}</span></div></div>` : "";
-    const status = stopped || externalMissing
-      ? html`<div class="sc-stopped"><span class="sc-stopped__dot"></span><span class="sc-stopped__title">${t(externalMissing ? "Kontakt saknas" : "Klockan är stoppad")}</span>${detail ? `<span class="sc-stopped__reason">${detail}</span>` : ""}<span class="sc-stopped__meta">${escapeHTML(meta)}</span></div>`
-      : digital ? html`<div class="sc-run">${t("Klockan går")} · ${escapeHTML(meta)}</div>` : "";
+    const status = !stopped && !externalMissing && digital ? html`<div class="sc-run">${t("Klockan går")} · ${escapeHTML(meta)}</div>` : "";
     // One clock only: a face never has digits beside it, and digits never have a face.
     const clock = digital
       ? html`<div class="clock-digital${stopped ? " stopped" : ""}" data-seconds="${showSeconds}"><span class="cd-hm"></span><span class="cd-side"><span class="cd-ap"></span><span class="cd-ss"></span></span></div>`
       : clockSVG(style, darkBackground, showSeconds, stopped);
-    target.innerHTML = html`<div class="sc-clock-layout ${digital ? "sc-clock-layout--digital" : "sc-clock-layout--face"}${stopped || externalMissing ? " is-stopped" : ""}">${clock}${status}${message}</div>`;
+    // Meddelandena ligger utanför flödet (position: absolute mot duken), så
+    // klockan har samma storlek med och utan dem.
+    target.innerHTML = html`<div class="sc-clock-layout ${digital ? "sc-clock-layout--digital" : "sc-clock-layout--face"}${stopped || externalMissing ? " is-stopped" : ""}${notices.quiet ? " is-quiet" : ""}">${clock}${status}${clockNoticeHTML(notices)}</div>`;
     // En urtavla på en stående skärm får en stående duk; siffror en liggande.
     serverUI.resizeStage?.();
-    const track = target.querySelector(".sc-clock-message__track");
-    // Fixed reading speed in canvas pixels, independent of message length.
-    // The signature guard keeps incoming clock polls from restarting the scroll.
-    track?.getAnimations().forEach(animation => animation.effect.updateTiming({ duration: Math.max(16000, track.scrollWidth / 2 / 48 * 1000) }));
   }
   const digits = target.querySelector(".clock-digital");
   if (digits) {

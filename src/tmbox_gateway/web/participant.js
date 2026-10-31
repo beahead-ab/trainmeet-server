@@ -123,7 +123,10 @@
     const showSeconds = globalThis.TrainMeetClockSeconds?.resolve(clock.show_seconds !== false) ?? clock.show_seconds !== false;
     const stopped = !clock.running;
     const us = snapshot.meet?.operating_region === "us";
-    const meta = [meetDayLabel(snapshot), stopped && clock.stopped_reason ? clock.stopped_reason : clock.source === "fastclock" ? "FastClock" : t("intern klocka")].filter(Boolean).join(" · ");
+    // Samma tolkning som klockskärmen (app.js): platshållare och okända koder
+    // från FastClock visas inte, kända koder visas på svenska.
+    const reason = stopped ? clockReason(clock.stopped_reason).text : "";
+    const meta = [meetDayLabel(snapshot), reason || (clock.source === "fastclock" ? "FastClock" : t("intern klocka"))].filter(Boolean).join(" · ");
     const status = stopped ? t("Klockan stoppad") : `${t("Klockan går")} · ${Number(clock.speed || 1)}×`;
     const signature = [style, globalThis.TrainMeetClockFace?.find(style)?.sha256, document.documentElement.dataset.krTheme, showSeconds, stopped, status, meta, TrainMeetI18n.getLanguage()].join("|");
     if (target.dataset.signature !== signature) {

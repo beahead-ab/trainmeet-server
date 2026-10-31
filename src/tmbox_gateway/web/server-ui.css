@@ -202,12 +202,11 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 #display-connection-code { font: 700 30px var(--font-mono); color: var(--display-fg); }
 #clock-view { width: 100%; height: 100%; padding: 0; display: flex; }
 /* The clock screen shows one clock: a face (analog, stationsur, an uploaded one) or
-   digits (digital), centred, with the running/stopped line under it. The
-   clock screen has no top row or footer, so a running face uses nearly the
-   whole height and gives way only when the stop box appears under it. */
+   digits (digital), centred. The clock screen has no top row or footer, so
+   the face uses nearly the whole height in every state. Messages and the stop
+   notice lie over it as glass (skarmar.css, .sc-notice) and take no room. */
 .sc-clock-layout { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; width: 100%; height: 100%; min-height: 0; }
 .sc-clock-layout .clock-face { flex: 0 0 auto; width: 980px; height: 980px; max-width: none; max-height: none; filter: none; }
-.sc-clock-layout.is-stopped .clock-face { width: 700px; height: 700px; }
 /* The clock screen is the clock and the QR link, nothing else: no meet name,
    no badge, no address line, no server name. 1020 px are left for the clock. */
 #display-stage[data-kind=clock] .sc-top { display: none; }
@@ -238,15 +237,10 @@ body.server-display #app-chrome, body.server-display #app-view { display: none !
 #display-connection #display-connection-address { font: 26px var(--font-mono); }
 .admin-modal .modal-close { width: 44px; height: 44px; }
 .sc-clock-layout .sc-run { font-size: 30px; }
-.sc-clock-layout .sc-stopped { max-width: 1240px; text-align: left; }
 /* En urtavla på en stående skärm: duken står (server-ui.js resize). */
 #display-stage.sc-portrait { width: 1080px; }
-#display-stage.sc-portrait .sc-clock-layout .sc-stopped { max-width: 1000px; }
-.sc-stopped__reason { color: var(--display-fg); overflow-wrap: anywhere; max-width: 1100px; }
 .light .sc-run { color: #1f6b3d; }
 .light .sc-run::before { background: #1f6b3d; }
-.light .sc-stopped { background: #fff8e6; }
-.light .sc-stopped__title { color: #7a5a00; }
 #graph-scroll { width: 100%; height: 100%; overflow: hidden; }
 #graph-canvas { width: 100% !important; height: 100% !important; min-width: 0; min-height: 0; }
 #graph-svg { width: 100%; height: 100%; min-height: 0; }
