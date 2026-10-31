@@ -5,6 +5,20 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Lokföraren: köruppdrag i Inställningar, vägar dit och en egen app som alltid är aktuell (#225)
+
+Köruppdragen laddas nu upp separat på servern under **Inställningar →
+Lokförare och köruppdrag**: hela häftet som en PDF. Tjänsterna läses in i
+webbläsaren, administratören granskar dem och gör dem sedan uttryckligen
+tillgängliga för förarna. Inget når förarna innan dess, och bara på träffen
+köruppdraget hör till. Föraren kan öppna originalsidorna från sin tjänst.
+
+Lokföraren går att hitta från träffens publika sida, från inloggningen och,
+för administratörer, från sidhuvudet, menyn och Inställningar med adress och
+QR-kod. Appen har eget namn och egen ikon (LF i stationsskylten). Varje
+version får nya fil-adresser och en ny cache, så en telefon med appen på
+hemskärmen hämtar alltid den nya versionen och en öppen app laddar om sig.
+
 ### Lokföraren: förarens app med körplan, NU-linje och incheckning på banan (#225, #226)
 
 Förare har en egen app på `/lokforaren/`, installerbar på telefonens hemskärm.

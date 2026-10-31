@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import sqlite3
 import tempfile
 import threading
@@ -18,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from http.cookies import SimpleCookie
 from pathlib import Path
 from urllib.error import HTTPError
+from urllib.parse import quote
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from runtime_fixture import runtime_package_v3
@@ -302,6 +304,121 @@ class LokforarenHTTPTests(unittest.TestCase):
             status, payload, headers = self.request(path)
             self.assertEqual((200, kind), (status, payload["type"]), path)
             self.assertIn("default-src 'self'", headers["Content-Security-Policy"])
+
+    # ── Egen app och cachebust ─────────────────────────────────────────
+
+    def test_every_file_address_carries_the_build_so_phones_get_new_versions(self) -> None:
+        html = self.request("/lokforaren/")[1]["raw"].decode()
+        build = re.search(r'data-build="([0-9a-f]{12})"', html).group(1)
+        self.assertNotIn("__LF_BUILD__", html)
+        for asset in ("/lokforaren/app.js", "/lokforaren/style.css", "/lokforaren/manifest.webmanifest", "/assets/clock-sync.js"):
+            self.assertIn(f"{asset}?v={build}", html)
+        sw = self.request("/lokforaren/sw.js")[1]["raw"].decode()
+        self.assertIn(f'const BUILD = "{build}"', sw)
+        benny = self.login("benny")
+        self.assertEqual(build, self.request("/v1/driver/session", cookie=benny)[1]["build"])
+        self.assertEqual(build, self.request("/v1/driver/clock", cookie=benny)[1]["build"])
+        manifest = json.loads(self.request("/lokforaren/manifest.webmanifest")[1]["raw"])
+        self.assertEqual(("/lokforaren/", "Lokföraren", "/lokforaren/"), (manifest["id"], manifest["name"], manifest["scope"]))
+        for icon in manifest["icons"]:
+            status, payload, _ = self.request(icon["src"])
+            self.assertEqual(200, status, icon["src"])
+        self.assertEqual("image/png", self.request("/lokforaren/ikon-180.png")[1]["type"])
+
+    def test_the_way_to_lokforaren_is_on_the_public_page_the_login_and_in_settings(self) -> None:
+        html = self.request("/")[1]["raw"].decode()
+        self.assertIn('id="pv-lokforaren" href="/lokforaren/"', html)
+        self.assertIn('id="login-lokforaren" class="login-lokforaren" href="/lokforaren/"', html)
+        self.assertIn('id="header-lokforare" href="/installningar#lokforare"', html)
+        self.assertIn('data-section="lokforare"', html)
+        self.assertEqual(200, self.request("/assets/lokforare-admin.js")[0])
+
+    # ── Köruppdrag i Inställningar → Lokförare ─────────────────────────
+
+    def upload(self, data: bytes, *, cookie: str | None, filename: str = "Köruppdrag Grimslöv.pdf",
+               kind: str = "application/pdf", headers: dict | None = None) -> tuple[int, dict]:
+        request = Request(self.base + "/v1/driver-admin/documents", data=data, method="POST",
+                          headers={"Content-Type": kind, "X-Filename": quote(filename),
+                                   **({"Cookie": cookie} if cookie else {}), **(headers or {})})
+        try:
+            with urlopen(request) as response:
+                return response.status, json.loads(response.read())
+        except HTTPError as error:
+            return error.code, json.loads(error.read() or b"{}")
+
+    PDF = b"%PDF-1.7\n" + b"0" * 4096 + b"\n%%EOF\n"
+
+    def duty(self, number: str, pages: list[int], **extra) -> dict:
+        return {"number": number, "pages": pages, "trains": [{"number": f"G {number}0", "from": "A", "to": "B"}],
+                "events": [{"kind": "departure", "time": "18:00", "station": "A", "train": f"G {number}0"},
+                           {"kind": "arrival", "time": "18:40", "station": "B", "train": f"G {number}0"}], **extra}
+
+    def test_an_administrator_uploads_reads_and_makes_duty_sheets_available(self) -> None:
+        anna, benny = self.login("anna"), self.login("benny")
+        status, payload = self.upload(self.PDF, cookie=anna)
+        self.assertEqual(201, status, payload)
+        document = payload["document"]
+        self.assertEqual(("Köruppdrag Grimslöv.pdf", "uploaded", False, 0), (document["filename"], document["status"], document["published"], document["duties"]))
+        # Samma fil igen blir samma köruppdrag.
+        again = self.upload(self.PDF, cookie=anna)
+        self.assertEqual((200, document["id"], True), (again[0], again[1]["document"]["id"], again[1]["document"]["duplicate"]))
+        # Inte inläst än: kan inte göras tillgängligt.
+        self.assertEqual(409, self.request(f"/v1/driver-admin/documents/{document['id']}/publish", {"published": True}, cookie=anna)[0])
+
+        status, payload, _ = self.request(f"/v1/driver-admin/documents/{document['id']}/index", {
+            "pages": 600, "warnings": ["Sidan 212: tjänstens slut saknas"],
+            "duties": [self.duty("211", [12, 13]), self.duty("211", [14]), self.duty("212", [15]), {"number": "", "events": []}],
+        }, cookie=anna)
+        self.assertEqual(200, status, payload)
+        self.assertEqual(("indexed", 600, 3), (payload["document"]["status"], payload["document"]["pages"], payload["document"]["duties"]))
+        self.assertIn("1 tjänster saknade nummer", payload["document"]["warnings"][0])
+        review = self.request(f"/v1/driver-admin/documents/{document['id']}", cookie=anna)[1]
+        self.assertEqual([("211", [12, 13]), ("211", [14, 14]), ("212", [15, 15])], [(duty["number"], duty["pages"]) for duty in review["duties"]])
+        self.assertEqual(3, len({duty["id"] for duty in review["duties"]}))
+
+        # Förarna ser ingenting förrän det är tillgängligt.
+        self.assertEqual(["7", "132"], [duty["number"] for duty in self.request("/v1/driver/duties", cookie=benny)[1]["duties"]])
+        self.assertEqual(404, self.request(f"/v1/driver/documents/{document['id']}.pdf", cookie=benny)[0])
+        self.assertEqual(200, self.request(f"/v1/driver-admin/documents/{document['id']}/publish", {"published": True}, cookie=anna)[0])
+        found = self.request("/v1/driver/duties?q=212", cookie=benny)[1]["duties"]
+        self.assertEqual(["212"], [duty["number"] for duty in found])
+        duty = self.request(f"/v1/driver/duties/{found[0]['id']}", cookie=benny)[1]["duty"]
+        self.assertEqual({"document_id": document["id"], "pages": [15, 15]}, duty["source"])
+        status, original, _ = self.request(f"/v1/driver/documents/{document['id']}.pdf", cookie=benny)
+        self.assertEqual((200, "application/pdf", self.PDF), (status, original["type"], original["raw"]))
+        active = self.request("/v1/driver/active", {"duty_id": found[0]["id"]}, cookie=benny)[1]["active"]
+        self.assertEqual("212", active["duty"]["number"])
+
+        # Tillbakadraget: borta ur listan, men den som kör behåller sin tjänst.
+        self.request(f"/v1/driver-admin/documents/{document['id']}/publish", {"published": False}, cookie=anna)
+        self.assertNotIn("212", [duty["number"] for duty in self.request("/v1/driver/duties", cookie=benny)[1]["duties"]])
+        self.assertEqual("212", self.request("/v1/driver/session", cookie=benny)[1]["active"]["duty"]["number"])
+        overview = self.request("/v1/driver-admin/overview", cookie=anna)[1]
+        benny_row = next(driver for driver in overview["drivers"] if driver["name"] == "Benny")
+        self.assertEqual(("212", ["G 2120"]), (benny_row["duty_number"], benny_row["trains"]))
+        self.assertEqual([document["id"]], [item["id"] for item in overview["documents"]])
+        self.assertTrue(overview["documents"][0]["current"])
+
+        # Borttaget: raderna och filen försvinner.
+        path = self.app.driver_documents.pdf_path(document["id"])
+        self.assertTrue(path.is_file())
+        self.assertEqual(200, self.request(f"/v1/driver-admin/documents/{document['id']}/remove", {}, cookie=anna)[0])
+        self.assertFalse(path.exists())
+        self.assertEqual([], self.request("/v1/driver-admin/overview", cookie=anna)[1]["documents"])
+
+    def test_only_administrators_upload_and_only_real_pdfs(self) -> None:
+        anna, benny = self.login("anna"), self.login("benny")
+        self.assertEqual(401, self.upload(self.PDF, cookie=benny)[0])
+        self.assertEqual(401, self.upload(self.PDF, cookie=None)[0])
+        self.assertEqual(401, self.request("/v1/driver-admin/overview", cookie=benny)[0])
+        self.assertEqual(415, self.upload(b"<html>inte en pdf</html>", cookie=anna)[0])
+        self.assertEqual(415, self.upload(self.PDF, cookie=anna, kind="text/plain")[0])
+        self.assertEqual(403, self.upload(self.PDF, cookie=anna, headers={"Origin": "https://evil.example"})[0])
+        status, payload = self.upload(self.PDF, cookie=anna)
+        self.assertEqual(201, status)
+        self.assertEqual(403, self.request(f"/v1/driver-admin/documents/{payload['document']['id']}/publish", {"published": True},
+                                           cookie=anna, headers={"Origin": "https://evil.example"})[0])
+        self.assertEqual(404, self.request("/v1/driver-admin/documents/000000000000", cookie=anna)[0])
 
 
 if __name__ == "__main__":

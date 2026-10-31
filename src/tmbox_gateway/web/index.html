@@ -52,6 +52,7 @@
             <summary aria-label="Öppna menyn">☰</summary>
             <nav aria-label="Servermeny">
               <a href="#settings" id="open-settings">Inställningar</a>
+              <a href="/installningar#lokforare" id="open-lokforare">Lokförare</a>
               <a href="#screens">Skärmar</a>
               <button id="logout" type="button">Logga ut</button>
             </nav>
@@ -71,6 +72,7 @@
             <button class="screen-menu__item" id="menu-about" type="button" data-eu-only><tm-text data-tm-text="Om trafikspelet">Om trafikspelet</tm-text></button>
           </nav></details>
           <button class="tm-icon-btn" id="header-about" type="button" aria-label="Om trafikspelet" title="Om trafikspelet" data-tm-aria-label="Om trafikspelet" data-tm-title="Om trafikspelet" data-eu-only><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4h6a4 4 0 0 1 4 4v12a3 3 0 0 0-3-3H2z"></path><path d="M22 4h-6a4 4 0 0 0-4 4v12a3 3 0 0 1 3-3h7z"></path></svg></button>
+          <a class="tm-icon-btn" id="header-lokforare" href="/installningar#lokforare" aria-label="Lokförare" title="Lokförare" data-tm-aria-label="Lokförare" data-tm-title="Lokförare"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16V7a2 2 0 0 1 2-2h7l5 5v6"></path><path d="M13 5v5h5"></path><path d="M2 16h20"></path><circle cx="7" cy="19" r="2"></circle><circle cx="17" cy="19" r="2"></circle></svg></a>
           <a class="tm-icon-btn" id="header-data" href="/tidtabell" aria-label="Tidtabell" title="Tidtabell" data-eu-only><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 10h18M9 10v10M15 10v10"></path></svg></a>
           <a class="tm-icon-btn" id="header-settings" href="/installningar" aria-label="Inställningar" title="Inställningar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg></a>
           <a class="tm-icon-btn" id="header-help" href="/hjalp" aria-label="Hjälp" title="Hjälp"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"></path></svg></a>
@@ -213,6 +215,9 @@
           <button id="forgot-open" type="button" class="link-button"><tm-text data-tm-text="Glömt lösenordet?">Glömt lösenordet?</tm-text></button>
           <button id="redeem-open" type="button" class="link-button"><tm-text data-tm-text="Jag har en kod">Jag har en kod</tm-text></button>
         </div>
+        <!-- Förare loggar in i sin egen app. Logga in här går också: en
+             förare skickas vidare dit. -->
+        <a id="login-lokforaren" class="login-lokforaren" href="/lokforaren/"><img src="/lokforaren/ikon.svg" alt="" width="28" height="28"><span><b><tm-text data-tm-text="Kör du tåg på träffen?">Kör du tåg på träffen?</tm-text></b><tm-text data-tm-text="Öppna Lokföraren – körplan, träffklocka och incheckning">Öppna Lokföraren – körplan, träffklocka och incheckning</tm-text></span><span aria-hidden="true">→</span></a>
         <form id="forgot-form" class="hidden">
           <label for="forgot-email"><tm-text data-tm-text="E-postadress">E-postadress</tm-text></label>
           <input id="forgot-email" type="email" maxlength="254" autocomplete="username" required>
@@ -265,6 +270,11 @@
             <!-- Två kolumner på en dator, en på telefonen: pv-col är display: contents där. -->
             <div class="pv-col pv-col--main">
             <section class="pv-panel pv-clock-card" aria-label="Träffklockan" data-tm-aria-label="Träffklockan"><div class="pv-clock" id="pv-clock"></div></section>
+            <a class="pv-panel pv-lokforaren" id="pv-lokforaren" href="/lokforaren/">
+              <img src="/lokforaren/ikon.svg" alt="" width="40" height="40">
+              <span class="pv-lokforaren__text"><b><tm-text data-tm-text="Lokföraren">Lokföraren</tm-text></b><span><tm-text data-tm-text="För förare: din körplan med träffklockan, och incheckning på banan">För förare: din körplan med träffklockan, och incheckning på banan</tm-text></span></span>
+              <span class="pv-lokforaren__go"><tm-text data-tm-text="Öppna">Öppna</tm-text> →</span>
+            </a>
             <section class="pv-panel" id="pv-screens" aria-label="Skärmar">
               <div class="pv-head"><span data-tm-text="Skärmar">Skärmar</span><span class="pv-spacer"></span><button id="pv-share-open" class="pv-share-open" type="button" aria-haspopup="dialog" data-tm-text="Dela träffen">Dela träffen</button></div>
               <nav id="pv-screens-list" class="pv-screen-list" aria-label="Skärmar" data-tm-aria-label="Skärmar"></nav>
@@ -669,6 +679,7 @@
             <a class="kr-nav" href="/installningar#skarmar" data-section="skarmar" data-group="traffen">Skärmar och klocka</a>
             <a class="kr-nav" href="/installningar#wifi" data-section="wifi" data-group="traffen">Wi-Fi och QR-koder</a>
             <a class="kr-nav" href="/installningar#obemannade" data-section="obemannade" data-group="traffen">Obemannade stationer</a>
+            <a class="kr-nav" href="/installningar#lokforare" data-section="lokforare" data-group="traffen">Lokförare och köruppdrag</a>
             <span class="kr-grp" data-group="servern">Den här servern</span>
             <a class="kr-nav" href="/installningar#server" data-section="server" data-group="servern">Namn och nätverk</a>
             <a class="kr-nav" href="/installningar#kod" data-section="kod" data-group="servern">Anslutningskod</a>
@@ -977,6 +988,74 @@
                 </div>
                 <p id="users-message" class="form-message" role="status"></p>
                 <div class="kr-pf"><span>Glömt lösenord: <b>Glömt lösenordet?</b> på inloggningen skickar en kod med e-post när servern är kopplad till TrainMeet Cloud. Annars <span class="kr-mono" data-no-i18n>tmbox_gateway.recover</span> i serverns terminal.</span></div>
+              </section>
+            </section>
+
+            <!-- Lokförare och köruppdrag (#225). Förarnas egen app heter
+                 Lokföraren och ligger på /lokforaren/. Här hittar man dit,
+                 ser vilka som kör och lägger in träffens köruppdrag. -->
+            <section id="lokforare" class="kr-setsec" data-section="lokforare" aria-labelledby="lokforare-title" hidden>
+              <div class="kr-sectitle"><h1 id="lokforare-title">Lokförare och köruppdrag</h1><span>förarnas app Lokföraren · körplan, träffklocka och incheckning</span></div>
+
+              <section class="kr-panel" aria-labelledby="lf-find-title">
+                <div class="kr-ph"><span id="lf-find-title">Hitta Lokföraren</span><span class="kr-c">en egen app för förarnas telefoner</span><span class="kr-sp"></span><a class="kr-btn sm" href="/lokforaren/" target="_blank" rel="noopener">Öppna Lokföraren</a></div>
+                <div class="lf-find">
+                  <div id="lf-find-qr" class="lf-find__qr" role="img" aria-label="QR-kod till Lokföraren"></div>
+                  <div class="lf-find__text">
+                    <code id="lf-find-link" class="kr-bigcode lf-find__link" data-no-i18n>/lokforaren/</code>
+                    <ol class="lf-find__steps">
+                      <li>Bjud in föraren under Användare med rollen Förare.</li>
+                      <li>Föraren skannar koden eller skriver adressen i telefonen och loggar in.</li>
+                      <li>Dela → Lägg till på hemskärmen. Appen heter Lokföraren.</li>
+                    </ol>
+                    <div class="lf-find__actions"><a class="kr-btn sm primary" href="/installningar#anvandare">Bjud in förare</a></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="kr-panel" aria-labelledby="lf-docs-title">
+                <div class="kr-ph"><span id="lf-docs-title">Köruppdrag</span><span class="kr-c">förarna ser tjänsterna först när du gjort köruppdraget tillgängligt</span></div>
+                <div id="lf-drop" class="kr-drop">
+                  <span class="kr-drop__title">Släpp köruppdragen (PDF) här</span>
+                  <span class="kr-m">hela häftet i en fil, gärna alla 600 sidorna · tjänsterna läses in här i webbläsaren och du granskar dem innan förarna får dem</span>
+                  <label class="kr-btn sm kr-drop__pick"><input id="lf-file" class="kr-visually-hidden" type="file" accept="application/pdf,.pdf"><span>Välj PDF</span></label>
+                </div>
+                <div id="lf-progress" class="lf-progress" hidden>
+                  <span id="lf-progress-text" class="lf-progress__text" role="status"></span>
+                  <progress id="lf-progress-bar" class="lf-progress__bar" max="1" value="0"></progress>
+                </div>
+                <p id="lf-docs-message" class="form-message" role="status"></p>
+                <div class="kr-scroll-x">
+                  <table class="kr-tbl lf-docs">
+                    <thead><tr><th>Köruppdrag</th><th class="r">Sidor</th><th class="r">Tjänster</th><th>Förarna</th><th></th></tr></thead>
+                    <tbody id="lf-docs-rows"></tbody>
+                  </table>
+                </div>
+                <p id="lf-docs-empty" class="kr-empty" hidden>Inga köruppdrag på servern än. Förarna kan öva med tjänst 132 tills du laddat upp träffens.</p>
+              </section>
+
+              <section id="lf-review" class="kr-panel" aria-labelledby="lf-review-title" hidden>
+                <div class="kr-ph"><span id="lf-review-title">Granska</span><b id="lf-review-name" class="lf-review__name" data-no-i18n></b><span class="kr-sp"></span>
+                  <input id="lf-review-search" class="lf-review__search" type="search" inputmode="numeric" placeholder="Tjänst" aria-label="Sök tjänst" autocomplete="off">
+                  <button id="lf-review-close" class="kr-btn sm" type="button">Stäng</button></div>
+                <ul id="lf-review-warnings" class="lf-review__warnings" hidden></ul>
+                <div class="kr-scroll-x lf-review__scroll">
+                  <table class="kr-tbl">
+                    <thead><tr><th>Tjänst</th><th>Tid</th><th>Tåg</th><th>Rutt</th><th class="r">Sidor</th></tr></thead>
+                    <tbody id="lf-review-rows"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="kr-panel" aria-labelledby="lf-drivers-title">
+                <div class="kr-ph"><span id="lf-drivers-title">Förarna</span><span id="lf-drivers-count" class="kr-pill">–</span><span class="kr-c">förare som bjudits in, och vilka som kör nu</span></div>
+                <div class="kr-scroll-x">
+                  <table class="kr-tbl">
+                    <thead><tr><th>Förare</th><th>Tjänst</th><th>Senast incheckad</th></tr></thead>
+                    <tbody id="lf-drivers-rows"></tbody>
+                  </table>
+                </div>
+                <p id="lf-drivers-empty" class="kr-empty" hidden>Inga förare än. Bjud in dem under Användare med rollen Förare.</p>
               </section>
             </section>
 
@@ -1443,6 +1522,8 @@
     <script src="/assets/drift.js" defer></script>
     <script src="/assets/server-ui.js" defer></script>
     <script src="/assets/settings.js" defer></script>
+    <script src="/assets/lokforaren-koruppdrag.js" defer></script>
+    <script src="/assets/lokforare-admin.js" defer></script>
     <script src="/assets/data-page.js" defer></script>
     <script src="/assets/app.js?v=20261006-1" defer></script>
     <script src="/assets/meet-timeline.js" defer></script>

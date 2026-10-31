@@ -162,3 +162,12 @@ body.participant-mode #app-view { padding: 0; max-width: none; }
 .pv-level input { margin: 3px 0 0; accent-color: var(--kr-blue); }
 .pv-level b { color: var(--kr-ink); font-size: 14px; font-weight: 600; }
 .pv-level span { grid-column: 2; color: var(--kr-mute); font-size: 12.5px; }
+
+/* Lokföraren: förarnas egen app, högt upp så att den syns i telefonen. */
+.pv-lokforaren { flex-direction: row; align-items: center; gap: 12px; padding: 12px 14px; color: var(--kr-ink); text-decoration: none; }
+.pv-lokforaren:hover { border-color: var(--kr-blue); }
+.pv-lokforaren img { flex: 0 0 40px; border-radius: 9px; }
+.pv-lokforaren__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.pv-lokforaren__text b { font-size: 15px; }
+.pv-lokforaren__text span { font-size: 12.5px; color: var(--kr-mute); line-height: 1.35; }
+.pv-lokforaren__go { flex: 0 0 auto; font-size: 13px; font-weight: 600; color: var(--kr-blue); }

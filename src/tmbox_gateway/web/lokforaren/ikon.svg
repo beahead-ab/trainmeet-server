@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="64" height="64" role="img" aria-label="Lokföraren">
+<rect width="1024" height="1024" rx="225.28" fill="#1D4ED8"/>
+<rect x="102.4" y="102.4" width="819.2" height="819.2" rx="133.12" fill="none" stroke="#FFFFFF" stroke-width="30.72"/>
+<g transform="translate(330.5 676.86)" fill="#FFFFFF"><rect x="0" y="-329.728" width="66.42" height="329.728" rx="5.65"/><rect x="0" y="-57" width="165" height="57" rx="5.65"/><rect x="191" y="-329.728" width="66.42" height="329.728" rx="5.65"/><rect x="191" y="-329.728" width="172" height="57" rx="5.65"/><rect x="191" y="-199" width="150" height="54" rx="5.65"/></g>
+</svg>

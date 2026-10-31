@@ -103,12 +103,13 @@ class ShellStructureTests(unittest.TestCase):
         self.assertIn('authorizedFetch("/v1/clock"', self.js)
 
     def test_settings_and_drift_have_separate_responsibilities(self):
-        # Inställningar är nio avsnitt, ett i taget (settings.js). Boxarna och
-        # stationerna hör till Drift och finns inte här.
+        # Inställningar är ett avsnitt i taget (settings.js). Boxarna och
+        # stationerna hör till Drift och finns inte här. Lokförare och
+        # köruppdrag hör till träffen (#225).
         sections = re.search(r"const SECTIONS = \[([^\]]*)\]", (WEB / "settings.js").read_text())
         self.assertIsNotNone(sections)
         names = re.findall(r'"(\w+)"', sections.group(1))
-        self.assertEqual(names, ["traff", "skarmar", "wifi", "obemannade", "server", "kod", "anvandare", "uppdatering", "sprak", "visning", "farozon"])
+        self.assertEqual(names, ["traff", "skarmar", "wifi", "obemannade", "lokforare", "server", "kod", "anvandare", "uppdatering", "sprak", "visning", "farozon"])
         for name in names:
             self.assertIn(f'<section id="{name}" class="kr-setsec" data-section="{name}"', self.html)
             self.assertIn(f'href="/installningar#{name}"', self.html)

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="sv">
+<html lang="sv" data-build="__LF_BUILD__">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -8,16 +8,17 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lokföraren">
-<title>Lokföraren · TrainMeet</title>
-<link rel="manifest" href="/lokforaren/manifest.webmanifest">
-<link rel="icon" href="/favicon.ico">
-<link rel="apple-touch-icon" href="/assets/ikon/png/trainmeet-ikon-kvadrat-180.png">
-<link rel="stylesheet" href="/assets/fonts/fonts.css">
-<link rel="stylesheet" href="/lokforaren/style.css">
-<script src="/assets/clock-sync.js" defer></script>
-<script src="/lokforaren/messages.js" defer></script>
-<script src="/lokforaren/korplan.js" defer></script>
-<script src="/lokforaren/app.js" defer></script>
+<title>Lokföraren</title>
+<link rel="manifest" href="/lokforaren/manifest.webmanifest?v=__LF_BUILD__">
+<link rel="icon" type="image/svg+xml" href="/lokforaren/ikon.svg?v=__LF_BUILD__">
+<link rel="icon" type="image/png" sizes="32x32" href="/lokforaren/ikon-32.png?v=__LF_BUILD__">
+<link rel="apple-touch-icon" href="/lokforaren/ikon-180.png?v=__LF_BUILD__">
+<link rel="stylesheet" href="/assets/fonts/fonts.css?v=__LF_BUILD__">
+<link rel="stylesheet" href="/lokforaren/style.css?v=__LF_BUILD__">
+<script src="/assets/clock-sync.js?v=__LF_BUILD__" defer></script>
+<script src="/lokforaren/messages.js?v=__LF_BUILD__" defer></script>
+<script src="/lokforaren/korplan.js?v=__LF_BUILD__" defer></script>
+<script src="/lokforaren/app.js?v=__LF_BUILD__" defer></script>
 </head>
 <body>
 <div id="app" class="lf" data-screen="loading">
@@ -65,6 +66,7 @@
         <div class="lf-found__head"><span class="lf-found__title" id="found-title"></span><span class="lf-tag" id="found-demo" hidden>DEMO</span></div>
         <dl class="lf-facts" id="found-facts"></dl>
         <p class="lf-note" id="found-note" hidden></p>
+        <a class="lf-source" id="found-source" target="_blank" rel="noopener" hidden></a>
       </div>
       <div class="lf-actions">
         <button class="lf-button lf-button--primary" type="button" id="duty-activate" disabled data-t="Aktivera tjänsten">Aktivera tjänsten</button>

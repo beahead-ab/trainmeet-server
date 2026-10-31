@@ -16,12 +16,57 @@ trafiken och inställningarna svarar 401. Föraren kommer bara åt `/v1/driver/*
 Loggar en förare in på serverns vanliga inloggning skickas hen till
 Lokföraren. Ägare och administratörer kan också använda appen.
 
+## Hitta dit
+
+- Appen heter **Lokföraren** och är en egen app: eget namn, egen ikon (LF i
+  stationsskylten) och eget id och scope (`/lokforaren/`), skild från
+  serverns admin. `/lokforare` och `/forare` leder också dit.
+- Utan inloggning: kortet **Lokföraren** högt upp på träffens publika sida,
+  och **Kör du tåg på träffen?** under inloggningen.
+- För administratörer: ikonen med loket i sidhuvudet, **Lokförare** i menyn
+  och **Inställningar → Lokförare och köruppdrag**, med adressen, en QR-kod
+  och de tre stegen (bjud in, skanna, lägg till på hemskärmen).
+
+### Nya versioner (cachebust)
+
+Servern räknar fram appens byggstämpel, en hash av appens egna filer, och
+skriver in den där det står `__LF_BUILD__`: i varje fil-adress i `index.html`
+(`?v=…`) och i service workerns cachenamn. En ny version ger alltså en ny
+`sw.js`, en ny cache och nya adresser; den gamla cachen tas bort. Appens filer
+läses från cachen (de ändras aldrig under samma adress), sidan själv alltid
+från nätet först. `/v1/driver/session` och `/v1/driver/clock` säger samma
+stämpel: skiljer den sig laddas appen om vid start, och annars visar den
+**Ny version av Lokföraren** tills föraren trycker eller kommer tillbaka till
+appen. Samma stämpel laddas bara om en gång, så det kan aldrig bli en loop.
+
 ## Tjänsterna
 
-Förartjänsterna kommer färdiga i träffens paket från Cloud, under
-`driver_duties`. Servern tolkar inga underlag; den visar det Cloud publicerat.
-Utöver dem finns alltid övningstjänsten **132 DEMO** (fakta ur #225, tiderna i
-Tveiten är exempel).
+Förarna väljer bland, i den här ordningen:
+
+1. Köruppdragen som gjorts tillgängliga under **Inställningar → Lokförare och
+   köruppdrag** (nedan), för träffen som körs.
+2. Tjänsterna i träffens paket från Cloud, under `driver_duties`.
+3. Övningstjänsten **132 DEMO** (fakta ur #225, tiderna i Tveiten är exempel).
+
+### Köruppdrag i Inställningar
+
+Köruppdragen laddas upp på varje server för sig, separat från Clouds paket.
+Det går i tre uttryckliga steg, så att inget når förarna av misstag:
+
+1. **Ladda upp.** PDF:en (högst 80 MB) sparas oförändrad i serverns
+   datakatalog, `lokforaren/<sha256>.pdf` bredvid `trainmeet.db`. Samma fil
+   igen för samma träff blir samma köruppdrag.
+2. **Läs in.** Tjänsterna läses ur PDF:en i administratörens webbläsare med
+   pdf.js (`web/pdfjs/`, Apache-2.0) och `lokforaren-koruppdrag.js`, och
+   skickas till servern i formen nedan med `pages: [från, till]`. Servern
+   tolkar ingen PDF; den kontrollerar formen med `normalize_duty`, som för
+   Cloud. Det som inte gick att läsa blir avvikelser att titta på.
+3. **Gör tillgängligt för förarna.** Först då syns tjänsterna under Välj
+   tjänst, och bara på träffen köruppdraget laddades upp för. **Dra tillbaka**
+   tar bort dem ur listan; den som redan kör behåller sin tjänst.
+
+Tjänsterna ligger i databasen och följer med i säkerhetskopiorna; PDF-filerna
+gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
 
 ```json
 {
@@ -94,5 +139,18 @@ Tveiten är exempel).
 | POST | `/v1/driver/avatar` | `{image: "data:image/jpeg;base64,…"}` |
 | POST | `/v1/driver/avatar/remove` | ta bort ikonen |
 | GET | `/v1/driver/avatars/{user_id}` | ikonen |
+| GET | `/v1/driver/documents/{id}.pdf` | förlagan, om köruppdraget är tillgängligt |
 
 Alla kräver en inloggad session; POST från en annan sida nekas.
+
+För administratörer (ägare och administratörer, aldrig förare):
+
+| Metod | Väg | Vad |
+|---|---|---|
+| GET | `/v1/driver-admin/overview` | förarna och vad de kör, köruppdragen |
+| POST | `/v1/driver-admin/documents` | PDF:en som den är (`Content-Type: application/pdf`, `X-Filename`) |
+| GET | `/v1/driver-admin/documents/{id}` | köruppdraget och dess tjänster |
+| GET | `/v1/driver-admin/documents/{id}.pdf` | PDF:en, för att läsa in den igen |
+| POST | `/v1/driver-admin/documents/{id}/index` | `{pages, duties, warnings}` |
+| POST | `/v1/driver-admin/documents/{id}/publish` | `{published: true/false}` |
+| POST | `/v1/driver-admin/documents/{id}/remove` | ta bort köruppdraget och filen |

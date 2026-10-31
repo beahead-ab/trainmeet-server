@@ -599,8 +599,8 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     const nav = page.locator('#settings-nav');
     assert.equal(await nav.locator('a[href="/installningar#kod"]').textContent(), 'Anslutningskod');
     assert.deepEqual(await nav.locator('a.kr-nav').evaluateAll(links => links.map(link => link.getAttribute('href').split('#')[1])),
-      ['traff', 'skarmar', 'wifi', 'obemannade', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'visning', 'farozon']);
-    assert.equal(await page.locator('#admin-view .kr-setsec').count(), 11);
+      ['traff', 'skarmar', 'wifi', 'obemannade', 'lokforare', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'visning', 'farozon']);
+    assert.equal(await page.locator('#admin-view .kr-setsec').count(), 12);
     assert.equal(await page.locator('#admin-view .kr-setsec:not([hidden])').count(), 1, 'one section at a time');
     // The clock source must be discoverable under Settings (not just a small link in Drift).
     await nav.locator('a[href="/installningar#skarmar"]').click();

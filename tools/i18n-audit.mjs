@@ -556,7 +556,7 @@ export const SURFACES = {
     catalog: ['i18n-messages.js', 'meet-type-messages.js', 'shell-messages.js', 'participant-messages.js'].map(web),
     html: [web('index.html')],
     css: fs.readdirSync(path.join(pkg, 'web')).filter((name) => name.endsWith('.css')).map(web),
-    js: ['app.js', 'drift.js', 'drift-model.js', 'train-graph.js', 'about-view.js', 'markdown.js', 'live-events.js', 'participant.js', 'guest-share.js', 'server-ui.js', 'settings.js', 'pi-network.js', 'display-feed.js', 'day-change.js', 'clock-face.js', 'clock-sync.js', 'kr-theme.js', 'data-page.js', 'meet-timeline.js'].map(web),
+    js: ['app.js', 'drift.js', 'drift-model.js', 'train-graph.js', 'about-view.js', 'markdown.js', 'live-events.js', 'participant.js', 'guest-share.js', 'server-ui.js', 'settings.js', 'lokforare-admin.js', 'pi-network.js', 'display-feed.js', 'day-change.js', 'clock-face.js', 'clock-sync.js', 'kr-theme.js', 'data-page.js', 'meet-timeline.js'].map(web),
     skip: {'app.js': UNREACHABLE_APP},
   },
   'US pages': {

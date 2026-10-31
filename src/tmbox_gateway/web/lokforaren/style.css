@@ -81,6 +81,7 @@ button { cursor: pointer; }
 .lf-banner.is-info { color: var(--blue); background: var(--blue-soft); }
 .lf-banner.is-stopped { color: var(--red); background: var(--red-soft); }
 .lf-banner.is-lost { color: var(--amber); background: var(--amber-soft); }
+.lf-banner.is-update { color: var(--green); background: var(--green-soft); cursor: pointer; }
 
 .lf-main { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .view { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -320,3 +321,8 @@ button { cursor: pointer; }
   .lf-tab { flex-direction: row; justify-content: center; gap: 8px; font-size: 13px; }
   .lf-countdown__value { font-size: 64px; line-height: 68px; }
 }
+
+/* Förlagan: originalsidorna i köruppdragets PDF. */
+.lf-source { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; font-weight: 600; color: var(--blue); text-decoration: none; }
+.lf-source::after { content: "↗"; }
+.lf-source[hidden] { display: none; }
