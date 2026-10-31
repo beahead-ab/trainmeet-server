@@ -42,6 +42,7 @@ from .central_sync import (
     fetch_runtime_download,
 )
 from .cloud_mail import send_server_mail
+from .cloud_live import LiveChannel
 from .identity import (
     AdminAccessError,
     DeviceKind,
@@ -397,6 +398,9 @@ class TrainMeetHTTPApplication:
         self.on_clock_changed = None
         self.on_terminal_tick = None
         self._terminal16 = None
+        # Livetrafik och push för Apple Watch via Cloud (#205, #206). Av tills
+        # administratören slår på den; local_server startar trådarna.
+        self.live = LiveChannel(self)
         self.automatic = None
         from .terminal16_public import SessionStore
         self.lab_sessions = SessionStore()
@@ -518,6 +522,7 @@ class TrainMeetHTTPApplication:
         if self._terminal16 is None:
             from .terminal16_runtime import Terminal16Service
             self._terminal16 = Terminal16Service(self.station_service)
+            self._terminal16.on_attention = self.live.on_attention
         return self._terminal16
 
     def note_device_seen(self, device_id: str) -> None:
@@ -5126,6 +5131,12 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/tmbox/terminal/timetable":
                 self._send_json(HTTPStatus.OK, self.server.application.terminal16_timetable(self._authenticated_client()))
                 return
+            if path == "/v1/tmbox/watch":
+                self._send_json(HTTPStatus.OK, self.server.application.live.box_status(self._authenticated_client()))
+                return
+            if path == "/v1/cloud/live":
+                self._send_json(HTTPStatus.OK, self.server.application.live.admin_status(self._authenticated_client()))
+                return
             if path == "/v1/clock":
                 self._send_json(HTTPStatus.OK, self.server.application.clock_status(self._authenticated_client()))
                 return
@@ -5570,6 +5581,15 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/tmbox/terminal":
                 self._send_json(HTTPStatus.OK, self.server.application.terminal16_command(self._authenticated_client(), payload))
+                return
+            if path == "/v1/tmbox/push":
+                self._send_json(HTTPStatus.OK, self.server.application.live.register(self._authenticated_client(), payload))
+                return
+            if path == "/v1/tmbox/answer":
+                self._send_json(HTTPStatus.OK, self.server.application.live.answer(self._authenticated_client(), payload))
+                return
+            if path == "/v1/cloud/live":
+                self._send_json(HTTPStatus.OK, self.server.application.live.configure(self._authenticated_client(), payload))
                 return
             if path == "/v1/automatic-stations":
                 self._send_json(HTTPStatus.OK, self.server.application.control_automatic_stations(self._authenticated_client(), payload))

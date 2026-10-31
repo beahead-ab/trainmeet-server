@@ -5,6 +5,21 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Apple Watch via Cloud: relä och notiser, avstängt tills det slås på (#205, #206)
+
+En Pi på en träff med internet kan nu nås av klockan genom TrainMeet Cloud,
+utan att något öppnas på träffens nät: Pi:n håller själv en utgående
+förbindelse, och bara boxens egna anrop (bild, tryck, tidtabell, klocka,
+push-registrering och svar på en notis) går den vägen, med samma box-nyckel
+och samma regler. Begäran hit, nekad, klart och tåg på väg blir notiser på
+telefon och klocka även när appen är stängd, och Ge klart eller Neka från
+notisen avgör bara den förfrågan, bara medan den väntar.
+
+Det är det smala undantaget från D1 som Casper beslutade den 29 oktober.
+Ingen konfiguration, ingen träffdata och ingen historik går upp. Allt är av
+tills administratören slår på **Apple Watch via Cloud** under Inställningar →
+Träff och Cloud. Kontraktet står i `docs/apple-watch-relay-push.md`.
+
 ### Träffklockan: meddelanden som glas, och NoReason syns aldrig (#223)
 
 Klockskärmen visade en brun remsa med «NoReason» under en gående klocka, och

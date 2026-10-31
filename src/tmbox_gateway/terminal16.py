@@ -361,7 +361,7 @@ class Terminal16Lab:
     def _notify_request(self, leg):
         for terminal in self.terminals.values():
             if terminal.station == leg["to_station_id"] and self._on_side(terminal, leg):
-                self._signal(terminal, "incoming_request")
+                self._signal(terminal, "incoming_request", leg)
             # An empty queue's INGA FRÅGOR gives way to the request at once.
             if (terminal.station == leg["to_station_id"] and self._on_side(terminal, leg)
                     and terminal.notice in ("", "INGA FRÅGOR")
@@ -612,9 +612,10 @@ class Terminal16Lab:
 
     # ------------------------------------------------------------- attention
 
-    def _signal(self, terminal, kind):
+    def _signal(self, terminal, kind, leg=None):
         """Something worth a sound happened to this box. Numbered, so the box
-        plays it once, and it never plays what happened before it connected."""
+        plays it once, and it never plays what happened before it connected.
+        `leg` is the train it is about; the runtime passes it on as a push."""
         now = self.now()
         current = terminal.attention_kind
         if (current in ATTENTION_KINDS and terminal.attention_at is not None
@@ -629,13 +630,13 @@ class Terminal16Lab:
         that gave it: the direction of the line says who did what."""
         for terminal in self.terminals.values():
             if terminal.station == leg["from_station_id"] and self._on_side(terminal, leg):
-                self._signal(terminal, "request_approved" if approved else "request_denied")
+                self._signal(terminal, "request_approved" if approved else "request_denied", leg)
 
     def _notify_departure(self, leg):
         """The receiver hears that a train is under way to it."""
         for terminal in self.terminals.values():
             if terminal.station == leg["to_station_id"] and self._on_side(terminal, leg):
-                self._signal(terminal, "incoming_train")
+                self._signal(terminal, "incoming_train", leg)
 
     def _tracks(self, terminal):
         return self.engine.config.tracks_for_station(terminal.station)

@@ -1078,6 +1078,9 @@ Ansvarsfördelningen mellan TrainMeet Cloud och servern — vem som får ändra
 vad, och hur en ändring rör sig — är fastslagen i
 [docs/CLOUD-ONLY-SERVER.md](docs/CLOUD-ONLY-SERVER.md). Flödet är enkelriktat:
 Cloud publicerar, servern hämtar och kör. Inga lokala configändringar görs.
+Två smala undantag går uppåt: e-post åt serverns användare och, när
+administratören slagit på det, livetrafik och notiser för Apple Watch
+([docs/apple-watch-relay-push.md](docs/apple-watch-relay-push.md)).
 
 Protokollet mellan en fysisk TMBox och servern är specificerat i
 [docs/protocol/terminal16/](docs/protocol/terminal16/README.md). Kommandonas
