@@ -27,6 +27,19 @@ En ny publicering av samma träff behåller den. Ett byte till en annan träff
 ärver inte klocknamn eller lösenord. Sena svar från tidigare källa/träff kastas
 bort. Klockans veckodag (till exempel `Monday`) visas som **Måndag** i serverns aktuella klock- och dagvyer i stället för *Dag 1*. Den ändrar inte tyst tidtabellens valda trafikdag eller nollställer pågående trafik.
 
+### Meddelanden och orsaker på skärmarna
+
+Klockans läge styr vad som visas (#223). `message` är FastClocks fria
+textfält och visas som information i mörkt glas i klockskärmens nedre vänstra
+hörn, både när klockan går och när den står. `pauseReason` gäller bara en paus
+och `stoppingReason` bara ett stopp; en gående klocka visar aldrig någon orsak.
+Platshållare (`None`, `NoReason`, `SelectStopReason`, tomt) betyder att det
+inte finns något att säga och visas inte. Kända koder översätts (till exempel
+`Lunch` → Lunchpaus, `Derailment` → Urspårning), okända koder visas inte.
+Ett stopp visas i rött glas över urtavlan, och `isCompleted` eller pausen
+`Closing` visas tyst som «Dagens spel slut». Inget av det tar plats från
+klockan.
+
 Vid nätfel eller för gammalt svar visas en varning och senast mottagna tid
 fryses. Ingen annan klocka tar tyst över och inget körtillstånd skapas. Servern
 försöker läsa igen och följer klockan när kontakten återkommer. Efter omstart

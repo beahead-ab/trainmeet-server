@@ -63,6 +63,18 @@ class FastClockError(ValueError):
     pass
 
 
+# FastClock fills its reason fields even when there is nothing to say: a
+# running clock reports pauseReason "None" and stoppingReason "NoReason" or
+# "SelectStopReason". Those are placeholders, not text for a screen.
+_PLACEHOLDERS = frozenset({"", "none", "noreason", "selectstopreason", "null", "undefined", "na", "unknown"})
+
+
+def provider_text(value):
+    """The provider's text with whitespace collapsed, or "" for a placeholder."""
+    text = " ".join(str(value or "").split())[:160]
+    return "" if re.sub(r"[\s_./-]", "", text).casefold() in _PLACEHOLDERS else text
+
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -127,11 +139,22 @@ def parse_status(data):
         if field in data and type(data[field]) is not bool:
             raise FastClockError("FastClock returnerade ogiltig status.")
     parts = list(map(int, clock.split(":")))
-    running = data["isRunning"] and not data.get("isPaused", False) and not data.get("isCompleted", False)
-    reason = data.get("pauseReason") or data.get("stoppingReason") or data.get("message") or ""
+    paused, completed = data.get("isPaused", False), data.get("isCompleted", False)
+    running = data["isRunning"] and not paused and not completed
+    # A reason belongs to the state it explains: pauseReason to a pause,
+    # stoppingReason to a stop. A running or completed clock has none.
+    reason = ""
+    if paused:
+        reason = provider_text(data.get("pauseReason"))
+    elif not running and not completed:
+        reason = provider_text(data.get("stoppingReason"))
+    # message is the provider's free-text field and nothing else. It used to
+    # fall back to the reasons, which put "NoReason" under a running clock.
+    message = provider_text(data.get("message")) or None
     weekday = data.get("weekday")
     return {"seconds": parts[0] * 3600 + parts[1] * 60 + (parts[2] if len(parts) > 2 else 0),
-            "speed": speed, "running": running, "stopped_reason": str(reason)[:160] if not running else None,
+            "speed": speed, "running": running, "stopped_reason": reason if not running else None,
+            "message": message, "completed": bool(completed),
             "minute_precision": len(parts) == 2,
             "explicit_zero_seconds": len(parts) == 3 and parts[2] == 0,
             "weekday": _WEEKDAYS.get(weekday.strip().casefold(), "") if isinstance(weekday, str) else ""}
@@ -192,6 +215,10 @@ class ExternalClock:
                          and sample["seconds"] == previous["seconds"]))):
             self.error = ""
             self.last_seen = now
+            # Repeated time samples keep their interpolation anchor, while
+            # live text and weekday still follow the newest provider response.
+            self.sample = {**previous, "message": sample.get("message"), "completed": sample.get("completed", False),
+                           "stopped_reason": sample["stopped_reason"], "weekday": sample.get("weekday", "")}
         else:
             if (sample.get("minute_precision") and previous and previous.get("minute_precision")
                     and sample["running"] and previous["running"] and sample["speed"] == previous["speed"]
@@ -254,6 +281,8 @@ class ExternalClock:
                     "seconds": seconds, "speed": sample["speed"] if sample else 1,
                     "running": bool(available and sample["running"]), "available": available,
                     "can_control": bool(self.settings["user"]), "last_sync": self.last_sync,
+                    "message": sample.get("message") if available else None,
+                    "completed": bool(available and sample.get("completed")),
                     "stopped_reason": (sample["stopped_reason"] if available else
                         self.error or "Väntar på FastClock. Senast mottagna tid visas."),
                     "weekday": sample.get("weekday", "") if sample else "",

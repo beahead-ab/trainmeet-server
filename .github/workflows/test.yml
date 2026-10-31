@@ -29,6 +29,7 @@ jobs:
         run: npm install --no-save --package-lock=false playwright@1.55.0 && npx playwright install --with-deps chromium
       - name: Verify desktop/mobile dialogs and public client assignment
         run: |
+          node tests/js/meet-switch.test.cjs
           node tests/js/server-shell.test.cjs
           node tests/js/setup-finish.test.cjs
           node tests/js/pi-network-live.test.cjs
@@ -59,5 +60,6 @@ jobs:
           node tests/js/double-track-meet.test.cjs
           node tests/js/clock-faces-live.test.cjs
           node tests/js/clock-seconds-live.test.cjs
+          node tests/js/clock-pause-message.test.cjs
           node tests/js/station-automatic-live.test.cjs
           node tests/js/screen-graph-fill.test.cjs

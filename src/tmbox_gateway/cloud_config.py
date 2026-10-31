@@ -20,6 +20,9 @@ from .us import USError, validate_package
 
 class MeetChangeRequired(CentralSyncError):
     """The code is for another meet and the switch was not confirmed."""
+    def __init__(self, message, confirmation=None):
+        super().__init__(message)
+        self.confirmation = confirmation or {}
 
 class CloudConfiguration:
     def __init__(self, application):
@@ -158,10 +161,34 @@ class CloudConfiguration:
             if self._stopping.is_set():
                 raise CentralSyncError("Servern stoppas. Ingen ny config kan aktiveras.")
             before = self.app.lifecycle.selected()
-            download = self.app.runtime_fetcher(code, url)
+            preview = self.app.runtime_preview_fetcher(code, url)
+            if not isinstance(preview, CentralRuntimeDownload):
+                raise CentralSyncError("Cloud skickade inget giltigt driftpaket.")
+            target = self.describe(preview.package)
+            with self.app.lifecycle.lock:
+                if self.app.lifecycle.selected() != before:
+                    raise CentralSyncError("Träffen ändrades under hämtningen. Försök igen.")
+                switching = bool(not before and self.app.lifecycle_error) or bool(
+                    before and (before["region"], before["meet_id"]) != target[:2])
+                if switching:
+                    expected_name = (before or {}).get("meet_name") or "BYT"
+                    confirmation = {"selection": before, "name": expected_name, "target_name": target[3]}
+                    if (payload.get("confirm_meet_change") is not True
+                            or payload.get("leaving_selection") != before
+                            or payload.get("leaving_name") != expected_name):
+                        raise MeetChangeRequired("Bekräfta namnet på träffen du lämnar innan du byter.", confirmation)
+                # Validate topology before creating/updating the Cloud link.
+                if target[0] == "eu":
+                    TrafficEngine(RuntimePublication.parse(preview.package).session_config())
+                if switching:
+                    self.app._backup_before("träffbyte")
+            checksum = hashlib.sha256(json.dumps(preview.package, sort_keys=True, ensure_ascii=False,
+                                                  separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+            download = self.app.runtime_claim_fetcher(code, url, checksum)
             if not isinstance(download, CentralRuntimeDownload) or not download.link_token:
                 raise CentralSyncError("Cloud skickade inget giltigt driftpaket med serverkoppling.")
-            self.describe(download.package)  # Validate before replacing a working link.
+            if download.package != preview.package:
+                raise CentralSyncError("Cloud-versionen ändrades under hämtningen. Försök igen.")
             with self.app.lifecycle.lock:
                 if self.app.lifecycle.selected() != before:
                     raise CentralSyncError("Träffen ändrades under hämtningen. Försök igen.")
@@ -177,7 +204,15 @@ class CloudConfiguration:
                 if self.store.server_name():
                     self.store.complete_installation()
                 self.last_checked_at = datetime.now(timezone.utc).isoformat()
-                return {**self.app.runtime_summary(self.app.local_admin()), **result, "linked": bool(download.link_token), "restart_required": False}
+                response = {**self.app.runtime_summary(self.app.local_admin()), **result, "linked": bool(download.link_token), "restart_required": False}
+            # Report the successfully activated selection immediately, also
+            # when automatic fetching is disabled. Never fail a completed local
+            # switch just because the heartbeat is temporarily unreachable.
+            try:
+                self.app.linked_runtime_fetcher(download.link_token, url, True)
+            except CentralSyncError:
+                pass
+            return response
 
     def check(self, *, automatic=False):
         if self._stopping.is_set():
@@ -268,8 +303,7 @@ class CloudConfiguration:
         ambiguous = bool(not previous and app.lifecycle_error)
         switching = ambiguous or bool(previous and (previous["region"], previous["meet_id"]) != (region, meet_id))
         if switching and not allow_switch:
-            raise MeetChangeRequired("Koden gäller en annan träff än den servern kör nu. Kryssa i rutan för "
-                                     "att byta träff, överst i dialogen, och tryck Koppla och hämta igen.")
+            raise MeetChangeRequired("Bekräfta namnet på träffen du lämnar innan du byter.")
         if app.lifecycle.transition():
             raise CentralSyncError("En tidigare configaktivering avbröts. Servern behöver återställas från säkerhetskopia innan ny aktivering.")
         if region == "us":
@@ -295,18 +329,11 @@ class CloudConfiguration:
         if local_layer is not None and (self.store.local_decision(publication_id) or {}).get("decision") != "take":
             from .local_edits import edit_count
             return self._local_changes_waiting(publication_id, edit_count(local_layer["edits"]))
-        blockers = self._engine_blockers() if not previous or previous["region"] == "eu" else []
+        blockers = self._engine_blockers() if not switching and (not previous or previous["region"] == "eu") else []
         us_session = app.us_store.context("config", True)["session"] if app.us_store else None
-        if switching and us_session and us_session["status"] != "closed":
-            blockers.append("Avsluta den pågående US-körningen innan du byter träff.")
         if old_publication and app.operations_store and region == "eu" and not switching:
             blockers.extend(app.operations_store.config_update_blockers(old_publication, RuntimePublication.parse(package)))
-        elif switching and old_publication and app.operations_store:
-            # A different traffic system must not bypass EU operational guards.
-            blockers.extend(app.operations_store.config_update_blockers(old_publication, old_publication))
-            if app.operations_store.clock_status().get("running"):
-                blockers.append("Stoppa klockan innan du byter träff.")
-        if region == "eu" and app.operations_store and (switching or not old_publication):
+        if region == "eu" and app.operations_store and not switching and not old_publication:
             blockers.extend(app.operations_store.start_meet_blockers(self.store.publication(publication_id)))
         if region == "us" and not switching and us_session and us_session["status"] != "closed":
             blockers.extend(app.us_store.config_update_blockers(package))
@@ -325,20 +352,22 @@ class CloudConfiguration:
             app.identities.clear_meet_assignments()
             self.store._save_setting("require_scoped_commands", "true")
             if app.us_store:
-                app.us_store.deactivate()
+                app.us_store.deactivate(close_session=True)
+            if region == "us" and app.operations_store:
+                app.operations_store.leave_meet()
         if region == "eu":
             publication = self.store.publication(publication_id)
             if app.operations_store:
                 if old_publication and not switching:
                     app.operations_store.adopt_publication(old_publication, publication)
                 else:
-                    app.operations_store.start_meet(publication)
+                    app.operations_store.start_meet(publication, reset_existing=switching)
             if local_layer is not None:
                 # Admin valde Ta Cloud-versionen. Historiken säger varför lagret upphörde.
                 self.store.discard_local_edits(old_publication.publication_id,
                                                expected_revision=local_layer["revision"], reason="cloud_taken")
             self.store.activate(publication_id, preserve_active_day=bool(old_publication and not switching))
-            app.engine.adopt_config(self.store.session_config(publication))
+            app.engine.adopt_config(self.store.session_config(publication), reset_traffic=switching)
             app.identities.reconcile_panels(set(app.engine.config.panels))
         else:
             if us_session and not switching:
@@ -349,7 +378,7 @@ class CloudConfiguration:
                 else:
                     app.us_store.adopt_package(package)
             self.store.deactivate()
-            app.engine.adopt_config(unconfigured_session())
+            app.engine.adopt_config(unconfigured_session(), reset_traffic=switching)
             app.identities.reconcile_panels(set())
         app.pairing.replace_valid_panels(set(app.engine.config.panels))
         app.refresh_connection_grants(new_meet=switching)

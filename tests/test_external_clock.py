@@ -46,6 +46,77 @@ class ProviderTests(unittest.TestCase):
         self.assertFalse(self.clock.status()["running"])
         self.assertEqual(self.clock.status()["stopped_reason"], "Lunch")
 
+    def test_live_messages_follow_provider_through_pause_resume_and_clear(self):
+        for payload, text in (
+            (provider_status(message="Trafiken börjar strax"), "Trafiken börjar strax"),
+            (provider_status(isPaused=True, pauseReason="Lunch"), None),
+            (provider_status(message="Körningen fortsätter"), "Körningen fortsätter"),
+            (provider_status(message="Ändrat meddelande"), "Ändrat meddelande"),
+            (provider_status(message="   "), None),
+            (provider_status(), None),
+        ):
+            with self.subTest(payload=payload):
+                self.reply = payload
+                self.clock.poll(force=True)
+                status = self.clock.status()
+                self.assertEqual(status["message"], text)
+                self.assertEqual(status["running"], not payload.get("isPaused", False))
+                if status["running"]:
+                    self.assertIsNone(status["stopped_reason"])
+                else:
+                    self.assertEqual(status["stopped_reason"], "Lunch")
+
+    def test_message_and_pause_reason_are_separate(self):
+        status = parse_status(provider_status(isPaused=True, pauseReason="Lunch", message="Vi börjar 13:00"))
+        self.assertEqual(status["message"], "Vi börjar 13:00")
+        self.assertEqual(status["stopped_reason"], "Lunch")
+        self.assertEqual(len(parse_status(provider_status(message="a" * 500))["message"]), 160)
+
+    def test_reasons_never_become_a_message_and_placeholders_say_nothing(self):
+        # Issue #223: a running clock showed "NoReason" in a band under the face.
+        running = parse_status(provider_status(pauseReason="None", stoppingReason="NoReason", message=""))
+        self.assertIsNone(running["message"])
+        self.assertIsNone(running["stopped_reason"])
+        self.assertIsNone(parse_status(provider_status(stoppingReason="Derailment"))["message"],
+                          "a stop reason is not shown while the clock runs")
+        for placeholder in ("NoReason", "SelectStopReason", "None", "  ", "N/A", "no_reason"):
+            with self.subTest(placeholder=placeholder):
+                stopped = parse_status(provider_status(isRunning=False, stoppingReason=placeholder, message=placeholder))
+                self.assertFalse(stopped["running"])
+                self.assertEqual(stopped["stopped_reason"], "")
+                self.assertIsNone(stopped["message"])
+
+    def test_each_reason_belongs_to_its_own_state(self):
+        paused = parse_status(provider_status(isPaused=True, pauseReason="Coffe", stoppingReason="Derailment"))
+        self.assertEqual(paused["stopped_reason"], "Coffe")
+        stopped = parse_status(provider_status(isRunning=False, pauseReason="Lunch", stoppingReason="Derailment"))
+        self.assertEqual(stopped["stopped_reason"], "Derailment")
+        done = parse_status(provider_status(isCompleted=True, stoppingReason="Derailment"))
+        self.assertFalse(done["running"])
+        self.assertTrue(done["completed"])
+        self.assertEqual(done["stopped_reason"], "")
+        self.assertFalse(parse_status(provider_status())["completed"])
+
+    def test_completed_reaches_the_status(self):
+        self.reply = provider_status(isCompleted=True)
+        self.clock.poll(force=True)
+        self.assertTrue(self.clock.status()["completed"])
+        self.reply = provider_status()
+        self.clock.poll(force=True)
+        self.assertFalse(self.clock.status()["completed"])
+
+    def test_message_change_does_not_reset_clock_interpolation(self):
+        self.reply = provider_status(time="09:15", message="Första meddelandet")
+        self.clock.poll(force=True)
+        self.now += 3
+        before = self.clock.status()["seconds"]
+        self.reply = provider_status(time="09:15", message="Nytt meddelande")
+        self.clock.poll(force=True)
+        self.assertEqual(self.clock.status()["message"], "Nytt meddelande")
+        self.assertEqual(self.clock.status()["seconds"], before)
+        self.now += 1
+        self.assertEqual(self.clock.status()["seconds"], before + 4)
+
     def test_outage_staleness_and_recovery_never_fall_back(self):
         self.clock.poll()
         self.now += 7
@@ -238,6 +309,16 @@ class ExternalClockIntegrationTests(unittest.TestCase):
             self.assertEqual(clock["source"], "fastclock")
         self.assertEqual(self.app.engine.snapshot("panel-a")["clock"]["time"], "06:12")
         self.assertEqual(self.app.external_clock.transport.call_count, 1, "clients read cache, not provider")
+
+    def test_display_gets_live_message_while_running_and_clears_it(self):
+        self.enable()
+        for paused, text in ((False, "Välkomna!"), (True, "Lunch"), (False, "Nu kör vi"), (False, None)):
+            with self.subTest(paused=paused, text=text):
+                self.app.external_clock.transport.return_value = provider_status(isPaused=paused, message=text)
+                self.app.external_clock.poll(force=True)
+                for clock in (self.app.clock_status(self.admin), self.app.display_snapshot()["clock"]):
+                    self.assertEqual(clock["message"], text)
+                    self.assertEqual(clock["running"], not paused)
 
     def test_password_is_local_redacted_and_cloud_updates_preserve_source(self):
         self.enable(user="Controller", password="private-password")

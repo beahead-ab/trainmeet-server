@@ -69,7 +69,7 @@ const root = path.resolve(__dirname, '../..');
     const signature = await clockPage.locator('#screen-qr').getAttribute('data-signature');
     assert.ok(signature.endsWith('|'+urls.eu+'/'), 'QR keeps the actual scheme, host and port');
     assert.ok(signature.startsWith('WIFI:T:WPA;S:Träff\\; ÅÄÖ;P:test-only\\:secret;;|'), 'The Wi-Fi QR carries the password, escaped');
-    assert.ok(await clockPage.locator('.sc-stopped').evaluate(stopped => {
+    assert.ok(await clockPage.locator('.sc-notice--stop').evaluate(stopped => {
       const a = stopped.getBoundingClientRect(), b = document.querySelector('#screen-qr').getBoundingClientRect();
       return a.right <= b.left || a.bottom <= b.top || a.left >= b.right || a.top >= b.bottom;
     }), 'Two QR codes do not overlap the stopped-clock message');
