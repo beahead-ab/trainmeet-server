@@ -7,11 +7,17 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ### Lokföraren: köruppdrag i Inställningar, vägar dit och en egen app som alltid är aktuell (#225)
 
-Köruppdragen laddas nu upp separat på servern under **Inställningar →
-Lokförare och köruppdrag**: hela häftet som en PDF. Tjänsterna läses in i
-webbläsaren, administratören granskar dem och gör dem sedan uttryckligen
-tillgängliga för förarna. Inget når förarna innan dess, och bara på träffen
-köruppdraget hör till. Föraren kan öppna originalsidorna från sin tjänst.
+Köruppdragen läggs nu in separat på servern under **Inställningar →
+Lokförare och köruppdrag**, från två filer. **Planeringsfilen** (samma JSON
+som går till Cloud) ger alla tjänster exakt: tåg, stationer, spår, tider,
+rundgång, skjut vagnar, förberedelse och avslutning; Värnamos 142 läses på en
+bråkdel av en sekund. **Köruppdragens PDF** (gärna alla 600 sidorna) blir
+förlagan, och sidorna för varje tjänst hittas på tjänstens rubrik. Allt läses
+i webbläsaren; servern kontrollerar bara formen. Administratören granskar och
+gör sedan köruppdraget uttryckligen tillgängligt för förarna. Inget når
+förarna innan dess, och bara på träffen köruppdraget hör till. Föraren kan
+öppna originalsidorna från sin tjänst, och de fasta anvisningarna (Rundgång,
+Förberedelse …) visas på förarens språk.
 
 Lokföraren går att hitta från träffens publika sida, från inloggningen och,
 för administratörer, från sidhuvudet, menyn och Inställningar med adress och

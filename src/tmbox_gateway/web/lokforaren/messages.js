@@ -3,6 +3,12 @@
  * (translations/ui.txt): träffklocka = træfur / treffklokke / Modellzeituhr. */
 globalThis.LokforarenMessages = {
   "Körplan": {en: "Run plan", da: "Køreplan", nb: "Kjøreplan", de: "Fahrplan"},
+  // Fasta anvisningar i köruppdragen (planeringsfilen, #225).
+  "Förberedelse": {en: "Preparation", da: "Forberedelse", nb: "Forberedelse", de: "Vorbereitung"},
+  "Avslutning": {en: "Finishing", da: "Afslutning", nb: "Avslutning", de: "Abschluss"},
+  "Rundgång": {en: "Run around", da: "Omløb", nb: "Omløp", de: "Umsetzen"},
+  "Skjut vagnar": {en: "Push the wagons", da: "Skub vognene", nb: "Skyv vognene", de: "Wagen schieben"},
+  "Vänd loket": {en: "Turn the loco", da: "Vend lokomotivet", nb: "Snu lokomotivet", de: "Lok drehen"},
   "Det gick inte. Försök igen.": {en: "That did not work. Try again.", da: "Det lykkedes ikke. Prøv igen.", nb: "Det gikk ikke. Prøv igjen.", de: "Das hat nicht geklappt. Bitte erneut versuchen."},
   "Tjänst {number}": {en: "Duty {number}", da: "Tjeneste {number}", nb: "Tjeneste {number}", de: "Dienst {number}"},
   "Lokföraren": {en: "Lokföraren", da: "Lokföraren", nb: "Lokföraren", de: "Lokföraren"},

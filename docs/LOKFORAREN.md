@@ -50,20 +50,42 @@ Förarna väljer bland, i den här ordningen:
 
 ### Köruppdrag i Inställningar
 
-Köruppdragen laddas upp på varje server för sig, separat från Clouds paket.
-Det går i tre uttryckliga steg, så att inget når förarna av misstag:
+Köruppdragen läggs in på varje server för sig, separat från Clouds paket, och
+kommer från två filer med var sin uppgift:
 
-1. **Ladda upp.** PDF:en (högst 80 MB) sparas oförändrad i serverns
-   datakatalog, `lokforaren/<sha256>.pdf` bredvid `trainmeet.db`. Samma fil
-   igen för samma träff blir samma köruppdrag.
-2. **Läs in.** Tjänsterna läses ur PDF:en i administratörens webbläsare med
-   pdf.js (`web/pdfjs/`, Apache-2.0) och `lokforaren-koruppdrag.js`, och
-   skickas till servern i formen nedan med `pages: [från, till]`. Servern
-   tolkar ingen PDF; den kontrollerar formen med `normalize_duty`, som för
-   Cloud. Det som inte gick att läsa blir avvikelser att titta på.
+1. **Planeringsfilen (JSON)**, samma fil ur planeringsprogrammet som går till
+   Cloud, ger tjänsterna. Den läses i administratörens webbläsare
+   (`lokforaren-koruppdrag.js`, `fromPlan`) och servern får färdiga tjänster i
+   formen ovan. Servern tolkar ingen plan; den kontrollerar formen med
+   `normalize_duty`, som för Cloud. Samma fil igen för samma träff (känns igen
+   på en kontrollsumma) uppdaterar samma köruppdrag.
+2. **Köruppdragens PDF** (högst 80 MB, gärna alla 600 sidorna) är förlagan.
+   Den sparas oförändrad i serverns datakatalog, `lokforaren/<sha256>.pdf`
+   bredvid `trainmeet.db`. Webbläsaren läser texten med pdf.js (`web/pdfjs/`,
+   Apache-2.0) och hittar sidorna för varje tjänst (`matchPages`); servern får
+   bara sidnumren.
 3. **Gör tillgängligt för förarna.** Först då syns tjänsterna under Välj
-   tjänst, och bara på träffen köruppdraget laddades upp för. **Dra tillbaka**
+   tjänst, och bara på träffen köruppdraget lades in för. **Dra tillbaka**
    tar bort dem ur listan; den som redan kör behåller sin tjänst.
+
+Ur planeringsfilen (`DriverDuties`, med planeringsprogrammets `$id`/`$ref`):
+
+| Planen | Lokföraren |
+|---|---|
+| `Identity` | tjänstens nummer |
+| delarna (`Parts`), från anrop till anrop på ett tåg | tåg med tågslagets prefix (`G 5453`), avgång, uppehåll, genomfart och ankomst med station och spår |
+| `FromTrack`/`ToTrack` på en del | spåret där tåget tas eller lämnas |
+| `Runaround`, `PushWagons`, `TurnLoco`, anropets anteckningar | Rundgång, Skjut vagnar, Vänd loket, fri text |
+| tågslagets `DefaultPreparationMinutes`/`DefaultFinishingMinutes`, eller tjänstens egna tider | Förberedelse och Avslutning |
+| tågslagets bolag, omloppets fordon (`ScheduledObjects`) | bolag och fordon |
+| ett ensamt anrop (till exempel växling 08:30–11:30) | hela tiden på stationen |
+
+Sidorna i PDF:en: en sida vars översta rader har en tjänsterubrik
+(`Tjänst 39`, `Tjeneste nr. 39`, `Duty 39` …) inleder den tjänsten, och sidorna
+efter hör till den. En innehållsförteckning (rubriker för många tjänster på
+samma sida) hoppas över. Utan rubriker känns tjänsten igen på sina tågnummer.
+Tjänster som inte hittas och sidor som inte nämner tjänstens tåg blir
+avvikelser att titta på i granskningen.
 
 Tjänsterna ligger i databasen och följer med i säkerhetskopiorna; PDF-filerna
 gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
@@ -148,9 +170,10 @@ För administratörer (ägare och administratörer, aldrig förare):
 | Metod | Väg | Vad |
 |---|---|---|
 | GET | `/v1/driver-admin/overview` | förarna och vad de kör, köruppdragen |
-| POST | `/v1/driver-admin/documents` | PDF:en som den är (`Content-Type: application/pdf`, `X-Filename`) |
-| GET | `/v1/driver-admin/documents/{id}` | köruppdraget och dess tjänster |
-| GET | `/v1/driver-admin/documents/{id}.pdf` | PDF:en, för att läsa in den igen |
-| POST | `/v1/driver-admin/documents/{id}/index` | `{pages, duties, warnings}` |
+| POST | `/v1/driver-admin/documents` | `{filename, fingerprint, name, duties, warnings}` ur planeringsfilen |
+| GET | `/v1/driver-admin/documents/{id}` | köruppdraget och dess tjänster med sidor |
+| POST | `/v1/driver-admin/documents/{id}/pdf` | PDF:en som den är (`Content-Type: application/pdf`, `X-Filename`) |
+| GET | `/v1/driver-admin/documents/{id}.pdf` | PDF:en, för att läsa sidorna igen |
+| POST | `/v1/driver-admin/documents/{id}/pages` | `{pages: {"39": [12, 15]}, total, warnings}` |
 | POST | `/v1/driver-admin/documents/{id}/publish` | `{published: true/false}` |
 | POST | `/v1/driver-admin/documents/{id}/remove` | ta bort köruppdraget och filen |

@@ -26,6 +26,9 @@ test('every page script is audited or has a reason not to be', async () => {
   const reasons = {
     'i18n.js': 'the runtime itself', 'i18n-init.js': 'calls initializeStatic', 'qrcode.js': 'a QR encoder, no text',
     'clock-sync.js': 'pure numeric interpolation, no user-visible text',
+    // Reads the planning file and the PDF in the admin's browser. Its two errors are shown through t() in
+    // lokforare-admin.js (rows in ui.txt); the notes and warnings it writes are data kept with the duties.
+    'lokforaren-koruppdrag.js': 'the duty sheet reader; its texts are data',
     'us-cloud-messages.js': 'a catalogue', 'tmbox-messages.js': 'a catalogue',
     // Built in Cloud, where its texts are audited (scripts/i18n-audit.mjs); it brings the rows the page lacks.
     'data-workspace.js': "Cloud's Data view",

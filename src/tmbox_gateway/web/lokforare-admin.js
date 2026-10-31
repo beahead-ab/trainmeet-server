@@ -1,13 +1,13 @@
 /* Inställningar → Lokförare och köruppdrag (#225).
  *
  * Tre saker på en sida: vägen till förarnas app (adress och QR-kod), träffens
- * köruppdrag (ladda upp, läs in, granska, gör tillgängliga) och vilka förare
- * som kör just nu. Köruppdraget går i tre uttryckliga steg så att inget når
- * förarna av misstag:
+ * köruppdrag och vilka förare som kör just nu. Köruppdraget läggs in i
+ * uttryckliga steg så att inget når förarna av misstag:
  *
- *   1. PDF:en laddas upp oförändrad till servern.
- *   2. Tjänsterna läses ur PDF:en här i webbläsaren (LokforarenKoruppdrag)
- *      och sparas på servern, som bara kontrollerar formen.
+ *   1. Planeringsfilen (JSON) läses här i webbläsaren (LokforarenKoruppdrag)
+ *      och tjänsterna sparas på servern, som bara kontrollerar formen.
+ *   2. PDF:en med köruppdragen laddas upp oförändrad som förlaga, och sidorna
+ *      för varje tjänst hittas här i webbläsaren.
  *   3. Administratören granskar och gör köruppdraget tillgängligt.
  */
 (() => {
@@ -15,7 +15,7 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   const t = (source, values) => globalThis.TrainMeetI18n ? globalThis.TrainMeetI18n.t(source, values) : source;
   const POLL = 15000;
-  const state = { overview: null, review: null, busy: false, timer: null, confirm: null };
+  const state = { overview: null, review: null, busy: false, timer: null, confirm: null, pdfTarget: null };
 
   class ApiError extends Error {}
 
@@ -74,11 +74,12 @@
 
   // ── Köruppdragen ───────────────────────────────────────────────────
   function statusOf(doc) {
-    if (doc.status !== "indexed") return { text: t("Inte inläst"), kind: "warn" };
-    if (!doc.duties) return { text: t("Inga tjänster hittades"), kind: "warn" };
+    if (!doc.duties) return { text: t("Inga tjänster"), kind: "warn" };
     if (!doc.current) return { text: t("Annan träff"), kind: "" };
     return doc.published ? { text: t("Tillgängligt"), kind: "ok" } : { text: t("Inte tillgängligt än"), kind: "" };
   }
+
+  const size = (bytes) => bytes < 1048576 ? `${Math.max(1, Math.round(bytes / 1024))} kB` : `${megabytes(bytes)} MB`;
 
   function actionButton(label, handler, primary = false) {
     const button = make("button", "kr-btn sm" + (primary ? " primary" : ""), label);
@@ -86,6 +87,24 @@
     button.disabled = state.busy;
     button.addEventListener("click", handler);
     return button;
+  }
+
+  function pdfCell(doc) {
+    const cell = make("td", "lf-docs__pdf");
+    const pdf = doc.pdf;
+    if (!pdf) {
+      cell.append(make("span", "kr-m", t("Ingen förlaga än")));
+      return cell;
+    }
+    cell.append(make("b", "", pdf.filename));
+    const facts = [size(pdf.size)];
+    if (pdf.pages) facts.push(t("{count} sidor", { count: pdf.pages }));
+    cell.append(make("span", "kr-m", facts.join(" · ")));
+    if (!pdf.has_file) cell.append(make("span", "kr-m lf-docs__warn", t("PDF-filen saknas på servern")));
+    else if (!pdf.pages_read_at) cell.append(make("span", "kr-m lf-docs__warn", t("Sidorna är inte lästa")));
+    else cell.append(make("span", "kr-m" + (pdf.duties_with_pages < doc.duties ? " lf-docs__warn" : ""),
+      t("sidor för {found} av {count} tjänster", { found: pdf.duties_with_pages, count: doc.duties })));
+    return cell;
   }
 
   function renderDocuments() {
@@ -97,26 +116,25 @@
       const row = make("tr");
       if (state.review?.document.id === doc.id) row.className = "sel";
       const name = make("td", "lf-docs__name");
-      name.append(make("b", "", doc.filename));
-      name.append(make("span", "kr-m", `${when(doc.uploaded_at)} · ${doc.size < 1048576 ? `${Math.max(1, Math.round(doc.size / 1024))} kB` : `${megabytes(doc.size)} MB`}`));
-      if (!doc.has_file) name.append(make("span", "kr-m", t("PDF-filen saknas på servern")));
+      name.append(make("b", "", doc.name || doc.filename));
+      name.append(make("span", "kr-m", `${doc.name ? doc.filename + " · " : ""}${when(doc.uploaded_at)}`));
       row.append(name);
-      row.append(make("td", "r", doc.pages ? String(doc.pages) : "–"));
-      row.append(make("td", "r", doc.status === "indexed" ? String(doc.duties) : "–"));
+      row.append(make("td", "r", String(doc.duties)));
+      row.append(pdfCell(doc));
       const status = statusOf(doc);
       const cell = make("td");
       cell.append(make("span", "kr-pill" + (status.kind ? ` ${status.kind}` : ""), status.text));
-      if (doc.warnings?.length) cell.append(make("span", "kr-m lf-docs__warn", t("{count} att titta på", { count: doc.warnings.length })));
+      const notes = (doc.warnings?.length || 0) + (doc.pdf?.warnings?.length || 0);
+      if (notes) cell.append(make("span", "kr-m lf-docs__warn", t("{count} att titta på", { count: notes })));
       row.append(cell);
 
-      const actions = make("td", "r lf-docs__actions");
-      if (doc.status === "indexed" && doc.duties) {
-        actions.append(actionButton(t("Granska"), () => openReview(doc.id)));
-      }
-      if (doc.has_file) {
-        actions.append(actionButton(doc.status === "indexed" ? t("Läs in igen") : t("Läs in"), () => readStored(doc)));
-      }
-      if (doc.status === "indexed" && doc.duties && doc.current) {
+      const cellActions = make("td", "r lf-docs__actions");
+      const actions = make("div", "lf-docs__buttons");
+      cellActions.append(actions);
+      if (doc.duties) actions.append(actionButton(t("Granska"), () => openReview(doc.id)));
+      actions.append(actionButton(doc.pdf ? t("Byt PDF") : t("Lägg till PDF"), () => pickPdf(doc)));
+      if (doc.pdf?.has_file) actions.append(actionButton(t("Läs sidorna igen"), () => readStored(doc)));
+      if (doc.duties && doc.current) {
         actions.append(doc.published
           ? actionButton(t("Dra tillbaka"), () => publish(doc, false))
           : actionButton(t("Gör tillgängligt för förarna"), () => publish(doc, true), true));
@@ -125,17 +143,19 @@
       const remove = actionButton(confirming ? t("Ta bort – säker?") : t("Ta bort"), () => removeDocument(doc));
       if (confirming) remove.classList.add("danger");
       actions.append(remove);
-      row.append(actions);
+      row.append(cellActions);
       rows.append(row);
     }
   }
+
+  const label = (doc) => doc.name || doc.filename;
 
   async function publish(doc, published) {
     await run(async () => {
       await api(`/v1/driver-admin/documents/${doc.id}/publish`, { method: "POST", body: { published } });
       message(published
-        ? t("{name} är tillgängligt. Förarna hittar tjänsterna under Välj tjänst.", { name: doc.filename })
-        : t("{name} är inte längre tillgängligt för förarna. Den som redan kör behåller sin tjänst.", { name: doc.filename }));
+        ? t("{name} är tillgängligt. Förarna hittar tjänsterna under Välj tjänst.", { name: label(doc) })
+        : t("{name} är inte längre tillgängligt för förarna. Den som redan kör behåller sin tjänst.", { name: label(doc) }));
     });
   }
 
@@ -150,7 +170,7 @@
     await run(async () => {
       await api(`/v1/driver-admin/documents/${doc.id}/remove`, { method: "POST", body: {} });
       if (state.review?.document.id === doc.id) closeReview();
-      message(t("{name} är borttaget.", { name: doc.filename }));
+      message(t("{name} är borttaget.", { name: label(doc) }));
     });
   }
 
@@ -171,11 +191,38 @@
     }
   }
 
-  // Uppladdningen visar hur långt den kommit; fetch kan inte det, XHR kan.
-  function uploadFile(file) {
+  const reader = () => {
+    if (!globalThis.LokforarenKoruppdrag) throw new ApiError(t("Inläsningen kunde inte starta. Ladda om sidan och försök igen."));
+    return globalThis.LokforarenKoruppdrag;
+  };
+
+  // Planeringsfilen: tjänsterna läses här och sparas som ett köruppdrag.
+  async function addPlan(file) {
+    progress(t("Läser planeringsfilen…"), null);
+    const source = await file.text();
+    let plan;
+    try { plan = JSON.parse(source); } catch (error) { throw new ApiError(t("{name} är ingen läsbar JSON-fil.", { name: file.name })); }
+    let result;
+    try { result = reader().fromPlan(plan); } catch (error) { throw new ApiError(t(error.message)); }
+    if (!result.duties.length) throw new ApiError(t("Inga köruppdrag hittades i {name}.", { name: file.name }));
+    progress(t("Sparar {count} tjänster…", { count: result.duties.length }), null);
+    const saved = await api("/v1/driver-admin/documents", { method: "POST", body: {
+      filename: file.name, fingerprint: reader().fingerprint(source), name: result.name,
+      duties: result.duties, warnings: result.warnings,
+    } });
+    const doc = saved.document;
+    message(doc.duplicate
+      ? t("{name} fanns redan. Tjänsterna är uppdaterade ({count} st).", { name: label(doc), count: doc.duties })
+      : t("{count} tjänster lästes in ur {name}. Lägg till PDF:en som förlaga, granska och gör sedan köruppdraget tillgängligt.", { count: doc.duties, name: label(doc) }));
+    await openReview(doc.id, false);
+  }
+
+  // PDF:en laddas upp som förlaga till ett köruppdrag. Uppladdningen visar
+  // hur långt den kommit; fetch kan inte det, XHR kan.
+  function uploadPdf(doc, file) {
     return new Promise((resolve, reject) => {
       const request = new XMLHttpRequest();
-      request.open("POST", "/v1/driver-admin/documents");
+      request.open("POST", `/v1/driver-admin/documents/${doc.id}/pdf`);
       request.setRequestHeader("Content-Type", "application/pdf");
       request.setRequestHeader("X-Filename", encodeURIComponent(file.name));
       request.upload.addEventListener("progress", (event) => {
@@ -192,34 +239,55 @@
     });
   }
 
-  async function readAndSave(doc, data) {
-    const reader = globalThis.LokforarenKoruppdrag;
-    if (!reader) throw new ApiError(t("Inläsningen kunde inte starta. Ladda om sidan och försök igen."));
-    progress(t("Läser köruppdragen…"), null);
-    const result = await reader.read(data, ({ page, pages }) => progress(t("Läser sidan {page} av {pages}", { page, pages }), page / pages));
-    progress(t("Sparar {count} tjänster…", { count: result.duties.length }), null);
-    const saved = await api(`/v1/driver-admin/documents/${doc.id}/index`, { method: "POST", body: result });
-    const found = saved.document.duties;
+  async function readPages(doc, data) {
+    const { duties } = await api(`/v1/driver-admin/documents/${doc.id}`);
+    progress(t("Läser PDF:en…"), null);
+    const pages = await reader().readPdf(data, ({ page, pages: total }) => progress(t("Läser sidan {page} av {pages}", { page, pages: total }), page / total));
+    const result = reader().matchPages(pages, duties);
+    const saved = await api(`/v1/driver-admin/documents/${doc.id}/pages`, { method: "POST", body: result });
+    const found = saved.document.pdf?.duties_with_pages || 0;
     message(found
-      ? t("{count} tjänster lästes in från {pages} sidor. Granska dem och gör sedan köruppdraget tillgängligt.", { count: found, pages: saved.document.pages || result.pages })
-      : t("Inga tjänster hittades i {name}. Är det rätt PDF?", { name: saved.document.filename }), !found);
-    if (found) await openReview(doc.id, false);
+      ? t("Sidorna hittades för {found} av {count} tjänster i {pages} sidor.", { found, count: saved.document.duties, pages: result.total })
+      : t("Inga tjänster hittades i PDF:en. Är det köruppdragen till {name}?", { name: label(doc) }), !found);
+    await openReview(doc.id, false);
   }
 
-  async function upload(file) {
-    if (!file) return;
+  async function addPdf(doc, file) {
     const limit = state.overview?.limits?.pdf_bytes || 80 * 1024 * 1024;
-    if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { message(t("Välj en PDF."), true); return; }
-    if (file.size > limit) { message(t("PDF:en är större än {size} MB.", { size: Math.round(limit / 1048576) }), true); return; }
+    if (file.size > limit) throw new ApiError(t("PDF:en är större än {size} MB.", { size: Math.round(limit / 1048576) }));
+    const saved = await uploadPdf(doc, file);
+    if (saved.same_pdf && saved.pdf?.pages_read_at) {
+      message(t("Samma PDF finns redan för {name}.", { name: label(doc) }));
+      return;
+    }
+    await readPages(doc, await file.arrayBuffer());
+  }
+
+  // Vart en PDF ska: köruppdraget man valt i tabellen, annars det senaste
+  // för den här träffen.
+  function targetFor() {
+    const documents = (state.overview?.documents || []).filter((doc) => doc.current);
+    return documents.find((doc) => doc.id === state.pdfTarget) || documents[0] || null;
+  }
+
+  function pickPdf(doc) {
+    state.pdfTarget = doc.id;
+    $("#lf-pdf-file").click();
+  }
+
+  async function upload(file, target = null) {
+    if (!file) return;
     message("");
-    await run(async () => {
-      const doc = await uploadFile(file);
-      if (doc.duplicate && doc.status === "indexed") {
-        message(t("{name} finns redan på servern för den här träffen.", { name: doc.filename }));
-        return;
-      }
-      await readAndSave(doc, await file.arrayBuffer());
-    });
+    const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+    const isJson = /\.json$/i.test(file.name) || file.type === "application/json";
+    if (!isPdf && !isJson) { message(t("Välj planeringsfilen (JSON) eller köruppdragens PDF."), true); return; }
+    if (isPdf) {
+      const doc = target || targetFor();
+      if (!doc) { message(t("Börja med planeringsfilen (JSON). PDF:en blir sedan förlaga till tjänsterna i den."), true); return; }
+      await run(() => addPdf(doc, file));
+      return;
+    }
+    await run(() => addPlan(file));
   }
 
   async function readStored(doc) {
@@ -228,7 +296,7 @@
       progress(t("Hämtar PDF:en…"), null);
       const response = await fetch(`/v1/driver-admin/documents/${doc.id}.pdf`, { credentials: "same-origin", cache: "no-store" });
       if (!response.ok) throw new ApiError(t("PDF:en finns inte längre på servern. Ladda upp den igen."));
-      await readAndSave(doc, await response.arrayBuffer());
+      await readPages(doc, await response.arrayBuffer());
     });
   }
 
@@ -241,11 +309,12 @@
       return;
     }
     $("#lf-review").hidden = false;
-    $("#lf-review-name").textContent = state.review.document.filename;
+    $("#lf-review-name").textContent = state.review.document.name || state.review.document.filename;
     $("#lf-review-search").value = "";
     const warnings = $("#lf-review-warnings");
-    warnings.replaceChildren(...state.review.document.warnings.map((text) => make("li", "", text)));
-    warnings.hidden = !state.review.document.warnings.length;
+    const notes = [...state.review.document.warnings, ...(state.review.document.pdf?.warnings || [])];
+    warnings.replaceChildren(...notes.map((text) => make("li", "", text)));
+    warnings.hidden = !notes.length;
     renderReview();
     renderDocuments();
     if (scroll) $("#lf-review").scrollIntoView({ block: "start", behavior: "smooth" });
@@ -291,7 +360,9 @@
     $("#lf-drivers-count").textContent = String(drivers.filter((driver) => driver.duty_number).length) + " " + t("kör nu");
     for (const driver of drivers) {
       const row = make("tr");
-      const who = make("td", "lf-driver");
+      const cell = make("td");
+      const who = make("div", "lf-driver");
+      cell.append(who);
       if (driver.avatar_url) {
         const image = make("img", "lf-driver__avatar");
         image.src = driver.avatar_url; image.alt = ""; image.width = 24; image.height = 24;
@@ -301,7 +372,7 @@
       }
       who.append(make("span", "", driver.name));
       if (driver.invitation_pending) who.append(make("span", "kr-pill", t("Inbjuden")));
-      row.append(who);
+      row.append(cell);
       row.append(make("td", "", driver.duty_number
         ? `${driver.duty_demo ? t("Övning") + " " : ""}${driver.duty_number}${driver.trains.length ? " · " + driver.trains.join(", ") : ""}`
         : "–"));
@@ -331,10 +402,22 @@
   function bind() {
     if (!$("#lokforare")) return;
     $("#lf-file").addEventListener("change", (event) => { const file = event.target.files[0]; event.target.value = ""; upload(file); });
+    $("#lf-pdf-file").addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      event.target.value = "";
+      const doc = (state.overview?.documents || []).find((item) => item.id === state.pdfTarget);
+      if (file && doc) upload(file, doc);
+    });
     const drop = $("#lf-drop");
     drop.addEventListener("dragover", (event) => { event.preventDefault(); drop.classList.add("is-dragover"); });
     drop.addEventListener("dragleave", () => drop.classList.remove("is-dragover"));
-    drop.addEventListener("drop", (event) => { event.preventDefault(); drop.classList.remove("is-dragover"); upload(event.dataTransfer.files[0]); });
+    drop.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      drop.classList.remove("is-dragover");
+      // Planeringsfilen och PDF:en kan släppas tillsammans: planen först.
+      const files = [...event.dataTransfer.files].sort((a, b) => Number(/\.pdf$/i.test(a.name)) - Number(/\.pdf$/i.test(b.name)));
+      for (const file of files.slice(0, 2)) await upload(file);
+    });
     $("#lf-review-search").addEventListener("input", renderReview);
     $("#lf-review-close").addEventListener("click", closeReview);
     addEventListener("hashchange", () => setTimeout(refresh, 0));

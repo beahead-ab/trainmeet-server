@@ -1,17 +1,20 @@
-"""Köruppdrag som administratören laddar upp i Inställningar → Lokförare (#225).
+"""Köruppdrag som administratören lägger in i Inställningar → Lokförare (#225).
 
-Ett köruppdrag är en PDF med många förartjänster (en träff kan ha 600 sidor).
-Flödet är uttryckligt i tre steg, så att ingenting når förarna av misstag:
+Ett köruppdrag är träffens alla förartjänster, och det kommer från två filer
+med var sin uppgift:
 
-1. **Ladda upp.** PDF:en sparas oförändrad i serverns datakatalog, i mappen
-   ``lokforaren/`` bredvid ``trainmeet.db``, under sin sha256. Samma fil två
-   gånger för samma träff blir ett och samma köruppdrag.
-2. **Läs in.** Tjänsterna läses ur PDF:en i administratörens webbläsare och
-   skickas hit som färdiga tjänster i samma form som Clouds ``driver_duties``.
-   Servern tolkar alltså ingen PDF; den kontrollerar formen med
-   :func:`normalize_duty`, precis som för Cloud.
-3. **Gör tillgängliga.** Först då ser förarna tjänsterna under Välj tjänst,
-   och bara på den träff köruppdraget laddades upp för.
+* **Planeringsfilen** (JSON ur planeringsprogrammet, samma fil som går till
+  Cloud) ger tjänsterna: tåg, stationer, spår och tider. Den läses i
+  administratörens webbläsare och hit kommer färdiga tjänster i samma form som
+  Clouds ``driver_duties``. Servern tolkar alltså ingen plan; den kontrollerar
+  formen med :func:`normalize_duty`, precis som för Cloud.
+* **PDF:en** (utskriften av samma tjänster, gärna 600 sidor) är förlagan.
+  Den sparas oförändrad i serverns datakatalog, i mappen ``lokforaren/``
+  bredvid ``trainmeet.db``, under sin sha256. Webbläsaren hittar vilka sidor
+  som hör till vilken tjänst och skickar bara sidnumren hit.
+
+Förarna ser tjänsterna först när administratören uttryckligen gjort
+köruppdraget tillgängligt, och bara på den träff det lades in för.
 
 Tjänsterna ligger i databasen och följer med i säkerhetskopiorna. PDF-filerna
 gör det inte (de kan vara stora); försvinner en fil finns tjänsterna kvar och
@@ -39,25 +42,32 @@ FILENAME_MAX = 120
 WARNINGS_MAX = 200
 _CHUNK = 1024 * 1024
 _SLUG = re.compile(r"[^0-9A-Za-z]+")
+_FINGERPRINT = re.compile(r"^[0-9a-f]{8,64}$")
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _filename(value: Any) -> str:
+def _filename(value: Any, fallback: str) -> str:
     name = Path(str(value or "")).name.strip()
     name = "".join(char for char in name if char.isprintable())[:FILENAME_MAX]
-    return name or "koruppdrag.pdf"
+    return name or fallback
 
 
 def _page(value: Any) -> int | None:
-    return value if isinstance(value, int) and 1 <= value <= MAX_PAGES else None
+    return value if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= MAX_PAGES else None
+
+
+def _warnings(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    return [str(item)[:240] for item in values if str(item).strip()][:WARNINGS_MAX]
 
 
 class DriverDocuments:
-    """Köruppdragen på den här servern: filer, inlästa tjänster och vilka
-    som är tillgängliga för förarna."""
+    """Köruppdragen på den här servern: tjänsterna ur planeringsfilen,
+    förlagan som PDF och om förarna får se dem."""
 
     def __init__(self, database: str | Path, folder: str | Path | None = None):
         self.database = Path(database)
@@ -68,25 +78,30 @@ class DriverDocuments:
         self._connection.execute("PRAGMA busy_timeout=10000")
         self._connection.executescript(
             """
-            CREATE TABLE IF NOT EXISTS driver_documents (
+            CREATE TABLE IF NOT EXISTS driver_plans (
                 document_id TEXT PRIMARY KEY,
                 meet_key TEXT NOT NULL,
-                sha256 TEXT NOT NULL,
+                fingerprint TEXT NOT NULL,
                 filename TEXT NOT NULL,
-                size INTEGER NOT NULL,
-                pages INTEGER,
-                status TEXT NOT NULL CHECK(status IN ('uploaded', 'indexed')),
-                published INTEGER NOT NULL DEFAULT 0,
+                plan_name TEXT NOT NULL DEFAULT '',
                 warnings TEXT NOT NULL DEFAULT '[]',
+                pdf_sha256 TEXT,
+                pdf_filename TEXT,
+                pdf_size INTEGER,
+                pdf_pages INTEGER,
+                pdf_warnings TEXT NOT NULL DEFAULT '[]',
+                pdf_uploaded_at TEXT,
+                pages_read_at TEXT,
+                published INTEGER NOT NULL DEFAULT 0,
                 uploaded_by TEXT,
                 uploaded_at TEXT NOT NULL,
-                indexed_at TEXT,
                 published_at TEXT
             );
-            CREATE UNIQUE INDEX IF NOT EXISTS driver_documents_by_file ON driver_documents(meet_key, sha256);
+            CREATE UNIQUE INDEX IF NOT EXISTS driver_plans_by_file ON driver_plans(meet_key, fingerprint);
 
-            -- Tjänsterna som lästs ur ett köruppdrag, i den form förarna får dem.
-            CREATE TABLE IF NOT EXISTS driver_document_duties (
+            -- Tjänsterna i ett köruppdrag, i den form förarna får dem, och
+            -- var i PDF:en de står.
+            CREATE TABLE IF NOT EXISTS driver_plan_duties (
                 document_id TEXT NOT NULL,
                 duty_id TEXT NOT NULL,
                 position INTEGER NOT NULL,
@@ -96,7 +111,7 @@ class DriverDocuments:
                 duty_json TEXT NOT NULL,
                 PRIMARY KEY(document_id, duty_id)
             );
-            CREATE INDEX IF NOT EXISTS driver_document_duties_by_number ON driver_document_duties(number);
+            CREATE INDEX IF NOT EXISTS driver_plan_duties_by_number ON driver_plan_duties(number);
             """
         )
 
@@ -104,12 +119,90 @@ class DriverDocuments:
         with self._lock:
             self._connection.close()
 
-    # ------------------------------------------------------------ filen
+    # ---------------------------------------------------- planeringsfilen
 
-    def store(self, stream: BinaryIO, length: int, *, filename: Any, meet_key: str,
-              user_id: str | None) -> dict[str, Any]:
-        """Tar emot PDF:en i bitar direkt till disk. Inget hålls i minnet."""
+    def create(self, payload: dict[str, Any], *, meet_key: str, user_id: str | None) -> dict[str, Any]:
+        """Ett köruppdrag ur planeringsfilens tjänster. Samma fil igen för
+        samma träff ersätter tjänsterna i det befintliga köruppdraget och
+        behåller PDF:en och sidorna för de tjänster som finns kvar."""
 
+        fingerprint = str(payload.get("fingerprint") or "").lower()
+        if not _FINGERPRINT.match(fingerprint):
+            raise DriverError(400, "fingerprint_required", "Planeringsfilen saknar kontrollsumma")
+        raw_duties = payload.get("duties")
+        if not isinstance(raw_duties, list) or not raw_duties:
+            raise DriverError(400, "duties_required", "Planeringsfilen har inga köruppdrag")
+        if len(raw_duties) > MAX_DUTIES:
+            raise DriverError(400, "too_many_duties", f"Högst {MAX_DUTIES} tjänster per köruppdrag")
+        filename = _filename(payload.get("filename"), "planeringsfil.json")
+        plan_name = " ".join(str(payload.get("name") or "").split())[:120]
+        warnings = _warnings(payload.get("warnings"))
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT document_id FROM driver_plans WHERE meet_key = ? AND fingerprint = ?", (meet_key, fingerprint)
+            ).fetchone()
+            duplicate = row is not None
+            document_id = row[0] if row else secrets.token_hex(6)
+            pages = {number: (first, last) for number, first, last in self._connection.execute(
+                "SELECT number, page_from, page_to FROM driver_plan_duties WHERE document_id = ?", (document_id,))}
+            rows, skipped = self._duty_rows(document_id, raw_duties, pages)
+            if not rows:
+                raise DriverError(400, "duties_required", "Inga köruppdrag i planeringsfilen gick att läsa")
+            if skipped:
+                warnings.insert(0, f"{skipped} tjänster saknade nummer eller läsbara tider och togs inte med")
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                if duplicate:
+                    self._connection.execute(
+                        "UPDATE driver_plans SET filename = ?, plan_name = ?, warnings = ?, uploaded_by = ?,"
+                        " uploaded_at = ? WHERE document_id = ?",
+                        (filename, plan_name, json.dumps(warnings, ensure_ascii=False), user_id, _now(), document_id))
+                else:
+                    self._connection.execute(
+                        "INSERT INTO driver_plans(document_id, meet_key, fingerprint, filename, plan_name, warnings,"
+                        " uploaded_by, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (document_id, meet_key, fingerprint, filename, plan_name,
+                         json.dumps(warnings, ensure_ascii=False), user_id, _now()))
+                self._connection.execute("DELETE FROM driver_plan_duties WHERE document_id = ?", (document_id,))
+                self._connection.executemany(
+                    "INSERT INTO driver_plan_duties(document_id, duty_id, position, number, page_from, page_to,"
+                    " duty_json) VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+        return self.document(document_id) | {"duplicate": duplicate}
+
+    @staticmethod
+    def _duty_rows(document_id: str, raw_duties: list[Any],
+                   pages: dict[str, tuple[int | None, int | None]]) -> tuple[list[tuple[Any, ...]], int]:
+        rows: list[tuple[Any, ...]] = []
+        used: dict[str, int] = {}
+        skipped = 0
+        for raw in raw_duties:
+            duty = normalize_duty(raw)
+            if duty is None:
+                skipped += 1
+                continue
+            slug = _SLUG.sub("-", duty["number"]).strip("-").lower() or "tjanst"
+            used[slug] = used.get(slug, 0) + 1
+            duty["id"] = f"k{document_id}-{slug}" + (f"-{used[slug]}" if used[slug] > 1 else "")
+            duty["demo"] = False
+            page_from, page_to = pages.get(duty["number"], (None, None))
+            rows.append((document_id, duty["id"], len(rows), duty["number"], page_from, page_to,
+                         json.dumps(duty, ensure_ascii=False)))
+        return rows, skipped
+
+    # ---------------------------------------------------------- förlagan
+
+    def attach_pdf(self, document_id: str, stream: BinaryIO, length: int, *, filename: Any) -> dict[str, Any]:
+        """Tar emot PDF:en i bitar direkt till disk. Inget hålls i minnet.
+        En ny PDF ersätter den förra, och sidorna läses om."""
+
+        document = self._row(document_id)
+        if document is None:
+            raise DriverError(404, "document_not_found", "Köruppdraget finns inte")
         if length < 1:
             raise DriverError(400, "empty_document", "Filen är tom")
         if length > MAX_PDF_BYTES:
@@ -144,90 +237,89 @@ class DriverDocuments:
             if partial.exists():
                 partial.unlink()
 
-        with self._lock:
-            row = self._connection.execute(
-                "SELECT document_id FROM driver_documents WHERE meet_key = ? AND sha256 = ?", (meet_key, sha)
-            ).fetchone()
-            if row is not None:
-                return self.document(row[0]) | {"duplicate": True}
-            document_id = secrets.token_hex(6)
-            self._connection.execute(
-                "INSERT INTO driver_documents(document_id, meet_key, sha256, filename, size, status, uploaded_by,"
-                " uploaded_at) VALUES (?, ?, ?, ?, ?, 'uploaded', ?, ?)",
-                (document_id, meet_key, sha, _filename(filename), length, user_id, _now()),
-            )
-        return self.document(document_id) | {"duplicate": False}
-
-    def pdf_path(self, document_id: str) -> Path | None:
-        document = self._row(document_id)
-        if document is None:
-            return None
-        path = self.folder / f"{document['sha256']}.pdf"
-        return path if path.is_file() else None
-
-    # ------------------------------------------------------- inläsningen
-
-    def index(self, document_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        """Sparar tjänsterna som lästs ur PDF:en. Ersätter en tidigare
-        inläsning helt. Ett köruppdrag som redan är tillgängligt förblir
-        det, med de nya tjänsterna."""
-
-        if self._row(document_id) is None:
-            raise DriverError(404, "document_not_found", "Köruppdraget finns inte")
-        raw_duties = payload.get("duties")
-        if not isinstance(raw_duties, list):
-            raise DriverError(400, "duties_required", "Inläsningen saknar tjänster")
-        if len(raw_duties) > MAX_DUTIES:
-            raise DriverError(400, "too_many_duties", f"Högst {MAX_DUTIES} tjänster per köruppdrag")
-        pages = _page(payload.get("pages"))
-        warnings = [str(item)[:240] for item in (payload.get("warnings") or []) if str(item).strip()][:WARNINGS_MAX]
-
-        rows: list[tuple[Any, ...]] = []
-        used: dict[str, int] = {}
-        skipped = 0
-        for raw in raw_duties:
-            duty = normalize_duty(raw)
-            if duty is None:
-                skipped += 1
-                continue
-            page_range = raw.get("pages") if isinstance(raw, dict) else None
-            page_from = _page(page_range[0]) if isinstance(page_range, list) and page_range else None
-            page_to = _page(page_range[-1]) if isinstance(page_range, list) and page_range else None
-            slug = _SLUG.sub("-", duty["number"]).strip("-").lower() or "tjanst"
-            used[slug] = used.get(slug, 0) + 1
-            duty["id"] = f"k{document_id}-{slug}" + (f"-{used[slug]}" if used[slug] > 1 else "")
-            duty["demo"] = False
-            duty["source"] = {"document_id": document_id, "pages": [page_from, page_to or page_from] if page_from else []}
-            rows.append((document_id, duty["id"], len(rows), duty["number"], page_from, page_to or page_from,
-                         json.dumps(duty, ensure_ascii=False)))
-        if skipped:
-            warnings.insert(0, f"{skipped} tjänster saknade nummer eller läsbara tider och togs inte med")
-
+        same = document["pdf_sha256"] == sha
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                self._connection.execute("DELETE FROM driver_document_duties WHERE document_id = ?", (document_id,))
-                self._connection.executemany(
-                    "INSERT INTO driver_document_duties(document_id, duty_id, position, number, page_from, page_to,"
-                    " duty_json) VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
                 self._connection.execute(
-                    "UPDATE driver_documents SET status = 'indexed', pages = ?, warnings = ?, indexed_at = ?,"
-                    " published = CASE WHEN ? = 0 THEN 0 ELSE published END WHERE document_id = ?",
-                    (pages, json.dumps(warnings[:WARNINGS_MAX], ensure_ascii=False), _now(), len(rows), document_id),
-                )
+                    "UPDATE driver_plans SET pdf_sha256 = ?, pdf_filename = ?, pdf_size = ?, pdf_uploaded_at = ?"
+                    + ("" if same else ", pdf_pages = NULL, pdf_warnings = '[]', pages_read_at = NULL")
+                    + " WHERE document_id = ?",
+                    (sha, _filename(filename, "koruppdrag.pdf"), length, _now(), document_id))
+                if not same:
+                    self._connection.execute(
+                        "UPDATE driver_plan_duties SET page_from = NULL, page_to = NULL WHERE document_id = ?",
+                        (document_id,))
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+        if document["pdf_sha256"] and not same:
+            self._forget_file(document["pdf_sha256"])
+        return self.document(document_id) | {"same_pdf": same}
+
+    def set_pages(self, document_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Var i PDF:en varje tjänst står, som webbläsaren läst ut:
+        ``{"pages": {"39": [12, 15], ...}, "total": 600, "warnings": [...]}``."""
+
+        document = self._row(document_id)
+        if document is None:
+            raise DriverError(404, "document_not_found", "Köruppdraget finns inte")
+        if not document["pdf_sha256"]:
+            raise DriverError(409, "pdf_required", "Ladda upp PDF:en först")
+        ranges = payload.get("pages")
+        if not isinstance(ranges, dict):
+            raise DriverError(400, "pages_required", "Sidorna saknas")
+        total = _page(payload.get("total"))
+        updates: list[tuple[int | None, int | None, str, str]] = []
+        with self._lock:
+            numbers = {row[0] for row in self._connection.execute(
+                "SELECT number FROM driver_plan_duties WHERE document_id = ?", (document_id,))}
+        for number in numbers:
+            value = ranges.get(number)
+            first = _page(value[0]) if isinstance(value, list) and len(value) == 2 else None
+            last = _page(value[1]) if isinstance(value, list) and len(value) == 2 else None
+            if first is None or last is None or last < first or (total and last > total):
+                first = last = None
+            updates.append((first, last, document_id, number))
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.executemany(
+                    "UPDATE driver_plan_duties SET page_from = ?, page_to = ? WHERE document_id = ? AND number = ?",
+                    updates)
+                self._connection.execute(
+                    "UPDATE driver_plans SET pdf_pages = ?, pdf_warnings = ?, pages_read_at = ? WHERE document_id = ?",
+                    (total, json.dumps(_warnings(payload.get("warnings")), ensure_ascii=False), _now(), document_id))
                 self._connection.execute("COMMIT")
             except BaseException:
                 self._connection.execute("ROLLBACK")
                 raise
         return self.document(document_id)
 
+    def pdf_path(self, document_id: str) -> Path | None:
+        document = self._row(document_id)
+        if document is None or not document["pdf_sha256"]:
+            return None
+        path = self.folder / f"{document['pdf_sha256']}.pdf"
+        return path if path.is_file() else None
+
+    def _forget_file(self, sha: str) -> None:
+        with self._lock:
+            still_used = self._connection.execute(
+                "SELECT 1 FROM driver_plans WHERE pdf_sha256 = ?", (sha,)).fetchone()
+        if not still_used:
+            (self.folder / f"{sha}.pdf").unlink(missing_ok=True)
+
+    # ----------------------------------------------------- tillgängligt
+
     def publish(self, document_id: str, published: bool) -> dict[str, Any]:
         document = self.document(document_id)
-        if published and (document["status"] != "indexed" or not document["duties"]):
-            raise DriverError(409, "document_not_indexed", "Läs in tjänsterna innan köruppdraget görs tillgängligt")
+        if published and not document["duties"]:
+            raise DriverError(409, "document_empty", "Köruppdraget har inga tjänster")
         with self._lock:
             self._connection.execute(
-                "UPDATE driver_documents SET published = ?, published_at = ? WHERE document_id = ?",
+                "UPDATE driver_plans SET published = ?, published_at = ? WHERE document_id = ?",
                 (1 if published else 0, _now() if published else None, document_id),
             )
         return self.document(document_id)
@@ -237,18 +329,16 @@ class DriverDocuments:
         if document is None:
             raise DriverError(404, "document_not_found", "Köruppdraget finns inte")
         with self._lock:
-            self._connection.execute("DELETE FROM driver_document_duties WHERE document_id = ?", (document_id,))
-            self._connection.execute("DELETE FROM driver_documents WHERE document_id = ?", (document_id,))
-            still_used = self._connection.execute(
-                "SELECT 1 FROM driver_documents WHERE sha256 = ?", (document["sha256"],)).fetchone()
-        if not still_used:
-            (self.folder / f"{document['sha256']}.pdf").unlink(missing_ok=True)
+            self._connection.execute("DELETE FROM driver_plan_duties WHERE document_id = ?", (document_id,))
+            self._connection.execute("DELETE FROM driver_plans WHERE document_id = ?", (document_id,))
+        if document["pdf_sha256"]:
+            self._forget_file(document["pdf_sha256"])
 
     # ---------------------------------------------------------- läsning
 
     def _row(self, document_id: str) -> dict[str, Any] | None:
         with self._lock:
-            cursor = self._connection.execute("SELECT * FROM driver_documents WHERE document_id = ?", (str(document_id),))
+            cursor = self._connection.execute("SELECT * FROM driver_plans WHERE document_id = ?", (str(document_id),))
             row = cursor.fetchone()
             names = [column[0] for column in cursor.description]
         return dict(zip(names, row)) if row else None
@@ -258,39 +348,59 @@ class DriverDocuments:
         if row is None:
             raise DriverError(404, "document_not_found", "Köruppdraget finns inte")
         with self._lock:
-            count, first, last = self._connection.execute(
-                "SELECT COUNT(*), MIN(number), MAX(number) FROM driver_document_duties WHERE document_id = ?",
+            count, paged = self._connection.execute(
+                "SELECT COUNT(*), COUNT(page_from) FROM driver_plan_duties WHERE document_id = ?",
                 (row["document_id"],),
             ).fetchone()
+        pdf = None
+        if row["pdf_sha256"]:
+            pdf = {
+                "filename": row["pdf_filename"], "size": row["pdf_size"], "pages": row["pdf_pages"],
+                "uploaded_at": row["pdf_uploaded_at"], "pages_read_at": row["pages_read_at"],
+                "warnings": json.loads(row["pdf_warnings"] or "[]"), "duties_with_pages": paged,
+                "has_file": (self.folder / f"{row['pdf_sha256']}.pdf").is_file(),
+            }
         return {
-            "id": row["document_id"], "meet_key": row["meet_key"], "filename": row["filename"], "size": row["size"],
-            "pages": row["pages"], "status": row["status"], "published": bool(row["published"]),
-            "warnings": json.loads(row["warnings"] or "[]"), "duties": count, "sha256": row["sha256"],
-            "uploaded_at": row["uploaded_at"], "indexed_at": row["indexed_at"], "published_at": row["published_at"],
-            "has_file": (self.folder / f"{row['sha256']}.pdf").is_file(),
+            "id": row["document_id"], "meet_key": row["meet_key"], "filename": row["filename"],
+            "name": row["plan_name"], "published": bool(row["published"]),
+            "warnings": json.loads(row["warnings"] or "[]"), "duties": count,
+            "uploaded_at": row["uploaded_at"], "published_at": row["published_at"], "pdf": pdf,
         }
 
     def documents(self) -> list[dict[str, Any]]:
         with self._lock:
             ids = [row[0] for row in self._connection.execute(
-                "SELECT document_id FROM driver_documents ORDER BY uploaded_at DESC, document_id").fetchall()]
+                "SELECT document_id FROM driver_plans ORDER BY uploaded_at DESC, document_id").fetchall()]
         return [self.document(document_id) for document_id in ids]
 
+    @staticmethod
+    def _with_source(duty_json: str, document_id: str, page_from: int | None, page_to: int | None,
+                     has_pdf: bool) -> dict[str, Any]:
+        duty = json.loads(duty_json)
+        duty["source"] = {"document_id": document_id,
+                          "pages": [page_from, page_to or page_from] if has_pdf and page_from else []}
+        return duty
+
     def duties(self, document_id: str) -> list[dict[str, Any]]:
+        document = self._row(document_id)
+        if document is None:
+            return []
         with self._lock:
             rows = self._connection.execute(
-                "SELECT duty_json FROM driver_document_duties WHERE document_id = ? ORDER BY position",
+                "SELECT duty_json, page_from, page_to FROM driver_plan_duties WHERE document_id = ? ORDER BY position",
                 (str(document_id),)).fetchall()
-        return [json.loads(row[0]) for row in rows]
+        return [self._with_source(duty_json, document_id, first, last, bool(document["pdf_sha256"]))
+                for duty_json, first, last in rows]
 
     def published_duties(self, meet_key: str) -> list[dict[str, Any]]:
         """Tjänsterna förarna får välja bland på den här träffen."""
         with self._lock:
             rows = self._connection.execute(
-                "SELECT d.duty_json FROM driver_document_duties d JOIN driver_documents k"
-                " ON k.document_id = d.document_id WHERE k.published = 1 AND k.meet_key = ?"
+                "SELECT d.duty_json, d.document_id, d.page_from, d.page_to, k.pdf_sha256 FROM driver_plan_duties d"
+                " JOIN driver_plans k ON k.document_id = d.document_id WHERE k.published = 1 AND k.meet_key = ?"
                 " ORDER BY k.uploaded_at, d.position", (meet_key,)).fetchall()
-        return [json.loads(row[0]) for row in rows]
+        return [self._with_source(duty_json, document_id, first, last, bool(sha))
+                for duty_json, document_id, first, last, sha in rows]
 
     def published_document(self, document_id: str, meet_key: str) -> bool:
         row = self._row(document_id)

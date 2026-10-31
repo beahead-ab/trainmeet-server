@@ -960,13 +960,18 @@ class TrainMeetHTTPApplication:
             "checkin_fade_seconds": int(CHECKIN_FADE.total_seconds()),
         }
 
-    def driver_admin_upload(self, client: PairedClient, stream: Any, length: int, filename: str) -> dict[str, Any]:
+    def driver_admin_create(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Ett köruppdrag ur planeringsfilens tjänster (lästa i webbläsaren)."""
         self._require_admin(client)
         meet_key, _, _ = self._driver_meet()
         if meet_key == "none":
-            raise HTTPAPIError(HTTPStatus.CONFLICT, "meet_required", "Välj träff under Träff och Cloud innan du laddar upp köruppdrag")
-        return {"document": self.driver_documents.store(stream, length, filename=filename, meet_key=meet_key,
-                                                        user_id=client.admin_user_id)}
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "meet_required", "Välj träff under Träff och Cloud innan du lägger in köruppdrag")
+        return {"document": self.driver_documents.create(payload, meet_key=meet_key, user_id=client.admin_user_id)}
+
+    def driver_admin_attach_pdf(self, client: PairedClient, document_id: str, stream: Any, length: int,
+                                filename: str) -> dict[str, Any]:
+        self._require_admin(client)
+        return {"document": self.driver_documents.attach_pdf(document_id, stream, length, filename=filename)}
 
     def driver_admin_document(self, client: PairedClient, document_id: str) -> dict[str, Any]:
         self._require_admin(client)
@@ -983,8 +988,8 @@ class TrainMeetHTTPApplication:
 
     def driver_admin_action(self, client: PairedClient, document_id: str, action: str, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
-        if action == "index":
-            return {"document": self.driver_documents.index(document_id, payload)}
+        if action == "pages":
+            return {"document": self.driver_documents.set_pages(document_id, payload)}
         if action == "publish":
             if not isinstance(payload.get("published"), bool):
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_published", "Ange om köruppdraget ska vara tillgängligt")
@@ -5755,8 +5760,8 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path.startswith("/tmbox-lab/"):
                 from .terminal16_embedded import serve
                 return serve(self, "POST")
-            if path == "/v1/driver-admin/documents":
-                self._driver_admin_upload()
+            if re.fullmatch(r"/v1/driver-admin/documents/[0-9a-f]{12}/pdf", path):
+                self._driver_admin_upload(path.split("/")[4])
                 return
             payload = self._read_json()
             if path.startswith("/v1/driver/"):
@@ -6388,7 +6393,7 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get("Sec-Fetch-Site") == "cross-site":
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "same_origin_required", "Öppna Inställningar från denna TrainMeet Server")
 
-    def _driver_admin_upload(self) -> None:
+    def _driver_admin_upload(self, document_id: str) -> None:
         """PDF:en kommer som den är (Content-Type application/pdf), inte som
         JSON: den kan vara tiotals MB och skrivs direkt till disk."""
         self._driver_admin_same_origin()
@@ -6402,21 +6407,26 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_body", "Felaktig datalängd") from error
         filename = unquote(self.headers.get("X-Filename", ""))
         try:
-            result = self.server.application.driver_admin_upload(client, self.rfile, length, filename)
+            result = self.server.application.driver_admin_attach_pdf(client, document_id, self.rfile, length, filename)
         except DriverError as error:
-            if error.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE:
+            if error.status in {HTTPStatus.REQUEST_ENTITY_TOO_LARGE, HTTPStatus.NOT_FOUND}:
                 self.close_connection = True  # resten av filen läses aldrig
             raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error)) from None
-        self._send_json(HTTPStatus.OK if result["document"].get("duplicate") else HTTPStatus.CREATED, result)
+        self._send_json(HTTPStatus.OK, result)
 
     def _driver_admin_post(self, path: str, payload: dict[str, Any]) -> None:
         self._driver_admin_same_origin()
         client = self._authenticated_client()
-        match = re.fullmatch(r"/v1/driver-admin/documents/([0-9a-f]{12})/(index|publish|remove)", path)
-        if match is None:
-            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
+        application = self.server.application
         try:
-            self._send_json(HTTPStatus.OK, self.server.application.driver_admin_action(client, match.group(1), match.group(2), payload))
+            if path == "/v1/driver-admin/documents":
+                result = application.driver_admin_create(client, payload)
+                self._send_json(HTTPStatus.OK if result["document"].get("duplicate") else HTTPStatus.CREATED, result)
+                return
+            match = re.fullmatch(r"/v1/driver-admin/documents/([0-9a-f]{12})/(pages|publish|remove)", path)
+            if match is None:
+                raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
+            self._send_json(HTTPStatus.OK, application.driver_admin_action(client, match.group(1), match.group(2), payload))
         except DriverError as error:
             raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error)) from None
 

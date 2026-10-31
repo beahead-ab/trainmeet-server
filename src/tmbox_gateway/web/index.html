@@ -1015,10 +1015,16 @@
 
               <section class="kr-panel" aria-labelledby="lf-docs-title">
                 <div class="kr-ph"><span id="lf-docs-title">Köruppdrag</span><span class="kr-c">förarna ser tjänsterna först när du gjort köruppdraget tillgängligt</span></div>
+                <ol class="lf-docs__steps">
+                  <li><b>Planeringsfilen (JSON)</b> – samma fil som går till Cloud. Den ger tjänsterna: tåg, stationer, spår och tider.</li>
+                  <li><b>Köruppdragens PDF</b> – utskriften, gärna alla 600 sidorna. Den blir förlagan som föraren kan öppna från sin tjänst.</li>
+                  <li><b>Granska</b> och gör köruppdraget tillgängligt för förarna.</li>
+                </ol>
                 <div id="lf-drop" class="kr-drop">
-                  <span class="kr-drop__title">Släpp köruppdragen (PDF) här</span>
-                  <span class="kr-m">hela häftet i en fil, gärna alla 600 sidorna · tjänsterna läses in här i webbläsaren och du granskar dem innan förarna får dem</span>
-                  <label class="kr-btn sm kr-drop__pick"><input id="lf-file" class="kr-visually-hidden" type="file" accept="application/pdf,.pdf"><span>Välj PDF</span></label>
+                  <span class="kr-drop__title">Släpp planeringsfilen och PDF:en här</span>
+                  <span class="kr-m">en i taget eller båda på en gång · allt läses här i webbläsaren och du granskar innan förarna får något</span>
+                  <label class="kr-btn sm kr-drop__pick"><input id="lf-file" class="kr-visually-hidden" type="file" accept="application/json,.json,application/pdf,.pdf"><span>Välj fil</span></label>
+                  <input id="lf-pdf-file" class="kr-visually-hidden" type="file" accept="application/pdf,.pdf" tabindex="-1" aria-hidden="true">
                 </div>
                 <div id="lf-progress" class="lf-progress" hidden>
                   <span id="lf-progress-text" class="lf-progress__text" role="status"></span>
@@ -1027,7 +1033,7 @@
                 <p id="lf-docs-message" class="form-message" role="status"></p>
                 <div class="kr-scroll-x">
                   <table class="kr-tbl lf-docs">
-                    <thead><tr><th>Köruppdrag</th><th class="r">Sidor</th><th class="r">Tjänster</th><th>Förarna</th><th></th></tr></thead>
+                    <thead><tr><th>Köruppdrag</th><th class="r">Tjänster</th><th>Förlaga (PDF)</th><th>Förarna</th><th></th></tr></thead>
                     <tbody id="lf-docs-rows"></tbody>
                   </table>
                 </div>

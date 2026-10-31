@@ -1510,9 +1510,6 @@ Share → Add to Home Screen. The app is called Lokföraren.|Dela → Lägg till
 Invite drivers|Bjud in förare|Invitér førere|Inviter førere|Lokführer einladen
 Duty sheets|Köruppdrag|Køreopgaver|Kjøreoppdrag|Dienstpläne
 drivers see the duties only once you have made the duty sheets available|förarna ser tjänsterna först när du gjort köruppdraget tillgängligt|førerne ser tjenesterne først, når du har gjort køreopgaverne tilgængelige|førerne ser tjenestene først når du har gjort kjøreoppdragene tilgjengelige|die Lokführer sehen die Dienste erst, wenn Sie die Dienstpläne freigegeben haben
-Drop the duty sheets (PDF) here|Släpp köruppdragen (PDF) här|Slip køreopgaverne (PDF) her|Slipp kjøreoppdragene (PDF) her|Dienstpläne (PDF) hier ablegen
-the whole booklet in one file, all 600 pages is fine · the duties are read here in the browser and you review them before the drivers get them|hela häftet i en fil, gärna alla 600 sidorna · tjänsterna läses in här i webbläsaren och du granskar dem innan förarna får dem|hele hæftet i én fil, gerne alle 600 sider · tjenesterne læses her i browseren, og du gennemgår dem, før førerne får dem|hele heftet i én fil, gjerne alle 600 sidene · tjenestene leses her i nettleseren, og du går gjennom dem før førerne får dem|das ganze Heft in einer Datei, gern alle 600 Seiten · die Dienste werden hier im Browser gelesen, und Sie prüfen sie, bevor die Lokführer sie bekommen
-Choose PDF|Välj PDF|Vælg PDF|Velg PDF|PDF auswählen
 Pages|Sidor|Sider|Sider|Seiten
 Duties|Tjänster|Tjenester|Tjenester|Dienste
 The drivers|Förarna|Førerne|Førerne|Die Lokführer
@@ -1526,15 +1523,11 @@ No drivers yet. Invite them under Users with the role Driver.|Inga förare än. 
 Driving a train at the meet?|Kör du tåg på träffen?|Kører du tog på træffet?|Kjører du tog på treffet?|Fahren Sie beim Treffen einen Zug?
 Open Lokföraren – run plan, meet clock and check-in|Öppna Lokföraren – körplan, träffklocka och incheckning|Åbn Lokföraren – køreplan, træfur og check-in|Åpne Lokföraren – kjøreplan, treffklokke og innsjekking|Lokföraren öffnen – Fahrplan, Modellzeituhr und Check-in
 For drivers: your run plan with the meet clock, and check-in on the layout|För förare: din körplan med träffklockan, och incheckning på banan|For førere: din køreplan med træfuret og check-in på banen|For førere: din kjøreplan med treffklokka og innsjekking på banen|Für Lokführer: Ihr Fahrplan mit der Modellzeituhr und Check-in auf der Anlage
-Not read in|Inte inläst|Ikke indlæst|Ikke innlest|Nicht eingelesen
-No duties found|Inga tjänster hittades|Ingen tjenester fundet|Ingen tjenester funnet|Keine Dienste gefunden
 Another meet|Annan träff|Andet træf|Annet treff|Anderes Treffen
 Available|Tillgängligt|Tilgængelig|Tilgjengelig|Freigegeben
 Not available yet|Inte tillgängligt än|Ikke tilgængelig endnu|Ikke tilgjengelig ennå|Noch nicht freigegeben
 The PDF file is missing on the server|PDF-filen saknas på servern|PDF-filen mangler på serveren|PDF-filen mangler på serveren|Die PDF-Datei fehlt auf dem Server
 {count} to look at|{count} att titta på|{count} at se på|{count} å se på|{count} zum Ansehen
-Read in again|Läs in igen|Indlæs igen|Les inn igjen|Erneut einlesen
-Read in|Läs in|Indlæs|Les inn|Einlesen
 Withdraw|Dra tillbaka|Træk tilbage|Trekk tilbake|Zurückziehen
 Make available to drivers|Gör tillgängligt för förarna|Gør tilgængelig for førerne|Gjør tilgjengelig for førerne|Für Lokführer freigeben
 Remove – sure?|Ta bort – säker?|Fjern – sikker?|Fjern – sikker?|Entfernen – sicher?
@@ -1544,14 +1537,9 @@ Remove – sure?|Ta bort – säker?|Fjern – sikker?|Fjern – sikker?|Entfern
 Uploading {done} of {total} MB|Laddar upp {done} av {total} MB|Uploader {done} af {total} MB|Laster opp {done} av {total} MB|Lade {done} von {total} MB hoch
 The server is not responding. Try again.|Servern svarar inte. Försök igen.|Serveren svarer ikke. Prøv igen.|Serveren svarer ikke. Prøv igjen.|Der Server antwortet nicht. Bitte erneut versuchen.
 Reading could not start. Reload the page and try again.|Inläsningen kunde inte starta. Ladda om sidan och försök igen.|Indlæsningen kunne ikke starte. Genindlæs siden og prøv igen.|Innlesingen kunne ikke starte. Last inn siden på nytt og prøv igjen.|Das Einlesen konnte nicht starten. Laden Sie die Seite neu und versuchen Sie es erneut.
-Reading the duty sheets…|Läser köruppdragen…|Læser køreopgaverne…|Leser kjøreoppdragene…|Lese die Dienstpläne…
 Reading page {page} of {pages}|Läser sidan {page} av {pages}|Læser side {page} af {pages}|Leser side {page} av {pages}|Lese Seite {page} von {pages}
 Saving {count} duties…|Sparar {count} tjänster…|Gemmer {count} tjenester…|Lagrer {count} tjenester…|Speichere {count} Dienste…
-{count} duties were read from {pages} pages. Review them and then make the duty sheets available.|{count} tjänster lästes in från {pages} sidor. Granska dem och gör sedan köruppdraget tillgängligt.|{count} tjenester blev indlæst fra {pages} sider. Gennemgå dem, og gør derefter køreopgaverne tilgængelige.|{count} tjenester ble lest inn fra {pages} sider. Gå gjennom dem, og gjør deretter kjøreoppdragene tilgjengelige.|{count} Dienste wurden aus {pages} Seiten eingelesen. Prüfen Sie sie und geben Sie die Dienstpläne dann frei.
-No duties were found in {name}. Is it the right PDF?|Inga tjänster hittades i {name}. Är det rätt PDF?|Ingen tjenester blev fundet i {name}. Er det den rigtige PDF?|Ingen tjenester ble funnet i {name}. Er det riktig PDF?|In {name} wurden keine Dienste gefunden. Ist es die richtige PDF?
-Choose a PDF.|Välj en PDF.|Vælg en PDF.|Velg en PDF.|Wählen Sie eine PDF.
 The PDF is larger than {size} MB.|PDF:en är större än {size} MB.|PDF'en er større end {size} MB.|PDF-en er større enn {size} MB.|Die PDF ist größer als {size} MB.
-{name} is already on the server for this meet.|{name} finns redan på servern för den här träffen.|{name} findes allerede på serveren for dette træf.|{name} finnes allerede på serveren for dette treffet.|{name} ist für dieses Treffen bereits auf dem Server.
 Fetching the PDF…|Hämtar PDF:en…|Henter PDF'en…|Henter PDF-en…|Lade die PDF…
 The PDF is no longer on the server. Upload it again.|PDF:en finns inte längre på servern. Ladda upp den igen.|PDF'en findes ikke længere på serveren. Upload den igen.|PDF-en finnes ikke lenger på serveren. Last den opp igjen.|Die PDF ist nicht mehr auf dem Server. Laden Sie sie erneut hoch.
 and {count} more – search for the duty number|och {count} till – sök på tjänstens nummer|og {count} mere – søg på tjenestens nummer|og {count} til – søk på tjenestens nummer|und {count} weitere – nach der Dienstnummer suchen
@@ -1560,3 +1548,33 @@ Invited|Inbjuden|Inviteret|Invitert|Eingeladen
 Practice|Övning|Øvelse|Øvelse|Übung
 track {track}|spår {track}|spor {track}|spor {track}|Gleis {track}
 That did not work. Try again.|Det gick inte. Försök igen.|Det lykkedes ikke. Prøv igen.|Det gikk ikke. Prøv igjen.|Das hat nicht geklappt. Bitte erneut versuchen.
+Planning file (JSON)|Planeringsfilen (JSON)|Planlægningsfilen (JSON)|Planleggingsfilen (JSON)|Planungsdatei (JSON)
+– the same file that goes to Cloud. It gives the duties: trains, stations, tracks and times.|– samma fil som går till Cloud. Den ger tjänsterna: tåg, stationer, spår och tider.|– den samme fil, der går til Cloud. Den giver tjenesterne: tog, stationer, spor og tider.|– den samme filen som går til Cloud. Den gir tjenestene: tog, stasjoner, spor og tider.|– dieselbe Datei, die an Cloud geht. Sie liefert die Dienste: Züge, Bahnhöfe, Gleise und Zeiten.
+Duty sheets PDF|Köruppdragens PDF|Køreopgavernes PDF|Kjøreoppdragenes PDF|PDF der Fahraufträge
+– the printout, preferably all 600 pages. It becomes the original the driver can open from their duty.|– utskriften, gärna alla 600 sidorna. Den blir förlagan som föraren kan öppna från sin tjänst.|– udskriften, gerne alle 600 sider. Den bliver forlægget, som føreren kan åbne fra sin tjeneste.|– utskriften, gjerne alle 600 sidene. Den blir forelegget som føreren kan åpne fra sin tjeneste.|– der Ausdruck, gern alle 600 Seiten. Er wird zur Vorlage, die der Triebfahrzeugführer aus seinem Dienst öffnen kann.
+and make the duty sheets available to the drivers.|och gör köruppdraget tillgängligt för förarna.|og gør køreopgaverne tilgængelige for førerne.|og gjør kjøreoppdraget tilgjengelig for førerne.|und mache die Fahraufträge für die Triebfahrzeugführer verfügbar.
+Drop the planning file and the PDF here|Släpp planeringsfilen och PDF:en här|Slip planlægningsfilen og PDF'en her|Slipp planleggingsfilen og PDF-en her|Planungsdatei und PDF hier ablegen
+one at a time or both at once · everything is read here in the browser and you review before the drivers get anything|en i taget eller båda på en gång · allt läses här i webbläsaren och du granskar innan förarna får något|én ad gangen eller begge på én gang · alt læses her i browseren, og du gennemgår, før førerne får noget|én om gangen eller begge på en gang · alt leses her i nettleseren, og du går gjennom før førerne får noe|einzeln oder beide zugleich · alles wird hier im Browser gelesen, und du prüfst, bevor die Triebfahrzeugführer etwas bekommen
+Choose file|Välj fil|Vælg fil|Velg fil|Datei wählen
+Original (PDF)|Förlaga (PDF)|Forlæg (PDF)|Forelegg (PDF)|Vorlage (PDF)
+No duties|Inga tjänster|Ingen tjenester|Ingen tjenester|Keine Dienste
+No original yet|Ingen förlaga än|Intet forlæg endnu|Ikke noe forelegg ennå|Noch keine Vorlage
+{count} pages|{count} sidor|{count} sider|{count} sider|{count} Seiten
+The pages have not been read|Sidorna är inte lästa|Siderne er ikke læst|Sidene er ikke lest|Die Seiten sind noch nicht gelesen
+pages for {found} of {count} duties|sidor för {found} av {count} tjänster|sider for {found} af {count} tjenester|sider for {found} av {count} tjenester|Seiten für {found} von {count} Diensten
+Replace PDF|Byt PDF|Skift PDF|Bytt PDF|PDF ersetzen
+Add PDF|Lägg till PDF|Tilføj PDF|Legg til PDF|PDF hinzufügen
+Read the pages again|Läs sidorna igen|Læs siderne igen|Les sidene igjen|Seiten erneut lesen
+Reading the planning file…|Läser planeringsfilen…|Læser planlægningsfilen…|Leser planleggingsfilen…|Planungsdatei wird gelesen…
+{name} is not a readable JSON file.|{name} är ingen läsbar JSON-fil.|{name} er ikke en læsbar JSON-fil.|{name} er ikke en lesbar JSON-fil.|{name} ist keine lesbare JSON-Datei.
+No duty sheets were found in {name}.|Inga köruppdrag hittades i {name}.|Der blev ikke fundet nogen køreopgaver i {name}.|Det ble ikke funnet noen kjøreoppdrag i {name}.|In {name} wurden keine Fahraufträge gefunden.
+{name} was already here. The duties are updated ({count}).|{name} fanns redan. Tjänsterna är uppdaterade ({count} st).|{name} fandtes allerede. Tjenesterne er opdateret ({count} stk.).|{name} fantes allerede. Tjenestene er oppdatert ({count} stk.).|{name} war bereits vorhanden. Die Dienste sind aktualisiert ({count}).
+{count} duties were read from {name}. Add the PDF as the original, review, then make the duty sheets available.|{count} tjänster lästes in ur {name}. Lägg till PDF:en som förlaga, granska och gör sedan köruppdraget tillgängligt.|{count} tjenester blev læst fra {name}. Tilføj PDF'en som forlæg, gennemgå og gør derefter køreopgaverne tilgængelige.|{count} tjenester ble lest inn fra {name}. Legg til PDF-en som forelegg, gå gjennom og gjør så kjøreoppdraget tilgjengelig.|{count} Dienste wurden aus {name} gelesen. Füge die PDF als Vorlage hinzu, prüfe und mache die Fahraufträge dann verfügbar.
+Reading the PDF…|Läser PDF:en…|Læser PDF'en…|Leser PDF-en…|PDF wird gelesen…
+Pages were found for {found} of {count} duties in {pages} pages.|Sidorna hittades för {found} av {count} tjänster i {pages} sidor.|Siderne blev fundet for {found} af {count} tjenester i {pages} sider.|Sidene ble funnet for {found} av {count} tjenester i {pages} sider.|Seiten für {found} von {count} Diensten in {pages} Seiten gefunden.
+No duties were found in the PDF. Are these the duty sheets for {name}?|Inga tjänster hittades i PDF:en. Är det köruppdragen till {name}?|Der blev ikke fundet nogen tjenester i PDF'en. Er det køreopgaverne til {name}?|Det ble ikke funnet noen tjenester i PDF-en. Er det kjøreoppdragene til {name}?|In der PDF wurden keine Dienste gefunden. Sind das die Fahraufträge zu {name}?
+The same PDF is already there for {name}.|Samma PDF finns redan för {name}.|Den samme PDF findes allerede for {name}.|Den samme PDF-en finnes allerede for {name}.|Dieselbe PDF ist für {name} bereits vorhanden.
+Choose the planning file (JSON) or the duty sheets PDF.|Välj planeringsfilen (JSON) eller köruppdragens PDF.|Vælg planlægningsfilen (JSON) eller køreopgavernes PDF.|Velg planleggingsfilen (JSON) eller kjøreoppdragenes PDF.|Wähle die Planungsdatei (JSON) oder die PDF der Fahraufträge.
+Start with the planning file (JSON). The PDF then becomes the original for its duties.|Börja med planeringsfilen (JSON). PDF:en blir sedan förlaga till tjänsterna i den.|Begynd med planlægningsfilen (JSON). PDF'en bliver derefter forlæg for tjenesterne i den.|Begynn med planleggingsfilen (JSON). PDF-en blir så forelegg for tjenestene i den.|Beginne mit der Planungsdatei (JSON). Die PDF wird dann zur Vorlage für ihre Dienste.
+The file is not a planning file.|Filen är ingen planeringsfil.|Filen er ikke en planlægningsfil.|Filen er ikke en planleggingsfil.|Die Datei ist keine Planungsdatei.
+The file has no duty sheets (DriverDuties). Is it the planning file?|Filen saknar köruppdrag (DriverDuties). Är det planeringsfilen?|Filen har ingen køreopgaver (DriverDuties). Er det planlægningsfilen?|Filen mangler kjøreoppdrag (DriverDuties). Er det planleggingsfilen?|Die Datei enthält keine Fahraufträge (DriverDuties). Ist es die Planungsdatei?

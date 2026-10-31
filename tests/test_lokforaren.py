@@ -335,9 +335,9 @@ class LokforarenHTTPTests(unittest.TestCase):
 
     # ── Köruppdrag i Inställningar → Lokförare ─────────────────────────
 
-    def upload(self, data: bytes, *, cookie: str | None, filename: str = "Köruppdrag Grimslöv.pdf",
+    def upload(self, document_id: str, data: bytes, *, cookie: str | None, filename: str = "Köruppdrag Grimslöv.pdf",
                kind: str = "application/pdf", headers: dict | None = None) -> tuple[int, dict]:
-        request = Request(self.base + "/v1/driver-admin/documents", data=data, method="POST",
+        request = Request(f"{self.base}/v1/driver-admin/documents/{document_id}/pdf", data=data, method="POST",
                           headers={"Content-Type": kind, "X-Filename": quote(filename),
                                    **({"Cookie": cookie} if cookie else {}), **(headers or {})})
         try:
@@ -347,34 +347,51 @@ class LokforarenHTTPTests(unittest.TestCase):
             return error.code, json.loads(error.read() or b"{}")
 
     PDF = b"%PDF-1.7\n" + b"0" * 4096 + b"\n%%EOF\n"
+    OTHER_PDF = b"%PDF-1.7\n" + b"1" * 4096 + b"\n%%EOF\n"
 
-    def duty(self, number: str, pages: list[int], **extra) -> dict:
-        return {"number": number, "pages": pages, "trains": [{"number": f"G {number}0", "from": "A", "to": "B"}],
+    def duty(self, number: str, **extra) -> dict:
+        return {"number": number, "trains": [{"number": f"G {number}0", "from": "A", "to": "B"}],
                 "events": [{"kind": "departure", "time": "18:00", "station": "A", "train": f"G {number}0"},
                            {"kind": "arrival", "time": "18:40", "station": "B", "train": f"G {number}0"}], **extra}
 
-    def test_an_administrator_uploads_reads_and_makes_duty_sheets_available(self) -> None:
+    def plan(self, cookie: str | None, duties: list[dict] | None = None, **extra) -> tuple[int, dict]:
+        body = {"filename": "Grimslöv 2027.json", "fingerprint": "a1b2c3d4e5f60718", "name": "Grimslöv 2027",
+                "duties": duties if duties is not None else [self.duty("211"), self.duty("212"), self.duty("213")],
+                "warnings": [], **extra}
+        status, payload, _ = self.request("/v1/driver-admin/documents", body, cookie=cookie)
+        return status, payload
+
+    def test_an_administrator_adds_the_plan_then_the_pdf_and_makes_the_duties_available(self) -> None:
         anna, benny = self.login("anna"), self.login("benny")
-        status, payload = self.upload(self.PDF, cookie=anna)
+        status, payload = self.plan(anna, [self.duty("211"), self.duty("211"), self.duty("212"), {"number": "", "events": []}])
         self.assertEqual(201, status, payload)
         document = payload["document"]
-        self.assertEqual(("Köruppdrag Grimslöv.pdf", "uploaded", False, 0), (document["filename"], document["status"], document["published"], document["duties"]))
-        # Samma fil igen blir samma köruppdrag.
-        again = self.upload(self.PDF, cookie=anna)
-        self.assertEqual((200, document["id"], True), (again[0], again[1]["document"]["id"], again[1]["document"]["duplicate"]))
-        # Inte inläst än: kan inte göras tillgängligt.
-        self.assertEqual(409, self.request(f"/v1/driver-admin/documents/{document['id']}/publish", {"published": True}, cookie=anna)[0])
+        self.assertEqual(("Grimslöv 2027.json", "Grimslöv 2027", False, 3, None),
+                         (document["filename"], document["name"], document["published"], document["duties"], document["pdf"]))
+        self.assertIn("1 tjänster saknade nummer", document["warnings"][0])
+        review = self.request(f"/v1/driver-admin/documents/{document['id']}", cookie=anna)[1]
+        self.assertEqual(3, len({duty["id"] for duty in review["duties"]}))
+        self.assertEqual([[], [], []], [duty["pages"] for duty in review["duties"]])
 
-        status, payload, _ = self.request(f"/v1/driver-admin/documents/{document['id']}/index", {
-            "pages": 600, "warnings": ["Sidan 212: tjänstens slut saknas"],
-            "duties": [self.duty("211", [12, 13]), self.duty("211", [14]), self.duty("212", [15]), {"number": "", "events": []}],
+        # Sidorna kan inte sparas förrän PDF:en finns.
+        self.assertEqual(409, self.request(f"/v1/driver-admin/documents/{document['id']}/pages",
+                                           {"pages": {"212": [15, 16]}, "total": 600}, cookie=anna)[0])
+        status, payload = self.upload(document["id"], self.PDF, cookie=anna)
+        self.assertEqual(200, status, payload)
+        self.assertEqual(("Köruppdrag Grimslöv.pdf", len(self.PDF), None, False),
+                         (payload["document"]["pdf"]["filename"], payload["document"]["pdf"]["size"],
+                          payload["document"]["pdf"]["pages"], payload["document"]["same_pdf"]))
+        status, payload, _ = self.request(f"/v1/driver-admin/documents/{document['id']}/pages", {
+            "total": 600, "warnings": ["Tjänst 213 hittades inte i PDF:en"],
+            "pages": {"211": [12, 14], "212": [15, 16], "213": [20, 2], "999": [1, 1]},
         }, cookie=anna)
         self.assertEqual(200, status, payload)
-        self.assertEqual(("indexed", 600, 3), (payload["document"]["status"], payload["document"]["pages"], payload["document"]["duties"]))
-        self.assertIn("1 tjänster saknade nummer", payload["document"]["warnings"][0])
+        self.assertEqual((600, 3, ["Tjänst 213 hittades inte i PDF:en"]),
+                         (payload["document"]["pdf"]["pages"], payload["document"]["pdf"]["duties_with_pages"],
+                          payload["document"]["pdf"]["warnings"]))
         review = self.request(f"/v1/driver-admin/documents/{document['id']}", cookie=anna)[1]
-        self.assertEqual([("211", [12, 13]), ("211", [14, 14]), ("212", [15, 15])], [(duty["number"], duty["pages"]) for duty in review["duties"]])
-        self.assertEqual(3, len({duty["id"] for duty in review["duties"]}))
+        self.assertEqual([("211", [12, 14]), ("211", [12, 14]), ("212", [15, 16])],
+                         [(duty["number"], duty["pages"]) for duty in review["duties"]])
 
         # Förarna ser ingenting förrän det är tillgängligt.
         self.assertEqual(["7", "132"], [duty["number"] for duty in self.request("/v1/driver/duties", cookie=benny)[1]["duties"]])
@@ -383,11 +400,30 @@ class LokforarenHTTPTests(unittest.TestCase):
         found = self.request("/v1/driver/duties?q=212", cookie=benny)[1]["duties"]
         self.assertEqual(["212"], [duty["number"] for duty in found])
         duty = self.request(f"/v1/driver/duties/{found[0]['id']}", cookie=benny)[1]["duty"]
-        self.assertEqual({"document_id": document["id"], "pages": [15, 15]}, duty["source"])
+        self.assertEqual({"document_id": document["id"], "pages": [15, 16]}, duty["source"])
         status, original, _ = self.request(f"/v1/driver/documents/{document['id']}.pdf", cookie=benny)
         self.assertEqual((200, "application/pdf", self.PDF), (status, original["type"], original["raw"]))
         active = self.request("/v1/driver/active", {"duty_id": found[0]["id"]}, cookie=benny)[1]["active"]
         self.assertEqual("212", active["duty"]["number"])
+
+        # Samma planeringsfil igen: samma köruppdrag, tjänsterna uppdateras
+        # och sidorna finns kvar för de tjänster som är kvar.
+        status, payload = self.plan(anna, [self.duty("212"), self.duty("214")])
+        self.assertEqual((200, document["id"], True, 2), (status, payload["document"]["id"], payload["document"]["duplicate"],
+                                                         payload["document"]["duties"]))
+        pages = {duty["number"]: duty["pages"] for duty in self.request(f"/v1/driver-admin/documents/{document['id']}", cookie=anna)[1]["duties"]}
+        self.assertEqual({"212": [15, 16], "214": []}, pages)
+
+        # En ny PDF ersätter den gamla; sidorna ska läsas om.
+        old_path = self.app.driver_documents.pdf_path(document["id"])
+        status, payload = self.upload(document["id"], self.OTHER_PDF, cookie=anna, filename="Ny.pdf")
+        self.assertEqual((200, "Ny.pdf", 0, None), (status, payload["document"]["pdf"]["filename"],
+                                                     payload["document"]["pdf"]["duties_with_pages"], payload["document"]["pdf"]["pages_read_at"]))
+        self.assertFalse(old_path.exists())
+        # Samma PDF igen behåller sidorna.
+        self.request(f"/v1/driver-admin/documents/{document['id']}/pages", {"total": 9, "pages": {"212": [3, 4]}}, cookie=anna)
+        status, payload = self.upload(document["id"], self.OTHER_PDF, cookie=anna, filename="Ny.pdf")
+        self.assertEqual((True, 1), (payload["document"]["same_pdf"], payload["document"]["pdf"]["duties_with_pages"]))
 
         # Tillbakadraget: borta ur listan, men den som kör behåller sin tjänst.
         self.request(f"/v1/driver-admin/documents/{document['id']}/publish", {"published": False}, cookie=anna)
@@ -406,20 +442,30 @@ class LokforarenHTTPTests(unittest.TestCase):
         self.assertFalse(path.exists())
         self.assertEqual([], self.request("/v1/driver-admin/overview", cookie=anna)[1]["documents"])
 
-    def test_only_administrators_upload_and_only_real_pdfs(self) -> None:
+    def test_only_administrators_add_duties_and_only_real_pdfs(self) -> None:
         anna, benny = self.login("anna"), self.login("benny")
-        self.assertEqual(401, self.upload(self.PDF, cookie=benny)[0])
-        self.assertEqual(401, self.upload(self.PDF, cookie=None)[0])
+        self.assertEqual(401, self.plan(benny)[0])
+        self.assertEqual(401, self.plan(None)[0])
         self.assertEqual(401, self.request("/v1/driver-admin/overview", cookie=benny)[0])
-        self.assertEqual(415, self.upload(b"<html>inte en pdf</html>", cookie=anna)[0])
-        self.assertEqual(415, self.upload(self.PDF, cookie=anna, kind="text/plain")[0])
-        self.assertEqual(403, self.upload(self.PDF, cookie=anna, headers={"Origin": "https://evil.example"})[0])
-        status, payload = self.upload(self.PDF, cookie=anna)
+        self.assertEqual(400, self.plan(anna, fingerprint="")[0])
+        self.assertEqual(400, self.plan(anna, duties=[])[0])
+        self.assertEqual(400, self.plan(anna, duties=[{"number": "1", "events": []}])[0])
+        status, payload, _ = self.request("/v1/driver-admin/documents", {"fingerprint": "a1b2c3d4e5f60718", "duties": [self.duty("1")]},
+                                          cookie=anna, headers={"Origin": "https://evil.example"})
+        self.assertEqual(403, status)
+        status, payload = self.plan(anna)
         self.assertEqual(201, status)
-        self.assertEqual(403, self.request(f"/v1/driver-admin/documents/{payload['document']['id']}/publish", {"published": True},
+        document_id = payload["document"]["id"]
+        self.assertEqual(401, self.upload(document_id, self.PDF, cookie=benny)[0])
+        self.assertEqual(401, self.upload(document_id, self.PDF, cookie=None)[0])
+        self.assertEqual(415, self.upload(document_id, b"<html>inte en pdf</html>", cookie=anna)[0])
+        self.assertEqual(415, self.upload(document_id, self.PDF, cookie=anna, kind="text/plain")[0])
+        self.assertEqual(403, self.upload(document_id, self.PDF, cookie=anna, headers={"Origin": "https://evil.example"})[0])
+        self.assertEqual(404, self.upload("000000000000", self.PDF, cookie=anna)[0])
+        self.assertEqual(403, self.request(f"/v1/driver-admin/documents/{document_id}/publish", {"published": True},
                                            cookie=anna, headers={"Origin": "https://evil.example"})[0])
         self.assertEqual(404, self.request("/v1/driver-admin/documents/000000000000", cookie=anna)[0])
-
+        self.assertEqual(401, self.request(f"/v1/driver-admin/documents/{document_id}", cookie=benny)[0])
 
 if __name__ == "__main__":
     unittest.main()

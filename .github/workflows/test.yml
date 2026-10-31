@@ -49,6 +49,7 @@ jobs:
           node tests/js/account-mail-live.test.cjs
           node tests/js/user-editing-live.test.cjs
           node tests/js/lokforaren-live.test.cjs
+          node tests/js/lokforaren-koruppdrag-live.test.cjs
           node tests/js/header-mobile.test.cjs
           node tests/js/about-view.test.cjs
           node tests/js/software-retry.test.cjs

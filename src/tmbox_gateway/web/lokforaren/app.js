@@ -366,7 +366,7 @@
     fact(t("Rutt"), route.join(" → "));
     fact(t("Bolag och fordon"), [duty.operator, duty.vehicle, duty.vmax ? "vmax " + duty.vmax : ""].filter(Boolean).join(" · "));
     $("#found-note").hidden = !duty.notes.length;
-    $("#found-note").textContent = duty.notes.join(" ");
+    $("#found-note").textContent = duty.notes.map(note).join(" ");
     // Förlagan: sidorna i köruppdragets PDF, för den som vill se originalet.
     const source = $("#found-source");
     const pages = (duty.source && duty.source.pages || []).filter(Boolean);
@@ -449,6 +449,10 @@
     return element;
   }
 
+  // Anvisningarna i köruppdraget: de fasta (Rundgång, Förberedelse …) finns
+  // i katalogen, och fri text från planen visas som den står.
+  function note(text) { return t(text); }
+
   function chip(text, parent, extra = "") {
     const element = document.createElement("span");
     element.className = "lf-chip" + extra;
@@ -509,9 +513,9 @@
       el("tl-row__sub", box, sub);
       if (row.notes.length && !isDuty) {
         const chips = el("lf-chips", box);
-        for (const note of row.notes) chip(note, chips);
+        for (const text of row.notes) chip(note(text), chips);
       } else if (row.notes.length && isDuty) {
-        box.querySelector(".tl-row__sub").textContent = [row.station, ...row.notes].join(" · ");
+        box.querySelector(".tl-row__sub").textContent = [row.station, ...row.notes.map(note)].join(" · ");
       }
       parts.rows.push({row, box, end: row.t2 ?? row.t});
       if (row.t2 !== undefined) {
@@ -636,7 +640,7 @@
       chips.replaceChildren();
       if (moment && moment.row.track) chip(t("spår {track}", {track: moment.row.track}), chips, " lf-chip--track");
       if (moment && moment.row.train && ["departure"].includes(moment.kind)) chip(moment.row.train, chips);
-      if (moment) for (const note of moment.row.notes.slice(0, 3)) chip(note, chips);
+      if (moment) for (const text of moment.row.notes.slice(0, 3)) chip(note(text), chips);
     }
     const remaining = $("#next-left");
     if (moment && now !== null) {
@@ -685,7 +689,7 @@
     value.textContent = remaining === null ? "–" : left(remaining);
     value.classList.toggle("is-soon", remaining !== null && remaining <= 10);
     const first = plan.rows[0];
-    $("#countdown-sub").textContent = t("{time} träfftid · {station}", {time: K.label(plan.start), station: first.station}) + (first.notes.length ? " · " + first.notes[0].toLowerCase() : "");
+    $("#countdown-sub").textContent = t("{time} träfftid · {station}", {time: K.label(plan.start), station: first.station}) + (first.notes.length ? " · " + note(first.notes[0]).toLowerCase() : "");
     $("#mark-start").textContent = t("Start {time}", {time: K.label(plan.start)});
     const pct = remaining === null ? 0 : Math.max(0, Math.min(1, (30 - remaining) / 30));
     $("#countdown-fill").style.width = (pct * 100) + "%";
@@ -706,7 +710,7 @@
         const isDuty = row.kind.startsWith("duty");
         what.textContent = isDuty ? KIND[row.kind]() : (row.train && row.kind === "departure" ? t("{train} avgår", {train: row.train}) : KIND[row.kind]() + " " + row.station);
         const small = document.createElement("small");
-        small.textContent = [row.station, ...row.notes].filter(Boolean).join(" · ");
+        small.textContent = [row.station, ...row.notes.map(note)].filter(Boolean).join(" · ");
         what.append(small);
         item.append(time, what);
         list.append(item);

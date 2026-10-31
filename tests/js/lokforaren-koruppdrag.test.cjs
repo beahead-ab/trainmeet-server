@@ -1,40 +1,92 @@
-// Köruppdragens PDF läses i administratörens webbläsare med pdf.js (#225).
-// Här: att texten på varje sida blir rader i rätt ordning, och att den
-// medföljande pdf.js läser en riktig PDF, också å, ä, ö, æ och ø.
+// Köruppdragen till Lokföraren läses i administratörens webbläsare (#225):
+// tjänsterna ur planeringsfilen (JSON) och sidorna ur köruppdragens PDF.
+// Här: planeringsprogrammets $id/$ref-form, förberedelse och avslutning,
+// växling på en station, midnatt, sidmatchningen och att den medföljande
+// pdf.js läser en riktig PDF, också å, ä, ö, æ och ø.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const reader = require("../../src/tmbox_gateway/web/lokforaren-koruppdrag.js");
+const { tinyPdf, tinyPlan } = require("./lokforaren-fixtures.cjs");
 
 const PDFJS = path.join(__dirname, "../../src/tmbox_gateway/web/pdfjs");
 
-// En liten PDF med standardtypsnittet Helvetica, skriven för hand så att
-// testet inte behöver någon fil i repot. Sidor: [[x, y, text], …].
-function tinyPdf(pages) {
-  const winAnsi = (text) => [...text].map((char) => {
-    const code = char.codePointAt(0);
-    if (char === "(" || char === ")" || char === "\\") return "\\" + char;
-    return code < 128 ? char : "\\" + code.toString(8);
-  }).join("");
-  const objects = [];
-  const add = (body) => { objects.push(body); return objects.length; };
-  const font = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
-  const pagesId = objects.length + 1 + pages.length * 2;
-  const kids = [];
-  for (const items of pages) {
-    const stream = items.map(([x, y, text]) => `BT /F1 11 Tf ${x} ${y} Td (${winAnsi(text)}) Tj ET`).join("\n");
-    const content = add(`<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`);
-    kids.push(add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${font} 0 R >> >> /Contents ${content} 0 R >>`));
-  }
-  add(`<< /Type /Pages /Kids [${kids.map((id) => `${id} 0 R`).join(" ")}] /Count ${kids.length} >>`);
-  const catalog = add(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`);
-  let out = "%PDF-1.4\n";
-  const offsets = objects.map((body, index) => { const at = Buffer.byteLength(out, "latin1"); out += `${index + 1} 0 obj\n${body}\nendobj\n`; return at; });
-  const xref = Buffer.byteLength(out, "latin1");
-  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n` + offsets.map((at) => `${String(at).padStart(10, "0")} 00000 n \n`).join("");
-  out += `trailer\n<< /Size ${objects.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return Buffer.from(out, "latin1");
-}
+test("tjänsterna i planeringsfilen blir Lokförarens tjänster", () => {
+  const plan = tinyPlan();
+  const result = reader.fromPlan(JSON.parse(JSON.stringify(plan)));
+  assert.equal(result.name, "Grimslöv 2027");
+  assert.deepEqual(result.duties.map((duty) => duty.number), ["211", "212", "213"]);
+  assert.deepEqual(result.warnings, ["Tjänst 214 har inga tåg med tider och togs inte med"]);
+  const [d211, d212, d213] = result.duties;
+  assert.deepEqual(
+    { operator: d211.operator, vehicle: d211.vehicle, vmax: d211.vmax, start: d211.start, end: d211.end, trains: d211.trains },
+    { operator: "CargoNet AS", vehicle: "CD312", vmax: 80, start: "17:10", end: "21:02", trains: [
+      { number: "G 5453", from: "Spiten", to: "Kjøllstad", vmax: 80 }, { number: "G 5456", from: "Kjøllstad", to: "Spiten", vmax: 80 }] });
+  assert.deepEqual(d211.events, [
+    { kind: "duty_start", time: "17:10", station: "Spiten", notes: ["Förberedelse"] },
+    { station: "Spiten", train: "G 5453", track: "5", kind: "departure", time: "17:30" },
+    { station: "Tveiten", train: "G 5453", track: "2", kind: "stop", arrival: "17:58", departure: "18:14", notes: ["Rundgång", "Skjut vagnar"] },
+    { station: "Kjøllstad", train: "G 5453", track: "1", kind: "arrival", time: "18:25" },
+    { station: "Kjøllstad", train: "G 5456", track: "1", kind: "departure", time: "19:35" },
+    { station: "Tveiten", train: "G 5456", track: "2", kind: "pass", time: "20:02" },
+    { station: "Spiten", train: "G 5456", track: "1", kind: "arrival", time: "20:42" },
+    { kind: "duty_end", time: "21:02", station: "Spiten", notes: ["Avslutning"] },
+  ]);
+  // Växling på en station: hela tiden där, och tågslagets förberedelse.
+  assert.deepEqual([d212.start, d212.end, d212.vehicle, d212.events.map((event) => event.kind)],
+    ["08:20", "11:40", "", ["duty_start", "stop", "duty_end"]]);
+  // Tjänstens egen starttid, och över midnatt.
+  assert.deepEqual([d213.start, d213.end], ["23:15", "00:45"]);
+  assert.deepEqual(d213.events.at(-2).notes, ["Ring tågklareraren"]);
+});
+
+test("en fil som inte är en planeringsfil säger det", () => {
+  assert.throws(() => reader.fromPlan([]), /ingen planeringsfil/);
+  assert.throws(() => reader.fromPlan({ Name: "Stationstidtabell" }), /DriverDuties/);
+});
+
+test("kontrollsumman känner igen samma fil", () => {
+  assert.equal(reader.fingerprint("{\"a\":1}"), reader.fingerprint("{\"a\":1}"));
+  assert.notEqual(reader.fingerprint("{\"a\":1}"), reader.fingerprint("{\"a\":2}"));
+  assert.match(reader.fingerprint("x".repeat(5000)), /^[0-9a-f]{16,}$/);
+});
+
+const duties = [
+  { number: "211", trains: [{ number: "G 5453" }, { number: "G 5456" }] },
+  { number: "212", trains: ["21"] },
+  { number: "213", trains: [{ number: "G 5481" }] },
+];
+
+test("sidorna för varje tjänst hittas på tjänstens rubrik", () => {
+  const pages = [
+    ["Köruppdrag Grimslöv 2027", "Innehåll"],
+    ["Innehåll", "Tjeneste 211 ... 3", "Tjeneste 212 ... 5", "Tjeneste 213 ... 6", "Tjenste 9 ... 7"],
+    ["Tjeneste 211", "Spiten 17:30 G 5453"],
+    ["Kjøllstad 19:35 G 5456"],
+    ["Tjänst nr. 212", "Tveiten 08:30 Växling 21"],
+    ["TJENESTE 213:", "Spiten 23:40 G 5481"],
+    ["Tjeneste 9", "en tjänst som inte finns i planen"],
+  ];
+  const result = reader.matchPages(pages, duties);
+  assert.deepEqual(result.pages, { 211: [3, 4], 212: [5, 5], 213: [6, 7] });
+  assert.equal(result.total, 7);
+  assert.deepEqual(result.warnings, []);
+});
+
+test("saknade tjänster och sidor som inte nämner tjänstens tåg varnas", () => {
+  const pages = [["Tjeneste 211", "Spiten 17:30 G 9999"], ["Tjeneste 212", "Tveiten 08:30 21"]];
+  const result = reader.matchPages(pages, duties);
+  assert.deepEqual(result.pages, { 211: [1, 1], 212: [2, 2] });
+  assert.deepEqual(result.warnings, [
+    "1 tjänster hittades inte i PDF:en: 213",
+    "Sidorna 1–1 för tjänst 211 nämner inget av dess tåg (G 5453, G 5456)",
+  ]);
+});
+
+test("utan rubriker känns tjänsten igen på sina tåg", () => {
+  const pages = [["Spiten 17:30 G 5453", "Kjøllstad 19:35 G 5456"], ["fortsättning"], ["Spiten 23:40 G 5481"]];
+  assert.deepEqual(reader.matchPages(pages, duties).pages, { 211: [1, 2], 213: [3, 3] });
+});
 
 test("text på samma höjd blir en rad, uppifrån och ned och från vänster", () => {
   const item = (str, x, y) => ({ str, transform: [11, 0, 0, 11, x, y], width: str.length * 5 });
@@ -42,16 +94,16 @@ test("text på samma höjd blir en rad, uppifrån och ned och från vänster", (
     item("17:10", 112, 700.4), item("Spiten", 12, 701), item("Tjeneste 211", 6, 760),
     item("  ", 300, 700), item("G 5453", 154, 699.2), item("Tveiten", 12, 680),
   ]);
-  assert.deepEqual(rows.map((row) => row.text), ["Tjeneste 211", "Spiten 17:10 G 5453", "Tveiten"]);
-  assert.deepEqual(rows[1].parts.map((part) => part.x), [12, 112, 154]);
+  assert.deepEqual(rows, ["Tjeneste 211", "Spiten 17:10 G 5453", "Tveiten"]);
 });
 
-test("pdf.js läser varje sida i en riktig PDF, med nordiska tecken", async () => {
+test("pdf.js läser varje sida i en riktig PDF, med nordiska tecken, och sidorna hittas", async () => {
   const pdfjs = await import(path.join(PDFJS, "pdf.min.mjs"));
   pdfjs.GlobalWorkerOptions.workerSrc = path.join(PDFJS, "pdf.worker.min.mjs");
   const pdf = tinyPdf([
     [[40, 780, "Tjeneste 211"], [40, 740, "Spiten"], [160, 740, "17:10"], [240, 740, "G 5453"], [40, 720, "Tveiten"], [240, 720, "Rundgång"]],
-    [[40, 780, "Tjeneste 212"], [40, 740, "Kjøllstad"], [160, 740, "19:00"], [240, 740, "Ålö æøå"]],
+    [[40, 740, "Kjøllstad"], [160, 740, "19:35"], [240, 740, "G 5456"]],
+    [[40, 780, "Tjeneste 212"], [40, 740, "Tveiten"], [160, 740, "08:30"], [240, 740, "Ålö æøå 21"]],
   ]);
   const progress = [];
   const warn = console.log; console.log = () => {}; // pdf.js säger att canvas saknas i Node; texten behöver inget
@@ -61,9 +113,11 @@ test("pdf.js läser varje sida i en riktig PDF, med nordiska tecken", async () =
   } finally {
     console.log = warn;
   }
-  assert.deepEqual(progress, [{ page: 1, pages: 2 }, { page: 2, pages: 2 }]);
-  assert.deepEqual(pages.map((rows) => rows.map((row) => row.text)), [
+  assert.deepEqual(progress, [{ page: 1, pages: 3 }, { page: 2, pages: 3 }, { page: 3, pages: 3 }]);
+  assert.deepEqual(pages, [
     ["Tjeneste 211", "Spiten 17:10 G 5453", "Tveiten Rundgång"],
-    ["Tjeneste 212", "Kjøllstad 19:00 Ålö æøå"],
+    ["Kjøllstad 19:35 G 5456"],
+    ["Tjeneste 212", "Tveiten 08:30 Ålö æøå 21"],
   ]);
+  assert.deepEqual(reader.matchPages(pages, duties.slice(0, 2)).pages, { 211: [1, 2], 212: [3, 3] });
 });
