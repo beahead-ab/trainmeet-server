@@ -5,7 +5,7 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
-### Lokföraren: köruppdragens anvisningar på förarens språk, sekunder av och på, ikonen följer kontot (#225)
+### Lokföraren: köruppdragens anvisningar på förarens språk, sekunder av och på, ikonen följer kontot och förarna syns på banan i Drift (#225)
 
 - **Anvisningarna i köruppdragen** syns nu i körplanen under raden de hör
   till: möten och förbikörningar med tåg och tider ("Möter NSB L 410
@@ -26,6 +26,10 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 - **Ikonen följer kontot**: samma ikon i Lokföraren, på banan och under
   Användare i serverns admin. Den som har admin kan byta sin egen ikon där,
   och ser förarnas ikoner i användarlistan.
+- **Förarna på banan i Drift**: den som checkar in i Lokföraren syns med
+  sin ikon vid stationen på banöversikten i Drift, direkt när hen checkar
+  in, och tonar ut efter tio minuter som i appen. Bara för ägare och
+  administratörer; storskärmarna och deltagarnas sidor visar inga förare.
 
 ### Lokföraren: köruppdrag i Inställningar, vägar dit och en egen app som alltid är aktuell (#225)
 

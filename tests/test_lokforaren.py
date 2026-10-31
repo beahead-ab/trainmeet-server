@@ -280,6 +280,23 @@ class LokforarenHTTPTests(unittest.TestCase):
         self.request("/v1/driver/active/end", {}, cookie=benny)
         self.assertIsNone(self.request("/v1/driver/session", cookie=benny)[1]["active"])
 
+    def test_what_moves_a_driver_on_the_map_is_announced(self) -> None:
+        """Banan i Drift hämtar förarna igen när /v1/events säger "drivers":
+        en tjänst, en incheckning, synligheten och ikonen. Bara namnet går ut."""
+
+        benny = self.login("benny")
+        for path, body in (("/v1/driver/active", {"duty_id": "demo-132"}),
+                           ("/v1/driver/checkins", {"station": "Tveiten"}),
+                           ("/v1/driver/profile", {"visible": False}),
+                           ("/v1/driver/avatar", {"image": data_url("image/png", PNG)}),
+                           ("/v1/driver/avatar/remove", {}),
+                           ("/v1/account/avatar", {"image": data_url("image/png", PNG)}),
+                           ("/v1/driver/active/end", {})):
+            with self.subTest(path=path):
+                since = self.app.changes.seq
+                self.assertEqual(200, self.request(path, body, cookie=benny)[0])
+                self.assertIn("drivers", self.app.changes.wait(since, 0)[1])
+
     def test_icons_are_served_to_drivers_only(self) -> None:
         benny, maja = self.login("benny"), self.login("maja")
         user = self.request("/v1/driver/avatar", {"image": data_url("image/png", PNG)}, cookie=benny)[1]["user"]

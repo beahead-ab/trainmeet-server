@@ -184,6 +184,34 @@
       stat(s.manned, t("bemannade"), "", ` / ${s.stations}`), stat(s.deviations, t("avvikelser"), s.deviations ? "warn" : "ok"));
   }
 
+  // ── Förarna på banan ──────────────────────────────────────────────────
+  // De som checkat in i Lokföraren står vid stationen med kontots ikon, som i
+  // appen: fulla i tio minuter, sedan tonar de ut under fem. Den som stängt av
+  // "Visa min ikon på banan" syns inte. Senaste incheckningen först.
+  function driverMarks(snapshot) {
+    const data = ctx.drivers;
+    if (!Array.isArray(data?.drivers)) return [];
+    const visible = Number(data.checkin_visible_seconds) || 600, fade = Number(data.checkin_fade_seconds) || 300;
+    const elapsed = Math.max(0, (Date.now() - (data.at || Date.now())) / 1000);
+    const ids = new Set((snapshot.stations || []).map((station) => station.id));
+    const byName = new Map((snapshot.stations || []).map((station) => [String(station.name || "").toLowerCase(), station.id]));
+    const marks = [];
+    for (const driver of data.drivers) {
+      const checkin = driver.checkin;
+      if (!checkin || driver.visible === false) continue;
+      const age = Number(checkin.age_seconds || 0) + elapsed;
+      if (age > visible + fade) continue;
+      const station = ids.has(checkin.station_id) ? checkin.station_id : byName.get(String(checkin.station || "").toLowerCase());
+      if (!station) continue;
+      const k = Math.min(1, Math.max(0, (age - visible) / fade)), eased = k * k * (3 - 2 * k);
+      const title = [driver.name, driver.duty_number ? t("Tjänst {number}", { number: driver.duty_number }) : "",
+        checkin.train || "", checkin.meet_time ? t("incheckad {time}", { time: String(checkin.meet_time).slice(0, 5) }) : ""];
+      marks.push({ station_id: station, user_id: driver.user_id, initials: driver.initials || "", avatar_url: driver.avatar_url || null,
+        title: title.filter(Boolean).join(" · "), opacity: 1 - eased * 0.85, gray: eased, age });
+    }
+    return marks.sort((a, b) => a.age - b.age);
+  }
+
   // ── Banöversikten ─────────────────────────────────────────────────────
   function renderMap() {
     const target = $("#overview-topology"), snapshot = ctx.snapshot;
@@ -195,6 +223,7 @@
       kr: { width },
       selectedTrainNumber: ctx.selection.train, selectedStationID: ctx.selection.station, showBadge: false,
       stationClass: (station) => (automated.has(station.id) ? "auto" : ""),
+      drivers: driverMarks(snapshot),
       onTrainSelect: (number) => hooks.selectTrain?.(number),
       onStationSelect: (id) => hooks.selectStation?.(id),
       onClear: () => hooks.clear?.(),

@@ -1,7 +1,7 @@
 /* What changed on the server, as it happens (GET /v1/events).
  *
- * The server says only *that* traffic, the clock, the boxes, the meet or the
- * automatic stations changed. Each page then fetches just that again at once, from
+ * The server says only *that* traffic, the clock, the boxes, the meet, the
+ * automatic stations or the drivers changed. Each page then fetches just that again at once, from
  * the endpoints it always used; its own timer stays as a slow fallback, and
  * returns to its usual pace whenever the stream is down.
  *
@@ -13,7 +13,7 @@
 (() => {
   const COALESCE_MS = 250;
   const RETRY_MS = 30000;
-  const ALL = ["traffic", "clock", "devices", "runtime", "automatic"];
+  const ALL = ["traffic", "clock", "devices", "runtime", "automatic", "drivers"];
   const subscribers = new Set();
   const statusListeners = new Set();
   let source = null, retryTimer = null, flushTimer = null;

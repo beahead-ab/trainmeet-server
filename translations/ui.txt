@@ -1530,6 +1530,8 @@ Duty|Tjänst|Tjeneste|Tjeneste|Dienst
 Search duty|Sök tjänst|Søg tjeneste|Søk tjeneste|Dienst suchen
 Route|Rutt|Rute|Rute|Strecke
 Last checked in|Senast incheckad|Senest checket ind|Sist sjekket inn|Zuletzt eingecheckt
+Duty {number}|Tjänst {number}|Tjeneste {number}|Tjeneste {number}|Dienst {number}
+checked in {time}|incheckad {time}|checket ind {time}|sjekket inn {time}|eingecheckt {time}
 drivers who have been invited, and who is driving now|förare som bjudits in, och vilka som kör nu|førere, der er inviteret, og hvem der kører nu|førere som er invitert, og hvem som kjører nå|eingeladene Lokführer und wer gerade fährt
 No drivers yet. Invite them under Users with the role Driver.|Inga förare än. Bjud in dem under Användare med rollen Förare.|Ingen førere endnu. Invitér dem under Brugere med rollen Fører.|Ingen førere ennå. Inviter dem under Brukere med rollen Fører.|Noch keine Lokführer. Laden Sie sie unter Benutzer mit der Rolle Lokführer ein.
 Driving a train at the meet?|Kör du tåg på träffen?|Kører du tog på træffet?|Kjører du tog på treffet?|Fahren Sie beim Treffen einen Zug?

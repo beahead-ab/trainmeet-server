@@ -970,17 +970,20 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "duty_not_found", "Tjänsten finns inte i träffens köruppdrag")
         return duty
 
+    @announces("drivers")  # förarna på banan i Drift
     def driver_activate(self, user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         duty = self.driver_duty(str(payload.get("duty_id") or ""))
         meet_key, _, _ = self._driver_meet()
         active = self.drivers.activate(str(user["user_id"]), meet_key, duty)
         return {"active": active}
 
+    @announces("drivers")
     def driver_end(self, user: dict[str, Any]) -> dict[str, Any]:
         meet_key, _, _ = self._driver_meet()
         self.drivers.end(str(user["user_id"]), meet_key)
         return {"active": None}
 
+    @announces("drivers")
     def driver_check_in(self, user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         meet_key, _, _ = self._driver_meet()
         active = self.drivers.active(str(user["user_id"]), meet_key)
@@ -1128,6 +1131,7 @@ class TrainMeetHTTPApplication:
             return {"removed": document_id}
         raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
 
+    @announces("drivers")
     def driver_profile(self, user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         if "visible" in payload:
             if not isinstance(payload["visible"], bool):
@@ -1135,10 +1139,12 @@ class TrainMeetHTTPApplication:
             self.drivers.set_visible(str(user["user_id"]), payload["visible"])
             return {"user": self._driver_person(user)}
 
+    @announces("drivers")
     def driver_set_avatar(self, user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         self.drivers.set_avatar(str(user["user_id"]), payload.get("image"))
         return {"user": self._driver_person(user)}
 
+    @announces("drivers")
     def driver_remove_avatar(self, user: dict[str, Any]) -> dict[str, Any]:
         self.drivers.remove_avatar(str(user["user_id"]))
         return {"user": self._driver_person(user)}
@@ -1190,6 +1196,7 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "avatar_not_found", "Ikonen finns inte")
         return avatar
 
+    @announces("drivers")
     def account_icon(self, client: PairedClient, payload: dict[str, Any] | None) -> dict[str, Any]:
         """Byt (payload med image) eller ta bort (None) sin egen ikon."""
         if not client.admin_user_id:

@@ -540,7 +540,7 @@ function setMode(mode) {
     startTMBoxV2();
   } else if (next === "installningar") showSettings();
   else if (next === "kor" && state.serverContext?.operating_region === "eu") renderOverview(state.overviewSnapshot);
-  if (next === "kor") refreshAutomatic();
+  if (next === "kor") { refreshAutomatic(); refreshDriverMap(); }
   serverUI.mode(next);
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -567,6 +567,25 @@ async function refreshAutomatic() {
     globalThis.TrainMeetDrift?.update({ automatic: data });
     if (mode === "installningar") renderAutomatic(data);
   } catch (error) { if (mode === "installningar") setMessage(document.querySelector("#automatic-message"), error.message, "error"); }
+}
+
+// Förarna på banan i Drift: de som checkat in i Lokföraren, med kontots ikon.
+// Bara ägare och administratörer får dem. Hämtas när en förare checkar in
+// (/v1/events, "drivers") och annars var trettionde sekund, så att en gammal
+// incheckning hinner tona ut.
+let driverMapTimer = null;
+async function refreshDriverMap() {
+  clearTimeout(driverMapTimer);
+  if (document.body.dataset.mode !== "kor" || !["owner", "admin"].includes(state.authStatus?.role)) return;
+  try {
+    if (!document.hidden) {
+      const response = await authorizedFetch("/v1/driver-admin/overview", {cache: "no-store"});
+      if (!response.ok) return; // ingen behörighet: banan ritas utan förare
+      const data = await response.json();
+      globalThis.TrainMeetDrift?.update({ drivers: {...data, at: Date.now()} });
+    }
+  } catch { /* banan ritas utan förare */ }
+  driverMapTimer = setTimeout(refreshDriverMap, 30000);
 }
 
 async function sendAutomatic(payload) {
@@ -2565,6 +2584,7 @@ const refreshDevicesSerially = serially(() => refreshDevices());
 const refreshRuntimeSerially = serially(() => refreshRuntime());
 const refreshServerContextSerially = serially(() => refreshServerContext());
 const refreshAutomaticSerially = serially(() => refreshAutomatic());
+const refreshDriverMapSerially = serially(() => refreshDriverMap());
 
 // What changed on the server (/v1/events) is fetched again at once. The timer
 // is then only a fallback; while the stream is down it keeps five seconds.
@@ -2583,6 +2603,7 @@ function bindAdminLive() {
     if (any("devices")) refreshDevicesSerially();
     if (any("traffic", "clock", "runtime", "automatic")) refreshLocalClockSerially();
     if (any("automatic", "runtime", "devices", "traffic")) refreshAutomaticSerially();
+    if (any("drivers")) refreshDriverMapSerially();
   });
   live.onStatus(() => {
     if (state.authStatus?.authenticated) scheduleAdminRefresh();
@@ -4244,7 +4265,7 @@ function placeTopologyLabels(items, segments, viewBox, options = {}) {
       if (labels > 0) cost += 1000 + labels;
       if (node > 0) cost += 1000 + node;
     }
-    for (const other of items) if (other.badge && overlap(spot.box, other.badge) > 0) cost += 1000;
+    for (const other of items) for (const box of [other.badge, ...(other.avoid || [])]) if (box && overlap(spot.box, box) > 0) cost += 1000;
     for (const segment of segments) if (crosses(spot.box, segment)) cost += 300;
     if (!options.refit && Number.isFinite(viewWidth)
       && (spot.box.x1 < viewX || spot.box.x2 > viewX + viewWidth || spot.box.y1 < viewY || spot.box.y2 > viewY + viewHeight)) cost += 600;
@@ -4274,6 +4295,38 @@ function placeTopologyLabels(items, segments, viewBox, options = {}) {
       element.classList.toggle("label-end", spot.anchor === "end");
     }
   }
+}
+
+// En förare på banan: ikonen i en cirkel, annars initialerna; "+N" för fler.
+// Bilden klipps med en cirkel som läggs en gång per karta.
+let topologyClipCount = 0;
+function topologyDriverMark(svg, mark, cy, r) {
+  const group = svgElement("g", { class: `topology-driver${mark.more ? " more" : ""}` });
+  group.append(svgElement("circle", { cx: mark.cx, cy, r: r + 1.5, class: "topology-driver-ring" }),
+    svgElement("circle", { cx: mark.cx, cy, r, class: "topology-driver-face" }));
+  const driver = mark.driver;
+  if (driver?.avatar_url) {
+    let clip = svg.querySelector("clipPath.topology-driver-clip");
+    if (!clip) {
+      clip = svgElement("clipPath", { id: `topology-driver-clip-${++topologyClipCount}`, class: "topology-driver-clip", clipPathUnits: "objectBoundingBox" });
+      clip.append(svgElement("circle", { cx: 0.5, cy: 0.5, r: 0.5 }));
+      const defs = svgElement("defs");
+      defs.append(clip);
+      svg.prepend(defs);
+    }
+    group.append(svgElement("image", { href: driver.avatar_url, x: mark.cx - r, y: cy - r, width: r * 2, height: r * 2,
+      preserveAspectRatio: "xMidYMid slice", "clip-path": `url(#${clip.id})` }));
+  } else {
+    group.append(svgElement("text", { x: mark.cx, y: cy + r * 0.34, class: "topology-driver-initials" }, mark.more ? `+${mark.more}` : driver?.initials || ""));
+  }
+  if (driver) {
+    group.append(svgElement("title", {}, driver.title || driver.initials || ""));
+    group.setAttribute("opacity", String(Math.round((driver.opacity ?? 1) * 1000) / 1000));
+    group.dataset.user = driver.user_id || "";
+    // Gråskalan sätts med CSSOM: serverns CSP tillåter inga stilattribut.
+    if (driver.gray > 0) group.style.filter = `grayscale(${Math.round(driver.gray * 1000) / 1000})`;
+  }
+  return group;
 }
 
 function renderTopology(snapshot, target = document.querySelector("#topology-svg"), options = {}) {
@@ -4435,11 +4488,27 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
       group.append(count);
       badge = { x1: cx - width / 2 - 1, y1: cy - r - 1, x2: cx + width / 2 + 1, y2: cy + r + 1 };
     }
+    // Förarna som checkat in här (options.drivers, från Lokföraren): kontots
+    // ikon på stationens övre vänstra hörn, mitt emot antalsbrickan, sida vid
+    // sida. Den senaste närmast stationen; fler än tre blir två och "+N".
+    const avoid = [];
+    const here = kr ? (options.drivers || []).filter((driver) => driver.station_id === station.id) : [];
+    if (here.length) {
+      const r = screen ? 16 : 14, step = r * 2 + 3; // sida vid sida, så att alla går att känna igen
+      const shown = here.length > 3 ? here.slice(0, 2) : here;
+      const cy = point.y - halfH - r + 2, first = point.x - halfW - r + 5;
+      const marks = shown.map((driver, index) => ({ driver, cx: first - index * step }));
+      if (here.length > shown.length) marks.push({ more: here.length - shown.length, cx: first - shown.length * step });
+      const stack = svgElement("g", { class: "topology-drivers" });
+      for (const mark of [...marks].reverse()) stack.append(topologyDriverMark(target, mark, cy, r));
+      group.append(stack);
+      avoid.push({ x1: marks[marks.length - 1].cx - r - 2, y1: cy - r - 2, x2: first + r + 2, y2: cy + r + 2 });
+    }
     // Bara namnet: koden står i stationens etikett för skärmläsare, och på kartan blev namn och kod plottrigt.
     const nameGap = kr ? (screen ? 21 : 17) : autonomous ? 11 : 13;
     const name = svgElement("text", { x: point.x, y: point.y + halfH + nameGap, class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name);
     group.append(name);
-    labels.push({ point, radius, rx: halfW, ry: halfH, name, code: null, badge });
+    labels.push({ point, radius, rx: halfW, ry: halfH, name, code: null, badge, avoid });
     bricks.set(station.id, { x: halfW, y: halfH });
     const activate = (event) => {
       event.stopPropagation();
@@ -4484,7 +4553,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   const names = labels.flatMap((label) => [label.name, label.code].filter(Boolean)).flatMap((text) => {
     // A map not on screen has no measured text (and some browsers throw).
     try { const box = text.getBBox(); return [{ x1: box.x, y1: box.y, x2: box.x + box.width, y2: box.y + box.height }]; } catch { return []; }
-  }).concat(labels.map((label) => label.badge).filter(Boolean)); // antalsbrickorna är också i vägen
+  }).concat(labels.flatMap((label) => [label.badge, ...(label.avoid || [])]).filter(Boolean)); // antalsbrickorna och förarna är också i vägen
   const overlaps = (box, list, margin = 0) => list.some((o) => box.x1 < o.x2 + margin && o.x1 - margin < box.x2 && box.y1 < o.y2 + margin && o.y1 - margin < box.y2);
   for (const train of trains.onLine) {
     const from = positions.get(train.from), to = positions.get(train.to);

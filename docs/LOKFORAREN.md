@@ -213,6 +213,17 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
   syns då i Lokföraren. Ägare och administratörer ser alla ikoner; andra ser
   bara sin egen via kontot. Utan ikon visas initialerna.
 - Ett borttaget konto lämnar ingen ikon, tjänst eller incheckning efter sig.
+- **Banan i Drift**: ägare och administratörer ser förarna som checkat in
+  på banöversikten i Drift (Kör), med kontots ikon (eller initialerna) vid
+  stationens övre vänstra hörn, sida vid sida, den senaste närmast
+  stationen. Fler än tre blir två och "+N". De tonar ut som i appen: fulla
+  i tio minuter, borta efter femton. Håll pekaren över ikonen för namn,
+  tjänst, tåg och incheckningens träfftid. Den som stängt av **Visa min
+  ikon på banan** syns inte där heller. Kartan hämtar förarna
+  (`/v1/driver-admin/overview`) när servern säger `drivers` på
+  `/v1/events` (tjänst, incheckning, synlighet, ikon) och annars var
+  trettionde sekund. Storskärmarna och deltagarnas sidor är öppna utan
+  inloggning och visar inga förare.
 
 ## API
 
