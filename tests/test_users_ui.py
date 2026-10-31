@@ -65,7 +65,9 @@ class UsersViewTests(unittest.TestCase):
 
         view = SCRIPT[SCRIPT.index("function renderUsers()"): SCRIPT.index("function usersButton(")]
         self.assertIn('const owner = users.role === "owner"', view)
-        self.assertRegex(view, r'invite-open.*classList\.toggle\("hidden", !owner\)')
+        # Ägare och administratörer bjuder in, men en administratör bara förare (Lokföraren).
+        self.assertRegex(view, r'invite-open.*classList\.toggle\("hidden", !\["owner", "admin"\]\.includes\(users\.role\)\)')
+        self.assertIn('option.disabled = !owner && option.value !== "user"', view)
         self.assertIn("if (canEditUser(user)) {", view)
 
     def test_an_account_without_an_address_is_marked(self) -> None:

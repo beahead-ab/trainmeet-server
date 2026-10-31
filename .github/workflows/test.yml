@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: 22
       - name: Test localization, Cloud-only shell and US browser behavior
-        run: node --test tests/js/clock-sync.test.cjs tests/js/i18n.test.cjs tests/js/i18n-coverage.test.cjs tests/js/shell-i18n.test.cjs tests/js/us-ui.test.cjs tests/js/tmbox-catalog.test.cjs tests/js/tmbox-cloud-config.test.cjs tests/js/terminal16-buffer.test.cjs tests/js/terminal16-guard.test.cjs tests/js/live-events.test.cjs tests/js/display-feed.test.cjs tests/js/train-live.test.cjs tests/js/drift-model.test.cjs tests/js/dot-label.test.cjs tests/js/terminal16-timetable.test.cjs tests/js/day-change.test.cjs tests/js/clock-face.test.cjs tests/js/markdown.test.cjs tests/js/train-graph.test.cjs
+        run: node --test tests/js/clock-sync.test.cjs tests/js/i18n.test.cjs tests/js/i18n-coverage.test.cjs tests/js/shell-i18n.test.cjs tests/js/us-ui.test.cjs tests/js/tmbox-catalog.test.cjs tests/js/tmbox-cloud-config.test.cjs tests/js/terminal16-buffer.test.cjs tests/js/terminal16-guard.test.cjs tests/js/live-events.test.cjs tests/js/display-feed.test.cjs tests/js/train-live.test.cjs tests/js/drift-model.test.cjs tests/js/dot-label.test.cjs tests/js/terminal16-timetable.test.cjs tests/js/day-change.test.cjs tests/js/clock-face.test.cjs tests/js/markdown.test.cjs tests/js/train-graph.test.cjs tests/js/lokforaren-korplan.test.cjs
       - name: Install isolated browser test runtime
         run: npm install --no-save --package-lock=false playwright@1.55.0 && npx playwright install --with-deps chromium
       - name: Verify desktop/mobile dialogs and public client assignment
@@ -48,6 +48,7 @@ jobs:
           node tests/js/guest-share.test.cjs
           node tests/js/account-mail-live.test.cjs
           node tests/js/user-editing-live.test.cjs
+          node tests/js/lokforaren-live.test.cjs
           node tests/js/header-mobile.test.cjs
           node tests/js/about-view.test.cjs
           node tests/js/software-retry.test.cjs

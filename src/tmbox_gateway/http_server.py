@@ -42,7 +42,18 @@ from .central_sync import (
     fetch_runtime_download,
 )
 from .cloud_mail import send_server_mail
+from .driver import (
+    CHECKIN_FADE,
+    CHECKIN_VISIBLE,
+    DEMO_DUTY,
+    DriverError,
+    DriverStore,
+    duty_summary,
+    initials,
+    normalize_duty,
+)
 from .identity import (
+    ADMIN_ROLES,
     AdminAccessError,
     AdminUserConflictError,
     AdminUserPermissionError,
@@ -452,6 +463,9 @@ class TrainMeetHTTPApplication:
         self._reset_lock = threading.Lock()
         self.web_root = files("tmbox_gateway").joinpath("web")
         self.us_web_root = files("tmbox_gateway").joinpath("us_web")
+        # Lokföraren: förarnas tjänster, incheckningar och ikoner, i samma
+        # databas som kontona (och därmed i säkerhetskopiorna).
+        self.drivers = DriverStore(identities.path)
 
         if self.runtime_store is not None and self.runtime_store.central_url():
             saved_url = self.runtime_store.central_url() or ""
@@ -761,6 +775,165 @@ class TrainMeetHTTPApplication:
             admin_role=str(user["role"]) if user else "owner",
         )
 
+    # ------------------------------------------------------- Lokföraren
+
+    def _driver_meet(self) -> tuple[str, dict[str, Any] | None, Any]:
+        """Träffen förarna kör på: nyckel, namn och paket.
+
+        Incheckningar och aktiva tjänster hör till träffen. Byter servern
+        träff följer de inte med, och kommer tillbaka om träffen väljs igen.
+        """
+        publication = self.runtime_store.active() if self.runtime_store is not None else None
+        if publication is None:
+            return "none", None, None
+        return str(publication.meet_id), {"id": publication.meet_id, "name": publication.meet_name}, publication
+
+    def driver_catalog(self) -> list[dict[str, Any]]:
+        """Förartjänsterna i träffens paket från Cloud, och övningstjänsten."""
+        _, _, publication = self._driver_meet()
+        duties: list[dict[str, Any]] = []
+        for raw in (publication.payload.get("driver_duties") or []) if publication is not None else []:
+            duty = normalize_duty(raw)
+            if duty is not None:
+                duty["demo"] = False
+                duties.append(duty)
+        demo = normalize_duty(DEMO_DUTY)
+        if demo is not None:
+            duties.append(demo)
+        return duties
+
+    def _driver_stations(self, publication: Any) -> list[dict[str, str]]:
+        if publication is None:
+            return []
+        stations = {str(station.get("id")): station for station in publication.payload.get("stations", [])}
+        order = (publication.payload.get("display") or {}).get("graph_station_order") or list(stations)
+        ordered = [stations[key] for key in order if key in stations]
+        ordered += [station for key, station in stations.items() if key not in set(order)]
+        return [{"id": str(station.get("id")), "name": str(station.get("name") or "")} for station in ordered
+                if not station.get("is_autonomous")]
+
+    def driver_clock(self) -> dict[str, Any]:
+        """Träffklockan som förarens telefon följer. Servern är enda källan."""
+        clock = self.clock_status(self.local_admin())
+        return {key: clock.get(key) for key in
+                ("configured", "time", "speed", "running", "source", "external_name", "stopped_reason", "show_seconds")}
+
+    def _driver_person(self, user: dict[str, Any], profile: dict[str, Any] | None = None) -> dict[str, Any]:
+        profile = profile or self.drivers.profile(str(user["user_id"]))
+        name = str(user.get("display_name") or user.get("email") or "")
+        return {
+            "user_id": user["user_id"], "name": name, "initials": initials(name), "role": user.get("role"),
+            "visible": profile["visible"],
+            "avatar_url": (f"/v1/driver/avatars/{user['user_id']}?v={profile['avatar_version']}"
+                           if profile["has_avatar"] else None),
+        }
+
+    def driver_session(self, user: dict[str, Any]) -> dict[str, Any]:
+        meet_key, meet, publication = self._driver_meet()
+        return {
+            "user": self._driver_person(user),
+            "meet": meet,
+            "active": self.drivers.active(str(user["user_id"]), meet_key),
+            "clock": self.driver_clock(),
+            "stations": self._driver_stations(publication),
+            "checkin_visible_seconds": int(CHECKIN_VISIBLE.total_seconds()),
+            "checkin_fade_seconds": int(CHECKIN_FADE.total_seconds()),
+            "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+
+    def driver_duties(self, query: str) -> dict[str, Any]:
+        query = " ".join(query.split()).lower()
+        duties = self.driver_catalog()
+        if query:
+            exact = [duty for duty in duties if duty["number"].lower() == query]
+            starts = [duty for duty in duties if duty not in exact and duty["number"].lower().startswith(query)]
+            duties = exact + starts
+        return {"duties": [duty_summary(duty) for duty in duties[:30]]}
+
+    def driver_duty(self, duty_id: str) -> dict[str, Any]:
+        duty = next((duty for duty in self.driver_catalog() if duty["id"] == duty_id), None)
+        if duty is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "duty_not_found", "Tjänsten finns inte i träffens köruppdrag")
+        return duty
+
+    def driver_activate(self, user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+        duty = self.driver_duty(str(payload.get("duty_id") or ""))
+        meet_key, _, _ = self._driver_meet()
+        active = self.drivers.activate(str(user["user_id"]), meet_key, duty)
+        return {"active": active}
+
+    def driver_end(self, user: dict[str, Any]) -> dict[str, Any]:
+        meet_key, _, _ = self._driver_meet()
+        self.drivers.end(str(user["user_id"]), meet_key)
+        return {"active": None}
+
+    def driver_check_in(self, user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+        meet_key, _, _ = self._driver_meet()
+        active = self.drivers.active(str(user["user_id"]), meet_key)
+        clock = self.driver_clock()
+        checkin = self.drivers.check_in(str(user["user_id"]), meet_key, payload,
+                                        duty=active["duty"] if active else None,
+                                        meet_time=str(clock.get("time") or "") or None)
+        return {"checkin": checkin}
+
+    def driver_presence(self, user: dict[str, Any]) -> dict[str, Any]:
+        """Förarna på träffen: aktiv tjänst och senaste incheckning.
+
+        Den som stängt av synligheten syns inte för andra, men alltid för
+        sig själv. En incheckning äldre än femton minuter är borta.
+        """
+        meet_key, _, _ = self._driver_meet()
+        latest = self.drivers.latest_checkins(meet_key)
+        active = self.drivers.active_drivers(meet_key)
+        accounts = {str(account["user_id"]): account for account in self.identities.list_admin_users()}
+        drivers = []
+        for user_id in sorted(set(latest) | set(active)):
+            account = accounts.get(user_id)
+            if account is None:
+                continue
+            profile = self.drivers.profile(user_id)
+            me = user_id == str(user["user_id"])
+            if not profile["visible"] and not me:
+                continue
+            duty = active.get(user_id)
+            drivers.append({
+                **self._driver_person(account, profile), "me": me,
+                "duty_number": duty["number"] if duty else None,
+                "duty_demo": bool(duty and duty.get("demo")),
+                "trains": [train["number"] for train in duty.get("trains", [])] if duty else [],
+                "checkin": latest.get(user_id),
+            })
+        drivers.sort(key=lambda item: (not item["me"], item["checkin"] is None,
+                                       (item["checkin"] or {}).get("age_seconds", 0), item["name"].lower()))
+        return {
+            "drivers": drivers,
+            "checkin_visible_seconds": int(CHECKIN_VISIBLE.total_seconds()),
+            "checkin_fade_seconds": int(CHECKIN_FADE.total_seconds()),
+            "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+
+    def driver_profile(self, user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+        if "visible" in payload:
+            if not isinstance(payload["visible"], bool):
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_visibility", "Synligheten måste vara på eller av")
+            self.drivers.set_visible(str(user["user_id"]), payload["visible"])
+            return {"user": self._driver_person(user)}
+
+    def driver_set_avatar(self, user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+        self.drivers.set_avatar(str(user["user_id"]), payload.get("image"))
+        return {"user": self._driver_person(user)}
+
+    def driver_remove_avatar(self, user: dict[str, Any]) -> dict[str, Any]:
+        self.drivers.remove_avatar(str(user["user_id"]))
+        return {"user": self._driver_person(user)}
+
+    def driver_avatar(self, user: dict[str, Any], user_id: str) -> tuple[bytes, str]:
+        profile = self.drivers.profile(user_id)
+        avatar = self.drivers.avatar(user_id)
+        if avatar is None or (not profile["visible"] and user_id != str(user["user_id"])):
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "avatar_not_found", "Ikonen finns inte")
+        return avatar
+
     # ------------------------------------------------------- användare
 
     def _require_owner(self, client: PairedClient) -> None:
@@ -784,13 +957,25 @@ class TrainMeetHTTPApplication:
         return {"users": self.identities.list_admin_users(), "role": client.admin_role,
                 "user_id": client.admin_user_id}
 
+    def _require_owner_unless_driver(self, client: PairedClient, role: object) -> None:
+        """Förare (user) får en administratör också bjuda in och ta bort.
+
+        Arrangören som sköter träffen ska kunna ta in förarna utan att ägaren
+        finns på plats. Alla andra konton är fortfarande ägarens.
+        """
+
+        self._require_admin(client)
+        if role != "user" or client.admin_role not in ADMIN_ROLES:
+            self._require_owner(client)
+
     def create_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        self._require_owner(client)
+        role = str(payload.get("role") or "admin")
+        self._require_owner_unless_driver(client, role)
         try:
             user = self.identities.invite_admin_user(
                 str(payload.get("display_name") or ""),
                 str(payload.get("email") or ""),
-                str(payload.get("role") or "admin"),
+                role,
             )
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
@@ -798,7 +983,8 @@ class TrainMeetHTTPApplication:
         return {"user": user, "mail": self._mail_account_code("invite", user, payload)}
 
     def reissue_admin_setup(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        self._require_owner(client)
+        self._require_owner_unless_driver(
+            client, (self.identities.admin_user(str(payload.get("user_id") or "")) or {}).get("role"))
         try:
             user = self.identities.reissue_admin_setup(str(payload.get("user_id") or ""))
         except AdminAccessError as error:
@@ -924,8 +1110,8 @@ class TrainMeetHTTPApplication:
         )
 
     def delete_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        self._require_owner(client)
         user_id = str(payload.get("user_id") or "")
+        self._require_owner_unless_driver(client, (self.identities.admin_user(user_id) or {}).get("role"))
         # Att ta bort sig själv är inte en behörighetsfråga utan ett misstag.
         # Den som vill sluta ber någon annan ägare ta bort kontot.
         if client.admin_user_id and client.admin_user_id == user_id:
@@ -939,6 +1125,7 @@ class TrainMeetHTTPApplication:
             self.identities.delete_admin_user(user_id)
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.CONFLICT, "invalid_admin_user", str(error)) from error
+        self.drivers.forget_user(user_id)
         self._record_user_change(client, "user.removed", str(target))
         return {"users": self.identities.list_admin_users()}
 
@@ -4956,7 +5143,22 @@ class TrainMeetHTTPApplication:
                 "Administratörsbehörighet krävs",
             )
 
+    #: Lokföraren, en egen liten webbapp under /lokforaren/ (#225).
+    DRIVER_ASSETS = {
+        "/lokforaren/": ("index.html", "text/html; charset=utf-8"),
+        "/lokforaren/index.html": ("index.html", "text/html; charset=utf-8"),
+        "/lokforaren/app.js": ("app.js", "text/javascript; charset=utf-8"),
+        "/lokforaren/korplan.js": ("korplan.js", "text/javascript; charset=utf-8"),
+        "/lokforaren/messages.js": ("messages.js", "text/javascript; charset=utf-8"),
+        "/lokforaren/style.css": ("style.css", "text/css; charset=utf-8"),
+        "/lokforaren/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
+        "/lokforaren/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
+    }
+
     def static_asset(self, path: str) -> tuple[bytes, str] | None:
+        driver_asset = self.DRIVER_ASSETS.get(path)
+        if driver_asset:
+            return self.web_root.joinpath("lokforaren", driver_asset[0]).read_bytes(), driver_asset[1]
         if path in {"/drift", "/installningar", "/tidtabell", "/hjalp", "/login", "/setup", "/display/territories"}:
             path = "/index.html"
         if path.startswith("/assets/fonts/"):
@@ -5078,6 +5280,16 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path.startswith("/v1/driver/"):
+                self._driver_get(path, parsed.query)
+                return
+            if path == "/lokforaren":
+                # Appen och dess service worker hör till /lokforaren/.
+                self.send_response(HTTPStatus.PERMANENT_REDIRECT)
+                self.send_header("Location", "/lokforaren/")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             if path == "/v1/host/wifi":
                 self._send_json(HTTPStatus.OK, self._host_wifi("status", {}))
                 return
@@ -5235,6 +5447,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                         # unauthenticated caller who the administrator is.
                         "password_configured": access["password_configured"],
                         "must_change_password": access["must_change_password"],
+                        # En förares session ger ingen admin; sidan skickar
+                        # då vidare till Lokföraren i stället för att visa
+                        # inloggningen igen.
+                        "account_role": self._session_role(),
                     },
                 )
                 return
@@ -5421,6 +5637,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 from .terminal16_embedded import serve
                 return serve(self, "POST")
             payload = self._read_json()
+            if path.startswith("/v1/driver/"):
+                self._driver_post(path, payload)
+                return
             if path.startswith("/v1/host/wifi/"):
                 self._send_json(HTTPStatus.OK, self._host_wifi(path.removeprefix("/v1/host/wifi/"), payload, write=True))
                 return
@@ -5506,12 +5725,14 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                         "invalid_login",
                         "Fel e-postadress eller lösenord",
                     )
+                session_user = self.server.application.identities.admin_session_user(token) or {}
                 self._send_json(
                     HTTPStatus.OK,
                     {
                         "authenticated": True,
                         "access_mode": "external",
                         "must_change_password": access["must_change_password"],
+                        "role": session_user.get("role"),
                     },
                     headers={"Set-Cookie": self._admin_cookie(token)},
                 )
@@ -5955,9 +6176,72 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         token = self._admin_session_token()
         if token:
             user = self.server.application.identities.admin_session_user(token)
-            if user is not None:
+            # En förare (user) är inloggad men ingen administratör: sessionen
+            # öppnar bara Lokföraren (/v1/driver/*), aldrig ett admin-API.
+            if user is not None and user.get("role") in ADMIN_ROLES:
                 return self.server.application.local_admin(user)
         return None
+
+    # ------------------------------------------------------- Lokföraren
+
+    def _driver_user(self) -> dict[str, Any]:
+        """Den inloggade föraren. Alla roller får köra; ingen får något mer
+        här än sin egen tjänst, sin incheckning och sin ikon."""
+        token = self._admin_session_token()
+        user = self.server.application.identities.admin_session_user(token) if token else None
+        if user is None:
+            raise HTTPAPIError(HTTPStatus.UNAUTHORIZED, "authentication_required", "Logga in för att använda Lokföraren")
+        return user
+
+    def _driver_get(self, path: str, query: str) -> None:
+        application = self.server.application
+        user = self._driver_user()
+        try:
+            if path == "/v1/driver/session":
+                self._send_json(HTTPStatus.OK, application.driver_session(user))
+            elif path == "/v1/driver/clock":
+                self._send_json(HTTPStatus.OK, {"clock": application.driver_clock(),
+                                                "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")})
+            elif path == "/v1/driver/duties":
+                self._send_json(HTTPStatus.OK, application.driver_duties(parse_qs(query).get("q", [""])[0]))
+            elif path.startswith("/v1/driver/duties/"):
+                self._send_json(HTTPStatus.OK, {"duty": application.driver_duty(path.removeprefix("/v1/driver/duties/"))})
+            elif path == "/v1/driver/presence":
+                self._send_json(HTTPStatus.OK, application.driver_presence(user))
+            elif path.startswith("/v1/driver/avatars/"):
+                data, kind = application.driver_avatar(user, path.removeprefix("/v1/driver/avatars/"))
+                self._send_bytes(HTTPStatus.OK, data, kind)
+            else:
+                raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
+        except DriverError as error:
+            raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error)) from None
+
+    def _driver_post(self, path: str, payload: dict[str, Any]) -> None:
+        origin = self.headers.get("Origin")
+        if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get("Sec-Fetch-Site") == "cross-site":
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "same_origin_required", "Öppna Lokföraren från TrainMeet Server")
+        application = self.server.application
+        user = self._driver_user()
+        actions = {
+            "/v1/driver/active": lambda: application.driver_activate(user, payload),
+            "/v1/driver/active/end": lambda: application.driver_end(user),
+            "/v1/driver/checkins": lambda: application.driver_check_in(user, payload),
+            "/v1/driver/profile": lambda: application.driver_profile(user, payload),
+            "/v1/driver/avatar": lambda: application.driver_set_avatar(user, payload),
+            "/v1/driver/avatar/remove": lambda: application.driver_remove_avatar(user),
+        }
+        action = actions.get(path)
+        if action is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
+        try:
+            self._send_json(HTTPStatus.OK, action())
+        except DriverError as error:
+            raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error)) from None
+
+    def _session_role(self) -> str | None:
+        token = self._admin_session_token()
+        user = self.server.application.identities.admin_session_user(token) if token else None
+        return str(user["role"]) if user else None
 
     def _installation_is_open(self) -> bool:
         """Innan det finns ett lösenord finns det ingen att logga in som.

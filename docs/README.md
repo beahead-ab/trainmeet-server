@@ -8,6 +8,7 @@ Här finns den publika dokumentationen för TrainMeet Server.
 - [Samspelet mellan Cloud och Server](cloud-server.md)
 - [Externa trafikintegrationer: ram, testadapter och kompatibilitetskontroll](external-integrations.md)
 - [FastClock: anslut extern träffklocka på servern](FASTCLOCK.md)
+- [Lokföraren: förarens app, tjänster i paketet och incheckning](LOKFORAREN.md)
 - [Klockpaket: egna urtavlor att ladda upp på servern](clock-packs.md)
 - [TMBox 16×2-protokollet](protocol/terminal16/README.md) – det boxarna talar över MQTT
 - [TMBox-protokoll v2](protocol/v2/README.md) – kommandon och lägen, för webbläsarboxar över HTTP

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0f13">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lokföraren">
+<title>Lokföraren · TrainMeet</title>
+<link rel="manifest" href="/lokforaren/manifest.webmanifest">
+<link rel="icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/assets/ikon/png/trainmeet-ikon-kvadrat-180.png">
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<link rel="stylesheet" href="/lokforaren/style.css">
+<script src="/assets/clock-sync.js" defer></script>
+<script src="/lokforaren/messages.js" defer></script>
+<script src="/lokforaren/korplan.js" defer></script>
+<script src="/lokforaren/app.js" defer></script>
+</head>
+<body>
+<div id="app" class="lf" data-screen="loading">
+
+  <header class="lf-header" id="header">
+    <div class="lf-header__duty">
+      <div class="lf-header__title"><span id="duty-title">Lokföraren</span><span class="lf-tag" id="duty-demo" hidden>DEMO</span></div>
+      <div class="lf-header__sub" id="duty-sub"></div>
+    </div>
+    <div class="lf-header__clock">
+      <div class="lf-clock" id="clock" aria-live="off">--:--:--</div>
+      <div class="lf-status" id="clock-status"><span class="lf-status__dot"></span><span id="clock-status-text">–</span></div>
+    </div>
+  </header>
+
+  <div class="lf-banner" id="banner" role="status" hidden>
+    <svg class="lf-banner__icon" viewBox="0 0 24 24" aria-hidden="true"><path id="banner-icon" d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"></path></svg>
+    <span id="banner-text"></span>
+  </div>
+
+  <main class="lf-main" id="main">
+
+    <section class="view view--login" id="view-login" hidden>
+      <div class="lf-brand"><span class="lf-sign">TRAINMEET</span><span class="lf-brand__label">LOKFÖRAREN</span></div>
+      <h1 data-t="Logga in">Logga in</h1>
+      <p class="lf-lead" data-t="Använd kontot du fått inbjudan till på den här servern.">Använd kontot du fått inbjudan till på den här servern.</p>
+      <form id="login-form" class="lf-form">
+        <label><span data-t="E-postadress">E-postadress</span><input id="login-email" type="email" autocomplete="username" required></label>
+        <label><span data-t="Lösenord">Lösenord</span><input id="login-password" type="password" autocomplete="current-password" required></label>
+        <p class="lf-message" id="login-message" role="status"></p>
+        <button class="lf-button lf-button--primary" type="submit" data-t="Logga in">Logga in</button>
+      </form>
+      <a class="lf-link" href="/login" data-t="Jag har en inbjudningskod">Jag har en inbjudningskod</a>
+    </section>
+
+    <section class="view view--choose" id="view-choose" hidden>
+      <div class="lf-brand"><span class="lf-sign">TRAINMEET</span><span class="lf-brand__label">LOKFÖRAREN</span></div>
+      <h1 data-t="Välj din tjänst">Välj din tjänst</h1>
+      <p class="lf-lead" id="choose-lead" data-t="Köruppdragen för träffen ligger på servern. Skriv numret på din tjänst.">Köruppdragen för träffen ligger på servern. Skriv numret på din tjänst.</p>
+      <label class="lf-field"><span data-t="Tjänstnummer">Tjänstnummer</span>
+        <input id="duty-query" class="lf-bignumber" inputmode="numeric" autocomplete="off" maxlength="16" placeholder="132">
+      </label>
+      <div class="lf-results" id="duty-results"></div>
+      <div class="lf-card lf-found" id="duty-found" hidden>
+        <div class="lf-found__head"><span class="lf-found__title" id="found-title"></span><span class="lf-tag" id="found-demo" hidden>DEMO</span></div>
+        <dl class="lf-facts" id="found-facts"></dl>
+        <p class="lf-note" id="found-note" hidden></p>
+      </div>
+      <div class="lf-actions">
+        <button class="lf-button lf-button--primary" type="button" id="duty-activate" disabled data-t="Aktivera tjänsten">Aktivera tjänsten</button>
+        <button class="lf-button lf-button--quiet" type="button" id="duty-cancel" hidden data-t="Avbryt">Avbryt</button>
+      </div>
+    </section>
+
+    <section class="view view--countdown" id="view-countdown" hidden>
+      <div class="lf-countdown">
+        <span class="lf-countdown__label" data-t="Tjänsten börjar om">Tjänsten börjar om</span>
+        <span class="lf-countdown__value" id="countdown-value">–</span>
+        <span class="lf-countdown__sub" id="countdown-sub"></span>
+      </div>
+      <div class="lf-milestones" aria-hidden="true">
+        <div class="lf-milestones__track"><div class="lf-milestones__fill" id="countdown-fill"></div><div class="lf-milestones__now" id="countdown-now"></div></div>
+        <div class="lf-milestones__mark lf-milestones__mark--20" id="mark-20"><span class="lf-milestones__dot"></span><span data-t="20 min · påminnelse">20 min · påminnelse</span></div>
+        <div class="lf-milestones__mark lf-milestones__mark--10" id="mark-10"><span class="lf-milestones__dot"></span><span data-t="10 min · körplanen öppnas">10 min · körplanen öppnas</span></div>
+        <div class="lf-milestones__mark lf-milestones__mark--0"><span class="lf-milestones__dot"></span><span id="mark-start"></span></div>
+      </div>
+      <div class="lf-first">
+        <h2 class="lf-kicker" data-t="FÖRSTA MOMENTEN">FÖRSTA MOMENTEN</h2>
+        <ol class="lf-first__list" id="first-moments"></ol>
+      </div>
+      <button class="lf-button lf-button--quiet" type="button" id="show-korplan" data-t="Visa körplanen">Visa körplanen</button>
+    </section>
+
+    <section class="view view--korplan" id="view-korplan" hidden>
+      <div class="lf-timeline-wrap">
+        <div class="lf-timeline" id="timeline" tabindex="0" aria-label="Körplan">
+          <div class="lf-timeline__content" id="timeline-content"></div>
+        </div>
+        <div class="lf-edge lf-edge--top" id="edge-top" hidden><span class="lf-nowchip" id="edge-top-chip"></span></div>
+        <div class="lf-edge lf-edge--bottom" id="edge-bottom" hidden><span class="lf-nowchip" id="edge-bottom-chip"></span></div>
+        <button class="lf-tonow" type="button" id="to-now" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"></path></svg><span data-t="Till NU">Till NU</span></button>
+      </div>
+      <section class="lf-next" id="next" aria-live="polite">
+        <div class="lf-next__row"><span class="lf-kicker" id="next-label" data-t="NÄSTA">NÄSTA</span><span class="lf-next__left" id="next-left"></span></div>
+        <div class="lf-next__row lf-next__main"><span class="lf-next__title" id="next-title"></span><span class="lf-next__time" id="next-time"></span></div>
+        <div class="lf-chips" id="next-chips"></div>
+        <button class="lf-button lf-button--checkin" type="button" id="open-checkin"><span class="lf-avatar lf-avatar--s" id="checkin-avatar"></span><span id="open-checkin-text"></span></button>
+      </section>
+    </section>
+
+    <section class="view view--drivers" id="view-drivers" hidden>
+      <div class="lf-pagehead">
+        <h1 data-t="Förare">Förare</h1>
+        <button class="lf-button lf-button--checkin lf-button--compact" type="button" id="drivers-checkin"><span class="lf-avatar lf-avatar--s" id="drivers-checkin-avatar"></span><span id="drivers-checkin-text"></span></button>
+      </div>
+      <section class="lf-card lf-bana" aria-labelledby="bana-title">
+        <h2 class="lf-kicker" id="bana-title" data-t="PÅ BANAN NU">PÅ BANAN NU</h2>
+        <ol class="lf-bana__line" id="bana"></ol>
+        <p class="lf-empty" id="bana-empty" data-t="Ingen har checkat in de senaste femton minuterna." hidden>Ingen har checkat in de senaste femton minuterna.</p>
+      </section>
+      <section class="lf-card lf-list" aria-label="Förare på träffen">
+        <ul class="lf-people" id="people"></ul>
+      </section>
+      <p class="lf-note" data-t="En incheckning syns i 10 minuter och tonar sedan långsamt ut. Tiden räknas i verklig tid, inte träfftid.">En incheckning syns i 10 minuter och tonar sedan långsamt ut. Tiden räknas i verklig tid, inte träfftid.</p>
+    </section>
+
+    <section class="view view--me" id="view-me" hidden>
+      <button class="lf-card lf-me" type="button" id="open-icon">
+        <span class="lf-avatar lf-avatar--l" id="me-avatar"></span>
+        <span class="lf-me__text"><span class="lf-me__name" id="me-name"></span><span class="lf-me__role" id="me-role"></span></span>
+        <span class="lf-me__action" data-t="Byt ikon">Byt ikon</span>
+      </button>
+      <section class="lf-group">
+        <h2 class="lf-kicker" data-t="TJÄNST">TJÄNST</h2>
+        <div class="lf-card">
+          <div class="lf-row"><span id="me-duty"></span></div>
+          <div class="lf-row lf-row--buttons">
+            <button class="lf-button lf-button--secondary" type="button" id="change-duty" data-t="Byt tjänst">Byt tjänst</button>
+            <button class="lf-button lf-button--secondary lf-button--danger" type="button" id="end-duty" data-t="Avsluta tjänsten">Avsluta tjänsten</button>
+          </div>
+        </div>
+      </section>
+      <section class="lf-group">
+        <h2 class="lf-kicker" data-t="PÅ BANAN">PÅ BANAN</h2>
+        <div class="lf-card">
+          <label class="lf-row lf-switch"><span data-t="Visa min ikon på banan">Visa min ikon på banan</span><input type="checkbox" id="me-visible" role="switch"></label>
+          <div class="lf-row"><span data-t="En incheckning syns">En incheckning syns</span><span class="lf-value" data-t="10 min, sedan tonar den ut">10 min, sedan tonar den ut</span></div>
+        </div>
+      </section>
+      <section class="lf-group">
+        <h2 class="lf-kicker" data-t="PÅMINNELSER">PÅMINNELSER</h2>
+        <div class="lf-card">
+          <label class="lf-row lf-switch"><span data-t="20 och 10 min före start">20 och 10 min före start</span><input type="checkbox" id="me-reminders" role="switch"></label>
+          <label class="lf-row lf-switch"><span data-t="Ljud och vibration">Ljud och vibration</span><input type="checkbox" id="me-sound" role="switch"></label>
+          <div class="lf-row"><span data-t="Push-notiser">Push-notiser</span><span class="lf-value" data-t="Inte än – påminnelsen kommer när appen är öppen">Inte än – påminnelsen kommer när appen är öppen</span></div>
+        </div>
+      </section>
+      <section class="lf-group">
+        <h2 class="lf-kicker" data-t="VISNING">VISNING</h2>
+        <div class="lf-card">
+          <label class="lf-row"><span data-t="Språk">Språk</span>
+            <select id="me-language">
+              <option value="sv">Svenska</option><option value="da">Dansk</option><option value="nb">Norsk</option><option value="en">English</option><option value="de">Deutsch</option>
+            </select>
+          </label>
+          <label class="lf-row"><span data-t="Tema">Tema</span>
+            <select id="me-theme">
+              <option value="dark" data-t="Mörkt">Mörkt</option><option value="light" data-t="Ljust">Ljust</option><option value="system" data-t="Som telefonen">Som telefonen</option>
+            </select>
+          </label>
+        </div>
+      </section>
+      <section class="lf-group">
+        <h2 class="lf-kicker" data-t="KLOCKA OCH SERVER">KLOCKA OCH SERVER</h2>
+        <div class="lf-card">
+          <div class="lf-row"><span data-t="Träffklockan">Träffklockan</span><span class="lf-value" id="me-clock"></span></div>
+          <div class="lf-row"><span data-t="Träff">Träff</span><span class="lf-value" id="me-meet"></span></div>
+        </div>
+      </section>
+      <button class="lf-button lf-button--quiet" type="button" id="logout" data-t="Logga ut">Logga ut</button>
+    </section>
+  </main>
+
+  <nav class="lf-tabs" id="tabs" aria-label="Lokföraren" hidden>
+    <button type="button" class="lf-tab" data-tab="duty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v18"></path><circle cx="7" cy="7" r="2.3"></circle><circle cx="7" cy="16" r="2.3"></circle><path d="M12 7h8M12 16h6"></path></svg><span data-t="Tjänst">Tjänst</span></button>
+    <button type="button" class="lf-tab" data-tab="drivers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 20v-1.4a3.6 3.6 0 0 0-3.6-3.6H7.1a3.6 3.6 0 0 0-3.6 3.6V20"></path><circle cx="9.5" cy="8" r="3.4"></circle><path d="M20.5 20v-1.4a3.6 3.6 0 0 0-2.6-3.45M15.6 4.7a3.4 3.4 0 0 1 0 6.6"></path></svg><span data-t="Förare">Förare</span></button>
+    <button type="button" class="lf-tab" data-tab="me"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4.5 21a7.5 7.5 0 0 1 15 0"></path></svg><span data-t="Jag">Jag</span></button>
+  </nav>
+
+  <div class="sheet" id="sheet-checkin" hidden>
+    <div class="sheet__backdrop" data-close></div>
+    <section class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="checkin-title">
+      <div class="sheet__grabber"></div>
+      <div class="sheet__head">
+        <span class="lf-avatar lf-avatar--m" id="sheet-avatar"></span>
+        <div><h2 id="checkin-title" data-t="Checka in">Checka in</h2>
+        <p class="lf-note" data-t="Din ikon syns på banan i 10 minuter och tonar sedan ut. Den flyttar inte NU-linjen och styr inte trafiken.">Din ikon syns på banan i 10 minuter och tonar sedan ut. Den flyttar inte NU-linjen och styr inte trafiken.</p></div>
+      </div>
+      <div class="lf-choices" id="checkin-stations" role="radiogroup" aria-label="Station"></div>
+      <label class="lf-field lf-field--other"><span data-t="Annan station">Annan station</span><select id="checkin-other"></select></label>
+      <div class="lf-field" id="checkin-tracks-field"><span data-t="Spår, om du vill">Spår, om du vill</span><div class="lf-chips lf-chips--choose" id="checkin-tracks"></div></div>
+      <p class="lf-message" id="checkin-message" role="status"></p>
+      <div class="sheet__actions">
+        <button class="lf-button lf-button--primary" type="button" id="checkin-submit"></button>
+        <button class="lf-button lf-button--quiet" type="button" data-close data-t="Avbryt">Avbryt</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="sheet" id="sheet-icon" hidden>
+    <div class="sheet__backdrop" data-close></div>
+    <section class="sheet__panel sheet__panel--tall" role="dialog" aria-modal="true" aria-labelledby="icon-title">
+      <div class="sheet__grabber"></div>
+      <h2 id="icon-title" data-t="Din ikon">Din ikon</h2>
+      <div class="lf-crop" id="crop">
+        <canvas id="crop-canvas" width="560" height="560" aria-label="Förhandsvisning av ikonen"></canvas>
+        <div class="lf-crop__ring" aria-hidden="true"></div>
+        <p class="lf-crop__empty" id="crop-empty" data-t="Välj en bild eller ta ett foto">Välj en bild eller ta ett foto</p>
+      </div>
+      <label class="lf-zoom"><span data-t="Zooma">Zooma</span><input type="range" id="crop-zoom" min="1" max="4" step="0.01" value="1"></label>
+      <div class="lf-row--buttons lf-iconbuttons">
+        <label class="lf-button lf-button--secondary lf-file"><span data-t="Välj bild">Välj bild</span><input type="file" id="icon-file" accept="image/*"></label>
+        <label class="lf-button lf-button--secondary lf-file"><span data-t="Ta foto">Ta foto</span><input type="file" id="icon-camera" accept="image/*" capture="user"></label>
+      </div>
+      <div class="lf-previews" aria-label="Så här syns du">
+        <div class="lf-preview"><span class="lf-pill"><span class="lf-avatar lf-avatar--s" id="preview-s"></span><span id="preview-name-s"></span></span><span class="lf-note" data-t="På banan">På banan</span></div>
+        <div class="lf-preview"><span class="lf-avatar lf-avatar--l" id="preview-l"></span><span class="lf-note" data-t="I listan">I listan</span></div>
+      </div>
+      <p class="lf-note" data-t="Bilden beskärs till en cirkel och sparas liten. Plats och annan data i bildfilen tas bort. Utan bild visas dina initialer.">Bilden beskärs till en cirkel och sparas liten. Plats och annan data i bildfilen tas bort. Utan bild visas dina initialer.</p>
+      <p class="lf-message" id="icon-message" role="status"></p>
+      <div class="sheet__actions">
+        <button class="lf-button lf-button--primary" type="button" id="icon-save" disabled data-t="Spara ikonen">Spara ikonen</button>
+        <button class="lf-button lf-button--quiet" type="button" id="icon-remove" data-t="Ta bort ikonen">Ta bort ikonen</button>
+        <button class="lf-button lf-button--quiet" type="button" data-close data-t="Avbryt">Avbryt</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="lf-toast" id="toast" role="alert" hidden></div>
+</div>
+</body>
+</html>
