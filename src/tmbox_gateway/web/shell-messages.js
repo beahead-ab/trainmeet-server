@@ -2,6 +2,8 @@
  * never translation keys. Uses the existing TrainMeet localization runtime. */
 (() => {
   const rows = [
+    ['Eget konto', 'My account', 'Egen konto', 'Egen konto', 'Mein Konto'],
+    ['ägare hanterar alla konton · administratörer hanterar administratörer och användare', 'owners manage all accounts · administrators manage administrators and users', 'ejere administrerer alle konti · administratorer administrerer administratorer og brugere', 'eiere administrerer alle kontoer · administratorer administrerer administratorer og brukere', 'Eigentümer verwalten alle Konten · Administratoren verwalten Administratoren und Benutzer'],
     ["Standardadress för FastClock", "Default FastClock address", "Standardadresse til FastClock", "Standardadresse for FastClock", "Standardadresse für FastClock"],
     ["Automatisk anslutning avstängd", "Automatic connection disabled", "Automatisk tilslutning slået fra", "Automatisk tilkobling slått av", "Automatische Verbindung deaktiviert"],
     ["SSID", "SSID", "SSID", "SSID", "SSID"],

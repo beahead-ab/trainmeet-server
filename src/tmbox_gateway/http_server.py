@@ -657,7 +657,7 @@ class TrainMeetHTTPApplication:
         selected = self.lifecycle.selected() if self.lifecycle else None
         region = selected["region"] if selected else None
         country = self._meet_country()
-        admin = client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}
+        admin = client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN} and client.admin_role in {"owner", "admin"}
         workspaces = ["administration"] if admin else []
         if region == "eu" and (admin or client.kind == DeviceKind.TKL_TERMINAL):
             workspaces.append("tkl")
@@ -764,19 +764,14 @@ class TrainMeetHTTPApplication:
     # ------------------------------------------------------- användare
 
     def _require_owner(self, client: PairedClient) -> None:
-        """Bara ägaren får ändra vilka som har tillgång.
-
-        En administratör kan allt annat på servern. Skillnaden är avsiktligt
-        smal: den som lagts till ska kunna sköta en träff fullt ut, men inte
-        kunna ge sig själv sällskap eller ta bort den som bjöd in hen.
-        """
+        """Owner-only operations, beyond ordinary account administration."""
 
         self._require_admin(client)
         if client.admin_role != "owner":
             raise HTTPAPIError(
                 HTTPStatus.FORBIDDEN,
                 "owner_required",
-                "Bara ägaren kan lägga till och ta bort användare",
+                "Ägarbehörighet krävs",
             )
 
     def admin_users(self, client: PairedClient) -> dict[str, Any]:
@@ -785,22 +780,26 @@ class TrainMeetHTTPApplication:
                 "user_id": client.admin_user_id}
 
     def create_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        self._require_owner(client)
+        self._require_admin(client)
         try:
             user = self.identities.invite_admin_user(
                 str(payload.get("display_name") or ""),
                 str(payload.get("email") or ""),
-                str(payload.get("role") or "admin"),
+                str(payload.get("role") or "admin"), actor=client,
             )
+        except AdminUserPermissionError as error:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_user_forbidden", str(error)) from error
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
         self._record_user_change(client, "user.invited", str(user.get("display_name")))
         return {"user": user, "mail": self._mail_account_code("invite", user, payload)}
 
     def reissue_admin_setup(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        self._require_owner(client)
+        self._require_admin(client)
         try:
-            user = self.identities.reissue_admin_setup(str(payload.get("user_id") or ""))
+            user = self.identities.reissue_admin_setup(str(payload.get("user_id") or ""), actor=client)
+        except AdminUserPermissionError as error:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_user_forbidden", str(error)) from error
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
         self._record_user_change(client, "user.invitation_reissued", str(user.get("display_name")))
@@ -924,26 +923,20 @@ class TrainMeetHTTPApplication:
         )
 
     def delete_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        self._require_owner(client)
+        self._require_admin(client)
         user_id = str(payload.get("user_id") or "")
-        # Att ta bort sig själv är inte en behörighetsfråga utan ett misstag.
-        # Den som vill sluta ber någon annan ägare ta bort kontot.
-        if client.admin_user_id and client.admin_user_id == user_id:
-            raise HTTPAPIError(
-                HTTPStatus.CONFLICT,
-                "cannot_remove_self",
-                "Du kan inte ta bort ditt eget konto. Be en annan ägare göra det.",
-            )
         target = (self.identities.admin_user(user_id) or {}).get("display_name", user_id)
         try:
-            self.identities.delete_admin_user(user_id)
+            self.identities.delete_admin_user(user_id, actor=client)
+        except AdminUserPermissionError as error:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_user_forbidden", str(error)) from error
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.CONFLICT, "invalid_admin_user", str(error)) from error
         self._record_user_change(client, "user.removed", str(target))
         return {"users": self.identities.list_admin_users()}
 
     def update_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        """Owners edit all accounts; administrators edit administrators."""
+        """Owners edit all accounts; administrators edit non-owner accounts."""
 
         self._require_admin(client)
         user_id = str(payload.get("user_id") or "")
@@ -964,6 +957,26 @@ class TrainMeetHTTPApplication:
                               ("role", "user.role_changed"), ("password", "user.password_changed")):
             if payload.get(field) is not None and (field != "password" or payload[field]):
                 self._record_user_change(client, action, user_id)
+        return {"user": user}
+
+    def own_account(self, client: PairedClient, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        if not client.admin_user_id:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "account_required", "Ett inloggat konto krävs")
+        if payload is None:
+            return {"user": self.identities.admin_user(client.admin_user_id)}
+        if set(payload) - {"display_name", "email", "password"}:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "account_fields_forbidden", "Bara eget namn, e-post och lösenord får ändras")
+        try:
+            user = self.identities.update_admin_user(client.admin_user_id, client, **{
+                key: str(value) for key, value in payload.items() if value is not None
+            })
+        except AdminUserPermissionError as error:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "account_forbidden", str(error)) from error
+        except AdminAccessError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_account", str(error)) from error
+        for field in payload:
+            if field != "password" or payload[field]:
+                self._record_user_change(client, "user." + {"display_name": "renamed", "email": "email_changed", "password": "password_changed"}[field], client.admin_user_id)
         return {"user": user}
 
     def installation_status(self) -> dict[str, Any]:
@@ -1146,6 +1159,8 @@ class TrainMeetHTTPApplication:
         if self.us_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "us_unavailable", "US runtime is not configured")
         dispatcher = client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}
+        if dispatcher:
+            self._require_admin(client)
         if not dispatcher and client.kind != DeviceKind.US_CONDUCTOR:
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "us_access_required", "US dispatcher or conductor access required")
         actor = f"user:{client.admin_user_id}" if client.admin_user_id else f"client:{client.client_id}"
@@ -1345,6 +1360,7 @@ class TrainMeetHTTPApplication:
 
     def _require_box_access(self, client: PairedClient, device_id: str) -> None:
         if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
+            self._require_admin(client)
             return
         current = self.identities.client(client.client_id)
         if current is None or current.kind != DeviceKind.ESP32_PANEL or device_id != current.client_id:
@@ -2490,6 +2506,7 @@ class TrainMeetHTTPApplication:
 
     def _require_station_access(self, client: PairedClient, station_id: str) -> None:
         if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
+            self._require_admin(client)
             return
         if client.kind == DeviceKind.TKL_TERMINAL:
             # A signal box asks for its station every few seconds: that is its
@@ -4947,9 +4964,12 @@ class TrainMeetHTTPApplication:
                 # undo them; the next hello republishes the current assignment.
                 LOGGER.exception("Could not publish changed TMBox assignment")
 
-    @staticmethod
-    def _require_admin(client: PairedClient) -> None:
-        if client.kind not in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
+    def _require_admin(self, client: PairedClient) -> None:
+        role = client.admin_role
+        if client.admin_user_id:
+            user = self.identities.admin_user(client.admin_user_id)
+            role = str(user["role"]) if user else ""
+        if client.kind not in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN} or role not in {"owner", "admin"}:
             raise HTTPAPIError(
                 HTTPStatus.FORBIDDEN,
                 "admin_required",
@@ -5078,6 +5098,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            self._guard_user_admin_api(path)
+            if path == "/v1/account":
+                self._send_json(HTTPStatus.OK, self.server.application.own_account(self._authenticated_client()))
+                return
             if path == "/v1/host/wifi":
                 self._send_json(HTTPStatus.OK, self._host_wifi("status", {}))
                 return
@@ -5221,6 +5245,8 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     {
                         "authenticated": client is not None,
+                        "role": client.admin_role if client else None,
+                        "can_use_driver": bool(client and client.admin_role in {"owner", "admin", "user"}),
                         # Läget svarar på hur man är inne. "local" betyder att
                         # servern släpper in utan inloggning, och det gör den
                         # numera bara innan det finns ett lösenord att logga in
@@ -5250,7 +5276,7 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/info":
                 client = self._optional_authenticated_client()
-                if client is None:
+                if client is None or client.admin_role == "user":
                     self._send_json(
                         HTTPStatus.OK,
                         {
@@ -5417,6 +5443,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         try:
+            self._guard_user_admin_api(path)
+            if path == "/v1/account":
+                self._send_json(HTTPStatus.OK, self.server.application.own_account(self._authenticated_client(), self._read_json()))
+                return
             if path.startswith("/tmbox-lab/"):
                 from .terminal16_embedded import serve
                 return serve(self, "POST")
@@ -5924,6 +5954,25 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         forwarded = any(self.headers.get(name) for name in ("Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto"))
         return secure_proxy or (self._client_address_is_loopback() and not forwarded)
 
+    def _guard_user_admin_api(self, path: str) -> None:
+        # A driver session may use its profile and the same read-only feeds
+        # as guests. Default-deny also covers newly added traffic/admin APIs.
+        if not (path.startswith("/v1/") or path.startswith("/tmbox-lab/")):
+            return
+        client = self._optional_authenticated_client()
+        if not client or client.admin_role != "user":
+            return
+        if path == "/v1/account":
+            return
+        if self.command == "GET" and (path in {
+            "/v1/auth/status", "/v1/workspaces", "/v1/display", "/v1/about",
+            "/v1/events", "/v1/setup", "/v1/info",
+        } or path.startswith("/v1/clock-faces/")):
+            return
+        if self.command == "POST" and path in {"/v1/auth/login", "/v1/auth/logout"}:
+            return
+        raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_required", "Administratörsbehörighet krävs")
+
     def _authenticated_client(self) -> PairedClient:
         authorization = self.headers.get("Authorization", "")
         prefix = "Bearer "
@@ -5943,6 +5992,8 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 "authentication_required",
                 "Administratörsinloggning krävs",
             )
+        if client.admin_role == "user" and urlparse(self.path).path != "/v1/account":
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_required", "Administratörsbehörighet krävs")
         return client
 
     def _optional_authenticated_client(self) -> PairedClient | None:

@@ -8,6 +8,7 @@ import re
 import secrets
 import sqlite3
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
@@ -232,8 +233,8 @@ class IdentityStore:
                 created_at TEXT NOT NULL
             );
 
-            -- Flera personer kan sköta servern. Ägaren är den som dessutom får
-            -- lägga till och ta bort andra; en administratör kan allt annat.
+            -- Ägare hanterar alla konton; administratörer hanterar icke-ägare.
+            -- Användare är lokförare och får bara ändra sin egen profil.
             --
             -- Listan är serverns egen och delas inte med Cloud. En Pi i en
             -- klubblokal ska fungera utan nät, och en användarlista som kräver
@@ -243,7 +244,7 @@ class IdentityStore:
                 username TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 password_salt BLOB,
                 password_digest BLOB,
-                role TEXT NOT NULL CHECK(role IN ('owner', 'admin')),
+                role TEXT NOT NULL CHECK(role IN ('owner', 'admin', 'user')),
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 must_change_password INTEGER NOT NULL DEFAULT 0,
@@ -299,8 +300,72 @@ class IdentityStore:
             """,
             (now,),
         )
+        self._migrate_user_role()
         self._adopt_singleton_admin_as_owner(now)
         self._bind_accounts_to_email()
+
+    def _migrate_user_role(self) -> None:
+        """Rebuild the old CHECK atomically, preserving every column and index.
+
+        Sessions refer to stable user IDs, not table rowids. No account or
+        credential is rewritten, and a failed rebuild rolls back the schema.
+        """
+        with self._user_write():
+            schema = self._connection.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'admin_users'"
+            ).fetchone()[0]
+            if "'user'" in schema:
+                return
+            indexes = self._connection.execute(
+                "SELECT sql FROM sqlite_master WHERE tbl_name = 'admin_users'"
+                " AND type IN ('index', 'trigger') AND sql IS NOT NULL"
+            ).fetchall()
+            expanded = re.sub(
+                r"CHECK\s*\(\s*role\s+IN\s*\(\s*'owner'\s*,\s*'admin'\s*\)\s*\)",
+                "CHECK(role IN ('owner', 'admin', 'user'))", schema, flags=re.IGNORECASE,
+            )
+            if expanded == schema:
+                raise RuntimeError("Unknown admin_users role constraint")
+            expanded = expanded.replace("admin_users", "admin_users_rebuild", 1)
+            self._connection.execute(expanded)
+            columns = ", ".join('"' + row[1] + '"' for row in self._connection.execute("PRAGMA table_info(admin_users)"))
+            self._connection.execute(f"INSERT INTO admin_users_rebuild ({columns}) SELECT {columns} FROM admin_users")
+            self._connection.execute("DROP TABLE admin_users")
+            self._connection.execute("ALTER TABLE admin_users_rebuild RENAME TO admin_users")
+            for (sql,) in indexes:
+                self._connection.execute(sql)
+
+    @contextmanager
+    def _user_write(self):
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+
+    def _authorize_user_change_locked(
+        self, actor: PairedClient, *, user_id: str | None = None,
+        role: str | None = None, action: str = "update",
+    ) -> None:
+        actor_role = actor.admin_role
+        if actor.admin_user_id:
+            current = self.admin_user(actor.admin_user_id)
+            actor_role = str(current["role"]) if current else ""
+        target = self.admin_user(user_id) if user_id else None
+        own = bool(user_id and actor.admin_user_id == user_id)
+        if actor_role == "user" and own and action == "update" and role is None:
+            return
+        if actor_role not in {"owner", "admin"}:
+            raise AdminUserPermissionError("Administratörsbehörighet krävs")
+        if actor_role == "admin" and ((target and target["role"] == "owner") or role == "owner"):
+            raise AdminUserPermissionError("Bara ägaren kan ändra ägarkonton eller tilldela ägarrollen")
+        if own and action == "delete":
+            raise AdminUserConflictError("Du kan inte ta bort ditt eget konto. Be en annan ägare göra det.")
+        if own and role is not None and role != actor_role:
+            raise AdminUserConflictError("Du kan inte ändra din egen roll. Be en annan ägare göra det.")
 
     def _adopt_singleton_admin_as_owner(self, now: str) -> None:
         """Den befintliga administratören blir den första ägaren.
@@ -1071,6 +1136,7 @@ class IdentityStore:
                 "user_id": row[0],
                 "display_name": row[1],
                 "role": row[2],
+                "can_use_driver": row[2] in {"owner", "admin", "user"},
                 "created_at": row[3],
                 "updated_at": row[4],
                 "password_configured": bool(row[5]),
@@ -1087,10 +1153,10 @@ class IdentityStore:
             (user for user in self.list_admin_users() if user["user_id"] == user_id), None
         )
 
-    def invite_admin_user(self, display_name: str, email: str, role: str = "admin") -> dict[str, object]:
+    def invite_admin_user(self, display_name: str, email: str, role: str = "admin", *, actor: PairedClient | None = None) -> dict[str, object]:
         """Skapa ett konto och en engångskod att lämna över.
 
-        Ägaren sätter inte någon annans lösenord. Den inbjudne löser in koden
+        Den inbjudne löser in koden
         med sin e-postadress och väljer sitt eget - då finns lösenordet aldrig
         hos någon annan, inte ens en kort stund.
 
@@ -1100,13 +1166,15 @@ class IdentityStore:
 
         display_name = clean_admin_display_name(display_name)
         email = required_admin_email(email)
-        if role not in {"owner", "admin"}:
-            raise AdminAccessError("Rollen måste vara ägare eller administratör")
+        if role not in {"owner", "admin", "user"}:
+            raise AdminAccessError("Rollen måste vara ägare, administratör eller användare")
 
         now = datetime.now(timezone.utc)
         code = _new_account_code()
         user_id = secrets.token_hex(16)
-        with self._lock:
+        with self._user_write():
+            if actor is not None:
+                self._authorize_user_change_locked(actor, role=role, action="invite")
             self._assert_email_free_locked(email)
             self._connection.execute(
                 """
@@ -1120,12 +1188,14 @@ class IdentityStore:
             )
         return {**(self.admin_user(user_id) or {}), "setup_code": code}
 
-    def reissue_admin_setup(self, user_id: str) -> dict[str, object]:
+    def reissue_admin_setup(self, user_id: str, *, actor: PairedClient | None = None) -> dict[str, object]:
         """En ny kod när den gamla gått ut eller kommit bort."""
 
         now = datetime.now(timezone.utc)
         code = _new_account_code()
-        with self._lock:
+        with self._user_write():
+            if actor is not None:
+                self._authorize_user_change_locked(actor, user_id=user_id, action="reissue")
             if self._connection.execute(
                 "SELECT 1 FROM admin_users WHERE user_id = ?", (user_id,)
             ).fetchone() is None:
@@ -1181,21 +1251,10 @@ class IdentityStore:
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                actor_role = actor.admin_role
-                if actor.admin_user_id:
-                    current_actor = self.admin_user(actor.admin_user_id)
-                    actor_role = str(current_actor["role"]) if current_actor else ""
+                self._authorize_user_change_locked(actor, user_id=user_id, role=role)
                 target = self.admin_user(user_id)
-                if actor_role not in {"owner", "admin"}:
-                    raise AdminUserPermissionError("Administratörsbehörighet krävs")
                 if target is None:
                     raise AdminAccessError("Användaren finns inte")
-                if actor_role != "owner" and (target["role"] != "admin" or role not in {None, "admin"}):
-                    raise AdminUserPermissionError("Bara ägaren kan ändra ägarkonton eller tilldela ägarrollen")
-                if actor_role == "owner" and actor.admin_user_id == user_id and role not in {None, "owner"}:
-                    raise AdminUserConflictError(
-                        "Du kan inte ta bort din egen ägarroll. Be en annan ägare göra det."
-                    )
                 if display_name is not None:
                     self.set_admin_user_display_name(user_id, display_name)
                 if email is not None:
@@ -1298,14 +1357,16 @@ class IdentityStore:
             self._connection.execute("DELETE FROM admin_sessions WHERE user_id = ?", (row[0],))
         return self.admin_user(str(row[0])) or {}
 
-    def delete_admin_user(self, user_id: str) -> None:
+    def delete_admin_user(self, user_id: str, *, actor: PairedClient | None = None) -> None:
         """Den sista ägaren går inte att ta bort.
 
         En server utan ägare har ingen som kan lägga till en - den vore låst
         för alltid utan att någonting gått sönder.
         """
 
-        with self._lock:
+        with self._user_write():
+            if actor is not None:
+                self._authorize_user_change_locked(actor, user_id=user_id, action="delete")
             row = self._connection.execute(
                 "SELECT role FROM admin_users WHERE user_id = ?", (user_id,)
             ).fetchone()
@@ -1319,8 +1380,8 @@ class IdentityStore:
             self._connection.execute("DELETE FROM admin_sessions WHERE user_id = ?", (user_id,))
 
     def set_admin_user_role(self, user_id: str, role: str) -> dict[str, object]:
-        if role not in {"owner", "admin"}:
-            raise AdminAccessError("Rollen måste vara ägare eller administratör")
+        if role not in {"owner", "admin", "user"}:
+            raise AdminAccessError("Rollen måste vara ägare, administratör eller användare")
         with self._lock:
             row = self._connection.execute(
                 "SELECT role FROM admin_users WHERE user_id = ?", (user_id,)

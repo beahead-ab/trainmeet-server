@@ -1,12 +1,7 @@
-"""Flera personer kan sköta servern, men bara ägaren styr vilka.
+"""Local accounts, invitation codes, sessions and usable-owner protection.
 
-Servern hade en enda administratör i en singleton-rad. Nu finns en lista, med
-två roller: ägaren får dessutom lägga till och ta bort andra, en administratör
-kan allt annat.
-
-Listan är serverns egen och delas inte med Cloud. En Pi i en klubblokal ska
-fungera utan nät, och en användarlista som kräver uppkoppling för att logga in
-vore fel sorts beroende.
+Owners administer every account; administrators administer non-owner
+accounts. The three-role permission matrix lives in test_user_roles.py.
 """
 
 from __future__ import annotations
@@ -359,13 +354,11 @@ class OwnerGateTests(unittest.TestCase):
             admin_user_id=str(user["user_id"]), admin_role=str(user["role"]),
         )
 
-    def test_an_administrator_may_not_add_a_user(self) -> None:
-        with self.assertRaises(HTTPAPIError) as caught:
-            self.application.create_admin_user(
-                self._as("lars"), {"display_name": "Nyan", "email": "nyan@example.se"}
-            )
-
-        self.assertEqual(403, int(caught.exception.status))
+    def test_an_administrator_may_invite_an_administrator(self) -> None:
+        result = self.application.create_admin_user(
+            self._as("lars"), {"display_name": "Nyan", "email": "nyan@example.se"}
+        )
+        self.assertEqual("admin", result["user"]["role"])
 
     def test_an_administrator_may_not_take_over_the_owners_login(self) -> None:
         """Ägarens namn, adress och lösenord är ägarens eller en annan ägares.
@@ -392,13 +385,13 @@ class OwnerGateTests(unittest.TestCase):
 
         self.assertEqual("Lars i Lekby", result["user"]["display_name"])
 
-    def test_an_administrator_may_not_remove_a_user(self) -> None:
+    def test_an_administrator_may_not_remove_themselves(self) -> None:
         with self.assertRaises(HTTPAPIError) as caught:
             self.application.delete_admin_user(
                 self._as("lars"), {"user_id": str(self.lars["user_id"])}
             )
 
-        self.assertEqual(403, int(caught.exception.status))
+        self.assertEqual(409, int(caught.exception.status))
 
     def test_an_administrator_may_not_assign_the_owner_role(self) -> None:
         with self.assertRaises(HTTPAPIError):
