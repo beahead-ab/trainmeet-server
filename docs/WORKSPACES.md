@@ -36,7 +36,20 @@ i sin verktygsrad; `trainmeet.displayClockStyle` och
 Den schweiziska urtavlan ritas av samma befintliga kod som tidigare.
 
 `/display/clock`, `/display/dashboard`, `/display/topology` och `/display/graph`
-är publika. US har även `/display/territories`. QR-koder genereras lokalt:
+är publika. US har även `/display/territories`. En skärm som öppnas med sin
+egen adress (bokmärkt eller i kioskläge i lokalen), en inloggad webbläsare och
+en webbläsare med egna sparade skärmval är träffens skärm: den behåller sina
+val och sin vanliga verktygsrad.
+
+Gästläget gäller bara besökare som väljer en vy under **Stora vyer** på
+deltagarsidan (dit träffens QR-koder leder). Vyn öppnas skrivskyddad i
+helskärm, följer träffens inställningar och har bara **Tillbaka** och
+**Byt skärm**. Märket ligger i webbläsarhistoriken, så omladdning, bakåt och
+framåt behåller gästläget. På klockan svävar knapparna i hörnen och klockan
+behåller hela skärmen; på övriga vyer får de en egen remsa ovanför
+träffnamnet. Ett tryck på klockans sekunder hos en gäst sparar ingenting.
+
+QR-koder genereras lokalt:
 Wi-Fi först (om nätverket är ifyllt), sedan en länk till deltagarvyn på samma
 webbadress som skärmen. Inga externa QR-tjänster används.
 

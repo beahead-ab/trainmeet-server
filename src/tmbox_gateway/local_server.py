@@ -255,6 +255,9 @@ def main() -> None:
     clock_thread = threading.Thread(target=_external_clock_loop, args=(application, clock_stop),
                                     name="trainmeet-fastclock", daemon=True)
     clock_thread.start()
+    # Klockan via Cloud (#205, #206): trådarna går alltid, men gör ingenting
+    # förrän administratören slagit på kanalen och servern är kopplad.
+    application.live.start()
     signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
     signal.signal(signal.SIGINT, _raise_keyboard_interrupt)
     _print_ready(local_ip, args.http_port, args.mqtt_port, pairing_code)
@@ -266,6 +269,8 @@ def main() -> None:
     finally:
         clock_stop.set()
         clock_thread.join()  # Bounded provider timeout; no database access after close.
+        application.live.stop()
+        application.tellurian.close()  # Skuggläsningen (#222) läser inget efter stängning.
         _stop_cloud_sync(application, cloud_sync_thread, cloud_sync_stop)
         application.changes.close()  # Open pages' event streams end now.
         server.shutdown()
@@ -429,6 +434,10 @@ def _external_clock_loop(application, stop):
                 application.on_terminal_tick()
         except Exception:
             LOGGER.warning("Terminalerna kunde inte uppdateras; försöker igen")
+        try:
+            application.live.tick()
+        except Exception:
+            LOGGER.warning("Boxarna med push kunde inte uppdateras; försöker igen")
         application.check_device_liveness()
         stop.wait(0.5)
 

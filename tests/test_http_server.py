@@ -234,11 +234,17 @@ class HTTPServerTests(unittest.TestCase):
             self.assertEqual(row["state"], "planned")
             self.assertIn(row["kind"], {"departure", "arrival"})
             self.assertEqual(set(row), {"movement_id", "train_number", "kind", "time", "station", "side", "track", "actual_track",
+                                        "track_id", "actual_track_id",
                                         "state", "selected", "delay_minutes", "expected_time", "estimated", "early_minutes",
-                                        "early_kind", "train_type"})
+                                        "early_kind", "train_type", "service_day_offset"})
+            self.assertEqual(row["service_day_offset"], 0, "the same service day (trainmeet-tmbox-ios #51)")
             self.assertIsNone(row["actual_track"], "nothing has been taken in yet")
         self.assertEqual(table["deviation_level"], 2)
         self.assertEqual(table["tracks"], ["1", "2"], "every track at the station, in its order")
+        # Utan sparad spårvisning (#46) är allt som förut, med id:n bredvid.
+        self.assertEqual(table["track_display"]["revision"], 0)
+        self.assertEqual([(t["id"], t["label"], t["visible"]) for t in table["track_display"]["tracks"]],
+                         [("track-station-a-1", "1", True), ("track-station-a-2", "2", True)])
         frame = self._json_request("/v1/tmbox/terminal", token=token)
         self.assertEqual(frame["keys"]["A"]["short"], "KÖ")
         self.assertEqual(frame["entry"]["short"]["#"], "SÖK")

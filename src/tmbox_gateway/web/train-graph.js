@@ -1,8 +1,8 @@
 /* Tågdiagrammet – ritat som en grafisk tidtabell.
  *
  * Samma ritare för Drift och för skärmen, efter planeringsprogrammets grafiska
- * tidtabell: stationerna ligger på avstånd från varandra (den typiska
- * gångtiden mellan dem, eftersom banan saknar kilometer), varje station kan
+ * tidtabell: stationerna ligger på avstånd från varandra (planens km när
+ * planens grafiska linjer finns, annars den typiska gångtiden), varje station kan
  * fällas ut till en rad per spår, uppehållet ritas som ett vågrätt streck på
  * spåret, minuterna står vid varje station, och tågnumret står längs sin
  * linje på varje delsträcka, i tågtypens färg. En förgrenad bana ritas som
@@ -118,6 +118,24 @@
   function lines(snapshot) {
     const stations = model.stationMap(snapshot);
     if (!stations.size) return [];
+    // Planens grafiska linjer (#100 C5): samma blad som arrangörens grafiska
+    // tidtabell, med nummer, namn och km. En sträcka får ligga på flera blad.
+    const planned = (snapshot?.display?.plan_lines || []).filter((line) =>
+      Array.isArray(line?.station_ids) && line.station_ids.length > 1 && line.station_ids.every((id) => stations.has(id)));
+    if (planned.length) {
+      const result = planned.map((line) => ({
+        id: `plan-${line.number || line.station_ids.join("-")}`,
+        name: [line.number, line.name].filter(Boolean).join(": ") || `${stations.get(line.station_ids[0]).name}–${stations.get(line.station_ids.at(-1)).name}`,
+        stations: line.station_ids.map((id) => stations.get(id)),
+        km: Array.isArray(line.km) && line.km.length === line.station_ids.length ? line.km.map(Number) : null,
+        color: /^#[0-9a-f]{6}$/i.test(line.color || "") ? line.color : null,
+      }));
+      const drawn = new Set(result.flatMap((line) => line.stations.map((station) => station.id)));
+      for (const station of model.stationOrder(snapshot)) {
+        if (!drawn.has(station.id)) { result.push({ id: station.id, name: station.name, stations: [station], km: null }); drawn.add(station.id); }
+      }
+      return result;
+    }
     const next = adjacency(snapshot);
     const order = model.stationOrder(snapshot).map((station) => station.id);
     const branch = new Set(snapshot?.display?.topology_branch_station_ids || []);
@@ -279,6 +297,13 @@
   // ── Geometrin ─────────────────────────────────────────────────────────
 
   const TYPE_OF = (service) => TYPES[String(service?.train_type || "").toLowerCase()] || "person";
+  /** Tågslagets färg ur planen, om den syns på både ljus och mörk botten; annars tågtypens. */
+  const readableColor = (value) => {
+    if (!/^#[0-9a-f]{6}$/i.test(value || "")) return null;
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16) / 255);
+    const light = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return light < 0.12 || light > 0.92 ? null : value;
+  };
 
   /**
    * Geometrin för ett diagram: en linje eller alla linjer ovanpå varandra.
@@ -296,6 +321,15 @@
     const chosen = o.line ? all.filter((line) => line.id === o.line) : all;
     const shown = chosen.length ? chosen : all.slice(0, 1);
     const run = runTimes(snapshot);
+    // Km och gångtid blandas inte: km bara när varje visat blad med flera
+    // stationer har km. Skalan gör en km lika stor som en typisk gångminut.
+    const multi = shown.filter((line) => line.stations.length > 1);
+    const typical = (() => {
+      const values = multi.flatMap((line) => line.stations.slice(1).map((station, index) => run.of(line.stations[index].id, station.id))).filter((v) => v > 0).sort((a, b) => a - b);
+      const kms = multi.flatMap((line) => (line.km || []).slice(1).map((km, index) => Math.abs(km - line.km[index]))).filter((v) => v > 0).sort((a, b) => a - b);
+      return values.length && kms.length ? values[Math.floor(values.length / 2)] / kms[Math.floor(kms.length / 2)] : 1;
+    })();
+    const kmScale = multi.length && multi.every((line) => line.km) ? typical : null;
     const tracks = stationTracks(snapshot), trackLookup = trackOf(snapshot);
     const expanded = (id) => o.tracks === "all" || (o.tracks instanceof Set && o.tracks.has(id));
     const rowsOf = (id) => (expanded(id) ? Math.max(1, (tracks.get(id) || []).length) : 1);
@@ -310,7 +344,8 @@
     // Höjden: varje linje tar sina gångtider gånger skalan, plus spårraderna.
     const blocks = shown.map((line) => {
       const ids = line.stations.map((station) => station.id);
-      const weights = ids.slice(1).map((id, index) => run.of(ids[index], id));
+      // Med planens km står stationerna på sitt avstånd, som på arrangörens blad.
+      const weights = ids.slice(1).map((id, index) => kmScale && line.km ? Math.max(0.5, Math.abs(line.km[index + 1] - line.km[index])) * kmScale : run.of(ids[index], id));
       const extra = ids.reduce((sum, id) => sum + (rowsOf(id) - 1) * o.trackStep, 0);
       return { line, ids, weights, extra, total: weights.reduce((sum, value) => sum + value, 0) };
     });
@@ -396,7 +431,10 @@
         const number = String(service.train_number);
         const state = states.get(number);
         const selected = o.train !== null && o.train !== undefined && number === String(o.train);
-        const train = { number, type: TYPE_OF(service), service, selected, state: state?.state || null,
+        // Tåg som delar nummer med ett annat står med bolag och tågslag: "DSB IC 116".
+        const label = service.service_key ? `${service.service_key} ${number}` : number;
+        const color = readableColor(service.color);
+        const train = { number, label, color, type: TYPE_OF(service), service, selected, state: state?.state || null,
           lit: state?.state === "on-line" || state?.state === "cleared" || selected, runs: [], legs: [], dwells: [], at: null, tag: null };
         let run = [];
         const flush = () => { if (run.length >= 2) train.runs.push(run); run = []; };
@@ -458,14 +496,14 @@
 
   const DRIFT = { past: "sh", grid: "gl", gridMajor: "gl h", gridMinor: "gl d", track: "gl trk", axis: "ax", label: "lbl s", code: "cnt", trackLabel: "tlbl", title: "gtitle",
     train: "tr-line", line: "pl", hit: "hit", lit: "tr-lit", litLine: "pl lit", dwell: "dw", name: "tr-name", minute: "tr-min",
-    tag: "tr-tag", tagBox: "tb", tagText: "tbt", tagBoxCleared: "tbh", tagTextCleared: "tbht", now: "now", nowBox: "nowb", nowText: "nowt", tagHeight: 22, labelDy: 4.5 };
+    tag: "tr-tag", tagBox: "tb", tagText: "tbt", tagBoxCleared: "tbh", tagTextCleared: "tbht", now: "now", nowBox: "nowb", nowText: "nowt", tagHeight: 22, labelDy: 4.5, colors: true };
   const SCREEN = { past: "sc-graph-past", grid: "graph-grid graph-row", gridMajor: "graph-grid graph-col", gridMinor: "graph-grid graph-col is-half", track: "graph-grid graph-track", axis: "sc-graph-time",
     label: "sc-graph-label", code: "sc-graph-code", trackLabel: "sc-graph-track", title: "sc-graph-title", train: "graph-train-group", line: "sc-graph-line", hit: "sc-graph-hit", lit: "graph-train-group is-lit", litLine: "sc-graph-line is-out",
     dwell: "sc-graph-dwell", name: "sc-graph-train", minute: "sc-graph-minute", tag: "graph-train-group", tagBox: "sc-graph-tag", tagText: "sc-graph-tag-text",
     tagBoxCleared: "sc-graph-tag is-cleared", tagTextCleared: "sc-graph-tag-text is-cleared", now: "sc-graph-now", nowBox: "sc-graph-now-tag", nowText: "sc-graph-now-text", tagHeight: 18, labelDy: 5.5,
     // Storskärmens tågnummer, minuter och klocka är 15 % större än Drifts (4.12.0); skarmar.css har storlekarna.
     // Spårens namn står i en egen kolumn, så att stationens namn inte skrivs över.
-    text: 1.15, trackColumn: 24 };
+    text: 1.15, trackColumn: 24, colors: true };
 
   /**
    * Ritar geometrin i en SVG. `cls` är klassnamnen (DRIFT eller SCREEN),
@@ -522,16 +560,16 @@
       const node = group(train, `${cls.train} is-${train.type}`);
       for (const run of train.runs) {
         const points = run.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
-        node.append(el("polyline", { class: `${cls.line} is-${train.type}${train.selected ? " lit sel" : ""}`, points }), el("polyline", { class: cls.hit, points }));
+        node.append(el("polyline", { class: `${cls.line} is-${train.type}${train.selected ? " lit sel" : ""}`, points, ...(train.color && cls.colors ? { style: `stroke:${train.color}` } : {}) }), el("polyline", { class: cls.hit, points }));
       }
       for (const dwell of train.dwells) node.append(el("line", { class: `${cls.dwell} is-${train.type}`, x1: dwell.x1.toFixed(1), y1: dwell.y.toFixed(1), x2: dwell.x2.toFixed(1), y2: dwell.y.toFixed(1) }));
       for (const leg of train.legs) {
-        const length = Math.hypot(leg.x2 - leg.x1, leg.y2 - leg.y1), textWidth = String(train.number).length * 6.6 * k + 6;
+        const length = Math.hypot(leg.x2 - leg.x1, leg.y2 - leg.y1), textWidth = String(train.label || train.number).length * 6.6 * k + 6;
         if (length >= textWidth + 10) {
           const mx = (leg.x1 + leg.x2) / 2, my = (leg.y1 + leg.y2) / 2, degrees = angle(leg);
           // Ovanför linjen, vinkelrätt mot den.
           const radians = degrees * Math.PI / 180, ox = Math.sin(radians) * 7 * k, oy = -Math.cos(radians) * 7 * k;
-          node.append(el("text", { class: `${cls.name} is-${train.type}`, x: 0, y: 0, "text-anchor": "middle", transform: `translate(${(mx + ox).toFixed(1)} ${(my + oy).toFixed(1)}) rotate(${degrees.toFixed(1)})` }, train.number));
+          node.append(el("text", { class: `${cls.name} is-${train.type}`, x: 0, y: 0, "text-anchor": "middle", transform: `translate(${(mx + ox).toFixed(1)} ${(my + oy).toFixed(1)}) rotate(${degrees.toFixed(1)})`, ...(train.color && cls.colors ? { style: `fill:${train.color}` } : {}) }, train.label || train.number));
         }
         if (g.options.minutes && Math.abs(leg.y2 - leg.y1) >= 14) {
           const down = leg.y2 > leg.y1;

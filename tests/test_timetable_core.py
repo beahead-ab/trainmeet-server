@@ -39,7 +39,7 @@ class SharedCodeTests(unittest.TestCase):
     """
 
     #: Samma värde som CORE_DIGEST i trainmeet-cloud/tests/test_timetable_core.py.
-    CORE_DIGEST = "3054b0a94b6a0eb76f1731ac5d07c88223c7780f15b3b206a78198a1c2a3d5f4"
+    CORE_DIGEST = "484719ed945fa78179b1051ae83992668aa910877201d24f5c2987323dc62e54"
 
     def test_the_copy_is_clouds(self):
         self.assertEqual(self.CORE_DIGEST, core_digest(CORE),
