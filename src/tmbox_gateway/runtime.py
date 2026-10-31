@@ -115,6 +115,29 @@ class RuntimePublication:
     def country(self) -> str:
         return meet_country(self.payload.get("meet"))
 
+    @property
+    def traffic_week(self) -> dict[str, Any]:
+        """Planens speldygn ur Clouds paket (`clock.traffic_week`), eller tomt.
+
+        `start_weekday` är 1 för måndag, `days` antalet speldygn och
+        `runs_over_midnight` att trafiken går dygnet runt (Cloud #100).
+        Äldre paket har inga speldygn; då gäller trafikdagen som förut.
+        """
+        clock = self.payload.get("clock")
+        week = clock.get("traffic_week") if isinstance(clock, dict) else None
+        if not isinstance(week, dict):
+            return {}
+        result: dict[str, Any] = {}
+        day = week.get("start_weekday")
+        if type(day) is int and 1 <= day <= 7:
+            result["start_day"] = DAY_ORDER[day - 1]
+        days = week.get("days")
+        if type(days) is int and 1 <= days <= 31:
+            result["days"] = days
+        if type(week.get("runs_over_midnight")) is bool:
+            result["runs_over_midnight"] = week["runs_over_midnight"]
+        return result
+
     @classmethod
     def parse(cls, payload: dict[str, Any]) -> "RuntimePublication":
         schema_version = payload.get("schema_version")
@@ -613,7 +636,7 @@ class SQLiteRuntimeStore:
                             value = excluded.value,
                             updated_at = CURRENT_TIMESTAMP
                         """,
-                        (publication.active_day,),
+                        (self._start_plan_calendar(publication),),
                     )
                     self._connection.execute(
                         "DELETE FROM runtime_settings WHERE key = 'runtime_error'"
@@ -626,6 +649,28 @@ class SQLiteRuntimeStore:
         if activate:
             self.bump_config_version()
         return publication
+
+    def _start_plan_calendar(self, publication: RuntimePublication) -> str:
+        """Trafikdagen en aktiverad publicering börjar på; en ny träff ur en plan
+        med speldygn får planens kalender (Cloud #100).
+
+        Kalendern börjar på planens veckodag som dag 1, och går trafiken
+        dygnet runt byts dygnet automatiskt vid dygnsskiftet. En träff som
+        redan har en kalender behåller den och trafikdagen blir som förut,
+        paketets: det admin valt gäller, och en pågående träff ändras inte.
+        Körs i aktiveringens transaktion.
+        """
+        week = publication.traffic_week
+        key = "meet_calendar:" + publication.meet_id
+        if not week.get("start_day") or self._connection.execute(
+                "SELECT 1 FROM runtime_settings WHERE key = ?", (key,)).fetchone() is not None:
+            return publication.active_day
+        calendar = {"start_day": week["start_day"], "day_number": 1,
+                    "day_change_mode": "auto" if week.get("runs_over_midnight") else "manual", "from_plan": True}
+        self._connection.execute(
+            "INSERT INTO runtime_settings(key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+            (key, json.dumps(calendar)))
+        return week["start_day"]
 
     def active(self) -> RuntimePublication | None:
         """The active publication, parsed once while it stays active.
@@ -889,7 +934,7 @@ class SQLiteRuntimeStore:
                         VALUES ('active_day', ?, CURRENT_TIMESTAMP)
                         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
                         """,
-                        (publication.active_day,),
+                        (self._start_plan_calendar(publication),),
                     )
                 self._connection.execute(
                     "DELETE FROM runtime_settings WHERE key = 'runtime_error'"
