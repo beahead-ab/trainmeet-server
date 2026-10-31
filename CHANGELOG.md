@@ -12,7 +12,9 @@ Lokförare och köruppdrag**, från två filer. **Planeringsfilen** (samma JSON
 som går till Cloud) ger alla tjänster exakt: tåg, stationer, spår, tider,
 rundgång, skjut vagnar, förberedelse och avslutning; Värnamos 142 läses på en
 bråkdel av en sekund. **Köruppdragens PDF** (gärna alla 600 sidorna) blir
-förlagan, och sidorna för varje tjänst hittas på tjänstens rubrik. Allt läses
+förlagan: sidorna för varje tjänst hittas på omslaget och sidfötterna, och
+PDF:en delas i en liten fil per tjänst, så att föraren bara får sina sidor
+(Värnamo: 612 sidor, 142 av 142 tjänster, ungefär 6 sekunder). Allt läses
 i webbläsaren; servern kontrollerar bara formen. Administratören granskar och
 gör sedan köruppdraget uttryckligen tillgängligt för förarna. Inget når
 förarna innan dess, och bara på träffen köruppdraget hör till. Föraren kan

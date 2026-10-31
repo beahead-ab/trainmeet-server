@@ -401,7 +401,7 @@ class LokforarenHTTPTests(unittest.TestCase):
         found = self.request("/v1/driver/duties?q=212", cookie=benny)[1]["duties"]
         self.assertEqual(["212"], [duty["number"] for duty in found])
         duty = self.request(f"/v1/driver/duties/{found[0]['id']}", cookie=benny)[1]["duty"]
-        self.assertEqual({"document_id": document["id"], "pages": [15, 16]}, duty["source"])
+        self.assertEqual({"document_id": document["id"], "pages": [15, 16], "part": False}, duty["source"])
         status, original, _ = self.request(f"/v1/driver/documents/{document['id']}.pdf", cookie=benny)
         self.assertEqual((200, "application/pdf", self.PDF), (status, original["type"], original["raw"]))
         active = self.request("/v1/driver/active", {"duty_id": found[0]["id"]}, cookie=benny)[1]["active"]
@@ -442,6 +442,66 @@ class LokforarenHTTPTests(unittest.TestCase):
         self.assertEqual(200, self.request(f"/v1/driver-admin/documents/{document['id']}/remove", {}, cookie=anna)[0])
         self.assertFalse(path.exists())
         self.assertEqual([], self.request("/v1/driver-admin/overview", cookie=anna)[1]["documents"])
+
+    def part(self, document_id: str, number: str, data: bytes, *, cookie: str | None) -> tuple[int, dict]:
+        request = Request(f"{self.base}/v1/driver-admin/documents/{document_id}/parts", data=data, method="POST",
+                          headers={"Content-Type": "application/pdf", "X-Duty": quote(number),
+                                   **({"Cookie": cookie} if cookie else {})})
+        try:
+            with urlopen(request) as response:
+                return response.status, json.loads(response.read())
+        except HTTPError as error:
+            return error.code, json.loads(error.read() or b"{}")
+
+    def test_each_driver_gets_only_the_pages_of_their_duty(self) -> None:
+        anna, benny = self.login("anna"), self.login("benny")
+        document = self.plan(anna, [self.duty("211"), self.duty("212")])[1]["document"]
+        doc = document["id"]
+        self.assertEqual(409, self.part(doc, "211", self.PDF, cookie=anna)[0])  # förlagan först
+        self.upload(doc, self.PDF, cookie=anna)
+        self.request(f"/v1/driver-admin/documents/{doc}/pages", {"total": 9, "pages": {"211": [1, 4], "212": [5, 8]}}, cookie=anna)
+        part_211 = b"%PDF-1.7\n" + b"2" * 900 + b"\n%%EOF\n"
+        self.assertEqual(403, self.part(doc, "211", part_211, cookie=benny)[0])
+        self.assertEqual(404, self.part(doc, "999", part_211, cookie=anna)[0])
+        self.assertEqual(415, self.part(doc, "211", b"inte en pdf", cookie=anna)[0])
+        self.assertEqual((200, {"part": {"number": "211", "size": len(part_211)}}), self.part(doc, "211", part_211, cookie=anna))
+        review = self.request(f"/v1/driver-admin/documents/{doc}", cookie=anna)[1]
+        self.assertEqual({"211": True, "212": False}, {duty["number"]: duty["part"] for duty in review["duties"]})
+        self.assertEqual(1, review["document"]["pdf"]["duties_with_parts"])
+        duty_211 = next(duty["id"] for duty in review["duties"] if duty["number"] == "211")
+        duty_212 = next(duty["id"] for duty in review["duties"] if duty["number"] == "212")
+        status, admin_copy, _ = self.request(f"/v1/driver-admin/duties/{duty_211}.pdf", cookie=anna)
+        self.assertEqual((200, part_211), (status, admin_copy["raw"]))
+
+        # Föraren får sidorna först när köruppdraget är tillgängligt.
+        self.assertEqual(404, self.request(f"/v1/driver/duties/{duty_211}.pdf", cookie=benny)[0])
+        self.request(f"/v1/driver-admin/documents/{doc}/publish", {"published": True}, cookie=anna)
+        status, original, headers = self.request(f"/v1/driver/duties/{duty_211}.pdf", cookie=benny)
+        self.assertEqual((200, "application/pdf", part_211), (status, original["type"], original["raw"]))
+        self.assertIn('filename="Tjanst-211.pdf"', headers["Content-Disposition"])
+        self.assertEqual(404, self.request(f"/v1/driver/duties/{duty_212}.pdf", cookie=benny)[0])
+        self.assertEqual(401, self.request(f"/v1/driver/duties/{duty_211}.pdf")[0])
+        found = self.request(f"/v1/driver/duties/{duty_211}", cookie=benny)[1]["duty"]
+        self.assertEqual({"document_id": doc, "pages": [1, 4], "part": True}, found["source"])
+
+        # Samma planeringsfil igen behåller delen; nya sidor tar bort den.
+        part_path = self.app.driver_documents.part_path(duty_211)
+        self.assertTrue(part_path.is_file())
+        self.plan(anna, [self.duty("211"), self.duty("212")])
+        self.assertEqual(1, self.request(f"/v1/driver-admin/documents/{doc}", cookie=anna)[1]["document"]["pdf"]["duties_with_parts"])
+        self.request(f"/v1/driver-admin/documents/{doc}/pages", {"total": 9, "pages": {"211": [1, 3]}}, cookie=anna)
+        self.assertEqual(0, self.request(f"/v1/driver-admin/documents/{doc}", cookie=anna)[1]["document"]["pdf"]["duties_with_parts"])
+        self.assertFalse(part_path.exists())
+        self.assertEqual(404, self.request(f"/v1/driver/duties/{duty_211}.pdf", cookie=benny)[0])
+
+        # En ny PDF tar också bort delarna, och borttaget köruppdrag tar filerna.
+        self.part(doc, "211", part_211, cookie=anna)
+        self.upload(doc, self.OTHER_PDF, cookie=anna)
+        self.assertFalse(part_path.exists())
+        self.part(doc, "212", part_211, cookie=anna)
+        self.assertTrue(part_path.exists())
+        self.request(f"/v1/driver-admin/documents/{doc}/remove", {}, cookie=anna)
+        self.assertFalse(part_path.exists())
 
     def test_only_administrators_add_duties_and_only_real_pdfs(self) -> None:
         anna, benny = self.login("anna"), self.login("benny")

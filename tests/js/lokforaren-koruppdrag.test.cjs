@@ -10,6 +10,7 @@ const reader = require("../../src/tmbox_gateway/web/lokforaren-koruppdrag.js");
 const { tinyPdf, tinyPlan } = require("./lokforaren-fixtures.cjs");
 
 const PDFJS = path.join(__dirname, "../../src/tmbox_gateway/web/pdfjs");
+const PDFLib = require("../../src/tmbox_gateway/web/pdflib/pdf-lib.min.js");
 
 test("tjänsterna i planeringsfilen blir Lokförarens tjänster", () => {
   const plan = tinyPlan();
@@ -24,7 +25,7 @@ test("tjänsterna i planeringsfilen blir Lokförarens tjänster", () => {
       { number: "G 5453", from: "Spiten", to: "Kjøllstad", vmax: 80 }, { number: "G 5456", from: "Kjøllstad", to: "Spiten", vmax: 80 }] });
   assert.deepEqual(d211.events, [
     { kind: "duty_start", time: "17:10", station: "Spiten", notes: ["Förberedelse"] },
-    { station: "Spiten", train: "G 5453", track: "5", kind: "departure", time: "17:30" },
+    { station: "Spiten", train: "G 5453", track: "1", kind: "departure", time: "17:30", notes: ["Före avgång: hämta fordonet från spår 5"] },
     { station: "Tveiten", train: "G 5453", track: "2", kind: "stop", arrival: "17:58", departure: "18:14", notes: ["Rundgång", "Skjut vagnar"] },
     { station: "Kjøllstad", train: "G 5453", track: "1", kind: "arrival", time: "18:25" },
     { station: "Kjøllstad", train: "G 5456", track: "1", kind: "departure", time: "19:35" },
@@ -32,9 +33,9 @@ test("tjänsterna i planeringsfilen blir Lokförarens tjänster", () => {
     { station: "Spiten", train: "G 5456", track: "1", kind: "arrival", time: "20:42" },
     { kind: "duty_end", time: "21:02", station: "Spiten", notes: ["Avslutning"] },
   ]);
-  // Växling på en station: hela tiden där, och tågslagets förberedelse.
-  assert.deepEqual([d212.start, d212.end, d212.vehicle, d212.events.map((event) => event.kind)],
-    ["08:20", "11:40", "", ["duty_start", "stop", "duty_end"]]);
+  // Växling på en station: hela tiden där, tågslagets namn och förberedelse.
+  assert.deepEqual([d212.start, d212.end, d212.vehicle, d212.trains, d212.events.map((event) => event.kind)],
+    ["08:20", "11:40", "", [{ number: "Växling", from: "Tveiten", to: "Tveiten", vmax: 80 }], ["duty_start", "stop", "duty_end"]]);
   // Tjänstens egen starttid, och över midnatt.
   assert.deepEqual([d213.start, d213.end], ["23:15", "00:45"]);
   assert.deepEqual(d213.events.at(-2).notes, ["Ring tågklareraren"]);
@@ -68,8 +69,27 @@ test("sidorna för varje tjänst hittas på tjänstens rubrik", () => {
     ["Tjeneste 9", "en tjänst som inte finns i planen"],
   ];
   const result = reader.matchPages(pages, duties);
-  assert.deepEqual(result.pages, { 211: [3, 4], 212: [5, 5], 213: [6, 7] });
+  // Sidan med tjänst 9 hör inte till planen och läggs inte till 213.
+  assert.deepEqual(result.pages, { 211: [3, 4], 212: [5, 5], 213: [6, 6] });
   assert.equal(result.total, 7);
+  assert.deepEqual(result.warnings, []);
+});
+
+test("planeringsprogrammets häften: omslag, sidfötter och tjänster på åtta sidor", () => {
+  // Så skriver planeringsprogrammet ut köruppdragen (Värnamo, 612 sidor):
+  // omslaget har ordet och numret på olika rader, sidfötterna "Tjänst 1 –
+  // Dagl – Sida 4", och mittsidan med tidtabellen har inget nummer alls.
+  const cover = (word, number) => ["Topologi", "Värnamo Moduldagar", "Idp Ryt Ebh Hgt Gbg " + word, "Tri", number, "Dagligen"];
+  const pages = [
+    cover("Tjänst", "211"), ["Tjänst 211 – Dagl – Sida 4"], ["Tjänst i CN tåg G 5453", "Avg Spiten 1 17:30"], ["Inga fler tåg i denna tjänst.", "Tjänst 211 – Dagl – Sida 2 Tjänst 211 – Dagl – Sida 3"],
+    cover("Tjeneste", "212"), ["Tjeneste 212 – Daglig – Side 8"], ["Skifteoppdrag CN", "Rise 08:30 11:30"], ["Tjeneste 212 – Daglig – Side 2 Tjeneste 212 – Daglig – Side 7"],
+    ["Tjeneste 212 – Daglig – Side 6"], ["fortsatt"], ["mer"], ["Tjeneste 212 – Daglig – Side 4 Tjeneste 212 – Daglig – Side 5"],
+    cover("Tjänst", "213"), ["Tjänst 213 – M,Ti – Sida 4"], ["Avg Spiten 23:40 G 5481"], ["Tjänst 213 – M,Ti – Sida 2 Tjänst 213 – M,Ti – Sida 3"],
+  ];
+  const result = reader.matchPages(pages, [
+    { number: "211", trains: [{ number: "G 5453" }] }, { number: "212", trains: [{ number: "Skifteoppdrag" }] }, { number: "213", trains: [{ number: "G 5481" }] },
+  ]);
+  assert.deepEqual(result.pages, { 211: [1, 4], 212: [5, 12], 213: [13, 16] });
   assert.deepEqual(result.warnings, []);
 });
 
@@ -120,4 +140,20 @@ test("pdf.js läser varje sida i en riktig PDF, med nordiska tecken, och sidorna
     ["Tjeneste 212", "Tveiten 08:30 Ålö æøå 21"],
   ]);
   assert.deepEqual(reader.matchPages(pages, duties.slice(0, 2)).pages, { 211: [1, 2], 212: [3, 3] });
+});
+
+test("förlagan delas i en liten PDF per tjänst med bara dess sidor", async () => {
+  const pdf = tinyPdf([
+    [[40, 780, "Tjeneste 211"]], [[40, 780, "G 5453"]], [[40, 780, "Tjeneste 212"]], [[40, 780, "Tjeneste 213"]], [[40, 780, "G 5481"]],
+  ]);
+  const parts = [];
+  const count = await reader.split(pdf, { 211: [1, 2], 212: [3, 3], 213: [4, 5] }, async (part) => { parts.push(part); }, PDFLib);
+  assert.equal(count, 3);
+  assert.deepEqual(parts.map(({ number, done, total }) => [number, done, total]), [["211", 1, 3], ["212", 2, 3], ["213", 3, 3]]);
+  const pageCounts = [];
+  for (const part of parts) {
+    const document = await PDFLib.PDFDocument.load(part.bytes);
+    pageCounts.push([document.getPageCount(), document.getTitle()]);
+  }
+  assert.deepEqual(pageCounts, [[2, "Tjänst 211"], [1, "Tjänst 212"], [2, "Tjänst 213"]]);
 });

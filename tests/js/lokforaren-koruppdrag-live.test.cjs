@@ -10,6 +10,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const assert = require('node:assert/strict');
 const { tinyPdf, tinyPlan } = require('./lokforaren-fixtures.cjs');
+const PDFLib = require('../../src/tmbox_gateway/web/pdflib/pdf-lib.min.js');
 const root = path.resolve(__dirname, '../..');
 
 (async () => {
@@ -67,7 +68,7 @@ const root = path.resolve(__dirname, '../..');
 
     // 3. PDF:en blir förlagan; sidorna hittas för varje tjänst.
     await page.locator('#lf-file').setInputFiles(pdfFile);
-    await page.waitForFunction(() => /Sidorna hittades för 3 av 3 tjänster i 5 sidor/.test(document.querySelector('#lf-docs-message').textContent), null, { timeout: 30000 });
+    await page.waitForFunction(() => /Sidorna hittades för 3 av 3 tjänster i 5 sidor. Varje förare får bara sin tjänsts sidor/.test(document.querySelector('#lf-docs-message').textContent), null, { timeout: 30000 });
     await page.waitForFunction(() => [...document.querySelectorAll('#lf-review-rows tr td:last-child')].map((cell) => cell.textContent).join(' ') === '2–3 4 5');
     assert.match(await page.locator('#lf-docs-rows').innerText(), /sidor för 3 av 3 tjänster/);
 
@@ -91,10 +92,13 @@ const root = path.resolve(__dirname, '../..');
     const source = phone.locator('#found-source');
     await source.waitFor({ state: 'visible' });
     assert.match(await source.innerText(), /sida 2–3/);
-    assert.match(await source.getAttribute('href'), /^\/v1\/driver\/documents\/[0-9a-f]{12}\.pdf#page=2$/);
+    // Bara tjänstens egna sidor (2–3), inte hela köruppdraget.
+    assert.match(await source.getAttribute('href'), /^\/v1\/driver\/duties\/k[0-9a-f]{12}-211\.pdf$/);
     if (process.env.LF_SHOTS) await phone.screenshot({ path: path.join(process.env.LF_SHOTS, 'driver-found.png') });
-    const original = await driver.request.get(base + (await source.getAttribute('href')).split('#')[0]);
+    const original = await driver.request.get(base + await source.getAttribute('href'));
     assert.equal(original.headers()['content-type'], 'application/pdf');
+    const part = await PDFLib.PDFDocument.load(await original.body());
+    assert.equal(part.getPageCount(), 2);
     await phone.locator('#duty-activate').click();
     await phone.locator('#view-korplan').waitFor({ state: 'visible' });
     if (process.env.LF_SHOTS) await phone.screenshot({ path: path.join(process.env.LF_SHOTS, 'driver-korplan.png') });

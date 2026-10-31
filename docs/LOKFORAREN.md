@@ -74,18 +74,34 @@ Ur planeringsfilen (`DriverDuties`, med planeringsprogrammets `$id`/`$ref`):
 |---|---|
 | `Identity` | tjänstens nummer |
 | delarna (`Parts`), från anrop till anrop på ett tåg | tåg med tågslagets prefix (`G 5453`), avgång, uppehåll, genomfart och ankomst med station och spår |
-| `FromTrack`/`ToTrack` på en del | spåret där tåget tas eller lämnas |
+| `FromTrack`/`ToTrack` på en del | anvisning om uppställningsspåret där fordonet hämtas eller lämnas |
 | `Runaround`, `PushWagons`, `TurnLoco`, anropets anteckningar | Rundgång, Skjut vagnar, Vänd loket, fri text |
 | tågslagets `DefaultPreparationMinutes`/`DefaultFinishingMinutes`, eller tjänstens egna tider | Förberedelse och Avslutning |
 | tågslagets bolag, omloppets fordon (`ScheduledObjects`) | bolag och fordon |
 | ett ensamt anrop (till exempel växling 08:30–11:30) | hela tiden på stationen |
 
-Sidorna i PDF:en: en sida vars översta rader har en tjänsterubrik
-(`Tjänst 39`, `Tjeneste nr. 39`, `Duty 39` …) inleder den tjänsten, och sidorna
-efter hör till den. En innehållsförteckning (rubriker för många tjänster på
-samma sida) hoppas över. Utan rubriker känns tjänsten igen på sina tågnummer.
-Tjänster som inte hittas och sidor som inte nämner tjänstens tåg blir
-avvikelser att titta på i granskningen.
+Sidorna i PDF:en: varje sida ägs av tjänsten vars nummer står på den, i en
+rubrik eller sidfot (`Tjänst 39 – Dagl – Sida 2`, `Tjeneste 48 – Dagl – Side 4`)
+eller på planeringsprogrammets omslag (ordet Tjänst/Tjeneste och numret ensamt
+på en rad). Mittsidan med tidtabellen saknar nummer och hör till tjänsten den
+står i. En innehållsförteckning och sidor för tjänster som inte finns i planen
+räknas inte. Utan nummer alls känns tjänsten igen på sina tågnummer. Tjänster
+som inte hittas och sidor som inte nämner tjänstens tåg blir avvikelser i
+granskningen. Värnamos häfte (612 sidor, 131 tjänster på 4 sidor och 11 på 8)
+ger 142 av 142 utan avvikelser.
+
+Sedan delas förlagan i en liten PDF per tjänst med pdf-lib (`web/pdflib/`,
+MIT) i webbläsaren, och delarna sparas i `lokforaren/delar/<sha256>.pdf`.
+Föraren får bara sin tjänsts sidor (i Värnamo ungefär 125 kB i stället för
+hela häftet på 2,9 MB) och öppnar dem i telefonens egen PDF-visare. Går det
+inte att dela får föraren hela PDF:en på rätt sida. Nya sidor eller en ny PDF
+tar bort de gamla delarna.
+
+Uppställningsspår: delens `FromTrack`/`ToTrack` i planen är spåret där
+fordonet hämtas eller lämnas, inte avgångs- eller ankomstspåret. De blir
+anvisningar ("Före avgång: hämta fordonet från spår 21 (X2 uppställning)").
+Växling (tågslag med `IsShunting`) har inget tågnummer i köruppdraget och
+visas med tågslagets namn, till exempel Skifteoppdrag.
 
 Tjänsterna ligger i databasen och följer med i säkerhetskopiorna; PDF-filerna
 gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
@@ -161,7 +177,8 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
 | POST | `/v1/driver/avatar` | `{image: "data:image/jpeg;base64,…"}` |
 | POST | `/v1/driver/avatar/remove` | ta bort ikonen |
 | GET | `/v1/driver/avatars/{user_id}` | ikonen |
-| GET | `/v1/driver/documents/{id}.pdf` | förlagan, om köruppdraget är tillgängligt |
+| GET | `/v1/driver/duties/{tjänst-id}.pdf` | tjänstens egna sidor, om köruppdraget är tillgängligt |
+| GET | `/v1/driver/documents/{id}.pdf` | hela förlagan, om tjänsten saknar egna sidor |
 
 Alla kräver en inloggad session; POST från en annan sida nekas.
 
@@ -175,5 +192,7 @@ För administratörer (ägare och administratörer, aldrig förare):
 | POST | `/v1/driver-admin/documents/{id}/pdf` | PDF:en som den är (`Content-Type: application/pdf`, `X-Filename`) |
 | GET | `/v1/driver-admin/documents/{id}.pdf` | PDF:en, för att läsa sidorna igen |
 | POST | `/v1/driver-admin/documents/{id}/pages` | `{pages: {"39": [12, 15]}, total, warnings}` |
+| POST | `/v1/driver-admin/documents/{id}/parts` | en tjänsts egna sidor som PDF (`X-Duty: 39`) |
+| GET | `/v1/driver-admin/duties/{tjänst-id}.pdf` | en tjänsts egna sidor, för granskningen |
 | POST | `/v1/driver-admin/documents/{id}/publish` | `{published: true/false}` |
 | POST | `/v1/driver-admin/documents/{id}/remove` | ta bort köruppdraget och filen |

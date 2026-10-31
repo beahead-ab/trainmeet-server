@@ -1036,6 +1036,14 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "document_not_found", "Köruppdraget finns inte på servern")
         return path
 
+    def driver_duty_pdf(self, duty_id: str) -> Path:
+        """Bara tjänstens egna sidor ur förlagan, för föraren."""
+        meet_key, _, _ = self._driver_meet()
+        path = self.driver_documents.part_path(duty_id, meet_key)
+        if path is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "document_not_found", "Tjänstens sidor finns inte på servern")
+        return path
+
     # ── Inställningar → Lokförare (#225) ────────────────────────────────
     def driver_admin_overview(self, client: PairedClient) -> dict[str, Any]:
         """Allt administratören behöver för förarna: vilka som kör nu och
@@ -1081,10 +1089,23 @@ class TrainMeetHTTPApplication:
         self._require_admin(client)
         return {"document": self.driver_documents.attach_pdf(document_id, stream, length, filename=filename)}
 
+    def driver_admin_store_part(self, client: PairedClient, document_id: str, number: str, stream: Any,
+                                length: int) -> dict[str, Any]:
+        self._require_admin(client)
+        return {"part": self.driver_documents.store_part(document_id, number, stream, length)}
+
+    def driver_admin_duty_pdf(self, client: PairedClient, duty_id: str) -> Path:
+        self._require_admin(client)
+        path = self.driver_documents.part_path(duty_id)
+        if path is None:
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "document_not_found", "Tjänstens sidor finns inte på servern")
+        return path
+
     def driver_admin_document(self, client: PairedClient, document_id: str) -> dict[str, Any]:
         self._require_admin(client)
         return {"document": self.driver_documents.document(document_id),
-                "duties": [duty_summary(duty) | {"pages": duty.get("source", {}).get("pages", [])}
+                "duties": [duty_summary(duty) | {"pages": duty.get("source", {}).get("pages", []),
+                                                 "part": duty.get("source", {}).get("part", False)}
                            for duty in self.driver_documents.duties(document_id)]}
 
     def driver_admin_document_pdf(self, client: PairedClient, document_id: str) -> Path:
@@ -5563,6 +5584,7 @@ class TrainMeetHTTPApplication:
             "/assets/lokforaren-koruppdrag.js": "lokforaren-koruppdrag.js",
             "/assets/pdfjs/pdf.min.mjs": "pdfjs/pdf.min.mjs",
             "/assets/pdfjs/pdf.worker.min.mjs": "pdfjs/pdf.worker.min.mjs",
+            "/assets/pdflib/pdf-lib.min.js": "pdflib/pdf-lib.min.js",
             "/assets/pi-network.js": "pi-network.js",
             "/assets/tellurian-settings.js": "tellurian-settings.js",
             "/assets/tellurian-messages.js": "tellurian-messages.js",
@@ -6037,8 +6059,8 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path.startswith("/tmbox-lab/"):
                 from .terminal16_embedded import serve
                 return serve(self, "POST")
-            if re.fullmatch(r"/v1/driver-admin/documents/[0-9a-f]{12}/pdf", path):
-                self._driver_admin_upload(path.split("/")[4])
+            if re.fullmatch(r"/v1/driver-admin/documents/[0-9a-f]{12}/(pdf|parts)", path):
+                self._driver_admin_upload(path.split("/")[4], part=path.endswith("/parts"))
                 return
             payload = self._read_json()
             if path.startswith("/v1/driver/"):
@@ -6653,6 +6675,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                                                 "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")})
             elif path == "/v1/driver/duties":
                 self._send_json(HTTPStatus.OK, application.driver_duties(parse_qs(query).get("q", [""])[0]))
+            elif re.fullmatch(r"/v1/driver/duties/k[0-9a-f]{12}-[0-9a-z-]+\.pdf", path):
+                duty_id = path.removeprefix("/v1/driver/duties/").removesuffix(".pdf")
+                self._send_pdf(application.driver_duty_pdf(duty_id), f"Tjanst-{duty_id.split('-', 1)[1]}.pdf")
             elif path.startswith("/v1/driver/duties/"):
                 self._send_json(HTTPStatus.OK, {"duty": application.driver_duty(path.removeprefix("/v1/driver/duties/"))})
             elif path == "/v1/driver/presence":
@@ -6696,6 +6721,11 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/driver-admin/overview":
                 self._send_json(HTTPStatus.OK, application.driver_admin_overview(client))
                 return
+            duty = re.fullmatch(r"/v1/driver-admin/duties/(k[0-9a-f]{12}-[0-9a-z-]+)\.pdf", path)
+            if duty:
+                self._send_pdf(application.driver_admin_duty_pdf(client, duty.group(1)),
+                               f"Tjanst-{duty.group(1).split('-', 1)[1]}.pdf")
+                return
             match = re.fullmatch(r"/v1/driver-admin/documents/([0-9a-f]{12})(\.pdf)?", path)
             if match is None:
                 raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
@@ -6711,9 +6741,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get("Sec-Fetch-Site") == "cross-site":
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "same_origin_required", "Öppna Inställningar från denna TrainMeet Server")
 
-    def _driver_admin_upload(self, document_id: str) -> None:
+    def _driver_admin_upload(self, document_id: str, part: bool = False) -> None:
         """PDF:en kommer som den är (Content-Type application/pdf), inte som
-        JSON: den kan vara tiotals MB och skrivs direkt till disk."""
+        JSON: den kan vara tiotals MB och skrivs direkt till disk. En del
+        (part) är en tjänsts egna sidor, med tjänstens nummer i X-Duty."""
         self._driver_admin_same_origin()
         client = self._authenticated_client()
         self.server.application._require_admin(client)
@@ -6725,7 +6756,13 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_body", "Felaktig datalängd") from error
         filename = unquote(self.headers.get("X-Filename", ""))
         try:
-            result = self.server.application.driver_admin_attach_pdf(client, document_id, self.rfile, length, filename)
+            if part:
+                number = unquote(self.headers.get("X-Duty", "")).strip()
+                if not number:
+                    raise DriverError(400, "duty_required", "Tjänstens nummer saknas")
+                result = self.server.application.driver_admin_store_part(client, document_id, number, self.rfile, length)
+            else:
+                result = self.server.application.driver_admin_attach_pdf(client, document_id, self.rfile, length, filename)
         except DriverError as error:
             if error.status in {HTTPStatus.REQUEST_ENTITY_TOO_LARGE, HTTPStatus.NOT_FOUND}:
                 self.close_connection = True  # resten av filen läses aldrig
@@ -6748,13 +6785,13 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         except DriverError as error:
             raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error)) from None
 
-    def _send_pdf(self, path: Path) -> None:
+    def _send_pdf(self, path: Path, filename: str = "koruppdrag.pdf") -> None:
         """En PDF i bitar, så att 600 sidor inte läses in i minnet."""
         size = path.stat().st_size
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "application/pdf")
         self.send_header("Content-Length", str(size))
-        self.send_header("Content-Disposition", 'inline; filename="koruppdrag.pdf"')
+        self.send_header("Content-Disposition", f'inline; filename="{re.sub(r"[^0-9A-Za-z._-]", "-", filename)}"')
         self.send_header("Cache-Control", "private, max-age=3600")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")

@@ -40,7 +40,7 @@ function tinyPlan([first, middle, last] = ["Spiten", "Tveiten", "Kjøllstad"]) {
   const companies = [id({ Id: 2, Name: "CargoNet AS", Signature: "CN" }), id({ Id: 13, Name: "SJ AB", Signature: "SJ" })];
   const categories = [
     id({ Id: 1, Prefix: "G", Suffix: "", Name: "CN gods", DefaultPreparationMinutes: 20, DefaultFinishingMinutes: 20, CompanyId: 2 }),
-    id({ Id: 2, Prefix: "", Suffix: "", Name: "Växling", DefaultPreparationMinutes: 10, DefaultFinishingMinutes: 10, CompanyId: null }),
+    id({ Id: 2, Prefix: "", Suffix: "", Name: "Växling", IsShunting: true, DefaultPreparationMinutes: 10, DefaultFinishingMinutes: 10, CompanyId: null }),
   ];
   const station = (Id, Name) => id({ $type: "Station", Id, Name, Signature: Name.slice(0, 3), Tracks: values([]) });
   const spiten = station(1, first), tveiten = station(2, middle), kjollstad = station(3, last);

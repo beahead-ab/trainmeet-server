@@ -373,7 +373,10 @@
     source.hidden = !(duty.source && duty.source.document_id && pages.length);
     if (!source.hidden) {
       const span = pages[0] === pages[pages.length - 1] ? String(pages[0]) : `${pages[0]}–${pages[pages.length - 1]}`;
-      source.href = `/v1/driver/documents/${duty.source.document_id}.pdf#page=${pages[0]}`;
+      // Helst bara tjänstens egna sidor; annars hela köruppdraget på rätt sida.
+      source.href = duty.source.part
+        ? `/v1/driver/duties/${encodeURIComponent(duty.id)}.pdf`
+        : `/v1/driver/documents/${duty.source.document_id}.pdf#page=${pages[0]}`;
       source.textContent = t("Förlagan i köruppdraget · sida {pages}", {pages: span});
     }
     const button = $("#duty-activate");

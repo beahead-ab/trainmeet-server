@@ -6,8 +6,9 @@
  *      Cloud) ger tjänsterna: tåg, stationer, spår, tider och anvisningar.
  *      fromPlan() gör om dem till samma form som Clouds driver_duties.
  *   2. Köruppdragens PDF (utskriften av samma tjänster, gärna 600 sidor) är
- *      förlagan. readPdf() tar fram texten på varje sida med pdf.js och
- *      matchPages() hittar vilka sidor som hör till vilken tjänst.
+ *      förlagan. readPdf() tar fram texten på varje sida med pdf.js,
+ *      matchPages() hittar vilka sidor som hör till vilken tjänst och split()
+ *      gör en liten PDF per tjänst med pdf-lib, så att föraren bara får sina.
  *
  * Servern får bara färdiga tjänster och sidnummer och kontrollerar formen;
  * den tolkar varken planen eller PDF:en.
@@ -23,6 +24,8 @@
   const PDFJS_VERSION = "6.4.299";
   const PDFJS = `/assets/pdfjs/pdf.min.mjs?v=${PDFJS_VERSION}`;
   const WORKER = `/assets/pdfjs/pdf.worker.min.mjs?v=${PDFJS_VERSION}`;
+  const PDFLIB_VERSION = "1.17.1";
+  const PDFLIB = `/assets/pdflib/pdf-lib.min.js?v=${PDFLIB_VERSION}`;
   const DAY = 1440;
 
   // ── Planeringsfilen ──────────────────────────────────────────────────
@@ -108,6 +111,8 @@
     const callsOf = (train) => list(train?.Calls).sort((a, b) => (a.Sequence ?? 0) - (b.Sequence ?? 0));
     const labelOf = (train) => {
       const category = categories.get(train.CategoryId) || deref(train.Category) || {};
+      // Växling har inget tågnummer i köruppdraget, bara tågslagets namn.
+      if (category.IsShunting) return text(category.Name) || "Växling";
       return text(`${text(category.Prefix)} ${train.Number}${text(category.Suffix)}`);
     };
     const notesOf = (call) => {
@@ -151,10 +156,13 @@
             number: label, from: name(calls[0]), to: name(calls[calls.length - 1]),
             ...(Number.isInteger(segmentTrain.MaxSpeed) && segmentTrain.MaxSpeed > 0 ? { vmax: segmentTrain.MaxSpeed } : {}),
           });
+          // Delens FromTrack/ToTrack är uppställningsspåret där fordonet hämtas
+          // eller lämnas, inte avgångs- eller ankomstspåret.
+          const fromTrack = segmentTrain === train ? deref(part.FromTrack) : null;
+          const toTrack = segmentTrain === (other || train) ? deref(part.ToTrack) : null;
+          const where = (track) => `spår ${text(track.Number)}${text(track.Usage) ? ` (${text(track.Usage)})` : ""}`;
           calls.forEach((call, index) => {
-            let track = trackOf(call);
-            if (index === 0 && segmentTrain === train && deref(part.FromTrack)) track = deref(part.FromTrack);
-            if (index === calls.length - 1 && deref(part.ToTrack) && segmentTrain === (other || train)) track = deref(part.ToTrack);
+            const track = trackOf(call);
             const event = { station: text(stationOf(track)?.Name || name(call)), train: label };
             if (track?.Number !== undefined && text(track.Number)) event.track = text(track.Number);
             const arrival = clock(call.Arrival);
@@ -174,6 +182,8 @@
               Object.assign(event, { kind: "pass", time: hhmm(departure ?? arrival) });
             }
             const notes = notesOf(call);
+            if (index === 0 && fromTrack) notes.unshift(`Före avgång: hämta fordonet från ${where(fromTrack)}`);
+            if (index === calls.length - 1 && toTrack) notes.push(`Efter ankomst: ställ fordonet på ${where(toTrack)}`);
             if (notes.length) event.notes = notes;
             if (departure === null && arrival === null) return;
             events.push(event);
@@ -196,7 +206,7 @@
       const endAt = clock(raw.OverriddenEndTime) ?? (lastAt + (Number(lastCategory.DefaultFinishingMinutes) || 0));
       if (hhmm(startAt) !== hhmm(firstAt)) events.unshift({ kind: "duty_start", time: hhmm(startAt), station: firstEvent.station, notes: ["Förberedelse"] });
       if (hhmm(endAt) !== hhmm(lastAt)) events.push({ kind: "duty_end", time: hhmm(endAt), station: lastEvent.station, notes: ["Avslutning"] });
-      const company = companies.get(raw.CompanyId) || companies.get(firstCategory.CompanyId) || {};
+      const company = companies.get(raw.CompanyId) || companies.get(firstTrain?.CompanyId) || companies.get(firstCategory.CompanyId) || {};
       const vmax = trainsOut.map((item) => item.vmax).filter(Boolean);
       duties.push({
         number,
@@ -261,7 +271,9 @@
 
   /** Alla sidor som textrader. onProgress({page, pages}) efter varje sida. */
   async function extract(data, onProgress, pdfjs) {
-    const task = pdfjs.getDocument({ data: new Uint8Array(data), isEvalSupported: false, disableFontFace: true });
+    // En kopia: pdf.js lämnar över sin buffert till arbetstråden, och
+    // samma PDF behövs efteråt för att dela den per tjänst.
+    const task = pdfjs.getDocument({ data: new Uint8Array(data).slice(), isEvalSupported: false, disableFontFace: true });
     const pages = [];
     try {
       const pdf = await task.promise;
@@ -284,60 +296,87 @@
     return extract(data, onProgress, pdfjs);
   }
 
-  // Rubriken som inleder en tjänst i utskriften, på de språk köruppdragen
-  // skrivs på: "Tjänst 39", "Tjeneste nr. 39", "Tjenestenummer 39", "Duty 39".
-  const HEADING = /(?:^|[^\p{L}])(?:lokförartjänst|förartjänst|köruppdrag|tjänst|tjeneste(?:nummer)?|tjenste|dienst|duty|turnus|uppdrag)\s*(?:nr\.?|no\.?|nummer|#)?\s*[:.]?\s*(\d{1,4}[a-z]?)(?![\p{L}\d])/iu;
+  // Tjänstens nummer i utskriften, på de språk köruppdragen skrivs på:
+  // "Tjänst 39", "Tjeneste nr. 39", sidfoten "Tjänst 39 – Dagl – Sida 2".
+  const HEADING = /(?:^|[^\p{L}])(?:lokförartjänst|förartjänst|köruppdrag|tjänst|tjeneste(?:nummer)?|tjenste|dienst|duty|turnus|uppdrag)\s*(?:nr\.?|no\.?|nummer|#)?\s*[:.]?\s*(\d{1,4}[a-z]?)(?![\p{L}\d])/giu;
+  // Omslaget i planeringsprogrammets häften: ordet på en rad, numret ensamt på en annan.
+  const COVER_WORD = /(?:^|[^\p{L}])(?:tjänst|tjeneste|tjenste|dienst|duty)\s*$/iu;
+  const GAP = 2; // sidor utan nummer som fylls i från grannarna; längre luckor är annat (instruktioner, bilagor)
 
-  /** Sidorna för varje tjänst: { pages: {nummer: [från, till]}, warnings }.
-   *
-   *  En sida som börjar med en tjänsterubrik (bland de översta raderna)
-   *  inleder den tjänsten, och sidorna efter hör till den tills nästa
-   *  rubrik. Sidor med rubriker för många tjänster (en innehållsförteckning)
-   *  hoppas över. Hittas inga rubriker alls används tågnumren: en sida där
-   *  alla en tjänsts tåg står hör till den tjänsten. Till sist kontrolleras
-   *  att varje tjänsts sidor nämner minst ett av dess tåg. */
   // Tågen kan vara {number: "X 104"} (planen) eller "X 104" (granskningen).
   const trainLabel = (train) => String(train && typeof train === "object" ? train.number : train);
   const trainNumbers = (duty) => (duty.trains || []).map((train) => (trainLabel(train).match(/\d+/g) || []).pop()).filter(Boolean);
 
-  function matchPages(pages, duties, { top = 8 } = {}) {
-    const known = new Map(duties.map((duty) => [duty.number.toLowerCase(), duty]));
+  /** Sidorna för varje tjänst: { pages: {nummer: [från, till]}, total, warnings }.
+   *
+   *  Varje sida ägs av tjänsten vars nummer står på den, i en rubrik eller
+   *  sidfot ("Tjänst 39 – Dagl – Sida 2") eller på ett omslag (ordet Tjänst
+   *  och numret ensamt på en rad). En sida med många tjänster (en innehålls-
+   *  förteckning) ägs av ingen. Sidor utan nummer inne i en tjänst hör till
+   *  den, och en eller två efter en tjänst fortsätter den; sidor före den
+   *  första tjänsten hör inte till någon. Hittas inga nummer alls används
+   *  tågnumren: en sida där alla en tjänsts tåg står hör till den. Till sist
+   *  kontrolleras att varje tjänsts sidor nämner minst ett av dess tåg. */
+  function matchPages(pages, duties) {
+    const known = new Map(duties.map((duty) => [duty.number.toLowerCase(), duty.number]));
     const result = {};
     const warnings = [];
-    const assigned = new Array(pages.length).fill(null);
-    const headingsOn = (rows, all = false) => {
-      const found = [];
-      for (const row of rows) {
-        const match = HEADING.exec(row);
-        if (match && (all || known.has(match[1].toLowerCase()))) found.push(known.get(match[1].toLowerCase())?.number || match[1]);
-      }
-      return found;
-    };
-    let current = null;
-    let headings = 0;
+    const owner = new Array(pages.length).fill(null);
+    // Sidor som inte hör till någon av planens tjänster: en innehållsförteckning,
+    // eller en tjänst som inte finns i planen.
+    const foreign = new Array(pages.length).fill(false);
     pages.forEach((rows, index) => {
-      if (headingsOn(rows, true).length >= 3) { current = null; return; } // innehållsförteckning
-      const head = headingsOn(rows.slice(0, top));
-      if (head.length) { current = head[0]; headings += 1; }
-      assigned[index] = current;
+      const counts = new Map();
+      const all = new Set();
+      for (const row of rows) {
+        for (const match of row.matchAll(HEADING)) {
+          all.add(match[1].toLowerCase());
+          const number = known.get(match[1].toLowerCase());
+          if (number) counts.set(number, (counts.get(number) || 0) + 1);
+        }
+      }
+      if (all.size >= 3) { foreign[index] = true; return; } // innehållsförteckning
+      if (!counts.size && rows.some((row) => COVER_WORD.test(row))) {
+        const alone = rows.map((row) => known.get(row.trim().toLowerCase())).filter(Boolean);
+        if (alone.length === 1) counts.set(alone[0], 1);
+      }
+      if (counts.size) owner[index] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      else if (all.size) foreign[index] = true;
     });
-    if (!headings) {
-      // Inga rubriker: känn igen tjänsten på dess tåg.
-      const numbersOf = trainNumbers;
-      current = null;
+
+    if (owner.some(Boolean)) {
+      // Luckor utan nummer: inne i en tjänst hör de till den; en eller två
+      // efter en tjänst är en fortsättning på den (omslagen känns igen för
+      // sig). Sidor före den första tjänsten är titel och instruktioner.
+      let index = 0;
+      while (index < pages.length) {
+        if (owner[index] || foreign[index]) { index += 1; continue; }
+        let end = index;
+        while (end < pages.length && !owner[end] && !foreign[end]) end += 1;
+        const before = index > 0 ? owner[index - 1] : null;
+        const after = end < pages.length ? owner[end] : null;
+        const short = end - index <= GAP;
+        const fill = before && (before === after || short) ? before : null;
+        if (fill) for (let page = index; page < end; page += 1) owner[page] = fill;
+        index = end;
+      }
+    } else {
+      // Inga nummer: känn igen tjänsten på dess tåg.
+      let current = null;
       pages.forEach((rows, index) => {
         const words = new Set(rows.join(" ").match(/\d+/g) || []);
         const candidates = duties
-          .map((duty) => ({ duty, numbers: numbersOf(duty) }))
+          .map((duty) => ({ duty, numbers: trainNumbers(duty) }))
           .filter(({ numbers }) => numbers.length && numbers.every((value) => words.has(value)))
           .sort((a, b) => b.numbers.length - a.numbers.length);
         if (candidates.length && (candidates.length === 1 || candidates[0].numbers.length > candidates[1].numbers.length)) {
           current = candidates[0].duty.number;
         }
-        assigned[index] = current;
+        owner[index] = current;
       });
     }
-    assigned.forEach((number, index) => {
+
+    owner.forEach((number, index) => {
       if (number === null) return;
       const page = index + 1;
       const range = result[number];
@@ -361,5 +400,37 @@
     return { pages: result, total: pages.length, warnings };
   }
 
-  return { fromPlan, fingerprint, readPdf, extract, lines, matchPages, PDFJS_VERSION };
+  function loadPdfLib() {
+    if (globalThis.PDFLib) return Promise.resolve(globalThis.PDFLib);
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = PDFLIB;
+      script.addEventListener("load", () => (globalThis.PDFLib ? resolve(globalThis.PDFLib) : reject(new Error("pdf-lib saknas"))));
+      script.addEventListener("error", () => reject(new Error("pdf-lib kunde inte laddas")));
+      document.head.append(script);
+    });
+  }
+
+  /** En liten PDF per tjänst med bara dess sidor ur förlagan. onPart({number,
+   *  bytes, done, total}) väntas in efter varje tjänst, så att bara en del åt
+   *  gången hålls i minnet. Ger antalet delar. */
+  async function split(data, ranges, onPart, lib) {
+    const { PDFDocument } = lib || await loadPdfLib();
+    const source = await PDFDocument.load(new Uint8Array(data), { updateMetadata: false });
+    const entries = Object.entries(ranges).sort((a, b) => a[1][0] - b[1][0]);
+    let done = 0;
+    for (const [number, [from, to]] of entries) {
+      const out = await PDFDocument.create({ updateMetadata: false });
+      const indices = [];
+      for (let page = from; page <= to; page += 1) indices.push(page - 1);
+      for (const page of await out.copyPages(source, indices)) out.addPage(page);
+      out.setTitle(`Tjänst ${number}`);
+      const bytes = await out.save({ useObjectStreams: false });
+      done += 1;
+      await onPart({ number, bytes, done, total: entries.length });
+    }
+    return done;
+  }
+
+  return { fromPlan, fingerprint, readPdf, extract, lines, matchPages, split, PDFJS_VERSION, PDFLIB_VERSION };
 });

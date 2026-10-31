@@ -239,6 +239,17 @@
     });
   }
 
+  async function uploadPart(doc, number, bytes) {
+    const response = await fetch(`/v1/driver-admin/documents/${doc.id}/parts`, {
+      method: "POST", credentials: "same-origin", cache: "no-store",
+      headers: { "Content-Type": "application/pdf", "X-Duty": encodeURIComponent(number) }, body: bytes,
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new ApiError(payload.message || t("Det gick inte. Försök igen."));
+    }
+  }
+
   async function readPages(doc, data) {
     const { duties } = await api(`/v1/driver-admin/documents/${doc.id}`);
     progress(t("Läser PDF:en…"), null);
@@ -246,9 +257,26 @@
     const result = reader().matchPages(pages, duties);
     const saved = await api(`/v1/driver-admin/documents/${doc.id}/pages`, { method: "POST", body: result });
     const found = saved.document.pdf?.duties_with_pages || 0;
-    message(found
-      ? t("Sidorna hittades för {found} av {count} tjänster i {pages} sidor.", { found, count: saved.document.duties, pages: result.total })
-      : t("Inga tjänster hittades i PDF:en. Är det köruppdragen till {name}?", { name: label(doc) }), !found);
+    if (!found) {
+      message(t("Inga tjänster hittades i PDF:en. Är det köruppdragen till {name}?", { name: label(doc) }), true);
+      await openReview(doc.id, false);
+      return;
+    }
+    // Varje tjänsts sidor som en egen liten PDF, så att föraren inte behöver
+    // hela häftet. Går det inte får föraren hela PDF:en på rätt sida.
+    let parts = 0;
+    try {
+      parts = await reader().split(data, result.pages, async ({ number, bytes, done, total }) => {
+        progress(t("Delar upp förlagan: tjänst {number} ({done} av {total})", { number, done, total }), done / total);
+        await uploadPart(doc, number, bytes);
+      });
+    } catch (error) {
+      parts = 0;
+      result.warnings.push(error.message);
+    }
+    message(parts
+      ? t("Sidorna hittades för {found} av {count} tjänster i {pages} sidor. Varje förare får bara sin tjänsts sidor.", { found, count: saved.document.duties, pages: result.total })
+      : t("Sidorna hittades för {found} av {count} tjänster i {pages} sidor, men förlagan kunde inte delas upp. Föraren får hela PDF:en.", { found, count: saved.document.duties, pages: result.total }));
     await openReview(doc.id, false);
   }
 
@@ -339,7 +367,19 @@
       row.append(make("td", "", duty.trains.join(" · ") || "–"));
       row.append(make("td", "m lf-review__route", duty.route.join(" → ")));
       const pages = duty.pages?.filter(Boolean) || [];
-      row.append(make("td", "r", pages.length ? (pages[0] === pages[pages.length - 1] ? String(pages[0]) : `${pages[0]}–${pages[pages.length - 1]}`) : "–"));
+      const span = pages.length ? (pages[0] === pages[pages.length - 1] ? String(pages[0]) : `${pages[0]}–${pages[pages.length - 1]}`) : "–";
+      const cell = make("td", "r");
+      if (duty.part) {
+        // Tjänstens egna sidor, som föraren får dem.
+        const link = make("a", "", span);
+        link.href = `/v1/driver-admin/duties/${encodeURIComponent(duty.id)}.pdf`;
+        link.target = "_blank";
+        link.rel = "noopener";
+        cell.append(link);
+      } else {
+        cell.textContent = span;
+      }
+      row.append(cell);
       rows.append(row);
     }
     if (duties.length > 400) {
