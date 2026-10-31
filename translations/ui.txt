@@ -1488,3 +1488,7 @@ Switching meet …|Byter träff …|Skifter træf …|Bytter treff …|Treffen w
 Checking the meet code …|Kontrollerar träffkoden …|Kontrollerer træfkoden …|Kontrollerer treffkoden …|Treffencode wird geprüft …
 The Cloud connection is saved on the server.|Cloud-kopplingen är sparad på servern.|Cloud-forbindelsen er gemt på serveren.|Cloud-tilkoblingen er lagret på serveren.|Die Cloud-Verbindung ist auf dem Server gespeichert.
 The meet changed. Confirm the current name again.|Träffen ändrades. Bekräfta det aktuella namnet igen.|Træffet blev ændret. Bekræft det aktuelle navn igen.|Treffet ble endret. Bekreft det gjeldende navnet på nytt.|Das Treffen wurde geändert. Bestätige den aktuellen Namen erneut.
+
+# User editing (#215)
+Only an owner can edit owner accounts or assign the owner role|Bara ägaren kan ändra ägarkonton eller tilldela ägarrollen|Kun ejeren kan ændre ejerkonti eller tildele ejerrollen|Bare eieren kan endre eierkontoer eller tildele eierrollen|Nur Eigentümer können Eigentümerkonten bearbeiten oder die Eigentümerrolle vergeben
+Owners edit all accounts · administrators edit administrators|ägare redigerar alla konton · administratörer redigerar administratörer|ejere redigerer alle konti · administratorer redigerer administratorer|eiere redigerer alle kontoer · administratorer redigerer administratorer|Eigentümer bearbeiten alle Konten · Administratoren bearbeiten Administratoren

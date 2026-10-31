@@ -964,7 +964,7 @@
             <section id="anvandare" class="kr-setsec" data-section="anvandare" aria-labelledby="anvandare-title" hidden>
               <div class="kr-sectitle"><h1 id="anvandare-title">Användare</h1><span>inloggning krävs överallt, också på serverdatorn</span></div>
               <section id="admin-users-settings" class="kr-panel" aria-label="Användare">
-                <div class="kr-ph"><span>Användare</span><span id="users-role-chip" class="kr-pill">–</span><span class="kr-c">ägaren lägger till och tar bort · en administratör sköter hela servern men inte vilka som har tillgång</span><span class="kr-sp"></span><button type="button" class="kr-btn sm primary" id="users-invite-open" data-open-modal="users-invite-form-modal">+ Bjud in</button></div>
+                <div class="kr-ph"><span>Användare</span><span id="users-role-chip" class="kr-pill">–</span><span class="kr-c">ägare redigerar alla konton · administratörer redigerar administratörer</span><span class="kr-sp"></span><button type="button" class="kr-btn sm primary" id="users-invite-open" data-open-modal="users-invite-form-modal">+ Bjud in</button></div>
                 <div class="kr-scroll-x">
                   <table id="users-table" class="kr-tbl">
                     <thead><tr><th>Namn</th><th>Roll</th><th>Status</th><th></th></tr></thead>
@@ -1366,9 +1366,12 @@
           <label>Nytt lösenord (valfritt)<input id="user-edit-password" type="password" minlength="8" autocomplete="new-password"></label>
           <label>Upprepa lösenord<input id="user-edit-password-confirm" type="password" minlength="8" autocomplete="new-password"></label>
           <p class="modal-feedback form-message" role="status"></p>
-          <hr><button id="user-edit-reissue" type="button" class="secondary">Skapa ny inbjudningskod</button>
-          <label class="users-delete-confirm"><input id="user-delete-confirm" type="checkbox"> Jag vill ta bort denna användare permanent.</label>
-          <button id="user-edit-delete" type="button" class="danger-action" disabled>Ta bort användaren</button>
+          <button id="user-edit-reissue" type="button" class="secondary">Skapa ny inbjudningskod</button>
+          <div id="user-edit-removal">
+            <hr>
+            <label class="users-delete-confirm"><input id="user-delete-confirm" type="checkbox"> Jag vill ta bort denna användare permanent.</label>
+            <button id="user-edit-delete" type="button" class="danger-action" disabled>Ta bort användaren</button>
+          </div>
           <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary">Spara</button></div>
         </form>
       </dialog>

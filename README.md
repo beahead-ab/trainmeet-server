@@ -877,8 +877,22 @@ Hur det fungerar:
   `docs/EPOST-OCH-KONTON.md` §10 i Cloud-repot, och kräver TrainMeet Cloud
   1.15 eller senare.
 
-Var och en kan ändra sitt eget namn, sin adress och sitt lösenord, och ägaren
-allas. En adress kan bytas men inte tas bort.
+Under **Inställningar → Användare** öppnar du ett konto genom att klicka på
+namnet eller **Redigera**. Namn, e-postadress, roll och ett valfritt nytt
+lösenord sparas tillsammans. Lämna lösenordsfältet tomt för att behålla det
+nuvarande lösenordet. En adress kan bytas men inte tas bort.
+
+Ägare kan redigera alla konton, även andra ägare. Administratörer kan redigera
+sig själva och andra administratörer, men aldrig ägare eller tilldela
+ägarrollen. Bara ägare kan bjuda in, ta bort och ändra roller. Du kan inte ta
+bort ditt eget konto eller din egen ägarroll, och servern behåller alltid
+minst en ägare som kan logga in. En framtida vanlig användarroll ger ingen
+rätt att administrera administratörer eller ägare; den rollen införs inte här.
+
+Felaktiga uppgifter eller nekad behörighet lämnar hela kontot oförändrat.
+Ett nytt lösenord avslutar kontots befintliga sessioner och ogiltigförklarar
+äldre inbjudnings- och återställningskoder. Byts e-postadressen upphör även
+återställningskoder som skickats till den gamla adressen att gälla.
 
 **Utan koppling eller internet.** Beviset är i stället fysisk åtkomst till
 maskinen:
