@@ -445,9 +445,9 @@ class LokforarenHTTPTests(unittest.TestCase):
 
     def test_only_administrators_add_duties_and_only_real_pdfs(self) -> None:
         anna, benny = self.login("anna"), self.login("benny")
-        self.assertEqual(401, self.plan(benny)[0])
+        self.assertEqual(403, self.plan(benny)[0])  # inloggad förare: inte administratör
         self.assertEqual(401, self.plan(None)[0])
-        self.assertEqual(401, self.request("/v1/driver-admin/overview", cookie=benny)[0])
+        self.assertEqual(403, self.request("/v1/driver-admin/overview", cookie=benny)[0])
         self.assertEqual(400, self.plan(anna, fingerprint="")[0])
         self.assertEqual(400, self.plan(anna, duties=[])[0])
         self.assertEqual(400, self.plan(anna, duties=[{"number": "1", "events": []}])[0])
@@ -457,7 +457,7 @@ class LokforarenHTTPTests(unittest.TestCase):
         status, payload = self.plan(anna)
         self.assertEqual(201, status)
         document_id = payload["document"]["id"]
-        self.assertEqual(401, self.upload(document_id, self.PDF, cookie=benny)[0])
+        self.assertEqual(403, self.upload(document_id, self.PDF, cookie=benny)[0])
         self.assertEqual(401, self.upload(document_id, self.PDF, cookie=None)[0])
         self.assertEqual(415, self.upload(document_id, b"<html>inte en pdf</html>", cookie=anna)[0])
         self.assertEqual(415, self.upload(document_id, self.PDF, cookie=anna, kind="text/plain")[0])
@@ -466,7 +466,7 @@ class LokforarenHTTPTests(unittest.TestCase):
         self.assertEqual(403, self.request(f"/v1/driver-admin/documents/{document_id}/publish", {"published": True},
                                            cookie=anna, headers={"Origin": "https://evil.example"})[0])
         self.assertEqual(404, self.request("/v1/driver-admin/documents/000000000000", cookie=anna)[0])
-        self.assertEqual(401, self.request(f"/v1/driver-admin/documents/{document_id}", cookie=benny)[0])
+        self.assertEqual(403, self.request(f"/v1/driver-admin/documents/{document_id}", cookie=benny)[0])
 
 if __name__ == "__main__":
     unittest.main()
