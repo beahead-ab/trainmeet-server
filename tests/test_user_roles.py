@@ -166,6 +166,8 @@ class DriverHTTPTests(unittest.TestCase):
             paths = {node.value for node in ast.walk(source) if isinstance(node, ast.Constant)
                      and isinstance(node.value, str) and node.value.startswith("/v1/")}
             for path in sorted(paths):
+                if path.startswith("/v1/driver/"):
+                    continue
                 if method == "GET" and (path in public or path.startswith("/v1/clock-faces/")):
                     continue
                 if method == "POST" and path in {"/v1/account", "/v1/auth/login", "/v1/auth/logout"}:

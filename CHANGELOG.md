@@ -5,6 +5,58 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Planens tåg, dygn, linjer och speldygn från Cloud (trainmeet-cloud #100)
+
+- **Tidtabellskärnan** är synkad med Cloud 2.25: tåg som delar nummer och
+  trafikdagar (SJ X 116 och DSB IC 116 i Värnamo) är två tjänster med
+  `service_key`, och planens dygn efter midnatt (`day_offset` på raden)
+  ordnar tåget när de stämmer med tiderna. Tåg med unikt nummer behåller sina
+  tjänste-id:n. Samma regler gäller när tidtabellen ändras lokalt.
+- **Grafen på Drift och storskärmen** ritar planens grafiska linjer när paketet
+  har dem (`display.plan_lines`): bladen heter som arrangörens ("1: Danmark"),
+  stationerna står på planens km och tågen har tågslagets färg ur planen
+  (`color` på tjänsten). Tåg som delar nummer märks "DSB IC 116". Filen
+  `web/train-graph.js` är densamma som Clouds `src/graph/train-graph.js`.
+- **Banöversikten** på Drift och skärmarna ritar stationerna där arrangörens
+  karta har dem när paketet har `display.reference_layout` (läst ur
+  planeringsprogrammets Banan-PDF i Cloud), och sträckorna får planens
+  linjefärg som ett band under rälsen. Utan kartan ritas banan som förut.
+- **Kalendern** tar planens speldygn som förval (`clock.traffic_week`):
+  startdagen blir planens veckodag och nytt trafikdygn sker automatiskt när
+  trafiken går dygnet runt. Det admin redan valt gäller före planen.
+
+### Lokföraren: förarens app med körplan, NU-linje och incheckning på banan (#225, #226)
+
+Förare har en egen app på `/lokforaren/`, installerbar på telefonens hemskärm.
+Den följer träffklockan från servern och ingenting annat: tappar telefonen
+kontakten står klockan och NU-linjen still på senaste servertid.
+
+- **Ny roll, Förare** (user), bredvid ägare och administratör. En förare
+  loggar in som vanligt men kommer bara åt Lokföraren, aldrig drift,
+  inställningar eller trafik. Administratörer kan bjuda in och ta bort förare;
+  roller delar fortfarande bara ägaren ut. Äldre databaser får rollen genom en
+  ombyggnad av kontotabellen i en transaktion.
+- **Välj tjänst** med numret. Tjänsterna kommer i träffens paket från Cloud
+  (`driver_duties`); övningstjänsten **132 DEMO** finns alltid för prov.
+- **Körplanen är en tidsaxel**: en träffminut är 7 px och långa uppehåll trycks
+  ihop, så den gula NU-linjen glider jämnt över hela bredden genom båda tågen.
+  Den följer med en tredjedel ner, släpper när föraren scrollar och kommer
+  tillbaka efter fyra sekunder eller med **Till NU**. Stoppad klocka och
+  bruten kontakt syns i en remsa och på linjen.
+- **Nedräkning** till tjänstens start med påminnelse vid 20 och 10 träffminuter
+  (i appen, med ljud och vibration); vid 10 öppnas körplanen av sig själv.
+- **Checka in** på stationen närmast NU. Incheckningen och förarens egen ikon
+  syns på banan under **Förare** i 10 minuter verklig tid och tonar sedan ut
+  under 5. En ny incheckning kommer fram med en tydlig puls. Den som vill kan
+  dölja sig för de andra.
+- **Egen ikon**: bilden beskärs i telefonen till en liten cirkel; plats och
+  annan data i filen följer aldrig med till servern.
+- Svenska, danska, norska, engelska och tyska; mörkt och ljust tema; liggande
+  läge med körplanen bredvid nästa moment.
+
+Push-notiser när appen är stängd och tolkning av köruppdrag ur PDF ingår inte
+än: det första kräver nycklar på servern, det andra görs i Cloud.
+
 ### Träffklockan: meddelanden som glas, och NoReason syns aldrig (#223)
 
 Klockskärmen visade en brun remsa med «NoReason» under en gående klocka, och

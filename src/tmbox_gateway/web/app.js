@@ -200,6 +200,11 @@ loginForm.addEventListener("submit", async (event) => {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || t("Inloggningen misslyckades"));
     document.querySelector("#login-password").value = "";
+    // En förare har bara Lokföraren. Där finns hens körplan och incheckning.
+    if (payload.role === "user") {
+      location.assign("/lokforaren/");
+      return;
+    }
     // Continue to the protected workspace selected before signing in.
     if (!location.hash || location.hash === "#workspaces") {
       sessionStorage.setItem("trainmeet.workspace", "administration");
@@ -3817,6 +3822,21 @@ function topologyLayout(snapshot, orientation = "") {
     addEdge(link.autonomous_station_id, link.related_station_id, link, true);
   }
 
+  // Arrangörens banöversikt från Cloud (display.reference_layout, trainmeet-cloud
+  // #100): stationerna där arrangörens karta har dem, när den täcker alla.
+  // Skalan ger en typisk sträcka 100 enheter, som den härledda layouten.
+  const reference = snapshot.display?.reference_layout?.positions;
+  if (reference && stations.length && stations.every((station) => reference[station.id])) {
+    const lengths = edges.map((edge) => Math.hypot(reference[edge.from].x - reference[edge.to].x, reference[edge.from].y - reference[edge.to].y))
+      .filter((length) => length > 0).sort((a, b) => a - b);
+    const median = lengths[Math.floor(lengths.length / 2)] || 100, shortest = lengths[0] || 100;
+    const scale = Math.max(100 / median, 55 / shortest);
+    const left = Math.min(...stations.map((station) => reference[station.id].x)), top = Math.min(...stations.map((station) => reference[station.id].y));
+    const positions = new Map(stations.map((station) => [station.id,
+      { x: (reference[station.id].x - left) * scale, y: (reference[station.id].y - top) * scale }]));
+    return topologyBounds(positions, edges, orientation);
+  }
+
   const connectedIDs = stations.map((station) => station.id).filter((id) => adjacency.get(id)?.size);
   if (!connectedIDs.length) {
     const positions = new Map(stations.map((station, index) => [station.id, { x: index * 100, y: 0 }]));
@@ -4243,6 +4263,14 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     for (const id of [edge.from, edge.to]) doubleAt.set(id, { ...(doubleAt.get(id) || {}), [axis]: true });
   }
   const doubleKeys = new Set(edges.filter((edge) => edge.source?.track_type === "double" && !edge.autonomous).map((edge) => topologyEdgeKey(edge.from, edge.to)));
+  const planLineColors = new Map();
+  for (const line of snapshot.display?.plan_lines || []) {
+    if (!/^#[0-9a-f]{6}$/i.test(line?.color || "")) continue;
+    (line.station_ids || []).forEach((id, index, ids) => {
+      const key = index ? topologyEdgeKey(ids[index - 1], id) : null;
+      if (key && !planLineColors.has(key)) planLineColors.set(key, line.color);
+    });
+  }
   const doubleLane = (from, to) => (doubleKeys.has(topologyEdgeKey(from, to)) ? track.lane : 0);
   for (const edge of edges) {
     const from = positions.get(edge.from);
@@ -4264,6 +4292,10 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     const dx = to.x - from.x, dy = to.y - from.y, length = Math.hypot(dx, dy) || 1;
     const normal = { x: -dy / length, y: dx / length };
     const group = svgElement("g", { class: `${lineClass}${double ? " double" : " single"}` });
+    // Planens linjefärg (display.plan_lines) som ett band under rälsen, som på arrangörens karta.
+    const color = planLineColors.get(key);
+    if (color) group.append(svgElement("line", { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: "topology-line-color", stroke: color,
+      "stroke-width": double ? track.lane * 2 + (track.sleeper || track.gauge * 2) : (track.sleeper || track.gauge * 2) + 4 }));
     for (const lane of double ? [-track.lane, track.lane] : [0]) {
       const line = (offset, attrs) => svgElement("line", {
         x1: from.x + normal.x * offset, y1: from.y + normal.y * offset, x2: to.x + normal.x * offset, y2: to.y + normal.y * offset, ...attrs });
@@ -5994,7 +6026,7 @@ async function reissueUserCode(user) {
 
 async function setUserRole(user, role) {
   await usersPost("/v1/admin/users/update", { user_id: user.user_id, role }, () => {
-    setMessage(usersEl("message"), role === "owner" ? "{name} är nu ägare" : "{name} är nu administratör", "success", { name: user.display_name });
+    setMessage(usersEl("message"), { owner: "{name} är nu ägare", user: "{name} är nu förare" }[role] || "{name} är nu administratör", "success", { name: user.display_name });
   });
 }
 

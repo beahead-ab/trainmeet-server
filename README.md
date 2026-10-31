@@ -896,8 +896,8 @@ Servern har tre roller:
 - **Användare** är i dag lokförare, med rättigheten **Lokföraren**
   (`can_use_driver`). Ägare och administratörer har också den rättigheten.
   Användaren kan bara ändra sitt eget namn, e-post och lösenord under
-  **Eget konto**. Fram till Lokföraren-PWA:n finns visas därutöver bara
-  träffens publika skärmar, som för gäster. Alla admin- och trafikstyrnings-API
+  **Eget konto**. Efter inloggning öppnas **Lokföraren-PWA:n**, som nu finns i servern.
+  Därifrån nås Eget konto; träffens publika skärmar är också tillgängliga. Alla admin- och trafikstyrnings-API
   svarar med 403 för användarkonton, även om klienten manipuleras.
 
 Rollväljaren visar bara roller som den inloggade får tilldela och är låst på

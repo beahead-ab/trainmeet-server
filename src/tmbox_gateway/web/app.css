@@ -686,6 +686,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 }
 .graph-time-overlay svg { display: block; }
 .topology-track { stroke: var(--display-line); stroke-width: 2.5; stroke-linecap: round; transition: opacity .25s ease, stroke .25s ease, stroke-width .25s ease; }
+/* Planens linjefärg under rälsen (display.plan_lines från Cloud, #100). */
+.topology-track .topology-line-color { stroke-opacity: .32; stroke-linecap: round; }
 /* Ruttkartan i Drift har inte --display-line: kontrollrummets färg, före markeringarna nedan. */
 .route-map .topology-track { stroke: var(--display-line, var(--kr-rail, #888)); }
 .topology-track.active { stroke: var(--display-primary); }
@@ -1004,6 +1006,7 @@ body[data-mode="bygg"] .server-admin-shell { flex-direction: column; }
   margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line-inner);
 }
 .users-invite-name { display: grid; gap: 5px; flex: 1 1 200px; max-width: 320px; }
+.users-invite-role { display: grid; gap: 5px; }
 .users-invite button { flex: 0 0 auto; }
 .users-role-choice {
   display: flex; align-items: center; gap: 8px;

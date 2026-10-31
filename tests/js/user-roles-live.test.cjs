@@ -48,6 +48,9 @@ const root = path.resolve(__dirname, '../..');
         await page.locator('#login-password').fill(password);
         await page.locator('#login-form button[type="submit"]').click();
         if (role === 'user') {
+          await page.waitForURL(base + '/lokforaren/');
+          await page.locator('#view-choose').waitFor({ state: 'visible' });
+          await page.goto(base + '/installningar#anvandare');
           await page.locator('#users-rows tr').waitFor();
           assert.equal(await page.locator('#anvandare-title').innerText(), 'Eget konto');
           assert.equal(await page.locator('#users-rows tr').count(), 1);

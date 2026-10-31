@@ -30,6 +30,10 @@ ADMIN_EMAIL_PATTERN = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]+$")
 ADMIN_NAME_MAX = 100
 CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 ADMIN_SESSION_TTL = timedelta(hours=12)
+#: Kontots roller. user är förare: kommer bara åt Lokföraren, aldrig drift
+#: eller inställningar.
+ACCOUNT_ROLES = ("owner", "admin", "user")
+ADMIN_ROLES = frozenset({"owner", "admin"})
 # A connection code printed on the meeting's screens has to keep working for as
 # long as it is on display, so it may be issued without an expiry.
 NEVER_EXPIRES = datetime(9999, 12, 31, tzinfo=timezone.utc)
@@ -1129,7 +1133,8 @@ class IdentityStore:
                 "SELECT user_id, display_name, role, created_at, updated_at,"
                 " password_digest IS NOT NULL, must_change_password,"
                 " setup_code_digest IS NOT NULL, setup_expires_at, email"
-                " FROM admin_users ORDER BY role DESC, display_name COLLATE NOCASE, email"
+                " FROM admin_users ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,"
+                " display_name COLLATE NOCASE, email"
             ).fetchall()
         return [
             {
