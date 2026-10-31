@@ -20,7 +20,8 @@ och publiceras i Cloud. Serverns byggläge och lokala import-/redigeringsvägar
 Servern behåller driftåtgärderna: klockstyrning, tågrapporter, klareringar,
 track warrants, extra tåg, operatörstilldelningar och TMBox-kopplingar.
 TMBoxarnas stationstilldelning är en lokal driftinställning, inte en ändring
-av banan. Serverkonton, enhetsidentiteter och nätverksinställningar hör till
+av banan. Detsamma gäller stationens [spårvisning](tmbox-sparvisning.md) i
+TMBox-appen: ett lokalt presentationsval som aldrig skickas till Cloud. Serverkonton, enhetsidentiteter och nätverksinställningar hör till
 servern och skapas inte om för varje träff.
 
 ## Anslutning och uppdateringar

@@ -80,6 +80,14 @@ SHORT_DAYS = {
 }
 
 
+class TrackDisplayConflict(RuntimeError):
+    """Stationens spårvisning har ändrats sedan klienten läste den (#46)."""
+
+    def __init__(self, revision: int):
+        super().__init__("Spårvisningen har ändrats. Läs om den.")
+        self.revision = revision
+
+
 class RuntimePublicationError(ValueError):
     pass
 
@@ -1078,6 +1086,45 @@ class SQLiteRuntimeStore:
             except BaseException:
                 self._connection.execute("ROLLBACK")
                 raise
+
+    # ------------------------------------------------- spårvisning (#46)
+    #
+    # Vilka spår TMBox-appens Spår-vy visar och i vilken ordning, per träff
+    # och station. Ren presentation: rör inte config_version, trafikmotorn
+    # eller Cloud. Revisionen räknar upp vid varje sparning och återställning,
+    # även när återställningen tar bort anpassningen, så att en klient som
+    # läste före någon annans ändring alltid får konflikt.
+
+    def track_display(self, meet_id: str, station_id: str) -> dict[str, Any]:
+        raw = self._setting("track_display:" + meet_id)
+        saved = json.loads(raw).get(station_id) if raw else None
+        return saved if isinstance(saved, dict) else {"revision": 0}
+
+    def save_track_display(self, meet_id: str, station_id: str, expected_revision: int,
+                           order: list[str] | None, hidden: list[str] | None = None) -> dict[str, Any]:
+        """Spara en anpassning, eller ta bort den med order=None (återställ).
+
+        Raises TrackDisplayConflict when someone else saved since the client read.
+        """
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                raw = self._setting("track_display:" + meet_id)
+                stations = json.loads(raw) if raw else {}
+                current = stations.get(station_id) if isinstance(stations.get(station_id), dict) else {}
+                revision = int(current.get("revision") or 0)
+                if expected_revision != revision:
+                    raise TrackDisplayConflict(revision)
+                saved: dict[str, Any] = {"revision": revision + 1}
+                if order is not None:
+                    saved.update(order=list(order), hidden=list(hidden or []))
+                stations[station_id] = saved
+                self._save_setting("track_display:" + meet_id, json.dumps(stations))
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+        return saved
 
     def bump_config_version(self) -> int:
         version = self.config_version() + 1

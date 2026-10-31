@@ -15,6 +15,7 @@ Här finns den publika dokumentationen för TrainMeet Server.
 - [TMBox: tågnummer först, beslutad målbild och implementationsstatus](TMBOX-TRAIN-FIRST-REVISION-2026-09-19.md) – tåguppslag infört; gemensam trafikprofil återstår
 - [TMBox: Cloud-mappning och stationskoder på displayen](TMBOX-CLOUD-MAPPING-2026-09-19.md) – synkfix och fortsatt gränssnittsrevidering
 - [Gemensam trafik för ESP8266, ESP32 och TKL](shared-traffic.md)
+- [Spårvisning för TMBox-appen](tmbox-sparvisning.md) – vilka spår Spår-vyn visar och i vilken ordning, per träff och station
 
 Installations- och driftinstruktioner finns i projektets
 [README](../README.md). Fel och förbättringsförslag hanteras i
