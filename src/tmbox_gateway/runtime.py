@@ -950,7 +950,8 @@ class SQLiteRuntimeStore:
         den trafikdag som gäller nu, som dag 1.
         """
         saved = self._saved_calendar(meet_id)
-        start = str(saved.get("start_day") or fallback_day or self.active_day() or "Dagl")
+        plan = self._planned_week(meet_id)
+        start = str(saved.get("start_day") or plan.get("start_day") or fallback_day or self.active_day() or "Dagl")
         try:
             number = max(1, int(saved.get("day_number") or 1))
         except (TypeError, ValueError):
@@ -961,9 +962,33 @@ class SQLiteRuntimeStore:
         # Nytt trafikdygn: manuellt med Starta ny dag (förval, Casper
         # 2026-10-09) eller automatiskt vid dygnsskiftet, som för en
         # tidtabell som går dygnet runt.
-        mode = saved.get("day_change_mode") if saved.get("day_change_mode") in DAY_CHANGE_MODES else "manual"
+        # Utan admins val: planens speldygn ur Cloud (clock.traffic_week, #100)
+        # ger automatiskt nytt trafikdygn när trafiken går dygnet runt.
+        mode = (saved.get("day_change_mode") if saved.get("day_change_mode") in DAY_CHANGE_MODES
+                else "auto" if plan.get("runs_over_midnight") else "manual")
         return {"start_day": start, "day_number": number, "weekday": calendar_weekday(start, number), "week": list(DAY_ORDER),
                 "change_time_set": day_change_time(saved.get("change_time")), "last_change": last, "day_change_mode": mode}
+
+    def _planned_week(self, meet_id: str) -> dict[str, Any]:
+        """Planens speldygn i paketet (clock.traffic_week från Cloud 2.25.1).
+
+        `start_weekday` 1 är måndag. Ger {"start_day": "Mån", "runs_over_midnight": True}
+        för den aktiva publiceringen av träffen, annars {}. Det admin sparat
+        i kalendern gäller alltid före planen.
+        """
+        publication = self.active()
+        if publication is None or publication.meet_id != meet_id:
+            return {}
+        week = (publication.payload.get("clock") or {}).get("traffic_week")
+        if not isinstance(week, dict):
+            return {}
+        planned: dict[str, Any] = {}
+        day = week.get("start_weekday")
+        if type(day) is int and 1 <= day <= 7:
+            planned["start_day"] = DAY_ORDER[day - 1]
+        if week.get("runs_over_midnight") is True:
+            planned["runs_over_midnight"] = True
+        return planned
 
     def _saved_calendar(self, meet_id: str) -> dict[str, Any]:
         try:

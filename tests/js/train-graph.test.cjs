@@ -245,3 +245,25 @@ test('the label along a line is never upside down', () => {
   assert.equal(graph.minuteText(1440 + 2), '02');
   assert.equal(graph.clockLabel(1500), '01:00');
 });
+
+// Planens grafiska linjer från Cloud (#100 C5): arrangörens blad, km och tågslagsfärger.
+test('planens linjer blir bladen, med km som avstånd och tågslagens färger', () => {
+  const plan = snapshot({
+    services: [service(1, services[0].stops, { color: '#1a7a3c', service_key: 'SJ X' }), services[1]],
+    display: { plan_lines: [
+      { number: '1', name: 'Huvudlinjen', color: '#1a3a5c', station_ids: ['a', 'b', 'c', 'd'], km: [0, 10, 40, 50] },
+      { number: '2', name: 'Grenen', color: '#8b008b', station_ids: ['b', 'e', 'f'], km: [0, 6, 12] },
+    ] },
+  });
+  const lines = graph.lines(plan);
+  assert.deepEqual(lines.slice(0, 2).map((line) => line.name), ['1: Huvudlinjen', '2: Grenen']);
+  assert.ok(lines.some((line) => line.stations.length === 1 && line.stations[0].id === 'g'), 'en station utanför planens linjer får en egen rad');
+  const g = graph.layout(plan, { width: 1200, windowMinutes: 0, line: lines[0].id, minutes: true, start: 540, end: 900 });
+  const y = Object.fromEntries(g.panels[0].stations.map((entry) => [entry.station.id, entry.y]));
+  // 10 km a–b och 30 km b–c: tre gånger så långt.
+  assert.ok((y.c - y.b) / (y.b - y.a) > 2.5);
+  const one = g.trains.find((train) => train.number === '1');
+  assert.equal(one.color, '#1a7a3c');
+  assert.equal(one.label, 'SJ X 1');
+  assert.equal(g.trains.find((train) => train.number === '2').color, null);
+});

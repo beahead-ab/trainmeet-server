@@ -14,7 +14,7 @@ import hashlib
 import json
 from statistics import median
 
-from .findings import clock, day_label, ordered_stops, source_refs, train_number_key
+from .findings import clock, day_label, ordered_stops, source_refs, train_labels, train_number_key
 from .times import clock_minutes as _clock_minutes
 
 #: Minsta antal ANDRA tåg på samma stationspar eller station innan något
@@ -371,11 +371,12 @@ def check_sanity(draft):
     edges = {frozenset((e.get('station_a_id'), e.get('station_b_id'))): e['id'] for e in draft.get('connections', [])}
     names = lambda sid: stations.get(sid, {}).get('name') or sid
     trains = defaultdict(list)
+    labels = train_labels(rows.values())
     # Rader med okänd station eller utan tågnummer är strukturfel i
     # konfliktkontrollen. Här finns inget rimligt att jämföra dem med.
     for row in rows.values():
         number = str(row.get('train_number') or '')
-        if row.get('station_id') in stations and number: trains[number].append(row)
+        if row.get('station_id') in stations and number: trains[labels.get(row['id'], number)].append(row)
     tables = _samples(trains); items = []
     for number in sorted(trains, key=train_number_key):
         typical = _typical(tables, number); group = trains[number]
