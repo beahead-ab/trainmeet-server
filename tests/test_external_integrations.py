@@ -22,6 +22,7 @@ class IntegrationTests(unittest.TestCase):
             return adapter
 
         self.service = IntegrationService({"stub": factory})
+        self.addCleanup(self.service.close)
         self.add(self.scope)
 
     def add(self, scope):

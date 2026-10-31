@@ -126,10 +126,19 @@ class MailIsTheOnlyWriteTests(unittest.TestCase):
             for node in ast.walk(ast.parse(text)):
                 if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Request"
                         and {keyword.arg for keyword in node.keywords} & {"data", "method"}):
-                    writers.append(path.name)
-        # Inte Cloud: GitHub-releaser och klubbens egen snabbklocka på träffens nät.
-        not_cloud = {"software_update.py", "external_clock.py"}
+                    writers.append(path.relative_to(SOURCE).as_posix())
+        # Inte Cloud: GitHub-releaser, klubbens snabbklocka och den uttryckligt
+        # loopbackbegränsade simulatorn. Matcha exakt sökväg, inte bara filnamn.
+        not_cloud = {"software_update.py", "external_clock.py", "integrations/http_sandbox.py"}
         self.assertEqual(["cloud_mail.py"], [name for name in writers if name not in not_cloud])
+
+    def test_the_sandbox_writer_rejects_cloud_and_other_external_origins(self):
+        from tmbox_gateway.integrations.http_sandbox import HttpSandboxAdapter
+
+        for origin in ("https://cloud.trainmeet.app", "http://example.invalid:80",
+                       "http://localhost:80", "http://127.0.0.1:80@cloud.trainmeet.app"):
+            with self.subTest(origin=origin), self.assertRaises(ValueError):
+                HttpSandboxAdapter(origin, "synthetic-account", "synthetic-password")
 
     def test_the_letter_has_a_fixed_set_of_fields(self):
         from tmbox_gateway.cloud_mail import MAIL_FIELDS
