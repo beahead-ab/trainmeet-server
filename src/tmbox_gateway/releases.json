@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.19.1",
+    "date": "2026-10-31",
+    "notes": [
+      "Låt Användare spara eget konto med vald träff"
+    ]
+  },
+  {
     "version": "4.19.0",
     "date": "2026-10-31",
     "notes": [
