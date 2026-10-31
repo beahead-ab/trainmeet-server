@@ -5,6 +5,25 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### En ny träff börjar på planens veckodag och byter dygn själv (Cloud #100)
+
+Cloud skickar planens speldygn i paketet (`clock.traffic_week`: startveckodag,
+antal speldygn och om trafiken går dygnet runt). En ny träff ur en sådan plan
+får nu kalendern därifrån: dag 1 är planens veckodag, trafikdagen är den
+veckodagen, och går trafiken dygnet runt sker nytt trafikdygn automatiskt vid
+dygnsskiftet. Värnamo Moduldagar börjar alltså måndag och byter dag vid varje
+midnatt, så att TXL CG 38958 (måndag–tisdag) och HCTOR HG 45696
+(onsdag–fredag) aldrig kör samma kväll i samma läge. En träff som redan har en
+kalender behåller den: det admin valt gäller, och en pågående träff ändras inte
+av en ny publicering. Äldre paket utan speldygn startar som förut.
+
+Tidtabellskärnan är synkad med Cloud (tåg som delar nummer hålls isär med
+bolag och tågslag, och planens dygn efter midnatt gäller när servern bygger om
+tjänsterna efter en lokal ändring). Tågdiagrammet på Drift och storskärmen
+ritar som Cloud: planens grafiska linjer som blad, stationerna på planens km,
+tågen i tågslagets färg och tåg som delar nummer som "DSB IC 116". Ett paket
+utan planens linjer och färger ritas som förut.
+
 ### FastClock-standardadressen finns alltid kvar att kopiera
 
 Klockans inställningar visar alltid `https://fastclock.azurewebsites.net` med
