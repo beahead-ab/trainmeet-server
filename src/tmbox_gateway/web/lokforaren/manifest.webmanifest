@@ -1,0 +1,17 @@
+{
+  "name": "Lokföraren · TrainMeet",
+  "short_name": "Lokföraren",
+  "description": "Körplan, träffklocka och incheckning för förare på en TrainMeet-träff.",
+  "start_url": "/lokforaren/",
+  "scope": "/lokforaren/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d0f13",
+  "theme_color": "#0d0f13",
+  "lang": "sv",
+  "icons": [
+    {"src": "/assets/ikon/png/trainmeet-ikon-256.png", "sizes": "256x256", "type": "image/png"},
+    {"src": "/assets/ikon/png/trainmeet-ikon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "/assets/ikon/png/trainmeet-ikon-kvadrat-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any"}
+  ]
+}

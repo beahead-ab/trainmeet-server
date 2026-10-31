@@ -200,6 +200,11 @@ loginForm.addEventListener("submit", async (event) => {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || t("Inloggningen misslyckades"));
     document.querySelector("#login-password").value = "";
+    // En förare har bara Lokföraren. Där finns hens körplan och incheckning.
+    if (payload.role === "user") {
+      location.assign("/lokforaren/");
+      return;
+    }
     // Continue to the protected workspace selected before signing in.
     if (!location.hash || location.hash === "#workspaces") {
       sessionStorage.setItem("trainmeet.workspace", "administration");
@@ -3649,6 +3654,11 @@ function showSetup(installation) {
 }
 
 async function showLogin() {
+  // Inloggad som förare (user): ingen admin, men Lokföraren väntar.
+  if (state.authStatus?.account_role === "user") {
+    location.assign("/lokforaren/");
+    return;
+  }
   clearTimeout(state.snapshotTimer);
   clearTimeout(state.adminTimer);
   stopTMBoxV2();
@@ -5783,8 +5793,20 @@ function bindTMBoxPanes() {
 
 const users = { list: [], role: "admin", code: null };
 
+// Förare (user) använder bara Lokföraren. En administratör sköter dem och
+// andra administratörer; ägarna och rollerna är ägarens.
+const ROLE_NAMES = { owner: "Ägare", admin: "Administratör", user: "Förare" };
+
+function roleName(role) {
+  return t(ROLE_NAMES[role] || "Administratör");
+}
+
 function canEditUser(user) {
-  return users.role === "owner" || (users.role === "admin" && user.role === "admin");
+  return users.role === "owner" || (users.role === "admin" && ["admin", "user"].includes(user.role));
+}
+
+function canManageAccount(user) {
+  return users.role === "owner" || (users.role === "admin" && user.role === "user");
 }
 
 function usersEl(name) {
@@ -5796,8 +5818,15 @@ function renderUsers() {
   if (!body) return;
   const owner = users.role === "owner";
 
-  usersEl("role-chip").textContent = owner ? t("Ägare") : t("Administratör");
-  usersEl("invite-open")?.classList.toggle("hidden", !owner);
+  usersEl("role-chip").textContent = roleName(users.role);
+  usersEl("invite-open")?.classList.toggle("hidden", !["owner", "admin"].includes(users.role));
+  const inviteRole = usersEl("invite-role");
+  if (inviteRole) {
+    for (const option of inviteRole.options) {
+      option.hidden = option.disabled = !owner && option.value !== "user";
+    }
+    if (!owner) inviteRole.value = "user";
+  }
 
   body.replaceChildren(...users.list.map((user) => {
     const tr = document.createElement("tr");
@@ -5833,7 +5862,7 @@ function renderUsers() {
     const role = document.createElement("td");
     const chip = document.createElement("span");
     chip.className = user.role === "owner" ? "kr-pill sel" : "kr-pill";
-    chip.textContent = user.role === "owner" ? t("Ägare") : t("Administratör");
+    chip.textContent = roleName(user.role);
     role.append(chip);
     tr.append(role);
 
@@ -5938,15 +5967,15 @@ async function usersPost(path, body, whenOk) {
 async function inviteUser(event) {
   event.preventDefault();
   const name = usersEl("invite-name").value.trim();
-  const owner = usersEl("invite-owner").checked;
+  const role = usersEl("invite-role").value;
   const email = usersEl("invite-email").value.trim();
   const result = await usersPost(
     "/v1/admin/users",
-    mailBody({ display_name: name, role: owner ? "owner" : "admin", email }),
+    mailBody({ display_name: name, role, email }),
     (payload) => {
       usersEl("invite-name").value = "";
       usersEl("invite-email").value = "";
-      usersEl("invite-owner").checked = false;
+      usersEl("invite-role").value = users.role === "owner" ? "admin" : "user";
       setMessage(usersEl("message"), ...mailReceipt(name, payload.mail));
     },
   );
@@ -5962,7 +5991,7 @@ async function reissueUserCode(user) {
 
 async function setUserRole(user, role) {
   await usersPost("/v1/admin/users/update", { user_id: user.user_id, role }, () => {
-    setMessage(usersEl("message"), role === "owner" ? "{name} är nu ägare" : "{name} är nu administratör", "success", { name: user.display_name });
+    setMessage(usersEl("message"), { owner: "{name} är nu ägare", user: "{name} är nu förare" }[role] || "{name} är nu administratör", "success", { name: user.display_name });
   });
 }
 
@@ -5991,8 +6020,8 @@ function editUser(user) {
   document.querySelector("#user-edit-password-confirm").value = "";
   document.querySelector("#user-delete-confirm").checked = false;
   document.querySelector("#user-edit-delete").disabled = true;
-  document.querySelector("#user-edit-reissue").hidden = !owner || !user.invitation_pending;
-  document.querySelector("#user-edit-removal").hidden = !owner || self;
+  document.querySelector("#user-edit-reissue").hidden = !canManageAccount(user) || !user.invitation_pending;
+  document.querySelector("#user-edit-removal").hidden = !canManageAccount(user) || self;
   openModal("user-edit-modal");
 }
 

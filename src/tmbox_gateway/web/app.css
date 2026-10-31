@@ -1004,6 +1004,7 @@ body[data-mode="bygg"] .server-admin-shell { flex-direction: column; }
   margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line-inner);
 }
 .users-invite-name { display: grid; gap: 5px; flex: 1 1 200px; max-width: 320px; }
+.users-invite-role { display: grid; gap: 5px; }
 .users-invite button { flex: 0 0 auto; }
 .users-role-choice {
   display: flex; align-items: center; gap: 8px;

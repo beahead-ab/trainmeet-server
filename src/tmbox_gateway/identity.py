@@ -29,6 +29,10 @@ ADMIN_EMAIL_PATTERN = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]+$")
 ADMIN_NAME_MAX = 100
 CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 ADMIN_SESSION_TTL = timedelta(hours=12)
+#: Kontots roller. user är förare: kommer bara åt Lokföraren, aldrig drift
+#: eller inställningar.
+ACCOUNT_ROLES = ("owner", "admin", "user")
+ADMIN_ROLES = frozenset({"owner", "admin"})
 # A connection code printed on the meeting's screens has to keep working for as
 # long as it is on display, so it may be issued without an expiry.
 NEVER_EXPIRES = datetime(9999, 12, 31, tzinfo=timezone.utc)
@@ -243,7 +247,7 @@ class IdentityStore:
                 username TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 password_salt BLOB,
                 password_digest BLOB,
-                role TEXT NOT NULL CHECK(role IN ('owner', 'admin')),
+                role TEXT NOT NULL CHECK(role IN ('owner', 'admin', 'user')),
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 must_change_password INTEGER NOT NULL DEFAULT 0,
@@ -271,6 +275,7 @@ class IdentityStore:
                 "display_name": "TEXT NOT NULL DEFAULT ''",
             },
         )
+        self._allow_driver_role()
         self._add_missing_columns(
             "admin_access",
             {"must_change_password": "INTEGER NOT NULL DEFAULT 0"},
@@ -379,6 +384,35 @@ class IdentityStore:
             if connection.in_transaction:
                 connection.execute("ROLLBACK")
             raise
+
+    def _allow_driver_role(self) -> None:
+        """Ge äldre databaser rollen user (förare, Lokföraren).
+
+        SQLite kan inte ändra en CHECK i efterhand, så tabellen byggs om med
+        exakt samma kolumner i samma ordning: den lagrade CREATE-satsen med en
+        roll till. Allt sker i en transaktion, så en avbruten ombyggnad lämnar
+        den gamla tabellen orörd. Inga andra tabeller pekar på admin_users.
+        """
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'admin_users'"
+            ).fetchone()
+            old_check = "CHECK(role IN ('owner', 'admin'))"
+            if row is None or old_check not in row[0]:
+                return
+            new_sql = row[0].replace(old_check, "CHECK(role IN ('owner', 'admin', 'user'))", 1)
+            new_sql = new_sql.replace("admin_users", "admin_users_rebuilt", 1)
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(new_sql)
+                self._connection.execute("INSERT INTO admin_users_rebuilt SELECT * FROM admin_users")
+                self._connection.execute("DROP TABLE admin_users")
+                self._connection.execute("ALTER TABLE admin_users_rebuilt RENAME TO admin_users")
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
 
     def _add_missing_columns(self, table: str, columns: dict[str, str]) -> None:
         existing = {
@@ -1064,7 +1098,8 @@ class IdentityStore:
                 "SELECT user_id, display_name, role, created_at, updated_at,"
                 " password_digest IS NOT NULL, must_change_password,"
                 " setup_code_digest IS NOT NULL, setup_expires_at, email"
-                " FROM admin_users ORDER BY role DESC, display_name COLLATE NOCASE, email"
+                " FROM admin_users ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,"
+                " display_name COLLATE NOCASE, email"
             ).fetchall()
         return [
             {
@@ -1100,8 +1135,8 @@ class IdentityStore:
 
         display_name = clean_admin_display_name(display_name)
         email = required_admin_email(email)
-        if role not in {"owner", "admin"}:
-            raise AdminAccessError("Rollen måste vara ägare eller administratör")
+        if role not in ACCOUNT_ROLES:
+            raise AdminAccessError("Rollen måste vara ägare, administratör eller förare")
 
         now = datetime.now(timezone.utc)
         code = _new_account_code()
@@ -1190,7 +1225,10 @@ class IdentityStore:
                     raise AdminUserPermissionError("Administratörsbehörighet krävs")
                 if target is None:
                     raise AdminAccessError("Användaren finns inte")
-                if actor_role != "owner" and (target["role"] != "admin" or role not in {None, "admin"}):
+                # En administratör redigerar administratörer och förare men
+                # aldrig en ägare, och rollerna delar bara ägaren ut.
+                if actor_role != "owner" and (target["role"] not in {"admin", "user"}
+                                              or role not in {None, target["role"]}):
                     raise AdminUserPermissionError("Bara ägaren kan ändra ägarkonton eller tilldela ägarrollen")
                 if actor_role == "owner" and actor.admin_user_id == user_id and role not in {None, "owner"}:
                     raise AdminUserConflictError(
@@ -1319,8 +1357,8 @@ class IdentityStore:
             self._connection.execute("DELETE FROM admin_sessions WHERE user_id = ?", (user_id,))
 
     def set_admin_user_role(self, user_id: str, role: str) -> dict[str, object]:
-        if role not in {"owner", "admin"}:
-            raise AdminAccessError("Rollen måste vara ägare eller administratör")
+        if role not in ACCOUNT_ROLES:
+            raise AdminAccessError("Rollen måste vara ägare, administratör eller förare")
         with self._lock:
             row = self._connection.execute(
                 "SELECT role FROM admin_users WHERE user_id = ?", (user_id,)
