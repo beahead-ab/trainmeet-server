@@ -25,7 +25,7 @@ const SHADOW = { state: 'connected', sse: true, last_contact: 1, last_contact_lo
   ] } };
 
 (async () => {
-  let settings = { base_url: '', test_instance: false, mode: 'off' };
+  let settings = { base_url: '', test_instance: false, mode: 'off' }, lastReport = null;
   const posts = [];
   const h = await open({ route: '/installningar#klarering', width: 1280, height: 900, api: {
     '/v1/clearance/tellurian': async (request) => {
@@ -36,12 +36,14 @@ const SHADOW = { state: 'connected', sse: true, last_contact: 1, last_contact_lo
         if (body.mode === 'authority') return { status: 409, data: { error: 'tellurian_authority_unavailable', message: 'Auktoritetsläget kommer när Stefans server finns. Välj Av eller Skugga.' } };
         settings = { base_url: body.base_url, test_instance: body.test_instance, mode: body.mode };
       }
-      return status(settings, settings.mode === 'shadow' ? SHADOW : null, posts.length ? REPORT : null);
+      // Like the server: the status carries the last report that was made.
+      return status(settings, settings.mode === 'shadow' ? SHADOW : null, lastReport);
     },
     '/v1/clearance/tellurian/test': async (request) => {
       const { meet_generation, ...body } = JSON.parse(request.postData());
       posts.push({ test: body });
       if (body.base_url === '8.8.8.8') return { status: 400, data: { error: 'tellurian_address_not_local', message: 'Bara en lokal adress på träffens nät godtas (privat IPv4, 169.254.x.x eller .local). En publik adress kräver valet Testinstans.' } };
+      lastReport = REPORT;
       return { data: REPORT };
     },
   } });
@@ -64,6 +66,8 @@ const SHADOW = { state: 'connected', sse: true, last_contact: 1, last_contact_lo
     // Testa anslutning: the unsaved address goes to the server, the report is shown.
     await page.locator('#tellurian-address').fill('192.168.1.40:5000');
     await page.locator('#tellurian-test').click();
+    // Wait for this click's answer, not for a status poll that may show the report first.
+    await page.waitForFunction(() => /Inget skrevs till Tellurian/.test(document.querySelector('#tellurian-message').textContent));
     await page.locator('#tellurian-report').waitFor({ state: 'visible' });
     const report = await page.locator('#tellurian-report-body li').allTextContents();
     assert.match(report[0], /Simulerad/);
@@ -71,7 +75,6 @@ const SHADOW = { state: 'connected', sse: true, last_contact: 1, last_contact_lo
     assert.ok(report.some(r => /tvetydiga, inte matchade: 421/.test(r)), report.join('\n'));
     assert.ok(report.some(r => /serverns egen klocka, inte FastClock/.test(r)), report.join('\n'));
     assert.deepEqual(posts.at(-1), { test: { base_url: '192.168.1.40:5000', test_instance: false } });
-    assert.match(await page.locator('#tellurian-message').textContent(), /Inget skrevs till Tellurian/);
 
     // Skugga: Spara sends the meet it was read for; status and deviations follow.
     await page.locator('#tellurian-mode').selectOption('shadow');
@@ -93,7 +96,13 @@ const SHADOW = { state: 'connected', sse: true, last_contact: 1, last_contact_lo
     assert.deepEqual(h.errors, []);
     assert.deepEqual(h.violations, []);
     console.log('tellurian settings ok');
+    if (process.env.GITHUB_ACTIONS) console.log('::notice file=tests/js/tellurian-settings.test.cjs::tellurian settings ok');
   } finally {
     await h.browser.close();
   }
-})().catch((error) => { console.error(error); process.exit(1); });
+})().catch((error) => {
+  console.error(error);
+  // The job log is not always readable; an annotation names the failing check.
+  if (process.env.GITHUB_ACTIONS) console.log('::error file=tests/js/tellurian-settings.test.cjs::' + String(error && error.message || error).split('\n').slice(0, 3).join(' | '));
+  process.exit(1);
+});
