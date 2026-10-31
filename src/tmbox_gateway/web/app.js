@@ -3751,10 +3751,28 @@ function displayRouteKind(path) {
   return match && DISPLAY_KINDS.includes(match[1]) ? match[1] : null;
 }
 let displayKind = displayRouteKind(location.pathname);
-let displayReadOnly = true;
+let displayReadOnly = false;
 let displayActive = false;
 let displayInitialized = false;
 let displayWakeLock = null;
+let displayChromeUpdate = null;
+let displayFullscreenExit = null;
+
+// Guest mode (#209) is for a visitor who opens a view from Stora vyer on the
+// participant page; the meet's QR codes lead there. The history entry carries
+// the mark, so reload, Back and Forward keep it. A screen opened by its own
+// address (bookmarked or kiosk in the hall), a signed-in browser and a browser
+// with its own screen choices stay the meet's screen: own settings, toolbar.
+const GUEST_DISPLAY_MARK = "trainmeetGuestDisplay";
+function displayHasOwnSettings() {
+  // Seconds are left out: the participant view and Drift share that choice,
+  // so a guest who tapped the clock there is still a guest.
+  const keys = [DISPLAY_CLOCK_STYLE_KEY, DISPLAY_GRAPH_WINDOW_KEY, DISPLAY_GRAPH_TRACKS_KEY, DISPLAY_THEME_KEY, DISPLAY_DEVIATION_LEVEL_KEY];
+  try { return keys.some((key) => localStorage.getItem(key)); } catch { return false; }
+}
+function displayGuestEntry() {
+  return history.state?.[GUEST_DISPLAY_MARK] === true && !displayHasOwnSettings();
+}
 
 const svgNS = "http://www.w3.org/2000/svg";
 let displaySnapshot = null;
@@ -5334,14 +5352,19 @@ async function pollDisplay() {
 // the document alive so switching screens also keeps native fullscreen.
 function openGuestDisplay(path) {
   const kind = displayRouteKind(path);
-  if (!kind || state.authStatus?.authenticated) return false;
-  if (location.pathname !== path) history.pushState(null, "", path);
+  // Signed in, or a browser set up as a screen: open it as that screen.
+  if (!kind || state.authStatus?.authenticated || displayHasOwnSettings()) return false;
+  if (location.pathname !== path) history.pushState({ [GUEST_DISPLAY_MARK]: true }, "", path);
   displayKind = kind;
   initDisplay();
   const app = document.querySelector("#display-app");
-  try {
-    if (!document.fullscreenElement) app.requestFullscreen?.()?.catch(() => {});
-  } catch { /* CSS still fills the viewport when native fullscreen is unavailable. */ }
+  const enter = () => {
+    try {
+      if (!document.fullscreenElement) app.requestFullscreen?.()?.catch(() => {});
+    } catch { /* CSS still fills the viewport when native fullscreen is unavailable. */ }
+  };
+  // Leaving a view a moment ago may still be exiting fullscreen; enter after it.
+  if (displayFullscreenExit) displayFullscreenExit.then(enter); else enter();
   return true;
 }
 globalThis.TrainMeetDisplays = { openGuest: openGuestDisplay };
@@ -5356,7 +5379,12 @@ function stopDisplay() {
   displayRequest = null;
   displayWakeLock?.release().catch(() => {});
   displayWakeLock = null;
-  if (document.fullscreenElement === document.querySelector("#display-app")) document.exitFullscreen().catch(() => {});
+  if (document.fullscreenElement === document.querySelector("#display-app")) {
+    // exitFullscreen() settles after the participant view is back.
+    const exit = displayFullscreenExit = document.exitFullscreen().catch(() => {}).finally(() => {
+      if (displayFullscreenExit === exit) displayFullscreenExit = null;
+    });
+  }
   document.querySelector("#display-app").classList.add("hidden");
   document.body.classList.remove("server-display");
   document.title = "TrainMeet Server";
@@ -5374,14 +5402,19 @@ async function initDisplay() {
   document.body.classList.add("server-display");
   const displayApp = document.querySelector("#display-app");
   displayApp.classList.remove("hidden");
-  // Fail closed while checking a direct/bookmarked screen. A guest never
-  // briefly sees the administrator's screen settings.
-  displayApp.dataset.readOnly = "true";
-  if (!state.authStatus) {
-    try { await refreshAuthStatus(); } catch { /* public snapshot remains available */ }
-    if (!displayActive) return;
+  // A bookmarked or kiosk screen in the hall keeps its own choices (#209).
+  const guestEntry = displayGuestEntry();
+  if (guestEntry) {
+    // Fail closed while a reloaded guest view checks the session: a guest
+    // never briefly sees the screen settings.
+    displayReadOnly = true;
+    displayApp.dataset.readOnly = "true";
+    if (!state.authStatus) {
+      try { await refreshAuthStatus(); } catch { /* public snapshot remains available */ }
+      if (!displayActive) return;
+    }
   }
-  displayReadOnly = !state.authStatus?.authenticated;
+  displayReadOnly = guestEntry && !state.authStatus?.authenticated;
   displayApp.dataset.readOnly = String(displayReadOnly);
   document.querySelector("#display-guest-back").classList.toggle("hidden", !displayReadOnly);
   document.querySelector(".display-back").href = workspaceHome();
@@ -5396,6 +5429,7 @@ async function initDisplay() {
   }).catch(() => {});
   if (displayInitialized) {
     applyDisplayTheme(displayTheme());
+    displayChromeUpdate?.();
     displayApp.dispatchEvent(new Event("mousemove"));
     if (displaySnapshot) renderDisplay(displaySnapshot);
     pollDisplay();
@@ -5486,6 +5520,7 @@ async function initDisplay() {
     showToolbar();
     serverUI.resizeStage?.();
   };
+  displayChromeUpdate = updateChrome;
   displayApp.addEventListener("mousemove", showToolbar);
   displayApp.addEventListener("click", showToolbar);
   // Ett tryck på storskärmens klocka visar eller döljer sekunderna här.

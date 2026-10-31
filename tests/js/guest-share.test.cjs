@@ -70,27 +70,57 @@ const { open } = require('./kr-fixture.cjs');
           await page.goBack();
           await page.locator('#participant-view').waitFor({ state: 'visible' });
           assert.equal(await page.locator('#display-app').isVisible(), false);
-          assert.equal(await page.evaluate(() => document.fullscreenElement), null);
+          // exitFullscreen() settles a moment after the participant view is back.
+          await page.waitForFunction(() => document.fullscreenElement === null);
           await page.goForward();
           await page.locator('#display-app').waitFor({ state: 'visible' });
           await page.locator('#display-guest-back').click();
           await page.locator('#participant-view').waitFor({ state: 'visible' });
         }
-        // A bookmarked public screen also follows the meet, ignoring old local choices.
-        await page.evaluate(() => {
-          localStorage.setItem('trainmeet.displayClockStyle', 'analog');
-          localStorage.setItem('trainmeet.displayClockSeconds', 'off');
-          localStorage.setItem('trainmeet.displayGraphWindow', '1440');
-        });
-        await page.goto('http://127.0.0.1:9999/display/clock');
+        // A guest who tapped the participant clock (seconds are shared with
+        // that view) is still a guest, and a reload keeps the guest view.
+        await page.evaluate(() => localStorage.setItem('trainmeet.displayClockSeconds', 'off'));
+        await page.locator('#pv-screens-menu summary').click();
+        await page.locator('#pv-screens-list a[href="/display/clock"]').click();
         await page.locator('#clock-view .clock-digital').waitFor();
+        assert.equal(await page.locator('#display-app').getAttribute('data-read-only'), 'true');
+        assert.equal(await page.locator('#clock-view .clock-digital').getAttribute('data-seconds'), 'true', 'the guest follows the meet');
         await page.locator('#clock-view').click();
-        assert.equal(await page.locator('#clock-view .clock-digital').getAttribute('data-seconds'), 'true');
-        assert.equal(await page.evaluate(() => localStorage.getItem('trainmeet.displayClockSeconds')), 'off');
-        assert.equal(await page.locator('#display-clock-style').isVisible(), false);
+        assert.equal(await page.evaluate(() => localStorage.getItem('trainmeet.displayClockSeconds')), 'off', 'a guest tap stores nothing');
+        await page.reload();
+        await page.locator('#clock-view .clock-digital').waitFor();
+        assert.equal(await page.locator('#display-app').getAttribute('data-read-only'), 'true', 'reload keeps the guest view');
+        assert.equal(await page.locator('#display-guest-back').isVisible(), true);
         await page.locator('#display-guest-back').click();
         await page.locator('#participant-view').waitFor({ state: 'visible' });
         assert.deepEqual(writes, [], 'guest browsing sends no write requests');
+
+        // A bookmarked screen in the hall is the meet's screen, not a guest:
+        // it keeps its own choices and its usual toolbar (#209).
+        await page.evaluate(() => {
+          localStorage.setItem('trainmeet.displayClockStyle', 'analog');
+          localStorage.setItem('trainmeet.displayGraphWindow', '1440');
+        });
+        await page.goto('http://127.0.0.1:9999/display/clock');
+        await page.locator('#clock-view svg.clock-face').waitFor();
+        assert.equal(await page.locator('#display-app').getAttribute('data-read-only'), 'false');
+        assert.equal(await page.locator('#display-guest-back').isVisible(), false);
+        assert.equal(await page.locator('#display-clock-style').isVisible(), true, 'the screen keeps its toolbar');
+        assert.equal(await page.locator('#display-clock-style').inputValue(), 'analog');
+        assert.equal(await page.locator('#display-clock-seconds').inputValue(), 'off');
+        if (region === 'eu') {
+          await page.goto('http://127.0.0.1:9999/display/graph');
+          await page.locator('#display-graph-window').waitFor({ state: 'visible' });
+          assert.equal(await page.locator('#display-graph-window').inputValue(), '1440', 'and its diagram window');
+        }
+        // From Stora vyer, a browser set up as a screen also opens as that screen.
+        await page.goto('http://127.0.0.1:9999/');
+        await page.locator('#pv-screens-menu summary').click();
+        await page.locator('#pv-screens-list a[href="/display/clock"]').click();
+        await page.locator('#clock-view svg.clock-face').waitFor();
+        assert.equal(await page.locator('#display-app').getAttribute('data-read-only'), 'false');
+        assert.equal(await page.locator('#display-clock-style').inputValue(), 'analog');
+        await page.evaluate(() => localStorage.clear());
         assert.equal(await page.locator('#login').isVisible(), false);
         assert.deepEqual(errors, [], 'browser errors');
         assert.deepEqual(violations, [], 'CSP violations');

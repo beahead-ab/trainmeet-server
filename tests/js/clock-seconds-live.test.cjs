@@ -85,22 +85,25 @@ const KEY = 'trainmeet.displayClockSeconds';
     await page.goto(base + '/');
     await page.waitForFunction(() => /^\d\d:\d\d:\d\d$/.test(document.querySelector('#overview-clock').textContent));
 
-    // Gästens storskärm följer träffen och kan inte ställa om sekunderna.
+    // En gäst som öppnar klockan under Stora vyer följer träffen och kan inte
+    // ställa om sekunderna (#209).
     const guestContext = await browser.newContext({ locale: 'sv-SE', viewport: { width: 1280, height: 900 } });
     const guest = await guestContext.newPage();
     watch(guest);
-    await guest.goto(base + '/display/clock');
+    await guest.goto(base + '/');
+    await guest.locator('#pv-screens-menu summary').click();
+    await guest.locator('#pv-screens-list a[href="/display/clock"]').click();
     await guest.locator('#clock-view .cd-ss').waitFor();
+    assert.equal(await guest.locator('#display-app').getAttribute('data-read-only'), 'true');
     await guest.locator('#clock-view').click();
     assert.equal(await guest.locator('#clock-view .clock-digital').getAttribute('data-seconds'), 'true');
     assert.equal(await guest.evaluate(key => localStorage.getItem(key), KEY), null);
     assert.equal(await guest.locator('#display-clock-seconds').isVisible(), false);
     await guestContext.close();
 
-    // Den inloggade skärmen behåller sitt eget val av sekunder.
-    const screenContext = await browser.newContext({ locale: 'sv-SE', viewport: { width: 1280, height: 900 }, storageState: await page.context().storageState() });
-    await screenContext.addInitScript(key => localStorage.removeItem(key), KEY);
-    const screen = await screenContext.newPage();
+    // Storskärmen i lokalen (öppnad med sin adress) följer inställningen
+    // (sekunder på) tills någon trycker på klockan.
+    const screen = await (await browser.newContext({ locale: 'sv-SE', viewport: { width: 1280, height: 900 } })).newPage();
     watch(screen);
     await screen.goto(base + '/display/clock');
     await screen.waitForFunction(() => /^\d\d$/.test(document.querySelector('#clock-view .cd-ss')?.textContent || ''));
