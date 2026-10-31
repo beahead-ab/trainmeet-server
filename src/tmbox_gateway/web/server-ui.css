@@ -456,3 +456,13 @@ body[data-signed-in="no"] #app-chrome :is(#header-cloud-status, .topbar-right, #
 :is(#device-list, #device-removed-trying) .status-row { grid-template-columns: minmax(220px, 280px) 150px minmax(0, 1fr) auto; }
 }
 /* No clients yet: a quiet row in the card, not a dashed box. */
+
+/* Driver accounts see their profile and public meet screens. */
+body[data-account-role="user"] #settings-nav > :not([data-section="anvandare"]),
+body[data-account-role="user"] #header-help,
+body[data-account-role="user"] #header-data,
+body[data-account-role="user"] .kr-search,
+body[data-account-role="user"] #app-devices,
+body[data-account-role="user"] #application-menu a[href="#screens"],
+body[data-account-role="user"] #admin-users-settings .kr-c,
+body[data-account-role="user"] #admin-users-settings .kr-pf { display: none !important; }

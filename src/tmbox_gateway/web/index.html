@@ -964,7 +964,7 @@
             <section id="anvandare" class="kr-setsec" data-section="anvandare" aria-labelledby="anvandare-title" hidden>
               <div class="kr-sectitle"><h1 id="anvandare-title">Användare</h1><span>inloggning krävs överallt, också på serverdatorn</span></div>
               <section id="admin-users-settings" class="kr-panel" aria-label="Användare">
-                <div class="kr-ph"><span>Användare</span><span id="users-role-chip" class="kr-pill">–</span><span class="kr-c">ägare redigerar alla konton · administratörer redigerar administratörer och förare</span><span class="kr-sp"></span><button type="button" class="kr-btn sm primary" id="users-invite-open" data-open-modal="users-invite-form-modal">+ Bjud in</button></div>
+                <div class="kr-ph"><span>Användare</span><span id="users-role-chip" class="kr-pill">–</span><span class="kr-c">ägare hanterar alla konton · administratörer hanterar administratörer och användare</span><span class="kr-sp"></span><button type="button" class="kr-btn sm primary" id="users-invite-open" data-open-modal="users-invite-form-modal">+ Bjud in</button></div>
                 <div class="kr-scroll-x">
                   <table id="users-table" class="kr-tbl">
                     <thead><tr><th>Namn</th><th>Roll</th><th>Status</th><th></th></tr></thead>
@@ -1160,13 +1160,7 @@
               <label class="users-invite-email"><tm-text data-tm-text="E-postadress">E-postadress</tm-text><input id="users-invite-email" type="email" maxlength="254" autocomplete="off" required>
                 <span class="kr-m"><tm-text data-tm-text="Är servern kopplad till TrainMeet Cloud skickas koden också dit.">Är servern kopplad till TrainMeet Cloud skickas koden också dit.</tm-text></span>
               </label>
-              <label class="users-invite-role"><tm-text data-tm-text="Roll">Roll</tm-text>
-                <select id="users-invite-role">
-                  <option value="user" data-tm-text="Förare — bara Lokföraren">Förare — bara Lokföraren</option>
-                  <option value="admin" data-tm-text="Administratör — även användare och inställningar" selected>Administratör — även användare och inställningar</option>
-                  <option value="owner" data-tm-text="Ägare — får också lägga till och ta bort användare">Ägare — får också lägga till och ta bort användare</option>
-                </select>
-              </label>
+              <label class="users-role-choice">Roll<select id="users-invite-role"><option value="admin">Administratör</option><option value="user">Användare</option><option value="owner">Ägare</option></select></label>
               <p class="modal-feedback form-message" role="status"></p>
               <div class="modal-actions"><button type="button" class="secondary" data-close-modal>Avbryt</button><button type="submit" class="primary"><tm-text data-tm-text="Bjud in">Bjud in</tm-text></button></div>
 </form>
@@ -1365,7 +1359,7 @@
           <p id="user-edit-name"></p>
           <label>Namn<input id="user-edit-display-name" maxlength="100" autocomplete="off" required></label>
           <label>E-postadress<input id="user-edit-email" type="email" maxlength="254" autocomplete="off" required></label>
-          <label>Roll<select id="user-edit-role"><option value="user">Förare</option><option value="admin">Administratör</option><option value="owner">Ägare</option></select></label>
+          <label>Roll<select id="user-edit-role"><option value="admin">Administratör</option><option value="user">Användare</option><option value="owner">Ägare</option></select></label>
           <label>Nytt lösenord (valfritt)<input id="user-edit-password" type="password" minlength="8" autocomplete="new-password"></label>
           <label>Upprepa lösenord<input id="user-edit-password-confirm" type="password" minlength="8" autocomplete="new-password"></label>
           <p class="modal-feedback form-message" role="status"></p>

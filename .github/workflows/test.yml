@@ -48,6 +48,7 @@ jobs:
           node tests/js/guest-share.test.cjs
           node tests/js/account-mail-live.test.cjs
           node tests/js/user-editing-live.test.cjs
+          node tests/js/user-roles-live.test.cjs
           node tests/js/lokforaren-live.test.cjs
           node tests/js/header-mobile.test.cjs
           node tests/js/about-view.test.cjs

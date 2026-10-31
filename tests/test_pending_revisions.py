@@ -35,6 +35,8 @@ def dispatch_request(application, client, path, payload=None, method="POST"):
     handler.server = SimpleNamespace(application=application)
     handler._read_json = lambda: payload or {}
     handler._authenticated_client = lambda: client
+    handler._optional_authenticated_client = lambda: client
+    handler.command = method
     responses = []
     handler._send_json = lambda status, body, **kwargs: responses.append((status, body))
     handler._send_api_error = lambda error: responses.append((error.status, {"code": error.code, "message": str(error)}))
