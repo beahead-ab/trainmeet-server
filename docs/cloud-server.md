@@ -32,6 +32,13 @@ att servern över huvud taget kan redigera en konfiguration.
 
 Cloud → server. Aldrig tillbaka.
 
+> **Undantag (Casper, 29 oktober 2026):** en egen, smal kanal bara för
+> livetrafik från Apple Watch: TMBox-anrop genom Clouds relä och
+> push-händelser (#205, #206). Ingen träffdata och ingen konfiguration går
+> upp, och D1 gäller fortfarande för allt annat. Se
+> [Cloud förbereder, Server kör](CLOUD-ONLY-SERVER.md#livetrafik-från-klockan-via-cloud)
+> och [kontraktet](apple-watch-relay-push.md).
+
 Servern föreslår inga ändringar uppströms, och Cloud tar inte emot några.
 Förslagskön är **borttagen ur båda repona** — det här är alltså inte längre
 ett beslut som väntar på att genomföras, utan en beskrivning av hur det ser

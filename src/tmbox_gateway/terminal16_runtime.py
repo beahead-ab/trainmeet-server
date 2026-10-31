@@ -33,6 +33,10 @@ class RuntimeViews(Terminal16Lab):
         super().__init__(engine, publication, {}, now=now)
         self.lock = service.operations_store.command_lock
         self.cases = {}
+        # Told about every sound a box is given (cloud_live.py: push to the
+        # box's phone and watch). Called under the traffic lock.
+        self.on_attention = None
+        self._previous_cases = {}
         self._departed = set()
         self.fingerprint = None
         self.refresh()
@@ -48,6 +52,23 @@ class RuntimeViews(Terminal16Lab):
 
     def _is_active(self, leg):
         return leg["from_movement_id"] in self.cases
+
+    def _signal(self, terminal, kind, leg=None):
+        super()._signal(terminal, kind, leg)
+        listener = self.on_attention
+        if listener is None or leg is None:
+            return
+        device = next((key for key, value in self.terminals.items() if value is terminal), None)
+        if device is None:
+            return
+        case = self.cases.get(leg["from_movement_id"]) or self._previous_cases.get(leg["from_movement_id"])
+        stations = self.engine.config.stations
+        listener(device, kind, {
+            "train_number": leg["train_number"], "from_station": stations[leg["from_station_id"]].code,
+            "to_station": stations[leg["to_station_id"]].code,
+            "request_id": case["clearance_id"] if case else None,
+            "station": terminal.station, "side": terminal.side, "language": terminal.language,
+        })
 
     def _automatic_here(self, terminal):
         automatic = self.service.automatic
@@ -103,6 +124,7 @@ class RuntimeViews(Terminal16Lab):
         old_cases, old_completed = self.cases, self.completed
         old_departed = self._departed
         self.cases = cases
+        self._previous_cases = old_cases
         self._departed = {key for key, case in cases.items() if service.case_departed(case)}
         self.bindings = {case["clearance_id"]: key for key, case in cases.items()}
         self.completed = {key for key, leg in self.legs.items()
@@ -213,8 +235,10 @@ class Terminal16Service:
         self.service, self.now = service, now
         self.views = None
         self.scope = None
+        # cloud_live.LiveChannel.on_attention when the watch channel is wired.
+        self.on_attention = None
 
-    def _views(self, device):
+    def _views(self, device, *, refresh=True):
         publication = self.service.publication()
         if publication is None:
             return None
@@ -222,6 +246,7 @@ class Terminal16Service:
                  self.service.runtime_scope().get("meet_generation"))
         if scope != self.scope:
             self.views, self.scope = RuntimeViews(self.service, now=self.now), scope
+            self.views.on_attention = self._attention
         views = self.views
         station = self.service.identities.station_for_client(device)
         if station not in views.engine.config.stations:
@@ -241,7 +266,8 @@ class Terminal16Service:
         if (terminal.rows, terminal.cols) != geometry:
             terminal.rows, terminal.cols = geometry
             terminal.revision += 1
-        views.refresh()
+        if refresh:
+            views.refresh()
         language = self.service.device_ui(device)["language"]
         if terminal.language != language:
             terminal.language = language
@@ -250,6 +276,25 @@ class Terminal16Service:
             views._open_requests(terminal)
             terminal.revision += 1
         return views
+
+    def _attention(self, device, kind, info):
+        if self.on_attention is not None:
+            self.on_attention(device, kind, info)
+
+    def observe(self, devices):
+        """Keep these boxes in the picture although nobody asks for their frames.
+
+        A phone whose app is closed does not poll, so nothing would notice a
+        request for its station. The watch channel calls this about once a
+        second for the boxes that registered for push; a new request, answer
+        or departure then reaches them as a push, exactly as it would sound.
+        """
+        with self.service.operations_store.command_lock:
+            views = None
+            for device in devices:
+                views = self._views(device, refresh=False) or views
+            if views is not None:
+                views.refresh()
 
     def _geometry(self, device):
         info = self.service.identities.discovered_device_or_none(device)
