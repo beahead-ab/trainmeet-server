@@ -1857,6 +1857,53 @@ document.querySelector("#cloud-auto-form").addEventListener("submit", async (eve
   } finally { endModalAction(form); }
 });
 
+// Apple Watch via Cloud (#205, #206): klockan når servern genom Cloud och får
+// notiser. Av tills administratören slår på det; texten säger var det står.
+const CLOUD_LIVE_RELAY = {
+  off: "Av. Klockan går via telefonen på träffens nät.",
+  unlinked: "Koppla servern till Cloud först.",
+  connecting: "Ansluter till Cloud …",
+  connected: "Ansluten. Klockan når servern via Cloud.",
+  cloud_disabled: "Cloud har inte reläet påslaget.",
+  link_rejected: "Cloud känner inte igen kopplingen. Koppla om servern.",
+  error: "Cloud nås inte just nu. Servern försöker igen.",
+};
+const CLOUD_LIVE_PUSH = { on: "Notiser: på.", cloud_not_configured: "Notiser: inte konfigurerat i Cloud." };
+
+async function refreshCloudLive() {
+  const form = document.querySelector("#cloud-live-form");
+  if (!form || editorActive(form)) return;
+  const response = await authorizedFetch("/v1/cloud/live", {cache: "no-store"});
+  if (!response.ok) { form.hidden = true; return; }
+  const payload = await response.json();
+  const input = document.querySelector("#cloud-live-enabled");
+  input.checked = Boolean(payload.enabled);
+  input.disabled = !payload.linked && !payload.enabled;
+  const relay = t(CLOUD_LIVE_RELAY[payload.relay?.state] || CLOUD_LIVE_RELAY.error);
+  const push = CLOUD_LIVE_PUSH[payload.push?.state];
+  document.querySelector("#cloud-live-status").textContent = push ? `${relay} ${t(push)}` : relay;
+  form.hidden = false;
+  globalThis.TrainMeetSettings?.rebase(form);
+}
+
+document.querySelector("#cloud-live-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const enabled = document.querySelector("#cloud-live-enabled").checked;
+  if (!beginModalAction(form)) return;
+  try {
+    const response = await authorizedFetch("/v1/cloud/live", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || t("Inställningen kunde inte sparas."));
+    finishModal(form);
+  } catch (error) {
+    setMessage(form.querySelector(".form-message"), error.message, "error");
+  } finally { endModalAction(form); }
+  await refreshCloudLive();
+});
+
 // Vilken sida tågen går på vid dubbelspår (kartorna). Förvalet följer
 // träffens land; en träff vars moduler är byggda annorlunda väljer själv.
 async function refreshTrafficSide() {
@@ -2767,6 +2814,7 @@ async function refreshRuntime() {
   if (state.runtime.central_url && !input.closest("dialog")?.open) input.value = state.runtime.central_url;
   renderCloudStatus();
   await refreshCloudPresentation();
+  await refreshCloudLive();
 }
 
 let cloudPresentation = null;
