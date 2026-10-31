@@ -104,6 +104,14 @@ klienten direkt efter en extern effekt och verifierar avstämning efter omstart.
 Nätverkstester kräver tillåtelse att öppna loopback-portar i testmiljön. En enskild
 preflight intygar inte dessa egenskaper hos en ännu okänd tjänst.
 
+## Första konkreta tjänst: Tellurian Dispatch
+
+Tellurian Dispatch (#222) är den första tjänsten i ramen. Den har en egen
+adapter, simulator och ett skuggläge i servern; se [tellurian-dispatch.md](tellurian-dispatch.md).
+Den använder kommandologgen härifrån (`SqliteCommandJournal`) men inte
+`IntegrationService`, eftersom Tellurian saknar inloggning och åtgärderna
+kommer som serverlämnade länkar (HATEOAS) i stället för fasta kommandon.
+
 ## Nästa fas: kvalificera en tjänsteadapter
 
 Uppföljning: [Externa trafikintegrationer: kvalificera en tjänsteadapter (#219)](https://github.com/beahead-ab/trainmeet-server/issues/219).

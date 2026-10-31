@@ -266,6 +266,7 @@ def main() -> None:
     finally:
         clock_stop.set()
         clock_thread.join()  # Bounded provider timeout; no database access after close.
+        application.tellurian.close()  # Skuggläsningen (#222) läser inget efter stängning.
         _stop_cloud_sync(application, cloud_sync_thread, cloud_sync_stop)
         application.changes.close()  # Open pages' event streams end now.
         server.shutdown()

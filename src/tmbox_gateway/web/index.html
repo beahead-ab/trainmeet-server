@@ -12,6 +12,8 @@
     <link rel="stylesheet" href="/assets/app.css?v=20260815-1">
     <script src="/assets/i18n-messages.js" defer></script>
     <script src="/assets/meet-type-messages.js" defer></script>
+    <!-- Före shell-messages.js, som översätter sidans fasta text när den körs. -->
+    <script src="/assets/tellurian-messages.js" defer></script>
     <link rel="stylesheet" href="/assets/meet-type.css">
     <link rel="stylesheet" href="/assets/server-design.css">
     <link rel="stylesheet" href="/assets/server-ui.css">
@@ -669,6 +671,7 @@
             <a class="kr-nav" href="/installningar#skarmar" data-section="skarmar" data-group="traffen">Skärmar och klocka</a>
             <a class="kr-nav" href="/installningar#wifi" data-section="wifi" data-group="traffen">Wi-Fi och QR-koder</a>
             <a class="kr-nav" href="/installningar#obemannade" data-section="obemannade" data-group="traffen">Obemannade stationer</a>
+            <a class="kr-nav" href="/installningar#klarering" data-section="klarering" data-group="traffen">Klarering</a>
             <span class="kr-grp" data-group="servern">Den här servern</span>
             <a class="kr-nav" href="/installningar#server" data-section="server" data-group="servern">Namn och nätverk</a>
             <a class="kr-nav" href="/installningar#kod" data-section="kod" data-group="servern">Anslutningskod</a>
@@ -762,6 +765,38 @@
                 <div id="automatic-waiting" class="kr-rows"></div>
                 <p id="automatic-message" class="form-message" role="status"></p>
                 <div class="kr-pf"><span>En station utan TMBox eller TKL ger klart, begär och anmäler avgång och ankomst enligt tidtabellen. Den första TMBox eller TKL som arbetar med stationen gör den manuell. Operatören kan lämna stationen till automatiken själv, med * på boxens startbild eller under Meny i TKL, och ta tillbaka den med #. Tappar stationen kontakten väntar den på sin operatör, eller tar automatiken över efter den tid som valts ovan.</span></div>
+              </section>
+            </section>
+
+            <!-- Klarering · Tellurian Dispatch (#222). Avstängt som standard; bara Skugga än. -->
+            <section id="klarering" class="kr-setsec" data-section="klarering" aria-labelledby="klarering-title" hidden>
+              <div class="kr-sectitle"><h1 id="klarering-title">Klarering</h1><span>vem som fattar klareringsbesluten på träffen</span></div>
+              <form id="tellurian-form" class="kr-panel kr-setform" aria-label="Tellurian Dispatch" data-tm-aria-label="Tellurian Dispatch" novalidate>
+                <div class="kr-ph"><span>Tellurian Dispatch</span><span class="kr-c">extern tågledning på träffens nät · avstängd som standard</span></div>
+                <div class="kr-rows">
+                  <div class="kr-kv"><label class="kr-k" for="tellurian-address">Adress</label><input id="tellurian-address" class="kr-field kr-w-lg mono" maxlength="255" autocomplete="off" spellcheck="false" placeholder="http://192.168.1.20:5000" data-change-label="Adress" data-no-i18n><button id="tellurian-test" class="kr-btn sm" type="button">Testa anslutning</button></div>
+                  <div class="kr-kv"><span class="kr-k">Testinstans</span><label class="kr-switch"><input id="tellurian-test-instance" type="checkbox" data-change-label="Testinstans"><span>Tillåt en publik adress, bara för test</span></label></div>
+                  <div class="kr-kv"><span class="kr-k">Läge</span><select id="tellurian-mode" class="kr-btn sm" aria-label="Läge för Tellurian Dispatch" data-tm-aria-label="Läge för Tellurian Dispatch" data-change-label="Läge"><option value="off">Av – TrainMeet klarerar själv</option><option value="shadow">Skugga – läs och jämför, skriv inget</option><option value="authority" disabled>Tellurian bestämmer – kommer när Stefans server finns</option></select></div>
+                  <div class="kr-kv"><span class="kr-k">Status</span><span id="tellurian-status" class="kr-tag off"><span class="kr-dot"></span><span id="tellurian-status-text">Av</span></span><span id="tellurian-status-note" class="kr-m"></span></div>
+                </div>
+                <p id="tellurian-message" class="form-message" role="status"></p>
+                <div class="kr-savebar" data-savebar><span class="kr-save-state" data-save-state>Inget ändrat</span><span class="kr-sp"></span><button class="kr-btn sm" type="button" data-save-cancel disabled>Avbryt</button><button class="kr-btn sm primary" type="submit" data-save-submit disabled>Spara</button></div>
+              </form>
+              <section id="tellurian-report" class="kr-panel" aria-label="Förhandsrapport" data-tm-aria-label="Förhandsrapport" hidden>
+                <div class="kr-ph"><span>Förhandsrapport</span><span id="tellurian-report-meta" class="kr-c"></span></div>
+                <ul id="tellurian-report-body" class="kr-findings-list"></ul>
+                <div class="kr-pf"><span>Rapporten läser Tellurian en gång och skriver ingenting. Omatchade stationer måste rättas innan Tellurian kan bestämma.</span></div>
+              </section>
+              <section id="tellurian-deviations" class="kr-panel" aria-label="Avvikelser mot TrainMeets klarering" data-tm-aria-label="Avvikelser mot TrainMeets klarering" hidden>
+                <div class="kr-ph"><span>Avvikelser mot TrainMeets klarering</span><span id="tellurian-deviations-meta" class="kr-c"></span></div>
+                <ul id="tellurian-deviations-list" class="kr-findings-list"></ul>
+              </section>
+              <section class="kr-panel" aria-label="Om lägena" data-tm-aria-label="Om lägena">
+                <div class="kr-lines">
+                  <div class="kr-line kr-line--two"><span>Skugga</span><span>TrainMeet klarerar som vanligt. Tellurian läses bredvid och skillnaderna visas här. Inget skrivs till Tellurian och trafiken påverkas inte.</span></div>
+                  <div class="kr-line kr-line--two"><span>Tellurian bestämmer</span><span>Kommer när Stefans server finns. Då fattar Tellurian alla klareringsbeslut och TrainMeet visar dem på boxar, skärmar och klockor.</span></div>
+                  <div class="kr-line kr-line--two"><span>Adress</span><span>Bara en lokal adress på träffens nät: privat IPv4, 169.254.x.x eller ett .local-namn. Tellurian har ingen inloggning, så boxar och appar går alltid via servern.</span></div>
+                </div>
               </section>
             </section>
 
@@ -1441,6 +1476,7 @@
     <script src="/assets/app.js?v=20261006-1" defer></script>
     <script src="/assets/meet-timeline.js" defer></script>
     <script src="/assets/pi-network.js" defer></script>
+    <script src="/assets/tellurian-settings.js" defer></script>
     <script src="/assets/guest-share.js" defer></script>
     <script src="/assets/participant.js" defer></script>
   </body>
