@@ -1,7 +1,7 @@
 """Deterministic sandbox adapter. No network, secrets or runtime traffic access."""
 from __future__ import annotations
 
-from .framework import Command, Connection, Scope, SessionExpired, Train
+from .framework import Command, Connection, Outcome, Scope, SessionExpired, Train, Unsupported
 
 
 class StubAdapter:
@@ -38,3 +38,6 @@ class StubAdapter:
 
     def close(self) -> None:
         self._scope = None
+
+    def command_status(self, command: Command) -> Outcome:
+        raise Unsupported("The basic stub does not retain correlated command receipts")
