@@ -254,6 +254,7 @@ class Terminal16Lab:
                 outgoing = schedule["kind"] == "departure"
                 other = self.engine.config.stations[schedule["other"]]
                 movement = movements.get(leg["from_movement_id"] if outgoing else leg["to_movement_id"], {})
+                actual = self._actual_track(terminal.station, movement.get("id"))
                 line = self._line(leg)
                 active = self._is_active(leg)
                 state = ("arrived" if key in self.completed else
@@ -267,7 +268,11 @@ class Terminal16Lab:
                     "side": self._side(terminal.station, other.id, leg["connection_id"]),
                     "track": labels.get(movement.get("track_id")),
                     # Där tåget står på riktigt, om det skiljer sig (4.9.0).
-                    "actual_track": labels.get(self._actual_track(terminal.station, movement.get("id"))),
+                    "actual_track": labels.get(actual),
+                    # Spårens id:n, för spårvisningen (#46): lika etiketter
+                    # på olika driftplatser är olika spår.
+                    "track_id": movement.get("track_id") if movement.get("track_id") in labels else None,
+                    "actual_track_id": actual if actual in labels else None,
                     "state": state, "selected": terminal.selected == key,
                 }))
             clock = self.engine.meeting_clock()["time"]
@@ -361,7 +366,7 @@ class Terminal16Lab:
     def _notify_request(self, leg):
         for terminal in self.terminals.values():
             if terminal.station == leg["to_station_id"] and self._on_side(terminal, leg):
-                self._signal(terminal, "incoming_request")
+                self._signal(terminal, "incoming_request", leg)
             # An empty queue's INGA FRÅGOR gives way to the request at once.
             if (terminal.station == leg["to_station_id"] and self._on_side(terminal, leg)
                     and terminal.notice in ("", "INGA FRÅGOR")
@@ -612,9 +617,10 @@ class Terminal16Lab:
 
     # ------------------------------------------------------------- attention
 
-    def _signal(self, terminal, kind):
+    def _signal(self, terminal, kind, leg=None):
         """Something worth a sound happened to this box. Numbered, so the box
-        plays it once, and it never plays what happened before it connected."""
+        plays it once, and it never plays what happened before it connected.
+        `leg` is the train it is about; the runtime passes it on as a push."""
         now = self.now()
         current = terminal.attention_kind
         if (current in ATTENTION_KINDS and terminal.attention_at is not None
@@ -629,13 +635,13 @@ class Terminal16Lab:
         that gave it: the direction of the line says who did what."""
         for terminal in self.terminals.values():
             if terminal.station == leg["from_station_id"] and self._on_side(terminal, leg):
-                self._signal(terminal, "request_approved" if approved else "request_denied")
+                self._signal(terminal, "request_approved" if approved else "request_denied", leg)
 
     def _notify_departure(self, leg):
         """The receiver hears that a train is under way to it."""
         for terminal in self.terminals.values():
             if terminal.station == leg["to_station_id"] and self._on_side(terminal, leg):
-                self._signal(terminal, "incoming_train")
+                self._signal(terminal, "incoming_train", leg)
 
     def _tracks(self, terminal):
         return self.engine.config.tracks_for_station(terminal.station)

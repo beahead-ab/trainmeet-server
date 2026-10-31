@@ -400,7 +400,7 @@ class OwnerGateTests(unittest.TestCase):
 
         self.assertEqual(403, int(caught.exception.status))
 
-    def test_an_administrator_may_not_change_a_role(self) -> None:
+    def test_an_administrator_may_not_assign_the_owner_role(self) -> None:
         with self.assertRaises(HTTPAPIError):
             self.application.update_admin_user(
                 self._as("lars"), {"user_id": str(self.lars["user_id"]), "role": "owner"}
@@ -419,7 +419,7 @@ class OwnerGateTests(unittest.TestCase):
             self.identities.create_admin_session("lars@example.se", "ett-helt-nytt-losenord")
         )
 
-    def test_an_administrator_may_not_change_someone_elses_password(self) -> None:
+    def test_an_administrator_may_not_change_the_owners_password(self) -> None:
         owner = next(u for u in self.identities.list_admin_users() if u["role"] == "owner")
 
         with self.assertRaises(HTTPAPIError) as caught:

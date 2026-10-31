@@ -5,6 +5,21 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Apple Watch via Cloud: relä och notiser, avstängt tills det slås på (#205, #206)
+
+En Pi på en träff med internet kan nu nås av klockan genom TrainMeet Cloud,
+utan att något öppnas på träffens nät: Pi:n håller själv en utgående
+förbindelse, och bara boxens egna anrop (bild, tryck, tidtabell, klocka,
+push-registrering och svar på en notis) går den vägen, med samma box-nyckel
+och samma regler. Begäran hit, nekad, klart och tåg på väg blir notiser på
+telefon och klocka även när appen är stängd, och Ge klart eller Neka från
+notisen avgör bara den förfrågan, bara medan den väntar.
+
+Det är det smala undantaget från D1 som Casper beslutade den 29 oktober.
+Ingen konfiguration, ingen träffdata och ingen historik går upp. Allt är av
+tills administratören slår på **Apple Watch via Cloud** under Inställningar →
+Träff och Cloud. Kontraktet står i `docs/apple-watch-relay-push.md`.
+
 ### Träffklockan: meddelanden som glas, och NoReason syns aldrig (#223)
 
 Klockskärmen visade en brun remsa med «NoReason» under en gående klocka, och
@@ -23,6 +38,25 @@ pausorsaken gäller bara en paus och stopporsaken bara ett stopp. Platshållare
 som `None`, `NoReason` och `SelectStopReason` blir ingenting, kända koder
 översätts (Lunch → Lunchpaus, Derailment → Urspårning) och okända koder visas
 aldrig. Deltagarvyn använder samma tolkning.
+
+### En ny träff börjar på planens veckodag och byter dygn själv (Cloud #100)
+
+Cloud skickar planens speldygn i paketet (`clock.traffic_week`: startveckodag,
+antal speldygn och om trafiken går dygnet runt). En ny träff ur en sådan plan
+får nu kalendern därifrån: dag 1 är planens veckodag, trafikdagen är den
+veckodagen, och går trafiken dygnet runt sker nytt trafikdygn automatiskt vid
+dygnsskiftet. Värnamo Moduldagar börjar alltså måndag och byter dag vid varje
+midnatt, så att TXL CG 38958 (måndag–tisdag) och HCTOR HG 45696
+(onsdag–fredag) aldrig kör samma kväll i samma läge. En träff som redan har en
+kalender behåller den: det admin valt gäller, och en pågående träff ändras inte
+av en ny publicering. Äldre paket utan speldygn startar som förut.
+
+Tidtabellskärnan är synkad med Cloud (tåg som delar nummer hålls isär med
+bolag och tågslag, och planens dygn efter midnatt gäller när servern bygger om
+tjänsterna efter en lokal ändring). Tågdiagrammet på Drift och storskärmen
+ritar som Cloud: planens grafiska linjer som blad, stationerna på planens km,
+tågen i tågslagets färg och tåg som delar nummer som "DSB IC 116". Ett paket
+utan planens linjer och färger ritas som förut.
 
 ### FastClock-standardadressen finns alltid kvar att kopiera
 

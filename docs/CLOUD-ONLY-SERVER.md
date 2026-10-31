@@ -20,7 +20,8 @@ och publiceras i Cloud. Serverns byggläge och lokala import-/redigeringsvägar
 Servern behåller driftåtgärderna: klockstyrning, tågrapporter, klareringar,
 track warrants, extra tåg, operatörstilldelningar och TMBox-kopplingar.
 TMBoxarnas stationstilldelning är en lokal driftinställning, inte en ändring
-av banan. Serverkonton, enhetsidentiteter och nätverksinställningar hör till
+av banan. Detsamma gäller stationens [spårvisning](tmbox-sparvisning.md) i
+TMBox-appen: ett lokalt presentationsval som aldrig skickas till Cloud. Serverkonton, enhetsidentiteter och nätverksinställningar hör till
 servern och skapas inte om för varje träff.
 
 ## Anslutning och uppdateringar
@@ -44,10 +45,16 @@ felaktigt paket eller en hämtning från en koppling som under tiden ändrats f�
 inte ersätta den aktiva träffen. En annan träff får inte smygas in genom
 automatisk synkronisering.
 
-## E-post via Cloud: det enda som går uppåt
+## Det som går uppåt: e-post och klockans livetrafik
 
 Synken går bara Cloud → Server. Servern skickar aldrig upp konfiguration, träffdata
-eller historik. Ett undantag finns, och det är smalt: en kopplad server kan be
+eller historik. Två undantag finns, och båda är smala. Var och en har sin egen
+modul med ett enda anrop, och `test_product_boundaries` vaktar att det inte
+blir fler.
+
+### E-post via Cloud
+
+En kopplad server kan be
 Cloud skicka **en inbjudan** eller **en kod för nytt lösenord** till en av
 serverns användare (`POST /api/server-mail`, i `cloud_mail.py`).
 
@@ -58,7 +65,33 @@ serverns användare (`POST /api/server-mail`, i `cloud_mail.py`).
 - Utan koppling eller internet fungerar allt som förut: koden visas för ägaren
   och lämnas över på plats, och `tmbox_gateway.recover` finns på serverdatorn.
 - `test_product_boundaries` vaktar både att synken bara läser och att
-  `cloud_mail.py` är den enda modul som skriver till Cloud.
+  `cloud_mail.py` och `cloud_live.py` är de enda moduler som skriver till Cloud.
+
+### Livetrafik från klockan via Cloud
+
+Casper beslutade den 29 oktober om ett smalt undantag från D1 (#205, #206):
+en egen kanal **bara för livetrafik från Apple Watch** (`cloud_live.py`).
+Kontraktet är [docs/apple-watch-relay-push.md](apple-watch-relay-push.md).
+
+- **Reläet.** Servern håller en utgående, autentiserad long-poll mot Cloud
+  (`POST /api/server-relay`). Det klockan skickar till serverns reläadress i
+  Cloud lämnas i utbytet och körs här, med samma box-nyckel, samma behörighet
+  och samma kod som när boxen ringer direkt. Bara sex anrop går den vägen
+  (`RELAY_ROUTES`): boxens bild, tryck, stationstidtabell och träffklockan,
+  och i steg 3 push-registrering och svar på en notis. Inte administrationen,
+  inte `POST /v1/clock`. Ingen port öppnas på träffen.
+- **Push.** Händelserna boxen redan låter för (begäran hit, nekad, klart, tåg
+  på väg) skickas till Cloud (`POST /api/server-push`) med bara fälten i
+  `EVENT_FIELDS`: händelsetyp, tågnummer, stationskoder, förfrågans id, ett
+  engångsbevis, språk, livslängd och boxens push-token. Ge klart och Neka från
+  notisen kommer tillbaka som `POST /v1/tmbox/answer` och avgör bara den
+  förfrågan, bara medan den väntar.
+- Allt är avstängt tills administratören slår på **Apple Watch via Cloud**
+  under Inställningar → Träff och Cloud (`POST /v1/cloud/live`). Utan koppling
+  eller internet fungerar allt som förut: klockan går genom telefonen.
+- Nycklar, push-token och engångsbevis loggas aldrig.
+- D1 och dess negativa tester gäller för allt annat. Förslagskön är borttagen
+  och förblir det; `POST /v1/cloud/changes` svarar 404.
 
 ## Säker aktivering
 
