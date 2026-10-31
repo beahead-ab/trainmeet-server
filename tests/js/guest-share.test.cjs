@@ -151,5 +151,35 @@ const { open } = require('./kr-fixture.cjs');
     assert.deepEqual(fallback.errors, []);
     assert.deepEqual(fallback.violations, []);
   } finally { await fallback.browser.close(); }
+  // The clock never shrinks for a guest's Tillbaka and Byt skärm: on a low
+  // landscape phone it is exactly as large as on the hall's own screen, and
+  // the two controls stay in the empty corners above it.
+  const low = await open({ route: '/', width: 844, height: 390, loggedOut: true });
+  try {
+    const {page} = low;
+    await page.locator('#pv-screens-list a').first().waitFor({state:'attached'});
+    await page.locator('#pv-screens-menu summary').click();
+    await page.locator('#pv-screens-list a[href="/display/clock"]').click();
+    await page.locator('#clock-view .cd-hm').waitFor();
+    assert.equal(await page.locator('#display-app').getAttribute('data-read-only'), 'true');
+    await page.waitForTimeout(300);
+    const guestDigits = await page.locator('#clock-view .cd-hm').boundingBox();
+    const controls = await page.evaluate(() => ['#display-guest-back', '#display-switch summary']
+      .map(selector => document.querySelector(selector).getBoundingClientRect().toJSON()));
+    if (process.env.SHOTS) await page.screenshot({ path: require('node:path').join(process.env.SHOTS, 'guest-clock-844x390.png') });
+    // The hall's screen: the same address opened as a bookmark.
+    await page.goto('http://127.0.0.1:9999/');
+    await page.goto('http://127.0.0.1:9999/display/clock');
+    await page.locator('#clock-view .cd-hm').waitFor();
+    assert.equal(await page.locator('#display-app').getAttribute('data-read-only'), 'false');
+    await page.waitForTimeout(300);
+    const screenDigits = await page.locator('#clock-view .cd-hm').boundingBox();
+    for (const key of ['x', 'y', 'width', 'height']) {
+      assert.ok(Math.abs(guestDigits[key] - screenDigits[key]) <= 1, `the guest clock keeps its size (${key}: ${guestDigits[key]} vs ${screenDigits[key]})`);
+    }
+    for (const box of controls) assert.ok(box.bottom <= guestDigits.y, 'Tillbaka and Byt skärm stay above the digits');
+    assert.deepEqual(low.errors, []);
+    assert.deepEqual(low.violations, []);
+  } finally { await low.browser.close(); }
   console.log('guest-share: ok');
 })().catch(error => { console.error(error); process.exit(1); });

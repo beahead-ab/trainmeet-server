@@ -146,9 +146,13 @@
     // räcker, så att tavlan fyller bredden i stället för halva den. Siffrorna
     // fyller redan bredden på den liggande duken.
     const resize = () => {
-      // Keep the guest's two small navigation controls clear of the meet title.
+      // A guest's Tillbaka and Byt skärm sit in the top corners (#209). On
+      // the map, the diagram and the lists they get a strip above the meet
+      // title; the clock has no top row, so there they float over the empty
+      // corners and the clock keeps the whole screen.
       const app = $("#display-app");
-      const chrome = app?.dataset.readOnly === "true" ? 56
+      const guestStrip = stage.dataset.kind === "clock" ? 0 : 56;
+      const chrome = app?.dataset.readOnly === "true" ? guestStrip
         : app?.dataset.chrome === "window" ? ($("#display-toolbar")?.offsetHeight || 0) : 0;
       const height = innerHeight - chrome;
       const portrait = stage.dataset.kind === "clock" && Boolean($("#clock-view .clock-face")) && height > innerWidth;
