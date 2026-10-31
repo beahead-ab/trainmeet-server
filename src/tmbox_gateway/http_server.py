@@ -85,6 +85,7 @@ from .runtime import (
     RuntimePublication,
     RuntimePublicationError,
     SQLiteRuntimeStore,
+    TrackDisplayConflict,
     calendar_weekday,
     day_change_time,
     DAY_CHANGE_LEAD_SECONDS,
@@ -579,6 +580,82 @@ class TrainMeetHTTPApplication:
         self._require_box_access(client, client.client_id)
         self._touch_browser_client(client.client_id)
         return self._timetable_with_deviations(self.terminal16.timetable(client.client_id))
+
+    # ---------------------------------------------- spårvisning (TMBox iOS #46)
+    #
+    # En stationstilldelad TMBox (även iPhone-appen) läser och ändrar enbart
+    # sin egen stations visningsval. Stationen tas från tilldelningen, aldrig
+    # från anropet, och kontrolleras igen vid varje skrivning. Docs:
+    # docs/tmbox-sparvisning.md.
+
+    def _track_display_scope(self, client: PairedClient):
+        if client.kind != DeviceKind.ESP32_PANEL:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "box_required", "Använd din egen TMBox")
+        self._require_box_access(client, client.client_id)
+        publication = self.station_service.publication()
+        config = self.station_service.session_config() if publication else None
+        station_id = self.identities.station_for_client(client.client_id)
+        if config is None or station_id not in config.stations:
+            return publication, config, None
+        return publication, config, station_id
+
+    def _track_display_view(self, publication, config, station_id) -> dict[str, Any]:
+        from . import track_display
+        if publication is None or config is None:
+            return {"supported": False, "meet_id": None, "publication_id": None, "station": None,
+                    "revision": 0, "customized": False, "tracks": []}
+        if station_id is None:
+            return {"supported": True, "meet_id": publication.meet_id,
+                    "publication_id": publication.publication_id, "station": None,
+                    "revision": 0, "customized": False, "tracks": []}
+        station = config.stations[station_id]
+        saved = self.runtime_store.track_display(publication.meet_id, station_id)
+        return {"supported": True, "meet_id": publication.meet_id,
+                "publication_id": publication.publication_id,
+                "station": {"id": station.id, "code": station.code, "name": station.name},
+                **track_display.describe(config, station_id, saved,
+                                         track_display.operating_points(publication.payload, station_id))}
+
+    def tmbox_track_display(self, client: PairedClient) -> dict[str, Any]:
+        return self._track_display_view(*self._track_display_scope(client))
+
+    def save_tmbox_track_display(self, client: PairedClient, payload: dict[str, Any], *, reset: bool = False) -> dict[str, Any]:
+        from . import track_display
+        publication, config, station_id = self._track_display_scope(client)
+        if publication is None or config is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "runtime_missing", "Ingen aktiv EU-träff på servern.")
+        if station_id is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "station_not_assigned", "Boxen har ingen station.")
+        expected = payload.get("revision")
+        if type(expected) is not int:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_track_display", "Ange revision.")
+        # Fel träff, publicering eller station: läs om, skriv aldrig över något annat.
+        if payload.get("meet_id") != publication.meet_id or payload.get("publication_id") != publication.publication_id:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_publication",
+                               "Träffen har uppdaterats. Läs om spåren.",
+                               details={"current": self._track_display_view(publication, config, station_id)})
+        if payload.get("station_id") != station_id:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "station_changed",
+                               "Boxen har fått en annan station. Läs om spåren.",
+                               details={"current": self._track_display_view(publication, config, station_id)})
+        order = hidden = None
+        if not reset:
+            try:
+                order, hidden = track_display.parse_save(track_display.catalogue(config, station_id),
+                                                         payload.get("tracks"))
+            except KeyError:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "tracks_changed",
+                                   "Stationens spår har ändrats. Läs om spåren.",
+                                   details={"current": self._track_display_view(publication, config, station_id)}) from None
+            except ValueError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_track_display", str(error)) from error
+        try:
+            self.runtime_store.save_track_display(publication.meet_id, station_id, expected, order, hidden)
+        except TrackDisplayConflict:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "revision_conflict",
+                               "Någon annan har ändrat spårvisningen. Läs om spåren.",
+                               details={"current": self._track_display_view(publication, config, station_id)}) from None
+        return self._track_display_view(publication, config, station_id)
 
     def _timetable_with_deviations(self, result: dict[str, Any]) -> dict[str, Any]:
         """Boxens tidtabell med förseningar och för tidiga tåg, som webbens vyer.
@@ -5126,6 +5203,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/tmbox/terminal/timetable":
                 self._send_json(HTTPStatus.OK, self.server.application.terminal16_timetable(self._authenticated_client()))
                 return
+            if path == "/v1/tmbox/terminal/track-display":
+                self._send_json(HTTPStatus.OK, self.server.application.tmbox_track_display(self._authenticated_client()))
+                return
             if path == "/v1/clock":
                 self._send_json(HTTPStatus.OK, self.server.application.clock_status(self._authenticated_client()))
                 return
@@ -5570,6 +5650,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/tmbox/terminal":
                 self._send_json(HTTPStatus.OK, self.server.application.terminal16_command(self._authenticated_client(), payload))
+                return
+            if path in {"/v1/tmbox/terminal/track-display", "/v1/tmbox/terminal/track-display/reset"}:
+                self._send_json(HTTPStatus.OK, self.server.application.save_tmbox_track_display(
+                    self._authenticated_client(), payload, reset=path.endswith("/reset")))
                 return
             if path == "/v1/automatic-stations":
                 self._send_json(HTTPStatus.OK, self.server.application.control_automatic_stations(self._authenticated_client(), payload))
