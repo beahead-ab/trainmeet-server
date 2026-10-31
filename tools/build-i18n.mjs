@@ -42,7 +42,8 @@ console.log(`${Object.keys(messages).length} source messages`);
 // participant.txt: the participant view. tmbox.txt: the virtual TMBox, the
 // test bench and the flows page (terminal16_web), which load it after
 // i18n-messages.js.
-for (const [name, output, generator] of [['participant', 'participant-messages.js', 'tools/sync-i18n.mjs'], ['tmbox', 'tmbox-messages.js', 'tools/build-i18n.mjs']]) {
+// tellurian.txt: Inställningar → Klarering → Tellurian Dispatch (#222).
+for (const [name, output, generator] of [['participant', 'participant-messages.js', 'tools/sync-i18n.mjs'], ['tmbox', 'tmbox-messages.js', 'tools/build-i18n.mjs'], ['tellurian', 'tellurian-messages.js', 'tools/build-i18n.mjs']]) {
   const extra = {};
   for (const line of fs.readFileSync(path.join(source, name + '.txt'), 'utf8').split('\n')) {
     if (!line.trim() || line.startsWith('#')) continue;

@@ -408,6 +408,9 @@ class TrainMeetHTTPApplication:
         from .terminal16_public import SessionStore
         self.lab_sessions = SessionStore()
         self.external_clock = ExternalClock()
+        # Tellurian Dispatch (#222): avstängt som standard; bara skuggläge än.
+        from .integrations.tellurian_service import TellurianClearance
+        self.tellurian = TellurianClearance(self)
         self.refresh_clock_source()
         if self.operations_store:
             self.operations_store.external_clock_source = lambda: self.external_clock.status("eu")
@@ -2669,6 +2672,23 @@ class TrainMeetHTTPApplication:
         if self.runtime_store:
             scope = self._clock_scope()
             self.external_clock.configure(scope, self.runtime_store.clock_source_settings(scope))
+        # Samma tillfälle som klockan: träffen kan ha bytts, och Tellurian är per träff.
+        if getattr(self, "tellurian", None) is not None:
+            self.tellurian.refresh()
+
+    def tellurian_clearance(self, client, payload=None, *, action="status"):
+        """Inställningar → Klarering → Tellurian Dispatch. Bara administratören."""
+        self._require_admin(client)
+        from .integrations.tellurian_service import SettingsError, error_response
+        try:
+            if action == "configure":
+                return self.tellurian.configure(payload or {})
+            if action == "test":
+                return self.tellurian.test_connection(payload or {})
+            return self.tellurian.status()
+        except SettingsError as error:
+            status, message = error_response(error.code)
+            raise HTTPAPIError(HTTPStatus(status), "tellurian_" + error.code, message) from None
 
     def clock_source_settings(self, client):
         self._require_admin(client)
@@ -5216,6 +5236,8 @@ class TrainMeetHTTPApplication:
             "/assets/about-view.js": "about-view.js",
             "/assets/settings.js": "settings.js",
             "/assets/pi-network.js": "pi-network.js",
+            "/assets/tellurian-settings.js": "tellurian-settings.js",
+            "/assets/tellurian-messages.js": "tellurian-messages.js",
             "/assets/data-page.js": "data-page.js",
             "/assets/data-workspace.js": "data-workspace.js",
             "/assets/kr-theme.js": "kr-theme.js",
@@ -5356,6 +5378,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/clock/source":
                 self._send_json(HTTPStatus.OK, self.server.application.clock_source_settings(self._authenticated_client()))
+                return
+            if path == "/v1/clearance/tellurian":
+                self._send_json(HTTPStatus.OK, self.server.application.tellurian_clearance(self._authenticated_client()))
                 return
             if path == "/v1/us/context":
                 self._send_json(HTTPStatus.OK, self.server.application.us_context(self._authenticated_client()))
@@ -6107,6 +6132,14 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/clock/source":
                 self._send_json(HTTPStatus.OK, self.server.application.configure_clock_source(self._authenticated_client(), payload))
+                return
+            if path in {"/v1/clearance/tellurian", "/v1/clearance/tellurian/test"}:
+                origin = self.headers.get("Origin")
+                if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get("Sec-Fetch-Site") == "cross-site":
+                    raise HTTPAPIError(HTTPStatus.FORBIDDEN, "same_origin_required", "Öppna sidan från den lokala TrainMeet Server")
+                action = "test" if path.endswith("/test") else "configure"
+                self._send_json(HTTPStatus.OK, self.server.application.tellurian_clearance(
+                    self._authenticated_client(), payload, action=action))
                 return
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
         except MeetLifecycleError as error:

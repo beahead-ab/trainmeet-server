@@ -1285,6 +1285,14 @@ class SQLiteRuntimeStore:
         # Local runtime settings only: never part of the Cloud package/status.
         self._save_setting("clock_source:" + scope, json.dumps(settings))
 
+    def tellurian_settings(self, scope: str) -> dict[str, Any] | None:
+        """Tellurian Dispatch för en träff (#222). Lokal inställning, aldrig till Cloud."""
+        value = self._setting("clearance_tellurian:" + scope)
+        return json.loads(value) if value else None
+
+    def save_tellurian_settings(self, scope: str, settings: dict[str, Any]) -> None:
+        self._save_setting("clearance_tellurian:" + scope, json.dumps(settings))
+
     def save_clock_display_settings(self, scope: str, style: str, show_seconds: bool) -> None:
         custom = isinstance(style, str) and style.startswith(CUSTOM_CLOCK_PREFIX) and self.clock_face(style[len(CUSTOM_CLOCK_PREFIX):]) is not None
         if (style not in AVAILABLE_CLOCK_STYLES and not custom) or not isinstance(show_seconds, bool):
