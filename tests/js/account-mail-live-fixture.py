@@ -6,6 +6,7 @@ sent; GET /captured hands that to the browser test. No real e-mail is sent and
 no network leaves this machine. stdin EOF shuts everything down.
 """
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -76,6 +77,12 @@ with tempfile.TemporaryDirectory(prefix="trainmeet-account-mail-") as directory:
                                  state_dir=str(Path(directory) / name)),
                 runtime_store=runtime,
             )
+            if os.environ.get("TRAINMEET_TEST_PUBLISHED_MEET") == "1":
+                from runtime_fixture import runtime_package_v3
+                from tmbox_gateway.central_sync import CentralRuntimeDownload
+
+                app.runtime_fetcher = lambda *_args: CentralRuntimeDownload(runtime_package_v3(), "test-link")
+                app.sync_runtime(app.local_admin(), {"sync_code": "123456"})
             urls[name] = serve(TrainMeetHTTPServer(("127.0.0.1", 0), app))
         print(json.dumps(urls), flush=True)
         for _ in sys.stdin:

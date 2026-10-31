@@ -3618,8 +3618,9 @@ function renderRouteMap() {
 function authorizedFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
   // Bind a command to the context already shown, never silently refresh a
-  // changed meet and then replay the user's old action against it.
-  if (options.method && options.method !== "GET" && typeof options.body === "string" && headers.get("Content-Type") === "application/json") {
+  // changed meet and then replay the user's old action against it. The own
+  // account is server-wide and accepts only profile fields.
+  if (path !== "/v1/account" && options.method && options.method !== "GET" && typeof options.body === "string" && headers.get("Content-Type") === "application/json") {
     const body = JSON.parse(options.body);
     if (body.meet_generation === undefined && state.serverContext?.selected_meet?.generation !== undefined) {
       body.meet_generation = state.serverContext.selected_meet.generation;
