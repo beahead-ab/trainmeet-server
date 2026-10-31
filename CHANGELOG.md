@@ -20,6 +20,34 @@ Ingen konfiguration, ingen träffdata och ingen historik går upp. Allt är av
 tills administratören slår på **Apple Watch via Cloud** under Inställningar →
 Träff och Cloud. Kontraktet står i `docs/apple-watch-relay-push.md`.
 
+### Tåg som delar nummer hålls isär, manuella tåg stoppar inget och rättelser under spelet (Cloud #100)
+
+- **Delade nummer.** DSB IC 116 och SJ X 116 är två tåg också i driften.
+  Förseningen räknas per tåg (`train_live` valde förut ett tåg per nummer),
+  Drifts stationslista visar båda med bolag och tågslag, och TMBox och TKL
+  visar förkortningen, "IC 116" och "X 116", där två tåg delar nummer.
+- **Planens veckodag i TMBox och TKL.** Boxens tidtabell och TKL får
+  trafikdagen och speldygnet; webb-TMBoxen skriver veckodagen i rubriken.
+- **Tider kring midnatt i boxens tidtabell.** Varje rad i
+  `/v1/tmbox/terminal/timetable` har `service_day_offset` (0 samma
+  tjänstedygn, 1 efter midnatt), och svaret har träffklockan i sekunder
+  (`clock_elapsed_seconds`, `clock_time`). Då räknar iPhone-appen ett tåg
+  23:50 → 00:05 rätt. Nya fält; äldre appar ignorerar dem.
+- **Manuella tåg (B4/B5).** Ett tåg som inte kan köras som planen säger – en
+  tid saknas, en sträcka mellan två stopp finns inte på banan, negativ
+  gångtid, eller Cloud har märkt det manuellt – automatiseras inte. Det listas
+  med skälen på Drift, i TKL och i boxens tidtabell, och stoppar aldrig
+  klockan, publiceringen eller något annat tåg. Aktiveringen säger *Publicerad
+  med N kända avvikelser*.
+- **Rättelse under pågående spel (B6).** En Cloud-version som bara rättar
+  tidtabellen gäller direkt för de tåg den rör, som ett lager på den aktiva
+  publiceringen. Ett tåg som är på väg väntar tills det har kommit fram, och
+  inget som pågår nollställs. Hela versionen tas när banan är fri, utan att
+  admin behöver välja.
+
+En träff som redan pågår, som Värnamo, kör som förut tills den publiceras på
+nytt, och äldre paket fungerar som förut.
+
 ### Träffklockan: meddelanden som glas, och NoReason syns aldrig (#223)
 
 Klockskärmen visade en brun remsa med «NoReason» under en gående klocka, och

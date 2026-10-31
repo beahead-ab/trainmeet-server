@@ -638,6 +638,7 @@ class SQLiteRuntimeStore:
                         """,
                         (self._start_plan_calendar(publication),),
                     )
+                    self._isolate_from_now_on(publication)
                     self._connection.execute(
                         "DELETE FROM runtime_settings WHERE key = 'runtime_error'"
                     )
@@ -649,6 +650,38 @@ class SQLiteRuntimeStore:
         if activate:
             self.bump_config_version()
         return publication
+
+    ISOLATION_KEY = "isolated_trains:"
+
+    def _isolate_from_now_on(self, publication: RuntimePublication) -> None:
+        """Från den här aktiveringen gäller att tåg som inte kan köras körs
+        manuellt (Cloud #100 B4/B5). Körs i aktiveringens transaktion.
+
+        En publicering som var aktiv redan före uppdateringen har inget märke
+        och kör som förut tills nästa publicering: en pågående träff ändrar
+        inte beteende mitt i.
+        """
+        self._connection.execute(
+            "INSERT OR IGNORE INTO runtime_settings(key, value, updated_at) VALUES (?, '1', CURRENT_TIMESTAMP)",
+            (self.ISOLATION_KEY + publication.publication_id,))
+
+    def manual_trains(self, publication: RuntimePublication | None) -> dict[str, list[str]]:
+        """{tjänst-id: skäl} för tåg som körs manuellt i publiceringen, eller tomt.
+
+        Räknas ur det effektiva paketet (lokala ändringar inräknade), en gång
+        per version. Tomt för en publicering som aktiverades före regeln.
+        """
+        if publication is None:
+            return {}
+        key = (publication.publication_id, publication.checksum, publication.local_revision)
+        cached = getattr(self, "_manual_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        from .train_identity import manual_trains
+        result = (manual_trains(publication.payload)
+                  if self._setting(self.ISOLATION_KEY + publication.publication_id) is not None else {})
+        self._manual_cache = (key, result)
+        return result
 
     def _start_plan_calendar(self, publication: RuntimePublication) -> str:
         """Trafikdagen en aktiverad publicering börjar på; en ny träff ur en plan
@@ -739,7 +772,9 @@ class SQLiteRuntimeStore:
         if layer is None:
             return {"active": False, "revision": 0, "count": 0}
         return {"active": True, "revision": layer["revision"], "count": edit_count(layer["edits"]),
-                "actor": layer["actor"], "created_at": layer["created_at"]}
+                "actor": layer["actor"], "created_at": layer["created_at"],
+                # En rättelse från Cloud under pågående spel (Cloud #100 B6) är inte admins.
+                "source": "cloud" if str(layer["actor"]).startswith("cloud:") else "local"}
 
     def _active_local_revision(self, base_publication_id: str) -> int:
         row = self._connection.execute(
@@ -936,6 +971,7 @@ class SQLiteRuntimeStore:
                         """,
                         (self._start_plan_calendar(publication),),
                     )
+                self._isolate_from_now_on(publication)
                 self._connection.execute(
                     "DELETE FROM runtime_settings WHERE key = 'runtime_error'"
                 )

@@ -236,7 +236,8 @@ class HTTPServerTests(unittest.TestCase):
             self.assertEqual(set(row), {"movement_id", "train_number", "kind", "time", "station", "side", "track", "actual_track",
                                         "track_id", "actual_track_id",
                                         "state", "selected", "delay_minutes", "expected_time", "estimated", "early_minutes",
-                                        "early_kind", "train_type"})
+                                        "early_kind", "train_type", "service_day_offset"})
+            self.assertEqual(row["service_day_offset"], 0, "the same service day (trainmeet-tmbox-ios #51)")
             self.assertIsNone(row["actual_track"], "nothing has been taken in yet")
         self.assertEqual(table["deviation_level"], 2)
         self.assertEqual(table["tracks"], ["1", "2"], "every track at the station, in its order")
