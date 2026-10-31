@@ -44,6 +44,8 @@ from .central_sync import (
 from .cloud_mail import send_server_mail
 from .identity import (
     AdminAccessError,
+    AdminUserConflictError,
+    AdminUserPermissionError,
     DeviceKind,
     DisplayCapability,
     IdentityStore,
@@ -779,7 +781,8 @@ class TrainMeetHTTPApplication:
 
     def admin_users(self, client: PairedClient) -> dict[str, Any]:
         self._require_admin(client)
-        return {"users": self.identities.list_admin_users(), "role": client.admin_role}
+        return {"users": self.identities.list_admin_users(), "role": client.admin_role,
+                "user_id": client.admin_user_id}
 
     def create_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_owner(client)
@@ -940,45 +943,28 @@ class TrainMeetHTTPApplication:
         return {"users": self.identities.list_admin_users()}
 
     def update_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        """Namn, adress, roll och lösenord. Rollen är ägarens ensak; det egna
-        namnet, adressen och lösenordet får var och en ändra själv."""
+        """Owners edit all accounts; administrators edit administrators."""
 
         self._require_admin(client)
         user_id = str(payload.get("user_id") or "")
         try:
-            if payload.get("display_name") is not None:
-                if client.admin_user_id != user_id:
-                    self._require_owner(client)
-                self.identities.set_admin_user_display_name(user_id, str(payload["display_name"]))
-                self._record_user_change(client, "user.renamed", user_id)
-            if payload.get("email") is not None:
-                # Adressen är dit en kod för nytt lösenord skickas, så den är
-                # lika känslig som lösenordet: egen, eller ägarens ensak.
-                if client.admin_user_id != user_id:
-                    self._require_owner(client)
-                self.identities.set_admin_user_email(user_id, str(payload["email"]))
-                self._record_user_change(client, "user.email_changed", user_id)
-            if payload.get("role") is not None:
-                self._require_owner(client)
-                # Samma skäl som ovan: den som degraderar sig själv gör det av
-                # misstag oftare än med avsikt.
-                if client.admin_user_id == user_id and str(payload["role"]) != "owner":
-                    raise HTTPAPIError(
-                        HTTPStatus.CONFLICT,
-                        "cannot_demote_self",
-                        "Du kan inte ta bort din egen ägarroll. Be en annan ägare göra det.",
-                    )
-                self.identities.set_admin_user_role(user_id, str(payload["role"]))
-                self._record_user_change(client, "user.role_changed", user_id)
-            if payload.get("password") is not None:
-                # Var och en får byta sitt eget lösenord. Någon annans är
-                # ägarens ensak.
-                if client.admin_user_id != user_id:
-                    self._require_owner(client)
-                self.identities.set_admin_user_password(user_id, str(payload["password"]))
+            user = self.identities.update_admin_user(
+                user_id, client,
+                **{field: str(payload[field]) for field in ("display_name", "email", "role", "password")
+                   if payload.get(field) is not None},
+            )
+        except AdminUserPermissionError as error:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_user_forbidden", str(error)) from error
+        except AdminUserConflictError as error:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "cannot_demote_self", str(error)) from error
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
-        return {"user": self.identities.admin_user(user_id)}
+        # Audit only committed changes, and never include the password.
+        for field, action in (("display_name", "user.renamed"), ("email", "user.email_changed"),
+                              ("role", "user.role_changed"), ("password", "user.password_changed")):
+            if payload.get(field) is not None and (field != "password" or payload[field]):
+                self._record_user_change(client, action, user_id)
+        return {"user": user}
 
     def installation_status(self) -> dict[str, Any]:
         access = self.identities.admin_access_summary()

@@ -5778,10 +5778,14 @@ function bindTMBoxPanes() {
 // på plats; har den inbjudne en e-postadress och servern är kopplad till
 // TrainMeet Cloud skickas den också dit.
 //
-// En administratör ser listan men får inte ändra i den. Att veta vilka som har
-// tillgång är inte samma sak som att bestämma det.
+// Ägare hanterar alla konton; administratörer redigerar administratörer.
+// Inbjudan, borttagning och tilldelning av ägarrollen är ägarens uppgifter.
 
 const users = { list: [], role: "admin", code: null };
+
+function canEditUser(user) {
+  return users.role === "owner" || (users.role === "admin" && user.role === "admin");
+}
 
 function usersEl(name) {
   return document.querySelector(`#users-${name}`);
@@ -5801,7 +5805,15 @@ function renderUsers() {
 
     const name = document.createElement("td");
     const strong = document.createElement("b");
-    strong.textContent = user.display_name;
+    if (canEditUser(user)) {
+      const nameButton = usersButton("Redigera", () => editUser(user));
+      delete nameButton.dataset.tmText;
+      nameButton.dataset.noI18n = "";
+      nameButton.textContent = user.display_name;
+      strong.append(nameButton);
+    } else {
+      strong.textContent = user.display_name;
+    }
     name.append(strong);
     const email = document.createElement("div");
     email.className = "kr-m users-email";
@@ -5836,7 +5848,7 @@ function renderUsers() {
 
     const actions = document.createElement("td");
     actions.className = "r";
-    if (owner) {
+    if (canEditUser(user)) {
       actions.append(usersButton("Redigera", () => editUser(user)));
     }
     tr.append(actions);
@@ -5887,6 +5899,7 @@ async function refreshUsers() {
     const payload = await response.json();
     users.list = payload.users || [];
     users.role = payload.role || "admin";
+    users.userId = payload.user_id;
     // Meddelandet lämnas som det är: varje åtgärd hämtar listan på nytt, och
     // en nollställning här skulle sudda kvittot i samma andetag som det sätts.
     renderUsers();
@@ -5962,16 +5975,24 @@ async function removeUser(user) {
 }
 
 function editUser(user) {
+  if (!canEditUser(user)) return;
   users.editing = user;
   document.querySelector("#user-edit-name").textContent = user.email || t("Saknar e-post – kan inte logga in");
   document.querySelector("#user-edit-display-name").value = user.display_name || "";
   document.querySelector("#user-edit-role").value = user.role;
+  const owner = users.role === "owner";
+  const self = user.user_id === users.userId;
+  const role = document.querySelector("#user-edit-role");
+  role.disabled = !owner || self;
+  role.querySelector('option[value="owner"]').hidden = !owner;
+  role.querySelector('option[value="owner"]').disabled = !owner;
   document.querySelector("#user-edit-email").value = user.email || "";
   document.querySelector("#user-edit-password").value = "";
   document.querySelector("#user-edit-password-confirm").value = "";
   document.querySelector("#user-delete-confirm").checked = false;
   document.querySelector("#user-edit-delete").disabled = true;
-  document.querySelector("#user-edit-reissue").hidden = !user.invitation_pending;
+  document.querySelector("#user-edit-reissue").hidden = !owner || !user.invitation_pending;
+  document.querySelector("#user-edit-removal").hidden = !owner || self;
   openModal("user-edit-modal");
 }
 
@@ -5987,14 +6008,24 @@ function bindUsersSection() {
     }
     const body = { user_id: users.editing.user_id };
     const role = document.querySelector("#user-edit-role").value;
-    if (role !== users.editing.role) body.role = role;
+    if (!document.querySelector("#user-edit-role").disabled && role !== users.editing.role) body.role = role;
     const displayName = document.querySelector("#user-edit-display-name").value.trim();
     if (displayName !== (users.editing.display_name || "")) body.display_name = displayName;
     const email = document.querySelector("#user-edit-email").value.trim();
     if (email !== (users.editing.email || "")) body.email = email;
     if (password) body.password = password;
+    const ownPasswordChanged = Boolean(password) && users.editing.user_id === users.userId;
     const result = await usersPost("/v1/admin/users/update", body);
-    if (result) { finishModal(form); setMessage(usersEl("message"), "Användaren är uppdaterad.", "success"); }
+    if (result) {
+      document.querySelector("#user-edit-password").value = "";
+      document.querySelector("#user-edit-password-confirm").value = "";
+      finishModal(form, t("{name} är uppdaterad.", { name: result.user.display_name }));
+      setMessage(usersEl("message"), "{name} är uppdaterad.", "success", { name: result.user.display_name });
+      if (ownPasswordChanged) {
+        await showLogin();
+        setMessage(loginError, "Lösenordet är ändrat. Använd det nya lösenordet nästa gång du loggar in.", "success");
+      }
+    }
   });
   document.querySelector("#user-delete-confirm").addEventListener("change", (event) => { document.querySelector("#user-edit-delete").disabled = !event.target.checked; });
   document.querySelector("#user-edit-delete").addEventListener("click", () => removeUser(users.editing));
