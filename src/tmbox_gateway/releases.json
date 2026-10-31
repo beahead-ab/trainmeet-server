@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.15.0",
+    "date": "2026-10-31",
+    "notes": [
+      "Lokföraren: körplan med NU-linje, incheckning med ikoner och förarroll (#225, #226)"
+    ]
+  },
+  {
     "version": "4.14.1",
     "date": "2026-10-31",
     "notes": [
