@@ -70,7 +70,7 @@ from .us import USStore, USError
 from .us_clock import clock_settings as validate_us_clock_settings
 from .protocol_v2 import TMBoxStationService, find_track_conflict
 from .train_routes import _visits
-from .train_live import expected_time, on_line_trains, train_live
+from .train_live import expected_time, live_for_row, on_line_trains, train_live
 from . import meet_timeline
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
@@ -87,6 +87,7 @@ from .runtime import (
     RuntimePublication,
     RuntimePublicationError,
     SQLiteRuntimeStore,
+    TrackDisplayConflict,
     calendar_weekday,
     day_change_time,
     DAY_CHANGE_LEAD_SECONDS,
@@ -582,6 +583,82 @@ class TrainMeetHTTPApplication:
         self._touch_browser_client(client.client_id)
         return self._timetable_with_deviations(self.terminal16.timetable(client.client_id))
 
+    # ---------------------------------------------- spårvisning (TMBox iOS #46)
+    #
+    # En stationstilldelad TMBox (även iPhone-appen) läser och ändrar enbart
+    # sin egen stations visningsval. Stationen tas från tilldelningen, aldrig
+    # från anropet, och kontrolleras igen vid varje skrivning. Docs:
+    # docs/tmbox-sparvisning.md.
+
+    def _track_display_scope(self, client: PairedClient):
+        if client.kind != DeviceKind.ESP32_PANEL:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "box_required", "Använd din egen TMBox")
+        self._require_box_access(client, client.client_id)
+        publication = self.station_service.publication()
+        config = self.station_service.session_config() if publication else None
+        station_id = self.identities.station_for_client(client.client_id)
+        if config is None or station_id not in config.stations:
+            return publication, config, None
+        return publication, config, station_id
+
+    def _track_display_view(self, publication, config, station_id) -> dict[str, Any]:
+        from . import track_display
+        if publication is None or config is None:
+            return {"supported": False, "meet_id": None, "publication_id": None, "station": None,
+                    "revision": 0, "customized": False, "tracks": []}
+        if station_id is None:
+            return {"supported": True, "meet_id": publication.meet_id,
+                    "publication_id": publication.publication_id, "station": None,
+                    "revision": 0, "customized": False, "tracks": []}
+        station = config.stations[station_id]
+        saved = self.runtime_store.track_display(publication.meet_id, station_id)
+        return {"supported": True, "meet_id": publication.meet_id,
+                "publication_id": publication.publication_id,
+                "station": {"id": station.id, "code": station.code, "name": station.name},
+                **track_display.describe(config, station_id, saved,
+                                         track_display.operating_points(publication.payload, station_id))}
+
+    def tmbox_track_display(self, client: PairedClient) -> dict[str, Any]:
+        return self._track_display_view(*self._track_display_scope(client))
+
+    def save_tmbox_track_display(self, client: PairedClient, payload: dict[str, Any], *, reset: bool = False) -> dict[str, Any]:
+        from . import track_display
+        publication, config, station_id = self._track_display_scope(client)
+        if publication is None or config is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "runtime_missing", "Ingen aktiv EU-träff på servern.")
+        if station_id is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "station_not_assigned", "Boxen har ingen station.")
+        expected = payload.get("revision")
+        if type(expected) is not int:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_track_display", "Ange revision.")
+        # Fel träff, publicering eller station: läs om, skriv aldrig över något annat.
+        if payload.get("meet_id") != publication.meet_id or payload.get("publication_id") != publication.publication_id:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_publication",
+                               "Träffen har uppdaterats. Läs om spåren.",
+                               details={"current": self._track_display_view(publication, config, station_id)})
+        if payload.get("station_id") != station_id:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "station_changed",
+                               "Boxen har fått en annan station. Läs om spåren.",
+                               details={"current": self._track_display_view(publication, config, station_id)})
+        order = hidden = None
+        if not reset:
+            try:
+                order, hidden = track_display.parse_save(track_display.catalogue(config, station_id),
+                                                         payload.get("tracks"))
+            except KeyError:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "tracks_changed",
+                                   "Stationens spår har ändrats. Läs om spåren.",
+                                   details={"current": self._track_display_view(publication, config, station_id)}) from None
+            except ValueError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_track_display", str(error)) from error
+        try:
+            self.runtime_store.save_track_display(publication.meet_id, station_id, expected, order, hidden)
+        except TrackDisplayConflict:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "revision_conflict",
+                               "Någon annan har ändrat spårvisningen. Läs om spåren.",
+                               details={"current": self._track_display_view(publication, config, station_id)}) from None
+        return self._track_display_view(publication, config, station_id)
+
     def _timetable_with_deviations(self, result: dict[str, Any]) -> dict[str, Any]:
         """Boxens tidtabell med förseningar och för tidiga tåg, som webbens vyer.
 
@@ -601,8 +678,19 @@ class TrainMeetHTTPApplication:
         trains = train_live(timetable.get("services", []), timetable.get("trains", []), live,
                             _clock_seconds(self.operations_store.clock_status()),
                             on_line_trains(connection_states, self.operations_store.positions()))
+        # Raden hör till sitt eget tåg, också när två tåg delar nummer (Cloud #100).
+        service_ids = {str(row["id"]): str(row.get("service_id") or "") for row in timetable.get("trains", [])}
+        _, services, _ = self._identified(publication, timetable)
+        identity = {str(service.get("id")): service for service in services}
         for row in result.get("rows", []):
-            train = trains.get(str(row.get("train_number")))
+            service = identity.get(service_ids.get(str(row.get("movement_id") or ""), ""), {})
+            # Två tåg med samma nummer: boxen visar förkortningen, "IC 116".
+            if service.get("short_label"):
+                row.update(train_label=service["short_label"], service_key=service["service_key"])
+            # Ett tåg som inte kan köras som planen säger körs av människor.
+            if service.get("manual"):
+                row.update(manual=True, manual_reasons=service["manual_reasons"])
+            train = live_for_row(trains, row, service_ids)
             delay = train["delay_minutes"] if train and train["state"] != "arrived" else 0
             row.update({"delay_minutes": delay, "expected_time": expected_time(row.get("time"), delay),
                         "estimated": bool(train and train["estimated"]),
@@ -610,7 +698,20 @@ class TrainMeetHTTPApplication:
                         "early_kind": train["early_kind"] if train else None,
                         "train_type": train["train_type"] if train else "person"})
         result["deviation_level"] = self.runtime_store.deviation_level(publication.meet_id)["level"]
+        result["traffic_day"] = self._traffic_day(publication, day)
+        # Träffklockan i sekunder sedan trafikdygnets midnatt (över 86 400 efter
+        # midnatt), så att en klient räknar rätt kring midnatt med radernas
+        # service_day_offset (trainmeet-tmbox-ios #51).
+        clock = self.operations_store.clock_status()
+        result["clock_elapsed_seconds"] = clock.get("elapsed_seconds")
+        result["clock_time"] = clock.get("time")
         return result
+
+    def _traffic_day(self, publication, day: str) -> dict[str, Any]:
+        """Trafikdagen boxen och TKL kör: veckodagen (planens, när träffen följer
+        planens kalender) och vilket speldygn det är."""
+        calendar = self.runtime_store.meet_calendar(publication.meet_id) if self.runtime_store else {}
+        return {"day": day, "weekday": calendar.get("weekday"), "day_number": calendar.get("day_number")}
 
     @runtime_view
     def terminal16_command(self, client, payload):
@@ -1628,6 +1729,7 @@ class TrainMeetHTTPApplication:
                 # på stationen (Casper, 2026-10-10).
                 positions = self._without_stabled(publication, positions, stabled)
         calendar = self.calendar_state() if publication is not None and not (selected and selected["region"] == "us") else None
+        trains, services, manual = self._identified(publication, timetable)
         return {
             "protocol_version": 1,
             "revision": self.engine.revision,
@@ -1640,9 +1742,11 @@ class TrainMeetHTTPApplication:
             "connection_states": connection_states,
             "autonomous_links": autonomous_links,
             "tracks": timetable.get("tracks", []),
-            "trains": timetable.get("trains", []),
+            "trains": trains,
             "routes": timetable.get("routes", []),
-            "services": timetable.get("services", []),
+            "services": services,
+            # Tåg som körs manuellt, med skälen (Cloud #100 B5). Tomt annars.
+            "manual_trains": manual,
             "display": display,
             # Vad som finns under Om trafikspelet; texterna själva i /v1/about.
             "about": meet_about.summary(publication.payload if publication is not None else None),
@@ -1655,6 +1759,39 @@ class TrainMeetHTTPApplication:
             "us": self.us_display_snapshot() if selected and selected["region"] == "us" else None,
             "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
+
+    def _identified(self, publication, timetable: dict[str, Any]) -> tuple[list, list, list]:
+        """Dagens rader och tåg med etikett där två tåg delar nummer, och de
+        manuella tågen (Cloud #100). Paketet ändras inte; raderna är kopior.
+
+        Ett tåg vars nummer ett annat tåg också har får `train_label`
+        ("DSB IC 116"), `short_label` ("IC 116") och `service_key`. Ett tåg
+        som körs manuellt får `manual` och `manual_reasons`.
+        """
+        services = timetable.get("services", [])
+        trains = timetable.get("trains", [])
+        if publication is None:
+            return trains, services, []
+        from .train_identity import manual_summary, shared_labels
+        labels = shared_labels(services)
+        manual_all = self.runtime_store.manual_trains(publication) if self.runtime_store else {}
+        day_ids = {str(service.get("id")) for service in services}
+        manual = {key: value for key, value in manual_all.items() if key in day_ids}
+        if not labels and not manual:
+            return trains, services, []
+
+        def extra(service_id: str) -> dict[str, Any]:
+            item: dict[str, Any] = {}
+            if service_id in labels:
+                item.update(train_label=labels[service_id]["label"], short_label=labels[service_id]["short_label"],
+                            service_key=labels[service_id]["service_key"])
+            if service_id in manual:
+                item.update(manual=True, manual_reasons=manual[service_id])
+            return item
+
+        return ([{**row, **extra(str(row.get("service_id")))} for row in trains],
+                [{**service, **extra(str(service.get("id")))} for service in services],
+                manual_summary({"services": services}, manual, labels))
 
     def _with_departure_times(self, publication, active_day, connection_states, positions):
         """Träffklockans tid när varje tåg på linjen avgick, så att kartan kan
@@ -2067,6 +2204,14 @@ class TrainMeetHTTPApplication:
             # Trains that end here and are put away (by whom): their track
             # is free. Additive; older terminals ignore it.
             "stabled": self._stabled_here(station_id),
+            # Cloud #100: the traffic day (the plan's weekday), the short name
+            # of a train that shares its number with another ("IC 116"), and
+            # trains run by people because they cannot run as planned.
+            # Additive; older terminals ignore them.
+            "traffic_day": {"day": snapshot["active_day"], "weekday": (snapshot.get("calendar") or {}).get("weekday"),
+                            "day_number": (snapshot.get("calendar") or {}).get("day_number")},
+            "train_labels": {str(row["id"]): row["short_label"] for row in trains if row.get("short_label")},
+            "manual_movements": {str(row["id"]): row["manual_reasons"] for row in trains if row.get("manual")},
         }
 
     @staticmethod
@@ -3606,6 +3751,82 @@ class TrainMeetHTTPApplication:
             detail={"revision": current_revision + 1, "lines": local_edits.describe(edits, base.payload)})
         return self._meet_data_state(after, generation=updated["generation"], changed=True)
 
+    #: Allt i ett paket utom tidtabellen. En Cloud-version som bara rättar
+    #: tidtabellen kan läggas på mitt under spelet (B6); ändras något av
+    #: det här väntar den tills trafiken är lugn, som förut.
+    _CORRECTION_TIMETABLE_KEYS = {"publication_id", "published_at", "trains", "services", "routes", "findings", "connections"}
+
+    @staticmethod
+    def _timetable_only(before: dict[str, Any], after: dict[str, Any]) -> bool:
+        keys = (set(before) | set(after)) - TrainMeetHTTPApplication._CORRECTION_TIMETABLE_KEYS
+        if any(before.get(key) != after.get(key) for key in keys):
+            return False
+        # Sträckorna får bara byta spårtyp, som en lokal ändring.
+        strip = lambda items: [{k: v for k, v in item.items() if k != "track_type"} for item in items or []]
+        return strip(before.get("connections")) == strip(after.get("connections"))
+
+    @runtime_command("eu")
+    def apply_cloud_correction(self, *, package: dict[str, Any]) -> dict[str, Any]:
+        """En väntande Cloud-version för samma träff, på de tåg den rättar (Cloud #100 B6).
+
+        Hela versionen väntar på att trafiken blir lugn. Rättar den bara
+        tidtabellen (tider, spår, dagar, borttagna tåg, spårtyp) läggs den
+        under tiden som ett lager på den aktiva publiceringen: samma id och
+        samma rader, så pågående tåg, klareringar, TKL och boxar står kvar.
+        Bara de tåg som ändras prövas, och ett tåg som är ute på linjen eller
+        har en öppen klarering väntar tills det har kommit fram. Lokala
+        ändringar som admin gjort ersätts aldrig här.
+        """
+        from types import SimpleNamespace
+        publication = self._meet_data_publication()
+        selected = self.lifecycle.assert_selected("eu", publication_id=publication.publication_id)
+        try:
+            incoming = RuntimePublication.parse(package)
+        except RuntimePublicationError:
+            return {"applied": False, "reason": "invalid"}
+        base = self.runtime_store.publication(publication.publication_id)
+        if base is None or incoming.meet_id != base.meet_id or incoming.publication_id == base.publication_id:
+            return {"applied": False, "reason": "not_applicable"}
+        actor = "cloud:" + incoming.publication_id
+        current = self.runtime_store.local_edits(publication.publication_id)
+        if current is not None and not str(current["actor"]).startswith("cloud:"):
+            return {"applied": False, "reason": "local_edits"}
+        if current is not None and current["actor"] == actor:
+            return {"applied": True, "count": 0, "already": True}
+        if not self._timetable_only(base.payload, incoming.payload):
+            return {"applied": False, "reason": "not_timetable_only"}
+        try:
+            effective, edits = local_edits.apply_draft(base.payload, local_edits.draft_from_publication(incoming.payload))
+            reviewed = local_edits.review(effective, incoming.payload.get("findings"))
+            RuntimePublication.parse(local_edits.with_findings(effective, reviewed))
+        except (LocalEditError, RuntimePublicationError):
+            # Nya tåg, nya fält eller annat som bara hela versionen kan ge.
+            return {"applied": False, "reason": "not_timetable_only"}
+        changed, removed, connections = self._timetable_delta(publication.payload, effective)
+        if not changed and not removed and not connections:
+            return {"applied": True, "count": 0}
+        # Ett tåg som är på väg rörs inte: varje rörelse i ett tåg som ändras
+        # prövas, inte bara den ändrade raden (en ny ankomsttid för ett tåg
+        # som just har fått klarering väntar tills det har kommit fram).
+        services = {str(row.get("service_id")) for row in publication.payload["trains"] if str(row["id"]) in {**changed, **removed}}
+        whole = {str(row["id"]): str(row.get("train_number") or "") for row in publication.payload["trains"]
+                 if str(row.get("service_id")) in services}
+        try:
+            self._meet_data_blockers(publication, {**whole, **changed}, removed, connections)
+        except HTTPAPIError as error:
+            return {"applied": False, "blocked": str(error)}
+        revision = current["revision"] if current else 0
+        cloud = SimpleNamespace(admin_user_id="cloud", display_name="TrainMeet Cloud")
+        trains = {**changed, **removed}
+        self._commit_meet_data(
+            cloud, selected, before=publication,
+            write=lambda: self.runtime_store.save_local_edits(base, effective, edits, reviewed, actor=actor, expected_revision=revision),
+            revert=lambda saved: self.runtime_store.reinstate_local_edits(publication.publication_id, revision, drop=saved.local_revision),
+            connections=connections, action="meet_data.cloud_correction",
+            detail={"cloud_publication_id": incoming.publication_id, "revision": revision + 1,
+                    "lines": local_edits.describe(edits, base.payload)})
+        return {"applied": True, "count": len(set(trains.values())), "trains": sorted(set(trains.values()))}
+
     @runtime_command("eu")
     def discard_meet_data(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         """Clouds tidtabell gäller igen. Lagret står kvar som historik, och en säkerhetskopia tas först."""
@@ -3930,8 +4151,8 @@ class TrainMeetHTTPApplication:
                            self.operations_store.movement_live(publication.publication_id, active_day),
                            _clock_seconds(self.operations_store.clock_status()),
                            on_line_trains(self.engine.shared_traffic.connection_states() if self.engine.shared_traffic is not None else [],
-                                          self.operations_store.positions())).get(number)
-                if self.operations_store is not None else None)
+                                          self.operations_store.positions()))
+                if self.operations_store is not None else {})
         result = []
         for service in services:
             ordered = sorted(service.get("stops", []), key=lambda stop: int(stop.get("stop_order") or 0))
@@ -3953,7 +4174,8 @@ class TrainMeetHTTPApplication:
             result.append({
                 "service_id": service.get("id"), "train_type": service.get("train_type", ""), "stops": stops,
                 "now": self._train_now(stops, cases, position, stabled),
-                "delay_minutes": self._train_delay(running),
+                # Varje tåg sin egen försening, också när två delar nummer.
+                "delay_minutes": self._train_delay(running.get(str(service.get("id"))) or running.get(number)),
             })
         return {"train_number": number, "active_day": active_day, "services": result}
 
@@ -5112,6 +5334,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/tmbox/terminal/timetable":
                 self._send_json(HTTPStatus.OK, self.server.application.terminal16_timetable(self._authenticated_client()))
                 return
+            if path == "/v1/tmbox/terminal/track-display":
+                self._send_json(HTTPStatus.OK, self.server.application.tmbox_track_display(self._authenticated_client()))
+                return
             if path == "/v1/clock":
                 self._send_json(HTTPStatus.OK, self.server.application.clock_status(self._authenticated_client()))
                 return
@@ -5556,6 +5781,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/tmbox/terminal":
                 self._send_json(HTTPStatus.OK, self.server.application.terminal16_command(self._authenticated_client(), payload))
+                return
+            if path in {"/v1/tmbox/terminal/track-display", "/v1/tmbox/terminal/track-display/reset"}:
+                self._send_json(HTTPStatus.OK, self.server.application.save_tmbox_track_display(
+                    self._authenticated_client(), payload, reset=path.endswith("/reset")))
                 return
             if path == "/v1/automatic-stations":
                 self._send_json(HTTPStatus.OK, self.server.application.control_automatic_stations(self._authenticated_client(), payload))

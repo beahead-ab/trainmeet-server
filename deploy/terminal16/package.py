@@ -11,7 +11,7 @@ import tarfile
 MODULES = (
     "__init__", "default_tracks", "device_ui", "display", "display_placement", "engine", "models", "observability",
     "runtime", "storage", "terminal16", "terminal16_demo", "terminal16_glyphs",
-    "terminal16_public", "terminal16_i18n", "train_routes",
+    "terminal16_public", "terminal16_i18n", "train_identity", "train_routes",
 )
 # Standardspåren (default_tracks) läser den delade tidtabellskärnan.
 TIMETABLE_CORE = ("__init__", "default_tracks", "dispatch", "findings", "sanity", "services", "times", "tracks")

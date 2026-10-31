@@ -353,9 +353,15 @@
     if (clear) clear.hidden = !(train || station);
     const delayed = model.lateTrains(snapshot).length;
     const foot = $("#drift-events-foot");
-    if (foot && changed("events-foot", [delayed, root.lang])) {
+    // Tåg som inte kan köras som planen säger körs av människor (Cloud #100 B5):
+    // de står här med skälen, och stoppar inget annat.
+    const manual = snapshot.manual_trains || [];
+    const manualKey = manual.map((item) => `${item.service_id}:${item.reasons.join(";")}`).join("|");
+    if (foot && changed("events-foot", [delayed, manualKey, root.lang])) {
       foot.replaceChildren(
         delayed ? h("span", { class: "kr-tag warn" }, dot(), plural(delayed, "{count} avvikelse", "{count} avvikelser")) : h("span", { class: "kr-tag ok" }, dot(), t("Inga avvikelser")),
+        ...(manual.length ? [h("span", { class: "kr-tag warn", id: "drift-manual-trains", title: manual.map((item) => `${item.label}: ${item.reasons.join("; ")}`).join("\n") },
+          dot(), plural(manual.length, "1 tåg körs manuellt", "{count} tåg körs manuellt"))] : []),
         h("span", {}, `· ${delayed ? t("något tåg är senare än tidtabellen") : t("trafiken följer tidtabellen")} · ${t("ofylld bricka = klart men inte avgått")}`));
     }
     const level = levelNow();
@@ -364,12 +370,14 @@
     host.replaceChildren(...events.map((event) => {
       const selected = train === event.train;
       const view = model.deviationView(level, event);
-      const mark = event.state === "on-line" ? badge(event.train, { selected }) : event.state === "cleared" ? badge(event.train, { hollow: true, selected }) : badge(event.train, { plain: true, selected });
+      // Två tåg med samma nummer står med bolag och tågslag: "DSB IC 116".
+      const shown = event.label || event.train;
+      const mark = event.state === "on-line" ? badge(shown, { selected }) : event.state === "cleared" ? badge(shown, { hollow: true, selected }) : badge(shown, { plain: true, selected });
       const what = h("span", { class: "w" }, eventText(event, names));
       if (view.mark?.style === "text") what.append(" ", markOf(view));
       const row = h("button", { type: "button", class: `kr-ev${selected ? " sel" : ""}${view.mark ? ` is-${view.mark.tone}` : ""}`, data: { trainNumber: event.train }, "aria-pressed": String(selected), on: { click: () => hooks.selectTrain?.(event.train) } },
         eventTime(event, view), mark, what, eventWhen(event, view));
-      return markFresh(row, `ev|${event.train}|${event.kind}|${event.stationId}`, eventSignature(event, view), what, view);
+      return markFresh(row, `ev|${event.serviceId ?? event.train}|${event.kind}|${event.stationId}`, eventSignature(event, view), what, view);
     }));
   }
 
@@ -531,7 +539,7 @@
         const what = h("span", { class: "w" }, eventText(event, names));
         if (view.mark?.style === "text") what.append(" ", markOf(view));
         return h("button", { type: "button", class: `kr-ev${view.mark ? ` is-${view.mark.tone}` : ""}`, on: { click: () => hooks.selectTrain?.(event.train) } },
-          eventTime(event, view), badge(event.train, { plain: true }), what, eventWhen(event, view));
+          eventTime(event, view), badge(event.label || event.train, { plain: true }), what, eventWhen(event, view));
       }))
       : h("p", { class: "kr-aside__note" }, t("Inga fler planerade händelser idag."))));
     host.replaceChildren(...body);

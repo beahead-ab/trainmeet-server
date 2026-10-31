@@ -5,6 +5,34 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tåg som delar nummer hålls isär, manuella tåg stoppar inget och rättelser under spelet (Cloud #100)
+
+- **Delade nummer.** DSB IC 116 och SJ X 116 är två tåg också i driften.
+  Förseningen räknas per tåg (`train_live` valde förut ett tåg per nummer),
+  Drifts stationslista visar båda med bolag och tågslag, och TMBox och TKL
+  visar förkortningen, "IC 116" och "X 116", där två tåg delar nummer.
+- **Planens veckodag i TMBox och TKL.** Boxens tidtabell och TKL får
+  trafikdagen och speldygnet; webb-TMBoxen skriver veckodagen i rubriken.
+- **Tider kring midnatt i boxens tidtabell.** Varje rad i
+  `/v1/tmbox/terminal/timetable` har `service_day_offset` (0 samma
+  tjänstedygn, 1 efter midnatt), och svaret har träffklockan i sekunder
+  (`clock_elapsed_seconds`, `clock_time`). Då räknar iPhone-appen ett tåg
+  23:50 → 00:05 rätt. Nya fält; äldre appar ignorerar dem.
+- **Manuella tåg (B4/B5).** Ett tåg som inte kan köras som planen säger – en
+  tid saknas, en sträcka mellan två stopp finns inte på banan, negativ
+  gångtid, eller Cloud har märkt det manuellt – automatiseras inte. Det listas
+  med skälen på Drift, i TKL och i boxens tidtabell, och stoppar aldrig
+  klockan, publiceringen eller något annat tåg. Aktiveringen säger *Publicerad
+  med N kända avvikelser*.
+- **Rättelse under pågående spel (B6).** En Cloud-version som bara rättar
+  tidtabellen gäller direkt för de tåg den rör, som ett lager på den aktiva
+  publiceringen. Ett tåg som är på väg väntar tills det har kommit fram, och
+  inget som pågår nollställs. Hela versionen tas när banan är fri, utan att
+  admin behöver välja.
+
+En träff som redan pågår, som Värnamo, kör som förut tills den publiceras på
+nytt, och äldre paket fungerar som förut.
+
 ### Träffklockan: meddelanden som glas, och NoReason syns aldrig (#223)
 
 Klockskärmen visade en brun remsa med «NoReason» under en gående klocka, och
@@ -23,6 +51,25 @@ pausorsaken gäller bara en paus och stopporsaken bara ett stopp. Platshållare
 som `None`, `NoReason` och `SelectStopReason` blir ingenting, kända koder
 översätts (Lunch → Lunchpaus, Derailment → Urspårning) och okända koder visas
 aldrig. Deltagarvyn använder samma tolkning.
+
+### En ny träff börjar på planens veckodag och byter dygn själv (Cloud #100)
+
+Cloud skickar planens speldygn i paketet (`clock.traffic_week`: startveckodag,
+antal speldygn och om trafiken går dygnet runt). En ny träff ur en sådan plan
+får nu kalendern därifrån: dag 1 är planens veckodag, trafikdagen är den
+veckodagen, och går trafiken dygnet runt sker nytt trafikdygn automatiskt vid
+dygnsskiftet. Värnamo Moduldagar börjar alltså måndag och byter dag vid varje
+midnatt, så att TXL CG 38958 (måndag–tisdag) och HCTOR HG 45696
+(onsdag–fredag) aldrig kör samma kväll i samma läge. En träff som redan har en
+kalender behåller den: det admin valt gäller, och en pågående träff ändras inte
+av en ny publicering. Äldre paket utan speldygn startar som förut.
+
+Tidtabellskärnan är synkad med Cloud (tåg som delar nummer hålls isär med
+bolag och tågslag, och planens dygn efter midnatt gäller när servern bygger om
+tjänsterna efter en lokal ändring). Tågdiagrammet på Drift och storskärmen
+ritar som Cloud: planens grafiska linjer som blad, stationerna på planens km,
+tågen i tågslagets färg och tåg som delar nummer som "DSB IC 116". Ett paket
+utan planens linjer och färger ritas som förut.
 
 ### FastClock-standardadressen finns alltid kvar att kopiera
 

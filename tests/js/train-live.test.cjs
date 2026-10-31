@@ -157,3 +157,29 @@ test('a stop after midnight comes after the evening in Nästa händelser', () =>
   const after = model.events({ ...night, clock: { time: '00:10:00', elapsed_seconds: 86400 + 600 } }, { train: '7', nowSeconds: at('00:10') });
   assert.deepEqual(after.map((event) => [event.stationId, event.delta]), [['b', 10]]);
 });
+
+// Cloud #100: DSB IC 116 och SJ X 116 är två tåg samma dag. Var och ett räknas
+// för sig under sitt tjänst-id, numret ger det som är på väg, och stationens
+// händelser visar båda med bolag och tågslag.
+test('two trains that share a number are kept apart', () => {
+  const service = (id, key, from, dep, to, arr) => ({ id, train_number: '116', service_key: key, stops: [
+    { station_id: from, departure_time: dep, stop_order: 0 }, { station_id: to, arrival_time: arr, stop_order: 1 }] });
+  const snap = {
+    clock: { time: '16:00:00' }, stations: [{ id: 'sbg', name: 'Skovborg' }, { id: 'mkd', name: 'Munkerød' }, { id: 'nlu', name: 'Nättelund' }],
+    services: [service('ic', 'DSB IC', 'sbg', '06:10', 'mkd', '06:26'), service('x', 'SJ X', 'mkd', '15:40', 'nlu', '16:18')],
+    trains: [{ id: 'ic0', service_id: 'ic', train_number: '116', station_id: 'sbg', departure_time: '06:10' },
+      { id: 'ic1', service_id: 'ic', train_number: '116', station_id: 'mkd', arrival_time: '06:26' },
+      { id: 'x0', service_id: 'x', train_number: '116', station_id: 'mkd', departure_time: '15:40' },
+      { id: 'x1', service_id: 'x', train_number: '116', station_id: 'nlu', arrival_time: '16:18' }],
+    movement_live: { ic0: { departure: 'departed', departed_seconds: at('06:10') }, ic1: { arrival: 'arrived', arrived_seconds: at('06:31') },
+      x0: { departure: 'departed', departed_seconds: at('15:52') } },
+    connection_states: [], train_positions: [],
+  };
+  const lives = model.trainLive(snap, at('16:00'));
+  assert.deepEqual([lives.get('ic').state, lives.get('ic').delayMinutes], ['arrived', 5]);
+  assert.deepEqual([lives.get('x').state, lives.get('x').delayMinutes], ['on_line', 12]);
+  assert.equal(lives.get('116'), lives.get('x'), 'the number means the train under way');
+  const before = { ...snap, clock: { time: '05:00:00' }, movement_live: {} };
+  const events = model.events(before, { station: 'mkd', nowSeconds: at('05:00') });
+  assert.deepEqual(events.map((event) => [event.label, event.kind, event.time]), [['DSB IC 116', 'arr', '06:26'], ['SJ X 116', 'dep', '15:40']]);
+});

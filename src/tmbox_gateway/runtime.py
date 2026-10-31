@@ -80,6 +80,14 @@ SHORT_DAYS = {
 }
 
 
+class TrackDisplayConflict(RuntimeError):
+    """Stationens spårvisning har ändrats sedan klienten läste den (#46)."""
+
+    def __init__(self, revision: int):
+        super().__init__("Spårvisningen har ändrats. Läs om den.")
+        self.revision = revision
+
+
 class RuntimePublicationError(ValueError):
     pass
 
@@ -106,6 +114,29 @@ class RuntimePublication:
     @property
     def country(self) -> str:
         return meet_country(self.payload.get("meet"))
+
+    @property
+    def traffic_week(self) -> dict[str, Any]:
+        """Planens speldygn ur Clouds paket (`clock.traffic_week`), eller tomt.
+
+        `start_weekday` är 1 för måndag, `days` antalet speldygn och
+        `runs_over_midnight` att trafiken går dygnet runt (Cloud #100).
+        Äldre paket har inga speldygn; då gäller trafikdagen som förut.
+        """
+        clock = self.payload.get("clock")
+        week = clock.get("traffic_week") if isinstance(clock, dict) else None
+        if not isinstance(week, dict):
+            return {}
+        result: dict[str, Any] = {}
+        day = week.get("start_weekday")
+        if type(day) is int and 1 <= day <= 7:
+            result["start_day"] = DAY_ORDER[day - 1]
+        days = week.get("days")
+        if type(days) is int and 1 <= days <= 31:
+            result["days"] = days
+        if type(week.get("runs_over_midnight")) is bool:
+            result["runs_over_midnight"] = week["runs_over_midnight"]
+        return result
 
     @classmethod
     def parse(cls, payload: dict[str, Any]) -> "RuntimePublication":
@@ -605,8 +636,9 @@ class SQLiteRuntimeStore:
                             value = excluded.value,
                             updated_at = CURRENT_TIMESTAMP
                         """,
-                        (publication.active_day,),
+                        (self._start_plan_calendar(publication),),
                     )
+                    self._isolate_from_now_on(publication)
                     self._connection.execute(
                         "DELETE FROM runtime_settings WHERE key = 'runtime_error'"
                     )
@@ -618,6 +650,60 @@ class SQLiteRuntimeStore:
         if activate:
             self.bump_config_version()
         return publication
+
+    ISOLATION_KEY = "isolated_trains:"
+
+    def _isolate_from_now_on(self, publication: RuntimePublication) -> None:
+        """Från den här aktiveringen gäller att tåg som inte kan köras körs
+        manuellt (Cloud #100 B4/B5). Körs i aktiveringens transaktion.
+
+        En publicering som var aktiv redan före uppdateringen har inget märke
+        och kör som förut tills nästa publicering: en pågående träff ändrar
+        inte beteende mitt i.
+        """
+        self._connection.execute(
+            "INSERT OR IGNORE INTO runtime_settings(key, value, updated_at) VALUES (?, '1', CURRENT_TIMESTAMP)",
+            (self.ISOLATION_KEY + publication.publication_id,))
+
+    def manual_trains(self, publication: RuntimePublication | None) -> dict[str, list[str]]:
+        """{tjänst-id: skäl} för tåg som körs manuellt i publiceringen, eller tomt.
+
+        Räknas ur det effektiva paketet (lokala ändringar inräknade), en gång
+        per version. Tomt för en publicering som aktiverades före regeln.
+        """
+        if publication is None:
+            return {}
+        key = (publication.publication_id, publication.checksum, publication.local_revision)
+        cached = getattr(self, "_manual_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        from .train_identity import manual_trains
+        result = (manual_trains(publication.payload)
+                  if self._setting(self.ISOLATION_KEY + publication.publication_id) is not None else {})
+        self._manual_cache = (key, result)
+        return result
+
+    def _start_plan_calendar(self, publication: RuntimePublication) -> str:
+        """Trafikdagen en aktiverad publicering börjar på; en ny träff ur en plan
+        med speldygn får planens kalender (Cloud #100).
+
+        Kalendern börjar på planens veckodag som dag 1, och går trafiken
+        dygnet runt byts dygnet automatiskt vid dygnsskiftet. En träff som
+        redan har en kalender behåller den och trafikdagen blir som förut,
+        paketets: det admin valt gäller, och en pågående träff ändras inte.
+        Körs i aktiveringens transaktion.
+        """
+        week = publication.traffic_week
+        key = "meet_calendar:" + publication.meet_id
+        if not week.get("start_day") or self._connection.execute(
+                "SELECT 1 FROM runtime_settings WHERE key = ?", (key,)).fetchone() is not None:
+            return publication.active_day
+        calendar = {"start_day": week["start_day"], "day_number": 1,
+                    "day_change_mode": "auto" if week.get("runs_over_midnight") else "manual", "from_plan": True}
+        self._connection.execute(
+            "INSERT INTO runtime_settings(key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+            (key, json.dumps(calendar)))
+        return week["start_day"]
 
     def active(self) -> RuntimePublication | None:
         """The active publication, parsed once while it stays active.
@@ -686,7 +772,9 @@ class SQLiteRuntimeStore:
         if layer is None:
             return {"active": False, "revision": 0, "count": 0}
         return {"active": True, "revision": layer["revision"], "count": edit_count(layer["edits"]),
-                "actor": layer["actor"], "created_at": layer["created_at"]}
+                "actor": layer["actor"], "created_at": layer["created_at"],
+                # En rättelse från Cloud under pågående spel (Cloud #100 B6) är inte admins.
+                "source": "cloud" if str(layer["actor"]).startswith("cloud:") else "local"}
 
     def _active_local_revision(self, base_publication_id: str) -> int:
         row = self._connection.execute(
@@ -881,8 +969,9 @@ class SQLiteRuntimeStore:
                         VALUES ('active_day', ?, CURRENT_TIMESTAMP)
                         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
                         """,
-                        (publication.active_day,),
+                        (self._start_plan_calendar(publication),),
                     )
+                self._isolate_from_now_on(publication)
                 self._connection.execute(
                     "DELETE FROM runtime_settings WHERE key = 'runtime_error'"
                 )
@@ -1078,6 +1167,45 @@ class SQLiteRuntimeStore:
             except BaseException:
                 self._connection.execute("ROLLBACK")
                 raise
+
+    # ------------------------------------------------- spårvisning (#46)
+    #
+    # Vilka spår TMBox-appens Spår-vy visar och i vilken ordning, per träff
+    # och station. Ren presentation: rör inte config_version, trafikmotorn
+    # eller Cloud. Revisionen räknar upp vid varje sparning och återställning,
+    # även när återställningen tar bort anpassningen, så att en klient som
+    # läste före någon annans ändring alltid får konflikt.
+
+    def track_display(self, meet_id: str, station_id: str) -> dict[str, Any]:
+        raw = self._setting("track_display:" + meet_id)
+        saved = json.loads(raw).get(station_id) if raw else None
+        return saved if isinstance(saved, dict) else {"revision": 0}
+
+    def save_track_display(self, meet_id: str, station_id: str, expected_revision: int,
+                           order: list[str] | None, hidden: list[str] | None = None) -> dict[str, Any]:
+        """Spara en anpassning, eller ta bort den med order=None (återställ).
+
+        Raises TrackDisplayConflict when someone else saved since the client read.
+        """
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                raw = self._setting("track_display:" + meet_id)
+                stations = json.loads(raw) if raw else {}
+                current = stations.get(station_id) if isinstance(stations.get(station_id), dict) else {}
+                revision = int(current.get("revision") or 0)
+                if expected_revision != revision:
+                    raise TrackDisplayConflict(revision)
+                saved: dict[str, Any] = {"revision": revision + 1}
+                if order is not None:
+                    saved.update(order=list(order), hidden=list(hidden or []))
+                stations[station_id] = saved
+                self._save_setting("track_display:" + meet_id, json.dumps(stations))
+                self._connection.execute("COMMIT")
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                raise
+        return saved
 
     def bump_config_version(self) -> int:
         version = self.config_version() + 1

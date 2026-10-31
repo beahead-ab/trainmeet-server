@@ -181,3 +181,5 @@ Press {keys}|Tryck {keys}|Tryk {keys}|Trykk {keys}|Drücke {keys}
 Now at {box}:|Nu på {box}:|Nu på {box}:|Nå på {box}:|Jetzt bei {box}:
 Starting point|Utgångsläge|Udgangspunkt|Utgangspunkt|Ausgangslage
 All boxes are on the overview. No train is under way.|Alla boxar står i översikten. Inget tåg är på gång.|Alle bokse står i oversigten. Intet tog er på vej.|Alle boksene står i oversikten. Ingen tog er på gang.|Alle Boxen zeigen die Übersicht. Kein Zug ist unterwegs.
+Timetable · {station} · {day}|Tidtabell · {station} · {day}|Køreplan · {station} · {day}|Ruteplan · {station} · {day}|Fahrplan · {station} · {day}
+Manual|Manuell|Manuel|Manuell|Manuell

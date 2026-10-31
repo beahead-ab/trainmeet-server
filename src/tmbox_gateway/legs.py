@@ -15,16 +15,25 @@ from .train_routes import resolve_departure, RouteResolutionError
 PRESENCE_SECONDS = 45
 
 
-def plan_legs(publication, day):
+def plan_legs(publication, day, manual=None):
     """Every complete leg of the day and what kept the others out.
 
     Automatic stations run the legs that are complete and leave the rest to
-    people; the errors say why a train is left out.
+    people; the errors say why a train is left out. `manual` names trains
+    that cannot run as planned ({service id: reasons}, Cloud #100 B5): none
+    of their legs is automated, and only they are left out.
     """
     payload = publication.payload
-    movements = {str(m["id"]): m for m in payload["trains"] if matches_active_day(m["days"], day)}
-    times = {}
+    manual = manual or {}
     errors = []
+    numbers = {str(service.get("id")): service.get("train_number") for service in payload.get("services", [])
+               if matches_active_day(str(service.get("days", "Dagl")), day)}
+    for service_id, reasons in manual.items():
+        if service_id in numbers:
+            errors.append(f"Tåg {numbers[service_id]} körs manuellt: {'; '.join(reasons)}.")
+    movements = {str(m["id"]): m for m in payload["trains"]
+                 if matches_active_day(m["days"], day) and str(m.get("service_id")) not in manual}
+    times = {}
     for service in payload.get("services", []):
         if not matches_active_day(service["days"], day):
             continue

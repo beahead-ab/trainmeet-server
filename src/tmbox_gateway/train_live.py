@@ -12,6 +12,13 @@ Samma regler i Python, för klienter som får tidtabellen färdig från servern
 - för tidigt är en verklig tid före den planerade. Om det ska synas avgör
   klienten: en för tidig avgång gäller bara persontåg.
 
+Varje tåg räknas för sig (Cloud #100): två tåg som delar nummer samma dag,
+som DSB IC 116 och SJ X 116, får var sitt svar under sitt tjänst-id. Under
+numret står det tåg numret gäller just nu (det som är på väg, annars nästa,
+annars det senast framkomna), så att den som bara vet numret, som en
+kanal på linjen, får rätt tåg. Ett nummer som bara ett tåg har ger som förut
+det tåget.
+
 tests/test_train_live.py kör samma fall som tests/js/train-live.test.cjs.
 """
 from __future__ import annotations
@@ -62,21 +69,42 @@ def on_line_trains(connection_states: list[dict], positions: list[dict]) -> set[
     return departed
 
 
+IN_PROGRESS = ("on_line", "at_station", "waiting")
+
+
+def _current(candidates: list[dict]) -> dict:
+    """Det tåg ett delat nummer gäller nu: på väg, annars nästa, annars det senaste."""
+    moving = [item for item in candidates if item["state"] in IN_PROGRESS]
+    if moving:
+        return moving[0]
+    coming = sorted((item for item in candidates if item["state"] == "not_departed"), key=lambda item: item["_start"])
+    if coming:
+        return coming[0]
+    return max(candidates, key=lambda item: item["_start"])
+
+
 def train_live(services: list[dict], trains: list[dict], movement_live: dict[str, dict], now_seconds: float,
                on_line: set[str] | frozenset[str] = frozenset()) -> dict[str, dict]:
-    """Tågnummer → {state, delay_minutes, late, estimated, early_minutes, early_kind, train_type}."""
-    by_number: dict[str, dict] = {}
+    """Tjänst-id och tågnummer → {state, delay_minutes, late, estimated, early_minutes, early_kind,
+    train_type, train_number, service_id}.
+
+    Varje tåg finns under sitt tjänst-id. Numret ger det tåg numret gäller
+    nu; delar två tåg nummer avgör det som händer i movement_live vilket.
+    """
+    services = [service for service in services if str(service.get("train_number") or "").strip()]
+    shared: dict[str, int] = {}
     for service in services:
-        number = str(service.get("train_number") or "").strip()
-        if number and (number not in by_number or len(service.get("stops") or []) > len(by_number[number].get("stops") or [])):
-            by_number[number] = service
+        number = str(service.get("train_number")).strip()
+        shared[number] = shared.get(number, 0) + 1
     index: dict[tuple, str | None] = {}
     for row in trains:
         key = (row.get("service_id"), row.get("station_id"), _hhmm(row.get("arrival_time")), _hhmm(row.get("departure_time")))
         index[key] = None if key in index else str(row.get("id"))
     now = now_seconds / 60
     result: dict[str, dict] = {}
-    for number, service in by_number.items():
+    by_number: dict[str, list[dict]] = {}
+    for service in services:
+        number = str(service.get("train_number")).strip()
         stops = []
         for stop in sorted(service.get("stops") or [], key=lambda item: int(item.get("stop_order") or 0)):
             offset = int(stop.get("service_day_offset") or 0) * 1440
@@ -103,7 +131,11 @@ def train_live(services: list[dict], trains: list[dict], movement_live: dict[str
                 delay, measured = _between(stop["planned_arrival"], stop["actual_arrival"]), "arr"
                 break
         last = stops[-1]
-        if number in on_line or (last_index >= 0 and stops[last_index]["departed"] and last_index < len(stops) - 1):
+        # En kanal säger bara numret. Delar två tåg det gäller kanalen det
+        # tåg som har avgått men inte kommit fram, aldrig ett som är framme
+        # eller ännu inte har gått.
+        channel = number in on_line and (shared[number] == 1 or (last_index >= 0 and not last["arrived"]))
+        if channel or (last_index >= 0 and stops[last_index]["departed"] and last_index < len(stops) - 1):
             state = "on_line"
         elif last["arrived"]:
             state = "arrived"
@@ -115,12 +147,29 @@ def train_live(services: list[dict], trains: list[dict], movement_live: dict[str
                 delay, estimated, measured = float(int(overdue // 1)), True, None
         delay = round(delay)
         early = -delay if delay < 0 else 0
-        result[number] = {
+        start = next((value for stop in stops for value in (stop["planned_departure"], stop["planned_arrival"]) if value is not None), 0)
+        item = {
             "state": state, "delay_minutes": max(0, delay), "late": delay >= LATE_MINUTES, "estimated": estimated,
             "early_minutes": early, "early_kind": measured if early else None,
             "train_type": str(service.get("train_type") or "person").lower(),
+            "train_number": number, "service_id": service.get("id"), "_start": start,
         }
+        if service.get("id"):
+            result[str(service["id"])] = item
+        by_number.setdefault(number, []).append(item)
+    for number, candidates in by_number.items():
+        result[number] = _current(candidates)
+    for item in {id(value): value for value in result.values()}.values():
+        item.pop("_start", None)
     return result
+
+
+def live_for_row(lives: dict[str, dict], row: dict, service_ids: dict[str, str]) -> dict | None:
+    """Tåget en tidtabellsrad gäller: radens tjänst om den är känd, annars numret."""
+    service = service_ids.get(str(row.get("movement_id") or row.get("id") or ""))
+    if service and service in lives:
+        return lives[service]
+    return lives.get(str(row.get("train_number") or ""))
 
 
 def expected_time(planned: str, delay_minutes: int) -> str | None:
