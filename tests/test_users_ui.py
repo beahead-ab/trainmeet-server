@@ -4,9 +4,8 @@ Två fel är lätta att göra i en vy som den här, och båda syns i filerna:
 
 1. Vyn läser ett fält som API:et inte skickar. Då blir kolumnen tom utan att
    något går sönder - ingen felkod, ingen loggrad, bara en lista som ser fel ut.
-2. Inbjudningsformuläret ligger kvar för en administratör. Servern säger nej
-   (403), men först efter att någon fyllt i namnet och tryckt. Att erbjuda en
-   åtgärd som alltid nekas är ett gränssnittsfel även när behörigheten håller.
+2. Rutter i vyn saknas på servern. Rollval och tillåtna åtgärder provas mot
+   riktig HTTP/SQLite per roll på dator och mobil i user-roles-live.test.cjs.
 
 Testet läser markup och `app.js` mot `identity.py`/`http_server.py` i stället
 för att köra en webbläsare: det som kan glida isär är fältnamn och rutter, och
@@ -59,16 +58,6 @@ class UsersViewTests(unittest.TestCase):
         called = set(re.findall(r'"(/v1/admin/users[a-z/]*)"', SCRIPT))
         self.assertTrue(called, "vyn anropar inga användarrutter alls")
         self.assertLessEqual(called, routes, f"vyn anropar rutter som saknas: {called - routes}")
-
-    def test_an_administrator_is_not_offered_what_the_server_will_refuse(self) -> None:
-        """Ägargränsen ska synas i vyn, inte bara i svaret."""
-
-        view = SCRIPT[SCRIPT.index("function renderUsers()"): SCRIPT.index("function usersButton(")]
-        self.assertIn('const owner = users.role === "owner"', view)
-        # Ägare och administratörer bjuder in, men en administratör bara förare (Lokföraren).
-        self.assertRegex(view, r'invite-open.*classList\.toggle\("hidden", !\["owner", "admin"\]\.includes\(users\.role\)\)')
-        self.assertIn('option.disabled = !owner && option.value !== "user"', view)
-        self.assertIn("if (canEditUser(user)) {", view)
 
     def test_an_account_without_an_address_is_marked(self) -> None:
         """Kontot är adressen. Ett konto utan, från före version 3, kommer inte

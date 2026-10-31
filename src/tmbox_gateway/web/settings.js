@@ -19,7 +19,7 @@
   const t = (source, values) => i18n().t(source, values);
   const SVGNS = "http://www.w3.org/2000/svg";
 
-  const SECTIONS = ["traff", "skarmar", "wifi", "obemannade", "lokforare", "server", "kod", "anvandare", "uppdatering", "sprak", "visning", "farozon"];
+  const SECTIONS = ["traff", "skarmar", "wifi", "obemannade", "klarering", "lokforare", "server", "kod", "anvandare", "uppdatering", "sprak", "visning", "farozon"];
   const ALIASES = { anslutning: "kod", fynd: "traff", klocka: "skarmar", cloud: "traff", meet: "traff",
     forare: "lokforare", lokforaren: "lokforare", koruppdrag: "lokforare" };
 
@@ -31,6 +31,7 @@
   }
 
   function show(id = currentSection()) {
+    if (document.body.dataset.accountRole === "user") id = "anvandare";
     for (const section of $$(".kr-setsec")) section.hidden = section.dataset.section !== id;
     for (const link of $$(".kr-nav")) {
       if (link.dataset.section === id) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");

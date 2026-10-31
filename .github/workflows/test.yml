@@ -48,6 +48,7 @@ jobs:
           node tests/js/guest-share.test.cjs
           node tests/js/account-mail-live.test.cjs
           node tests/js/user-editing-live.test.cjs
+          node tests/js/user-roles-live.test.cjs
           node tests/js/lokforaren-live.test.cjs
           node tests/js/lokforaren-koruppdrag-live.test.cjs
           node tests/js/header-mobile.test.cjs
@@ -65,4 +66,5 @@ jobs:
           node tests/js/clock-seconds-live.test.cjs
           node tests/js/clock-pause-message.test.cjs
           node tests/js/station-automatic-live.test.cjs
+          node tests/js/tellurian-settings.test.cjs
           node tests/js/screen-graph-fill.test.cjs

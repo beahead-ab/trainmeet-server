@@ -112,15 +112,13 @@ const root = path.resolve(__dirname, '../..');
     })).status(), 200);
 
     await login('lars@example.se', 'ursprungligt-losenord');
-    // An administrator invites drivers (Lokföraren) and nobody else.
     assert.equal(await page.locator('#users-invite-open').isVisible(), true);
-    assert.equal(await page.locator('#users-invite-role').inputValue(), 'user');
-    assert.deepEqual(await page.locator('#users-invite-role').evaluate((select) => [...select.options].filter((option) => !option.disabled).map((option) => option.value)), ['user']);
     for (const name of ['Casper', 'Benny']) assert.equal(await row(name).getByRole('button').count(), 0);
     await open('Sven Tomt');
-    assert.equal(await page.locator('#user-edit-role').isDisabled(), true);
-    assert.equal(await page.locator('#user-edit-role option[value="owner"]').isDisabled(), true);
-    assert.equal(await page.locator('#user-edit-removal').isVisible(), false);
+    assert.equal(await page.locator('#user-edit-role').isEnabled(), true);
+    assert.equal(await page.locator('#user-edit-role option[value="owner"]').count(), 0);
+    assert.deepEqual(await page.locator('#user-edit-role option').evaluateAll(options => options.map(option => option.value)), ['admin', 'user']);
+    assert.equal(await page.locator('#user-edit-removal').isVisible(), true);
     assert.equal(await page.locator('#user-edit-reissue').isVisible(), false);
     await page.setViewportSize({ width: 390, height: 844 });
     await noOverflow();

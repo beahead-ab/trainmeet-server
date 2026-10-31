@@ -7,6 +7,7 @@ Här finns den publika dokumentationen för TrainMeet Server.
 - [Versionshantering](VERSIONING.md)
 - [Samspelet mellan Cloud och Server](cloud-server.md)
 - [Externa trafikintegrationer: ram, testadapter och kompatibilitetskontroll](external-integrations.md)
+- [Tellurian Dispatch som klareringsauktoritet: simulator, adapter och skuggläge](tellurian-dispatch.md) (#222)
 - [FastClock: anslut extern träffklocka på servern](FASTCLOCK.md)
 - [Lokföraren: förarens app, tjänster i paketet och incheckning](LOKFORAREN.md)
 - [Klockpaket: egna urtavlor att ladda upp på servern](clock-packs.md)
@@ -16,6 +17,7 @@ Här finns den publika dokumentationen för TrainMeet Server.
 - [TMBox: tågnummer först, beslutad målbild och implementationsstatus](TMBOX-TRAIN-FIRST-REVISION-2026-09-19.md) – tåguppslag infört; gemensam trafikprofil återstår
 - [TMBox: Cloud-mappning och stationskoder på displayen](TMBOX-CLOUD-MAPPING-2026-09-19.md) – synkfix och fortsatt gränssnittsrevidering
 - [Gemensam trafik för ESP8266, ESP32 och TKL](shared-traffic.md)
+- [Spårvisning för TMBox-appen](tmbox-sparvisning.md) – vilka spår Spår-vyn visar och i vilken ordning, per träff och station
 
 Installations- och driftinstruktioner finns i projektets
 [README](../README.md). Fel och förbättringsförslag hanteras i

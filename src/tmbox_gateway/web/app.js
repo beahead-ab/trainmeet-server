@@ -211,6 +211,7 @@ loginForm.addEventListener("submit", async (event) => {
       history.replaceState(null, "", location.pathname + "#overview");
     }
     await refreshAuthStatus();
+    if (isDriverUser()) history.replaceState(null, "", "/installningar#anvandare");
     const installation = await refreshSetupStatus();
     if (installation.required) {
       showSetup(installation);
@@ -467,7 +468,21 @@ function storedMode() { sessionStorage.removeItem(WORKSPACE_KEY); return "worksp
 // "/" is for guests. Signed in, home is Drift: the logo, the screens' back link
 // and "/" itself all lead there, so an administrator never lands on the
 // participant view by accident. Signing out leads back to it.
-function workspaceHome() { return state.authStatus?.authenticated ? "/drift" : "/"; }
+function isDriverUser() { return state.authStatus?.authenticated && state.authStatus.role === "user"; }
+function renderAccountNavigation() {
+  for (const [selector, text] of [
+    ["#open-settings", isDriverUser() ? "Eget konto" : "Inställningar"],
+    ['#settings-nav [data-section="anvandare"]', isDriverUser() ? "Eget konto" : "Användare"],
+    ["#anvandare-title", isDriverUser() ? "Eget konto" : "Användare"],
+    ["#user-edit-title", isDriverUser() ? "Eget konto" : "Redigera användare"],
+  ]) {
+    const node = document.querySelector(selector);
+    node.dataset.tmText = text;
+    node.textContent = t(text);
+  }
+  document.querySelector("#open-settings").href = isDriverUser() ? "/installningar#anvandare" : "#settings";
+}
+function workspaceHome() { return state.authStatus?.authenticated && !isDriverUser() ? "/drift" : "/"; }
 
 function availableWorkspaces() {
   // Fail closed: a stale browser choice must not grant a role or select EU/US.
@@ -475,7 +490,7 @@ function availableWorkspaces() {
 }
 
 async function refreshServerContext() {
-  const response = await authorizedFetch(state.authStatus?.authenticated ? "/v1/server-context" : "/v1/workspaces", { cache: "no-store" });
+  const response = await authorizedFetch(state.authStatus?.authenticated && !isDriverUser() ? "/v1/server-context" : "/v1/workspaces", { cache: "no-store" });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || "Serverns träff kunde inte läsas.");
   state.serverContext = payload;
@@ -502,6 +517,7 @@ globalThis.TrainMeetI18n.subscribe(() => {
   globalThis.TrainMeetParticipant?.refresh();
   renderCloudStatus();
   renderUsers();
+  renderAccountNavigation();
   renderCloudPresentation();
   configureResetMode();
 });
@@ -530,6 +546,7 @@ function setMode(mode) {
 }
 
 function showSettings() {
+  if (isDriverUser()) { globalThis.TrainMeetSettings?.show("anvandare"); refreshUsers(); return; }
   globalThis.TrainMeetSettings?.show();
   Promise.allSettled([checkSoftwareUpdate(), refreshUsers(), refreshBackups(), refreshRuntime(), refreshDevices(), refreshAutomatic(), refreshTrafficSide(), refreshDeviationLevel()]);
 }
@@ -683,12 +700,29 @@ document.querySelector("#automatic-disturbance-form")?.addEventListener("submit"
 });
 
 function applyWorkspaceRoute() {
+  const kind = displayRouteKind(location.pathname);
+  if (kind) {
+    displayKind = kind;
+    initDisplay();
+    return;
+  }
+  if (displayActive) {
+    stopDisplay();
+    // A bookmarked screen starts without the participant/admin bootstrap.
+    if (!state.serverContext) { bootstrap(); return; }
+  }
   let route = location.hash.slice(1);
   const legacy = {overview: "/drift", traffic: "/drift", settings: "/installningar", simulation: "/drift", screens: "/installningar#skarmar"};
   if (legacy[route]) { history.replaceState(null, "", legacy[route]); route = location.hash.slice(1); }
   if (route === "workspaces") { history.replaceState(null, "", "/"); route = ""; }
   const path = location.pathname.replace(/\/$/, "") || "/";
-  if (state.authStatus?.authenticated && path === "/" && !route) {
+  if (isDriverUser() && (path !== "/" || route)) {
+    history.replaceState(null, "", "/installningar#anvandare");
+    setup.classList.add("hidden"); login.classList.add("hidden"); appView.classList.remove("hidden");
+    setMode("installningar");
+    return;
+  }
+  if (!isDriverUser() && state.authStatus?.authenticated && path === "/" && !route) {
     history.replaceState(null, "", "/drift");
     applyWorkspaceRoute();
     return;
@@ -1862,6 +1896,53 @@ document.querySelector("#cloud-auto-form").addEventListener("submit", async (eve
   } finally { endModalAction(form); }
 });
 
+// Apple Watch via Cloud (#205, #206): klockan når servern genom Cloud och får
+// notiser. Av tills administratören slår på det; texten säger var det står.
+const CLOUD_LIVE_RELAY = {
+  off: "Av. Klockan går via telefonen på träffens nät.",
+  unlinked: "Koppla servern till Cloud först.",
+  connecting: "Ansluter till Cloud …",
+  connected: "Ansluten. Klockan når servern via Cloud.",
+  cloud_disabled: "Cloud har inte reläet påslaget.",
+  link_rejected: "Cloud känner inte igen kopplingen. Koppla om servern.",
+  error: "Cloud nås inte just nu. Servern försöker igen.",
+};
+const CLOUD_LIVE_PUSH = { on: "Notiser: på.", cloud_not_configured: "Notiser: inte konfigurerat i Cloud." };
+
+async function refreshCloudLive() {
+  const form = document.querySelector("#cloud-live-form");
+  if (!form || editorActive(form)) return;
+  const response = await authorizedFetch("/v1/cloud/live", {cache: "no-store"});
+  if (!response.ok) { form.hidden = true; return; }
+  const payload = await response.json();
+  const input = document.querySelector("#cloud-live-enabled");
+  input.checked = Boolean(payload.enabled);
+  input.disabled = !payload.linked && !payload.enabled;
+  const relay = t(CLOUD_LIVE_RELAY[payload.relay?.state] || CLOUD_LIVE_RELAY.error);
+  const push = CLOUD_LIVE_PUSH[payload.push?.state];
+  document.querySelector("#cloud-live-status").textContent = push ? `${relay} ${t(push)}` : relay;
+  form.hidden = false;
+  globalThis.TrainMeetSettings?.rebase(form);
+}
+
+document.querySelector("#cloud-live-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const enabled = document.querySelector("#cloud-live-enabled").checked;
+  if (!beginModalAction(form)) return;
+  try {
+    const response = await authorizedFetch("/v1/cloud/live", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || t("Inställningen kunde inte sparas."));
+    finishModal(form);
+  } catch (error) {
+    setMessage(form.querySelector(".form-message"), error.message, "error");
+  } finally { endModalAction(form); }
+  await refreshCloudLive();
+});
+
 // Vilken sida tågen går på vid dubbelspår (kartorna). Förvalet följer
 // träffens land; en träff vars moduler är byggda annorlunda väljer själv.
 async function refreshTrafficSide() {
@@ -2432,7 +2513,7 @@ async function openApplication() {
   logoutButton.classList.toggle("hidden", !state.authStatus?.authenticated);
   try {
     await refreshServerContext();
-    if (!state.authStatus?.authenticated) {
+    if (!state.authStatus?.authenticated || isDriverUser()) {
       applyWorkspaceRoute();
       setConnection("online", "Lokalt ansluten");
       return;
@@ -2772,6 +2853,7 @@ async function refreshRuntime() {
   if (state.runtime.central_url && !input.closest("dialog")?.open) input.value = state.runtime.central_url;
   renderCloudStatus();
   await refreshCloudPresentation();
+  await refreshCloudLive();
 }
 
 let cloudPresentation = null;
@@ -3584,6 +3666,8 @@ async function refreshAuthStatus() {
   // The address field is left alone. The application never fills it in -
   // the browser's own password manager may still offer a saved login, which
   // is the user's choice rather than ours.
+  document.body.dataset.accountRole = state.authStatus.role || "";
+  renderAccountNavigation();
   configureResetMode();
   return state.authStatus;
 }
@@ -3654,11 +3738,6 @@ function showSetup(installation) {
 }
 
 async function showLogin() {
-  // Inloggad som förare (user): ingen admin, men Lokföraren väntar.
-  if (state.authStatus?.account_role === "user") {
-    location.assign("/lokforaren/");
-    return;
-  }
   clearTimeout(state.snapshotTimer);
   clearTimeout(state.adminTimer);
   stopTMBoxV2();
@@ -3744,9 +3823,34 @@ function escapeHTML(value) {
 }
 
 
-const displayKind = location.pathname.startsWith("/display/")
-  ? location.pathname.split("/").filter(Boolean).pop()
-  : null;
+const DISPLAY_KINDS = ["topology", "graph", "clock", "dashboard", "territories"];
+function displayRouteKind(path) {
+  const match = /^\/display\/([^/]+)\/?$/.exec(path);
+  return match && DISPLAY_KINDS.includes(match[1]) ? match[1] : null;
+}
+let displayKind = displayRouteKind(location.pathname);
+let displayReadOnly = false;
+let displayActive = false;
+let displayInitialized = false;
+let displayWakeLock = null;
+let displayChromeUpdate = null;
+let displayFullscreenExit = null;
+
+// Guest mode (#209) is for a visitor who opens a view from Stora vyer on the
+// participant page; the meet's QR codes lead there. The history entry carries
+// the mark, so reload, Back and Forward keep it. A screen opened by its own
+// address (bookmarked or kiosk in the hall), a signed-in browser and a browser
+// with its own screen choices stay the meet's screen: own settings, toolbar.
+const GUEST_DISPLAY_MARK = "trainmeetGuestDisplay";
+function displayHasOwnSettings() {
+  // Seconds are left out: the participant view and Drift share that choice,
+  // so a guest who tapped the clock there is still a guest.
+  const keys = [DISPLAY_CLOCK_STYLE_KEY, DISPLAY_GRAPH_WINDOW_KEY, DISPLAY_GRAPH_TRACKS_KEY, DISPLAY_THEME_KEY, DISPLAY_DEVIATION_LEVEL_KEY];
+  try { return keys.some((key) => localStorage.getItem(key)); } catch { return false; }
+}
+function displayGuestEntry() {
+  return history.state?.[GUEST_DISPLAY_MARK] === true && !displayHasOwnSettings();
+}
 
 const svgNS = "http://www.w3.org/2000/svg";
 let displaySnapshot = null;
@@ -4610,7 +4714,7 @@ function renderGraph(snapshot) {
   };
   // Ett tryck på stationens namn fäller ut eller ihop dess spår, som i Spår-menyn.
   const station = (id) => { toggleDisplayGraphTrack(snapshot, id); renderDisplayGraphTracks(snapshot); renderGraph(snapshot); };
-  lib.render(svg, g, { cls: lib.SCREEN, onSelect: select, onStation: station, label: (number) => t("Tåg {number}", { number }), clip: "screen-graph-clip",
+  lib.render(svg, g, { cls: lib.SCREEN, onSelect: select, onStation: displayReadOnly ? undefined : station, label: (number) => t("Tåg {number}", { number }), clip: "screen-graph-clip",
     marks: graphLives ? (number) => TrainMeetDriftModel.deviationView(5, graphLives.get(String(number)))?.mark || null : null });
   svg.removeAttribute("width"); svg.removeAttribute("height");
   // Ett tryck på en tom yta släpper det valda tåget (#196); tågen och
@@ -4734,6 +4838,7 @@ const DISPLAY_CLOCK_SECONDS_KEY = "trainmeet.displayClockSeconds";
 const LEGACY_SCREEN_STYLES = Object.fromEntries(["stationsur", "swedish", "norwegian", "danish", "german", "finnish", "polish", "dutch",
   "french", "italian", "american"].map(style => [style, `custom:${style}`]).concat([["swiss", "custom:sbb"]]));
 function displayClockPreference() {
+  if (displayActive && displayReadOnly) return { style: "", seconds: "" };
   try {
     const style = localStorage.getItem(DISPLAY_CLOCK_STYLE_KEY) || "";
     return { style: LEGACY_SCREEN_STYLES[style] || style, seconds: localStorage.getItem(DISPLAY_CLOCK_SECONDS_KEY) || "" };
@@ -5097,6 +5202,7 @@ const DEVIATION_LEVEL_HINTS = {
   5: "Allt från 1 min, även för tidig ankomst och vid tågen på kartan",
 };
 function deviationOwnLevel(key = displayKind ? DISPLAY_DEVIATION_LEVEL_KEY : DEVIATION_LEVEL_KEY) {
+  if (displayActive && displayReadOnly) return "";
   try { return localStorage.getItem(key) || ""; } catch { return ""; }
 }
 function deviationLevelOf(snapshot) { return TrainMeetDriftModel.deviationLevel(snapshot, deviationOwnLevel()); }
@@ -5129,8 +5235,8 @@ const DISPLAY_GRAPH_WINDOWS = [120, 180, 360, 1440];
 const DISPLAY_GRAPH_TRACKS_KEY = "trainmeet.displayGraphTracks";
 const DISPLAY_TOOLBAR_HIDE_MS = 4000;
 
-function displayStored(key) { try { return localStorage.getItem(key) || ""; } catch { return ""; } }
-function displayStore(key, value) { try { localStorage.setItem(key, value); } catch { /* privat läge: gäller bara den här sidan */ } }
+function displayStored(key) { if (displayActive && displayReadOnly) return ""; try { return localStorage.getItem(key) || ""; } catch { return ""; } }
+function displayStore(key, value) { if (displayActive && displayReadOnly) return; try { localStorage.setItem(key, value); } catch { /* privat läge: gäller bara den här sidan */ } }
 function displayGraphWindow() {
   const value = Number(displayStored(DISPLAY_GRAPH_WINDOW_KEY));
   return DISPLAY_GRAPH_WINDOWS.includes(value) ? value : 180;
@@ -5214,7 +5320,7 @@ function renderDisplayThemeChoice() {
 // Tågdiagrammet på skärmen går med klockan varje sekund, som på Drift, och
 // inte bara när en ny bild hämtas.
 setInterval(() => {
-  if (displayKind === "graph" && displaySnapshot?.clock?.running && !document.hidden) renderGraph(displaySnapshot);
+  if (displayActive && displayKind === "graph" && displaySnapshot?.clock?.running && !document.hidden) renderGraph(displaySnapshot);
 }, 1000);
 
 function renderDisplayDeviationLevel(snapshot) {
@@ -5290,6 +5396,7 @@ function renderDisplay(snapshot) {
   renderConnectionBadge(snapshot);
   const ids = { topology: "topology-svg", graph: "graph-scroll", clock: "clock-view", dashboard: "dashboard-view", territories:"territories-view" };
   for (const id of Object.values(ids)) document.querySelector(`#${id}`).classList.toggle("hidden", id !== ids[displayKind]);
+  serverUI.resizeStage?.();
   if (displayKind === "topology") renderDisplayTopology(snapshot);
   if (displayKind === "graph") renderGraph(snapshot);
   if (displayKind === "territories") serverUI.us(snapshot.us, true);
@@ -5307,10 +5414,12 @@ function renderDisplay(snapshot) {
 // The clock runs on locally; with the stream up a change arrives at once.
 function scheduleDisplayPoll() {
   clearTimeout(displayPollTimer);
+  if (!displayActive) return;
   displayPollTimer = setTimeout(pollDisplay, globalThis.TrainMeetLive?.connected ? 5000 : 1000);
 }
 
 async function pollDisplay() {
+  if (!displayActive) return;
   clearTimeout(displayPollTimer);
   displayRequest?.abort();
   const request = new AbortController();
@@ -5344,12 +5453,111 @@ async function pollDisplay() {
   }
 }
 
+// Opening from a guest link happens synchronously in the user's gesture. Keep
+// the document alive so switching screens also keeps native fullscreen.
+function openGuestDisplay(path) {
+  const kind = displayRouteKind(path);
+  // Signed in, or a browser set up as a screen: open it as that screen.
+  if (!kind || state.authStatus?.authenticated || displayHasOwnSettings()) return false;
+  if (location.pathname !== path) history.pushState({ [GUEST_DISPLAY_MARK]: true }, "", path);
+  displayKind = kind;
+  initDisplay();
+  const app = document.querySelector("#display-app");
+  const enter = () => {
+    try {
+      if (!document.fullscreenElement) app.requestFullscreen?.()?.catch(() => {});
+    } catch { /* CSS still fills the viewport when native fullscreen is unavailable. */ }
+  };
+  // Leaving a view a moment ago may still be exiting fullscreen; enter after it.
+  if (displayFullscreenExit) displayFullscreenExit.then(enter); else enter();
+  return true;
+}
+globalThis.TrainMeetDisplays = { openGuest: openGuestDisplay };
+
+function stopDisplay() {
+  displayActive = false;
+  displayKind = null;
+  clearTimeout(displayPollTimer);
+  clearTimeout(displayToolbarTimer);
+  cancelAnimationFrame(displayTickTimer);
+  displayRequest?.abort();
+  displayRequest = null;
+  displayWakeLock?.release().catch(() => {});
+  displayWakeLock = null;
+  if (document.fullscreenElement === document.querySelector("#display-app")) {
+    // exitFullscreen() settles after the participant view is back.
+    const exit = displayFullscreenExit = document.exitFullscreen().catch(() => {}).finally(() => {
+      if (displayFullscreenExit === exit) displayFullscreenExit = null;
+    });
+  }
+  document.querySelector("#display-app").classList.add("hidden");
+  document.body.classList.remove("server-display");
+  document.title = "TrainMeet Server";
+}
+
+function animateDisplayClock() {
+  if (!displayActive) return;
+  if (displaySnapshot && displayKind === "clock") renderClock(displaySnapshot);
+  displayTickTimer = requestAnimationFrame(animateDisplayClock);
+}
+
 async function initDisplay() {
-  serverUI.initDisplay();
+  displayActive = true;
+  globalThis.TrainMeetParticipant?.stop();
+  document.body.classList.add("server-display");
   const displayApp = document.querySelector("#display-app");
   displayApp.classList.remove("hidden");
+  // A bookmarked or kiosk screen in the hall keeps its own choices (#209).
+  const guestEntry = displayGuestEntry();
+  if (guestEntry) {
+    // Fail closed while a reloaded guest view checks the session: a guest
+    // never briefly sees the screen settings.
+    displayReadOnly = true;
+    displayApp.dataset.readOnly = "true";
+    if (!state.authStatus) {
+      try { await refreshAuthStatus(); } catch { /* public snapshot remains available */ }
+      if (!displayActive) return;
+    }
+  }
+  displayReadOnly = guestEntry && !state.authStatus?.authenticated;
+  displayApp.dataset.readOnly = String(displayReadOnly);
+  document.querySelector("#display-guest-back").classList.toggle("hidden", !displayReadOnly);
+  document.querySelector(".display-back").href = workspaceHome();
+  state.displaySelectedTrainNumber = null;
+  state.displaySelectedStationID = null;
+  state.displayHoveredTrainNumber = null;
+  cancelAnimationFrame(displayTickTimer);
+  displayTickTimer = requestAnimationFrame(animateDisplayClock);
+  if (!displayWakeLock) navigator.wakeLock?.request("screen").then((lock) => {
+    if (displayActive) displayWakeLock = lock;
+    else lock.release().catch(() => {});
+  }).catch(() => {});
+  if (displayInitialized) {
+    applyDisplayTheme(displayTheme());
+    displayChromeUpdate?.();
+    displayApp.dispatchEvent(new Event("mousemove"));
+    if (displaySnapshot) renderDisplay(displaySnapshot);
+    pollDisplay();
+    return;
+  }
+  displayInitialized = true;
+  serverUI.initDisplay();
   applyDisplayTheme(displayTheme());
   document.title = `TrainMeet · ${t("Skärm")}`;
+  document.querySelector("#display-switch-list").addEventListener("click", (event) => {
+    const link = event.target.closest("a");
+    if (!displayReadOnly || !link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    if (openGuestDisplay(new URL(link.href).pathname)) {
+      event.preventDefault();
+      document.querySelector("#display-switch").open = false;
+    }
+  });
+  document.querySelector("#display-guest-back").addEventListener("click", (event) => {
+    event.preventDefault();
+    history.pushState(null, "", "/");
+    applyWorkspaceRoute();
+    document.querySelector("#pv-screens-menu summary")?.focus();
+  });
   document.querySelector("#display-theme").addEventListener("change", (event) => {
     displayStore(DISPLAY_THEME_KEY, event.target.value);
     applyDisplayTheme(event.target.value);
@@ -5399,9 +5607,10 @@ async function initDisplay() {
   // I helskärm kommer raden tillbaka vid rörelse och döljs efter fyra sekunder;
   // i fönster står den kvar.
   const showToolbar = () => {
+    if (!displayActive) return;
     clearTimeout(displayToolbarTimer);
     setToolbar(true);
-    if (displayApp.dataset.chrome !== "fullscreen") return;
+    if (displayReadOnly || displayApp.dataset.chrome !== "fullscreen") return;
     displayToolbarTimer = setTimeout(() => {
       // Raden står kvar medan pekaren är över den eller menyn är öppen.
       if (toolbar.matches(":hover") || document.querySelector("#display-switch")?.open || document.querySelector("#display-graph-tracks")?.open) { showToolbar(); return; }
@@ -5409,30 +5618,25 @@ async function initDisplay() {
     }, DISPLAY_TOOLBAR_HIDE_MS);
   };
   const updateChrome = () => {
-    const full = displayIsFullscreen();
+    const full = displayReadOnly || displayIsFullscreen();
     displayApp.dataset.chrome = full ? "fullscreen" : "window";
     fullscreenButton.querySelector("tm-text").textContent = t(full ? "Avsluta helskärm" : "Helskärm");
     fullscreenButton.querySelector("tm-text").dataset.tmText = full ? "Avsluta helskärm" : "Helskärm";
     showToolbar();
     serverUI.resizeStage?.();
   };
+  displayChromeUpdate = updateChrome;
   displayApp.addEventListener("mousemove", showToolbar);
   displayApp.addEventListener("click", showToolbar);
   // Ett tryck på storskärmens klocka visar eller döljer sekunderna här.
   document.querySelector("#clock-view").addEventListener("click", () => {
-    if (displaySnapshot) globalThis.TrainMeetClockSeconds.toggle(resolveClockAppearance(displaySnapshot).showSeconds);
+    if (!displayReadOnly && displaySnapshot) globalThis.TrainMeetClockSeconds.toggle(resolveClockAppearance(displaySnapshot).showSeconds);
   });
   displayApp.addEventListener("touchstart", showToolbar, {passive:true});
   document.addEventListener("keydown", showToolbar);
   window.addEventListener("resize", updateChrome);
   document.addEventListener("fullscreenchange", updateChrome);
   updateChrome();
-  try { await navigator.wakeLock?.request("screen"); } catch {}
-  const animateClock = () => {
-    if (displaySnapshot && displayKind === "clock") renderClock(displaySnapshot);
-    displayTickTimer = requestAnimationFrame(animateClock);
-  };
-  displayTickTimer = requestAnimationFrame(animateClock);
   window.addEventListener("online", pollDisplay);
   window.addEventListener("pageshow", pollDisplay);
   globalThis.TrainMeetLive?.subscribe((topics) => {
@@ -5445,7 +5649,7 @@ async function initDisplay() {
   pollDisplay();
 }
 
-if (displayKind && ["topology", "graph", "clock", "dashboard", "territories"].includes(displayKind)) initDisplay();
+if (displayKind) initDisplay();
 else bootstrap();
 
 /* ---------------------------------------------------------------- TMBox v2
@@ -5815,45 +6019,33 @@ function bindTMBoxPanes() {
 // på plats; har den inbjudne en e-postadress och servern är kopplad till
 // TrainMeet Cloud skickas den också dit.
 //
-// Ägare hanterar alla konton; administratörer redigerar administratörer.
-// Inbjudan, borttagning och tilldelning av ägarrollen är ägarens uppgifter.
+// Servern avgör rättigheterna; klienten speglar rollerna och det egna kontot.
 
 const users = { list: [], role: "admin", code: null };
 
-// Förare (user) använder bara Lokföraren. En administratör sköter dem och
-// andra administratörer; ägarna och rollerna är ägarens.
-const ROLE_NAMES = { owner: "Ägare", admin: "Administratör", user: "Förare" };
-
-function roleName(role) {
-  return t(ROLE_NAMES[role] || "Administratör");
-}
-
 function canEditUser(user) {
-  return users.role === "owner" || (users.role === "admin" && ["admin", "user"].includes(user.role));
-}
-
-function canManageAccount(user) {
-  return users.role === "owner" || (users.role === "admin" && user.role === "user");
+  return users.role === "owner" || (users.role === "admin" && user.role !== "owner")
+    || (users.role === "user" && user.user_id === users.userId);
 }
 
 function usersEl(name) {
   return document.querySelector(`#users-${name}`);
 }
 
+function userRoleLabel(role) { return t({owner: "Ägare", admin: "Administratör", user: "Användare"}[role]); }
+
+function fillRoleOptions(select, current) {
+  const roles = users.role === "owner" ? ["owner", "admin", "user"] : users.role === "admin" ? ["admin", "user"] : ["user"];
+  select.replaceChildren(...roles.map(role => new Option(userRoleLabel(role), role)));
+  select.value = current;
+}
+
 function renderUsers() {
   const body = usersEl("rows");
   if (!body) return;
-  const owner = users.role === "owner";
-
-  usersEl("role-chip").textContent = roleName(users.role);
+  usersEl("role-chip").textContent = userRoleLabel(users.role);
   usersEl("invite-open")?.classList.toggle("hidden", !["owner", "admin"].includes(users.role));
-  const inviteRole = usersEl("invite-role");
-  if (inviteRole) {
-    for (const option of inviteRole.options) {
-      option.hidden = option.disabled = !owner && option.value !== "user";
-    }
-    if (!owner) inviteRole.value = "user";
-  }
+  fillRoleOptions(usersEl("invite-role"), "admin");
 
   body.replaceChildren(...users.list.map((user) => {
     const tr = document.createElement("tr");
@@ -5889,7 +6081,7 @@ function renderUsers() {
     const role = document.createElement("td");
     const chip = document.createElement("span");
     chip.className = user.role === "owner" ? "kr-pill sel" : "kr-pill";
-    chip.textContent = roleName(user.role);
+    chip.textContent = userRoleLabel(user.role);
     role.append(chip);
     tr.append(role);
 
@@ -5947,15 +6139,15 @@ function mailBody(body) {
 async function refreshUsers() {
   const message = usersEl("message");
   try {
-    const response = await authorizedFetch("/v1/admin/users");
+    const response = await authorizedFetch(isDriverUser() ? "/v1/account" : "/v1/admin/users");
     if (!response.ok) {
       setMessage(message, "Användarna kunde inte läsas", "error");
       return;
     }
     const payload = await response.json();
-    users.list = payload.users || [];
-    users.role = payload.role || "admin";
-    users.userId = payload.user_id;
+    users.list = payload.users || (payload.user ? [payload.user] : []);
+    users.role = payload.role || payload.user?.role || "admin";
+    users.userId = payload.user_id || payload.user?.user_id;
     // Meddelandet lämnas som det är: varje åtgärd hämtar listan på nytt, och
     // en nollställning här skulle sudda kvittot i samma andetag som det sätts.
     renderUsers();
@@ -6002,7 +6194,7 @@ async function inviteUser(event) {
     (payload) => {
       usersEl("invite-name").value = "";
       usersEl("invite-email").value = "";
-      usersEl("invite-role").value = users.role === "owner" ? "admin" : "user";
+      usersEl("invite-role").value = "admin";
       setMessage(usersEl("message"), ...mailReceipt(name, payload.mail));
     },
   );
@@ -6035,20 +6227,17 @@ function editUser(user) {
   users.editing = user;
   document.querySelector("#user-edit-name").textContent = user.email || t("Saknar e-post – kan inte logga in");
   document.querySelector("#user-edit-display-name").value = user.display_name || "";
-  document.querySelector("#user-edit-role").value = user.role;
-  const owner = users.role === "owner";
   const self = user.user_id === users.userId;
   const role = document.querySelector("#user-edit-role");
-  role.disabled = !owner || self;
-  role.querySelector('option[value="owner"]').hidden = !owner;
-  role.querySelector('option[value="owner"]').disabled = !owner;
+  fillRoleOptions(role, user.role);
+  role.disabled = self;
   document.querySelector("#user-edit-email").value = user.email || "";
   document.querySelector("#user-edit-password").value = "";
   document.querySelector("#user-edit-password-confirm").value = "";
   document.querySelector("#user-delete-confirm").checked = false;
   document.querySelector("#user-edit-delete").disabled = true;
-  document.querySelector("#user-edit-reissue").hidden = !canManageAccount(user) || !user.invitation_pending;
-  document.querySelector("#user-edit-removal").hidden = !canManageAccount(user) || self;
+  document.querySelector("#user-edit-reissue").hidden = !["owner", "admin"].includes(users.role) || !user.invitation_pending;
+  document.querySelector("#user-edit-removal").hidden = !["owner", "admin"].includes(users.role) || self;
   openModal("user-edit-modal");
 }
 
@@ -6071,7 +6260,8 @@ function bindUsersSection() {
     if (email !== (users.editing.email || "")) body.email = email;
     if (password) body.password = password;
     const ownPasswordChanged = Boolean(password) && users.editing.user_id === users.userId;
-    const result = await usersPost("/v1/admin/users/update", body);
+    if (isDriverUser()) delete body.user_id;
+    const result = await usersPost(isDriverUser() ? "/v1/account" : "/v1/admin/users/update", body);
     if (result) {
       document.querySelector("#user-edit-password").value = "";
       document.querySelector("#user-edit-password-confirm").value = "";

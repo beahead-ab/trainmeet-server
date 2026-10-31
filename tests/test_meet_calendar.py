@@ -499,7 +499,7 @@ if __name__ == "__main__":
 
 
 class PlannedWeekTests(unittest.TestCase):
-    """Planens speldygn från Cloud (clock.traffic_week, #100): förval, aldrig före admins val."""
+    """Planens speldygn från Cloud (clock.traffic_week, #100): kalendern vid aktivering, aldrig före admins val."""
 
     def store(self, week):
         temp = TemporaryDirectory()

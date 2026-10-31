@@ -2,6 +2,7 @@
  * spår skrivs alltid som i köruppdraget. Termerna följer Serverns katalog
  * (translations/ui.txt): träffklocka = træfur / treffklokke / Modellzeituhr. */
 globalThis.LokforarenMessages = {
+  "Eget konto": {en: "My account", da: "Egen konto", nb: "Egen konto", de: "Mein Konto"},
   "Körplan": {en: "Run plan", da: "Køreplan", nb: "Kjøreplan", de: "Fahrplan"},
   // Fasta anvisningar i köruppdragen (planeringsfilen, #225).
   "Förberedelse": {en: "Preparation", da: "Forberedelse", nb: "Forberedelse", de: "Vorbereitung"},

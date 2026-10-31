@@ -54,8 +54,8 @@ from .driver import (
     normalize_duty,
 )
 from .driver_documents import MAX_PDF_BYTES, DriverDocuments
+from .cloud_live import LiveChannel
 from .identity import (
-    ADMIN_ROLES,
     AdminAccessError,
     AdminUserConflictError,
     AdminUserPermissionError,
@@ -83,7 +83,7 @@ from .us import USStore, USError
 from .us_clock import clock_settings as validate_us_clock_settings
 from .protocol_v2 import TMBoxStationService, find_track_conflict
 from .train_routes import _visits
-from .train_live import expected_time, on_line_trains, train_live
+from .train_live import expected_time, live_for_row, on_line_trains, train_live
 from . import meet_timeline
 from .runtime import (
     AVAILABLE_CLOCK_STYLES,
@@ -100,6 +100,7 @@ from .runtime import (
     RuntimePublication,
     RuntimePublicationError,
     SQLiteRuntimeStore,
+    TrackDisplayConflict,
     calendar_weekday,
     day_change_time,
     DAY_CHANGE_LEAD_SECONDS,
@@ -412,10 +413,16 @@ class TrainMeetHTTPApplication:
         self.on_clock_changed = None
         self.on_terminal_tick = None
         self._terminal16 = None
+        # Livetrafik och push för Apple Watch via Cloud (#205, #206). Av tills
+        # administratören slår på den; local_server startar trådarna.
+        self.live = LiveChannel(self)
         self.automatic = None
         from .terminal16_public import SessionStore
         self.lab_sessions = SessionStore()
         self.external_clock = ExternalClock()
+        # Tellurian Dispatch (#222): avstängt som standard; bara skuggläge än.
+        from .integrations.tellurian_service import TellurianClearance
+        self.tellurian = TellurianClearance(self)
         self.refresh_clock_source()
         if self.operations_store:
             self.operations_store.external_clock_source = lambda: self.external_clock.status("eu")
@@ -537,6 +544,7 @@ class TrainMeetHTTPApplication:
         if self._terminal16 is None:
             from .terminal16_runtime import Terminal16Service
             self._terminal16 = Terminal16Service(self.station_service)
+            self._terminal16.on_attention = self.live.on_attention
         return self._terminal16
 
     def note_device_seen(self, device_id: str) -> None:
@@ -599,6 +607,82 @@ class TrainMeetHTTPApplication:
         self._touch_browser_client(client.client_id)
         return self._timetable_with_deviations(self.terminal16.timetable(client.client_id))
 
+    # ---------------------------------------------- spårvisning (TMBox iOS #46)
+    #
+    # En stationstilldelad TMBox (även iPhone-appen) läser och ändrar enbart
+    # sin egen stations visningsval. Stationen tas från tilldelningen, aldrig
+    # från anropet, och kontrolleras igen vid varje skrivning. Docs:
+    # docs/tmbox-sparvisning.md.
+
+    def _track_display_scope(self, client: PairedClient):
+        if client.kind != DeviceKind.ESP32_PANEL:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "box_required", "Använd din egen TMBox")
+        self._require_box_access(client, client.client_id)
+        publication = self.station_service.publication()
+        config = self.station_service.session_config() if publication else None
+        station_id = self.identities.station_for_client(client.client_id)
+        if config is None or station_id not in config.stations:
+            return publication, config, None
+        return publication, config, station_id
+
+    def _track_display_view(self, publication, config, station_id) -> dict[str, Any]:
+        from . import track_display
+        if publication is None or config is None:
+            return {"supported": False, "meet_id": None, "publication_id": None, "station": None,
+                    "revision": 0, "customized": False, "tracks": []}
+        if station_id is None:
+            return {"supported": True, "meet_id": publication.meet_id,
+                    "publication_id": publication.publication_id, "station": None,
+                    "revision": 0, "customized": False, "tracks": []}
+        station = config.stations[station_id]
+        saved = self.runtime_store.track_display(publication.meet_id, station_id)
+        return {"supported": True, "meet_id": publication.meet_id,
+                "publication_id": publication.publication_id,
+                "station": {"id": station.id, "code": station.code, "name": station.name},
+                **track_display.describe(config, station_id, saved,
+                                         track_display.operating_points(publication.payload, station_id))}
+
+    def tmbox_track_display(self, client: PairedClient) -> dict[str, Any]:
+        return self._track_display_view(*self._track_display_scope(client))
+
+    def save_tmbox_track_display(self, client: PairedClient, payload: dict[str, Any], *, reset: bool = False) -> dict[str, Any]:
+        from . import track_display
+        publication, config, station_id = self._track_display_scope(client)
+        if publication is None or config is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "runtime_missing", "Ingen aktiv EU-träff på servern.")
+        if station_id is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "station_not_assigned", "Boxen har ingen station.")
+        expected = payload.get("revision")
+        if type(expected) is not int:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_track_display", "Ange revision.")
+        # Fel träff, publicering eller station: läs om, skriv aldrig över något annat.
+        if payload.get("meet_id") != publication.meet_id or payload.get("publication_id") != publication.publication_id:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "stale_publication",
+                               "Träffen har uppdaterats. Läs om spåren.",
+                               details={"current": self._track_display_view(publication, config, station_id)})
+        if payload.get("station_id") != station_id:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "station_changed",
+                               "Boxen har fått en annan station. Läs om spåren.",
+                               details={"current": self._track_display_view(publication, config, station_id)})
+        order = hidden = None
+        if not reset:
+            try:
+                order, hidden = track_display.parse_save(track_display.catalogue(config, station_id),
+                                                         payload.get("tracks"))
+            except KeyError:
+                raise HTTPAPIError(HTTPStatus.CONFLICT, "tracks_changed",
+                                   "Stationens spår har ändrats. Läs om spåren.",
+                                   details={"current": self._track_display_view(publication, config, station_id)}) from None
+            except ValueError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_track_display", str(error)) from error
+        try:
+            self.runtime_store.save_track_display(publication.meet_id, station_id, expected, order, hidden)
+        except TrackDisplayConflict:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "revision_conflict",
+                               "Någon annan har ändrat spårvisningen. Läs om spåren.",
+                               details={"current": self._track_display_view(publication, config, station_id)}) from None
+        return self._track_display_view(publication, config, station_id)
+
     def _timetable_with_deviations(self, result: dict[str, Any]) -> dict[str, Any]:
         """Boxens tidtabell med förseningar och för tidiga tåg, som webbens vyer.
 
@@ -618,8 +702,19 @@ class TrainMeetHTTPApplication:
         trains = train_live(timetable.get("services", []), timetable.get("trains", []), live,
                             _clock_seconds(self.operations_store.clock_status()),
                             on_line_trains(connection_states, self.operations_store.positions()))
+        # Raden hör till sitt eget tåg, också när två tåg delar nummer (Cloud #100).
+        service_ids = {str(row["id"]): str(row.get("service_id") or "") for row in timetable.get("trains", [])}
+        _, services, _ = self._identified(publication, timetable)
+        identity = {str(service.get("id")): service for service in services}
         for row in result.get("rows", []):
-            train = trains.get(str(row.get("train_number")))
+            service = identity.get(service_ids.get(str(row.get("movement_id") or ""), ""), {})
+            # Två tåg med samma nummer: boxen visar förkortningen, "IC 116".
+            if service.get("short_label"):
+                row.update(train_label=service["short_label"], service_key=service["service_key"])
+            # Ett tåg som inte kan köras som planen säger körs av människor.
+            if service.get("manual"):
+                row.update(manual=True, manual_reasons=service["manual_reasons"])
+            train = live_for_row(trains, row, service_ids)
             delay = train["delay_minutes"] if train and train["state"] != "arrived" else 0
             row.update({"delay_minutes": delay, "expected_time": expected_time(row.get("time"), delay),
                         "estimated": bool(train and train["estimated"]),
@@ -627,7 +722,20 @@ class TrainMeetHTTPApplication:
                         "early_kind": train["early_kind"] if train else None,
                         "train_type": train["train_type"] if train else "person"})
         result["deviation_level"] = self.runtime_store.deviation_level(publication.meet_id)["level"]
+        result["traffic_day"] = self._traffic_day(publication, day)
+        # Träffklockan i sekunder sedan trafikdygnets midnatt (över 86 400 efter
+        # midnatt), så att en klient räknar rätt kring midnatt med radernas
+        # service_day_offset (trainmeet-tmbox-ios #51).
+        clock = self.operations_store.clock_status()
+        result["clock_elapsed_seconds"] = clock.get("elapsed_seconds")
+        result["clock_time"] = clock.get("time")
         return result
+
+    def _traffic_day(self, publication, day: str) -> dict[str, Any]:
+        """Trafikdagen boxen och TKL kör: veckodagen (planens, när träffen följer
+        planens kalender) och vilket speldygn det är."""
+        calendar = self.runtime_store.meet_calendar(publication.meet_id) if self.runtime_store else {}
+        return {"day": day, "weekday": calendar.get("weekday"), "day_number": calendar.get("day_number")}
 
     @runtime_view
     def terminal16_command(self, client, payload):
@@ -674,7 +782,7 @@ class TrainMeetHTTPApplication:
         selected = self.lifecycle.selected() if self.lifecycle else None
         region = selected["region"] if selected else None
         country = self._meet_country()
-        admin = client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}
+        admin = client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN} and client.admin_role in {"owner", "admin"}
         workspaces = ["administration"] if admin else []
         if region == "eu" and (admin or client.kind == DeviceKind.TKL_TERMINAL):
             workspaces.append("tkl")
@@ -1024,19 +1132,14 @@ class TrainMeetHTTPApplication:
     # ------------------------------------------------------- användare
 
     def _require_owner(self, client: PairedClient) -> None:
-        """Bara ägaren får ändra vilka som har tillgång.
-
-        En administratör kan allt annat på servern. Skillnaden är avsiktligt
-        smal: den som lagts till ska kunna sköta en träff fullt ut, men inte
-        kunna ge sig själv sällskap eller ta bort den som bjöd in hen.
-        """
+        """Owner-only operations, beyond ordinary account administration."""
 
         self._require_admin(client)
         if client.admin_role != "owner":
             raise HTTPAPIError(
                 HTTPStatus.FORBIDDEN,
                 "owner_required",
-                "Bara ägaren kan lägga till och ta bort användare",
+                "Ägarbehörighet krävs",
             )
 
     def admin_users(self, client: PairedClient) -> dict[str, Any]:
@@ -1044,36 +1147,27 @@ class TrainMeetHTTPApplication:
         return {"users": self.identities.list_admin_users(), "role": client.admin_role,
                 "user_id": client.admin_user_id}
 
-    def _require_owner_unless_driver(self, client: PairedClient, role: object) -> None:
-        """Förare (user) får en administratör också bjuda in och ta bort.
-
-        Arrangören som sköter träffen ska kunna ta in förarna utan att ägaren
-        finns på plats. Alla andra konton är fortfarande ägarens.
-        """
-
-        self._require_admin(client)
-        if role != "user" or client.admin_role not in ADMIN_ROLES:
-            self._require_owner(client)
-
     def create_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        role = str(payload.get("role") or "admin")
-        self._require_owner_unless_driver(client, role)
+        self._require_admin(client)
         try:
             user = self.identities.invite_admin_user(
                 str(payload.get("display_name") or ""),
                 str(payload.get("email") or ""),
-                role,
+                str(payload.get("role") or "admin"), actor=client,
             )
+        except AdminUserPermissionError as error:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_user_forbidden", str(error)) from error
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
         self._record_user_change(client, "user.invited", str(user.get("display_name")))
         return {"user": user, "mail": self._mail_account_code("invite", user, payload)}
 
     def reissue_admin_setup(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        self._require_owner_unless_driver(
-            client, (self.identities.admin_user(str(payload.get("user_id") or "")) or {}).get("role"))
+        self._require_admin(client)
         try:
-            user = self.identities.reissue_admin_setup(str(payload.get("user_id") or ""))
+            user = self.identities.reissue_admin_setup(str(payload.get("user_id") or ""), actor=client)
+        except AdminUserPermissionError as error:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_user_forbidden", str(error)) from error
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_admin_user", str(error)) from error
         self._record_user_change(client, "user.invitation_reissued", str(user.get("display_name")))
@@ -1197,19 +1291,13 @@ class TrainMeetHTTPApplication:
         )
 
     def delete_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_admin(client)
         user_id = str(payload.get("user_id") or "")
-        self._require_owner_unless_driver(client, (self.identities.admin_user(user_id) or {}).get("role"))
-        # Att ta bort sig själv är inte en behörighetsfråga utan ett misstag.
-        # Den som vill sluta ber någon annan ägare ta bort kontot.
-        if client.admin_user_id and client.admin_user_id == user_id:
-            raise HTTPAPIError(
-                HTTPStatus.CONFLICT,
-                "cannot_remove_self",
-                "Du kan inte ta bort ditt eget konto. Be en annan ägare göra det.",
-            )
         target = (self.identities.admin_user(user_id) or {}).get("display_name", user_id)
         try:
-            self.identities.delete_admin_user(user_id)
+            self.identities.delete_admin_user(user_id, actor=client)
+        except AdminUserPermissionError as error:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_user_forbidden", str(error)) from error
         except AdminAccessError as error:
             raise HTTPAPIError(HTTPStatus.CONFLICT, "invalid_admin_user", str(error)) from error
         self.drivers.forget_user(user_id)
@@ -1217,7 +1305,7 @@ class TrainMeetHTTPApplication:
         return {"users": self.identities.list_admin_users()}
 
     def update_admin_user(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        """Owners edit all accounts; administrators edit administrators."""
+        """Owners edit all accounts; administrators edit non-owner accounts."""
 
         self._require_admin(client)
         user_id = str(payload.get("user_id") or "")
@@ -1238,6 +1326,26 @@ class TrainMeetHTTPApplication:
                               ("role", "user.role_changed"), ("password", "user.password_changed")):
             if payload.get(field) is not None and (field != "password" or payload[field]):
                 self._record_user_change(client, action, user_id)
+        return {"user": user}
+
+    def own_account(self, client: PairedClient, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        if not client.admin_user_id:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "account_required", "Ett inloggat konto krävs")
+        if payload is None:
+            return {"user": self.identities.admin_user(client.admin_user_id)}
+        if set(payload) - {"display_name", "email", "password"}:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "account_fields_forbidden", "Bara eget namn, e-post och lösenord får ändras")
+        try:
+            user = self.identities.update_admin_user(client.admin_user_id, client, **{
+                key: str(value) for key, value in payload.items() if value is not None
+            })
+        except AdminUserPermissionError as error:
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "account_forbidden", str(error)) from error
+        except AdminAccessError as error:
+            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_account", str(error)) from error
+        for field in payload:
+            if field != "password" or payload[field]:
+                self._record_user_change(client, "user." + {"display_name": "renamed", "email": "email_changed", "password": "password_changed"}[field], client.admin_user_id)
         return {"user": user}
 
     def installation_status(self) -> dict[str, Any]:
@@ -1420,6 +1528,8 @@ class TrainMeetHTTPApplication:
         if self.us_store is None:
             raise HTTPAPIError(HTTPStatus.SERVICE_UNAVAILABLE, "us_unavailable", "US runtime is not configured")
         dispatcher = client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}
+        if dispatcher:
+            self._require_admin(client)
         if not dispatcher and client.kind != DeviceKind.US_CONDUCTOR:
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "us_access_required", "US dispatcher or conductor access required")
         actor = f"user:{client.admin_user_id}" if client.admin_user_id else f"client:{client.client_id}"
@@ -1619,6 +1729,7 @@ class TrainMeetHTTPApplication:
 
     def _require_box_access(self, client: PairedClient, device_id: str) -> None:
         if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
+            self._require_admin(client)
             return
         current = self.identities.client(client.client_id)
         if current is None or current.kind != DeviceKind.ESP32_PANEL or device_id != current.client_id:
@@ -1902,6 +2013,7 @@ class TrainMeetHTTPApplication:
                 # på stationen (Casper, 2026-10-10).
                 positions = self._without_stabled(publication, positions, stabled)
         calendar = self.calendar_state() if publication is not None and not (selected and selected["region"] == "us") else None
+        trains, services, manual = self._identified(publication, timetable)
         return {
             "protocol_version": 1,
             "revision": self.engine.revision,
@@ -1914,9 +2026,11 @@ class TrainMeetHTTPApplication:
             "connection_states": connection_states,
             "autonomous_links": autonomous_links,
             "tracks": timetable.get("tracks", []),
-            "trains": timetable.get("trains", []),
+            "trains": trains,
             "routes": timetable.get("routes", []),
-            "services": timetable.get("services", []),
+            "services": services,
+            # Tåg som körs manuellt, med skälen (Cloud #100 B5). Tomt annars.
+            "manual_trains": manual,
             "display": display,
             # Vad som finns under Om trafikspelet; texterna själva i /v1/about.
             "about": meet_about.summary(publication.payload if publication is not None else None),
@@ -1929,6 +2043,39 @@ class TrainMeetHTTPApplication:
             "us": self.us_display_snapshot() if selected and selected["region"] == "us" else None,
             "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
+
+    def _identified(self, publication, timetable: dict[str, Any]) -> tuple[list, list, list]:
+        """Dagens rader och tåg med etikett där två tåg delar nummer, och de
+        manuella tågen (Cloud #100). Paketet ändras inte; raderna är kopior.
+
+        Ett tåg vars nummer ett annat tåg också har får `train_label`
+        ("DSB IC 116"), `short_label` ("IC 116") och `service_key`. Ett tåg
+        som körs manuellt får `manual` och `manual_reasons`.
+        """
+        services = timetable.get("services", [])
+        trains = timetable.get("trains", [])
+        if publication is None:
+            return trains, services, []
+        from .train_identity import manual_summary, shared_labels
+        labels = shared_labels(services)
+        manual_all = self.runtime_store.manual_trains(publication) if self.runtime_store else {}
+        day_ids = {str(service.get("id")) for service in services}
+        manual = {key: value for key, value in manual_all.items() if key in day_ids}
+        if not labels and not manual:
+            return trains, services, []
+
+        def extra(service_id: str) -> dict[str, Any]:
+            item: dict[str, Any] = {}
+            if service_id in labels:
+                item.update(train_label=labels[service_id]["label"], short_label=labels[service_id]["short_label"],
+                            service_key=labels[service_id]["service_key"])
+            if service_id in manual:
+                item.update(manual=True, manual_reasons=manual[service_id])
+            return item
+
+        return ([{**row, **extra(str(row.get("service_id")))} for row in trains],
+                [{**service, **extra(str(service.get("id")))} for service in services],
+                manual_summary({"services": services}, manual, labels))
 
     def _with_departure_times(self, publication, active_day, connection_states, positions):
         """Träffklockans tid när varje tåg på linjen avgick, så att kartan kan
@@ -2341,6 +2488,14 @@ class TrainMeetHTTPApplication:
             # Trains that end here and are put away (by whom): their track
             # is free. Additive; older terminals ignore it.
             "stabled": self._stabled_here(station_id),
+            # Cloud #100: the traffic day (the plan's weekday), the short name
+            # of a train that shares its number with another ("IC 116"), and
+            # trains run by people because they cannot run as planned.
+            # Additive; older terminals ignore them.
+            "traffic_day": {"day": snapshot["active_day"], "weekday": (snapshot.get("calendar") or {}).get("weekday"),
+                            "day_number": (snapshot.get("calendar") or {}).get("day_number")},
+            "train_labels": {str(row["id"]): row["short_label"] for row in trains if row.get("short_label")},
+            "manual_movements": {str(row["id"]): row["manual_reasons"] for row in trains if row.get("manual")},
         }
 
     @staticmethod
@@ -2764,6 +2919,7 @@ class TrainMeetHTTPApplication:
 
     def _require_station_access(self, client: PairedClient, station_id: str) -> None:
         if client.kind in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
+            self._require_admin(client)
             return
         if client.kind == DeviceKind.TKL_TERMINAL:
             # A signal box asks for its station every few seconds: that is its
@@ -2793,6 +2949,23 @@ class TrainMeetHTTPApplication:
         if self.runtime_store:
             scope = self._clock_scope()
             self.external_clock.configure(scope, self.runtime_store.clock_source_settings(scope))
+        # Samma tillfälle som klockan: träffen kan ha bytts, och Tellurian är per träff.
+        if getattr(self, "tellurian", None) is not None:
+            self.tellurian.refresh()
+
+    def tellurian_clearance(self, client, payload=None, *, action="status"):
+        """Inställningar → Klarering → Tellurian Dispatch. Bara administratören."""
+        self._require_admin(client)
+        from .integrations.tellurian_service import SettingsError, error_response
+        try:
+            if action == "configure":
+                return self.tellurian.configure(payload or {})
+            if action == "test":
+                return self.tellurian.test_connection(payload or {})
+            return self.tellurian.status()
+        except SettingsError as error:
+            status, message = error_response(error.code)
+            raise HTTPAPIError(HTTPStatus(status), "tellurian_" + error.code, message) from None
 
     def clock_source_settings(self, client):
         self._require_admin(client)
@@ -3880,6 +4053,82 @@ class TrainMeetHTTPApplication:
             detail={"revision": current_revision + 1, "lines": local_edits.describe(edits, base.payload)})
         return self._meet_data_state(after, generation=updated["generation"], changed=True)
 
+    #: Allt i ett paket utom tidtabellen. En Cloud-version som bara rättar
+    #: tidtabellen kan läggas på mitt under spelet (B6); ändras något av
+    #: det här väntar den tills trafiken är lugn, som förut.
+    _CORRECTION_TIMETABLE_KEYS = {"publication_id", "published_at", "trains", "services", "routes", "findings", "connections"}
+
+    @staticmethod
+    def _timetable_only(before: dict[str, Any], after: dict[str, Any]) -> bool:
+        keys = (set(before) | set(after)) - TrainMeetHTTPApplication._CORRECTION_TIMETABLE_KEYS
+        if any(before.get(key) != after.get(key) for key in keys):
+            return False
+        # Sträckorna får bara byta spårtyp, som en lokal ändring.
+        strip = lambda items: [{k: v for k, v in item.items() if k != "track_type"} for item in items or []]
+        return strip(before.get("connections")) == strip(after.get("connections"))
+
+    @runtime_command("eu")
+    def apply_cloud_correction(self, *, package: dict[str, Any]) -> dict[str, Any]:
+        """En väntande Cloud-version för samma träff, på de tåg den rättar (Cloud #100 B6).
+
+        Hela versionen väntar på att trafiken blir lugn. Rättar den bara
+        tidtabellen (tider, spår, dagar, borttagna tåg, spårtyp) läggs den
+        under tiden som ett lager på den aktiva publiceringen: samma id och
+        samma rader, så pågående tåg, klareringar, TKL och boxar står kvar.
+        Bara de tåg som ändras prövas, och ett tåg som är ute på linjen eller
+        har en öppen klarering väntar tills det har kommit fram. Lokala
+        ändringar som admin gjort ersätts aldrig här.
+        """
+        from types import SimpleNamespace
+        publication = self._meet_data_publication()
+        selected = self.lifecycle.assert_selected("eu", publication_id=publication.publication_id)
+        try:
+            incoming = RuntimePublication.parse(package)
+        except RuntimePublicationError:
+            return {"applied": False, "reason": "invalid"}
+        base = self.runtime_store.publication(publication.publication_id)
+        if base is None or incoming.meet_id != base.meet_id or incoming.publication_id == base.publication_id:
+            return {"applied": False, "reason": "not_applicable"}
+        actor = "cloud:" + incoming.publication_id
+        current = self.runtime_store.local_edits(publication.publication_id)
+        if current is not None and not str(current["actor"]).startswith("cloud:"):
+            return {"applied": False, "reason": "local_edits"}
+        if current is not None and current["actor"] == actor:
+            return {"applied": True, "count": 0, "already": True}
+        if not self._timetable_only(base.payload, incoming.payload):
+            return {"applied": False, "reason": "not_timetable_only"}
+        try:
+            effective, edits = local_edits.apply_draft(base.payload, local_edits.draft_from_publication(incoming.payload))
+            reviewed = local_edits.review(effective, incoming.payload.get("findings"))
+            RuntimePublication.parse(local_edits.with_findings(effective, reviewed))
+        except (LocalEditError, RuntimePublicationError):
+            # Nya tåg, nya fält eller annat som bara hela versionen kan ge.
+            return {"applied": False, "reason": "not_timetable_only"}
+        changed, removed, connections = self._timetable_delta(publication.payload, effective)
+        if not changed and not removed and not connections:
+            return {"applied": True, "count": 0}
+        # Ett tåg som är på väg rörs inte: varje rörelse i ett tåg som ändras
+        # prövas, inte bara den ändrade raden (en ny ankomsttid för ett tåg
+        # som just har fått klarering väntar tills det har kommit fram).
+        services = {str(row.get("service_id")) for row in publication.payload["trains"] if str(row["id"]) in {**changed, **removed}}
+        whole = {str(row["id"]): str(row.get("train_number") or "") for row in publication.payload["trains"]
+                 if str(row.get("service_id")) in services}
+        try:
+            self._meet_data_blockers(publication, {**whole, **changed}, removed, connections)
+        except HTTPAPIError as error:
+            return {"applied": False, "blocked": str(error)}
+        revision = current["revision"] if current else 0
+        cloud = SimpleNamespace(admin_user_id="cloud", display_name="TrainMeet Cloud")
+        trains = {**changed, **removed}
+        self._commit_meet_data(
+            cloud, selected, before=publication,
+            write=lambda: self.runtime_store.save_local_edits(base, effective, edits, reviewed, actor=actor, expected_revision=revision),
+            revert=lambda saved: self.runtime_store.reinstate_local_edits(publication.publication_id, revision, drop=saved.local_revision),
+            connections=connections, action="meet_data.cloud_correction",
+            detail={"cloud_publication_id": incoming.publication_id, "revision": revision + 1,
+                    "lines": local_edits.describe(edits, base.payload)})
+        return {"applied": True, "count": len(set(trains.values())), "trains": sorted(set(trains.values()))}
+
     @runtime_command("eu")
     def discard_meet_data(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
         """Clouds tidtabell gäller igen. Lagret står kvar som historik, och en säkerhetskopia tas först."""
@@ -4204,8 +4453,8 @@ class TrainMeetHTTPApplication:
                            self.operations_store.movement_live(publication.publication_id, active_day),
                            _clock_seconds(self.operations_store.clock_status()),
                            on_line_trains(self.engine.shared_traffic.connection_states() if self.engine.shared_traffic is not None else [],
-                                          self.operations_store.positions())).get(number)
-                if self.operations_store is not None else None)
+                                          self.operations_store.positions()))
+                if self.operations_store is not None else {})
         result = []
         for service in services:
             ordered = sorted(service.get("stops", []), key=lambda stop: int(stop.get("stop_order") or 0))
@@ -4227,7 +4476,8 @@ class TrainMeetHTTPApplication:
             result.append({
                 "service_id": service.get("id"), "train_type": service.get("train_type", ""), "stops": stops,
                 "now": self._train_now(stops, cases, position, stabled),
-                "delay_minutes": self._train_delay(running),
+                # Varje tåg sin egen försening, också när två delar nummer.
+                "delay_minutes": self._train_delay(running.get(str(service.get("id"))) or running.get(number)),
             })
         return {"train_number": number, "active_day": active_day, "services": result}
 
@@ -5221,9 +5471,12 @@ class TrainMeetHTTPApplication:
                 # undo them; the next hello republishes the current assignment.
                 LOGGER.exception("Could not publish changed TMBox assignment")
 
-    @staticmethod
-    def _require_admin(client: PairedClient) -> None:
-        if client.kind not in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN}:
+    def _require_admin(self, client: PairedClient) -> None:
+        role = client.admin_role
+        if client.admin_user_id:
+            user = self.identities.admin_user(client.admin_user_id)
+            role = str(user["role"]) if user else ""
+        if client.kind not in {DeviceKind.WEB_ADMIN, DeviceKind.SWIFT_ADMIN} or role not in {"owner", "admin"}:
             raise HTTPAPIError(
                 HTTPStatus.FORBIDDEN,
                 "admin_required",
@@ -5311,6 +5564,8 @@ class TrainMeetHTTPApplication:
             "/assets/pdfjs/pdf.min.mjs": "pdfjs/pdf.min.mjs",
             "/assets/pdfjs/pdf.worker.min.mjs": "pdfjs/pdf.worker.min.mjs",
             "/assets/pi-network.js": "pi-network.js",
+            "/assets/tellurian-settings.js": "tellurian-settings.js",
+            "/assets/tellurian-messages.js": "tellurian-messages.js",
             "/assets/data-page.js": "data-page.js",
             "/assets/data-workspace.js": "data-workspace.js",
             "/assets/kr-theme.js": "kr-theme.js",
@@ -5401,6 +5656,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            self._guard_user_admin_api(path)
+            if path == "/v1/account":
+                self._send_json(HTTPStatus.OK, self.server.application.own_account(self._authenticated_client()))
+                return
             if path.startswith("/v1/driver/"):
                 self._driver_get(path, parsed.query)
                 return
@@ -5448,6 +5707,15 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/tmbox/terminal/timetable":
                 self._send_json(HTTPStatus.OK, self.server.application.terminal16_timetable(self._authenticated_client()))
                 return
+            if path == "/v1/tmbox/terminal/track-display":
+                self._send_json(HTTPStatus.OK, self.server.application.tmbox_track_display(self._authenticated_client()))
+                return
+            if path == "/v1/tmbox/watch":
+                self._send_json(HTTPStatus.OK, self.server.application.live.box_status(self._authenticated_client()))
+                return
+            if path == "/v1/cloud/live":
+                self._send_json(HTTPStatus.OK, self.server.application.live.admin_status(self._authenticated_client()))
+                return
             if path == "/v1/clock":
                 self._send_json(HTTPStatus.OK, self.server.application.clock_status(self._authenticated_client()))
                 return
@@ -5456,6 +5724,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/clock/source":
                 self._send_json(HTTPStatus.OK, self.server.application.clock_source_settings(self._authenticated_client()))
+                return
+            if path == "/v1/clearance/tellurian":
+                self._send_json(HTTPStatus.OK, self.server.application.tellurian_clearance(self._authenticated_client()))
                 return
             if path == "/v1/us/context":
                 self._send_json(HTTPStatus.OK, self.server.application.us_context(self._authenticated_client()))
@@ -5557,6 +5828,8 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     {
                         "authenticated": client is not None,
+                        "role": client.admin_role if client else None,
+                        "can_use_driver": bool(client and client.admin_role in {"owner", "admin", "user"}),
                         # Läget svarar på hur man är inne. "local" betyder att
                         # servern släpper in utan inloggning, och det gör den
                         # numera bara innan det finns ett lösenord att logga in
@@ -5590,7 +5863,7 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/info":
                 client = self._optional_authenticated_client()
-                if client is None:
+                if client is None or client.admin_role == "user":
                     self._send_json(
                         HTTPStatus.OK,
                         {
@@ -5757,6 +6030,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         try:
+            self._guard_user_admin_api(path)
+            if path == "/v1/account":
+                self._send_json(HTTPStatus.OK, self.server.application.own_account(self._authenticated_client(), self._read_json()))
+                return
             if path.startswith("/tmbox-lab/"):
                 from .terminal16_embedded import serve
                 return serve(self, "POST")
@@ -5907,6 +6184,19 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/tmbox/terminal":
                 self._send_json(HTTPStatus.OK, self.server.application.terminal16_command(self._authenticated_client(), payload))
+                return
+            if path in {"/v1/tmbox/terminal/track-display", "/v1/tmbox/terminal/track-display/reset"}:
+                self._send_json(HTTPStatus.OK, self.server.application.save_tmbox_track_display(
+                    self._authenticated_client(), payload, reset=path.endswith("/reset")))
+                return
+            if path == "/v1/tmbox/push":
+                self._send_json(HTTPStatus.OK, self.server.application.live.register(self._authenticated_client(), payload))
+                return
+            if path == "/v1/tmbox/answer":
+                self._send_json(HTTPStatus.OK, self.server.application.live.answer(self._authenticated_client(), payload))
+                return
+            if path == "/v1/cloud/live":
+                self._send_json(HTTPStatus.OK, self.server.application.live.configure(self._authenticated_client(), payload))
                 return
             if path == "/v1/automatic-stations":
                 self._send_json(HTTPStatus.OK, self.server.application.control_automatic_stations(self._authenticated_client(), payload))
@@ -6210,6 +6500,14 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/clock/source":
                 self._send_json(HTTPStatus.OK, self.server.application.configure_clock_source(self._authenticated_client(), payload))
                 return
+            if path in {"/v1/clearance/tellurian", "/v1/clearance/tellurian/test"}:
+                origin = self.headers.get("Origin")
+                if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get("Sec-Fetch-Site") == "cross-site":
+                    raise HTTPAPIError(HTTPStatus.FORBIDDEN, "same_origin_required", "Öppna sidan från den lokala TrainMeet Server")
+                action = "test" if path.endswith("/test") else "configure"
+                self._send_json(HTTPStatus.OK, self.server.application.tellurian_clearance(
+                    self._authenticated_client(), payload, action=action))
+                return
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
         except MeetLifecycleError as error:
             self._send_api_error(HTTPAPIError(HTTPStatus.CONFLICT, "meet_context_conflict", str(error)))
@@ -6275,6 +6573,25 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         forwarded = any(self.headers.get(name) for name in ("Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto"))
         return secure_proxy or (self._client_address_is_loopback() and not forwarded)
 
+    def _guard_user_admin_api(self, path: str) -> None:
+        # A driver session may use its profile and the same read-only feeds
+        # as guests. Default-deny also covers newly added traffic/admin APIs.
+        if not (path.startswith("/v1/") or path.startswith("/tmbox-lab/")):
+            return
+        client = self._optional_authenticated_client()
+        if not client or client.admin_role != "user":
+            return
+        if path == "/v1/account" or path.startswith("/v1/driver/"):
+            return
+        if self.command == "GET" and (path in {
+            "/v1/auth/status", "/v1/workspaces", "/v1/display", "/v1/about",
+            "/v1/events", "/v1/setup", "/v1/info",
+        } or path.startswith("/v1/clock-faces/")):
+            return
+        if self.command == "POST" and path in {"/v1/auth/login", "/v1/auth/logout"}:
+            return
+        raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_required", "Administratörsbehörighet krävs")
+
     def _authenticated_client(self) -> PairedClient:
         authorization = self.headers.get("Authorization", "")
         prefix = "Bearer "
@@ -6294,6 +6611,8 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 "authentication_required",
                 "Administratörsinloggning krävs",
             )
+        if client.admin_role == "user" and urlparse(self.path).path != "/v1/account":
+            raise HTTPAPIError(HTTPStatus.FORBIDDEN, "admin_required", "Administratörsbehörighet krävs")
         return client
 
     def _optional_authenticated_client(self) -> PairedClient | None:
@@ -6306,9 +6625,8 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         token = self._admin_session_token()
         if token:
             user = self.server.application.identities.admin_session_user(token)
-            # En förare (user) är inloggad men ingen administratör: sessionen
-            # öppnar bara Lokföraren (/v1/driver/*), aldrig ett admin-API.
-            if user is not None and user.get("role") in ADMIN_ROLES:
+            # Account role is enforced by the API guard and mutation transaction.
+            if user is not None:
                 return self.server.application.local_admin(user)
         return None
 

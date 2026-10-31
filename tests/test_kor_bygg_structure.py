@@ -90,8 +90,8 @@ class ShellStructureTests(unittest.TestCase):
         self.assertNotIn('href="#workspaces"', self.html)
         self.assertNotIn('data-open-view="admin"', self.html)
 
-    def test_home_is_drift_when_signed_in_and_the_participant_view_otherwise(self):
-        self.assertIn('function workspaceHome() { return state.authStatus?.authenticated ? "/drift" : "/"; }', self.js)
+    def test_home_has_admin_and_participant_containers(self):
+        # Role-specific navigation is exercised by user-roles-live.test.cjs.
         self.assertIn('history.replaceState(null, "", "/drift");', self.js)
         self.assertIn('id="workspace-home"', self.html)
         self.assertIn('id="participant-view"', self.html)
@@ -109,7 +109,7 @@ class ShellStructureTests(unittest.TestCase):
         sections = re.search(r"const SECTIONS = \[([^\]]*)\]", (WEB / "settings.js").read_text())
         self.assertIsNotNone(sections)
         names = re.findall(r'"(\w+)"', sections.group(1))
-        self.assertEqual(names, ["traff", "skarmar", "wifi", "obemannade", "lokforare", "server", "kod", "anvandare", "uppdatering", "sprak", "visning", "farozon"])
+        self.assertEqual(names, ["traff", "skarmar", "wifi", "obemannade", "klarering", "lokforare", "server", "kod", "anvandare", "uppdatering", "sprak", "visning", "farozon"])
         for name in names:
             self.assertIn(f'<section id="{name}" class="kr-setsec" data-section="{name}"', self.html)
             self.assertIn(f'href="/installningar#{name}"', self.html)
@@ -133,7 +133,7 @@ class ShellStructureTests(unittest.TestCase):
         """Inställningar: varje panel som går att ändra är ett eget formulär med
         Avbryt och Spara, släckta tills något skiljer sig från det sparade."""
         forms = re.findall(r'<form id="([\w-]+)" class="kr-panel kr-setform"', self.html)
-        self.assertEqual(forms, ["cloud-auto-form", "meet-calendar-form", "traffic-side-form", "automatic-form", "automatic-disturbance-form", "clock-appearance-form", "deviation-level-form", "connection-wifi-form",
+        self.assertEqual(forms, ["cloud-auto-form", "cloud-live-form", "meet-calendar-form", "traffic-side-form", "automatic-form", "automatic-disturbance-form", "tellurian-form", "clock-appearance-form", "deviation-level-form", "connection-wifi-form",
                                  "connection-badge-form", "server-identity-form", "connection-code-form", "language-form", "browser-deviation-form"])
         for name in forms:
             start = self.html.index(f'<form id="{name}"')

@@ -113,11 +113,13 @@ class SyncGoesOneWayTests(unittest.TestCase):
 
 
 class MailIsTheOnlyWriteTests(unittest.TestCase):
-    """Undantaget från D1, och hur smalt det är.
+    """Undantagen från D1, och hur smala de är.
 
-    Servern får be Cloud skicka en inbjudan eller en kod för nytt lösenord
-    (cloud_mail.py). Det är det enda som går uppåt, och det bär bara ett brev:
-    inga träffdata, ingen konfiguration och ingen historik.
+    Två saker får gå uppåt, var och en i sin egen modul med ett enda anrop:
+    ett brev (cloud_mail.py: en inbjudan eller en kod för nytt lösenord) och
+    livetrafiken från klockan (cloud_live.py, Caspers beslut 29 oktober, se
+    LiveTrafficIsNarrowTests). Inga träffdata, ingen konfiguration och ingen
+    historik.
     """
 
     def test_one_request_in_one_module_writes_to_cloud(self):
@@ -126,10 +128,20 @@ class MailIsTheOnlyWriteTests(unittest.TestCase):
             for node in ast.walk(ast.parse(text)):
                 if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Request"
                         and {keyword.arg for keyword in node.keywords} & {"data", "method"}):
-                    writers.append(path.name)
-        # Inte Cloud: GitHub-releaser och klubbens egen snabbklocka på träffens nät.
-        not_cloud = {"software_update.py", "external_clock.py"}
-        self.assertEqual(["cloud_mail.py"], [name for name in writers if name not in not_cloud])
+                    writers.append(path.relative_to(SOURCE).as_posix())
+        # Inte Cloud: GitHub-releaser, klubbens snabbklocka och den uttryckligt
+        # loopbackbegränsade simulatorn. Matcha exakt sökväg, inte bara filnamn.
+        # cloud_live.py är det smala undantaget från D1 för klockans livetrafik (#205/#206).
+        not_cloud = {"software_update.py", "external_clock.py", "integrations/http_sandbox.py"}
+        self.assertEqual(["cloud_live.py", "cloud_mail.py"], [name for name in writers if name not in not_cloud])
+
+    def test_the_sandbox_writer_rejects_cloud_and_other_external_origins(self):
+        from tmbox_gateway.integrations.http_sandbox import HttpSandboxAdapter
+
+        for origin in ("https://cloud.trainmeet.app", "http://example.invalid:80",
+                       "http://localhost:80", "http://127.0.0.1:80@cloud.trainmeet.app"):
+            with self.subTest(origin=origin), self.assertRaises(ValueError):
+                HttpSandboxAdapter(origin, "synthetic-account", "synthetic-password")
 
     def test_the_letter_has_a_fixed_set_of_fields(self):
         from tmbox_gateway.cloud_mail import MAIL_FIELDS
@@ -139,6 +151,54 @@ class MailIsTheOnlyWriteTests(unittest.TestCase):
         text = (SOURCE / "cloud_mail.py").read_text(encoding="utf-8")
         self.assertIn("if key in MAIL_FIELDS", text)
         self.assertIn('"/api/server-mail"', text.replace("{path}", ""))
+
+
+class LiveTrafficIsNarrowTests(unittest.TestCase):
+    """Det andra undantaget från D1: livetrafik från klockan (#205, #206).
+
+    Casper beslutade den 29 oktober om en egen kanal bara för livetrafik från
+    klockan: TMBox-anrop genom reläet och push-händelser. Testerna här låser
+    vad som får gå den vägen. En väg eller ett fält till ska vara ett nytt
+    beslut, inte en rad kod som ingen märker.
+    """
+
+    def test_only_the_tmbox_calls_go_through_the_relay(self):
+        from tmbox_gateway.cloud_live import RELAY_ROUTES
+        self.assertEqual({
+            ("GET", "/v1/tmbox/terminal"), ("POST", "/v1/tmbox/terminal"),
+            ("GET", "/v1/tmbox/terminal/timetable"), ("GET", "/v1/clock"),
+            ("POST", "/v1/tmbox/push"), ("POST", "/v1/tmbox/answer"),
+        }, set(RELAY_ROUTES))
+
+    def test_a_push_event_carries_only_what_the_notice_needs(self):
+        from tmbox_gateway.cloud_live import EVENT_FIELDS, PUSH_KINDS, RECIPIENT_FIELDS
+        from tmbox_gateway.terminal16 import ATTENTION_KINDS
+        self.assertEqual({"event_id", "kind", "train_number", "from_station", "to_station", "request_id",
+                          "proof", "language", "expires_in", "recipients"}, set(EVENT_FIELDS))
+        self.assertEqual({"device", "token", "environment"}, set(RECIPIENT_FIELDS))
+        self.assertEqual(ATTENTION_KINDS, PUSH_KINDS, "bara de händelser boxen redan låter för")
+
+    def test_it_talks_to_two_cloud_addresses_and_nothing_else(self):
+        code = _code_only((SOURCE / "cloud_live.py").read_text(encoding="utf-8"))
+        addresses = {line.split("/api/")[1].split('"')[0].split("'")[0] for line in code.splitlines() if "/api/" in line}
+        self.assertEqual({"server-relay", "server-push"}, addresses)
+        for forbidden in ("runtime_store.active(", "local_config", "meet_data", "package", "history"):
+            self.assertNotIn(forbidden, code, f"cloud_live.py rör {forbidden}")
+
+    def test_it_is_off_until_an_administrator_turns_it_on(self):
+        import tempfile
+        from types import SimpleNamespace
+        from tmbox_gateway.cloud_live import LiveChannel
+        from tmbox_gateway.runtime import SQLiteRuntimeStore
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteRuntimeStore(Path(directory) / "runtime.db")
+            try:
+                store.save_link_token("kopplad")
+                channel = LiveChannel(SimpleNamespace(runtime_store=store, config=SimpleNamespace(central_runtime_url="https://cloud.trainmeet.app/config")))
+                self.assertFalse(channel.enabled())
+                self.assertEqual("off", channel.status()["relay"]["state"])
+            finally:
+                store.close()
 
 
 class TimetableStaysEditableTests(unittest.TestCase):
@@ -213,3 +273,46 @@ class ServerHasNoAccountMailTests(unittest.TestCase):
                     token, code,
                     f"{path.name} innehåller {token} - kontomodellen hör hemma i Cloud",
                 )
+
+
+class TellurianIsALocalServiceTests(unittest.TestCase):
+    """Tellurian Dispatch (#222) är en lokal tjänst på träffens nät, inte Cloud.
+
+    D1 gäller oförändrat: klareringstrafik går aldrig till TrainMeet Cloud, och
+    Cloud-modulerna anropar aldrig Tellurian. Servern på Pi:n ansluter till en
+    lokal adress; en publik adress bara med uttryckligt val av testinstans.
+    """
+
+    def test_the_tellurian_client_rejects_cloud_and_public_origins(self):
+        from tmbox_gateway.integrations.tellurian import AddressRejected, check_address
+
+        for origin in ("https://cloud.trainmeet.app", "https://server.trainmeet.app", "https://trainmeet.app"):
+            for test_instance in (False, True):
+                with self.subTest(origin=origin, test_instance=test_instance), self.assertRaises(AddressRejected):
+                    check_address(origin, test_instance=test_instance)
+        for origin in ("http://example.invalid:80", "http://127.0.0.1:80", "http://localhost:5000", "https://8.8.8.8"):
+            with self.subTest(origin=origin), self.assertRaises(AddressRejected):
+                check_address(origin)
+
+    def test_only_the_integration_adapters_open_raw_http_connections(self):
+        users = sorted(path.relative_to(SOURCE).as_posix() for path, text in _python_sources()
+                       if "HTTPConnection" in _code_only(text) or "http.client" in _code_only(text))
+        self.assertEqual(["integrations/http_sandbox.py", "integrations/tellurian.py"], users)
+
+    def test_cloud_modules_never_reach_tellurian(self):
+        for name in ("central_sync.py", "cloud_config.py", "cloud_mail.py"):
+            self.assertNotIn("tellurian", _code_only((SOURCE / name).read_text(encoding="utf-8")).lower(), name)
+
+    def test_shadow_mode_and_the_report_have_no_write_path(self):
+        """Skugga och Testa anslutning är bara läsning; skrivvägen är inte inkopplad (etapp 4)."""
+        tree = ast.parse((SOURCE / "integrations" / "tellurian.py").read_text(encoding="utf-8"))
+        readers = [node for node in tree.body if getattr(node, "name", "") in ("ShadowRunner", "Mirror", "preflight")]
+        self.assertEqual(3, len(readers))
+        for node in readers:
+            calls = {child.func.attr for child in ast.walk(node)
+                     if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute)}
+            self.assertNotIn("post", calls, node.name)
+        for name in ("http_server.py", "integrations/tellurian_service.py"):
+            code = _code_only((SOURCE / name).read_text(encoding="utf-8"))
+            self.assertNotIn("TellurianCommands", code, name)
+            self.assertNotIn(".post(", code, name)

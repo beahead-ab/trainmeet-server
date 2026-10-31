@@ -221,11 +221,11 @@ class LokforarenHTTPTests(unittest.TestCase):
         self.assertEqual("user", payload["role"])
         benny = self.login("benny")
         for path in ("/v1/admin/users", "/v1/clock", "/v1/server-context", "/v1/runtime", "/v1/devices"):
-            self.assertEqual(401, self.request(path, cookie=benny)[0], path)
-        self.assertEqual(401, self.request("/v1/clock", {"action": "stop"}, cookie=benny)[0])
-        self.assertEqual(401, self.request("/v1/admin/users", {"display_name": "X", "email": "x@example.se", "role": "owner"}, cookie=benny)[0])
+            self.assertEqual(403, self.request(path, cookie=benny)[0], path)
+        self.assertEqual(403, self.request("/v1/clock", {"action": "stop"}, cookie=benny)[0])
+        self.assertEqual(403, self.request("/v1/admin/users", {"display_name": "X", "email": "x@example.se", "role": "owner"}, cookie=benny)[0])
         status = self.request("/v1/auth/status", cookie=benny)[1]
-        self.assertEqual((False, "user"), (status["authenticated"], status["account_role"]))
+        self.assertEqual((True, "user"), (status["authenticated"], status["account_role"]))
 
     def test_the_driver_api_needs_a_session(self) -> None:
         for path in ("/v1/driver/session", "/v1/driver/clock", "/v1/driver/duties", "/v1/driver/presence"):
@@ -270,14 +270,15 @@ class LokforarenHTTPTests(unittest.TestCase):
                               headers={"Origin": "https://evil.example"})[0]
         self.assertEqual(403, status)
 
-    def test_an_administrator_invites_and_removes_drivers_but_nothing_more(self) -> None:
+    def test_an_administrator_manages_nonowners_and_removes_driver_profile(self) -> None:
         anna = self.login("anna")
         status, payload, _ = self.request("/v1/admin/users", {"display_name": "Erik", "email": "erik@example.se", "role": "user"}, cookie=anna)
         self.assertEqual(201, status, payload)
-        self.assertEqual(403, self.request("/v1/admin/users", {"display_name": "Olle", "email": "olle@example.se", "role": "admin"}, cookie=anna)[0])
+        self.assertEqual(201, self.request("/v1/admin/users", {"display_name": "Olle", "email": "olle@example.se", "role": "admin"}, cookie=anna)[0])
         erik = payload["user"]["user_id"]
-        # Rollen delar bara ägaren ut.
-        self.assertEqual(403, self.request("/v1/admin/users/update", {"user_id": erik, "role": "admin"}, cookie=anna)[0])
+        # Administrators may assign admin/user, never owner.
+        self.assertEqual(200, self.request("/v1/admin/users/update", {"user_id": erik, "role": "admin"}, cookie=anna)[0])
+        self.assertEqual(403, self.request("/v1/admin/users/update", {"user_id": erik, "role": "owner"}, cookie=anna)[0])
         self.assertEqual(200, self.request("/v1/admin/users/update", {"user_id": erik, "display_name": "Erik E"}, cookie=anna)[0])
         benny = next(user for user in self.identities.list_admin_users() if user["display_name"] == "Benny")
         self.app.drivers.set_avatar(benny["user_id"], data_url("image/png", PNG))

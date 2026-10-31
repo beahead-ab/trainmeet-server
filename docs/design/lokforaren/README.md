@@ -22,7 +22,7 @@
 - Design: svart som TMBox iPhone. Inte en modifiering av fysisk TMBox, ingen 4x4-knappsats.
 - Träffklocka: **servern är enda källan**. Ingen matchning mot serverns tidtabeller eller trafikgraf.
 - Underlag: **TrainMeet Cloud → träffens Data → Köruppdrag (PDF)**. Vid publicering görs filen tillgänglig, indexerad och lagrad på servern för lokal användning. Förarna återanvänder katalogen.
-- Ägare bjuder in vanliga serveranvändare med rättigheten Lokföraren; inga öppna konton eller adminbehörighet krävs för föraren.
+- Ägare och administratörer bjuder in serveranvändare med rollen Användare (`user`) och rättigheten Lokföraren (`can_use_driver`); ägare och administratörer har också rättigheten; inga öppna konton eller adminbehörighet krävs för föraren.
 - Förarrapporterade stationer är social status och får **aldrig** ändra TrainMeet Servers auktoritativa trafikläge.
 
 ## Navigationskarta
@@ -36,7 +36,7 @@
 | **Mer** | Eget konto | Språk, push, synlighet, klock-/anslutningsstatus, PWA-installation |
 | **Logga in** | Endast inbjudna | Befintlig serverinbjudan, e-post, lösenord, återställning |
 | **Cloud Data** | Admin | Uppladdning/versionering av hela PDF-häftet, indexering och publicering |
-| **Server Användare** | Ägare | Bjud in användare, rättigheten `can_use_driver`, återkalla, granska |
+| **Server Användare** | Ägare och administratörer | Bjud in användare med `can_use_driver`, återkalla, granska; bara ägare hanterar ägarkonton |
 
 ## Användarflöde
 

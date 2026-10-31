@@ -448,7 +448,11 @@
     if (level !== shownLevel) { recent = drift.changeTracker(); shownLevel = level; }
     const now = performance.now();
     const table = document.createElement("table");
-    const caption = document.createElement("caption"); caption.textContent = t("Tidtabell · {station}", {station: liveTable.station.name});
+    // Trafikdagen följer planens veckodag (Cloud #100); "Dagl" sägs inte.
+    const weekday = liveTable.traffic_day?.day && liveTable.traffic_day.day !== "Dagl" ? liveTable.traffic_day.day : "";
+    const caption = document.createElement("caption");
+    caption.textContent = weekday ? t("Tidtabell · {station} · {day}", {station: liveTable.station.name, day: weekday})
+      : t("Tidtabell · {station}", {station: liveTable.station.name});
     const head = document.createElement("thead"), heading = document.createElement("tr");
     for (const label of ["Tåg", "Tid", "Från / till"]) { const cell = document.createElement("th"); cell.scope = "col"; cell.textContent = t(label); heading.append(cell); }
     head.append(heading);
@@ -462,7 +466,14 @@
       line.classList.toggle("is-done", shown.done);
       line.classList.toggle("is-early", shown.early);
       if (fresh) { line.classList.add("is-updated"); line.style.animationDelay = `${-(now - changedAt)}ms`; }
-      const number = document.createElement("th"); number.scope = "row"; number.textContent = row.train_number;
+      // Två tåg med samma nummer står med förkortningen, "IC 116" (Cloud #100).
+      const number = document.createElement("th"); number.scope = "row"; number.textContent = row.train_label || row.train_number;
+      if (row.manual) {
+        // Körs av människor: automatiken lämnar tåget (B5).
+        const manual = document.createElement("span"); manual.className = "tm-manual"; manual.textContent = t("Manuell");
+        manual.title = (row.manual_reasons || []).join("; ");
+        number.append(" ", manual);
+      }
       const [timeWord, routeWord] = words[row.kind] || ["{time}", "{station}"];
       const time = document.createElement("td");
       if (shown.shown) {

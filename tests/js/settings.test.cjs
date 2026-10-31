@@ -4,8 +4,8 @@
 const assert = require('node:assert/strict');
 const { open } = require('./kr-fixture.cjs');
 
-const SECTIONS = ['traff', 'skarmar', 'wifi', 'obemannade', 'lokforare', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'visning', 'farozon'];
-const FORMS = { traff: 'cloud-auto-form', skarmar: 'clock-appearance-form', wifi: 'connection-wifi-form', server: 'server-identity-form', kod: 'connection-code-form', sprak: 'language-form', visning: 'browser-deviation-form' };
+const SECTIONS = ['traff', 'skarmar', 'wifi', 'obemannade', 'klarering', 'lokforare', 'server', 'kod', 'anvandare', 'uppdatering', 'sprak', 'visning', 'farozon'];
+const FORMS = { traff: 'cloud-auto-form', skarmar: 'clock-appearance-form', wifi: 'connection-wifi-form', klarering: 'tellurian-form', server: 'server-identity-form', kod: 'connection-code-form', sprak: 'language-form', visning: 'browser-deviation-form' };
 
 const bar = (page, form) => page.evaluate((id) => {
   const f = document.getElementById(id);

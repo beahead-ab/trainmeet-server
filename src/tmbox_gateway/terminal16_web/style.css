@@ -324,6 +324,8 @@ html, body { overflow-x: clip; }
 .box-timetable .tm-was { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1.5px; margin-right: .35em; }
 .box-timetable .tm-new { color: var(--tm-late); font-weight: 650; }
 .box-timetable .is-early .tm-new { color: var(--tm-early); }
+/* Ett tåg som körs av människor (Cloud #100 B5). */
+.box-timetable .tm-manual { display: inline-block; margin-left: .3em; padding: 0 .35em; border: 1px solid currentColor; border-radius: 3px; font-size: .75em; font-weight: 600; opacity: .8; }
 .box-timetable .tm-delay, .box-timetable .tm-early { display: inline-flex; align-items: center; justify-content: center; min-width: 2.4em; margin-left: .4em;
   padding: 0 6px; border-radius: 6px; font-weight: 700; font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .box-timetable .tm-delay { background: var(--tm-late); color: var(--tm-late-ink); }
