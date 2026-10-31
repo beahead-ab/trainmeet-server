@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.19.0",
+    "date": "2026-10-31",
+    "notes": [
+      "Lokföraren: köruppdrag i Inställningar, vägar dit och egen app med cachebust (#225)"
+    ]
+  },
+  {
     "version": "4.18.0",
     "date": "2026-10-31",
     "notes": [
