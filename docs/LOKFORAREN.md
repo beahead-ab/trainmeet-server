@@ -108,27 +108,28 @@ visas med tågslagets namn, till exempel Skifteoppdrag.
 
 ### Anvisningarna på förarens språk
 
-Anvisningarna på köruppdragets sidor ("Krysser RE 2021 13:41–13:43", "Koble
-D 1611 til toget M,O,F", "Utveksl omstigende passasjerer her") räknas fram ur
+Anvisningarna på köruppdragets sidor ("Krysser NSB L 410 13:41–13:43",
+"Ti,To,L: Koble NSB 02 Di4 til toget", "Utveksl omstigende passasjerer her")
+räknas fram ur
 planeringsfilen efter samma regler som planeringsprogrammet använder när det
 skriver köruppdragen; ingen text läses ur PDF:en. De skickas som uppgifter,
 inte som färdig text, och Lokföraren skriver dem på förarens språk (svenska,
-danska, norska, engelska eller tyska). Samma köruppdrag blir alltså "Möter RE
-2021 13:41–13:43" för en svensk förare och "Krysser RE 2021 13:41–13:43" för
-en norsk. Värnamos 142 tjänster stämmer med häftet.
+danska, norska, engelska eller tyska). Samma köruppdrag blir alltså "Möter NSB
+L 410 13:41–13:43" för en svensk förare och "Krysser NSB L 410 13:41–13:43"
+för en norsk. Värnamos 142 tjänster stämmer med häftet.
 
 - **Möten** räknas vid ankomsten: ett annat tåg på samma station när det
   egna tåget står där. Motsatt riktning är ett möte; samma riktning är att
   köra förbi eller bli förbikörd. Stationer med `HideMeets` och tåg som börjar
   eller slutar där räknas inte. Tiden är när båda står på stationen.
 - **Veckodagar** (`days`, 1 = måndag) står bara när anvisningen inte gäller
-  alla dagar tjänsten körs ("M,O,F", "Ti–To"). Samma anvisning för flera
+  alla dagar tjänsten körs, först på raden ("Ti,To,L: …", "M–O: …"). Samma anvisning för flera
   fordon eller dagar skrivs en gång.
 - Formen, en händelses `instructions` (högst 12):
 
 ```json
-{"kind": "crosses", "meets": [{"train": "RE 2021", "from": "13:41", "to": "13:43"}]}
-{"kind": "couple", "vehicles": ["D 1611"], "days": [1, 3, 5]}
+{"kind": "crosses", "meets": [{"train": "NSB L 410", "from": "13:41", "to": "13:43"}]}
+{"kind": "couple", "vehicles": ["NSB 02 Di4"], "days": [2, 4, 6]}
 {"kind": "from_parking", "train": true}
 {"kind": "fetch_from_track", "track": "21", "usage": "X2 uppställning"}
 {"kind": "pick_up_key", "key": "K16", "place": "Spiten"}

@@ -8,13 +8,14 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 ### Lokföraren: köruppdragens anvisningar på förarens språk, sekunder av och på, ikonen följer kontot (#225)
 
 - **Anvisningarna i köruppdragen** syns nu i körplanen under raden de hör
-  till: möten och förbikörningar med tåg och tider ("Möter RE 2021
-  13:41–13:43"), koppla och koppla loss per veckodag ("Koppla D 1611 till
-  tåget M,O,F"), byt passagerare, hämta fordonet från uppställningsspåret,
+  till: möten och förbikörningar med tåg och tider ("Möter NSB L 410
+  13:41–13:43"), koppla och koppla loss per veckodag ("Ti,To,L: Koppla NSB 02
+  Di4 till tåget"), byt passagerare, hämta fordonet från uppställningsspåret,
   lyft, rundgång, vända, skjuta vagnar och låsnycklar. De räknas fram ur
   planeringsfilen efter planeringsprogrammets egna regler och skrivs på
-  förarens språk, så en norsk förare läser "Krysser RE 2021 13:41–13:43" och
-  en svensk "Möter …". Kontrollerat mot Värnamos häfte, alla 142 tjänster.
+  förarens språk, så en norsk förare läser "Krysser NSB L 410 13:41–13:43"
+  och en svensk "Möter …". Kontrollerat mot Värnamos häfte, alla 142
+  tjänster.
   Ett köruppdrag som redan är inlagt får anvisningarna när samma
   planeringsfil läses in igen under Inställningar → Lokförare och
   köruppdrag; sidorna och om det är tillgängligt för förarna behålls. Den
