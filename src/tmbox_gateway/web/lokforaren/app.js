@@ -33,6 +33,19 @@
   };
   let language = store.get("language", guessLanguage());
 
+  // Telefonens id (#225): slumpat en gång och sparat här. Samma konto kan vara
+  // inloggat på flera telefoner, men en tjänst är aktiv på en i taget.
+  const DEVICE = (() => {
+    let id = store.get("device", null);
+    if (typeof id !== "string" || !/^[0-9a-f]{32}$/.test(id)) {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      id = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+      store.set("device", id);
+    }
+    return id;
+  })();
+
   function t(source, values = {}) {
     const row = (globalThis.LokforarenMessages || {})[source];
     const text = language === "sv" || !row ? source : (row[language] || source);
@@ -71,13 +84,15 @@
     chosenDuty: null,
     checkin: {station: "", stationId: "", track: ""},
     endArmedUntil: 0,
+    elsewhere: null,
+    takeOver: false,
   };
 
   // ── Server ─────────────────────────────────────────────────────────
   class Unauthorized extends Error {}
 
   async function api(path, options = {}) {
-    const init = {credentials: "same-origin", cache: "no-store", headers: {}};
+    const init = {credentials: "same-origin", cache: "no-store", headers: {"X-Lokforaren-Device": DEVICE}};
     if (options.body !== undefined) {
       init.method = "POST";
       init.headers["Content-Type"] = "application/json";
@@ -86,8 +101,64 @@
     const response = await fetch(path, init);
     if (response.status === 401) throw new Unauthorized();
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.message || t("Det gick inte. Försök igen."));
+    if (!response.ok) {
+      const error = new Error(payload.message || t("Det gick inte. Försök igen."));
+      error.code = payload.error || "";
+      error.details = payload;
+      throw error;
+    }
     return payload;
+  }
+
+  // Tjänsten på en annan telefon (#225). Servern säger i varje svar om klockan
+  // vilken tjänst kontot har och om den är aktiv här. Aldrig ett tyst byte:
+  // har en annan telefon tagit över visas det, och tjänsten går att ta tillbaka.
+  function noticeActive(active) {
+    if (!state.session || state.offline) return;
+    // Ett svar som skickades före den egna aktiveringen säger inget om den.
+    if (performance.now() - (state.activeChangedAt || 0) < 5000) return;
+    const mine = activeDuty();
+    if (active && active.on_this_phone === false) {
+      // "Tagits över" bara när tjänsten var här; annars är den bara på en annan telefon.
+      const taken = state.elsewhere ? state.elsewhere.taken : Boolean(mine);
+      state.elsewhere = {number: active.number, duty_id: active.duty_id, taken};
+      return;
+    }
+    state.elsewhere = null;
+    if (!active && mine) {
+      // Avslutad på en annan telefon.
+      state.session.active = null;
+      state.planFor = null;
+      state.plan = null;
+      saveOffline();
+      toast(t("Tjänst {number} avslutades på en annan telefon", {number: mine.number}));
+      route();
+    } else if (active && mine && active.duty_id !== mine.id) {
+      // Tillbaka hit med en annan tjänst: hämta den.
+      api("/v1/driver/session").then((session) => {
+        state.session.active = session.active;
+        state.activeChangedAt = performance.now();
+        saveOffline();
+        route();
+      }).catch(() => {});
+    }
+  }
+
+  async function takeBack() {
+    const mine = activeDuty();
+    if (!mine || !state.elsewhere) return;
+    try {
+      const payload = await api("/v1/driver/active", {body: {duty_id: mine.id, take_over: true}});
+      state.session.active = payload.active;
+      state.activeChangedAt = performance.now();
+      state.elsewhere = null;
+      saveOffline();
+      toast(t("Tjänst {number} är aktiv på den här telefonen", {number: mine.number}));
+      route();
+    } catch (error) {
+      if (error instanceof Unauthorized) { showLogin(); return; }
+      toast(error.message);
+    }
   }
 
   // ── Klockan ────────────────────────────────────────────────────────
@@ -95,6 +166,7 @@
     try {
       const payload = await api("/v1/driver/clock");
       noticeBuild(payload.build);
+      if ("active" in payload) noticeActive(payload.active);
       state.clock = payload.clock;
       if (payload.clock && payload.clock.time) state.sync.accept(payload.clock, performance.now());
       state.clockOkAt = performance.now();
@@ -269,7 +341,11 @@
 
     const banner = $("#banner");
     let text = "", kind = "", icon = "";
-    if (mode === "lost" && state.session) {
+    if (state.elsewhere && duty && mode !== "lost") {
+      text = state.elsewhere.taken ? t("Tjänsten har tagits över på en annan telefon · tryck för att ta tillbaka")
+        : t("Tjänst {number} är aktiv på en annan telefon · tryck för att ta över här", {number: state.elsewhere.number || duty.number});
+      kind = "is-elsewhere"; icon = "M7 3.5h10v17H7zM11 17.5h2";
+    } else if (mode === "lost" && state.session) {
       text = seconds === null ? t("Ingen kontakt med träffklockan") : t("Ingen kontakt med träffklockan · fryst {time}", {time: hms(seconds, withSeconds())});
       kind = "is-lost"; icon = "M12 3.5 2.5 20h19zM12 10v4.2M12 17.4v.01";
     } else if (mode === "stopped") {
@@ -392,6 +468,8 @@
         : `/v1/driver/documents/${duty.source.document_id}.pdf#page=${pages[0]}`;
       source.textContent = t("Förlagan i köruppdraget · sida {pages}", {pages: span});
     }
+    state.takeOver = false;
+    $("#duty-elsewhere").hidden = true;
     const button = $("#duty-activate");
     button.disabled = false;
     button.textContent = t("Aktivera tjänst {number}", {number: duty.number});
@@ -402,8 +480,12 @@
     const button = $("#duty-activate");
     button.disabled = true;
     try {
-      const payload = await api("/v1/driver/active", {body: {duty_id: state.chosenDuty.id}});
+      const payload = await api("/v1/driver/active", {body: {duty_id: state.chosenDuty.id, take_over: state.takeOver}});
       state.session.active = payload.active;
+      state.activeChangedAt = performance.now();
+      state.elsewhere = null;
+      state.takeOver = false;
+      $("#duty-elsewhere").hidden = true;
       saveOffline();
       state.choosing = false;
       state.forceKorplan = false;
@@ -413,6 +495,17 @@
       setTab("duty");
     } catch (error) {
       if (error instanceof Unauthorized) { showLogin(); return; }
+      if (error.code === "active_on_other_device") {
+        // Fråga, byt aldrig tyst: ett andra tryck tar över tjänsten här.
+        const number = error.details.duty_number || "";
+        const prompt = $("#duty-elsewhere");
+        prompt.textContent = t("Tjänst {number} är aktiv på en annan telefon – ta över här?", {number});
+        prompt.hidden = false;
+        state.takeOver = true;
+        button.textContent = t("Ta över här");
+        button.disabled = false;
+        return;
+      }
       toast(error.message);
       button.disabled = false;
     }
@@ -421,6 +514,8 @@
   function openChoose() {
     state.choosing = true;
     state.chosenDuty = null;
+    state.takeOver = false;
+    $("#duty-elsewhere").hidden = true;
     $("#duty-found").hidden = true;
     $("#duty-activate").disabled = true;
     $("#duty-activate").textContent = t("Aktivera tjänsten");
@@ -1147,8 +1242,10 @@
     $("#me-name").textContent = person.name;
     $("#me-role").textContent = [t(ROLE[person.role] || "Lokförare"), state.session.meet ? state.session.meet.name : ""].filter(Boolean).join(" · ");
     const duty = activeDuty();
-    $("#me-duty").textContent = duty ? t("Tjänst {number} är aktiv på den här telefonen", {number: duty.number}) : t("Ingen tjänst vald");
-    $("#end-duty").hidden = !duty;
+    $("#me-duty").textContent = !duty ? t("Ingen tjänst vald")
+      : state.elsewhere ? t("Tjänst {number} är aktiv på en annan telefon", {number: state.elsewhere.number || duty.number})
+      : t("Tjänst {number} är aktiv på den här telefonen", {number: duty.number});
+    $("#end-duty").hidden = !duty || Boolean(state.elsewhere);
     $("#change-duty").textContent = duty ? t("Byt tjänst") : t("Välj tjänst");
     $("#me-visible").checked = person.visible;
     $("#me-reminders").checked = store.get("reminders", true);
@@ -1179,6 +1276,7 @@
     try {
       await api("/v1/driver/active/end", {body: {}});
       state.session.active = null;
+      state.activeChangedAt = performance.now();
       state.planFor = null;
       state.plan = null;
       saveOffline();
@@ -1338,6 +1436,8 @@
       state.session = await api("/v1/driver/session");
       if (noticeBuild(state.session.build)) { reloadForBuild(); }
       state.offline = false;
+      state.elsewhere = state.session.active && state.session.active.on_this_phone === false
+        ? {number: state.session.active.duty.number, duty_id: state.session.active.duty.id, taken: false} : null;
       saveOffline();
     } catch (error) {
       if (error instanceof Unauthorized) { showLogin(); return false; }
@@ -1387,7 +1487,10 @@
   }
 
   function bind() {
-    $("#banner").addEventListener("click", () => { if ($("#banner").classList.contains("is-update")) reloadForBuild(); });
+    $("#banner").addEventListener("click", () => {
+      if ($("#banner").classList.contains("is-update")) reloadForBuild();
+      else if ($("#banner").classList.contains("is-elsewhere")) takeBack();
+    });
     for (const button of document.querySelectorAll(".lf-tab")) {
       button.addEventListener("click", () => {
         state.choosing = false;

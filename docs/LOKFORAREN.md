@@ -197,6 +197,33 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
   påminnelse i appen (ljud och vibration om det är på); vid 10 öppnas
   körplanen. Push när appen är stängd ingår inte än (kräver VAPID-nycklar).
 
+## Två telefoner på samma konto
+
+Ett förarkonto kan vara inloggat på flera telefoner, men **en tjänst är aktiv på
+en telefon i taget**. Aldrig två aktiva tjänster och aldrig ett tyst byte.
+
+- Varje telefon slumpar ett id första gången appen öppnas och sparar det i
+  telefonen. Det skickas i `X-Lokforaren-Device` på alla anrop till
+  `/v1/driver/*`. Servern sparar på den aktiva tjänsten vilken telefon den
+  är aktiv på (`driver_active.device_id`).
+- Väljer en annan telefon en tjänst svarar servern `409
+  active_on_other_device` med tjänstens nummer. Appen frågar *Tjänst 132 är
+  aktiv på en annan telefon – ta över här?*, och knappen blir **Ta över här**.
+  Först ett andra tryck (`take_over: true`) flyttar tjänsten.
+- Öppnas appen på en telefon medan kontots tjänst är aktiv på en annan visas
+  körplanen med raden *Tjänst 132 är aktiv på en annan telefon · tryck för att
+  ta över här*.
+- Telefonen som tjänsten togs ifrån får veta det i nästa svar om klockan
+  (`/v1/driver/clock` har `active` med `on_this_phone`), inom ett par sekunder:
+  *Tjänsten har tagits över på en annan telefon · tryck för att ta tillbaka*.
+  Ett tryck tar tillbaka tjänsten.
+- Bara telefonen tjänsten är aktiv på kan avsluta den. Den andra telefonen
+  ser inte knappen, och servern svarar 409. Avslutas tjänsten på en telefon
+  säger den andra det.
+- Incheckningar, ikon och synlighet följer kontot, inte telefonen.
+- Utan id, från en äldre app eller i en äldre rad, går det inte att skilja
+  telefonerna åt. Då gäller kontot som förut.
+
 ## Incheckning och ikon
 
 - **Checka in** sparar station, valfritt spår, tjänst, tåg och träfftid. Den
