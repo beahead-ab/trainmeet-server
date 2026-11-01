@@ -943,7 +943,8 @@ class TrainMeetHTTPApplication:
         drivers = []
         for user_id, checkin in latest.items():
             account, profile = accounts.get(user_id), self.drivers.profile(user_id)
-            if account is None or not profile["visible"]:
+            # Paus och inväntar start är inte ute på banan: inte på kartorna.
+            if account is None or not profile["visible"] or checkin.get("status"):
                 continue
             name = str(account.get("display_name") or "").strip() or initials(str(account.get("email") or ""))
             drivers.append({
@@ -1039,7 +1040,8 @@ class TrainMeetHTTPApplication:
         """Förarna på träffen: aktiv tjänst och senaste incheckning.
 
         Den som stängt av synligheten syns inte för andra, men alltid för
-        sig själv. En incheckning äldre än femton spelminuter är borta.
+        sig själv. En incheckning på en station äldre än femton spelminuter
+        är borta; ett läge (paus, inväntar start) står kvar tills nästa.
         """
         meet_key, _, _ = self._driver_meet()
         latest = self.drivers.latest_checkins(meet_key, clock=self._meet_clock())

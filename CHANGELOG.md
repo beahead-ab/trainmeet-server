@@ -5,6 +5,21 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Lokföraren: Paus och Inväntar start – incheckning utan station (#225)
+
+- I **Checka in** finns nu två lägen för den som inte är ute på banan:
+  **Paus** (chillar en stund) och **Inväntar start** av uppdraget, med
+  tjänstens nummer och starttid. Före tjänstens start är Inväntar start
+  förvalt, och nedräkningen har en egen knapp för det.
+- Ett läge står inte vid någon station. Under Förare ligger föraren under
+  *Inte på banan*, och i listan står "Paus · för 5 min". Läget tonar inte
+  ut: det gäller tills föraren checkar in igen (som längst ett dygn).
+- Kartorna i Drift, storskärmarna och deltagarnas sida visar bara förare på
+  banan, så den som har paus eller inväntar start syns inte där.
+  Admin ser läget under Inställningar → Lokförare.
+- `POST /v1/driver/checkins` tar `{status: "pause" | "waiting"}` i stället för
+  station; incheckningen har `status` (annars `null`).
+
 ### Lokföraren visar hela uppdragslistan med smarta filter
 
 Alla tjänster visas direkt, även när katalogen har fler än 30 uppdrag.

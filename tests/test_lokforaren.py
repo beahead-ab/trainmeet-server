@@ -3,7 +3,8 @@
 En förare (rollen user) är inloggad men ingen administratör. Hen kommer åt
 /v1/driver/* och Lokföraren-appen, aldrig ett admin-API. Förartjänsterna kommer
 i Clouds paket (driver_duties) eller är övningstjänsten DEMO 132. En
-incheckning syns tio minuter i verklig tid och tonar sedan ut på fem.
+incheckning på en station syns tio spelminuter och tonar sedan ut på fem; ett
+läge utan station (paus, inväntar start) står kvar tills nästa incheckning.
 """
 
 from __future__ import annotations
@@ -197,6 +198,52 @@ class DriverStoreTests(unittest.TestCase):
         with self.assertRaises(DriverError):
             self.store.check_in("u1", "meet", {"station": "  "}, duty=None, meet_time=None)
 
+    def test_pause_and_waiting_are_check_ins_without_a_station_that_do_not_fade(self) -> None:
+        """Casper 2026-11-01: ett läge som säger att föraren inte är ute på
+        banan – paus (chillar) eller inväntar start av uppdraget. Det står kvar
+        tills föraren checkar in igen, men aldrig längre än ett dygn."""
+
+        start = datetime(2026, 10, 31, 15, 0, tzinfo=timezone.utc)
+        clock = lambda seconds: {"configured": True, "elapsed_seconds": seconds, "time": "17:00:00"}
+        duty = normalize_duty(DEMO_DUTY)
+        saved = self.store.check_in("u1", "meet", {"status": "pause", "station": "Tveiten", "track": "1"},
+                                    duty=duty, meet_time="17:00:00", meet_seconds=61200, now=start)
+        self.assertEqual(("pause", "", None, None, None), (
+            saved["status"], saved["station"], saved["station_id"], saved["track"], saved["train"]))
+        # Två spel-timmar senare: kvar, med åldern i spelsekunder.
+        later = self.store.latest_checkins("meet", clock=clock(61200 + 7200), now=start + timedelta(hours=1))["u1"]
+        self.assertEqual(("pause", "132", 7200.0), (later["status"], later["duty_number"], later["age_seconds"]))
+        # En klocka som ställts tillbaka gör inte läget osant; åldern blir då verklig tid.
+        rewound = self.store.latest_checkins("meet", clock=clock(50000), now=start + timedelta(minutes=5))["u1"]
+        self.assertEqual(("pause", 300.0), (rewound["status"], rewound["age_seconds"]))
+        self.assertNotIn("u1", self.store.latest_checkins("meet", now=start + timedelta(days=1, minutes=1)))
+        # Nästa incheckning ersätter läget, och tvärtom.
+        self.store.check_in("u1", "meet", {"status": "waiting"}, duty=None, meet_time=None, now=start + timedelta(minutes=1))
+        self.assertEqual("waiting", self.store.latest_checkins("meet", now=start + timedelta(minutes=2))["u1"]["status"])
+        self.store.check_in("u1", "meet", {"station": "Spiten"}, duty=None, meet_time=None, now=start + timedelta(minutes=3))
+        latest = self.store.latest_checkins("meet", now=start + timedelta(minutes=4))["u1"]
+        self.assertEqual((None, "Spiten"), (latest["status"], latest["station"]))
+        with self.assertRaises(DriverError):
+            self.store.check_in("u1", "meet", {"status": "lunch"}, duty=None, meet_time=None)
+
+    def test_an_older_database_gets_the_status_column(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        path = Path(directory.name) / "trainmeet.db"
+        connection = sqlite3.connect(path)
+        connection.execute(
+            "CREATE TABLE driver_checkins (checkin_id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL,"
+            " meet_key TEXT NOT NULL, station TEXT NOT NULL, station_id TEXT, track TEXT, duty_number TEXT,"
+            " train TEXT, meet_time TEXT, created_at TEXT NOT NULL, meet_seconds REAL)")
+        connection.execute("INSERT INTO driver_checkins(user_id, meet_key, station, created_at) VALUES ('u1', 'meet', 'Tveiten', ?)",
+                           (datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),))
+        connection.commit()
+        connection.close()
+        store = DriverStore(path)
+        self.addCleanup(store.close)
+        self.assertEqual(("Tveiten", None), (store.latest_checkins("meet")["u1"]["station"],
+                                             store.latest_checkins("meet")["u1"]["status"]))
+
     def test_an_icon_is_a_small_png_jpeg_or_webp_and_nothing_else(self) -> None:
         self.assertTrue(self.store.set_avatar("u1", data_url("image/png", PNG))["has_avatar"])
         self.assertEqual((PNG, "image/png"), self.store.avatar("u1"))
@@ -349,6 +396,33 @@ class LokforarenHTTPTests(unittest.TestCase):
         self.request("/v1/driver/profile", {"visible": False}, cookie=benny)
         self.assertEqual([], self.request("/v1/display")[1]["drivers"])
         self.assertEqual(404, self.request(drivers[0]["avatar_url"])[0])
+
+    def test_pause_and_waiting_show_among_the_drivers_but_not_on_the_maps(self) -> None:
+        """Paus och inväntar start är inte ute på banan: de andra förarna och
+        admin ser läget, men kartorna (Drift, storskärmarna, deltagarna) har
+        inte föraren och ikonen lämnas inte ut."""
+
+        benny, maja = self.login("benny"), self.login("maja")
+        station = runtime_package_v3()["stations"][0]
+        self.request("/v1/driver/avatar", {"image": data_url("image/png", PNG)}, cookie=benny)
+        self.request("/v1/driver/active", {"duty_id": "demo-132"}, cookie=benny)
+        self.request("/v1/driver/checkins", {"station": station["name"], "station_id": station["id"]}, cookie=benny)
+        avatar_url = self.request("/v1/display")[1]["drivers"][0]["avatar_url"]
+        status, payload, _ = self.request("/v1/driver/checkins", {"status": "waiting"}, cookie=benny)
+        self.assertEqual((200, "waiting", "", None), (status, payload["checkin"]["status"], payload["checkin"]["station"],
+                                                      payload["checkin"]["train"]))
+        seen = next(driver for driver in self.request("/v1/driver/presence", cookie=maja)[1]["drivers"]
+                    if driver["name"] == "Benny")
+        self.assertEqual(("132", "waiting"), (seen["duty_number"], seen["checkin"]["status"]))
+        self.assertEqual([], self.request("/v1/display")[1]["drivers"])
+        self.assertEqual(404, self.request(avatar_url)[0])
+        self.request("/v1/driver/checkins", {"status": "pause"}, cookie=benny)
+        overview = self.request("/v1/driver-admin/overview", cookie=self.login("anna"))[1]
+        self.assertEqual("pause", next(d for d in overview["drivers"] if d["name"] == "Benny")["checkin"]["status"])
+        self.assertEqual(400, self.request("/v1/driver/checkins", {"status": "lunch"}, cookie=benny)[0])
+        # Tillbaka på banan: på kartan igen.
+        self.request("/v1/driver/checkins", {"station": station["name"], "station_id": station["id"]}, cookie=benny)
+        self.assertEqual([station["id"]], [driver["station_id"] for driver in self.request("/v1/display")[1]["drivers"]])
 
     def test_what_moves_a_driver_on_the_map_is_announced(self) -> None:
         """Banan i Drift hämtar förarna igen när /v1/events säger "drivers":

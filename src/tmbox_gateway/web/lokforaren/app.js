@@ -72,7 +72,7 @@
     chosenDuty: null,
     duties: null,
     catalogLoading: false,
-    checkin: {station: "", stationId: "", track: ""},
+    checkin: {station: "", stationId: "", track: "", status: ""},
     endArmedUntil: 0,
   };
 
@@ -997,8 +997,14 @@
     const order = (state.session.stations || []).map((station) => station.name);
     const mine = state.plan ? K.stations(state.plan) : [];
     const here = new Map();
+    const offtrack = {pause: [], waiting: []};
     for (const driver of presence.drivers) {
       if (!driver.checkin) continue;
+      if (driver.checkin.status) {
+        // Paus och inväntar start: inte på någon station, och tonar inte ut.
+        if (offtrack[driver.checkin.status]) offtrack[driver.checkin.status].push(driver);
+        continue;
+      }
       const age = ageOf(driver);
       if (age > presence.checkin_visible_seconds + presence.checkin_fade_seconds) continue;
       if (!here.has(driver.checkin.station)) here.set(driver.checkin.station, []);
@@ -1007,7 +1013,22 @@
     const others = [...here.keys()].filter((name) => !mine.includes(name))
       .sort((a, b) => (order.indexOf(a) === -1 ? 999 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 999 : order.indexOf(b)));
     const stations = [...mine, ...others];
-    $("#bana-empty").hidden = here.size > 0;
+    const resting = offtrack.pause.length + offtrack.waiting.length;
+    $("#bana-empty").hidden = here.size > 0 || resting > 0;
+    $("#offtrack").hidden = !resting;
+    for (const [status, drivers] of Object.entries(offtrack)) {
+      const row = $("#offtrack-" + status);
+      row.hidden = !drivers.length;
+      const pills = row.querySelector(".lf-station__pills");
+      pills.replaceChildren();
+      drivers.sort((a, b) => (b.me - a.me) || (ageOf(a) - ageOf(b)));
+      for (const driver of drivers) {
+        const element = pill(driver);
+        const pop = state.popUntil.get(driver.user_id);
+        element.classList.toggle("is-pop", Boolean(pop && pop > Date.now()));
+        pills.append(element);
+      }
+    }
     for (const name of stations) {
       const item = document.createElement("li");
       item.className = "lf-station" + (mine.includes(name) ? " is-mine" : "");
@@ -1080,7 +1101,12 @@
       const where = element.querySelector(".lf-person__where");
       const avatar = element.querySelector(".lf-avatar");
       const age = ageOf(driver);
-      if (age === null || age > visible + fadeSeconds) {
+      if (driver.checkin && driver.checkin.status) {
+        where.textContent = STATUS_LABEL[driver.checkin.status]() + " · " + agoText(age);
+        where.classList.remove("is-faded");
+        avatar.style.opacity = "1";
+        avatar.style.filter = "grayscale(0)";
+      } else if (age === null || age > visible + fadeSeconds) {
         where.textContent = t("Inte incheckad");
         where.classList.add("is-faded");
         avatar.style.opacity = "0.55";
@@ -1096,7 +1122,11 @@
   }
 
   // ── Checka in ──────────────────────────────────────────────────────
-  function openCheckin() {
+  // Lägen utan station: föraren är inte ute på banan (paus, eller inväntar
+  // start av uppdraget). De står kvar tills nästa incheckning.
+  const STATUS_LABEL = {pause: () => t("Paus"), waiting: () => t("Inväntar start")};
+
+  function openCheckin(preferred) {
     const sheet = $("#sheet-checkin");
     fillAvatar($("#sheet-avatar"), me());
     const plan = state.plan;
@@ -1150,14 +1180,34 @@
       other.append(option);
     }
     other.parentElement.hidden = other.options.length <= 1;
+    const duty = activeDuty();
+    $("#checkin-waiting-sub").textContent = duty && plan
+      ? t("Tjänst {number} · {time}", {number: duty.number, time: K.label(plan.start)}) : t("av uppdraget");
     $("#checkin-message").textContent = "";
-    if (ranked.length) pickStation(ranked[0][0], "", ranked[0][1].row.track);
+    // Innan tjänsten börjar är det troligaste att föraren inväntar start.
+    const before = plan && now !== null && now < plan.start;
+    if (STATUS_LABEL[preferred]) pickStatus(preferred);
+    else if (before) pickStatus("waiting");
+    else if (ranked.length) pickStation(ranked[0][0], "", ranked[0][1].row.track);
     else pickStation("", "", "");
     sheet.hidden = false;
   }
 
+  function pickStatus(status) {
+    state.checkin = {station: "", stationId: "", track: "", status};
+    for (const button of document.querySelectorAll("#checkin-stations .lf-choice")) button.setAttribute("aria-checked", "false");
+    for (const button of document.querySelectorAll("#checkin-statuses .lf-choice")) {
+      button.setAttribute("aria-checked", String(button.dataset.status === status));
+    }
+    $("#checkin-other").value = "";
+    $("#checkin-tracks").replaceChildren();
+    $("#checkin-tracks-field").hidden = true;
+    labelCheckin();
+  }
+
   function pickStation(station, stationId, plannedTrack) {
-    state.checkin = {station, stationId, track: plannedTrack || ""};
+    state.checkin = {station, stationId, track: plannedTrack || "", status: ""};
+    for (const button of document.querySelectorAll("#checkin-statuses .lf-choice")) button.setAttribute("aria-checked", "false");
     for (const button of document.querySelectorAll("#checkin-stations .lf-choice")) {
       button.setAttribute("aria-checked", String(button.querySelector(".lf-choice__name").textContent === station));
     }
@@ -1185,20 +1235,24 @@
 
   function labelCheckin() {
     const button = $("#checkin-submit");
-    const {station, track} = state.checkin;
-    button.disabled = !station;
-    button.textContent = !station ? t("Checka in") : track ? t("Checka in i {station}, spår {track}", {station, track}) : t("Checka in i {station}", {station});
+    const {station, track, status} = state.checkin;
+    button.disabled = !station && !status;
+    button.textContent = status === "pause" ? t("Checka in · Paus")
+      : status === "waiting" ? t("Checka in · Inväntar start")
+        : !station ? t("Checka in") : track ? t("Checka in i {station}, spår {track}", {station, track}) : t("Checka in i {station}", {station});
   }
 
   async function submitCheckin() {
-    const {station, stationId, track} = state.checkin;
-    if (!station) return;
+    const {station, stationId, track, status} = state.checkin;
+    if (!station && !status) return;
     const button = $("#checkin-submit");
     button.disabled = true;
     try {
-      await api("/v1/driver/checkins", {body: {station, station_id: stationId || undefined, track: track || undefined}});
+      await api("/v1/driver/checkins", {body: status ? {status}
+        : {station, station_id: stationId || undefined, track: track || undefined}});
       $("#sheet-checkin").hidden = true;
-      toast(t("Incheckad i {station}", {station}));
+      toast(status === "pause" ? t("Du har paus") : status === "waiting" ? t("Du inväntar start")
+        : t("Incheckad i {station}", {station}));
       state.popUntil.set(me().user_id, Date.now() + 1600);
       await refreshPresence();
     } catch (error) {
@@ -1389,6 +1443,7 @@
 
   function refreshEverywhere() {
     fillAvatar($("#checkin-avatar"), me());
+    fillAvatar($("#countdown-checkin-avatar"), me());
     renderMe();
     refreshPresence();
   }
@@ -1432,6 +1487,7 @@
       }
     }
     fillAvatar($("#checkin-avatar"), me());
+    fillAvatar($("#countdown-checkin-avatar"), me());
     setTab(state.tab);
     pollClock();
     refreshPresence();
@@ -1524,8 +1580,12 @@
     box.addEventListener("touchend", () => { timeline.touching = false; timeline.interactedAt = performance.now(); }, {passive: true});
     box.addEventListener("keydown", (event) => { if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) interacted(); });
     box.addEventListener("pointerdown", (event) => { if (event.pointerType === "mouse") interacted(); });
-    $("#open-checkin").addEventListener("click", openCheckin);
-    $("#drivers-checkin").addEventListener("click", openCheckin);
+    $("#open-checkin").addEventListener("click", () => openCheckin());
+    $("#drivers-checkin").addEventListener("click", () => openCheckin());
+    $("#countdown-checkin").addEventListener("click", () => openCheckin("waiting"));
+    for (const button of document.querySelectorAll("#checkin-statuses .lf-choice")) {
+      button.addEventListener("click", () => pickStatus(button.dataset.status));
+    }
     $("#checkin-submit").addEventListener("click", submitCheckin);
     $("#checkin-other").addEventListener("change", (event) => {
       const option = event.target.selectedOptions[0];

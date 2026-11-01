@@ -7,9 +7,11 @@ trafik, klarering, tidtabell eller klocka, och ingenting här tolkar underlag �
 förartjänsterna kommer färdiga i driftpaketet från TrainMeet Cloud
 (``driver_duties``), eller är den uttryckligt märkta övningstjänsten DEMO 132.
 
-En incheckning syns i tio minuter i verklig tid och tonar sedan ut under fem.
-Tiden är verklig, inte träfftid: en snabbklocka i ×4 ska inte få någon att
-försvinna från banan efter två och en halv minut.
+En incheckning på en station syns i tio spelminuter och tonar sedan ut under
+fem. En incheckning kan också vara ett läge utan station (``status``): paus,
+eller att föraren inväntar start av sitt uppdrag. Den som har ett läge är inte
+ute på banan, står inte på kartorna och tonar inte ut – läget gäller tills
+föraren checkar in igen (som längst ett dygn).
 """
 
 from __future__ import annotations
@@ -33,6 +35,9 @@ CHECKIN_VISIBLE = timedelta(minutes=10)
 CHECKIN_FADE = timedelta(minutes=5)
 #: En incheckning gäller som längst ett dygn i verklig tid, vad klockan än gör.
 CHECKIN_KEPT = timedelta(days=1)
+#: Lägen utan station: föraren är inte ute på banan. "pause" är paus (chillar),
+#: "waiting" att föraren inväntar start av sitt uppdrag.
+CHECKIN_STATUSES = ("pause", "waiting")
 #: En ikon är en liten bild som webbläsaren redan beskurit och skalat ned.
 AVATAR_MAX_BYTES = 96 * 1024
 AVATAR_TYPES = ("image/png", "image/jpeg", "image/webp")
@@ -366,6 +371,9 @@ class DriverStore:
         columns = {row[1] for row in self._connection.execute("PRAGMA table_info(driver_checkins)")}
         if "meet_seconds" not in columns:
             self._connection.execute("ALTER TABLE driver_checkins ADD COLUMN meet_seconds REAL")
+        # Ett läge utan station (CHECKIN_STATUSES). Raden har då tom station.
+        if "status" not in columns:
+            self._connection.execute("ALTER TABLE driver_checkins ADD COLUMN status TEXT")
 
     def close(self) -> None:
         with self._lock:
@@ -492,13 +500,19 @@ class DriverStore:
     def check_in(self, user_id: str, meet_key: str, payload: dict[str, Any], *,
                  duty: dict[str, Any] | None, meet_time: str | None, meet_seconds: float | None = None,
                  now: datetime | None = None) -> dict[str, Any]:
-        station = _text(payload.get("station"), NAME_MAX)
-        if not station:
+        """Spara var föraren är: en station (med valfritt spår), eller ett
+        läge utan station (``status``: paus eller inväntar start)."""
+
+        status = payload.get("status") or None
+        if status is not None and status not in CHECKIN_STATUSES:
+            raise DriverError(400, "invalid_status", "Läget finns inte")
+        station = "" if status else _text(payload.get("station"), NAME_MAX)
+        if not station and not status:
             raise DriverError(400, "station_required", "Välj stationen du checkar in på")
-        track = _text(payload.get("track"), TRACK_MAX) or None
-        station_id = _text(payload.get("station_id"), NAME_MAX) or None
+        track = None if status else _text(payload.get("track"), TRACK_MAX) or None
+        station_id = None if status else _text(payload.get("station_id"), NAME_MAX) or None
         train = None
-        if duty:
+        if duty and not status:
             # Tåget som stannar eller går där enligt tjänsten, om det finns ett.
             for event in duty.get("events", []):
                 if event.get("station") == station and event.get("train"):
@@ -507,16 +521,16 @@ class DriverStore:
         with self._lock:
             cursor = self._connection.execute(
                 "INSERT INTO driver_checkins(user_id, meet_key, station, station_id, track, duty_number, train,"
-                " meet_time, meet_seconds, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " meet_time, meet_seconds, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (user_id, meet_key, station, station_id, track, duty["number"] if duty else None, train,
-                 meet_time, meet_seconds, _iso(moment)),
+                 meet_time, meet_seconds, _iso(moment), status),
             )
             # Bara den senaste platsen räknas. Äldre rader än en dag behövs inte.
             self._connection.execute(
                 "DELETE FROM driver_checkins WHERE created_at < ?", (_iso(moment - CHECKIN_KEPT),)
             )
         return {"checkin_id": cursor.lastrowid, "station": station, "station_id": station_id, "track": track,
-                "train": train, "meet_time": meet_time, "created_at": _iso(moment)}
+                "train": train, "meet_time": meet_time, "created_at": _iso(moment), "status": status}
 
     def latest_checkins(self, meet_key: str, *, clock: dict[str, Any] | None = None,
                         now: datetime | None = None) -> dict[str, dict[str, Any]]:
@@ -524,14 +538,16 @@ class DriverStore:
 
         ``age_seconds`` är i spelsekunder när träffklockan finns (``clock``,
         med ``elapsed_seconds`` eller ``time``), annars i verklig tid. En
-        incheckning syns i CHECKIN_VISIBLE + CHECKIN_FADE av den tiden.
+        incheckning på en station syns i CHECKIN_VISIBLE + CHECKIN_FADE av den
+        tiden. Ett läge (``status``) tonar inte ut: det gäller tills föraren
+        checkar in igen, och en klocka som ställts tillbaka gör det inte osant.
         """
         moment = now or _now()
         since = _iso(moment - CHECKIN_KEPT)
         with self._lock:
             rows = self._connection.execute(
-                "SELECT user_id, station, station_id, track, duty_number, train, meet_time, created_at, meet_seconds"
-                " FROM driver_checkins WHERE meet_key = ? AND created_at >= ? ORDER BY created_at, checkin_id",
+                "SELECT user_id, station, station_id, track, duty_number, train, meet_time, created_at, meet_seconds,"
+                " status FROM driver_checkins WHERE meet_key = ? AND created_at >= ? ORDER BY created_at, checkin_id",
                 (meet_key, since),
             ).fetchall()
         newest = {row[0]: row for row in rows}
@@ -539,10 +555,14 @@ class DriverStore:
         on_the_clock = bool(clock) and clock.get("configured", True) is not False
         latest: dict[str, dict[str, Any]] = {}
         for user_id, row in newest.items():
+            status = row[9] if row[9] in CHECKIN_STATUSES else None
             age = (game_age(row[8], row[6], clock) if on_the_clock
                    else max(0.0, (moment - _parse(row[7])).total_seconds()))
-            if age is None or age > shown:
+            if status and age is None:
+                age = max(0.0, (moment - _parse(row[7])).total_seconds())
+            if age is None or (age > shown and not status):
                 continue
             latest[user_id] = {"station": row[1], "station_id": row[2], "track": row[3], "duty_number": row[4],
-                               "train": row[5], "meet_time": row[6], "created_at": row[7], "age_seconds": round(age, 1)}
+                               "train": row[5], "meet_time": row[6], "created_at": row[7], "age_seconds": round(age, 1),
+                               "status": status}
         return latest

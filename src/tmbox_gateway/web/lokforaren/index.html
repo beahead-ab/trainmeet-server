@@ -109,6 +109,7 @@
         <h2 class="lf-kicker" data-t="FÖRSTA MOMENTEN">FÖRSTA MOMENTEN</h2>
         <ol class="lf-first__list" id="first-moments"></ol>
       </div>
+      <button class="lf-button lf-button--checkin" type="button" id="countdown-checkin"><span class="lf-avatar lf-avatar--s" id="countdown-checkin-avatar"></span><span id="countdown-checkin-text" data-t="Checka in · Inväntar start">Checka in · Inväntar start</span></button>
       <button class="lf-button lf-button--quiet" type="button" id="show-korplan" data-t="Visa körplanen">Visa körplanen</button>
     </section>
 
@@ -139,11 +140,16 @@
         <h2 class="lf-kicker" id="bana-title" data-t="PÅ BANAN NU">PÅ BANAN NU</h2>
         <ol class="lf-bana__line" id="bana"></ol>
         <p class="lf-empty" id="bana-empty" data-t="Ingen har checkat in de senaste femton minuterna." hidden>Ingen har checkat in de senaste femton minuterna.</p>
+        <div class="lf-offtrack" id="offtrack" hidden>
+          <h2 class="lf-kicker" data-t="INTE PÅ BANAN">INTE PÅ BANAN</h2>
+          <div class="lf-offtrack__row" id="offtrack-pause" hidden><span class="lf-offtrack__label" data-t="Paus">Paus</span><div class="lf-station__pills"></div></div>
+          <div class="lf-offtrack__row" id="offtrack-waiting" hidden><span class="lf-offtrack__label" data-t="Inväntar start">Inväntar start</span><div class="lf-station__pills"></div></div>
+        </div>
       </section>
       <section class="lf-card lf-list" aria-label="Förare på träffen">
         <ul class="lf-people" id="people"></ul>
       </section>
-      <p class="lf-note" data-t="En incheckning syns i 10 minuter och tonar sedan långsamt ut. Tiden räknas i verklig tid, inte träfftid.">En incheckning syns i 10 minuter och tonar sedan långsamt ut. Tiden räknas i verklig tid, inte träfftid.</p>
+      <p class="lf-note" data-t="En incheckning på en station syns i 10 spelminuter och tonar sedan långsamt ut. Paus och Inväntar start står kvar tills du checkar in igen.">En incheckning på en station syns i 10 spelminuter och tonar sedan långsamt ut. Paus och Inväntar start står kvar tills du checkar in igen.</p>
     </section>
 
     <section class="view view--me" id="view-me" hidden>
@@ -225,6 +231,12 @@
       <div class="lf-choices" id="checkin-stations" role="radiogroup" aria-label="Station"></div>
       <label class="lf-field lf-field--other"><span data-t="Annan station">Annan station</span><select id="checkin-other"></select></label>
       <div class="lf-field" id="checkin-tracks-field"><span data-t="Spår, om du vill">Spår, om du vill</span><div class="lf-chips lf-chips--choose" id="checkin-tracks"></div></div>
+      <div class="lf-field"><span data-t="Inte ute på banan">Inte ute på banan</span>
+        <div class="lf-choices lf-choices--pair" id="checkin-statuses" role="radiogroup" aria-label="Inte ute på banan">
+          <button type="button" class="lf-choice" role="radio" aria-checked="false" data-status="pause"><span class="lf-choice__dot"></span><span class="lf-choice__text"><span class="lf-choice__name" data-t="Paus">Paus</span><span class="lf-choice__sub" data-t="Chillar en stund">Chillar en stund</span></span></button>
+          <button type="button" class="lf-choice" role="radio" aria-checked="false" data-status="waiting"><span class="lf-choice__dot"></span><span class="lf-choice__text"><span class="lf-choice__name" data-t="Inväntar start">Inväntar start</span><span class="lf-choice__sub" id="checkin-waiting-sub" data-t="av uppdraget">av uppdraget</span></span></button>
+        </div>
+      </div>
       <p class="lf-message" id="checkin-message" role="status"></p>
       <div class="sheet__actions">
         <button class="lf-button lf-button--primary" type="button" id="checkin-submit"></button>

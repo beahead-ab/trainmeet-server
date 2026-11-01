@@ -1561,6 +1561,8 @@ driving now|kör nu|kører nu|kjører nå|fahren gerade
 Invited|Inbjuden|Inviteret|Invitert|Eingeladen
 Practice|Övning|Øvelse|Øvelse|Übung
 track {track}|spår {track}|spor {track}|spor {track}|Gleis {track}
+On a break|Paus|Pause|Pause|Pause
+Waiting for the duty to start|Inväntar start av uppdrag|Venter på at tjenesten starter|Venter på at tjenesten starter|Wartet auf den Dienstbeginn
 That did not work. Try again.|Det gick inte. Försök igen.|Det lykkedes ikke. Prøv igen.|Det gikk ikke. Prøv igjen.|Das hat nicht geklappt. Bitte erneut versuchen.
 Planning file (JSON)|Planeringsfilen (JSON)|Planlægningsfilen (JSON)|Planleggingsfilen (JSON)|Planungsdatei (JSON)
 – the same file that goes to Cloud. It gives the duties: trains, stations, tracks and times.|– samma fil som går till Cloud. Den ger tjänsterna: tåg, stationer, spår och tider.|– den samme fil, der går til Cloud. Den giver tjenesterne: tog, stationer, spor og tider.|– den samme filen som går til Cloud. Den gir tjenestene: tog, stasjoner, spor og tider.|– dieselbe Datei, die an Cloud geht. Sie liefert die Dienste: Züge, Bahnhöfe, Gleise und Zeiten.

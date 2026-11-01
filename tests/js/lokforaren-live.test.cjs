@@ -111,6 +111,22 @@ function png(size) {
     await page.locator('#bana .lf-pill.is-me').waitFor();
     assert.match(await page.locator('#people').innerText(), /Tveiten · nyss/);
 
+    // 4b. Paus: not out on the layout. Benny leaves the station line and stands
+    //     under "Not on the layout", without fading (Casper 2026-11-01).
+    await page.locator('#drivers-checkin').click();
+    await page.locator('#sheet-checkin').waitFor({ state: 'visible' });
+    await page.locator('#checkin-statuses [data-status="pause"]').click();
+    assert.equal(await page.locator('#checkin-statuses [data-status="pause"]').getAttribute('aria-checked'), 'true');
+    assert.equal(await page.locator('#checkin-stations [aria-checked="true"]').count(), 0);
+    assert.equal(await page.locator('#checkin-tracks-field').isHidden(), true);
+    assert.equal(await page.locator('#checkin-submit').innerText(), 'Checka in · Paus');
+    await page.locator('#checkin-submit').click();
+    await page.locator('#sheet-checkin').waitFor({ state: 'hidden' });
+    await page.locator('#offtrack-pause .lf-pill.is-me').waitFor();
+    assert.equal(await page.locator('#bana .lf-pill.is-me').count(), 0);
+    assert.equal(await page.locator('#offtrack-waiting').isHidden(), true);
+    assert.match(await page.locator('#people').innerText(), /Paus · nyss/);
+
     // 5. Save an icon: it replaces the initials everywhere.
     const image = path.join(os.tmpdir(), `lokforaren-icon-${process.pid}.png`);
     fs.writeFileSync(image, png(300));
@@ -189,8 +205,39 @@ function png(size) {
     await participant.goto(base + '/');
     await participant.locator('#pv-topology .topology-driver title', { hasText: 'Benny' }).waitFor({ state: 'attached' });
     assert.equal(await participant.locator('#pv-topology .topology-driver title', { hasText: 'Maja' }).count(), 0);
+    // 5e. On a break Benny is not on the layout, so not on the maps either.
+    await page.evaluate(async () => {
+      const response = await fetch('/v1/driver/checkins', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'pause' }) });
+      if (!response.ok) throw new Error(await response.text());
+    });
+    await participant.locator('#pv-topology .topology-driver title', { hasText: 'Benny' }).waitFor({ state: 'detached', timeout: 8000 });
     await guest.close();
     await maja.close();
+
+    // 5f. Before the duty starts: the countdown checks in as "waiting to start".
+    await clock({ action: 'set', time: '16:40:00', speed: 1 });
+    await page.locator('.lf-tab[data-tab="duty"]').click();
+    await page.locator('#view-countdown').waitFor({ state: 'visible', timeout: 8000 });
+    await page.locator('#countdown-checkin').click();
+    await page.locator('#sheet-checkin').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#checkin-statuses [data-status="waiting"]').getAttribute('aria-checked'), 'true');
+    assert.equal(await page.locator('#checkin-waiting-sub').innerText(), 'Tjänst 132 · 17:10');
+    assert.equal(await page.locator('#checkin-submit').innerText(), 'Checka in · Inväntar start');
+    await page.locator('#checkin-submit').click();
+    await page.locator('#sheet-checkin').waitFor({ state: 'hidden' });
+    await page.locator('.lf-tab[data-tab="drivers"]').click();
+    await page.locator('#offtrack-waiting .lf-pill.is-me').waitFor();
+    assert.equal(await page.locator('#offtrack-pause').isHidden(), true);
+    assert.match(await page.locator('#people').innerText(), /Inväntar start · nyss/);
+    // A station again: back on the line, and "Not on the layout" is gone.
+    await page.locator('#drivers-checkin').click();
+    await page.locator('#checkin-stations .lf-choice').first().click();
+    await page.locator('#checkin-submit').click();
+    await page.locator('#bana .lf-pill.is-me').waitFor();
+    assert.equal(await page.locator('#offtrack').isHidden(), true);
+    await clock({ action: 'set', time: '17:51:00', speed: 4 });
+    await page.locator('.lf-tab[data-tab="duty"]').click();
+    await page.locator('#view-korplan').waitFor({ state: 'visible', timeout: 8000 });
 
     // 6. A stopped clock stops the line and says so.
     await page.locator('.lf-tab[data-tab="duty"]').click();
@@ -207,7 +254,7 @@ function png(size) {
     const html = fs.readFileSync(path.join(root, 'src/tmbox_gateway/web/lokforaren/index.html'), 'utf8');
     assert.equal(/\sstyle=/.test(html), false);
     assert.deepEqual(errors, []);
-    console.log('lokforaren-live: ok (sign-in, duty 132, NOW line, seconds, check-in, layout, icon in app and account, drivers on the Drift map, big screen and participants page, stopped clock, English)');
+    console.log('lokforaren-live: ok (sign-in, duty 132, NOW line, seconds, check-in, pause and waiting to start, layout, icon in app and account, drivers on the Drift map, big screen and participants page, stopped clock, English)');
   } finally {
     if (browser) await browser.close();
     fixture.stdin.end();
