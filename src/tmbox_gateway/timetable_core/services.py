@@ -206,5 +206,11 @@ def build_services(rows: list[dict[str, Any]], station_names: dict[str, str]) ->
         color = next((str(row.get("train_color")) for row in group if re.fullmatch(r"#[0-9A-Fa-f]{6}", str(row.get("train_color") or ""))), None)
         if color:
             service["color"] = color  # tågslagets färg i planen, som i arrangörens grafblad
+        # Planens id för tåget följer tjänsten när alla rader med id har samma,
+        # så att det finns kvar också när servern bygger om tjänsterna efter en
+        # lokal ändring (Server #222).
+        sources = {str(row.get("source_train_id")).strip() for row in group if str(row.get("source_train_id") or "").strip()}
+        if len(sources) == 1:
+            service["source_train_id"] = next(iter(sources))
         services.append(service)
     return services, routes, service_ids

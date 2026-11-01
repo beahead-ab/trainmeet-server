@@ -104,7 +104,7 @@ rapport har ingen skrivväg.
 | --- | --- | --- |
 | Station (`code`) | Dispatcher (`signature`) | Exakt matchning. Dubbletter på någon sida matchas aldrig. Skillnad bara i versaler visas som tips men räknas som omatchad. |
 | Sträcka (stationspar) | Sektionernas `from`/`to` | Matchas på stationsparet. Antal passager = `totalTrackStretches − 1`. En sträcka utan tåg i Tellurian just nu visas som "utan tåg", inte som fel. |
-| Tåg | `train` ("SJ IC 456"), `trainId` | 1) källans tåg-id om tågturen har `source_train_id` (planens `Train.Id`, se nedan); 2) tågnummer om det är entydigt hos båda; 3) annars första avgångsstation. Tvetydigt = omatchat, aldrig gissat. |
+| Tåg | `train` ("SJ IC 456"), `trainId` | 1) källans tåg-id om tågturen har `source_train_id` (planens `Train.Id`, se nedan) och det pekar ut exakt ett tåg, också när två tåg delar nummer; 2) tågnummer om det är entydigt hos båda; 3) delar två TrainMeet-tåg numret: bolag och tågslag (`service_key`, "DSB IC") mot Tellurians etikett ("DSB IC 116"); 4) annars första avgångsstation. Tvetydigt = omatchat, aldrig gissat. |
 | Klocka | – | Rapporten varnar om TrainMeet inte följer FastClock. Tellurians klocka syns inte i API:t. |
 
 ### Källans id i driftpaketet
@@ -125,7 +125,10 @@ Adaptern använder i dag bara `services[].source_train_id`. Stationerna matchas
 fortfarande på signatur och sektionerna på stationspar; stationernas och
 sträckornas id finns för när Stefans server visar sig använda samma id (fråga
 12 nedan). Ett paket utan fälten (en äldre träff, eller ett underlag som inte
-är planen) matchas som förut. Driftpaketet har fortfarande inget bolag per tåg.
+är planen) matchas som förut. Två tåg som delar nummer (SJ X 116 och DSB IC 116)
+matchas på källans id när båda har ett eget, och annars på `service_key` mot
+Tellurians etikett. Har två tjänster samma id, eller samma bolag och tågslag,
+gissas inget.
 
 ## Handlingar
 

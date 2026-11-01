@@ -16,7 +16,7 @@ from unittest.mock import patch
 from tmbox_gateway.integrations.framework import Outcome, ScopeMismatch, Unsupported
 from tmbox_gateway.integrations.journal import SqliteCommandJournal
 from tmbox_gateway.integrations.tellurian import (
-    ActionNotOffered, AddressRejected, Endpoint, Mirror, ShadowRunner, TellurianClient,
+    ActionNotOffered, AddressRejected, Endpoint, Mirror, Section, ShadowRunner, TellurianClient,
     TellurianCommands, TellurianError, Transport, check_address, deviations, match_stations,
     match_stretches, match_trains, offered, parse_dispatcher_view, parse_train_label, preflight,
     safe_href, station_map,
@@ -433,6 +433,34 @@ class MappingTests(unittest.TestCase):
         services = [{"id": "s1", "train_number": "999", "source_train_id": "3", "stops": []}]
         result = match_trains(services, STATIONS, self.mirror.sections())
         self.assertEqual([("999", "TAB RC 100")], [(m["number"], m["tellurian"]) for m in result["matched"]])
+
+    def test_shared_number_is_told_apart_by_the_plans_id_or_operator(self):
+        def section(sid, train, train_id=None):
+            return Section(id=sid, train=train, train_id=train_id, train_state="planned", state="planned",
+                           current=0, total=1, from_sig="CDA", to_sig="VST")
+        stop = [{"station_id": "st-cda", "stop_order": 0}]
+        # Planens id avgör, också när två tåg delar nummer (Cloud #112).
+        by_id = {"a": section("a", "SJ X 116", "t1"), "b": section("b", "DSB IC 116", "t2")}
+        services = [{"id": "x", "train_number": "116", "source_train_id": "t1", "service_key": "SJ X", "stops": stop},
+                    {"id": "ic", "train_number": "116", "source_train_id": "t2", "service_key": "DSB IC", "stops": stop}]
+        result = match_trains(services, STATIONS, by_id)
+        self.assertEqual({("x", "SJ X 116"), ("ic", "DSB IC 116")},
+                         {(m["service_id"], m["tellurian"]) for m in result["matched"]})
+        self.assertEqual({"source_id"}, {m["by"] for m in result["matched"]})
+        # Utan id: bolag och tågslag (service_key) mot Tellurians etikett.
+        by_label = {"a": section("a", "SJ X 116"), "b": section("b", "DSB IC 116")}
+        bare = [{k: v for k, v in service.items() if k != "source_train_id"} for service in services]
+        result = match_trains(bare, STATIONS, by_label)
+        self.assertEqual({("x", "SJ X 116"), ("ic", "DSB IC 116")},
+                         {(m["service_id"], m["tellurian"]) for m in result["matched"]})
+        # Samma id på två tjänster, eller samma bolag och tågslag: inget gissas.
+        twice = [{**services[0], "id": "x2"}, services[0]]
+        self.assertEqual([], match_trains(twice, STATIONS, by_id)["matched"])
+        same_kind = [{**bare[0], "id": "x2"}, bare[0]]
+        self.assertEqual([], match_trains(same_kind, STATIONS, by_label)["matched"])
+        # Tellurians etikett utan bolag: som förut, tvetydigt.
+        plain = {"a": section("a", "116"), "b": section("b", "116 ")}
+        self.assertEqual([], match_trains(bare, STATIONS, plain)["matched"])
 
     def test_train_labels(self):
         self.assertEqual(("SJ", "IC", "456"), parse_train_label("SJ IC 456"))

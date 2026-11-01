@@ -61,6 +61,24 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual("23:59", next(s for s in service["stops"] if s["station_id"] == row["station_id"])["departure_time"])
         RuntimePublication.parse(effective)
 
+    def test_the_plans_train_id_survives_a_local_change(self):
+        """Planens id för tåget (Cloud #112) finns kvar på tjänsten när servern bygger om den (#222)."""
+        service_id = self.package["trains"][0]["service_id"]
+        for row in self.package["trains"]:
+            if row["service_id"] == service_id:
+                row["source_train_id"] = "4711"
+        for service in self.package["services"]:
+            if service["id"] == service_id:
+                service["source_train_id"] = "4711"
+        draft = draft_from_publication(self.package)
+        draft["trains"][0]["departure_time"] = "23:59"
+        effective, _ = apply_draft(self.package, draft)
+        rebuilt = {s["id"]: s for s in effective["services"]}
+        self.assertEqual("4711", rebuilt[effective["trains"][0]["service_id"]]["source_train_id"])
+        self.assertEqual(sum(1 for s in self.package["services"] if s.get("source_train_id")),
+                         sum(1 for s in effective["services"] if s.get("source_train_id")))
+        RuntimePublication.parse(effective)
+
     def test_what_cloud_owns_cannot_change_here(self):
         cases = (
             (lambda d: d["trains"].append({**d["trains"][0], "id": "ny"}), "Nya tåg läggs till i Cloud"),
