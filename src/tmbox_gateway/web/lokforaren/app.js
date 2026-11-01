@@ -383,7 +383,8 @@
     // Förlagan: sidorna i köruppdragets PDF, för den som vill se originalet.
     const source = $("#found-source");
     const pages = (duty.source && duty.source.pages || []).filter(Boolean);
-    source.hidden = !(duty.source && duty.source.document_id && pages.length);
+    // Förlagan: serverns egna köruppdrag (document_id) eller Clouds (part).
+    source.hidden = !(duty.source && (duty.source.document_id || duty.source.part) && pages.length);
     if (!source.hidden) {
       const span = pages[0] === pages[pages.length - 1] ? String(pages[0]) : `${pages[0]}–${pages[pages.length - 1]}`;
       // Helst bara tjänstens egna sidor; annars hela köruppdraget på rätt sida.

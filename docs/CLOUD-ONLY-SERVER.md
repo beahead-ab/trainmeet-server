@@ -171,6 +171,22 @@ När banan är fri tas hela versionen utan att admin behöver välja, eftersom
 lagret är Clouds egen rättelse. Statusraden säger *Rättelsen från Cloud gäller
 nu för N tåg*, och `local_edits.source` är `cloud` för ett sådant lager.
 
+## Köruppdragen till Lokföraren (Cloud #113)
+
+Paketet kan ha `driver_duties`: lokförarnas tjänster ur köruppdragen som
+arrangören lagt in under fliken Lokförare i Cloud. Varje tjänst kan ha
+`source.pages` (sidorna i förlagan) och `source.part` (`sha256`, `size`), en
+liten PDF med bara tjänstens sidor. Servern hämtar delarna med sin
+serverkoppling (`GET /config/driver-parts/<sha256>?token=…`) innan paketet tas
+emot, kontrollerar storlek, sha256 och PDF-huvud och sparar dem lokalt. Går en
+del inte att hämta tas paketet inte emot. Cloud lämnar bara ut delar som någon
+av träffens publicerade versioner hänvisar till, och bara till en server som är
+kopplad till träffen.
+
+En träff med bara köruppdrag har inga stationer, sträckor, tågrörelser eller
+TMBox-paneler. Servern tar emot ett sådant paket och kör klockan och
+Lokföraren. Detaljer i [LOKFORAREN.md](LOKFORAREN.md).
+
 ## Tåg som delar nummer och manuella tåg (Cloud #100)
 
 **Delade nummer.** Två tåg som delar nummer samma dag (DSB IC 116 och SJ X 116)

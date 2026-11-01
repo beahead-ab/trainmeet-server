@@ -192,6 +192,9 @@ class CloudConfiguration:
                 raise CentralSyncError("Cloud skickade inget giltigt driftpaket med serverkoppling.")
             if download.package != preview.package:
                 raise CentralSyncError("Cloud-versionen ändrades under hämtningen. Försök igen.")
+            # Köruppdragens sidor (Cloud #113) hämtas innan paketet tas emot,
+            # så att Lokföraren fungerar utan internet efter synken.
+            self._fetch_driver_parts(download.package, download.link_token, url)
             with self.app.lifecycle.lock:
                 if self.app.lifecycle.selected() != before:
                     raise CentralSyncError("Träffen ändrades under hämtningen. Försök igen.")
@@ -252,7 +255,10 @@ class CloudConfiguration:
                         self.store.clear_local_decision()
                         self._report("current", "Servern använder senaste publicerade config.")
                         self.last_checked_at = datetime.now(timezone.utc).isoformat()
-                        return {"checked": True, "pending": False, "update_available": False, **self.status()}
+                    # Sidor som saknas för den aktiva träffen, till exempel
+                    # efter en återställning, hämtas igen. Inget annat ändras.
+                    self._refill_driver_parts(token, url)
+                    return {"checked": True, "pending": False, "update_available": False, **self.status()}
                 # Admin har valt att behålla de lokala ändringarna mot just den
                 # här versionen: ingen ny hämtning, och frågan kommer igen först
                 # när Cloud publicerar en nyare.
@@ -274,6 +280,9 @@ class CloudConfiguration:
                     raise CentralSyncError("Cloud-versionen ändrades under hämtningen. Ny kontroll görs automatiskt.")
                 if not manifest.package_checksum or hashlib.sha256(canonical).hexdigest() != manifest.package_checksum:
                     raise CentralSyncError("Configens kontrollsumma stämmer inte. Den aktiva träffen är oförändrad.")
+                # Ett paket med köruppdrag tas emot först när alla sidor finns
+                # på servern (Cloud #113). Utanför träffens lås: nätverk.
+                self._fetch_driver_parts(download.package, token, url)
                 with self.app.lifecycle.lock:
                     if self.app.lifecycle.selected() != selected or self.store.link_token() != token:
                         raise CentralSyncError("Cloud-kopplingen ändrades under hämtningen. Försök igen.")
@@ -292,6 +301,33 @@ class CloudConfiguration:
                 self.state, self.message = "error", str(error)
                 self.message_template, self.message_values = "", {}
                 raise
+
+    def _fetch_driver_parts(self, package, token, url):
+        """Köruppdragens sidor ur Cloud för ett paket, innan det tas emot.
+
+        Allt eller inget: saknas en del, eller stämmer den inte, tas paketet
+        inte emot och den aktiva träffen är oförändrad. Nästa kontroll försöker
+        igen, och delar som redan kommit fram hämtas inte en gång till.
+        """
+        parts = getattr(self.app, "cloud_driver_parts", None)
+        if parts is None or not token or not parts.missing(package):
+            return
+        try:
+            result = parts.ensure(package, lambda sha, size: self.app.driver_part_fetcher(token, url, sha, size))
+        except CentralSyncError as error:
+            raise CentralSyncError(
+                f"Köruppdragens sidor kunde inte hämtas från Cloud ({error}). Den aktiva träffen är oförändrad."
+            ) from error
+        LOGGER.info("Köruppdragens sidor från Cloud: %s hämtade av %s", result["fetched"], result["parts"])
+
+    def _refill_driver_parts(self, token, url):
+        active = self.store.active()
+        if active is None:
+            return
+        try:
+            self._fetch_driver_parts(active.payload, token, url)
+        except CentralSyncError as error:
+            LOGGER.warning("Köruppdragens sidor för den aktiva träffen kunde inte hämtas igen: %s", error)
 
     def _correct_during_play(self, package):
         """Lägg en väntande Cloud-version på de tåg den rör, utan att nollställa något.

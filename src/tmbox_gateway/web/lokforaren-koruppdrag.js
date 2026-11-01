@@ -1,18 +1,24 @@
-/* Köruppdragen till Lokföraren, lästa i administratörens webbläsare (#225).
+/* Köruppdragen till Lokföraren, lästa i webbläsaren (Server #225, Cloud #113).
+ *
+ * Samma fil på två ställen, byte för byte: serverns uppladdning under
+ * Inställningar → Lokförare (web/lokforaren-koruppdrag.js) och fliken
+ * Lokförare i Cloud (src/driver/koruppdrag.js). Servern äger den: ändra här och
+ * kopiera till Cloud med `node tools/sync-i18n.mjs --siblings`.
  *
  * Två filer, med var sin uppgift:
  *
- *   1. Planeringsfilen (JSON ur planeringsprogrammet, samma fil som går till
- *      Cloud) ger tjänsterna: tåg, stationer, spår, tider och anvisningar.
- *      fromPlan() gör om dem till samma form som Clouds driver_duties.
+ *   1. Planeringsfilen (JSON ur planeringsprogrammet) ger tjänsterna: tåg,
+ *      stationer, spår, tider och anvisningar. fromPlan() gör om dem till
+ *      paketets form för driver_duties.
  *   2. Köruppdragens PDF (utskriften av samma tjänster, gärna 600 sidor) är
- *      förlagan. readPdf() tar fram texten på varje sida med pdf.js,
+ *      förlagan. extract() tar fram texten på varje sida med pdf.js,
  *      matchPages() hittar vilka sidor som hör till vilken tjänst och split()
  *      gör en liten PDF per tjänst med pdf-lib, så att föraren bara får sina.
  *
- * Servern får bara färdiga tjänster och sidnummer och kontrollerar formen;
- * den tolkar varken planen eller PDF:en.
- *
+ * Servern och Cloud får bara färdiga tjänster och sidnummer och kontrollerar
+ * formen (serverns driver.py, Clouds cloud/drivers.py); ingen av dem tolkar
+ * planen eller PDF:en. På servern läser readPdf() och loadPdfLib() pdf.js och
+ * pdf-lib ur serverns egna filer; i Cloud ges de in (src/driver/reader.ts).
  * Samma fil körs i Node i testerna (module.exports), utan pdf.js där.
  */
 (function (root, factory) {

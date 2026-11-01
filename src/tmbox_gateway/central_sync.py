@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from typing import Any
@@ -155,6 +156,39 @@ def wait_for_runtime_change(link_token: str, endpoint_url: str, publication_id: 
         raise CentralSyncError("Cloud skickade ingen publiceringsnotifiering")
     return CentralRuntimeManifest(str(payload["publication_id"]), str(payload.get("published_at", "")),
                                  str(payload.get("package_checksum", "")), payload.get("wait_supported") is True)
+
+
+#: En tjänsts egna sidor ur köruppdraget (Cloud: 8 MB, servern: 10 MB).
+MAX_DRIVER_PART_BYTES = 10 * 1024 * 1024
+
+
+def fetch_driver_part(link_token: str, endpoint_url: str, sha256: str, size: int,
+                      *, timeout: float = 20) -> bytes:
+    """En PDF-del till Lokföraren från Cloud (Cloud #113): en tjänsts egna sidor.
+
+    Delen är innehållsadresserad: den hämtas med serverkopplingen, som
+    configen, och godtas bara om storleken och sha256 stämmer med paketet och
+    filen är en PDF. Cloud lämnar bara ut delar som träffens publicerade
+    versioner hänvisar till.
+    """
+    token = link_token.strip()
+    if not token:
+        raise CentralSyncError("Servern är inte kopplad till en central träff")
+    if not isinstance(size, int) or isinstance(size, bool) or not 0 < size <= MAX_DRIVER_PART_BYTES:
+        raise CentralSyncError("Köruppdragets sidor har en ogiltig storlek i paketet")
+    endpoint_url = canonical_runtime_url(endpoint_url).split("?", 1)[0].rstrip("/")
+    request = Request(f"{endpoint_url}/driver-parts/{sha256}?{urlencode({'token': token})}",
+                      headers={"Accept": "application/pdf", "User-Agent": "TrainMeet-Server"})
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            body = response.read(size + 1)
+    except HTTPError as error:
+        raise CentralSyncError("Köruppdragets sidor kunde inte hämtas från Cloud") from error
+    except (URLError, TimeoutError) as error:
+        raise CentralSyncError("TrainMeet kunde inte nås. Kontrollera internetanslutningen.") from error
+    if len(body) != size or hashlib.sha256(body).hexdigest() != sha256 or not body.startswith(b"%PDF-"):
+        raise CentralSyncError("Köruppdragets sidor från Cloud stämmer inte med paketet")
+    return body
 
 
 def _heartbeat(name: str | None, running_version: str | None) -> dict[str, str]:
