@@ -417,8 +417,12 @@
         ? `${driver.duty_demo ? t("Övning") + " " : ""}${driver.duty_number}${driver.trains.length ? " · " + driver.trains.join(", ") : ""}`
         : "–"));
       const checkin = driver.checkin;
+      // Paus och inväntar start är lägen utan station: föraren är inte på banan.
+      const where = checkin && (checkin.status === "pause" ? t("Paus")
+        : checkin.status === "waiting" ? t("Inväntar start av uppdrag")
+          : `${checkin.station}${checkin.track ? " " + t("spår {track}", { track: checkin.track }) : ""}`);
       row.append(make("td", checkin ? "" : "m", checkin
-        ? `${checkin.station}${checkin.track ? " " + t("spår {track}", { track: checkin.track }) : ""}${checkin.meet_time ? " · " + checkin.meet_time.slice(0, 5) : ""}`
+        ? `${where}${checkin.meet_time ? " · " + checkin.meet_time.slice(0, 5) : ""}`
         : "–"));
       rows.append(row);
     }

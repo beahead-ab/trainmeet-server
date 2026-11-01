@@ -209,6 +209,17 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
   klocka utan dem räknas på klockslaget. Ställs klockan tillbaka förbi
   incheckningen är den inte aktuell längre, och efter ett dygn i verklig
   tid är den borta vad klockan än gör. Bara den senaste räknas.
+- **Inte ute på banan**: i stället för en station kan föraren checka in med
+  ett läge (`status`): **Paus** (`pause`, chillar en stund) eller
+  **Inväntar start** av uppdraget (`waiting`). Före tjänstens start är
+  Inväntar start förvalt, och nedräkningen har en knapp som öppnar arket med
+  det valt. Ett läge har ingen station, inget spår och inget tåg. Det tonar
+  inte ut utan gäller tills nästa incheckning (som längst ett dygn i verklig
+  tid), och en klocka som ställts tillbaka gör det inte osant; åldern räknas
+  då i verklig tid. Under Förare står föraren under *Inte på banan* och i
+  listan med läget och åldern ("Paus · för 5 min"). Kartorna har bara förare
+  på banan, så ett läge syns inte där, och ikonen lämnas inte ut via
+  `/v1/display/driver-avatars/{id}`.
 - Den som stänger av **Visa min ikon på banan** syns inte för andra,
   varken i appen eller på kartorna.
 - Ikonen beskärs och skalas ned i telefonen (canvas, 256 px JPEG). Servern
@@ -246,7 +257,7 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
 | GET | `/v1/driver/duties/{id}` | en tjänst |
 | POST | `/v1/driver/active` | aktivera `{duty_id}` |
 | POST | `/v1/driver/active/end` | avsluta |
-| POST | `/v1/driver/checkins` | `{station, station_id?, track?}` |
+| POST | `/v1/driver/checkins` | `{station, station_id?, track?}`, eller `{status: "pause" \| "waiting"}` |
 | GET | `/v1/driver/presence` | förarna på träffen och deras senaste incheckning |
 | POST | `/v1/driver/profile` | `{visible}` |
 | POST | `/v1/driver/avatar` | `{image: "data:image/jpeg;base64,…"}` |

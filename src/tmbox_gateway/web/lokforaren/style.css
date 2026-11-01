@@ -259,6 +259,10 @@ button { cursor: pointer; }
 .lf-person__where { font-size: 14px; font-weight: 600; text-align: right; white-space: nowrap; }
 .lf-person__where.is-faded { color: var(--mute); }
 .lf-empty { margin: 8px 0 4px; font-size: 13px; color: var(--mute); }
+/* Paus och inväntar start: under banan, utan station och utan uttoning. */
+.lf-offtrack { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding-top: 12px; border-top: 1px dashed var(--line2); }
+.lf-offtrack__row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 6px; min-height: 42px; }
+.lf-offtrack__label { flex: 0 0 auto; min-width: 26px; font-size: 15px; font-weight: 600; line-height: 30px; color: var(--ink2); }
 
 /* ── Jag ──────────────────────────────────────────────────────────── */
 .lf-me { display: flex; align-items: center; gap: 14px; padding: 12px 14px; text-align: left; width: 100%; color: var(--ink); }
@@ -296,6 +300,9 @@ button { cursor: pointer; }
 .sheet__head { display: flex; align-items: center; gap: 12px; }
 .sheet__head > div { display: flex; flex-direction: column; gap: 4px; }
 .lf-choices { display: flex; flex-direction: column; gap: 8px; }
+.lf-choices--pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.lf-choices--pair .lf-choice { gap: 10px; padding: 8px 12px; }
+.lf-choices--pair .lf-choice__text { min-width: 0; }
 .lf-choice { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-radius: 12px; text-align: left; color: var(--ink); border: 1.5px solid var(--line); background: var(--panel2); }
 .lf-choice[aria-checked="true"] { border-color: var(--blue); background: var(--blue-soft); }
 .lf-choice__dot { flex: 0 0 18px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line2); display: flex; align-items: center; justify-content: center; }
