@@ -146,18 +146,28 @@
     if (!latest) { box.hidden = true; return; }
     const local = latest.local_edits || {};
     const count = local.count || 0;
+    // En rättelse som Cloud lade på under spelet (Cloud #100 B6) är inte admins
+    // lokala lager: den står för sig och ersätts av hela Cloud-versionen när
+    // banan är fri, utan att admin behöver välja.
+    const fromCloud = count > 0 && local.source === "cloud";
     box.hidden = false;
-    box.className = `kr-state${count ? "" : " ok"}`;
+    box.className = `kr-state${count ? "" : " ok"}${fromCloud ? " is-cloud" : ""}`;
+    box.dataset.source = fromCloud ? "cloud" : "local";
     $("#data-local-state").textContent = count === 0 ? t("Samma som Cloud-versionen.")
+      : fromCloud ? (count === 1 ? t("1 rättelse från Cloud gäller redan under spelet.") : t("{count} rättelser från Cloud gäller redan under spelet.", { count }))
       : count === 1 ? t("1 lokal ändring ovanpå Cloud-versionen.") : t("{count} lokala ändringar ovanpå Cloud-versionen.", { count });
-    $("#data-local-note").textContent = t("Det du sparar här gäller direkt i driften och ändrar inte Cloud.");
+    $("#data-local-note").textContent = fromCloud
+      ? t("Cloud rättade tåg som inte var ute på linjen. Hela den nya versionen tas i bruk när banan är fri.")
+      : t("Det du sparar här gäller direkt i driften och ändrar inte Cloud.");
     const lines = $("#data-local-lines");
     lines.hidden = !count;
+    lines.querySelector("summary").textContent = fromCloud ? t("Visa Clouds rättelser") : t("Visa de lokala ändringarna");
     lines.querySelector("ul").replaceChildren(...(local.lines || []).map((line) => {
       const item = document.createElement("li"); item.textContent = line; return item;
     }));
+    // Clouds rättelse tas inte bort här: den är Clouds, och hela versionen kommer efter.
     const discard = $("#data-discard");
-    discard.hidden = !count;
+    discard.hidden = !count || fromCloud;
     discard.disabled = editState.busy;
   }
 

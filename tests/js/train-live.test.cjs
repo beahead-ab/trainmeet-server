@@ -183,3 +183,70 @@ test('two trains that share a number are kept apart', () => {
   const events = model.events(before, { station: 'mkd', nowSeconds: at('05:00') });
   assert.deepEqual(events.map((event) => [event.label, event.kind, event.time]), [['DSB IC 116', 'arr', '06:26'], ['SJ X 116', 'dep', '15:40']]);
 });
+
+// Cloud #100, resten på Server: Drift, kartan och listorna håller isär två tåg
+// som delar nummer. Nyckeln är serverns etikett ("DSB IC 116") där numret delas,
+// annars numret; tåget på linjen känns igen på sin rörelse.
+test('Drift, the map and the lists keep two trains that share a number apart', () => {
+  const service = (id, key, short, from, dep, to, arr) => ({ id, train_number: '116', service_key: key, train_label: `${key} 116`, short_label: `${short} 116`, stops: [
+    { station_id: from, departure_time: dep, stop_order: 0 }, { station_id: to, arrival_time: arr, stop_order: 1 }] });
+  const snap = {
+    clock: { time: '15:50:00' }, stations: [{ id: 'sbg', name: 'Skovborg' }, { id: 'mkd', name: 'Munkerød' }, { id: 'nlu', name: 'Nättelund' }],
+    services: [service('ic', 'DSB IC', 'IC', 'sbg', '15:30', 'mkd', '15:46'), service('x', 'SJ X', 'X', 'mkd', '15:40', 'nlu', '16:18'),
+      { id: 's7', train_number: '7', stops: [{ station_id: 'sbg', departure_time: '16:30', stop_order: 0 }, { station_id: 'mkd', arrival_time: '16:50', stop_order: 1 }] }],
+    trains: [{ id: 'ic0', service_id: 'ic', train_number: '116', station_id: 'sbg', departure_time: '15:30' },
+      { id: 'ic1', service_id: 'ic', train_number: '116', station_id: 'mkd', arrival_time: '15:46' },
+      { id: 'x0', service_id: 'x', train_number: '116', station_id: 'mkd', departure_time: '15:40' },
+      { id: 'x1', service_id: 'x', train_number: '116', station_id: 'nlu', arrival_time: '16:18' }],
+    movement_live: { ic0: { departure: 'departed', departed_seconds: at('15:30') }, ic1: { arrival: 'arrived', arrived_seconds: at('15:49') },
+      x0: { departure: 'departed', departed_seconds: at('15:48') } },
+    // X 116 är ute på linjen (rörelsen x0); IC 116 står inne i Munkerød.
+    connection_states: [{ id: 'c2', channels: [{ train_number: '116', state: 'occupied', from_station_id: 'mkd', to_station_id: 'nlu', movement_id: 'x0' }] }],
+    train_positions: [{ train_number: '116', status: 'station', station_id: 'mkd', movement_id: 'ic1' }],
+  };
+  // Listorna: ett tåg per nyckel, båda 116 och det unika 7.
+  assert.deepEqual(model.services(snap).map((service) => [model.trainKey(service), model.trainText(service)]),
+    [['7', '7'], ['DSB IC 116', 'IC 116'], ['SJ X 116', 'X 116']]);
+  // Kartan: X 116 på linjen, IC 116 inne, var och ett med sin tagg.
+  const { onLine, atStation } = model.trains(snap);
+  assert.deepEqual(onLine.map((train) => [train.key, train.text, train.serviceId]), [['SJ X 116', 'X 116', 'x']]);
+  assert.deepEqual(atStation.map((train) => [train.key, train.text, train.station]), [['DSB IC 116', 'IC 116', 'mkd']]);
+  assert.deepEqual(model.stationCounts(snap).get('mkd'), ['DSB IC 116']);
+  const states = model.trainStates(snap);
+  assert.equal(states.get('SJ X 116').state, 'on-line');
+  assert.equal(states.get('DSB IC 116').state, 'at-station');
+  // Förseningen per tåg, också under nyckeln.
+  const lives = model.trainLive(snap, at('15:50'));
+  assert.deepEqual([lives.get('SJ X 116').delayMinutes, lives.get('DSB IC 116').delayMinutes], [8, 3]);
+  // Händelserna: var och en med sin nyckel och sin försening; ett vald tåg är bara det tåget.
+  const line = model.events(snap, { nowSeconds: at('15:50') });
+  assert.deepEqual(line.filter((event) => event.train === '116').map((event) => [event.key, event.label, event.delayMinutes]), [['SJ X 116', 'X 116', 8]]);
+  assert.deepEqual(model.events(snap, { train: 'SJ X 116', nowSeconds: at('15:50') }).map((event) => [event.key, event.stationId]), [['SJ X 116', 'nlu']]);
+  assert.deepEqual(model.events(snap, { train: 'DSB IC 116', nowSeconds: at('15:50') }), [], 'IC 116 has nothing left today');
+  // Sträckan på linjen hör till X 116, inte till IC 116 som delar numret.
+  assert.equal(model.onLineLeg(snap, onLine[0], minute('15:50')).service.id, 'x');
+  // Diagrammet: båda linjerna, valet tänder bara det valda tåget.
+  const g = model.graph(snap, { windowMinutes: 0, train: 'SJ X 116' });
+  assert.deepEqual(g.lines.filter((item) => item.number === '116').map((item) => [item.key, item.selected, item.state]),
+    [['DSB IC 116', false, 'at-station'], ['SJ X 116', true, 'on-line']]);
+  // Sök: "ic" hittar IC 116, "116" båda; träffen bär nyckeln och taggen.
+  assert.deepEqual(model.search(snap, 'ic').map((item) => [item.id, item.label]), [['DSB IC 116', 'IC 116']]);
+  assert.deepEqual(model.search(snap, '116').map((item) => item.label), ['IC 116', 'X 116']);
+});
+
+test('a number only one train has behaves exactly as before', () => {
+  // Utan etikett är nyckeln numret: samma listor, samma val och samma händelser.
+  const snap = snapshot({ m0: { departure: 'departed', departed_seconds: at('09:24') } }, {
+    clock: { time: '09:30:00' },
+    connection_states: [{ id: 'ab', channels: [{ train_number: '101', state: 'occupied', from_station_id: 'a', to_station_id: 'b', movement_id: 'm0' }] }] });
+  assert.deepEqual(model.services(snap).map((service) => model.trainKey(service)), ['101']);
+  assert.deepEqual(model.trains(snap).onLine.map((train) => [train.trainNumber, train.key, train.text]), [['101', '101', '101']]);
+  assert.equal(model.trainStates(snap).get('101').state, 'on-line');
+  const [event] = model.events(snap, { nowSeconds: at('09:30') });
+  assert.deepEqual([event.train, event.key, event.label, event.serviceId], ['101', '101', '101', null]);
+  assert.equal(model.graph(snap, { windowMinutes: 0, train: '101' }).lines[0].selected, true);
+  assert.deepEqual(model.search(snap, '10').map((item) => [item.id, item.label]), [['101', '101']]);
+  // En äldre bild utan rörelse i kanalen: numret gäller, som förut.
+  const older = { ...snap, connection_states: [{ id: 'ab', channels: [{ train_number: '101', state: 'occupied', from_station_id: 'a', to_station_id: 'b' }] }] };
+  assert.deepEqual(model.trains(older).onLine.map((train) => [train.key, train.serviceId]), [['101', null]]);
+});

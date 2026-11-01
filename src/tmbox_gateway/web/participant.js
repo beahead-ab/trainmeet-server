@@ -192,7 +192,8 @@
     const shown = level();
     const upcoming = [];
     for (const service of model.services(snapshot)) {
-      const number = String(service.train_number), live = lives.get(number);
+      // Två tåg med samma nummer: vart och ett med sitt eget läge och "IC 116" (Cloud #100).
+      const number = model.trainText(service), live = service.train_label ? lives.get(String(service.id)) : lives.get(String(service.train_number));
       model.orderedStops(service).forEach((stop, index) => {
         if (selectedStation && stop.station_id !== selectedStation) return;
         const done = live?.stops[index];
@@ -230,7 +231,7 @@
     const services = (snapshot.services || []).filter(service => !selectedStation || (service.stops || []).some(stop => stop.station_id === selectedStation)).map((service) => {
       const stops = service.stops || [];
       const first = stops[0], last = stops[stops.length - 1];
-      return { number: String(service.train_number), search: stops.map(stop => stop.station_name || stationNameOf(stop.station_id)).join(" ").toLowerCase(), from: first?.station_name || stationNameOf(first?.station_id), to: last?.station_name || stationNameOf(last?.station_id),
+      return { number: model.trainText(service), live: service.train_label ? String(service.id) : String(service.train_number), search: stops.map(stop => stop.station_name || stationNameOf(stop.station_id)).join(" ").toLowerCase(), from: first?.station_name || stationNameOf(first?.station_id), to: last?.station_name || stationNameOf(last?.station_id),
                departure: first?.departure_time || first?.arrival_time || "", arrival: last?.arrival_time || last?.departure_time || "" };
     }).filter((row) => row.departure)
       .sort((a, b) => minutes(a.departure) - minutes(b.departure));
@@ -238,7 +239,7 @@
       ? services.filter((row) => row.number.toLowerCase().includes(needle) || row.search.includes(needle))
       : services;
     // Kvar att se: tåg som inte är framme, och de som ska komma senare.
-    const upcoming = matches.filter((row) => { const live = lives.get(row.number); return live ? live.state !== "arrived" && (live.state !== "not_departed" || minutes(row.arrival || row.departure) >= now) : minutes(row.arrival || row.departure) >= now; });
+    const upcoming = matches.filter((row) => { const live = lives.get(row.live); return live ? live.state !== "arrived" && (live.state !== "not_departed" || minutes(row.arrival || row.departure) >= now) : minutes(row.arrival || row.departure) >= now; });
     const rows = fullTimetable || needle ? matches : (upcoming.length ? upcoming.slice(0, 4) : matches.slice(-4));
     $("#pv-timetable-count").textContent = `${t(services.length === 1 ? "1 tåg" : "{count} tåg", { count: services.length })} · ${meetDayLabel(snapshot)}`;
     const list = $("#pv-timetable");
@@ -246,7 +247,7 @@
     if (!rows.length) list.append(Object.assign(document.createElement("p"), { className: "pv-empty", textContent: needle ? t("Inget tåg matchar sökningen.") : t("Ingen tidtabell för dagen.") }));
     const shown = level();
     for (const row of rows) {
-      const live = lives.get(row.number);
+      const live = lives.get(row.live);
       const view = model.deviationView(shown, live);
       const first = live?.stops[0], last = live?.stops.at(-1);
       // Avgången: den verkliga om den var sen eller för tidig; ankomsten: den verkliga eller den nya.

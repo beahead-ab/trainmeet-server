@@ -1,7 +1,7 @@
 // Gemensam fixtur för Kontrollrummets webbläsartester (Drift, Inställningar): riktig webb-kod
 // från repot med en strikt CSP, men API:et är en fixtur som liknar träffen i designen
 // (Grimslöv 2027, elva stationer). Ingen server, ingen Cloud, inga användardata.
-// open({ route, theme, width, height, sim, running, lang, lastRestore, loggedOut, apiDelay }) → { page, browser, errors, violations, state }
+// open({ route, theme, width, height, sim, running, lang, lastRestore, loggedOut, apiDelay, api, display }) → { page, browser, errors, violations, state }
 const { chromium } = require('playwright');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -135,7 +135,10 @@ async function open(opts = {}) {
         case '/v1/clock': if (request.method() === 'POST') { const b = JSON.parse(request.postData() || '{}'); if (b.action === 'start') st.running = true; if (b.action === 'stop') st.running = false; } data = clock(); break;
         case '/v1/clock/source': data = { source: 'internal', clock_name: '', user: '', has_password: false, poll_interval: 2 }; break;
         case '/v1/clearance/tellurian': data = { available: true, reason: null, meet_id: 'meet-1', settings: { base_url: '', test_instance: false, mode: 'off' }, modes: ['off', 'shadow'], authority_available: false, shadow: null, report: null }; break;
-        case '/v1/display': data = { clock: clock(), meet: { id: 'meet-1', name: 'Grimslöv 2027', operating_region: o.region }, active_day: 'Dagl', publication_id: 'pub-9', stations, connections, routes, services, train_positions: positions(), connection_states: connectionStates(), connection: { screens: [] }, display: {}, calendar: o.calendar ?? null, server_time: new Date().toISOString() }; break;
+        case '/v1/display': data = { clock: clock(), meet: { id: 'meet-1', name: 'Grimslöv 2027', operating_region: o.region }, active_day: 'Dagl', publication_id: 'pub-9', stations, connections, routes, services, train_positions: positions(), connection_states: connectionStates(), connection: { screens: [] }, display: {}, calendar: o.calendar ?? null, server_time: new Date().toISOString() };
+          // A test can change the picture: two trains that share a number, say.
+          if (o.display) data = o.display(data);
+          break;
         case '/v1/train': {
           const n = url.searchParams.get('number'); const s = services.find(x => x.train_number === n); selectedTrainCalls++;
           data = { train_number: n, active_day: 'Dagl', services: s ? [{ service_id: s.id, train_type: 'Persontåg', delay_minutes: 0,

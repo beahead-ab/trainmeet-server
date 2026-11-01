@@ -3233,24 +3233,37 @@ async function controlLocalClock(command) {
 
 
 
+// Tågets nyckel i Drift och på skärmarna (som drift-model trainKey): numret,
+// och där två tåg delar nummer serverns etikett ("DSB IC 116"), så att DSB IC
+// 116 och SJ X 116 hålls isär (Cloud #100). Ett unikt nummer är sin nyckel som
+// förut. Texten på tåget där det är trångt är "IC 116", annars numret.
+function overviewTrainKey(service) {
+  return service?.train_label ? String(service.train_label) : String(service?.train_number ?? "").trim();
+}
+function overviewTrainText(service) {
+  return service?.short_label ? String(service.short_label) : String(service?.train_number ?? "").trim();
+}
+
 function uniqueOverviewServices(snapshot) {
-  const byTrainNumber = new Map();
+  const byTrainKey = new Map();
   for (const service of snapshot?.services || []) {
-    const trainNumber = String(service.train_number || "").trim();
-    if (!trainNumber) continue;
-    const existing = byTrainNumber.get(trainNumber);
+    if (!String(service.train_number || "").trim()) continue;
+    const key = overviewTrainKey(service);
+    const existing = byTrainKey.get(key);
     if (!existing || (service.stops?.length || 0) > (existing.stops?.length || 0)) {
-      byTrainNumber.set(trainNumber, service);
+      byTrainKey.set(key, service);
     }
   }
-  return [...byTrainNumber.values()].sort((a, b) =>
+  return [...byTrainKey.values()].sort((a, b) =>
     String(a.train_number).localeCompare(String(b.train_number), "sv", { numeric: true })
+      || overviewTrainKey(a).localeCompare(overviewTrainKey(b), "sv", { numeric: true })
   );
 }
 
-function serviceForTrain(snapshot, trainNumber) {
-  if (!trainNumber) return null;
-  return uniqueOverviewServices(snapshot).find((service) => String(service.train_number) === String(trainNumber)) || null;
+// trainKey är tågets nyckel (numret, eller etiketten där numret delas).
+function serviceForTrain(snapshot, trainKey) {
+  if (!trainKey) return null;
+  return uniqueOverviewServices(snapshot).find((service) => overviewTrainKey(service) === String(trainKey)) || null;
 }
 
 // ── Valt tåg och vald station i Drift ─────────────────────────────────
@@ -3279,12 +3292,21 @@ function closeTrainDetail() {
   selectOverviewTrain(null);
 }
 
+// trainDetail.number är tågets nyckel. Delar två tåg numret frågar Drift efter
+// just det här tåget (service_key), annars efter numret som förut.
+function trainDetailQuery(key) {
+  const service = serviceForTrain(state.overviewSnapshot, key);
+  const number = service ? String(service.train_number) : String(key);
+  const own = service?.train_label && service.service_key ? `&service_key=${encodeURIComponent(service.service_key)}` : "";
+  return `number=${encodeURIComponent(number)}${own}`;
+}
+
 async function refreshTrainDetail() {
   const number = trainDetail.number;
   if (!number || trainDetail.loading) return;
   trainDetail.loading = true;
   try {
-    const response = await authorizedFetch(`/v1/train?number=${encodeURIComponent(number)}`, { cache: "no-store" });
+    const response = await authorizedFetch(`/v1/train?${trainDetailQuery(number)}`, { cache: "no-store" });
     const payload = await response.json();
     if (trainDetail.number !== number) return;
     if (!response.ok) throw new Error(payload.message || t("Kunde inte hämta tåget"));
@@ -3410,7 +3432,7 @@ function stationTrafficRows(snapshot, stationID) {
     const time = stop.departure_time || stop.arrival_time;
     const minute = minuteValue(time);
     return [{
-      trainNumber: String(service.train_number),
+      trainNumber: overviewTrainText(service),
       time: time ? String(time).slice(0, 5) : "–",
       kind: stop.departure_time ? "avg" : "ank",
       sort: minute === null ? 2880 : (minute < currentMinute ? minute + 1440 : minute),
@@ -3433,7 +3455,7 @@ function renderOverview(snapshot) {
     renderRouteExplorer();
   }
   // A train that left the timetable can no longer be the chosen one.
-  if (state.selectedTrainNumber !== null && !services.some((service) => String(service.train_number) === state.selectedTrainNumber)) selectTrain(null);
+  if (state.selectedTrainNumber !== null && !services.some((service) => overviewTrainKey(service) === state.selectedTrainNumber)) selectTrain(null);
   if (state.selectedStationID && !stations.some((station) => station.id === state.selectedStationID)) state.selectedStationID = null;
   // Kartan, diagrammet, klockraden, stationerna och händelserna ritas av Drift.
   pushDrift();
@@ -3479,22 +3501,22 @@ function renderRouteExplorer() {
   const stationByID = new Map((snapshot.stations || []).map((station) => [station.id, station]));
   const query = overviewRouteSearch.value.trim().toLocaleLowerCase("sv");
   const visibleServices = services.filter((service) =>
-    String(service.train_number).toLocaleLowerCase("sv").includes(query)
+    [service.train_number, overviewTrainText(service)].some((value) => String(value).toLocaleLowerCase("sv").includes(query))
   );
   // Nothing is lit until someone picks a train: a first train chosen for them
   // dimmed every other train on the map and in the diagram.
-  if (state.selectedTrainNumber !== null && !services.some((service) => String(service.train_number) === state.selectedTrainNumber)) {
+  if (state.selectedTrainNumber !== null && !services.some((service) => overviewTrainKey(service) === state.selectedTrainNumber)) {
     state.selectedTrainNumber = null;
   }
 
   overviewRouteList.innerHTML = visibleServices.length
     ? visibleServices.map((service) => {
-        const trainNumber = String(service.train_number);
-        return html`<button type="button" data-train-number="${escapeHTML(trainNumber)}" class="route-number${trainNumber === state.selectedTrainNumber ? " active" : ""}">${escapeHTML(trainNumber)}</button>`;
+        const key = overviewTrainKey(service);
+        return html`<button type="button" data-train-number="${escapeHTML(key)}" class="route-number${key === state.selectedTrainNumber ? " active" : ""}">${escapeHTML(overviewTrainText(service))}</button>`;
       }).join("")
     : html`<p class="route-empty">Inga tåg hittades.</p>`;
 
-  const selected = services.find((service) => String(service.train_number) === state.selectedTrainNumber);
+  const selected = services.find((service) => overviewTrainKey(service) === state.selectedTrainNumber);
   renderRouteDetail();
 
   const counts = new Map((snapshot.stations || []).map((station) => [station.id, 0]));
@@ -3544,7 +3566,7 @@ function renderRouteDetail() {
   const detail = document.querySelector("#overview-route-detail");
   if (!snapshot || !detail) return;
   const services = uniqueOverviewServices(snapshot);
-  const selected = services.find((service) => String(service.train_number) === state.selectedTrainNumber);
+  const selected = services.find((service) => overviewTrainKey(service) === state.selectedTrainNumber);
   if (!selected) {
     const empty = document.createElement("div"); empty.className = "route-detail-empty";
     empty.textContent = t(services.length ? "Välj ett tåg i listan, banöversikten eller tågdiagrammet." : "Tidtabellen saknar tågrutter.");
@@ -3553,7 +3575,7 @@ function renderRouteDetail() {
   }
   const stops = [...(selected.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
   const heading = document.createElement("div"); heading.className = "route-detail-heading";
-  const title = document.createElement("h3"); title.textContent = selected.train_number;
+  const title = document.createElement("h3"); title.textContent = selected.train_label || selected.train_number;
   const count = document.createElement("span"); count.textContent = t("{count} stopp", { count: stops.length });
   heading.append(title, count);
   const map = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -4035,24 +4057,10 @@ const TOPOLOGY_TRAIN_ARROW = "M2 1 L10 6 L2 11 Z";
 // channel of a line (reserved = clear given, occupied = departed), then the
 // recorded positions for trains not on a channel. Older paths record only a
 // line position, which still counts as on the line.
+// Samma regler som drift-model trains: varje tåg bär sin nyckel (key), texten
+// på taggen (text) och sin tjänst, så att två tåg med samma nummer hålls isär.
 function topologyTrains(snapshot) {
-  const onLine = [], atStation = [], seen = new Set();
-  for (const connection of snapshot.connection_states || []) {
-    for (const channel of connection.channels || []) {
-      if (!channel.train_number || !["reserved", "occupied"].includes(channel.state)) continue;
-      seen.add(String(channel.train_number));
-      onLine.push({ trainNumber: String(channel.train_number), from: channel.from_station_id, to: channel.to_station_id, departed: channel.state === "occupied",
-        departedSeconds: channel.departed_seconds ?? null, movementId: channel.movement_id ?? null });
-    }
-  }
-  for (const position of snapshot.train_positions || []) {
-    const trainNumber = String(position.train_number);
-    if (seen.has(trainNumber)) continue;
-    if (position.status === "connection") onLine.push({ trainNumber, from: position.from_station_id, to: position.to_station_id, departed: true,
-      departedSeconds: position.departed_seconds ?? null, movementId: position.movement_id ?? null });
-    else if (position.station_id) atStation.push({ trainNumber, station: position.station_id });
-  }
-  return { onLine, atStation };
+  return TrainMeetDriftModel.trains(snapshot);
 }
 
 // Vilken tur ett tåg på linjen kör (drift-model, samma svar på Drift, i
@@ -4127,7 +4135,9 @@ function markTopologyTrain(group, live, size) {
 
 function appendTopologyTrain(target, point, train, options = {}) {
   const kr = Boolean(options.kr);
-  const label = String(train.trainNumber);
+  // Taggen visar "IC 116" där två tåg delar nummer; valet gäller tågets nyckel.
+  const label = String(train.text ?? train.trainNumber);
+  const key = String(train.key ?? train.trainNumber);
   const heading = train.heading; // the way it runs from the station it leaves; none inside a station
   const { font, arrow, pad, textWidth, height, width } = topologyTrainSize(label, Boolean(heading), kr, Boolean(options.screen));
   const kind = !heading ? "at-station" : train.departed ? "on-line" : "cleared";
@@ -4138,7 +4148,7 @@ function appendTopologyTrain(target, point, train, options = {}) {
     tabindex: options.clickable ? "0" : "-1",
     "aria-label": train.label,
   });
-  group.dataset.trainNumber = label;
+  group.dataset.trainNumber = key;
   if (options.selected) group.append(svgElement("rect", { x: -width / 2 - 3, y: -height / 2 - 3, width: width + 6, height: height + 6, rx: kr ? 8 : 6, class: "topology-train-ring" }));
   group.append(svgElement("rect", { x: -width / 2, y: -height / 2, width, height, rx: kr ? 5 : 3, class: "topology-train-tag" }));
   let textX = 0;
@@ -4157,7 +4167,7 @@ function appendTopologyTrain(target, point, train, options = {}) {
   if (options.clickable) {
     const activate = (event) => {
       event.stopPropagation();
-      options.onSelect?.(label);
+      options.onSelect?.(key);
     };
     group.addEventListener("click", activate);
     group.addEventListener("keydown", (event) => {
@@ -4536,18 +4546,18 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   placeTopologyLabels(labels, edges.map((edge) => [positions.get(edge.from), positions.get(edge.to)]).filter(([from, to]) => from && to), viewBox, options);
   const trains = topologyTrains(snapshot);
   if (options.onlySelectedTrain) {
-    const chosen = (train) => train.trainNumber === String(options.selectedTrainNumber);
+    const chosen = (train) => train.key === String(options.selectedTrainNumber);
     trains.onLine = trains.onLine.filter(chosen);
     trains.atStation = trains.atStation.filter(chosen);
   }
   const code = (id) => (snapshot.stations || []).find((station) => station.id === id)?.code || "?";
   // Nivå 5 (Allt): förseningen står också vid tågnumret på kartan.
   const lives = deviationLevelOf(snapshot) >= 5 ? TrainMeetDriftModel.trainLive(snapshot, topologyClockSeconds(snapshot)) : null;
-  const trainOptions = (trainNumber) => ({
+  const trainOptions = (trainKey) => ({
     kr: Boolean(kr),
     screen,
-    selected: trainNumber === String(options.selectedTrainNumber),
-    dimmed: Boolean(selectedService && trainNumber !== String(options.selectedTrainNumber)),
+    selected: trainKey === String(options.selectedTrainNumber),
+    dimmed: Boolean(selectedService && trainKey !== String(options.selectedTrainNumber)),
     clickable: Boolean(options.onTrainSelect),
     onSelect: options.onTrainSelect,
   });
@@ -4571,7 +4581,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     if (!from || !to) continue;
     const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
     const along = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
-    const size = topologyTrainSize(train.trainNumber, true, Boolean(kr), screen);
+    const size = topologyTrainSize(train.text, true, Boolean(kr), screen);
     const reach = Math.abs(along.x) * size.width / 2 + Math.abs(along.y) * size.height / 2;
     const edgeOf = (id) => { const brick = bricks.get(id) || { x: 7, y: 7 }; return Math.abs(along.x) * brick.x + Math.abs(along.y) * brick.y; };
     const clear = edgeOf(train.from) + (kr ? 8 : 7) + reach; // off the station
@@ -4618,11 +4628,11 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     taken.push({ x1: at.x - size.width / 2, y1: at.y - size.height / 2, x2: at.x + size.width / 2, y2: at.y + size.height / 2 });
     const group = appendTopologyTrain(target, at, {
       ...train, heading: along,
-      label: train.departed ? t("Tåg {number} · {route} · på linjen", { number: train.trainNumber, route })
-        : t("Tåg {number} · {route} · klart, inte avgått", { number: train.trainNumber, route }),
-    }, trainOptions(train.trainNumber));
+      label: train.departed ? t("Tåg {number} · {route} · på linjen", { number: train.text, route })
+        : t("Tåg {number} · {route} · klart, inte avgått", { number: train.text, route }),
+    }, trainOptions(train.key));
     if (moving && snapshot.clock?.running) motion.push({ group, place: () => spot(travelled()) });
-    markTopologyTrain(group, lives?.get(train.trainNumber), size);
+    markTopologyTrain(group, (train.serviceId !== null && lives?.get(String(train.serviceId))) || lives?.get(train.key), size);
   }
   // Inside a station: a row of tags beside it, at most three and then +N, on
   // the first side that covers neither a name nor a line: above, below, left,
@@ -4636,26 +4646,27 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   const byStation = new Map();
   const plainMap = !kr; // tågets ruttkarta visar fortfarande raden vid stationen
   for (const train of trains.atStation) {
-    if (!plainMap && train.trainNumber !== String(options.selectedTrainNumber)) continue;
+    if (!plainMap && train.key !== String(options.selectedTrainNumber)) continue;
     byStation.set(train.station, [...(byStation.get(train.station) || []), train]);
   }
   for (const [stationID, here] of byStation) {
     const point = positions.get(stationID);
     if (!point) continue;
     const shown = here.length > 3 ? here.slice(0, 2) : here;
-    const items = [...shown.map((train) => train.trainNumber), ...(here.length > shown.length ? [`+${here.length - shown.length}`] : [])];
+    // Varje tagg är ett tåg ({ key, text }) eller "+N".
+    const items = [...shown.map((train) => ({ key: train.key, text: train.text })), ...(here.length > shown.length ? [`+${here.length - shown.length}`] : [])];
     const brick = bricks.get(stationID) || { x: 7, y: 7 };
     const gap = kr ? 6 : 4;
     const offX = brick.x + gap + (kr ? 6 : 0), offY = brick.y + gap + (kr ? 6 : 0);
     const height = topologyTrainSize("", false, Boolean(kr), screen).height;
     // Kontrollrummet: finns ingen fri plats för raden krymper den, först till ett tåg och +N, sedan bara +N.
     const variants = [items];
-    if (kr && here.length > 2 && items.length > 2) variants.push([here[0].trainNumber, `+${here.length - 1}`]);
+    if (kr && here.length > 2 && items.length > 2) variants.push([{ key: here[0].key, text: here[0].text }, `+${here.length - 1}`]);
     if (kr && here.length > 1) variants.push([`+${here.length}`]);
     // Above, below, left, right; then the four corners, which miss both the
     // line through the station and its name when all four sides are taken.
     const place = (list) => {
-      const widths = list.map((item) => topologyTrainSize(item, false, Boolean(kr), screen).width);
+      const widths = list.map((item) => topologyTrainSize(typeof item === "string" ? item : item.text, false, Boolean(kr), screen).width);
       const width = widths.reduce((sum, value) => sum + value, 0) + gap * (list.length - 1);
       const across = offX + width / 2, up = offY + height / 2;
       const sides = [[0, -up], [0, up], [-across, 0], [across, 0], [across, -up], [-across, -up], [across, up], [-across, up]]
@@ -4674,11 +4685,11 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     chosen.list.forEach((item, index) => {
       const at = { x: left + widths[index] / 2, y: centre.y };
       left += widths[index] + gap;
-      if (item.startsWith("+")) {
+      if (typeof item === "string") {
         appendTopologyTrain(target, at, { trainNumber: item, label: item }, { kr: Boolean(kr), screen, dimmed: Boolean(selectedService) });
         return;
       }
-      appendTopologyTrain(target, at, { trainNumber: item, label: t("Tåg {number} vid {station}", { number: item, station: code(stationID) }) }, trainOptions(item));
+      appendTopologyTrain(target, at, { trainNumber: item.text, key: item.key, text: item.text, label: t("Tåg {number} vid {station}", { number: item.text, station: code(stationID) }) }, trainOptions(item.key));
     });
   }
   if (motion.length) {
@@ -4687,7 +4698,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   } else topologyMotion.delete(target);
   if (selectedService && options.showBadge !== false) {
     const [boxX, boxY, boxWidth, boxHeight] = viewBox.split(" ").map(Number);
-    const label = t("Tåg {number} · {count} stopp", { number: selectedService.train_number, count: routeStops.length });
+    const label = t("Tåg {number} · {count} stopp", { number: overviewTrainText(selectedService), count: routeStops.length });
     const badgeWidth = Math.max(118, label.length * 6.5 + 24);
     const badge = svgElement("g", { class: "topology-route-badge", transform: `translate(${boxX + boxWidth / 2},${boxY + boxHeight - 24})` });
     badge.append(svgElement("rect", { x: -badgeWidth / 2, y: -13, width: badgeWidth, height: 26, rx: 13 }));
@@ -4731,7 +4742,7 @@ function renderDisplaySelection(snapshot) {
   const close = (label) => html`<button type="button" class="display-selection__close" data-display-clear aria-label="${escapeHTML(t(label))}" title="${escapeHTML(t(label))}">×</button>`;
   if (service) {
     const stops = [...(service.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
-    panel.innerHTML = html`${close("Alla tåg")}<p>TÅG</p><b>${escapeHTML(service.train_number)}</b><span>${stops.length} stopp</span><small>${stops.map((stop) => escapeHTML((snapshot.stations || []).find((item) => item.id === stop.station_id)?.name || "?")).join(" → ")}</small>`;
+    panel.innerHTML = html`${close("Alla tåg")}<p>TÅG</p><b>${escapeHTML(service.train_label || service.train_number)}</b><span>${stops.length} stopp</span><small>${stops.map((stop) => escapeHTML((snapshot.stations || []).find((item) => item.id === stop.station_id)?.name || "?")).join(" → ")}</small>`;
   } else if (station) {
     const rows = stationTrafficRows(snapshot, station.id);
     const connected = (snapshot.connections || []).filter((connection) => connection.station_a_id === station.id || connection.station_b_id === station.id).length;
@@ -5465,13 +5476,13 @@ function renderDisplay(snapshot) {
   const trainSelect = document.querySelector("#display-train-select");
   const trainSelectable = displayKind === "topology" || displayKind === "graph";
   const services = uniqueOverviewServices(snapshot);
-  const trainSignature = services.map((service) => service.train_number).join("|");
+  const trainSignature = services.map((service) => overviewTrainKey(service)).join("|");
   trainSelect.classList.toggle("hidden", !trainSelectable);
   if (trainSelect.dataset.signature !== trainSignature) {
     trainSelect.dataset.signature = trainSignature;
-    trainSelect.innerHTML = html`<option value="">Alla tåg</option>${services.map((service) => html`<option value="${escapeHTML(service.train_number)}">Tåg ${escapeHTML(service.train_number)}</option>`).join("")}`;
+    trainSelect.innerHTML = html`<option value="">Alla tåg</option>${services.map((service) => html`<option value="${escapeHTML(overviewTrainKey(service))}">Tåg ${escapeHTML(overviewTrainText(service))}</option>`).join("")}`;
   }
-  if (!services.some((service) => String(service.train_number) === state.displaySelectedTrainNumber)) state.displaySelectedTrainNumber = null;
+  if (!services.some((service) => overviewTrainKey(service) === state.displaySelectedTrainNumber)) state.displaySelectedTrainNumber = null;
   trainSelect.value = state.displaySelectedTrainNumber || "";
   renderConnectionBadge(snapshot);
   const ids = { topology: "topology-svg", graph: "graph-scroll", clock: "clock-view", dashboard: "dashboard-view", territories:"territories-view" };

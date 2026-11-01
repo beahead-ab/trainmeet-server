@@ -5,6 +5,23 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Drift håller isär två tåg som delar nummer, och en rättelse från Cloud står som Clouds (Cloud #100)
+
+- **Två tåg med samma nummer** (DSB IC 116 och SJ X 116) är nu två tåg i
+  hela Drift, inte bara i stationslistan: kartan visar "IC 116" och "X 116"
+  med var sin försening, ett tryck på det ena tänder bara det tåget på
+  kartan, i diagrammet och bland händelserna, och tågpanelen visar just det
+  tåget. Tågrutterna, sökningen ("ic" hittar IC 116), skärmarnas tågval och
+  deltagarvyn håller isär dem på samma sätt. Ett nummer som bara ett tåg har
+  ser ut och fungerar som förut.
+- `/v1/train` tar `service_key` för att fråga efter ett av två tåg med samma
+  nummer. Utan den gäller numret som förut.
+- **Rättelse från Cloud under spelet**: Inställningar → Tidtabell säger
+  *1 rättelse från Cloud gäller redan under spelet* och att hela den nya
+  versionen tas i bruk när banan är fri, i stället för att kalla Clouds
+  rättelse för lokala ändringar. Knappen för att gå tillbaka visas bara för
+  admins egna ändringar.
+
 ### Lokföraren: köruppdragens anvisningar på förarens språk, sekunder av och på, ikonen följer kontot och förarna syns på kartorna (#225)
 
 - **Anvisningarna i köruppdragen** syns nu i körplanen under raden de hör

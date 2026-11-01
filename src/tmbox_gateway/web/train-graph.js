@@ -429,12 +429,16 @@
         const inWindow = visits.some((visit) => (visit.departure ?? visit.arrival) >= start && (visit.arrival ?? visit.departure) <= end);
         if (!inWindow) continue;
         const number = String(service.train_number);
-        const state = states.get(number);
-        const selected = o.train !== null && o.train !== undefined && number === String(o.train);
+        // Tågets nyckel: numret, eller serverns etikett där två tåg delar
+        // nummer (Cloud #100). Valet och läget följer nyckeln.
+        const key = model.trainKey ? model.trainKey(service) : number;
+        const text = model.trainText ? model.trainText(service) : number;
+        const state = states.get(key) || (key !== number ? null : states.get(number));
+        const selected = o.train !== null && o.train !== undefined && key === String(o.train);
         // Tåg som delar nummer med ett annat står med bolag och tågslag: "DSB IC 116".
         const label = service.service_key ? `${service.service_key} ${number}` : number;
         const color = readableColor(service.color);
-        const train = { number, label, color, type: TYPE_OF(service), service, selected, state: state?.state || null,
+        const train = { number, key, text, label, color, type: TYPE_OF(service), service, selected, state: state?.state || null,
           lit: state?.state === "on-line" || state?.state === "cleared" || selected, runs: [], legs: [], dwells: [], at: null, tag: null };
         let run = [];
         const flush = () => { if (run.length >= 2) train.runs.push(run); run = []; };
@@ -507,9 +511,10 @@
 
   /**
    * Ritar geometrin i en SVG. `cls` är klassnamnen (DRIFT eller SCREEN),
-   * `onSelect(number)` och `onStation(stationId)` svarar på klick, `label`
+   * `onSelect(key)` och `onStation(stationId)` svarar på klick, `label`
    * översätter "Tåg {number}", och `marks` ger nivå 5:s förseningstext per
-   * tågnummer.
+   * tåg. Nyckeln är tågnumret, eller etiketten där två tåg delar nummer
+   * ("DSB IC 116", drift-model trainKey).
    */
   function render(svg, g, { cls = DRIFT, codes = false, onSelect = null, onStation = null, label = (number) => String(number), marks = null, clip = null } = {}) {
     const { left, width, height } = g;
@@ -545,9 +550,9 @@
     }
     const gray = [], chosen = [], lit = [];
     const group = (train, klass) => {
-      const node = el("g", { class: klass, "data-train-number": train.number, role: onSelect ? "button" : null, tabindex: onSelect ? "0" : null, "aria-label": label(train.number) });
+      const node = el("g", { class: klass, "data-train-number": train.key ?? train.number, role: onSelect ? "button" : null, tabindex: onSelect ? "0" : null, "aria-label": label(train.text ?? train.number) });
       if (onSelect) {
-        const open = (event) => { event.stopPropagation(); onSelect(train.number); };
+        const open = (event) => { event.stopPropagation(); onSelect(train.key ?? train.number); };
         node.addEventListener("click", open);
         node.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(event); } });
       }
@@ -585,11 +590,11 @@
         lit.push(segment);
       }
       if (train.tag) {
-        const w = tagWidth(train.number), h = cls.tagHeight * k, cleared = train.tag.cleared;
-        const mark = el("g", { class: cls.tag, "data-train-number": train.number, "pointer-events": "none" });
+        const w = tagWidth(train.text ?? train.number), h = cls.tagHeight * k, cleared = train.tag.cleared;
+        const mark = el("g", { class: cls.tag, "data-train-number": train.key ?? train.number, "pointer-events": "none" });
         mark.append(el("rect", { class: `${cleared ? cls.tagBoxCleared : cls.tagBox}${train.selected ? " sel" : ""}`, x: (train.tag.x - w - 6).toFixed(1), y: (train.tag.y - h / 2).toFixed(1), width: w, height: h, rx: h > 20 ? 6 : 4 }),
-          el("text", { class: cleared ? cls.tagTextCleared : cls.tagText, x: (train.tag.x - w / 2 - 6).toFixed(1), y: (train.tag.y + 5 * k).toFixed(1), "text-anchor": "middle" }, train.number));
-        const text = marks ? marks(train.number) : null;
+          el("text", { class: cleared ? cls.tagTextCleared : cls.tagText, x: (train.tag.x - w / 2 - 6).toFixed(1), y: (train.tag.y + 5 * k).toFixed(1), "text-anchor": "middle" }, train.text ?? train.number));
+        const text = marks ? marks(train.key ?? train.number) : null;
         if (text) mark.append(el("text", { class: `graph-train-mark is-${text.tone}`, x: (train.tag.x - w - 6).toFixed(1), y: (train.tag.y - h / 2 - 3).toFixed(1) }, text.text));
         lit.push(mark);
       }
