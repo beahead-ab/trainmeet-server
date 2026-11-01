@@ -5,6 +5,22 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tågdiagrammet: tågslagens färger, hela dagen över midnatt, 390 px och alla linjer på skärmen (Cloud #100)
+
+Från jämförelsen med Cloud och Värnamo-underlaget (C6):
+
+- **Tågslagens färger** syns i Drift och på storskärmen. Serverns säkerhets-
+  regler (CSP) stoppade dem, så diagrammet hade bara två färger där Cloud har
+  tolv till sjutton. Ett valt tåg behåller valets färg.
+- **Hela dagen** som går förbi midnatt står som *05:00–01:00 (+1 dygn)*. Förut
+  stod det *00:00–01:00*, som om bara en timme visades.
+- **Drift på telefonen**: diagrammet får minst 40 px per timme och rullas i
+  sidled i panelen, med klockan i bild när det öppnas. Hela dagen trycktes
+  förut ihop så att klockslagen skrevs över varandra.
+- **Alla linjer på storskärmen**: när raderna blir tätare än namnen krymper
+  namnen och linjernas rubriker med raderna, och rubrikerna ligger ovanpå
+  tågen. Förut skrevs stationsnamnen över varandra.
+
 ### Drift håller isär två tåg som delar nummer, och en rättelse från Cloud står som Clouds (Cloud #100)
 
 - **Två tåg med samma nummer** (DSB IC 116 och SJ X 116) är nu två tåg i

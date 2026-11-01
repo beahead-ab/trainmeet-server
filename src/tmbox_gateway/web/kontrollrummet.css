@@ -293,6 +293,10 @@ body[data-mode="kor"] #app-view { padding: 14px 20px 24px; max-width: none; }
 /* Tågdiagram */
 .kr-graph { padding: 8px 24px 6px; }
 .kr-graph svg { display: block; width: 100%; height: auto; overflow: visible; }
+/* Ett diagram som behöver mer än panelens bredd (hela dagen på en telefon)
+   rullas i sidled i panelen; drift.js sätter bredden. */
+.kr-graph.is-wide { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.kr-graph.is-wide svg { max-width: none; }
 .sh { fill: var(--kr-panel-2); }
 .gl { stroke: var(--kr-line); stroke-width: 1; }
 .gl.h { stroke: var(--kr-line-2); }
@@ -318,7 +322,7 @@ body[data-mode="kor"] #app-view { padding: 14px 20px 24px; max-width: none; }
    och tågnumret längs linjen, i tågtypens färg. */
 .gl.trk { stroke: var(--kr-line); stroke-dasharray: 2 4; }
 .kr-graph .tlbl { fill: var(--kr-mute); font: 9.5px var(--kr-mono); }
-.kr-graph .gtitle { fill: var(--kr-ink-2); font: 600 12px var(--kr-sans); letter-spacing: .02em; }
+.kr-graph .gtitle { fill: var(--kr-ink-2); font: 600 12px var(--kr-sans); letter-spacing: .02em; paint-order: stroke; stroke: var(--kr-panel); stroke-width: 4px; stroke-linejoin: round; }
 .kr-graph .lbl[role="button"] { cursor: pointer; }
 .kr-graph .lbl[role="button"]:hover { fill: var(--kr-ink); text-decoration: underline; }
 .pl.is-person { stroke: var(--kr-red); } .pl.is-goods { stroke: var(--kr-blue); } .pl.is-work { stroke: var(--kr-green); }
