@@ -9,8 +9,14 @@ Två saker som båda handlar om vilket tåg en rad gäller:
   allt annat ser ut som förut.
 
 - **Manuella tåg (B4/B5).** Ett tåg som inte kan köras som planen säger -
-  en tid saknas, en sträcka mellan två stopp finns inte på banan, gångtiden
-  är negativ, eller Cloud har märkt det manuellt - körs av människor. Det
+  en tid saknas, två stopp i följd saknar egen sträcka på banan, gångtiden
+  är negativ, eller Cloud har märkt det manuellt - körs av människor.
+  Trafikmotorn kör ett tåg sträcka för sträcka, så två stopp utan egen
+  sträcka går aldrig att köra här. Går banan en enda väg mellan dem lägger
+  Cloud en passage på stationerna emellan i paketet (Caspers beslut
+  1 november), och tåget körs som vanligt; skälet säger då bara att
+  passagen saknas. Reglerna och texterna är desamma som Clouds
+  (`cloud/manual_trains.py`), ord för ord. Det
   listas med en varning och automatiseras inte, men stoppar aldrig klockan,
   publiceringen eller något annat tåg. Vilka det är räknas ur paketet; om
   reglerna gäller för en publicering avgör runtime-lagret (en träff som
@@ -19,7 +25,10 @@ Två saker som båda handlar om vilket tåg en rad gäller:
 from __future__ import annotations
 
 import re
+from collections import defaultdict, deque
 from typing import Any
+
+from .timetable_core.findings import unique_path
 
 _CLOCK = re.compile(r"(\d{1,2}):([0-5]\d)")
 
@@ -74,6 +83,38 @@ def movement_labels(trains: list[dict[str, Any]], labels: dict[str, dict[str, st
             if str(row.get("service_id")) in labels}
 
 
+def _reachable(graph: dict[str, list[tuple[str, str]]], a: str, b: str) -> bool:
+    seen, queue = {a}, deque([a])
+    while queue:
+        node = queue.popleft()
+        for neighbor, _ in graph.get(node, []):
+            if neighbor == b:
+                return True
+            if neighbor not in seen:
+                seen.add(neighbor)
+                queue.append(neighbor)
+    return False
+
+
+def _gap_reason(graph: dict[str, list[tuple[str, str]]], names: dict[str, str],
+                before: dict[str, Any], after: dict[str, Any]) -> str:
+    """Skälet när två stopp i följd saknar egen sträcka, samma som Clouds.
+
+    En färd (avgång, sedan ankomst) med en enda väg passerar stationerna
+    emellan, men utan passage i paketet kan den inte köras. En färd med flera
+    lika korta vägar är tvetydig. Annars finns ingen väg, eller så är luckan
+    inte en färd.
+    """
+    a, b = str(before.get("station_id")), str(after.get("station_id"))
+    moves = bool(before.get("departure_time")) and bool(after.get("arrival_time"))
+    path = unique_path(graph, a, b) if moves else None
+    if path and len(path) > 1:
+        return f"Tåget passerar {', '.join(names.get(target, target) for _, target, _ in path[:-1])} utan tid"
+    if moves and _reachable(graph, a, b):
+        return f"Vägen {names.get(a, a)}–{names.get(b, b)} är inte entydig"
+    return f"Sträckan {names.get(a, a)}–{names.get(b, b)} finns inte på banan"
+
+
 def manual_trains(payload: dict[str, Any]) -> dict[str, list[str]]:
     """{tjänst-id: skäl} för tåg som inte kan köras som planen säger.
 
@@ -83,6 +124,12 @@ def manual_trains(payload: dict[str, Any]) -> dict[str, list[str]]:
              for station in payload.get("stations") or []}
     links = {frozenset((str(item.get("station_a_id")), str(item.get("station_b_id"))))
              for item in payload.get("connections") or []}
+    graph: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for item in payload.get("connections") or []:
+        a, b = str(item.get("station_a_id")), str(item.get("station_b_id"))
+        if a != b:
+            graph[a].append((b, str(item.get("id"))))
+            graph[b].append((a, str(item.get("id"))))
     rows_by_service: dict[str, list[dict[str, Any]]] = {}
     for row in payload.get("trains") or []:
         rows_by_service.setdefault(str(row.get("service_id")), []).append(row)
@@ -105,7 +152,7 @@ def manual_trains(payload: dict[str, Any]) -> dict[str, list[str]]:
         for before, after in zip(stops, stops[1:]):
             a, b = str(before.get("station_id")), str(after.get("station_id"))
             if a != b and frozenset((a, b)) not in links:
-                reasons.append(f"Sträckan {names.get(a, a)}–{names.get(b, b)} finns inte på banan")
+                reasons.append(_gap_reason(graph, names, before, after))
                 continue
             leaves = _minutes(before.get("departure_time")) if before.get("departure_time") else _minutes(before.get("arrival_time"))
             arrives = _minutes(after.get("arrival_time")) if after.get("arrival_time") else _minutes(after.get("departure_time"))

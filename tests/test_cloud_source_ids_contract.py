@@ -42,8 +42,9 @@ PACKAGE = {
             {"station_id": "station-charlottendal", "departure_time": "06:20", "stop_order": 0, "service_day_offset": 0},
             {"station_id": "station-vagnsta", "arrival_time": "06:31", "departure_time": "06:32", "stop_order": 1, "service_day_offset": 0}]},
         {"id": "service-93-dagl", "train_number": "93", "days": "Dagl", "source_train_id": "3",
-         "manual": True, "manual_reason": "Sträckan Charlottendal–Salsborg finns inte på banan",
-         "manual_reasons": ["Sträckan Charlottendal–Salsborg finns inte på banan"], "manual_codes": ["unknown_connection"],
+         # Banan går en väg via Vagnsta, men Cloud kunde inte räkna fram passagen.
+         "manual": True, "manual_reason": "Tåget passerar Vagnsta utan tid",
+         "manual_reasons": ["Tåget passerar Vagnsta utan tid"], "manual_codes": ["passage_without_time"],
          "stops": [
             {"station_id": "station-charlottendal", "departure_time": "23:40", "stop_order": 0, "service_day_offset": 0},
             {"station_id": "station-salsborg", "arrival_time": "00:05", "stop_order": 1, "service_day_offset": 1}]},
@@ -53,7 +54,16 @@ PACKAGE = {
 
 class CloudSourceIdContractTests(unittest.TestCase):
     def test_clouds_reasons_and_the_servers_own_are_one_list(self):
-        self.assertEqual({"service-93-dagl": ["Sträckan Charlottendal–Salsborg finns inte på banan"]}, manual_trains(PACKAGE))
+        self.assertEqual({"service-93-dagl": ["Tåget passerar Vagnsta utan tid"]}, manual_trains(PACKAGE))
+
+    def test_an_older_clouds_reason_stands_beside_the_servers(self):
+        """Cloud #112 skrev "Sträckan … finns inte på banan" också när banan gick en väg."""
+        package = copy.deepcopy(PACKAGE)
+        package["services"][1].update(manual_reason="Sträckan Charlottendal–Salsborg finns inte på banan",
+                                      manual_reasons=["Sträckan Charlottendal–Salsborg finns inte på banan"],
+                                      manual_codes=["unknown_connection"])
+        self.assertEqual(["Sträckan Charlottendal–Salsborg finns inte på banan", "Tåget passerar Vagnsta utan tid"],
+                         manual_trains(package)["service-93-dagl"])
 
     def test_a_cloud_reason_the_server_cannot_see_is_kept(self):
         package = copy.deepcopy(PACKAGE)

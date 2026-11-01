@@ -5,6 +5,18 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Ett tåg som passerar en station utan egen rad följer banans enda väg (Cloud #100)
+
+Caspers beslut 1 november: ett tåg som går Charlottendal–Salsborg utan rad i
+Vagnsta, där banan bara går en väg, körs som vanligt. Cloud lägger en passage i
+Vagnsta i paketet, och servern kör tåget sträcka för sträcka som alla andra:
+automatiken tar båda sträckorna, en box i Vagnsta ser tåget passera och
+standardspåret för passerande tåg gäller. Ett tåg blir manuellt bara när vägen
+saknas eller är tvetydig, och skälet säger nu vilket: *Tåget passerar Vagnsta
+utan tid*, *Vägen A–C är inte entydig* eller *Sträckan A–C finns inte på banan*.
+Servern ändrar inte vilka tåg som är manuella i ett paket, bara skälen, så en
+träff som pågår kör som förut.
+
 ### Drift håller isär två tåg som delar nummer, och en rättelse från Cloud står som Clouds (Cloud #100)
 
 - **Två tåg med samma nummer** (DSB IC 116 och SJ X 116) är nu två tåg i
