@@ -28,6 +28,13 @@ och annars när föraren öppnar dem, så föraren får sina sidor som förut.
 
 Kräver TrainMeet Cloud med Lokförare (Cloud #113). En äldre server tar inte
 emot en träff som bara har lokförarna.
+### Sökrutan i sidhuvudet är borttagen
+
+Rutan *Sök tåg eller station* finns inte längre i sidhuvudet, och snabbtangenten
+`/` som flyttade dit är borta. Tåg och stationer väljs som förut på kartan, i
+diagrammet, under Nästa händelser och i stationslistan. På en telefon i Drift
+blir sidhuvudet därmed en rad i stället för två.
+
 ### Drift håller isär två tåg som delar nummer, och en rättelse från Cloud står som Clouds (Cloud #100)
 
 - **Två tåg med samma nummer** (DSB IC 116 och SJ X 116) är nu två tåg i
