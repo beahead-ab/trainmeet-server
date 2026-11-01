@@ -22,8 +22,11 @@ unless the copy holds as much as the source did.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
+import shutil
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -51,6 +54,23 @@ TIME_MACHINE_KEEP = 5
 KEPT_ON_RESTORE = ("clock_faces", "clock_face_layers")
 
 _KIND_IN_NAME = re.compile(r"^trainmeet-[0-9]{8}-[0-9]{6}-([a-z-]+)\.db$")
+
+#: Köruppdragens PDF:er (#225). Databasen säger vilka som hör till träffen
+#: (driver_plans.pdf_sha256 och driver_plan_duties.part_sha256), men själva
+#: filerna ligger bredvid den, i lokforaren/<sha256>.pdf och
+#: lokforaren/delar/<sha256>.pdf. En kopia av databasen utan filerna lovar
+#: förarna sidor som inte finns: när förlagan bytts ut efter kopian är den
+#: gamla filen borta.
+#:
+#: Kopiorna delar därför en egen lagring i backupmappen, lokforaren/, där
+#: varje fil ligger en gång under sin sha256 hur många kopior som än pekar på
+#: den. Filerna ändras aldrig under samma namn, så en hård länk räcker när
+#: mappen ligger på samma disk; annars kopieras filen. En fil som ingen kvar-
+#: varande kopia pekar på tas bort när kopiorna gallras.
+DRIVER_FOLDER = "lokforaren"
+DRIVER_PARTS = "delar"
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_CHUNK = 1 << 20
 
 
 def kind_of(path: Path) -> str | None:
@@ -94,6 +114,112 @@ def _verify(path: Path, expected_tables: int) -> None:
         )
 
 
+def _driver_files(connection: sqlite3.Connection) -> dict[str, str]:
+    """{sökväg under lokforaren/: sha256} för varje PDF databasen pekar på.
+
+    En databas utan köruppdrag, eller från en version utan dem, pekar inte på
+    något."""
+
+    files: dict[str, str] = {}
+    for query, prefix in (
+        ("SELECT DISTINCT pdf_sha256 FROM driver_plans WHERE pdf_sha256 IS NOT NULL", ""),
+        ("SELECT DISTINCT part_sha256 FROM driver_plan_duties WHERE part_sha256 IS NOT NULL", DRIVER_PARTS + "/"),
+    ):
+        try:
+            rows = connection.execute(query).fetchall()
+        except sqlite3.DatabaseError:
+            continue
+        for (sha,) in rows:
+            if _SHA256.fullmatch(str(sha)):
+                files[f"{prefix}{sha}.pdf"] = str(sha)
+    return files
+
+
+def _sha256(path: Path) -> str | None:
+    """Filens sha256, eller None om den inte går att läsa."""
+
+    digest = hashlib.sha256()
+    try:
+        with open(path, "rb") as source:
+            while chunk := source.read(_CHUNK):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
+
+
+def _place(source: Path, target: Path) -> None:
+    """Lägg `source` på `target`: en hård länk om det går, annars en kopia.
+    Under ett tillfälligt namn, så att en halv fil aldrig ligger där."""
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.with_name(target.name + ".partial")
+    partial.unlink(missing_ok=True)
+    try:
+        try:
+            os.link(source, partial)
+        except OSError:
+            shutil.copyfile(source, partial)
+        partial.replace(target)
+    finally:
+        partial.unlink(missing_ok=True)
+
+
+def _keep_driver_files(database: Path, backup_dir: Path, copy: Path) -> list[str]:
+    """Köruppdragens PDF:er som kopian pekar på, in i backupmappens lagring.
+
+    Varje fil kontrolleras mot sin sha256 första gången den lagras; en fil som
+    redan ligger där lagras inte igen. Returnerar de filer som inte gick att
+    ta med, därför att de saknas eller inte stämmer på servern."""
+
+    connection = sqlite3.connect(f"file:{copy}?mode=ro", uri=True)
+    try:
+        files = _driver_files(connection)
+    finally:
+        connection.close()
+    live = Path(database).parent / DRIVER_FOLDER
+    store = Path(backup_dir) / DRIVER_FOLDER
+    missing = []
+    for name, sha in sorted(files.items()):
+        target = store / name
+        if target.is_file():
+            continue
+        source = live / name
+        if not source.is_file() or _sha256(source) != sha:
+            missing.append(name)
+            continue
+        _place(source, target)
+    return missing
+
+
+def _collect_driver_files(backup_dir: Path) -> list[Path]:
+    """Ta bort de PDF:er i lagringen som ingen kvarvarande kopia pekar på.
+
+    En kopia som inte går att läsa duger inte att återställa och håller inga
+    filer kvar."""
+
+    store = Path(backup_dir) / DRIVER_FOLDER
+    if not store.is_dir():
+        return []
+    wanted: set[str] = set()
+    for item in Path(backup_dir).glob("trainmeet-*.db"):
+        try:
+            connection = sqlite3.connect(f"file:{item}?mode=ro", uri=True)
+        except sqlite3.DatabaseError:
+            continue
+        try:
+            wanted.update(_driver_files(connection))
+        finally:
+            connection.close()
+    removed = []
+    for path in [*store.glob("*.pdf"), *(store / DRIVER_PARTS).glob("*.pdf"),
+                 *store.glob("*.partial"), *(store / DRIVER_PARTS).glob("*.partial")]:
+        if path.relative_to(store).as_posix() not in wanted:
+            path.unlink(missing_ok=True)
+            removed.append(path)
+    return removed
+
+
 def prune(backup_dir: Path, keep: int = DEFAULT_KEEP, kind: str | None = None) -> list[Path]:
     """Delete all but the newest `keep` backups. Returns what was removed.
 
@@ -114,6 +240,8 @@ def prune(backup_dir: Path, keep: int = DEFAULT_KEEP, kind: str | None = None) -
     for stale in backups[: max(0, len(backups) - keep)]:
         stale.unlink()
         removed.append(stale)
+    # Köruppdragens PDF:er försvinner med den sista kopian som pekar på dem.
+    _collect_driver_files(backup_dir)
     return removed
 
 
@@ -157,6 +285,10 @@ def create_backup(
             finally:
                 destination.close()
             _verify(partial, expected)
+            # Köruppdragens PDF:er före bytet: en kopia som listas ska ha sina
+            # filer. En fil som redan saknas på servern kan inte tas med; då
+            # säger återställningen att förlagan saknas.
+            _keep_driver_files(database, backup_dir, partial)
             partial.replace(target)
         except BaseException:
             partial.unlink(missing_ok=True)
@@ -168,8 +300,12 @@ def create_backup(
     return target
 
 
-def restore(backup: Path, database: Path) -> None:
+def restore(backup: Path, database: Path) -> list[str]:
     """Put a backup back, safely. The server must not be running.
+
+    Returns what the owner should know about a restore that went through:
+    one line per köruppdrag whose PDF could not be put back (see
+    `_restore_driver_files`). Usually nothing.
 
     Copying the file into place is the obvious half. The half that ruins the
     day is `trainmeet.db-wal`: if the crashed database left one behind,
@@ -215,6 +351,7 @@ def restore(backup: Path, database: Path) -> None:
             # Går de inte att läsa ur den nuvarande databasen återställs kopian
             # som den är, hellre än inte alls.
             pass
+        notes = _restore_driver_files(backup, database, staged)
         for stale in (
             database.with_name(database.name + "-wal"),
             database.with_name(database.name + "-shm"),
@@ -224,6 +361,57 @@ def restore(backup: Path, database: Path) -> None:
     except BaseException:
         staged.unlink(missing_ok=True)
         raise
+    return notes
+
+
+def _restore_driver_files(backup: Path, database: Path, staged: Path) -> list[str]:
+    """Köruppdragens PDF:er tillbaka bredvid databasen, kontrollerade mot sin sha256.
+
+    En fil som redan ligger rätt på servern står kvar. Annars läggs kopians
+    fil ur backupmappens lagring dit. Finns den inte där heller, eller stämmer
+    den inte, är förlagan borta: en felaktig fil tas bort så att ingen förare
+    får den, och köruppdraget görs otillgängligt för förarna i den återställda
+    databasen. Det blir tillgängligt igen först när administratören lagt in
+    PDF:en på nytt och läst sidorna. Aldrig tyst: en rad per köruppdrag."""
+
+    connection = sqlite3.connect(staged, isolation_level=None)
+    try:
+        files = _driver_files(connection)
+        if not files:
+            return []
+        live = Path(database).parent / DRIVER_FOLDER
+        store = Path(backup).parent / DRIVER_FOLDER
+        missing: set[str] = set()
+        for name, sha in sorted(files.items()):
+            target = live / name
+            if target.is_file() and _sha256(target) == sha:
+                continue
+            kept = store / name
+            if kept.is_file() and _sha256(kept) == sha:
+                _place(kept, target)
+                continue
+            target.unlink(missing_ok=True)
+            missing.add(name)
+        if not missing:
+            return []
+        affected: dict[str, str] = {}
+        for document_id, plan_name, filename, sha in connection.execute(
+                "SELECT document_id, plan_name, filename, pdf_sha256 FROM driver_plans ORDER BY uploaded_at, document_id"):
+            if sha and f"{sha}.pdf" in missing:
+                affected[document_id] = plan_name or filename
+        for document_id, sha in connection.execute(
+                "SELECT document_id, part_sha256 FROM driver_plan_duties WHERE part_sha256 IS NOT NULL"):
+            if f"{DRIVER_PARTS}/{sha}.pdf" in missing and document_id not in affected:
+                row = connection.execute("SELECT plan_name, filename FROM driver_plans WHERE document_id = ?",
+                                         (document_id,)).fetchone()
+                affected[document_id] = (row[0] or row[1]) if row else document_id
+        connection.executemany("UPDATE driver_plans SET published = 0, published_at = NULL WHERE document_id = ?",
+                               [(document_id,) for document_id in affected])
+        return [f"Förlagan till köruppdraget {name} saknas, och det är inte tillgängligt för förarna. "
+                "Lägg in PDF:en igen och läs sidorna under Inställningar → Lokförare och köruppdrag."
+                for name in affected.values()]
+    finally:
+        connection.close()
 
 
 def _keep_server_tables(current: Path, staged: Path) -> None:
@@ -287,7 +475,8 @@ def main(argv: list[str] | None = None) -> int:
             if written is not None:
                 print(written)
         else:
-            restore(Path(args.backup), Path(args.database))
+            for note in restore(Path(args.backup), Path(args.database)):
+                print(note, file=sys.stderr)
             print(args.database)
     except (BackupError, ValueError, OSError, sqlite3.Error) as error:
         print(f"{args.command} misslyckades: {error}", file=sys.stderr)
@@ -459,7 +648,8 @@ RESTORE_RECORD = "last-restore.json"
 
 
 def record_restore(
-    state_dir: Path, backup: Path, problem: str | None = None, now: datetime | None = None
+    state_dir: Path, backup: Path, problem: str | None = None, now: datetime | None = None,
+    notes: list[str] | None = None,
 ) -> None:
     """Skriv ner utfallet innan servern startar om.
 
@@ -475,6 +665,9 @@ def record_restore(
         "attempted_at": (now or datetime.now(timezone.utc)).isoformat(),
         "restored": problem is None,
         "problem": problem,
+        # Det ägaren ska veta om en återställning som gick igenom, till exempel
+        # ett köruppdrag vars förlaga inte gick att lägga tillbaka.
+        "notes": list(notes or []),
     }
     path = Path(state_dir) / RESTORE_RECORD
     staged = path.with_name(path.name + ".partial")

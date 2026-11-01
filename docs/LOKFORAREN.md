@@ -100,6 +100,31 @@ hela häftet på 2,9 MB) och öppnar dem i telefonens egen PDF-visare. Går det
 inte att dela får föraren hela PDF:en på rätt sida. Nya sidor eller en ny PDF
 tar bort de gamla delarna.
 
+### Säkerhetskopior och återställning
+
+Köruppdragen ligger i databasen och följer med varje säkerhetskopia. PDF:erna
+(förlagan och delarna) följer med i backupmappens egen lagring,
+`backups/lokforaren/<sha256>.pdf` och `backups/lokforaren/delar/<sha256>.pdf`
+(`backup.py`):
+
+- Varje fil ligger där **en gång**, hur många kopior som än pekar på den. Den
+  kontrolleras mot sin sha256 första gången den lagras, och läggs dit som en
+  hård länk när backupmappen ligger på samma disk (filerna ändras aldrig under
+  samma namn), annars som en kopia. Tio kopior av en träff med ett häfte på
+  600 sidor tar alltså ungefär lika mycket plats som ett häfte.
+- En fil tas bort när den sista kopian som pekar på den gallras bort, med samma
+  regler som kopiorna (tio, och fem för tidsmaskinen).
+- **Återställningen** kontrollerar varje fil kopian pekar på mot sin sha256.
+  En fil som redan ligger rätt på servern står kvar, annars läggs lagringens
+  fil dit. Finns den inte där heller, eller stämmer den inte, är förlagan
+  borta: en felaktig fil tas bort så att ingen förare får den, köruppdraget
+  görs **otillgängligt för förarna** och återställningens besked i Farozonen
+  säger vilket köruppdrag det gäller, i felfärg.
+- Under Inställningar → Lokförare och köruppdrag står köruppdraget som
+  **Förlaga saknas** (`source_missing`), och det går inte att göra tillgängligt
+  (`409 source_missing`) förrän PDF:en lagts in igen och sidorna lästs, så
+  att alla delar finns och stämmer.
+
 Uppställningsspår: delens `FromTrack`/`ToTrack` i planen är spåret där
 fordonet hämtas eller lämnas, inte avgångs- eller ankomstspåret. De blir
 anvisningar ("Före avgång: hämta fordonet från spår 21 (X2 uppställning)").

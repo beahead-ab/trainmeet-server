@@ -18,9 +18,12 @@ med var sin uppgift:
 Förarna ser tjänsterna först när administratören uttryckligen gjort
 köruppdraget tillgängligt, och bara på den träff det lades in för.
 
-Tjänsterna ligger i databasen och följer med i säkerhetskopiorna. PDF-filerna
-gör det inte (de kan vara stora); försvinner en fil finns tjänsterna kvar och
-bara förlagan saknas.
+Tjänsterna ligger i databasen och följer med i säkerhetskopiorna, och
+PDF-filerna följer med i backupmappens egen lagring (``backup.py``, en fil per
+sha256 hur många kopior som än pekar på den). Saknas en fil ändå, till exempel
+efter en återställning från en kopia vars fil inte fanns, säger köruppdraget
+att förlagan saknas (``source_missing``) och går inte att göra tillgängligt för
+förarna förrän PDF:en lagts in igen och sidorna lästs.
 """
 
 from __future__ import annotations
@@ -390,6 +393,9 @@ class DriverDocuments:
         document = self.document(document_id)
         if published and not document["duties"]:
             raise DriverError(409, "document_empty", "Köruppdraget har inga tjänster")
+        if published and document["source_missing"]:
+            raise DriverError(409, "source_missing", "Förlagan saknas på servern. Lägg in PDF:en igen och läs sidorna"
+                              " innan köruppdraget görs tillgängligt för förarna.")
         with self._lock:
             self._connection.execute(
                 "UPDATE driver_plans SET published = ?, published_at = ? WHERE document_id = ?",
@@ -426,20 +432,28 @@ class DriverDocuments:
                 "SELECT COUNT(*), COUNT(page_from), COUNT(part_sha256) FROM driver_plan_duties WHERE document_id = ?",
                 (row["document_id"],),
             ).fetchone()
+            part_shas = [sha for (sha,) in self._connection.execute(
+                "SELECT part_sha256 FROM driver_plan_duties WHERE document_id = ? AND part_sha256 IS NOT NULL",
+                (row["document_id"],))]
+        # Filerna kan fattas fast databasen pekar på dem, till exempel efter en
+        # återställning. Det ska synas, aldrig bli en tjänst utan sidor.
+        missing_parts = sum(1 for sha in part_shas if not (self.parts_folder / f"{sha}.pdf").is_file())
+        has_file = bool(row["pdf_sha256"]) and (self.folder / f"{row['pdf_sha256']}.pdf").is_file()
         pdf = None
         if row["pdf_sha256"]:
             pdf = {
                 "filename": row["pdf_filename"], "size": row["pdf_size"], "pages": row["pdf_pages"],
                 "uploaded_at": row["pdf_uploaded_at"], "pages_read_at": row["pages_read_at"],
                 "warnings": json.loads(row["pdf_warnings"] or "[]"), "duties_with_pages": paged,
-                "duties_with_parts": parts,
-                "has_file": (self.folder / f"{row['pdf_sha256']}.pdf").is_file(),
+                "duties_with_parts": parts, "missing_parts": missing_parts,
+                "has_file": has_file,
             }
         return {
             "id": row["document_id"], "meet_key": row["meet_key"], "filename": row["filename"],
             "name": row["plan_name"], "published": bool(row["published"]),
             "warnings": json.loads(row["warnings"] or "[]"), "duties": count,
             "uploaded_at": row["uploaded_at"], "published_at": row["published_at"], "pdf": pdf,
+            "source_missing": bool(row["pdf_sha256"]) and (not has_file or missing_parts > 0),
         }
 
     def documents(self) -> list[dict[str, Any]]:

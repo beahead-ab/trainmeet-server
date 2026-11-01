@@ -5,6 +5,19 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Köruppdragens PDF:er följer med säkerhetskopiorna (#225)
+
+Säkerhetskopian tog databasen men inte köruppdragens PDF:er. Byttes förlagan
+ut efter kopian var den gamla filen borta, och en återställd träff lovade
+förarna sidor som inte fanns. Nu följer förlagan och delarna med, i en egen
+lagring i backupmappen där varje fil ligger en gång (en hård länk när det går)
+och tas bort med den sista kopian som pekar på den. Återställningen
+kontrollerar varje fil mot sin kontrollsumma. Saknas en fil, eller stämmer den
+inte, blir köruppdraget otillgängligt för förarna och står som **Förlaga
+saknas** under Inställningar → Lokförare och köruppdrag, och återställningens
+besked i Farozonen säger det. Det går att göra tillgängligt igen när PDF:en
+lagts in och sidorna lästs.
+
 ### Drift håller isär två tåg som delar nummer, och en rättelse från Cloud står som Clouds (Cloud #100)
 
 - **Två tåg med samma nummer** (DSB IC 116 och SJ X 116) är nu två tåg i

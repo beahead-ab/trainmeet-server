@@ -76,6 +76,7 @@
   function statusOf(doc) {
     if (!doc.duties) return { text: t("Inga tjänster"), kind: "warn" };
     if (!doc.current) return { text: t("Annan träff"), kind: "" };
+    if (doc.source_missing) return { text: t("Förlaga saknas"), kind: "warn" };
     return doc.published ? { text: t("Tillgängligt"), kind: "ok" } : { text: t("Inte tillgängligt än"), kind: "" };
   }
 
@@ -101,6 +102,8 @@
     if (pdf.pages) facts.push(t("{count} sidor", { count: pdf.pages }));
     cell.append(make("span", "kr-m", facts.join(" · ")));
     if (!pdf.has_file) cell.append(make("span", "kr-m lf-docs__warn", t("PDF-filen saknas på servern")));
+    else if (pdf.missing_parts) cell.append(make("span", "kr-m lf-docs__warn",
+      t("Sidorna för {count} tjänster saknas på servern – läs sidorna igen", { count: pdf.missing_parts })));
     else if (!pdf.pages_read_at) cell.append(make("span", "kr-m lf-docs__warn", t("Sidorna är inte lästa")));
     else cell.append(make("span", "kr-m" + (pdf.duties_with_pages < doc.duties ? " lf-docs__warn" : ""),
       t("sidor för {found} av {count} tjänster", { found: pdf.duties_with_pages, count: doc.duties })));
@@ -134,7 +137,7 @@
       if (doc.duties) actions.append(actionButton(t("Granska"), () => openReview(doc.id)));
       actions.append(actionButton(doc.pdf ? t("Byt PDF") : t("Lägg till PDF"), () => pickPdf(doc)));
       if (doc.pdf?.has_file) actions.append(actionButton(t("Läs sidorna igen"), () => readStored(doc)));
-      if (doc.duties && doc.current) {
+      if (doc.duties && doc.current && (doc.published || !doc.source_missing)) {
         actions.append(doc.published
           ? actionButton(t("Dra tillbaka"), () => publish(doc, false))
           : actionButton(t("Gör tillgängligt för förarna"), () => publish(doc, true), true));
