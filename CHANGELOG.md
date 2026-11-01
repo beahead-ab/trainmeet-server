@@ -20,6 +20,14 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 - `POST /v1/driver/checkins` tar `{status: "pause" | "waiting"}` i stället för
   station; incheckningen har `status` (annars `null`).
 
+### Lokföraren visar hela uppdragslistan med smarta filter
+
+Alla tjänster visas direkt, även när katalogen har fler än 30 uppdrag.
+Sök på tjänst, tåg, station, bolag eller lok och kombinera med station,
+bolag och tidsfilter som följer träffklockan. Listan visar träffantal,
+kan sorteras på nummer eller starttid och har Rensa filter.
+
+
 ### Sökrutan i sidhuvudet är borttagen
 
 Rutan *Sök tåg eller station* finns inte längre i sidhuvudet, och snabbtangenten

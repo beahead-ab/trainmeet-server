@@ -18,6 +18,7 @@
 <script src="/assets/clock-sync.js?v=__LF_BUILD__" defer></script>
 <script src="/lokforaren/messages.js?v=__LF_BUILD__" defer></script>
 <script src="/lokforaren/korplan.js?v=__LF_BUILD__" defer></script>
+<script src="/lokforaren/duties.js?v=__LF_BUILD__" defer></script>
 <script src="/lokforaren/app.js?v=__LF_BUILD__" defer></script>
 </head>
 <body>
@@ -57,11 +58,28 @@
     <section class="view view--choose" id="view-choose" hidden>
       <div class="lf-brand"><span class="lf-sign">TRAINMEET</span><span class="lf-brand__label">LOKFÖRAREN</span></div>
       <h1 data-t="Välj din tjänst">Välj din tjänst</h1>
-      <p class="lf-lead" id="choose-lead" data-t="Köruppdragen för träffen ligger på servern. Skriv numret på din tjänst.">Köruppdragen för träffen ligger på servern. Skriv numret på din tjänst.</p>
-      <label class="lf-field"><span data-t="Tjänstnummer">Tjänstnummer</span>
-        <input id="duty-query" class="lf-bignumber" inputmode="numeric" autocomplete="off" maxlength="16" placeholder="132">
+      <p class="lf-lead" id="choose-lead" data-t="Alla träffens uppdrag visas här. Sök och kombinera filtren för att hitta din tjänst.">Alla träffens uppdrag visas här. Sök och kombinera filtren för att hitta din tjänst.</p>
+      <label class="lf-field"><span data-t="Sök uppdrag">Sök uppdrag</span>
+        <input id="duty-query" class="lf-search" type="search" autocomplete="off" maxlength="120" aria-describedby="duty-search-hint">
       </label>
-      <div class="lf-results" id="duty-results"></div>
+      <p class="lf-filter-hint" id="duty-search-hint" data-t="Sök på tjänstnummer, tåg, station, bolag eller lok. Flera ord kan kombineras.">Sök på tjänstnummer, tåg, station, bolag eller lok. Flera ord kan kombineras.</p>
+      <div class="lf-filters">
+        <label class="lf-field"><span data-t="Station">Station</span><select id="duty-station"></select></label>
+        <label class="lf-field"><span data-t="Bolag">Bolag</span><select id="duty-operator"></select></label>
+        <label class="lf-field"><span data-t="Tid">Tid</span><select id="duty-time">
+          <option value="all" data-t="Alla tider">Alla tider</option>
+          <option value="soon" data-t="Start inom 60 min">Start inom 60 min</option>
+          <option value="ongoing" data-t="Pågår enligt plan">Pågår enligt plan</option>
+        </select></label>
+        <label class="lf-field"><span data-t="Sortera">Sortera</span><select id="duty-sort">
+          <option value="number" data-t="Tjänstnummer">Tjänstnummer</option>
+          <option value="start" data-t="Starttid">Starttid</option>
+        </select></label>
+      </div>
+      <div class="lf-resultbar"><span id="duty-count" role="status" aria-live="polite"></span>
+        <button class="lf-button lf-button--quiet" type="button" id="duty-reset" data-t="Rensa filter">Rensa filter</button></div>
+      <p class="lf-filter-hint" id="duty-time-hint" hidden data-t="Anslut till träffklockan för tidsfilter.">Anslut till träffklockan för tidsfilter.</p>
+      <button class="lf-button lf-button--secondary" type="button" id="duty-retry" hidden data-t="Försök igen">Försök igen</button>
       <div class="lf-card lf-found" id="duty-found" hidden>
         <div class="lf-found__head"><span class="lf-found__title" id="found-title"></span><span class="lf-tag" id="found-demo" hidden>DEMO</span></div>
         <dl class="lf-facts" id="found-facts"></dl>
@@ -72,6 +90,7 @@
         <button class="lf-button lf-button--primary" type="button" id="duty-activate" disabled data-t="Aktivera tjänsten">Aktivera tjänsten</button>
         <button class="lf-button lf-button--quiet" type="button" id="duty-cancel" hidden data-t="Avbryt">Avbryt</button>
       </div>
+      <div class="lf-results" id="duty-results"></div>
     </section>
 
     <section class="view view--countdown" id="view-countdown" hidden>
@@ -195,6 +214,7 @@
 
   <nav class="lf-tabs" id="tabs" aria-label="Lokföraren" hidden>
     <button type="button" class="lf-tab" data-tab="duty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v18"></path><circle cx="7" cy="7" r="2.3"></circle><circle cx="7" cy="16" r="2.3"></circle><path d="M12 7h8M12 16h6"></path></svg><span data-t="Tjänst">Tjänst</span></button>
+    <button type="button" class="lf-tab" data-tab="catalog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h.01M3 12h.01M3 19h.01"></path></svg><span data-t="Uppdrag">Uppdrag</span></button>
     <button type="button" class="lf-tab" data-tab="drivers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 20v-1.4a3.6 3.6 0 0 0-3.6-3.6H7.1a3.6 3.6 0 0 0-3.6 3.6V20"></path><circle cx="9.5" cy="8" r="3.4"></circle><path d="M20.5 20v-1.4a3.6 3.6 0 0 0-2.6-3.45M15.6 4.7a3.4 3.4 0 0 1 0 6.6"></path></svg><span data-t="Förare">Förare</span></button>
     <button type="button" class="lf-tab" data-tab="me"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4.5 21a7.5 7.5 0 0 1 15 0"></path></svg><span data-t="Jag">Jag</span></button>
   </nav>

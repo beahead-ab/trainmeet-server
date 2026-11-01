@@ -1004,7 +1004,7 @@ class TrainMeetHTTPApplication:
             exact = [duty for duty in duties if duty["number"].lower() == query]
             starts = [duty for duty in duties if duty not in exact and duty["number"].lower().startswith(query)]
             duties = exact + starts
-        return {"duties": [duty_summary(duty) for duty in duties[:30]]}
+        return {"duties": [duty_summary(duty) for duty in duties]}
 
     def driver_duty(self, duty_id: str) -> dict[str, Any]:
         duty = next((duty for duty in self.driver_catalog() if duty["id"] == duty_id), None)
@@ -5615,6 +5615,7 @@ class TrainMeetHTTPApplication:
         "/lokforaren/index.html": ("index.html", "text/html; charset=utf-8"),
         "/lokforaren/app.js": ("app.js", "text/javascript; charset=utf-8"),
         "/lokforaren/korplan.js": ("korplan.js", "text/javascript; charset=utf-8"),
+        "/lokforaren/duties.js": ("duties.js", "text/javascript; charset=utf-8"),
         "/lokforaren/messages.js": ("messages.js", "text/javascript; charset=utf-8"),
         "/lokforaren/style.css": ("style.css", "text/css; charset=utf-8"),
         "/lokforaren/sw.js": ("sw.js", "text/javascript; charset=utf-8"),

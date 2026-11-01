@@ -333,6 +333,22 @@ class LokforarenHTTPTests(unittest.TestCase):
             self.assertEqual(401, self.request(path)[0], path)
         self.assertEqual(401, self.request("/v1/driver/checkins", {"station": "X"})[0])
 
+    def test_the_full_catalogue_is_not_limited_to_thirty_duties(self) -> None:
+        from unittest.mock import patch
+        duties = [normalize_duty({**DEMO_DUTY, "id": f"full-{n}", "number": str(n)}) for n in range(1, 143)]
+        benny = self.login("benny")
+        with patch.object(self.app, "driver_catalog", return_value=duties):
+            status, payload, _ = self.request("/v1/driver/duties", cookie=benny)
+            self.assertEqual(200, status)
+            self.assertEqual(142, len(payload["duties"]))
+            self.assertEqual("142", payload["duties"][-1]["number"])
+            self.assertNotIn("events", payload["duties"][0])
+            # Existing number lookup remains compatible, including exact match first.
+            results = self.request("/v1/driver/duties?q=1", cookie=benny)[1]["duties"]
+            self.assertEqual("1", results[0]["number"])
+            self.assertGreater(len(results), 30)
+            self.assertEqual(401, self.request("/v1/driver/duties")[0])
+
     def test_choose_activate_and_check_in(self) -> None:
         benny, maja = self.login("benny"), self.login("maja")
         session = self.request("/v1/driver/session", cookie=benny)[1]

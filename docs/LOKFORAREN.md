@@ -48,6 +48,25 @@ Förarna väljer bland, i den här ordningen:
 2. Tjänsterna i träffens paket från Cloud, under `driver_duties`.
 3. Övningstjänsten **132 DEMO** (fakta ur #225, tiderna i Tveiten är exempel).
 
+### Hela listan och smarta filter
+
+Fliken **Uppdrag** öppnar **Välj din tjänst**, som visar hela den aktiva träffens katalog, även med fler än
+30 uppdrag. Sökfältet söker på tjänstnummer, tågnummer, station, bolag och lok.
+Flera ord kombineras (alla ska stämma); stora bokstäver, accenter och mellanrum
+i tågnummer spelar ingen roll, så `cargonet G5453 kjollstad` fungerar.
+Ett exakt tjänstnummer kommer först och öppnar tjänstens uppgifter när det
+är den enda träffen. Övriga sökningar kräver ett tryck på uppdraget.
+
+Sökning kan kombineras med **Station**, **Bolag** och **Tid**: alla tider,
+start inom 60 träffminuter eller pågår enligt plan. Tid beskriver planeringen,
+inte om tjänsten är bemannad eller tåget faktiskt kör. Filtren använder bara
+serverns synkade träffklocka, följer paus och tidshopp samt klarar midnatt.
+Utan kontakt fungerar textsökning, men tidsfilter kräver kontakt igen.
+Sortera efter tjänstnummer eller starttid; träffantal och **Rensa filter**
+visas hela tiden. Filtrering aktiverar aldrig en tjänst: föraren bekräftar
+fortfarande med **Aktivera tjänsten**. Listan nås alltid via **Uppdrag** eller **Jag → Byt tjänst**.
+Att bläddra i katalogen ändrar inte den aktiva tjänsten.
+
 ### Köruppdrag i Inställningar
 
 Köruppdragen läggs in på varje server för sig, separat från Clouds paket, och
