@@ -59,8 +59,9 @@ const root = path.resolve(__dirname, '../..');
       screen.on('pageerror', (error) => seen.push(error.message));
       const response = await screen.goto(base + address);
       assert.equal(response.status(), 200, address);
-      await screen.waitForLoadState('networkidle');
-      await screen.waitForTimeout(400);
+      // The pages keep /v1/events open, so the network never goes idle.
+      await screen.waitForLoadState('load');
+      await screen.waitForTimeout(1200);
       assert.deepEqual(seen, [], address);
       await screen.close();
     }
