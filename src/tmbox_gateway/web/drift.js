@@ -349,6 +349,7 @@
     const names = model.stationMap(snapshot);
     const events = model.events(snapshot, { station: train ? null : station, train, limit: 8, nowSeconds: liveSeconds() });
     const scope = $("#drift-events-scope"), clear = $("#drift-events-clear");
+    // Det valda tåget är dess nyckel: numret, eller "DSB IC 116" där två tåg delar nummer.
     if (scope) scope.textContent = train ? t("tåg {number}", { number: train }) : station ? (names.get(station)?.name || "") : t("hela banan");
     if (clear) clear.hidden = !(train || station);
     const delayed = model.lateTrains(snapshot).length;
@@ -368,14 +369,14 @@
     if (!changed("events", [events, train, station, root.lang, level])) return;
     if (!events.length) { host.replaceChildren(h("p", { class: "kr-empty" }, t("Inga fler planerade händelser idag."))); return; }
     host.replaceChildren(...events.map((event) => {
-      const selected = train === event.train;
+      const selected = train === (event.key ?? event.train);
       const view = model.deviationView(level, event);
       // Två tåg med samma nummer står med bolag och tågslag: "DSB IC 116".
       const shown = event.label || event.train;
       const mark = event.state === "on-line" ? badge(shown, { selected }) : event.state === "cleared" ? badge(shown, { hollow: true, selected }) : badge(shown, { plain: true, selected });
       const what = h("span", { class: "w" }, eventText(event, names));
       if (view.mark?.style === "text") what.append(" ", markOf(view));
-      const row = h("button", { type: "button", class: `kr-ev${selected ? " sel" : ""}${view.mark ? ` is-${view.mark.tone}` : ""}`, data: { trainNumber: event.train }, "aria-pressed": String(selected), on: { click: () => hooks.selectTrain?.(event.train) } },
+      const row = h("button", { type: "button", class: `kr-ev${selected ? " sel" : ""}${view.mark ? ` is-${view.mark.tone}` : ""}`, data: { trainNumber: event.key ?? event.train }, "aria-pressed": String(selected), on: { click: () => hooks.selectTrain?.(event.key ?? event.train) } },
         eventTime(event, view), mark, what, eventWhen(event, view));
       return markFresh(row, `ev|${event.serviceId ?? event.train}|${event.kind}|${event.stationId}`, eventSignature(event, view), what, view);
     }));
@@ -458,7 +459,9 @@
     if (!host) return;
     host.hidden = !number;
     if (!number) { host.replaceChildren(); sigs.delete("train-aside"); return; }
-    const listed = ctx.snapshot ? model.services(ctx.snapshot).find((service) => String(service.train_number) === String(number)) : null;
+    // number är tågets nyckel: numret, eller etiketten där två tåg delar det.
+    const listed = ctx.snapshot ? model.services(ctx.snapshot).find((service) => model.trainKey(service) === String(number)) : null;
+    const shownNumber = listed ? model.trainText(listed) : number;
     const live = (data?.services || []).find((service) => (service.stops || []).length) || null;
     const service = live || listed;
     const names = ctx.snapshot ? model.stationMap(ctx.snapshot) : new Map();
@@ -471,7 +474,7 @@
     const now = live?.now;
     const body = [h("div", { class: "kr-ph kr-ph--top" },
       h("div", { class: "kr-aside__title" },
-        h("div", { class: "kr-aside__row" }, badge(number, { selected: true }), stops.length ? h("span", { class: "kr-aside__route" }, `${stopName(first)} → ${stopName(last)}`) : null),
+        h("div", { class: "kr-aside__row" }, badge(shownNumber, { selected: true }), stops.length ? h("span", { class: "kr-aside__route" }, `${stopName(first)} → ${stopName(last)}`) : null),
         h("span", { class: "kr-c" }, meta)),
       h("span", { class: "kr-sp" }), closeButton(t("Stäng tågpanelen"), () => hooks.clear?.()))];
     if (error) body.push(h("p", { class: "kr-aside__note kr-error" }, error));
@@ -493,7 +496,7 @@
         h("button", { type: "button", class: "kr-stoplink", on: { click: () => hooks.selectStation?.(stop.station_id, true) } }, h("span", {}, stopName(stop)), track ? h("small", {}, track) : null),
         h("span", { class: "t" }, hhmm(stop.arrival_time) || "—"), h("span", { class: "t" }, hhmm(stop.departure_time) || "—")));
       if (now?.state === "on_line" && now.from_station_id === stop.station_id && stops[index + 1]?.station_id === now.to_station_id) {
-        list.append(h("div", { class: "kr-stop between" }, h("i", { "aria-hidden": "true" }), h("span", { class: "kr-between__text" }, `${t("På linjen")} · ${number} →`), h("span", {}), h("span", {})));
+        list.append(h("div", { class: "kr-stop between" }, h("i", { "aria-hidden": "true" }), h("span", { class: "kr-between__text" }, `${t("På linjen")} · ${shownNumber} →`), h("span", {}), h("span", {})));
       }
     });
     body.push(list, h("div", { class: "kr-pf" }, h("span", {}, t("Valt tåg lyser på kartan, i diagrammet och bland händelserna."))));
@@ -507,6 +510,8 @@
     host.hidden = !station;
     if (!station) { host.replaceChildren(); sigs.delete("station-aside"); return; }
     const here = model.stationCounts(snapshot).get(station.id) || [];
+    // Tågen inne står med sin nyckel; taggen visar "IC 116" där två tåg delar nummer.
+    const texts = new Map(model.services(snapshot).map((service) => [model.trainKey(service), model.trainText(service)]));
     const devices = ctx.devices.filter((device) => device.station_id === station.id);
     const place = model.placement(ctx.presentation, station.id);
     const events = model.events(snapshot, { station: station.id, limit: 5, nowSeconds: liveSeconds() });
@@ -526,7 +531,7 @@
       body.push(section(t("Stationens instruktioner"), text));
     }
     body.push(section(t("Tåg inne"), here.length
-      ? h("div", { class: "kr-badges" }, here.map((number) => h("button", { type: "button", class: "kr-badgebtn", on: { click: () => hooks.selectTrain?.(number) } }, badge(number, { plain: true, selected: ctx.selection.train === number }))))
+      ? h("div", { class: "kr-badges" }, here.map((key) => h("button", { type: "button", class: "kr-badgebtn", on: { click: () => hooks.selectTrain?.(key) } }, badge(texts.get(key) || key, { plain: true, selected: ctx.selection.train === key }))))
       : h("p", { class: "kr-aside__note" }, t("Inga tåg inne."))));
     body.push(section(t("Boxar"), devices.length
       ? h("div", { class: "kr-aside__lines" }, devices.map((device) => h("div", { class: "kr-aside__line" }, h("span", { class: "mono" }, device.device_code),
@@ -538,7 +543,7 @@
         const view = model.deviationView(levelNow(), event);
         const what = h("span", { class: "w" }, eventText(event, names));
         if (view.mark?.style === "text") what.append(" ", markOf(view));
-        return h("button", { type: "button", class: `kr-ev${view.mark ? ` is-${view.mark.tone}` : ""}`, on: { click: () => hooks.selectTrain?.(event.train) } },
+        return h("button", { type: "button", class: `kr-ev${view.mark ? ` is-${view.mark.tone}` : ""}`, on: { click: () => hooks.selectTrain?.(event.key ?? event.train) } },
           eventTime(event, view), badge(event.label || event.train, { plain: true }), what, eventWhen(event, view));
       }))
       : h("p", { class: "kr-aside__note" }, t("Inga fler planerade händelser idag."))));

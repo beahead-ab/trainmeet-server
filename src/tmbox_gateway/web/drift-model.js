@@ -24,16 +24,54 @@
   /** "05:12:40" → "05:12"; tomt när det inte är en tid. */
   function hhmm(value) { return minutes(value) === null ? "" : String(value).slice(0, 5); }
 
-  /** Ett tåg per tågnummer: det med flest stopp, sorterade som tal. */
+  /** Tågets nyckel i Drift: numret, och där två tåg delar nummer serverns
+   *  etikett ("DSB IC 116"), så att DSB IC 116 och SJ X 116 hålls isär
+   *  (Cloud #100). Turer av samma tåg har samma nyckel, och ett nummer som
+   *  bara ett tåg har får numret som förut. */
+  function trainKey(service) {
+    const number = String(service?.train_number ?? "").trim();
+    return service?.train_label ? String(service.train_label) : number;
+  }
+
+  /** Det som står på tåget där det är trångt (kartan, listorna): "IC 116" där
+   *  numret delas, annars numret. */
+  function trainText(service) {
+    const number = String(service?.train_number ?? "").trim();
+    return service?.short_label ? String(service.short_label) : number;
+  }
+
+  /** Ett tåg per nyckel (tågnummer, eller etikett där två tåg delar nummer):
+   *  turen med flest stopp, sorterade som tal. */
   function services(snapshot) {
-    const byNumber = new Map();
+    const byKey = new Map();
     for (const service of snapshot?.services || []) {
-      const number = String(service.train_number || "").trim();
-      if (!number) continue;
-      const existing = byNumber.get(number);
-      if (!existing || (service.stops?.length || 0) > (existing.stops?.length || 0)) byNumber.set(number, service);
+      if (!String(service.train_number || "").trim()) continue;
+      const key = trainKey(service);
+      const existing = byKey.get(key);
+      if (!existing || (service.stops?.length || 0) > (existing.stops?.length || 0)) byKey.set(key, service);
     }
-    return [...byNumber.values()].sort((a, b) => compare(a.train_number, b.train_number));
+    return [...byKey.values()].sort((a, b) => compare(a.train_number, b.train_number) || compare(trainKey(a), trainKey(b)));
+  }
+
+  /** Tjänsten en rörelse (snapshot.trains) hör till, och tåget den är:
+   *  { serviceId, key, text, service }. Utan rörelse, eller i en äldre bild
+   *  utan tjänster, gäller numret. */
+  const identityIndexes = new WeakMap();
+  function trainIdentity(snapshot, trainNumber, movementId = null) {
+    const number = String(trainNumber ?? "").trim();
+    let index = identityIndexes.get(snapshot);
+    if (!index) {
+      const byService = new Map((snapshot?.services || []).map((service) => [String(service.id), service]));
+      index = new Map();
+      for (const row of snapshot?.trains || []) {
+        const service = byService.get(String(row.service_id));
+        if (service) index.set(String(row.id), service);
+      }
+      if (snapshot && typeof snapshot === "object") identityIndexes.set(snapshot, index);
+    }
+    const service = movementId === null || movementId === undefined ? null : index.get(String(movementId)) || null;
+    if (!service || String(service.train_number ?? "").trim() !== number) return { serviceId: null, key: number, text: number, service: null };
+    return { serviceId: service.id ?? null, key: trainKey(service), text: trainText(service), service };
   }
 
   function orderedStops(service) {
@@ -46,41 +84,48 @@
    *  (reserverad = klartecken givet, upptagen = avgått), sedan de noterade
    *  lägena för tåg som inte står på en kanal. Äldre vägar noterar bara en
    *  sträckposition, vilket också räknas som på linjen. */
+  // Varje tåg bär också sin nyckel (key), texten på taggen (text) och sin
+  // tjänst (serviceId), ur rörelsen: två tåg med samma nummer hålls isär.
   function trains(snapshot) {
     const onLine = [], atStation = [], seen = new Set();
     for (const connection of snapshot?.connection_states || []) {
       for (const channel of connection.channels || []) {
         if (!channel.train_number || !["reserved", "occupied"].includes(channel.state)) continue;
-        seen.add(String(channel.train_number));
-        onLine.push({ trainNumber: String(channel.train_number), from: channel.from_station_id, to: channel.to_station_id, departed: channel.state === "occupied",
+        const who = trainIdentity(snapshot, channel.train_number, channel.movement_id);
+        seen.add(who.key);
+        onLine.push({ trainNumber: String(channel.train_number), key: who.key, text: who.text, serviceId: who.serviceId,
+          from: channel.from_station_id, to: channel.to_station_id, departed: channel.state === "occupied",
           departedSeconds: channel.departed_seconds ?? null, movementId: channel.movement_id ?? null });
       }
     }
     for (const position of snapshot?.train_positions || []) {
       const trainNumber = String(position.train_number);
-      if (seen.has(trainNumber)) continue;
-      if (position.status === "connection") onLine.push({ trainNumber, from: position.from_station_id, to: position.to_station_id, departed: true,
+      const who = trainIdentity(snapshot, trainNumber, position.movement_id);
+      if (seen.has(who.key)) continue;
+      const train = { trainNumber, key: who.key, text: who.text, serviceId: who.serviceId };
+      if (position.status === "connection") onLine.push({ ...train, from: position.from_station_id, to: position.to_station_id, departed: true,
         departedSeconds: position.departed_seconds ?? null, movementId: position.movement_id ?? null });
-      else if (position.station_id) atStation.push({ trainNumber, station: position.station_id });
+      else if (position.station_id) atStation.push({ ...train, station: position.station_id });
     }
     return { onLine, atStation };
   }
 
-  /** tågnummer → { state: "on-line" | "cleared" | "at-station", from, to, station } */
+  /** tågets nyckel (numret, eller etiketten där två tåg delar nummer) →
+   *  { state: "on-line" | "cleared" | "at-station", from, to, station } */
   function trainStates(snapshot) {
     const result = new Map();
     const { onLine, atStation } = trains(snapshot);
-    for (const train of onLine) result.set(train.trainNumber, { state: train.departed ? "on-line" : "cleared", from: train.from, to: train.to, departedSeconds: train.departedSeconds });
-    for (const train of atStation) if (!result.has(train.trainNumber)) result.set(train.trainNumber, { state: "at-station", station: train.station });
+    for (const train of onLine) result.set(train.key, { state: train.departed ? "on-line" : "cleared", from: train.from, to: train.to, departedSeconds: train.departedSeconds });
+    for (const train of atStation) if (!result.has(train.key)) result.set(train.key, { state: "at-station", station: train.station });
     return result;
   }
 
-  /** stations-id → tågnummer som står inne på stationen */
+  /** stations-id → nycklarna för tågen som står inne på stationen */
   function stationCounts(snapshot) {
     const result = new Map((snapshot?.stations || []).map((station) => [station.id, []]));
     for (const train of trains(snapshot).atStation) {
       if (!result.has(train.station)) result.set(train.station, []);
-      result.get(train.station).push(train.trainNumber);
+      result.get(train.station).push(train.key);
     }
     for (const list of result.values()) list.sort(compare);
     return result;
@@ -102,6 +147,9 @@
       : (snapshot?.trains || []).find((row) => String(row.id) === String(train.movementId)) || null;
     // Turerna med numret; en äldre bild utan turer har bara ruttstoppen, som grupperas.
     let runs = (snapshot?.services || []).filter((service) => String(service.train_number) === number);
+    // Två tåg med samma nummer: bara det här tågets turer (Cloud #100).
+    const own = train?.key && train.key !== number ? runs.filter((service) => trainKey(service) === train.key) : [];
+    if (own.length) runs = own;
     if (!runs.length) {
       const groups = new Map();
       for (const route of snapshot?.routes || []) {
@@ -254,30 +302,38 @@
     const names = stationMap(snapshot);
     const states = trainStates(snapshot);
     const listed = services(snapshot);
-    const stopsOf = new Map(listed.map((service) => [String(service.train_number), orderedStops(service)]));
-    const nextAfter = (number, stationId, step = 1, service = null) => {
-      const stops = service ? orderedStops(service) : stopsOf.get(String(number)) || [];
+    // Tågets nyckel: numret, eller etiketten där två tåg delar nummer.
+    const byKey = new Map(listed.map((service) => [trainKey(service), service]));
+    const nextAfter = (stationId, step, service) => {
+      const stops = orderedStops(service);
       const index = stops.findIndex((stop) => stop.station_id === stationId);
       return index >= 0 ? stops[index + step]?.station_id || null : null;
     };
     // Tåg som delar nummer samma dag hålls isär: händelsen bär sitt tåg och
-    // står med bolag och tågslag, "DSB IC 116" (Cloud #100).
-    const build = (number, stop, kind, at, service = null) => ({
-      time: hhmm(at), minute: stopAt(stop, kind === "dep" ? "departure_time" : "arrival_time"), delta: stopAt(stop, kind === "dep" ? "departure_time" : "arrival_time") - now, train: String(number), stationId: stop.station_id,
-      serviceId: service?.id ?? null, label: service?.service_key ? `${service.service_key} ${number}` : String(number),
-      station: names.get(stop.station_id)?.name || stop.station_id,
-      kind, nextStationId: kind === "dep" ? nextAfter(number, stop.station_id, 1, service) : null,
-      previousStationId: kind === "arr" ? nextAfter(number, stop.station_id, -1, service) : null,
-      state: states.get(String(number))?.state || null,
-    });
-    const rowsOf = (number) => stopsOf.get(String(number)) || [];
+    // sin nyckel, och står med bolag och tågslag, "DSB IC 116" (Cloud #100).
+    // Vid en station står tåget med sin nyckel (service_key), som förut.
+    const build = (stop, kind, at, service, { keyed = false } = {}) => {
+      const number = String(service.train_number), key = trainKey(service);
+      return {
+        time: hhmm(at), minute: stopAt(stop, kind === "dep" ? "departure_time" : "arrival_time"), delta: stopAt(stop, kind === "dep" ? "departure_time" : "arrival_time") - now, train: number, key, stationId: stop.station_id,
+        serviceId: keyed || key !== number ? service.id ?? null : null,
+        // Vid en station med bolag och tågslag ("DSB IC 116", #230); annars
+        // taggens kortform där numret delas ("IC 116"), som på kartan.
+        label: keyed ? (service.train_label ? String(service.train_label) : service.service_key ? `${service.service_key} ${number}` : number) : trainText(service),
+        station: names.get(stop.station_id)?.name || stop.station_id,
+        kind, nextStationId: kind === "dep" ? nextAfter(stop.station_id, 1, service) : null,
+        previousStationId: kind === "arr" ? nextAfter(stop.station_id, -1, service) : null,
+        state: (states.get(key) || (key !== number ? null : states.get(number)))?.state || null,
+      };
+    };
     const result = [];
 
     if (train) {
-      for (const stop of rowsOf(train)) {
+      const service = byKey.get(String(train));
+      for (const stop of service ? orderedStops(service) : []) {
         const arrival = stopAt(stop, "arrival_time"), departure = stopAt(stop, "departure_time");
-        if (departure !== null && departure >= now) result.push(build(train, stop, "dep", stop.departure_time));
-        else if (arrival !== null && arrival >= now) result.push(build(train, stop, "arr", stop.arrival_time));
+        if (departure !== null && departure >= now) result.push(build(stop, "dep", stop.departure_time, service));
+        else if (arrival !== null && arrival >= now) result.push(build(stop, "arr", stop.arrival_time, service));
       }
     } else if (station) {
       // Vid en station syns varje tåg, också två med samma nummer.
@@ -285,29 +341,30 @@
         for (const stop of orderedStops(service)) {
           if (stop.station_id !== station) continue;
           const arrival = stopAt(stop, "arrival_time"), departure = stopAt(stop, "departure_time");
-          if (arrival !== null && arrival >= now) result.push(build(service.train_number, stop, "arr", stop.arrival_time, service));
-          if (departure !== null && departure >= now && departure !== arrival) result.push(build(service.train_number, stop, "dep", stop.departure_time, service));
+          if (arrival !== null && arrival >= now) result.push(build(stop, "arr", stop.arrival_time, service, { keyed: true }));
+          if (departure !== null && departure >= now && departure !== arrival) result.push(build(stop, "dep", stop.departure_time, service, { keyed: true }));
         }
       }
     } else {
       for (const service of listed) {
-        const number = String(service.train_number), stops = orderedStops(service), live = states.get(number);
+        const number = String(service.train_number), key = trainKey(service), stops = orderedStops(service);
+        const live = states.get(key) || (key !== number ? null : states.get(number));
         let event = null;
         if (live && live.state === "on-line") {
           const stop = stops.find((item) => item.station_id === live.to);
           const at = stop?.arrival_time || stop?.departure_time;
-          if (stop && minutes(at) !== null) event = build(number, stop, stop.arrival_time ? "arr" : "dep", at);
+          if (stop && minutes(at) !== null) event = build(stop, stop.arrival_time ? "arr" : "dep", at, service);
         } else if (live) {
           const here = live.state === "cleared" ? live.from : live.station;
           const stop = stops.find((item) => item.station_id === here);
           const departs = stop?.departure_time;
-          if (stop && minutes(departs) !== null) event = build(number, stop, "dep", departs);
+          if (stop && minutes(departs) !== null) event = build(stop, "dep", departs, service);
         }
         if (!event && !live) {
           for (const stop of stops) {
             const at = stop.departure_time || stop.arrival_time;
             const minute = stopAt(stop, stop.departure_time ? "departure_time" : "arrival_time");
-            if (minute !== null && minute >= now) { event = build(number, stop, stop.departure_time ? "dep" : "arr", at); break; }
+            if (minute !== null && minute >= now) { event = build(stop, stop.departure_time ? "dep" : "arr", at, service); break; }
           }
         }
         if (event) result.push(event);
@@ -317,7 +374,7 @@
     // försening, den man står vid får den beräknade.
     const lives = trainLive(snapshot, Number.isFinite(nowSeconds) ? nowSeconds : now * 60);
     for (const event of result) {
-      const live = (event.serviceId !== null && lives.get(String(event.serviceId))) || lives.get(event.train);
+      const live = (event.serviceId !== null && lives.get(String(event.serviceId))) || lives.get(event.key) || lives.get(event.train);
       const delay = live && live.state !== "arrived" ? live.delayMinutes : 0;
       event.delayMinutes = delay;
       event.late = delay >= LATE_MINUTES;
@@ -381,7 +438,7 @@
     const all = (snapshot?.services || []).filter((service) => String(service.train_number || "").trim());
     const shared = new Map();
     for (const service of all) { const number = String(service.train_number).trim(); shared.set(number, (shared.get(number) || 0) + 1); }
-    const byNumber = new Map();
+    const byNumber = new Map(), byKey = new Map();
     for (const service of all) {
       const number = String(service.train_number).trim();
       const stops = orderedStops(service).map((stop) => {
@@ -407,7 +464,10 @@
       const last = stops.at(-1);
       // En kanal säger bara numret: delar två tåg det gäller den det tåg som
       // har avgått men inte kommit fram.
-      const channel = shared.get(number) === 1 || (lastIndex >= 0 && !last.arrived) ? states.get(number) : null;
+      // Med rörelsen vet kanalen vilket tåg det är: då gäller tågets nyckel.
+      const key = trainKey(service);
+      const channel = key !== number && states.has(key) ? states.get(key)
+        : shared.get(number) === 1 || (lastIndex >= 0 && !last.arrived) ? states.get(number) : null;
       let state, station = null, from = null, to = null;
       if (channel && channel.state === "on-line") { state = "on_line"; from = channel.from; to = channel.to; }
       else if (lastIndex >= 0 && stops[lastIndex].departed && lastIndex < stops.length - 1) {
@@ -438,21 +498,28 @@
           expectedArrival: done ? stop.actualArrival : expected(stop.plannedArrival),
           expectedDeparture: stop.departed ? stop.actualDeparture : expected(stop.plannedDeparture) };
       });
-      const item = { number, serviceId: service.id ?? null, state, station, from, to, delayMinutes: delay, late: delay >= LATE_MINUTES, estimated,
+      const item = { number, key, serviceId: service.id ?? null, state, station, from, to, delayMinutes: delay, late: delay >= LATE_MINUTES, estimated,
         earlyMinutes, earlyKind, trainType: String(service.train_type || "person").toLowerCase(),
         arrivedAt: last.actualArrival, stops: times };
       if (service.id !== undefined && service.id !== null) result.set(String(service.id), item);
       const start = times.map((stop) => stop.plannedDeparture ?? stop.plannedArrival).find((value) => value !== null) ?? 0;
       if (!byNumber.has(number)) byNumber.set(number, []);
       byNumber.get(number).push({ item, start });
+      if (key !== number) {
+        if (!byKey.has(key)) byKey.set(key, []);
+        byKey.get(key).push({ item, start });
+      }
     }
-    // Det tåg ett delat nummer gäller nu: på väg, annars nästa, annars det senaste.
-    for (const [number, candidates] of byNumber) {
+    // Det tåg ett delat nummer gäller nu: på väg, annars nästa, annars det
+    // senaste. Detsamma för varje tåg (nyckel) bland turerna med dess nummer.
+    const current = (candidates) => {
       const moving = candidates.find(({ item }) => ["on_line", "at_station", "waiting"].includes(item.state));
       const coming = candidates.filter(({ item }) => item.state === "not_departed").sort((a, b) => a.start - b.start)[0];
       const latest = [...candidates].sort((a, b) => b.start - a.start)[0];
-      result.set(number, (moving || coming || latest).item);
-    }
+      return (moving || coming || latest).item;
+    };
+    for (const [number, candidates] of byNumber) result.set(number, current(candidates));
+    for (const [key, candidates] of byKey) result.set(key, current(candidates));
     return result;
   }
 
@@ -576,9 +643,10 @@
   function graph(snapshot, { windowMinutes = 180, train = null, now: liveNow = null, all: everyTurn = false } = {}) {
     const stations = stationOrder(snapshot);
     const rowOf = new Map(stations.map((station, index) => [station.id, index]));
-    // Drift visar ett tåg per nummer; den grafiska tidtabellen varje tur (`all`).
+    // Drift visar ett tåg per nyckel (numret, eller etiketten där två tåg delar
+    // nummer); den grafiska tidtabellen varje tur (`all`).
     const chosen = everyTurn ? (snapshot?.services || []).filter((service) => String(service.train_number || "").trim()) : services(snapshot);
-    const lines = chosen.map((service) => ({ service, number: String(service.train_number), points: routePoints(service, rowOf), shift: 0 }))
+    const lines = chosen.map((service) => ({ service, number: String(service.train_number), key: trainKey(service), points: routePoints(service, rowOf), shift: 0 }))
       .filter((line) => line.points.length >= 2);
     // Drift skickar klockan som den går (minuter med decimaler); annars bildens.
     const now = liveNow ?? minutes(snapshot?.clock?.time);
@@ -608,9 +676,9 @@
     }
     const live = trainStates(snapshot);
     for (const line of lines) {
-      const state = live.get(line.number);
+      const state = live.get(line.key) || (line.key !== line.number ? null : live.get(line.number));
       line.state = state?.state || null;
-      line.selected = train !== null && line.number === String(train);
+      line.selected = train !== null && line.key === String(train);
       line.lit = state?.state === "on-line" || state?.state === "cleared" || line.selected;
       // Tåg på linjen: just den sträckan som är under väg.
       line.segment = null;
@@ -645,11 +713,13 @@
     if (!needle) return [];
     const result = [];
     for (const service of services(snapshot)) {
-      const number = String(service.train_number);
-      if (!number.toLocaleLowerCase("sv").includes(needle)) continue;
+      const number = String(service.train_number), key = trainKey(service);
+      // Numret, eller etiketten där två tåg delar det ("IC 116" hittas på "ic").
+      const haystack = [number, key, trainText(service)].map((value) => value.toLocaleLowerCase("sv"));
+      if (!haystack.some((value) => value.includes(needle))) continue;
       const stops = orderedStops(service), names = stationMap(snapshot);
       const first = names.get(stops[0]?.station_id)?.name, last = names.get(stops.at(-1)?.station_id)?.name;
-      result.push({ kind: "train", id: number, label: number, detail: first && last ? `${first} → ${last}` : "", rank: number.toLocaleLowerCase("sv").startsWith(needle) ? 0 : 1 });
+      result.push({ kind: "train", id: key, label: trainText(service), detail: first && last ? `${first} → ${last}` : "", rank: haystack.some((value) => value.startsWith(needle)) ? 0 : 1 });
     }
     for (const station of snapshot?.stations || []) {
       const name = String(station.name || "").toLocaleLowerCase("sv"), code = String(station.code || "").toLocaleLowerCase("sv");
@@ -659,7 +729,7 @@
     return result.sort((a, b) => a.rank - b.rank || (a.kind === b.kind ? 0 : a.kind === "train" ? -1 : 1) || compare(a.label, b.label)).slice(0, limit);
   }
 
-  return { compare, minutes, hhmm, services, orderedStops, stationMap, trains, trainStates, stationCounts, onLineLeg, lateTrains,
+  return { compare, minutes, hhmm, trainKey, trainText, trainIdentity, services, orderedStops, stationMap, trains, trainStates, stationCounts, onLineLeg, lateTrains,
     placement, connectionTone, stationRows, stats, events, stationOrder, routePoints, graph, legProgress, search, LATE_MINUTES, movementOf, trainLive, changeTracker,
     DEVIATION_LEVELS, DEFAULT_DEVIATION_LEVEL, deviationLevel, deviationView, takesOverMinutes };
 });

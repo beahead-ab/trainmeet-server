@@ -70,7 +70,8 @@ test('trains reads reserved and occupied channels first, then noted positions', 
     ],
   }));
   assert.deepEqual(found.onLine.map((train) => [train.trainNumber, train.departed]), [['101', false], ['20', true], ['7', true]]);
-  assert.deepEqual(found.atStation, [{trainNumber: '8', station: 'c'}]);
+  // Varje tåg bär också sin nyckel och tagg; ett unikt nummer är sin egen (Cloud #100).
+  assert.deepEqual(found.atStation, [{trainNumber: '8', key: '8', text: '8', serviceId: null, station: 'c'}]);
 });
 
 test('trainStates and stationCounts say where each train is', () => {

@@ -181,6 +181,24 @@ class BoxAndTklTests(CloudDeliveryFixture):
         self.assertEqual({"DSB IC 101", "SJ X 101"}, {row["train_label"] for row in snapshot["trains"] if row["train_number"] == "101"})
 
 
+    def test_the_train_panel_asks_for_one_of_two_trains_that_share_a_number(self):
+        # Drift frågar efter det valda tåget med dess nyckel; utan nyckel gäller
+        # numret som förut, med båda tågens turer.
+        self.shared()
+        both = self.application.train_detail(self.client, "101")
+        self.assertEqual(2, len({item["service_id"] for item in both["services"]}))
+        self.assertNotIn("service_key", both)
+        x = self.application.train_detail(self.client, "101", "SJ X")
+        self.assertEqual(["service-101-Dagl-sj-x"], [item["service_id"] for item in x["services"]])
+        self.assertEqual("SJ X", x["service_key"])
+        self.assertEqual("15:40", next(stop for stop in x["services"][0]["stops"] if stop["departure_time"])["departure_time"])
+        ic = self.application.train_detail(self.client, "101", "  DSB   IC ")
+        self.assertEqual(1, len(ic["services"]))
+        self.assertNotEqual(x["services"][0]["service_id"], ic["services"][0]["service_id"])
+        from tmbox_gateway.http_server import HTTPAPIError
+        with self.assertRaises(HTTPAPIError):
+            self.application.train_detail(self.client, "101", "NSB L")
+
     def test_the_box_screen_shows_the_short_name_where_it_fits(self):
         from tmbox_gateway.engine import TrafficEngine
         from tmbox_gateway.terminal16 import Terminal16Lab
@@ -250,6 +268,8 @@ class CorrectionDuringPlayTests(CloudDeliveryFixture):
         self.assertEqual(("cloud-first", 1), (active.publication_id, active.local_revision), "same publication, a layer on top")
         self.assertEqual("10:05", next(row for row in active.payload["trains"] if row["id"] == "movement-202-a")["arrival_time"])
         self.assertEqual("cloud", self.runtime.local_edits_summary(active)["source"])
+        # Inställningar → Tidtabell får veta att lagret är Clouds rättelse, inte admins.
+        self.assertEqual("cloud", self.application.meet_data(self.client)["local_edits"]["source"])
         self.assertEqual([case["clearance_id"]], [item["clearance_id"] for item in self.application.station_service.open_cases("station-a")],
                          "train 101's clearance is untouched")
         # Samma version igen gör ingenting nytt.

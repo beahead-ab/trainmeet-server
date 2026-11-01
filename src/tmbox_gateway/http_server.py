@@ -4525,12 +4525,16 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "unknown_station", "Stationen finns inte")
         return publication.timetable(active_day=active_day, station_id=station_id)
 
-    def train_detail(self, client: PairedClient, number: str) -> dict[str, Any]:
+    def train_detail(self, client: PairedClient, number: str, service_key: str | None = None) -> dict[str, Any]:
         """One train today: every call with times and tracks, and where it is now.
 
         Drift opens this from "Kommande enligt tidtabell". Read-only; it joins
         what already exists - the timetable, each station's movement states,
         open clearances and the line positions - and decides nothing.
+
+        Två tåg som delar nummer (DSB IC 116 och SJ X 116, Cloud #100) skiljs
+        med `service_key`: då gäller bara det tågets turer, och läget på linjen
+        bara om rörelsen är dess. Utan nyckel gäller numret som förut.
         """
         del client
         selected = self.lifecycle.selected() if self.lifecycle else None
@@ -4541,6 +4545,9 @@ class TrainMeetHTTPApplication:
         number = str(number or "").strip()
         timetable = publication.timetable(active_day=active_day)
         services = [service for service in timetable["services"] if str(service.get("train_number")) == number]
+        key = " ".join(str(service_key or "").split())
+        if key:
+            services = [service for service in services if " ".join(str(service.get("service_key") or "").split()) == key]
         if not services:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "unknown_train", "Tåget finns inte i dagens tidtabell")
         stations = {str(station["id"]): station for station in timetable["stations"]}
@@ -4558,8 +4565,13 @@ class TrainMeetHTTPApplication:
         cases = ({case["movement_id"]: case for case in self.station_service.open_cases(None)}
                  if self.station_service is not None else {})
         stabled = self.automatic.stabled_movements(publication, active_day) if self.automatic is not None else set()
+        # Med nyckel gäller bara ett läge vars rörelse är tågets egen; ett läge
+        # utan rörelse kan vara det andra tågets och visas inte.
+        own_movements = {str(row["id"]) for row in timetable["trains"]
+                         if row.get("service_id") in {service.get("id") for service in services}}
         position = next((item for item in (self.operations_store.positions() if self.operations_store else [])
-                         if str(item["train_number"]) == number), None)
+                         if str(item["train_number"]) == number
+                         and (not key or str(item.get("movement_id") or "") in own_movements)), None)
         # Förseningen ur verkliga tider, som i tidtabellerna (train_live.py).
         running = (train_live(timetable.get("services", []), timetable.get("trains", []),
                            self.operations_store.movement_live(publication.publication_id, active_day),
@@ -4591,7 +4603,7 @@ class TrainMeetHTTPApplication:
                 # Varje tåg sin egen försening, också när två delar nummer.
                 "delay_minutes": self._train_delay(running.get(str(service.get("id"))) or running.get(number)),
             })
-        return {"train_number": number, "active_day": active_day, "services": result}
+        return {"train_number": number, **({"service_key": key} if key else {}), "active_day": active_day, "services": result}
 
     def _train_now(self, stops: list[dict[str, Any]], cases: dict[str, dict[str, Any]],
                    position: dict[str, Any] | None, stabled: set | frozenset = frozenset()) -> dict[str, Any]:
@@ -6123,8 +6135,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/v1/train":
                 client = self._authenticated_client()
-                number = parse_qs(parsed.query).get("number", [""])[0]
-                self._send_json(HTTPStatus.OK, self.server.application.train_detail(client, number))
+                query = parse_qs(parsed.query)
+                self._send_json(HTTPStatus.OK, self.server.application.train_detail(
+                    client, query.get("number", [""])[0], query.get("service_key", [None])[0]))
                 return
             if path == "/v1/timetable":
                 client = self._authenticated_client()

@@ -267,3 +267,21 @@ test('planens linjer blir bladen, med km som avstånd och tågslagens färger', 
   assert.equal(one.label, 'SJ X 1');
   assert.equal(g.trains.find((train) => train.number === '2').color, null);
 });
+
+// Cloud #100: två tåg med samma nummer. Valet och läget följer nyckeln
+// ("DSB IC 2" där numret delas), och taggen visar den korta etiketten.
+test('layout: of two trains that share a number only the chosen one is lit, and each tag says which', () => {
+  const shared = (extra) => ({ train_label: `${extra.service_key} 2`, short_label: `${extra.service_key.split(' ').at(-1)} 2`, ...extra });
+  const twin = service(2, [stop('a', 0, null, '10:02'), stop('b', 1, '10:12', '10:14'), stop('c', 2, '10:24', '10:24'), stop('d', 3, '10:38', null)],
+    shared({ id: 's-2x', service_key: 'SJ X' }));
+  const plan = snapshot({
+    services: [services[0], { ...services[1], ...shared({ service_key: 'DSB IC' }) }, twin, ...services.slice(2)],
+    trains: [...trains, { id: 'x-b', service_id: 's-2x', station_id: 'b', train_number: '2' }],
+    connection_states: [{ id: 'c1', state: 'occupied', channels: [{ train_number: '2', state: 'occupied', from_station_id: 'b', to_station_id: 'c', movement_id: 'x-b', departed_seconds: 10 * 3600 + 14 * 60 }] }],
+  });
+  const g = graph.layout(plan, { width: 1000, windowMinutes: 180, now: 618, line: 'a..d', train: 'SJ X 2' });
+  const two = g.trains.filter((train) => train.number === '2').map((train) => [train.key, train.text, train.selected, train.state]);
+  assert.deepEqual(two.sort(), [['DSB IC 2', 'IC 2', false, null], ['SJ X 2', 'X 2', true, 'on-line']]);
+  const one = g.trains.find((train) => train.number === '1');
+  assert.deepEqual([one.key, one.text, one.selected], ['1', '1', false], 'a number only one train has is its own key');
+});
