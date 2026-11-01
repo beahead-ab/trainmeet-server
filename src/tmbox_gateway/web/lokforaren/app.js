@@ -10,6 +10,7 @@
   const $ = (selector) => document.querySelector(selector);
   const K = globalThis.LokforarenKorplan;
   const D = globalThis.LokforarenDuties;
+  const P = globalThis.LokforarenPapper;
   const app = $("#app");
   const LANGUAGES = ["sv", "da", "nb", "en", "de"];
   const CLOCK_POLL = 2000;
@@ -74,6 +75,7 @@
     catalogLoading: false,
     checkin: {station: "", stationId: "", track: ""},
     endArmedUntil: 0,
+    paper: null,
   };
 
   // ── Server ─────────────────────────────────────────────────────────
@@ -290,6 +292,12 @@
     } else if (mode === "idle" && duty) {
       text = t("Träffklockan har inte startat än.");
       kind = "is-info"; icon = "M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM12 7.5V12l3 2";
+    } else if (duty && dutyUpdate()) {
+      const update = dutyUpdate();
+      text = update.version
+        ? t("Tjänst {number} har rättats efter pappret · tryck för att se", {number: update.number})
+        : t("Tjänst {number} gäller igen som i köruppdraget · tryck för att se", {number: update.number});
+      kind = "is-update is-duty"; icon = "M4 8.5h3l1.6-2.5h6.8L17 8.5h3v10.5H4zM12 10.1a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8z";
     } else if (duty && state.plan && seconds !== null && app.dataset.screen === "korplan"
                && K.axisMinutes(seconds, state.plan) < state.plan.start) {
       const now = K.axisMinutes(seconds, state.plan);
@@ -300,8 +308,9 @@
       kind = "is-update"; icon = "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7";
     }
     const showBanner = Boolean(text) && (["korplan", "countdown", "drivers", "me"].includes(app.dataset.screen)
-      || (kind === "is-update" && app.dataset.screen === "choose"));
+      || (kind.startsWith("is-update") && app.dataset.screen === "choose"));
     banner.hidden = !showBanner;
+    if (!showBanner) banner.className = "lf-banner";
     if (showBanner) {
       banner.className = "lf-banner " + kind;
       $("#banner-text").textContent = text;
@@ -449,11 +458,21 @@
     fact(t("Bolag och fordon"), [duty.operator, duty.vehicle, duty.vmax ? "vmax " + duty.vmax : ""].filter(Boolean).join(" · "));
     $("#found-note").hidden = !duty.notes.length;
     $("#found-note").textContent = duty.notes.map(note).join(" ");
-    // Förlagan: sidorna i köruppdragets PDF, för den som vill se originalet.
+    // En version rättad efter fotona av pappret (#225).
+    $("#found-version").hidden = !duty.version;
+    if (duty.version) $("#found-version").textContent = versionText(duty.version, duty.version_info || {});
+    $("#found-admin").hidden = !isAdmin() || Boolean(duty.demo);
+    // Har tjänsten versioner (även när köruppdragets gäller igen) bär den "version".
+    $("#versions-open").hidden = !("version" in duty);
+    // Förlagan: sidorna i köruppdragets PDF, för den som vill se originalet,
+    // eller fotona av pappret när tjänsten rättats efter dem.
     const source = $("#found-source");
     const pages = (duty.source && duty.source.pages || []).filter(Boolean);
-    source.hidden = !(duty.source && duty.source.document_id && pages.length);
-    if (!source.hidden) {
+    source.hidden = !(duty.source && (duty.source.document_id || duty.source.photos) && pages.length);
+    if (!source.hidden && duty.source.photos) {
+      source.href = `/v1/driver/duties/${encodeURIComponent(duty.id)}.pdf`;
+      source.textContent = t("Fotona av pappret · {pages} sidor", {pages: pages[pages.length - 1]});
+    } else if (!source.hidden) {
       const span = pages[0] === pages[pages.length - 1] ? String(pages[0]) : `${pages[0]}–${pages[pages.length - 1]}`;
       // Helst bara tjänstens egna sidor; annars hela köruppdraget på rätt sida.
       source.href = duty.source.part
@@ -1393,6 +1412,380 @@
     refreshPresence();
   }
 
+  // ── Rätta efter pappret (#225) ─────────────────────────────────────
+  // Bara ägare och administratörer: fota pappret förarna har, en bild per
+  // sida; AI i TrainMeet Cloud läser av fotona, och förslaget visas bredvid
+  // tjänsten som den är nu. Först när administratören sparar blir det en ny
+  // version. Förare (rollen user) ser aldrig knapparna och servern svarar 403.
+  function isAdmin() { return Boolean(me() && ["owner", "admin"].includes(me().role)); }
+
+  function stampText(iso) {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return "";
+    const locale = {sv: "sv-SE", da: "da-DK", nb: "nb-NO", en: "en-GB", de: "de-DE"}[language] || "sv-SE";
+    return date.toLocaleString(locale, {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"});
+  }
+
+  function versionText(version, info) {
+    return t("Version {version} · rättad efter pappret {when} av {name}", {
+      version, when: stampText(info.created_at || ""), name: info.created_by_name || "–"});
+  }
+
+  async function adminApi(path, body) {
+    return api(path, body === undefined ? {} : {body});
+  }
+
+  function paperStep(step) {
+    for (const name of ["photos", "reading", "result"]) $("#paper-step-" + name).hidden = name !== step;
+    const paper = state.paper;
+    const pages = paper ? paper.pages.length : 0;
+    const sending = paper ? paper.pages.some((page) => page.sending) : false;
+    $("#paper-read").hidden = !(step === "photos" || (step === "result" && paper && paper.failed));
+    $("#paper-read").disabled = !pages || sending;
+    $("#paper-read").textContent = paper && paper.failed ? t("Försök igen") : t("Läs av fotona");
+    $("#paper-save").hidden = !(step === "result" && paper && paper.result);
+    $("#paper-retake").hidden = !(pages && step !== "reading");
+    $("#paper-retake").textContent = step === "photos" ? t("Börja om") : t("Fota om");
+    $("#paper-camera-text").textContent = pages ? t("Fota sida {n}", {n: pages + 1}) : t("Fota omslaget");
+    $("#paper-camera-label").classList.toggle("lf-button--primary", !pages);
+    $("#paper-camera-label").classList.toggle("lf-button--secondary", Boolean(pages));
+  }
+
+  function renderPages() {
+    const list = $("#paper-pages");
+    list.replaceChildren();
+    state.paper.pages.forEach((page, index) => {
+      const item = document.createElement("li");
+      item.className = "lf-page" + (page.sending ? " is-sending" : "");
+      const image = document.createElement("img");
+      image.src = page.url;
+      image.alt = t("Sida {n}", {n: index + 1});
+      const label = document.createElement("span");
+      label.textContent = page.sending ? t("Skickar…") : t("Sida {n}", {n: index + 1});
+      item.append(image, label);
+      list.append(item);
+    });
+  }
+
+  function openPaper(duty) {
+    closePaper(false);
+    state.paper = {duty, scanId: null, pages: [], result: null, current: null, failed: false, poll: 0, saved: false};
+    $("#paper-title").textContent = t("Rätta tjänst {number} efter pappret", {number: duty.number});
+    $("#paper-message").textContent = "";
+    $("#paper-message").className = "lf-message";
+    renderPages();
+    paperStep("photos");
+    $("#sheet-paper").hidden = false;
+  }
+
+  function closePaper(hide = true) {
+    const paper = state.paper;
+    if (paper) {
+      clearTimeout(paper.poll);
+      paper.closed = true;
+      // Ett förslag som inte sparas lämnar inget kvar på servern.
+      if (paper.scanId && !paper.saved) adminApi(`/v1/driver-admin/scans/${paper.scanId}/discard`, {}).catch(() => {});
+    }
+    state.paper = null;
+    if (hide) $("#sheet-paper").hidden = true;
+  }
+
+  function paperMessage(text, kind = "") {
+    $("#paper-message").textContent = text;
+    $("#paper-message").className = "lf-message" + (kind ? " " + kind : "");
+  }
+
+  async function addPhotos(files) {
+    const paper = state.paper;
+    if (!paper || !files.length) return;
+    paperMessage("");
+    try {
+      if (!paper.scanId) {
+        const created = await adminApi("/v1/driver-admin/scans", {duty_id: paper.duty.id});
+        if (paper.closed) return;
+        paper.scanId = created.scan.id;
+        if (!created.cloud_linked) paperMessage(t("Servern är inte kopplad till TrainMeet Cloud. Fotona kan inte läsas av förrän den är det."), "is-error");
+      }
+      for (const file of files) {
+        let shrunk;
+        try { shrunk = await P.shrink(file); } catch { paperMessage(t("Bilden gick inte att öppna."), "is-error"); continue; }
+        const page = {url: shrunk.thumb, sending: true};
+        paper.pages.push(page);
+        renderPages();
+        paperStep("photos");
+        const response = await fetch(`/v1/driver-admin/scans/${paper.scanId}/pages`, {
+          method: "POST", credentials: "same-origin", body: shrunk.blob,
+          headers: {"Content-Type": "image/jpeg", "X-Width": String(shrunk.width), "X-Height": String(shrunk.height)},
+        });
+        if (response.status === 401) throw new Unauthorized();
+        const payload = await response.json().catch(() => ({}));
+        if (paper.closed) return;
+        if (!response.ok) {
+          paper.pages.splice(paper.pages.indexOf(page), 1);
+          renderPages();
+          paperStep("photos");
+          paperMessage(payload.message || t("Det gick inte. Försök igen."), "is-error");
+          return;
+        }
+        page.sending = false;
+        renderPages();
+        paperStep("photos");
+      }
+    } catch (error) {
+      if (error instanceof Unauthorized) { closePaper(); showLogin(); return; }
+      paperMessage(error.message, "is-error");
+      paperStep("photos");
+    }
+  }
+
+  async function readPaper() {
+    const paper = state.paper;
+    if (!paper || !paper.scanId) return;
+    paper.failed = false;
+    paper.result = null;
+    paperMessage("");
+    paperStep("reading");
+    try {
+      await adminApi(`/v1/driver-admin/scans/${paper.scanId}/read`, {});
+      paper.startedAt = Date.now();
+      pollPaper();
+    } catch (error) {
+      if (error instanceof Unauthorized) { closePaper(); showLogin(); return; }
+      paper.failed = true;
+      paperStep("photos");
+      paperMessage(error.message, "is-error");
+    }
+  }
+
+  async function pollPaper() {
+    const paper = state.paper;
+    if (!paper || paper.closed) return;
+    try {
+      const payload = await api(`/v1/driver-admin/scans/${paper.scanId}`);
+      if (paper.closed) return;
+      const scan = payload.scan;
+      if (scan.status === "done") { paper.result = scan.result; paper.current = payload.current; renderPaperResult(); return; }
+      if (scan.status === "failed") {
+        paper.failed = true;
+        paperStep("result");
+        $("#paper-step-result").hidden = true;
+        paperMessage(scan.message || t("Det gick inte. Försök igen."), "is-error");
+        return;
+      }
+    } catch (error) {
+      if (error instanceof Unauthorized) { closePaper(); showLogin(); return; }
+    }
+    if (Date.now() - paper.startedAt > 7 * 60 * 1000) {
+      paper.failed = true;
+      paperStep("result");
+      $("#paper-step-result").hidden = true;
+      paperMessage(t("Avläsningen tog för lång tid. Försök igen."), "is-error");
+      return;
+    }
+    paper.poll = setTimeout(pollPaper, 2500);
+  }
+
+  const FACT_LABEL = {time: "Tid", trains: "Tåg", vehicle: "Bolag och fordon"};
+  function eventWhat(row) {
+    const kind = {duty_start: t("Tjänsten börjar"), duty_end: t("Tjänsten slutar"), departure: t("Avgång"),
+      arrival: t("Ankomst"), stop: t("Uppehåll"), pass: t("Passerar")}[row.kind] || "";
+    return [kind, row.station].filter(Boolean).join(" ");
+  }
+
+  function renderPaperResult() {
+    const paper = state.paper;
+    const proposal = paper.result.duty;
+    const result = P.compare(paper.current, proposal);
+    const warnings = $("#paper-warnings");
+    warnings.replaceChildren(...(paper.result.warnings || []).map((text) => {
+      const item = document.createElement("li");
+      item.textContent = text;
+      return item;
+    }));
+    warnings.hidden = !warnings.children.length;
+    $("#paper-summary").textContent = result.changes
+      ? t("Pappret skiljer sig från tjänsten som den är nu på {n} punkter. Kontrollera mot pappret innan du sparar.", {n: result.changes})
+      : t("Pappret stämmer med tjänsten som den är nu.");
+    const body = $("#paper-facts tbody");
+    body.replaceChildren(...result.facts.map((fact) => {
+      const row = document.createElement("tr");
+      row.className = fact.same ? "" : "is-changed";
+      for (const value of [t(FACT_LABEL[fact.key]), fact.now || "–", fact.paper || "–"]) {
+        const cell = document.createElement("td");
+        cell.textContent = value;
+        row.append(cell);
+      }
+      return row;
+    }));
+    const rows = $("#paper-rows");
+    rows.replaceChildren(...result.rows.map((row) => {
+      const item = document.createElement("li");
+      item.className = "is-" + row.change;
+      const time = el("lf-paper-rows__time", item, row.time);
+      time.title = row.change === "added" ? t("Ny") : row.change === "changed" ? t("Ändrad") : "";
+      el("lf-paper-rows__what", item, eventWhat(row));
+      const sub = [row.train, row.track ? t("spår {track}", {track: row.track}) : ""].filter(Boolean).join(" · ");
+      const was = row.was ? t("Nu: {time}", {time: row.was.time}) + (row.was.track ? " · " + t("spår {track}", {track: row.was.track}) : "") : "";
+      if (sub || was) el("lf-paper-rows__sub", item, [sub, was].filter(Boolean).join(" — "));
+      return item;
+    }));
+    $("#paper-gone").hidden = !result.gone.length;
+    $("#paper-gone").textContent = t("Bara i tjänsten som den är nu, inte på pappret: {rows}", {
+      rows: result.gone.map((row) => `${row.time} ${row.station}${row.train ? " (" + row.train + ")" : ""}`).join(", ")});
+    paperStep("result");
+  }
+
+  async function savePaper() {
+    const paper = state.paper;
+    if (!paper || !paper.result) return;
+    $("#paper-save").disabled = true;
+    try {
+      const payload = await adminApi(`/v1/driver-admin/scans/${paper.scanId}/save`, {});
+      paper.saved = true;
+      const duty = paper.duty;
+      closePaper();
+      toast(t("Version {version} av tjänst {number} gäller nu", {version: payload.version.version, number: duty.number}));
+      await reloadChosen(duty);
+    } catch (error) {
+      if (error instanceof Unauthorized) { closePaper(); showLogin(); return; }
+      paperMessage(error.message, "is-error");
+    } finally {
+      $("#paper-save").disabled = false;
+    }
+  }
+
+  async function retakePaper() {
+    const duty = state.paper && state.paper.duty;
+    if (duty) openPaper(duty);
+  }
+
+  // Katalogen och den valda tjänsten igen, med den version som gäller nu.
+  async function reloadChosen(duty) {
+    await searchDuties();
+    const summary = (state.duties || []).find((item) => item.id === duty.id);
+    if (summary) await chooseDuty(summary, true);
+  }
+
+  async function openVersions(duty) {
+    $("#versions-title").textContent = t("Versioner av tjänst {number}", {number: duty.number});
+    $("#versions-message").textContent = "";
+    const list = $("#versions-list");
+    list.replaceChildren();
+    $("#versions-use").disabled = true;
+    $("#sheet-versions").hidden = false;
+    let payload;
+    try {
+      payload = await api(`/v1/driver-admin/duties/${encodeURIComponent(duty.id)}/versions`);
+    } catch (error) {
+      if (error instanceof Unauthorized) { showLogin(); return; }
+      $("#versions-message").textContent = error.message;
+      return;
+    }
+    const choices = [{version: 0, name: t("Som i köruppdraget"), sub: t("Planeringsfilen eller paketet från Cloud")}]
+      .concat(payload.versions.map((item) => ({
+        version: item.version, name: t("Version {version} · pappret", {version: item.version}),
+        sub: [stampText(item.created_at), item.created_by_name, item.pages ? t("{n} foton", {n: item.pages}) : ""].filter(Boolean).join(" · "),
+      })));
+    let chosen = payload.current;
+    const render = () => {
+      for (const button of list.children) button.setAttribute("aria-checked", String(Number(button.dataset.version) === chosen));
+      $("#versions-use").disabled = chosen === payload.current;
+    };
+    for (const choice of choices.reverse()) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "lf-choice";
+      button.setAttribute("role", "radio");
+      button.dataset.version = String(choice.version);
+      el("lf-choice__dot", button);
+      const text = el("lf-choice__text", button);
+      el("lf-choice__name", text, choice.name + (choice.version === payload.current ? " · " + t("gäller nu") : ""));
+      el("lf-choice__sub", text, choice.sub);
+      button.addEventListener("click", () => { chosen = choice.version; render(); });
+      list.append(button);
+    }
+    render();
+    $("#versions-use").onclick = async () => {
+      $("#versions-use").disabled = true;
+      try {
+        await adminApi(`/v1/driver-admin/duties/${encodeURIComponent(duty.id)}/versions/use`, {version: chosen});
+        $("#sheet-versions").hidden = true;
+        toast(chosen ? t("Version {version} av tjänst {number} gäller nu", {version: chosen, number: duty.number})
+          : t("Tjänst {number} gäller som i köruppdraget", {number: duty.number}));
+        await reloadChosen(duty);
+      } catch (error) {
+        if (error instanceof Unauthorized) { showLogin(); return; }
+        $("#versions-message").textContent = error.message;
+        render();
+      }
+    };
+  }
+
+  // ── En annan version av förarens tjänst gäller (#225) ───────────────
+  // Föraren byts aldrig mitt i. Lokföraren frågar, och föraren väljer.
+  function dutyUpdate() {
+    const update = state.presence && "duty_update" in state.presence ? state.presence.duty_update
+      : state.session && state.session.duty_update;
+    if (!update) return null;
+    return store.get("kept", "") === `${update.duty_id}|${update.version}|${update.changed_at || ""}` ? null : update;
+  }
+
+  async function openUpdate() {
+    const update = dutyUpdate(), duty = activeDuty();
+    if (!update || !duty) return;
+    $("#update-title").textContent = t("Tjänst {number}", {number: update.number});
+    $("#update-text").textContent = update.version
+      ? t("Tjänsten har rättats efter pappret. Du kör fortfarande den du valde tills du byter.")
+      : t("Tjänsten gäller igen som i köruppdraget. Du kör fortfarande den du valde tills du byter.");
+    $("#update-message").textContent = "";
+    const facts = $("#update-facts");
+    facts.replaceChildren();
+    const fact = (label, value) => {
+      const row = el("", facts);
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.textContent = value;
+      row.append(dt, dd);
+    };
+    fact(t("Du kör nu"), `${duty.start}–${duty.end} · ${duty.trains.map((train) => train.number).join(" · ")}`);
+    $("#sheet-update").hidden = false;
+    try {
+      const fresh = (await api("/v1/driver/duties/" + encodeURIComponent(update.duty_id))).duty;
+      fact(t("Gäller nu"), `${fresh.start}–${fresh.end} · ${fresh.trains.map((train) => train.number).join(" · ")}`);
+    } catch (error) {
+      if (error instanceof Unauthorized) { showLogin(); return; }
+      $("#update-message").textContent = error.message;
+    }
+  }
+
+  async function switchToUpdate() {
+    const update = dutyUpdate();
+    if (!update) { $("#sheet-update").hidden = true; return; }
+    $("#update-switch").disabled = true;
+    try {
+      const payload = await api("/v1/driver/active", {body: {duty_id: update.duty_id}});
+      state.session.active = payload.active;
+      state.session.duty_update = null;
+      if (state.presence) state.presence.duty_update = null;
+      saveOffline();
+      $("#sheet-update").hidden = true;
+      toast(t("Du kör nu den version som gäller"));
+      route();
+    } catch (error) {
+      if (error instanceof Unauthorized) { showLogin(); return; }
+      $("#update-message").textContent = error.message;
+    } finally {
+      $("#update-switch").disabled = false;
+    }
+  }
+
+  function keepCurrent() {
+    const update = dutyUpdate();
+    if (update) store.set("kept", `${update.duty_id}|${update.version}|${update.changed_at || ""}`);
+    $("#sheet-update").hidden = true;
+  }
+
   // ── Uppstart ───────────────────────────────────────────────────────
   function saveOffline() {
     if (state.session) store.set("cache", {session: state.session, at: Date.now()});
@@ -1463,7 +1856,21 @@
   }
 
   function bind() {
-    $("#banner").addEventListener("click", () => { if ($("#banner").classList.contains("is-update")) reloadForBuild(); });
+    $("#banner").addEventListener("click", () => {
+      if ($("#banner").classList.contains("is-duty")) openUpdate();
+      else if ($("#banner").classList.contains("is-update")) reloadForBuild();
+    });
+    $("#paper-open").addEventListener("click", () => { if (state.chosenDuty) openPaper(state.chosenDuty); });
+    $("#versions-open").addEventListener("click", () => { if (state.chosenDuty) openVersions(state.chosenDuty); });
+    $("#paper-camera").addEventListener("change", (event) => { addPhotos([...event.target.files]); event.target.value = ""; });
+    $("#paper-files").addEventListener("change", (event) => { addPhotos([...event.target.files]); event.target.value = ""; });
+    $("#paper-read").addEventListener("click", readPaper);
+    $("#paper-save").addEventListener("click", savePaper);
+    $("#paper-retake").addEventListener("click", retakePaper);
+    $("#paper-cancel").addEventListener("click", () => closePaper());
+    $("#sheet-paper .sheet__backdrop").addEventListener("click", () => closePaper());
+    $("#update-switch").addEventListener("click", switchToUpdate);
+    $("#update-keep").addEventListener("click", keepCurrent);
     for (const button of document.querySelectorAll(".lf-tab")) {
       button.addEventListener("click", () => {
         if (button.dataset.tab === "catalog") { openChoose(); return; }

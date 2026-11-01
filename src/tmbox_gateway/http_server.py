@@ -42,6 +42,7 @@ from .central_sync import (
     fetch_linked_runtime,
     fetch_runtime_download,
 )
+from .cloud_duty_scan import read_duty_photos
 from .cloud_mail import send_server_mail
 from .driver import (
     CHECKIN_FADE,
@@ -55,6 +56,7 @@ from .driver import (
     normalize_duty,
 )
 from .driver_documents import MAX_PDF_BYTES, DriverDocuments
+from .driver_versions import DriverVersions
 from .cloud_live import LiveChannel
 from .identity import (
     AdminAccessError,
@@ -477,6 +479,12 @@ class TrainMeetHTTPApplication:
         # databas som kontona (och därmed i säkerhetskopiorna).
         self.drivers = DriverStore(identities.path)
         self.driver_documents = DriverDocuments(identities.path)
+        # Nya versioner av tjänsterna, från foton av pappret förarna har.
+        # Fotona tolkas i Cloud; läsaren och tråden byts ut i testerna.
+        self.driver_versions = DriverVersions(identities.path)
+        self.duty_photo_reader = read_duty_photos
+        self.run_duty_scan: Callable[[Callable[[], None]], None] = (
+            lambda job: threading.Thread(target=job, name="duty-scan", daemon=True).start())
 
         if self.runtime_store is not None and self.runtime_store.central_url():
             saved_url = self.runtime_store.central_url() or ""
@@ -914,7 +922,8 @@ class TrainMeetHTTPApplication:
         demo = normalize_duty(DEMO_DUTY)
         if demo is not None:
             duties.append(demo)
-        return duties
+        # En tjänst som fått en ny version från fotona av pappret visas som den.
+        return self.driver_versions.apply_all(meet_key, duties)
 
     def _driver_stations(self, publication: Any) -> list[dict[str, str]]:
         if publication is None:
@@ -988,6 +997,7 @@ class TrainMeetHTTPApplication:
             "user": self._driver_person(user),
             "meet": meet,
             "active": self.drivers.active(str(user["user_id"]), meet_key),
+            "duty_update": self._duty_update(user, meet_key),
             "clock": self.driver_clock(),
             "stations": self._driver_stations(publication),
             "checkin_visible_seconds": int(CHECKIN_VISIBLE.total_seconds()),
@@ -995,6 +1005,24 @@ class TrainMeetHTTPApplication:
             "build": self.driver_build(),
             "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
+
+    def _duty_update(self, user: dict[str, Any], meet_key: str) -> dict[str, Any] | None:
+        """En annan version av förarens tjänst gäller nu än den hen kör.
+
+        Föraren byts aldrig mitt i: Lokföraren frågar, och först när hen
+        väljer tjänsten igen kör hen den version som gäller.
+        """
+        active = self.drivers.active(str(user["user_id"]), meet_key)
+        if active is None or active["duty"].get("demo"):
+            return None
+        duty_id = str(active["duty"].get("id") or "")
+        version, changed_at = self.driver_versions.current_version(meet_key, duty_id)
+        if version == int(active["duty"].get("version") or 0):
+            return None
+        if not any(duty["id"] == duty_id for duty in self.driver_catalog()):
+            return None
+        return {"duty_id": duty_id, "number": active["duty"].get("number"), "version": version,
+                "changed_at": changed_at}
 
     def driver_duties(self, query: str) -> dict[str, Any]:
         query = " ".join(query.split()).lower()
@@ -1066,6 +1094,7 @@ class TrainMeetHTTPApplication:
                                        (item["checkin"] or {}).get("age_seconds", 0), item["name"].lower()))
         return {
             "drivers": drivers,
+            "duty_update": self._duty_update(user, meet_key),
             "checkin_visible_seconds": int(CHECKIN_VISIBLE.total_seconds()),
             "checkin_fade_seconds": int(CHECKIN_FADE.total_seconds()),
             "build": self.driver_build(),
@@ -1082,9 +1111,13 @@ class TrainMeetHTTPApplication:
         return path
 
     def driver_duty_pdf(self, duty_id: str) -> Path:
-        """Bara tjänstens egna sidor ur förlagan, för föraren."""
+        """Bara tjänstens egna sidor ur förlagan, för föraren. En version från
+        fotona har fotona som förlaga."""
         meet_key, _, _ = self._driver_meet()
-        path = self.driver_documents.part_path(duty_id, meet_key)
+        version = next((duty.get("version") for duty in self.driver_catalog() if duty["id"] == duty_id), None)
+        path = self.driver_versions.pdf_path(meet_key, duty_id, version) if version else None
+        if path is None and not version:
+            path = self.driver_documents.part_path(duty_id, meet_key)
         if path is None:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "document_not_found", "Tjänstens sidor finns inte på servern")
         return path
@@ -1172,6 +1205,113 @@ class TrainMeetHTTPApplication:
             self.driver_documents.remove(document_id)
             return {"removed": document_id}
         raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
+
+    # ── Nya versioner från foton av pappret (#225) ─────────────────────
+    # Pappret förarna har och tjänsten på servern kan komma från olika
+    # versioner av planen. En administratör eller ägare fotar pappret, en bild
+    # per sida; Cloud tolkar fotona och förslaget blir en ny version först
+    # när administratören sparar det. Förare (rollen user) når inget av detta.
+
+    def _admin_duty(self, duty_id: str) -> tuple[str, dict[str, Any]]:
+        meet_key, _, _ = self._driver_meet()
+        if meet_key == "none":
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "meet_required", "Välj träff under Träff och Cloud först")
+        duty = next((duty for duty in self.driver_catalog() if duty["id"] == duty_id), None)
+        if duty is None or duty.get("demo"):
+            raise HTTPAPIError(HTTPStatus.NOT_FOUND, "duty_not_found", "Tjänsten finns inte i träffens köruppdrag")
+        return meet_key, duty
+
+    def driver_admin_scan_create(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
+        """Börja fota en tjänst. Sidorna kommer en och en (driver_admin_scan_page)."""
+        self._require_admin(client)
+        meet_key, duty = self._admin_duty(str(payload.get("duty_id") or ""))
+        return {"scan": self.driver_versions.create_scan(meet_key, duty, client.admin_user_id),
+                "cloud_linked": self._cloud_mail_link() is not None}
+
+    def driver_admin_scan_page(self, client: PairedClient, scan_id: str, stream: Any, length: int,
+                               width: int, height: int) -> dict[str, Any]:
+        self._require_admin(client)
+        meet_key, _, _ = self._driver_meet()
+        return {"scan": self.driver_versions.add_page(scan_id, meet_key, stream, length, width=width, height=height)}
+
+    def driver_admin_scan(self, client: PairedClient, scan_id: str) -> dict[str, Any]:
+        """Fotograferingen och tjänsten som den är nu, att jämföra med."""
+        self._require_admin(client)
+        meet_key, _, _ = self._driver_meet()
+        scan = self.driver_versions.scan(scan_id, meet_key)
+        current = next((duty for duty in self.driver_catalog() if duty["id"] == scan["duty_id"]), None)
+        return {"scan": scan, "current": current}
+
+    def driver_admin_scan_read(self, client: PairedClient, scan_id: str) -> dict[str, Any]:
+        """Skicka fotona till Cloud. Svaret kommer efter en stund; sidan frågar
+        efter fotograferingen tills den är tolkad eller misslyckad."""
+        self._require_admin(client)
+        link = self._cloud_mail_link()
+        if link is None:
+            raise HTTPAPIError(HTTPStatus.CONFLICT, "cloud_link_required",
+                               "Servern är inte kopplad till TrainMeet Cloud. Fotona tolkas där.")
+        meet_key, _, publication = self._driver_meet()
+        scan, pages = self.driver_versions.begin_read(scan_id, meet_key)
+        current = next((duty for duty in self.driver_catalog() if duty["id"] == scan["duty_id"]), None) or {}
+        # Stationernas namn som servern stavar dem: banans och tjänstens egna.
+        names = [station["name"] for station in self._driver_stations(publication)]
+        names += [event["station"] for event in current.get("events", [])
+                  if event.get("station") and event["station"] not in names]
+        token, url = link
+        payload = {"pages": [{"data": data} for data in pages], "number": scan["number"],
+                   "stations": names[:400], "language": "sv"}
+
+        def job() -> None:
+            try:
+                result = self.duty_photo_reader(token, url, payload)
+                raw = result.get("duty") if isinstance(result, dict) else None
+                # Versionen hör till tjänsten som fotades: samma id och nummer.
+                # Säger pappret ett annat nummer står det bland varningarna.
+                duty = (normalize_duty({**raw, "id": scan["duty_id"], "number": scan["number"]})
+                        if isinstance(raw, dict) else None)
+                if duty is None:
+                    self.driver_versions.fail_read(scan_id, "Inga tåg med tider gick att läsa på fotona")
+                    return
+                warnings = result.get("warnings") if isinstance(result.get("warnings"), list) else []
+                self.driver_versions.finish_read(scan_id, duty, [str(item) for item in warnings])
+            except CentralSyncError as error:
+                self.driver_versions.fail_read(scan_id, str(error))
+            except Exception:
+                LOGGER.exception("Tolkningen av fotona misslyckades")
+                self.driver_versions.fail_read(scan_id, "Tolkningen misslyckades. Försök igen.")
+
+        self.run_duty_scan(job)
+        return {"scan": self.driver_versions.scan(scan_id)}
+
+    @announces("drivers")
+    def driver_admin_scan_save(self, client: PairedClient, scan_id: str) -> dict[str, Any]:
+        """Förslaget blir en ny version som gäller från och med nu."""
+        self._require_admin(client)
+        meet_key, _, _ = self._driver_meet()
+        user = self.identities.admin_user(client.admin_user_id) if client.admin_user_id else None
+        name = str((user or {}).get("display_name") or (user or {}).get("email") or client.display_name or "")
+        version = self.driver_versions.save(scan_id, meet_key, user_id=client.admin_user_id, user_name=name)
+        return {"version": version}
+
+    def driver_admin_scan_discard(self, client: PairedClient, scan_id: str) -> dict[str, Any]:
+        self._require_admin(client)
+        meet_key, _, _ = self._driver_meet()
+        self.driver_versions.discard(scan_id, meet_key)
+        return {"discarded": scan_id}
+
+    def driver_admin_versions(self, client: PairedClient, duty_id: str) -> dict[str, Any]:
+        self._require_admin(client)
+        meet_key, duty = self._admin_duty(duty_id)
+        return {"duty_id": duty_id, "number": duty["number"], **self.driver_versions.versions(meet_key, duty_id)}
+
+    @announces("drivers")
+    def driver_admin_use_version(self, client: PairedClient, duty_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Låt en annan version gälla, även 0: tjänsten som den kom ur
+        planeringsfilen eller paketet."""
+        self._require_admin(client)
+        meet_key, duty = self._admin_duty(duty_id)
+        result = self.driver_versions.use(meet_key, duty_id, payload.get("version"), client.admin_user_id)
+        return {"duty_id": duty_id, "number": duty["number"], **result}
 
     @announces("drivers")
     def driver_profile(self, user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
@@ -5614,6 +5754,7 @@ class TrainMeetHTTPApplication:
         "/lokforaren/app.js": ("app.js", "text/javascript; charset=utf-8"),
         "/lokforaren/korplan.js": ("korplan.js", "text/javascript; charset=utf-8"),
         "/lokforaren/duties.js": ("duties.js", "text/javascript; charset=utf-8"),
+        "/lokforaren/papper.js": ("papper.js", "text/javascript; charset=utf-8"),
         "/lokforaren/messages.js": ("messages.js", "text/javascript; charset=utf-8"),
         "/lokforaren/style.css": ("style.css", "text/css; charset=utf-8"),
         "/lokforaren/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
@@ -6183,6 +6324,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                 return serve(self, "POST")
             if re.fullmatch(r"/v1/driver-admin/documents/[0-9a-f]{12}/(pdf|parts)", path):
                 self._driver_admin_upload(path.split("/")[4], part=path.endswith("/parts"))
+                return
+            if re.fullmatch(r"/v1/driver-admin/scans/[0-9a-f]{16}/pages", path):
+                self._driver_admin_scan_page(path.split("/")[4])
                 return
             payload = self._read_json()
             if path.startswith("/v1/driver/"):
@@ -6798,9 +6942,11 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                                                 "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")})
             elif path == "/v1/driver/duties":
                 self._send_json(HTTPStatus.OK, application.driver_duties(parse_qs(query).get("q", [""])[0]))
-            elif re.fullmatch(r"/v1/driver/duties/k[0-9a-f]{12}-[0-9a-z-]+\.pdf", path):
-                duty_id = path.removeprefix("/v1/driver/duties/").removesuffix(".pdf")
-                self._send_pdf(application.driver_duty_pdf(duty_id), f"Tjanst-{duty_id.split('-', 1)[1]}.pdf")
+            elif re.fullmatch(r"/v1/driver/duties/[^/]+\.pdf", path):
+                # Köruppdragets sidor, eller fotona av pappret för en tjänst
+                # som fått en ny version (även en tjänst ur Clouds paket).
+                duty_id = unquote(path.removeprefix("/v1/driver/duties/").removesuffix(".pdf"))
+                self._send_pdf(application.driver_duty_pdf(duty_id), f"Tjanst-{duty_id.split('-')[-1]}.pdf")
             elif path.startswith("/v1/driver/duties/"):
                 self._send_json(HTTPStatus.OK, {"duty": application.driver_duty(path.removeprefix("/v1/driver/duties/"))})
             elif path == "/v1/driver/presence":
@@ -6843,6 +6989,14 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         try:
             if path == "/v1/driver-admin/overview":
                 self._send_json(HTTPStatus.OK, application.driver_admin_overview(client))
+                return
+            scan = re.fullmatch(r"/v1/driver-admin/scans/([0-9a-f]{16})", path)
+            if scan:
+                self._send_json(HTTPStatus.OK, application.driver_admin_scan(client, scan.group(1)))
+                return
+            versions = re.fullmatch(r"/v1/driver-admin/duties/([^/]+)/versions", path)
+            if versions:
+                self._send_json(HTTPStatus.OK, application.driver_admin_versions(client, unquote(versions.group(1))))
                 return
             duty = re.fullmatch(r"/v1/driver-admin/duties/(k[0-9a-f]{12}-[0-9a-z-]+)\.pdf", path)
             if duty:
@@ -6892,6 +7046,30 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error)) from None
         self._send_json(HTTPStatus.OK, result)
 
+    def _driver_admin_scan_page(self, scan_id: str) -> None:
+        """En fotograferad sida som JPEG (Content-Type image/jpeg), med
+        bildens bredd och höjd i X-Width och X-Height. Webbläsaren har redan
+        förminskat fotot; servern läser ingenting i bilden."""
+        try:
+            self._driver_admin_same_origin()
+            client = self._authenticated_client()
+            self.server.application._require_admin(client)
+            if self.headers.get("Content-Type", "").split(";", 1)[0].strip() != "image/jpeg":
+                raise HTTPAPIError(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "jpeg_required", "Skicka sidan som JPEG")
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                width, height = int(self.headers.get("X-Width", "0")), int(self.headers.get("X-Height", "0"))
+            except ValueError as error:
+                raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_body", "Felaktig storlek") from error
+            try:
+                result = self.server.application.driver_admin_scan_page(client, scan_id, self.rfile, length, width, height)
+            except DriverError as error:
+                raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error)) from None
+        except HTTPAPIError:
+            self.close_connection = True  # resten av bilden läses aldrig
+            raise
+        self._send_json(HTTPStatus.OK, result)
+
     def _driver_admin_post(self, path: str, payload: dict[str, Any]) -> None:
         self._driver_admin_same_origin()
         client = self._authenticated_client()
@@ -6900,6 +7078,20 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path == "/v1/driver-admin/documents":
                 result = application.driver_admin_create(client, payload)
                 self._send_json(HTTPStatus.OK if result["document"].get("duplicate") else HTTPStatus.CREATED, result)
+                return
+            if path == "/v1/driver-admin/scans":
+                self._send_json(HTTPStatus.CREATED, application.driver_admin_scan_create(client, payload))
+                return
+            scan = re.fullmatch(r"/v1/driver-admin/scans/([0-9a-f]{16})/(read|save|discard)", path)
+            if scan:
+                action = {"read": application.driver_admin_scan_read, "save": application.driver_admin_scan_save,
+                          "discard": application.driver_admin_scan_discard}[scan.group(2)]
+                self._send_json(HTTPStatus.ACCEPTED if scan.group(2) == "read" else HTTPStatus.OK,
+                                action(client, scan.group(1)))
+                return
+            use = re.fullmatch(r"/v1/driver-admin/duties/([^/]+)/versions/use", path)
+            if use:
+                self._send_json(HTTPStatus.OK, application.driver_admin_use_version(client, unquote(use.group(1)), payload))
                 return
             match = re.fullmatch(r"/v1/driver-admin/documents/([0-9a-f]{12})/(pages|publish|remove)", path)
             if match is None:

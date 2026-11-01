@@ -14,6 +14,7 @@ const SHELL = [
   "/lokforaren/app.js",
   "/lokforaren/korplan.js",
   "/lokforaren/duties.js",
+  "/lokforaren/papper.js",
   "/lokforaren/messages.js",
   "/lokforaren/manifest.webmanifest",
   "/lokforaren/ikon.svg",

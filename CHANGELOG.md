@@ -5,6 +5,18 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Lokföraren: rätta en tjänst efter pappret förarna har (#225)
+
+När pappret och servern kommer från olika versioner av planen fotar en ägare
+eller administratör pappret i Lokföraren, en bild per sida. TrainMeet Cloud
+läser av fotona med AI, och pappret visas bredvid tjänsten som den är nu med
+det som skiljer markerat. Först när man sparar blir det en ny version av
+tjänsten, med fotona som förlaga. En förare som redan kör tjänsten får frågan
+om att byta och byts aldrig mitt i. Under *Versioner* väljer man vilken
+version som gäller, även köruppdragets egen. Förare ser inga av knapparna.
+Kräver att servern är kopplad till Cloud och att Cloud har den nya
+avläsningen (Cloud PR).
+
 ### Lokföraren visar hela uppdragslistan med smarta filter
 
 Alla tjänster visas direkt, även när katalogen har fler än 30 uppdrag.
