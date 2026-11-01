@@ -4,6 +4,10 @@
  * /v1/clearance/tellurian), aldrig med Tellurian. Läget Skugga läser Tellurian
  * bredvid TrainMeets egen klarering och visar skillnaderna här; inget skrivs.
  * Läget där Tellurian bestämmer (etapp 4) går inte att välja än.
+ *
+ * Drift får en rad om klareringen så länge Tellurian läses i skugga: kontakt,
+ * senaste kontakt och antal avvikelser, med väg till Inställningar. Raden läser
+ * samma status och syns inte alls när läget är Av.
  */
 (() => {
   "use strict";
@@ -40,6 +44,8 @@
   const CASE_STATES = { requested: "begärd", accepted: "klarerad", departed: "avgått" };
 
   const visible = () => document.body.dataset.mode === "installningar" && location.hash === "#klarering";
+  const drift = $("drift-clearance");
+  const onDrift = () => Boolean(drift) && document.body.dataset.mode === "kor" && !document.hidden;
   const message = (text, kind = "error") => app().setMessage($("tellurian-message"), text, kind);
   const errorText = (code) => t(ERRORS[code] || "Tellurian svarar inte som väntat.");
   const stateText = (state) => t(CASE_STATES[state] || "inget");
@@ -63,6 +69,31 @@
   }
 
   function setTag(element, kind) { element.className = "kr-tag " + kind; }
+  const shadowKind = (shadow) => shadow.state === "connected" ? "ok"
+    : shadow.state === "polling" || shadow.state === "starting" ? "auto" : "warn";
+  const lastContact = (shadow) => shadow.last_contact_local
+    ? t("senast kontakt {time}", { time: shadow.last_contact_local }) : t("ingen kontakt ännu");
+
+  // Drift: bara i skugga, och bara det som behövs under spelet. Detaljerna står i Inställningar.
+  function renderDrift() {
+    if (!drift) return;
+    const shadow = data?.available && data.settings?.mode === "shadow" ? data.shadow : null;
+    drift.hidden = !shadow;
+    if (!shadow) return;
+    const kind = shadowKind(shadow);
+    setTag($("drift-clearance-status"), kind);
+    drift.classList.toggle("warn", kind === "warn");
+    $("drift-clearance-text").textContent = t(STATES[shadow.state] || STATES.starting);
+    const parts = [];
+    if (shadow.state === "no_contact") parts.push(lastContact(shadow));
+    if (shadow.error) parts.push(errorText(shadow.error));
+    // Utan kontakt är jämförelsen gammal; då står bara när kontakten bröts.
+    const deviations = ["connected", "polling"].includes(shadow.state) ? shadow.deviations : null;
+    // "Skillnader", inte "avvikelser": det ordet har Drift redan för tågen.
+    if (deviations) parts.push(deviations.count ? t("skillnader mot Tellurian: {count}", { count: deviations.count }) : t("inga skillnader mot Tellurian"));
+    if (shadow.simulated) parts.push(t("simulerad"));
+    $("drift-clearance-note").textContent = parts.join(" · ");
+  }
 
   function renderStatus() {
     const tag = $("tellurian-status"), text = $("tellurian-status-text"), note = $("tellurian-status-note");
@@ -81,10 +112,10 @@
       note.textContent = t("TrainMeet klarerar själv. Ingenting läses från Tellurian.");
       return;
     }
-    setTag(tag, shadow.state === "connected" ? "ok" : shadow.state === "polling" || shadow.state === "starting" ? "auto" : "warn");
+    setTag(tag, shadowKind(shadow));
     text.textContent = t(STATES[shadow.state] || STATES.starting);
     const parts = [];
-    if (shadow.state === "no_contact") parts.push(shadow.last_contact_local ? t("senast kontakt {time}", { time: shadow.last_contact_local }) : t("ingen kontakt ännu"));
+    if (shadow.state === "no_contact") parts.push(lastContact(shadow));
     if (shadow.state === "polling") parts.push(t("händelseströmmen saknas"));
     if (shadow.error) parts.push(errorText(shadow.error));
     parts.push(t("stationer: {count} · tågsektioner: {sections}", { count: shadow.dispatchers, sections: shadow.sections }));
@@ -170,15 +201,20 @@
     renderStatus();
     renderReport();
     renderDeviations();
+    renderDrift();
   }
 
-  let lastRefresh = 0, wasVisible = false;
+  let lastRefresh = 0, wasVisible = false, wasOnDrift = false;
   async function refresh() {
-    if (loading || !visible() || document.body.dataset.signedIn !== "yes") return;
+    const settingsShown = visible();
+    if (loading || !(settingsShown || onDrift()) || document.body.dataset.signedIn !== "yes") return;
     loading = true;
     lastRefresh = Date.now();
     try { data = await request("/v1/clearance/tellurian"); render(); }
-    catch (error) { message(error.message); }
+    catch (error) {
+      if (settingsShown) message(error.message);
+      else if (drift) drift.hidden = true; // Drift visar ingen gissning om klareringen.
+    }
     finally { loading = false; }
   }
 
@@ -216,10 +252,16 @@
 
   addEventListener("hashchange", refresh);
   // Läs direkt när avsnittet visas, sedan var tredje sekund medan det är öppet.
+  // På Drift var femte sekund i skugga (så att "ingen kontakt" syns i tid), annars
+  // var trettionde, för att märka när en annan administratör slår på skuggan.
   setInterval(() => {
-    const shown = visible();
-    if (shown && (!wasVisible || Date.now() - lastRefresh >= 3000)) refresh();
+    const shown = visible(), driftShown = onDrift();
+    const shadowing = data?.available && data.settings?.mode === "shadow";
+    const age = Date.now() - lastRefresh;
+    if (shown && (!wasVisible || age >= 3000)) refresh();
+    else if (driftShown && (!wasOnDrift || age >= (shadowing ? 5000 : 30000))) refresh();
     wasVisible = shown;
+    wasOnDrift = driftShown;
   }, 400);
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", refresh); else refresh();
   globalThis.TrainMeetTellurian = { refresh };

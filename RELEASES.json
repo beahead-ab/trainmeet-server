@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.21.0",
+    "date": "2026-11-01",
+    "notes": [
+      "Drift visar Tellurian Dispatch i skugga: kontakt och skillnader (#222)"
+    ]
+  },
+  {
     "version": "4.20.0",
     "date": "2026-11-01",
     "notes": [

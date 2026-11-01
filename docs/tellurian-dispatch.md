@@ -29,6 +29,7 @@ annars är det avstängt. Se tabellen i #222.
 | Adapter: adress, transport, läsning, spegling, mappning, handlingar, kommandon | `src/tmbox_gateway/integrations/tellurian.py` | Läsning används i skugga; skrivvägen finns men är inte inkopplad |
 | Inställning, skugga och förhandsrapport i servern | `src/tmbox_gateway/integrations/tellurian_service.py` | Avstängd som standard |
 | Inställningar → Klarering → Tellurian Dispatch | `web/index.html`, `web/tellurian-settings.js`, `translations/tellurian.txt` | Av eller Skugga |
+| Raden Klarering på Drift | `web/index.html` (`#drift-clearance`), `web/tellurian-settings.js` | Bara i Skugga |
 | Tester | `tests/test_tellurian_simulator.py`, `tests/test_tellurian_contract.py`, `tests/test_tellurian_settings.py`, `tests/js/tellurian-settings.test.cjs` | Körs i CI |
 
 ### Lägen
@@ -36,12 +37,30 @@ annars är det avstängt. Se tabellen i #222.
 | Läge | Vad händer |
 | --- | --- |
 | **Av** (standard) | Ingenting läses från Tellurian. TrainMeet klarerar som i dag. |
-| **Skugga** | Servern läser och speglar Tellurian bredvid sin egen klarering, utan att skriva. Administratören ser status och avvikelser under Inställningar → Klarering. Trafiken, boxarna och skärmarna påverkas inte. |
+| **Skugga** | Servern läser och speglar Tellurian bredvid sin egen klarering, utan att skriva. Administratören ser status och avvikelser under Inställningar → Klarering, och en rad på Drift (se nedan). Trafiken, boxarna och skärmarna påverkas inte. |
 | **Tellurian bestämmer** | Etapp 4. Visas som "kommer när Stefans server finns" och avvisas av servern (`409 tellurian_authority_unavailable`). |
 
 Inställningen är per träff (`runtime_settings`, nyckel `clearance_tellurian:<region>:<träff>`),
 skickas aldrig till Cloud och försvinner när träffdata nollställs. Bara
 EU-trafikspel kan använda den; en US-träff visar avsnittet som inte tillgängligt.
+
+### Raden på Drift
+
+I läget Skugga står en rad direkt under klockan på Drift: *Klarering ·
+TrainMeet klarerar. Tellurian Dispatch läses bredvid.* följt av kontakten
+(samma ord och färger som i Inställningar), och sedan antingen antalet
+skillnader mot Tellurian eller, utan kontakt, när Tellurian senast svarade
+och felkoden i klartext. Simulatorn märks "simulerad". Länken leder till
+Inställningar → Klarering, där skillnaderna står var för sig. Ordet är
+"skillnader" och inte "avvikelser", eftersom Drift redan använder det för
+tågen.
+
+Raden läser samma `GET /v1/clearance/tellurian` som inställningssidan: var
+femte sekund i skugga, så att "ingen kontakt" (15 sekunder utan svar) syns i
+tid, annars var trettionde för att märka att en annan administratör slagit på
+skuggan. I läget Av, på en US-träff och när svaret inte är statusen (till
+exempel 403) syns ingen rad alls. Raden har ingen knapp: **Byt till TrainMeets
+klarering** hör till etapp 4, när Tellurian bestämmer.
 
 ### HTTP i TrainMeet Server (administratör)
 
@@ -209,6 +228,7 @@ adressen den skriver ut och kryssa i Testinstans.
 | Två stationer parallellt; en box kan inte agera för en annan station | verifierad | ej testad |
 | Förhandsrapport (API, stationer, sträckor, tåg, klocka, läge) | verifierad | ej testad |
 | Skuggläge med avvikelser, utan skrivning | verifierad | ej testad |
+| Raden på Drift i skugga (kontakt, skillnader, ingen kontakt) | verifierad (webbtest) | ej testad |
 | Auktoritetsläge | saknas (etapp 4) | saknas |
 | Källans id från Cloud | saknas (Cloud-delen) | – |
 

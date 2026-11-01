@@ -22,6 +22,18 @@ Versionsnumret sätts automatiskt vid merge till main. Se
   rättelse för lokala ändringar. Knappen för att gå tillbaka visas bara för
   admins egna ändringar.
 
+### Drift visar Tellurian Dispatch i skugga: kontakt och skillnader (#222)
+
+När träffen läser Tellurian Dispatch i läget **Skugga** står en rad om
+klareringen direkt under klockan på Drift: att TrainMeet klarerar och Tellurian
+läses bredvid, om Tellurian svarar, och hur många klareringar som skiljer sig
+mellan dem. Tappar servern kontakten blir raden gul och visar när Tellurian
+senast svarade och varför det inte går. **Visa i Inställningar** leder till
+Inställningar → Klarering, där skillnaderna står en och en. Administratören
+behöver alltså inte lämna Drift under en träff för att se att skuggan
+fungerar. I läget Av, som är förvalt, syns ingenting nytt. Inget skrivs till
+Tellurian och trafiken påverkas inte.
+
 ### Lokföraren: köruppdragens anvisningar på förarens språk, sekunder av och på, ikonen följer kontot och förarna syns på kartorna (#225)
 
 - **Anvisningarna i köruppdragen** syns nu i körplanen under raden de hör
