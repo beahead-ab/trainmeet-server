@@ -76,6 +76,9 @@ Ur planeringsfilen (`DriverDuties`, med planeringsprogrammets `$id`/`$ref`):
 | delarna (`Parts`), från anrop till anrop på ett tåg | tåg med tågslagets prefix (`G 5453`), avgång, uppehåll, genomfart och ankomst med station och spår |
 | `FromTrack`/`ToTrack` på en del | anvisning om uppställningsspåret där fordonet hämtas eller lämnas |
 | `Runaround`, `PushWagons`, `TurnLoco`, anropets anteckningar | Rundgång, Skjut vagnar, Vänd loket, fri text |
+| andra tåg på samma station samtidigt | Möter, Kör förbi, Blir förbikörd, med tåg och tider |
+| omloppens delar (`HasCoupleNote`, `HasUncoupleNote`, `DisplayUseNote`, lyft) | Koppla, Koppla loss, Använd, Lyft på, Lyft av, per veckodag |
+| passagerarbyte på stationen, låsnyckel (`LockKey`) | Byt passagerare här, Inget passagerarbyte, Hämta/Lämna nyckel |
 | tågslagets `DefaultPreparationMinutes`/`DefaultFinishingMinutes`, eller tjänstens egna tider | Förberedelse och Avslutning |
 | tågslagets bolag, omloppets fordon (`ScheduledObjects`) | bolag och fordon |
 | ett ensamt anrop (till exempel växling 08:30–11:30) | hela tiden på stationen |
@@ -102,6 +105,44 @@ fordonet hämtas eller lämnas, inte avgångs- eller ankomstspåret. De blir
 anvisningar ("Före avgång: hämta fordonet från spår 21 (X2 uppställning)").
 Växling (tågslag med `IsShunting`) har inget tågnummer i köruppdraget och
 visas med tågslagets namn, till exempel Skifteoppdrag.
+
+### Anvisningarna på förarens språk
+
+Anvisningarna på köruppdragets sidor ("Krysser NSB L 410 13:41–13:43",
+"Ti,To,L: Koble NSB 02 Di4 til toget", "Utveksl omstigende passasjerer her")
+räknas fram ur
+planeringsfilen efter samma regler som planeringsprogrammet använder när det
+skriver köruppdragen; ingen text läses ur PDF:en. De skickas som uppgifter,
+inte som färdig text, och Lokföraren skriver dem på förarens språk (svenska,
+danska, norska, engelska eller tyska). Samma köruppdrag blir alltså "Möter NSB
+L 410 13:41–13:43" för en svensk förare och "Krysser NSB L 410 13:41–13:43"
+för en norsk. Värnamos 142 tjänster stämmer med häftet.
+
+- **Möten** räknas vid ankomsten: ett annat tåg på samma station när det
+  egna tåget står där. Motsatt riktning är ett möte; samma riktning är att
+  köra förbi eller bli förbikörd. Stationer med `HideMeets` och tåg som börjar
+  eller slutar där räknas inte. Tiden är när båda står på stationen.
+- **Veckodagar** (`days`, 1 = måndag) står bara när anvisningen inte gäller
+  alla dagar tjänsten körs, först på raden ("Ti,To,L: …", "M–O: …"). Samma anvisning för flera
+  fordon eller dagar skrivs en gång.
+- Formen, en händelses `instructions` (högst 12):
+
+```json
+{"kind": "crosses", "meets": [{"train": "NSB L 410", "from": "13:41", "to": "13:43"}]}
+{"kind": "couple", "vehicles": ["NSB 02 Di4"], "days": [2, 4, 6]}
+{"kind": "from_parking", "train": true}
+{"kind": "fetch_from_track", "track": "21", "usage": "X2 uppställning"}
+{"kind": "pick_up_key", "key": "K16", "place": "Spiten"}
+{"kind": "exchange_passengers"}
+```
+
+`kind` är en av `crosses`, `overtakes`, `overtaken_by`, `exchange_passengers`,
+`no_exchange`, `couple`, `uncouple`, `use`, `from_parking`, `to_parking`,
+`lift_on`, `lift_off`, `fetch_from_track`, `put_on_track`,
+`shunt_wagons_to_departure`, `shunt_wagons_to_arrival`, `circulate`, `turn`,
+`turn_and_circulate`, `push_wagons`, `pick_up_key` och `leave_key`. En okänd
+sort hoppas över (`normalize_instruction` i `driver.py`), så en äldre server
+visar resten. Fri text ur planen (`notes`) visas som den står.
 
 Tjänsterna ligger i databasen och följer med i säkerhetskopiorna; PDF-filerna
 gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
@@ -146,6 +187,12 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
   nedräkningen och linjen; telefonens egen klocka används aldrig.
 - Linjen följer med en tredjedel ner. Scrollar föraren släpper den och kommer
   tillbaka efter fyra sekunder eller med **Till NU**.
+- **Sekunder**: tryck på klockan i sidhuvudet eller på NU-linjens tid för att
+  visa eller dölja sekunderna, eller ställ in det under Inställningar →
+  Visning (**Visa sekunder**). Valet gäller alla klockor i appen och sparas i
+  telefonen; sekunderna visas från början.
+- Anvisningarna står under raden de hör till, så att NU-linjen aldrig går
+  rakt genom texten.
 - Före start visas en nedräkning. Vid 20 och 10 träffminuter kommer en
   påminnelse i appen (ljud och vibration om det är på); vid 10 öppnas
   körplanen. Push när appen är stängd ingår inte än (kräver VAPID-nycklar).
@@ -154,12 +201,40 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
 
 - **Checka in** sparar station, valfritt spår, tjänst, tåg och träfftid. Den
   flyttar aldrig NU-linjen och styr ingenting.
-- En incheckning syns i 10 minuter i verklig tid och tonar sedan ut under 5
-  (`CHECKIN_VISIBLE`, `CHECKIN_FADE` i `driver.py`). Bara den senaste räknas.
-- Den som stänger av **Visa min ikon på banan** syns inte för andra.
+- En incheckning syns i 10 **spelminuter** och tonar sedan ut under 5
+  (`CHECKIN_VISIBLE`, `CHECKIN_FADE` i `driver.py`), räknat på
+  träffklockan: står klockan står incheckningen kvar, och vid 4× är den
+  borta efter knappt fyra riktiga minuter. Incheckningen sparar klockans
+  löpande sekunder (`meet_seconds`, fortsätter över midnatt); en extern
+  klocka utan dem räknas på klockslaget. Ställs klockan tillbaka förbi
+  incheckningen är den inte aktuell längre, och efter ett dygn i verklig
+  tid är den borta vad klockan än gör. Bara den senaste räknas.
+- Den som stänger av **Visa min ikon på banan** syns inte för andra,
+  varken i appen eller på kartorna.
 - Ikonen beskärs och skalas ned i telefonen (canvas, 256 px JPEG). Servern
   tar emot PNG, JPEG eller WebP upp till 96 kB och läser bara filhuvudet.
+- **Ikonen hör till kontot.** Det finns bara en ikon per konto, och samma
+  ikon visas i Lokföraren, på banan och i serverns admin under Användare.
+  Byter föraren ikon i Lokföraren syns den i admin direkt. Den som har admin
+  byter sin egen ikon när hen redigerar sig själv under Användare, och den
+  syns då i Lokföraren. Ägare och administratörer ser alla ikoner; andra ser
+  bara sin egen via kontot. Utan ikon visas initialerna.
 - Ett borttaget konto lämnar ingen ikon, tjänst eller incheckning efter sig.
+- **Förarna på kartorna**: den som checkat in och valt att synas står
+  med kontots ikon (eller initialerna) vid stationen på alla kartor:
+  banöversikten i Drift, storskärmarna (Banöversikt och Översikt) och
+  träffens sida för deltagare. Ikonen sitter vid stationens övre vänstra
+  hörn, mitt emot antalsbrickan, sida vid sida med den senaste närmast
+  stationen; fler än tre blir två och "+N". De tonar ut på träffklockan
+  som i appen. Håll pekaren över ikonen för namn, tjänst, tåg och
+  incheckningens träfftid.
+- Förarna kommer med `/v1/display` (`drivers`, med åldern i spelsekunder,
+  och `driver_checkin_seconds`), som kartorna redan hämtar. Servern säger
+  `drivers` på `/v1/events` när en förare väljer tjänst, checkar in, byter
+  synlighet eller ikon, så att sidorna hämtar bilden direkt. Ikonen hämtas
+  från `/v1/display/driver-avatars/{id}`, som är öppen som `/v1/display`
+  men bara lämnar ut ikonen för en förare som står på kartan just nu och
+  valt att synas.
 
 ## API
 
@@ -179,6 +254,22 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
 | GET | `/v1/driver/avatars/{user_id}` | ikonen |
 | GET | `/v1/driver/duties/{tjänst-id}.pdf` | tjänstens egna sidor, om köruppdraget är tillgängligt |
 | GET | `/v1/driver/documents/{id}.pdf` | hela förlagan, om tjänsten saknar egna sidor |
+
+Öppna, utan inloggning:
+
+| Metod | Väg | Vad |
+|---|---|---|
+| GET | `/v1/display` | kartornas bild, med `drivers` (se ovan) |
+| GET | `/v1/display/driver-avatars/{user_id}` | ikonen för en förare på kartan just nu |
+
+Kontots ikon, samma som ovan, för serverns admin:
+
+| Metod | Väg | Vad |
+|---|---|---|
+| GET | `/v1/account` | det egna kontot med `initials` och `avatar_url` |
+| POST | `/v1/account/avatar` | `{image: "data:image/jpeg;base64,…"}` |
+| POST | `/v1/account/avatar/remove` | ta bort ikonen |
+| GET | `/v1/account/avatars/{user_id}` | ikonen; ägare och administratörer alla, andra sin egen |
 
 Alla kräver en inloggad session; POST från en annan sida nekas.
 

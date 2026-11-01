@@ -375,6 +375,14 @@ body.kr-print .sh { fill: none; }
 .topology-kr .topology-count-badge { pointer-events: none; }
 .topology-kr .topology-count { fill: var(--kr-blue); font-size: 10.5px; font-weight: 600; text-anchor: middle; }
 .topology-screen .topology-count { font-size: 12.5px; }
+/* Förarna som checkat in i Lokföraren: kontots ikon vid stationens övre
+   vänstra hörn. Ringen har kartans bakgrund, så att ikonerna går att skilja åt. */
+.topology-kr .topology-driver-ring { fill: var(--topology-bg); }
+.topology-kr .topology-driver-face { fill: var(--kr-blue-soft); stroke: var(--kr-blue); stroke-width: 1; }
+.topology-kr .topology-driver-initials { fill: var(--kr-blue); font: 700 10.5px var(--kr-sans); text-anchor: middle; letter-spacing: .02em; }
+.topology-screen .topology-driver-initials { font-size: 12px; }
+.topology-kr .topology-driver.more .topology-driver-face { fill: var(--kr-panel-2); stroke: var(--kr-faint); }
+.topology-kr .topology-driver.more .topology-driver-initials { fill: var(--kr-ink-2); }
 .topology-kr .topology-node .topology-name.label-start { text-anchor: start; }
 .topology-kr .topology-node .topology-name.label-end { text-anchor: end; }
 .topology-kr .topology-node.on-route .topology-name, .topology-kr .topology-node.selected .topology-name { fill: var(--kr-blue); font-weight: 600; }
@@ -792,6 +800,16 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
 #login :is(#redeem-form, #forgot-form) .link-button { margin-top: 8px; padding-top: 8px; border-top: 0; color: var(--kr-mute); }
 /* Användarens e-post under namnet i Inställningar → Användare. */
 .users-email { margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--kr-mute); overflow-wrap: anywhere; }
+/* Kontots ikon, samma som i Lokföraren. */
+/* Namncellen bär ikonen till vänster; cellen förblir en tabellcell (ingen flex). */
+.users-name { min-width: 180px; }
+.users-avatar { float: left; width: 30px; height: 30px; margin: 1px 10px 0 0; border-radius: 50%; overflow: hidden; display: inline-grid; place-items: center; background: var(--kr-blue-soft); color: var(--kr-blue); font: 700 11px/1 var(--kr-sans); }
+.users-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.users-avatar--l { float: none; width: 52px; height: 52px; margin: 0; font-size: 17px; flex: 0 0 52px; }
+.users-icon { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 12px; }
+.users-icon[hidden] { display: none; }
+.users-icon__text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 160px; }
+.users-icon__pick { cursor: pointer; }
 /* Utan adress kan kontot inte logga in. Det ska synas för ägaren, som ger det en under Redigera. */
 .users-email.users-no-email { color: var(--kr-amber); font-weight: 600; }
 /* Glömt lösenordet? och Jag har en kod på samma rad under inloggningen. */

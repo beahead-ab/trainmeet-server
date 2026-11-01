@@ -1498,6 +1498,13 @@
         <h2 id="user-edit-title">Redigera användare</h2>
         <form id="user-edit-form">
           <p id="user-edit-name"></p>
+          <!-- Ikonen är densamma som i Lokföraren: den syns på banan när föraren checkar in. -->
+          <div id="user-edit-icon" class="users-icon" hidden>
+            <span id="user-edit-icon-preview" class="users-avatar users-avatar--l" aria-hidden="true"></span>
+            <span class="users-icon__text"><b>Ikon</b><span class="kr-m">samma som i Lokföraren och på banan</span></span>
+            <label class="kr-btn sm users-icon__pick"><input id="user-edit-icon-file" class="kr-visually-hidden" type="file" accept="image/png,image/jpeg,image/webp"><span>Byt ikon</span></label>
+            <button id="user-edit-icon-remove" type="button" class="kr-btn sm">Ta bort ikon</button>
+          </div>
           <label>Namn<input id="user-edit-display-name" maxlength="100" autocomplete="off" required></label>
           <label>E-postadress<input id="user-edit-email" type="email" maxlength="254" autocomplete="off" required></label>
           <label>Roll<select id="user-edit-role"><option value="admin">Administratör</option><option value="user">Användare</option><option value="owner">Ägare</option></select></label>

@@ -17,6 +17,36 @@ behöver alltså inte lämna Drift under en träff för att se att skuggan
 fungerar. I läget Av, som är förvalt, syns ingenting nytt. Inget skrivs till
 Tellurian och trafiken påverkas inte.
 
+### Lokföraren: köruppdragens anvisningar på förarens språk, sekunder av och på, ikonen följer kontot och förarna syns på kartorna (#225)
+
+- **Anvisningarna i köruppdragen** syns nu i körplanen under raden de hör
+  till: möten och förbikörningar med tåg och tider ("Möter NSB L 410
+  13:41–13:43"), koppla och koppla loss per veckodag ("Ti,To,L: Koppla NSB 02
+  Di4 till tåget"), byt passagerare, hämta fordonet från uppställningsspåret,
+  lyft, rundgång, vända, skjuta vagnar och låsnycklar. De räknas fram ur
+  planeringsfilen efter planeringsprogrammets egna regler och skrivs på
+  förarens språk, så en norsk förare läser "Krysser NSB L 410 13:41–13:43"
+  och en svensk "Möter …". Kontrollerat mot Värnamos häfte, alla 142
+  tjänster.
+  Ett köruppdrag som redan är inlagt får anvisningarna när samma
+  planeringsfil läses in igen under Inställningar → Lokförare och
+  köruppdrag; sidorna och om det är tillgängligt för förarna behålls. Den
+  som redan kör en tjänst ser anvisningarna när hen väljer tjänsten igen.
+- **Sekunder**: tryck på klockan (eller NU-linjens tid) för att visa eller
+  dölja sekunderna, eller välj **Visa sekunder** under Inställningar →
+  Visning. Valet sparas i telefonen.
+- **Ikonen följer kontot**: samma ikon i Lokföraren, på banan och under
+  Användare i serverns admin. Den som har admin kan byta sin egen ikon där,
+  och ser förarnas ikoner i användarlistan.
+- **Förarna på kartorna**: den som checkar in i Lokföraren syns med sin
+  ikon vid stationen på banöversikten i Drift, på storskärmarna och på
+  träffens sida för deltagare, direkt när hen checkar in. Den som stängt av
+  **Visa min ikon på banan** syns ingenstans; inställningen säger nu var
+  ikonen syns.
+- **Incheckningen räknas i spelminuter**: den syns fullt i tio minuter på
+  träffklockan och tonar sedan ut under fem, i appen och på kartorna. Står
+  klockan står incheckningen kvar.
+
 ### Lokföraren: köruppdrag i Inställningar, vägar dit och en egen app som alltid är aktuell (#225)
 
 Köruppdragen läggs nu in separat på servern under **Inställningar →
