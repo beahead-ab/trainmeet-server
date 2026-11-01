@@ -560,11 +560,26 @@ class LokforarenHTTPTests(unittest.TestCase):
         self.app.driver_part_fetcher = lambda token, url, sha: self.PART
         self.assertEqual({"parts": 1, "fetched": 1, "failed": 0, "missing": 0}, self.app.sync_driver_parts())
         self.assertEqual(200, self.request("/v1/driver/duties/duty-81.pdf", cookie=benny)[0])
-        # En ny version av träffen utan den delen: den gamla tas bort.
-        old = self.app.driver_documents.cloud_part_path(self.PART_SHA)
-        self.install_cloud([self.cloud_duty("81")], publication_id="publication-2026-08-11-c")
-        self.assertEqual({"parts": 0, "fetched": 0, "failed": 0, "missing": 0}, self.app.sync_driver_parts())
-        self.assertFalse(old.exists())
+
+    def test_the_pages_are_fetched_as_soon_as_a_package_comes_from_cloud(self) -> None:
+        """Medan servern är uppkopplad, också för en version som väntar på att
+        aktiveras, så att föraren har sidorna utan internet på träffen."""
+        benny = self.login("benny")
+        calls = self.link_cloud()
+        package = runtime_package_v3(publication_id="publication-2026-08-11-waiting")
+        package["driver_duties"] = [self.cloud_duty("81", source={"pages": [5, 6], "part": {"sha256": self.PART_SHA}})]
+        self.app.fetch_driver_parts_soon(package)
+        deadline = time.monotonic() + 5
+        while self.app.driver_documents.cloud_part_path(self.PART_SHA) is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        self.assertEqual([self.PART_SHA], [sha for _, _, sha in calls])
+        # Versionen aktiveras senare, utan internet: sidorna finns redan.
+        self.app.driver_part_fetcher = lambda token, url, sha: (_ for _ in ()).throw(CentralSyncError("offline"))
+        self.install_cloud(package["driver_duties"], publication_id="publication-2026-08-11-waiting")
+        status, original, _ = self.request("/v1/driver/duties/duty-81.pdf", cookie=benny)
+        self.assertEqual((200, self.PART), (status, original["raw"]))
+        self.app.fetch_driver_parts_soon({"driver_duties": [self.cloud_duty("82")]})  # inga delar: ingen hämtning
+        self.assertEqual(1, len(calls))
 
     def test_the_server_fetches_the_pages_in_the_background_once_per_publication(self) -> None:
         anna = self.login("anna")

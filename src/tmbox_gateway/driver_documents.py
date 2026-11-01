@@ -342,15 +342,6 @@ class DriverDocuments:
         temporary.replace(target)
         return target
 
-    def prune_cloud_parts(self, keep: set[str]) -> int:
-        """Tar bort delar från Cloud som träffen inte längre hänvisar till."""
-        removed = 0
-        for path in self.cloud_folder.glob("*.pdf") if self.cloud_folder.is_dir() else ():
-            if path.stem not in keep:
-                path.unlink(missing_ok=True)
-                removed += 1
-        return removed
-
     def part_path(self, duty_id: str, meet_key: str | None = None) -> Path | None:
         """Tjänstens egna sidor. Med meet_key bara om köruppdraget är
         tillgängligt för förarna på den träffen."""

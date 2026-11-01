@@ -67,9 +67,12 @@ inte emot några PDF:er.
 Servern hämtar varje tjänsts egna sidor med sin serverkoppling,
 `GET <Clouds config-adress>/driver-parts/<sha256>?token=…`, och sparar dem i
 `lokforaren/cloud/<sha256>.pdf` i datakatalogen. Delarna hämtas i bakgrunden
-en gång per publicering (när Drift, en storskärm eller Inställningar frågar),
-och annars när en förare öppnar sina sidor. Det som inte kom fram försöks igen
-efter en minut. Servern tar bara emot en PDF vars summa stämmer, och Cloud
+så fort paketet har kommit från Cloud, medan servern är uppkopplad, också för
+en version som väntar på att aktiveras. Föraren har alltså sina sidor utan
+internet på träffen. Saknas något hämtas det igen när Drift, en storskärm
+eller Inställningar frågar (en gång per publicering, och efter en minut om det
+inte gick), och när en förare öppnar sina sidor. Delarna är adresserade efter
+innehållet, så en ny version med samma PDF hämtar ingenting nytt. Servern tar bara emot en PDF vars summa stämmer, och Cloud
 lämnar bara ut en del som någon av träffens publicerade versioner hänvisar
 till, och bara till en kopplad server.
 

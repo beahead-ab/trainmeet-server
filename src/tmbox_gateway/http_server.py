@@ -1139,18 +1139,20 @@ class TrainMeetHTTPApplication:
         url = canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url)
         return self.driver_documents.store_cloud_part(sha, self.driver_part_fetcher(token, url, sha))
 
-    def _cloud_parts(self, publication: Any) -> list[str]:
-        if publication is None:
-            return []
-        found = (_cloud_source(raw) for raw in publication.payload.get("driver_duties") or [])
+    @staticmethod
+    def _cloud_parts(payload: dict[str, Any] | None) -> list[str]:
+        found = (_cloud_source(raw) for raw in (payload or {}).get("driver_duties") or [])
         return sorted({source["cloud"] for source in found if source})
 
-    def sync_driver_parts(self, publication: Any = None) -> dict[str, int]:
-        """Hämtar de tjänstesidor från Cloud som saknas för den aktiva träffen.
-        Ett fel stoppar inte de andra; det som inte kom fram försöks igen."""
-        publication = publication if publication is not None else (
-            self.runtime_store.active() if self.runtime_store is not None else None)
-        parts = self._cloud_parts(publication)
+    def sync_driver_parts(self, publication: Any = None, *, package: dict[str, Any] | None = None) -> dict[str, int]:
+        """Hämtar de tjänstesidor från Cloud som saknas, för den aktiva träffen
+        eller för ett paket som just kommit från Cloud. Ett fel stoppar inte de
+        andra; det som inte kom fram försöks igen."""
+        if package is None:
+            publication = publication if publication is not None else (
+                self.runtime_store.active() if self.runtime_store is not None else None)
+        payload = package if package is not None else (publication.payload if publication is not None else None)
+        parts = self._cloud_parts(payload)
         fetched = failed = 0
         for sha in parts:
             if self.driver_documents.cloud_part_path(sha) is not None:
@@ -1160,10 +1162,23 @@ class TrainMeetHTTPApplication:
             except (CentralSyncError, DriverError, OSError):
                 failed += 1
         missing = sum(1 for sha in parts if self.driver_documents.cloud_part_path(sha) is None)
-        if publication is not None and publication.payload.get("driver_duties"):
-            # Delar från äldre versioner av träffen behövs inte längre.
-            self.driver_documents.prune_cloud_parts(set(parts))
         return {"parts": len(parts), "fetched": fetched, "failed": failed, "missing": missing}
+
+    def fetch_driver_parts_soon(self, package: dict[str, Any]) -> None:
+        """Hämtar tjänstesidorna för ett paket som just kommit från Cloud, i
+        bakgrunden medan servern är uppkopplad, så att föraren har dem också
+        utan internet på träffen. Gäller också en version som väntar på att
+        aktiveras."""
+        if not self._cloud_parts(package):
+            return
+
+        def work() -> None:
+            try:
+                self.sync_driver_parts(package=package)
+            except Exception:  # noqa: BLE001 - bakgrund: hämtas igen när sidorna behövs
+                LOGGER.warning("Tjänstesidorna från Cloud kunde inte hämtas", exc_info=True)
+
+        threading.Thread(target=work, name="driver-parts-package", daemon=True).start()
 
     def _prefetch_driver_parts(self) -> None:
         """Startar hämtningen av tjänstesidorna i bakgrunden när den aktiva
@@ -1237,7 +1252,7 @@ class TrainMeetHTTPApplication:
         if publication is None:
             return None
         duties = [raw for raw in publication.payload.get("driver_duties") or [] if normalize_duty(raw) is not None]
-        parts = self._cloud_parts(publication)
+        parts = self._cloud_parts(publication.payload)
         central = canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url)
         origin = urlparse(central)
         meet = publication.payload.get("meet") or {}
