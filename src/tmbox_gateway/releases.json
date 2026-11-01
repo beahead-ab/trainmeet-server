@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.23.0",
+    "date": "2026-11-01",
+    "notes": [
+      "Ta bort sökrutan i sidhuvudet"
+    ]
+  },
+  {
     "version": "4.22.0",
     "date": "2026-11-01",
     "notes": [
