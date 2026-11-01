@@ -5,6 +5,7 @@ from the runtime fixture with one driver duty in the Cloud package format, and
 the meet clock runs at 4× from 17:51. stdin EOF shuts everything down.
 """
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -43,6 +44,11 @@ with tempfile.TemporaryDirectory(prefix="trainmeet-lokforaren-") as directory:
             {"kind": "duty_end", "time": "19:10", "station": stations[-1]},
         ],
     }]
+    if os.environ.get("LOKFORAREN_FULL_CATALOG"):
+        template = package["driver_duties"][0]
+        package["driver_duties"] = [dict(template, id=f"catalog-{n}", number=str(n),
+            operator="SJ" if n % 2 else "CargoNet", vehicle=f"Rc {n}",
+            start="18:00" if n % 2 else "17:00", end="20:00") for n in range(1, 143)]
     publication = runtime.install(package)
     operations.ensure_publication(publication)
     operations.start_clock(time_value="17:51:00", now=datetime.now(timezone.utc))

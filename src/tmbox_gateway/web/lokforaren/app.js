@@ -9,6 +9,7 @@
   "use strict";
   const $ = (selector) => document.querySelector(selector);
   const K = globalThis.LokforarenKorplan;
+  const D = globalThis.LokforarenDuties;
   const app = $("#app");
   const LANGUAGES = ["sv", "da", "nb", "en", "de"];
   const CLOCK_POLL = 2000;
@@ -69,6 +70,8 @@
     seenCheckins: new Set(),
     popUntil: new Map(),
     chosenDuty: null,
+    duties: null,
+    catalogLoading: false,
     checkin: {station: "", stationId: "", track: ""},
     endArmedUntil: 0,
   };
@@ -216,6 +219,11 @@
     clearTimeout(state.clockTimer);
     clearTimeout(state.presenceTimer);
     state.session = null;
+    state.duties = null;
+    state.catalogLoading = false;
+    catalogRequest++;
+    clearDutyChoice();
+    $("#duty-results").replaceChildren();
     show("login");
     $("#login-email").focus();
   }
@@ -235,7 +243,11 @@
     if (state.tab === "drivers") { show("drivers"); renderDrivers(); return; }
     if (state.tab === "me") { show("me"); renderMe(); return; }
     const duty = activeDuty();
-    if (!duty || state.choosing) { show("choose"); return; }
+    if (!duty || state.choosing) {
+      show("choose");
+      if (state.duties === null && !state.catalogLoading) searchDuties();
+      return;
+    }
     ensurePlan();
     const seconds = clockSeconds();
     const now = seconds === null || !state.plan ? null : K.axisMinutes(seconds, state.plan);
@@ -298,25 +310,76 @@
   }
 
   // ── Välj tjänst ────────────────────────────────────────────────────
-  let searchTimer = null;
+  let catalogRequest = 0, choiceRequest = 0, filterClockKey = "";
+  function clearDutyChoice() {
+    choiceRequest++;
+    state.chosenDuty = null;
+    $("#duty-found").hidden = true;
+    $("#duty-activate").disabled = true;
+  }
+
+  function fillDutyOptions() {
+    const fill = (id, values, all) => {
+      const select = $(id), previous = select.value;
+      select.replaceChildren(new Option(t(all), ""));
+      for (const value of [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, language))) {
+        select.add(new Option(value, value));
+      }
+      select.value = [...select.options].some((option) => option.value === previous) ? previous : "";
+    };
+    fill("#duty-station", (state.duties || []).flatMap((duty) => duty.route || []), "Alla stationer");
+    fill("#duty-operator", (state.duties || []).map((duty) => duty.operator), "Alla bolag");
+  }
+
   async function searchDuties() {
-    const query = $("#duty-query").value.trim();
+    const request = ++catalogRequest, session = state.session;
+    state.catalogLoading = true;
+    state.duties = null;
+    clearDutyChoice();
+    $("#duty-results").replaceChildren();
+    $("#duty-retry").hidden = true;
+    $("#duty-count").textContent = t("Laddar uppdrag…");
     try {
-      const payload = await api("/v1/driver/duties?q=" + encodeURIComponent(query));
-      renderResults(payload.duties || [], query);
+      // Hela katalogen hämtas en gång. Sökning och filter görs direkt i telefonen.
+      const payload = await api("/v1/driver/duties");
+      if (request !== catalogRequest || session !== state.session) return;
+      state.duties = payload.duties || [];
+      state.catalogLoading = false;
+      fillDutyOptions();
+      renderDutyFilters();
     } catch (error) {
-      if (error instanceof Unauthorized) showLogin();
+      if (request !== catalogRequest || session !== state.session) return;
+      state.catalogLoading = false;
+      state.duties = [];
+      if (error instanceof Unauthorized) { showLogin(); return; }
+      $("#duty-count").textContent = t("Kunde inte hämta uppdragen.");
+      $("#duty-retry").hidden = false;
     }
+  }
+
+  function renderDutyFilters() {
+    if (state.duties === null || !$("#duty-retry").hidden) return;
+    const query = $("#duty-query").value.trim();
+    const seconds = clockMode() === "lost" || clockMode() === "idle" ? null : clockSeconds();
+    for (const option of $("#duty-time").options) option.disabled = option.value !== "all" && seconds === null;
+    $("#duty-time-hint").hidden = seconds !== null;
+    const shown = D.filter(state.duties, {
+      query, station: $("#duty-station").value, operator: $("#duty-operator").value,
+      time: $("#duty-time").value, sort: $("#duty-sort").value, language,
+      now: seconds === null ? null : seconds / 60,
+    });
+    $("#duty-count").textContent = t("{shown} av {total} uppdrag", {shown: shown.length, total: state.duties.length});
+    renderResults(shown, query);
   }
 
   function renderResults(duties, query) {
     const list = $("#duty-results");
     list.replaceChildren();
-    const shown = query ? duties : duties.slice(0, 6);
-    for (const duty of shown) {
+    for (const duty of duties) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "lf-result";
+      button.dataset.dutyId = duty.id;
       button.setAttribute("aria-pressed", String(state.chosenDuty && state.chosenDuty.id === duty.id));
       const number = document.createElement("span");
       number.className = "lf-result__nr";
@@ -334,31 +397,37 @@
       time.className = "lf-result__time";
       time.textContent = duty.start + "–" + duty.end;
       button.append(number, text, time);
-      button.addEventListener("click", () => chooseDuty(duty));
+      button.addEventListener("click", () => chooseDuty(duty, true));
       list.append(button);
     }
-    if (query && duties.length === 1) chooseDuty(duties[0]);
-    if (!duties.length && query) {
+    if (duties.length === 1 && D.normalize(duties[0].number) === D.normalize(query)
+        && (!state.chosenDuty || state.chosenDuty.id !== duties[0].id)) chooseDuty(duties[0]);
+    if (!duties.length) {
       const empty = document.createElement("p");
       empty.className = "lf-empty";
-      empty.textContent = t("Ingen tjänst {number} i träffens köruppdrag.", {number: query});
+      empty.textContent = t(state.duties.length ? "Inga uppdrag matchar filtren. Prova att rensa dem." : "Inga uppdrag finns i träffens katalog.");
       list.append(empty);
     }
   }
 
-  async function chooseDuty(summary) {
+  async function chooseDuty(summary, reveal = false) {
+    const request = ++choiceRequest, session = state.session;
     try {
       const payload = await api("/v1/driver/duties/" + encodeURIComponent(summary.id));
+      if (request !== choiceRequest || session !== state.session) return;
       state.chosenDuty = payload.duty;
     } catch (error) {
+      if (request !== choiceRequest || session !== state.session) return;
       if (error instanceof Unauthorized) { showLogin(); return; }
+      toast(error.message);
       return;
     }
     const duty = state.chosenDuty;
     for (const button of document.querySelectorAll(".lf-result")) {
-      button.setAttribute("aria-pressed", String(button.querySelector(".lf-result__nr").textContent === duty.number));
+      button.setAttribute("aria-pressed", String(button.dataset.dutyId === duty.id));
     }
     $("#duty-found").hidden = false;
+    if (reveal) $("#duty-found").scrollIntoView({block: "nearest", behavior: "smooth"});
     $("#found-title").textContent = t("Tjänst {number}", {number: duty.number});
     $("#found-demo").hidden = !duty.demo;
     const facts = $("#found-facts");
@@ -426,13 +495,16 @@
     $("#duty-activate").textContent = t("Aktivera tjänsten");
     $("#duty-cancel").hidden = !activeDuty();
     $("#duty-query").value = "";
-    state.tab = "duty";
+    $("#duty-station").value = "";
+    $("#duty-operator").value = "";
+    $("#duty-time").value = "all";
+    state.duties = null;
+    state.tab = "catalog";
     for (const button of document.querySelectorAll(".lf-tab")) {
-      if (button.dataset.tab === "duty") button.setAttribute("aria-current", "page");
+      if (button.dataset.tab === "catalog") button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     }
     route();
-    searchDuties();
   }
 
   // ── Körplanen ──────────────────────────────────────────────────────
@@ -1374,6 +1446,10 @@
     const seconds = state.session ? clockSeconds() : null;
     if (state.session) {
       renderHeader(seconds);
+      if (app.dataset.screen === "choose") {
+        const key = clockMode() + "|" + Math.floor((seconds || 0) / 60);
+        if (key !== filterClockKey) { filterClockKey = key; renderDutyFilters(); }
+      }
       if (activeDuty() && !state.choosing && state.tab === "duty") {
         ensurePlan();
         const now = seconds === null || !state.plan ? null : K.axisMinutes(seconds, state.plan);
@@ -1390,6 +1466,7 @@
     $("#banner").addEventListener("click", () => { if ($("#banner").classList.contains("is-update")) reloadForBuild(); });
     for (const button of document.querySelectorAll(".lf-tab")) {
       button.addEventListener("click", () => {
+        if (button.dataset.tab === "catalog") { openChoose(); return; }
         state.choosing = false;
         if (button.dataset.tab === "duty" && state.tab === "duty") {
           timeline.follow = true;
@@ -1421,15 +1498,18 @@
         button.disabled = false;
       }
     });
-    $("#duty-query").addEventListener("input", () => {
-      clearTimeout(searchTimer);
-      state.chosenDuty = null;
-      $("#duty-found").hidden = true;
-      $("#duty-activate").disabled = true;
-      searchTimer = setTimeout(searchDuties, 200);
+    const filterChanged = () => { clearDutyChoice(); renderDutyFilters(); };
+    $("#duty-query").addEventListener("input", filterChanged);
+    for (const id of ["#duty-station", "#duty-operator", "#duty-time", "#duty-sort"]) $(id).addEventListener("change", filterChanged);
+    $("#duty-reset").addEventListener("click", () => {
+      for (const id of ["#duty-query", "#duty-station", "#duty-operator"]) $(id).value = "";
+      $("#duty-time").value = "all";
+      $("#duty-sort").value = "number";
+      filterChanged();
     });
+    $("#duty-retry").addEventListener("click", searchDuties);
     $("#duty-activate").addEventListener("click", activateDuty);
-    $("#duty-cancel").addEventListener("click", () => { state.choosing = false; route(); });
+    $("#duty-cancel").addEventListener("click", () => { state.choosing = false; setTab("duty"); });
     $("#show-korplan").addEventListener("click", () => { state.forceKorplan = true; timeline.jump = true; route(); });
     $("#to-now").addEventListener("click", () => {
       timeline.follow = true;
@@ -1500,6 +1580,8 @@
       language = event.target.value;
       store.set("language", language);
       translateStatic();
+      fillDutyOptions();
+      renderDutyFilters();
       lastNextKey = "";
       state.planFor = null;
       $("#first-moments").dataset.duty = "";
