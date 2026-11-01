@@ -5,6 +5,14 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Tellurian Dispatch känner igen tåg som delar nummer (#222)
+
+Matchningen mot Tellurian använder planens tåg-id (`source_train_id`, som Cloud
+nu för vidare) även när två tåg delar nummer, som SJ X 116 och DSB IC 116. Utan
+id skiljs de åt av bolag och tågslag mot Tellurians etikett ("DSB IC 116").
+Har två tåg samma id eller samma bolag och tågslag gissas fortfarande inget.
+Gäller bara skuggläget och förhandsrapporten; inget skrivs till Tellurian.
+
 ### Drift håller isär två tåg som delar nummer, och en rättelse från Cloud står som Clouds (Cloud #100)
 
 - **Två tåg med samma nummer** (DSB IC 116 och SJ X 116) är nu två tåg i

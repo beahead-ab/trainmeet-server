@@ -657,29 +657,51 @@ def match_stretches(connections: list[dict], stations: list[dict], match: dict[s
 
 
 def _service_source_id(service: dict) -> str | None:
-    """Källans tåg-id, om Cloud har fört det vidare (fältnamnet är ett antagande, se docs)."""
+    """Källans tåg-id: planens `Train.Id`, som Cloud för vidare som `source_train_id` (Cloud #112).
+
+    Cloud sätter det bara när alla tjänstens rader har samma id. Om Tellurian
+    använder samma id som planeringsexporten är fråga 12 till Stefan.
+    """
     return _ident(service.get("source_train_id"))
 
 
-def match_trains(services: list[dict], stations: list[dict], sections: dict[str, Section]) -> dict[str, Any]:
-    """Tåg: källans id om båda har det, annars nummer (+ bolag + första avgång).
+def _service_key(service: dict) -> str:
+    """Bolag och tågslag när två tåg delar nummer ("DSB IC"), annars tomt (Server #230)."""
+    return " ".join(str(service.get("service_key") or "").split()).casefold()
 
-    TrainMeets driftpaket har i dag inget bolag, så nummer räcker bara när det
-    är entydigt hos båda. Annars avgör första avgångsstationen, och om inte
-    heller den skiljer dem åt är tåget omatchat: aldrig gissat.
+
+def _label_key(label: str) -> str:
+    operator, kind, _ = parse_train_label(label)
+    return " ".join(f"{operator} {kind}".split()).casefold()
+
+
+def match_trains(services: list[dict], stations: list[dict], sections: dict[str, Section]) -> dict[str, Any]:
+    """Tåg: källans id om båda har det, annars nummer (+ bolag och tågslag + första avgång).
+
+    Källans id avgör ensamt när det pekar ut exakt ett tåg hos Tellurian och
+    bara en tjänst i TrainMeet har det, också när två tåg delar nummer
+    (DSB IC 116 och SJ X 116). Utan id räcker numret bara när det är entydigt
+    hos båda. Delar två TrainMeet-tåg numret skiljer `service_key` ("DSB IC")
+    dem åt mot Tellurians etikett, och annars första avgångsstationen. Skiljer
+    inget dem åt är tåget omatchat: aldrig gissat.
     """
     code_of = {s["id"]: str(s.get("code") or "") for s in stations}
     trains: dict[str, dict] = {}
     for section in sections.values():
         key = section.train_id or section.train
         info = trains.setdefault(key, {"label": section.train, "train_id": section.train_id,
-                                       "number": parse_train_label(section.train)[2], "sections": []})
+                                       "number": parse_train_label(section.train)[2],
+                                       "kind": _label_key(section.train), "sections": []})
         info["sections"].append(section)
     for info in trains.values():
         froms = {s.from_sig for s in info["sections"]}
         tos = {s.to_sig for s in info["sections"]}
         starts = sorted(s for s in froms - tos if s)
         info["first"] = starts[0] if len(starts) == 1 else None
+    source_count: dict[str, int] = {}
+    for service in services:
+        if (source := _service_source_id(service)):
+            source_count[source] = source_count.get(source, 0) + 1
     matched, unmatched, ambiguous, used = [], [], [], set()
     for service in services:
         number = _number(service.get("train_number"))
@@ -687,13 +709,23 @@ def match_trains(services: list[dict], stations: list[dict], sections: dict[str,
         first = code_of.get(stops[0].get("station_id")) if stops else None
         row = {"service_id": service.get("id"), "number": number or ""}
         source = _service_source_id(service)
-        candidates = [k for k, t in trains.items() if source and t["train_id"] == source] if source else []
-        if not candidates:
-            candidates = [k for k, t in trains.items() if number and t["number"] == number]
+        by_source = [k for k, t in trains.items() if source and t["train_id"] == source] if source else []
+        if len(by_source) == 1 and source_count.get(source) == 1:
+            used.add(by_source[0])
+            matched.append({**row, "tellurian": trains[by_source[0]]["label"], "by": "source_id"})
+            continue
+        candidates = by_source or [k for k, t in trains.items() if number and t["number"] == number]
+        same_number = [s for s in services if _number(s.get("train_number")) == number and s is not service]
+        kind = _service_key(service)
+        if same_number and kind and not any(_service_key(other) == kind for other in same_number):
+            # Tåg som delar nummer skiljs åt av bolag och tågslag när Tellurians
+            # etikett säger dem. Annars gäller det som förut: inget gissas.
+            narrowed = [k for k in candidates if trains[k]["kind"] == kind]
+            if narrowed:
+                candidates, same_number = narrowed, []
         if len(candidates) > 1 and first:
             narrowed = [k for k in candidates if trains[k]["first"] == first]
             candidates = narrowed or candidates
-        same_number = [s for s in services if _number(s.get("train_number")) == number and s is not service]
         if len(candidates) == 1 and not same_number:
             used.add(candidates[0])
             matched.append({**row, "tellurian": trains[candidates[0]]["label"]})
