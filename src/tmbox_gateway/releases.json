@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.22.0",
+    "date": "2026-11-01",
+    "notes": [
+      "Drift håller isär två tåg som delar nummer, och en rättelse från Cloud står som Clouds (Cloud #100)"
+    ]
+  },
+  {
     "version": "4.21.0",
     "date": "2026-11-01",
     "notes": [
