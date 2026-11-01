@@ -461,7 +461,6 @@ body[data-signed-in="no"] #app-chrome :is(#header-cloud-status, .topbar-right, #
 body[data-account-role="user"] #settings-nav > :not([data-section="anvandare"]),
 body[data-account-role="user"] #header-help,
 body[data-account-role="user"] #header-data,
-body[data-account-role="user"] .kr-search,
 body[data-account-role="user"] #app-devices,
 body[data-account-role="user"] #application-menu a[href="#screens"],
 body[data-account-role="user"] #admin-users-settings .kr-c,
