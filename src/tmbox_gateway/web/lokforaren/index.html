@@ -95,18 +95,13 @@
 
     <section class="view view--countdown" id="view-countdown" hidden>
       <div class="lf-countdown">
-        <span class="lf-countdown__label" data-t="Tjänsten börjar om">Tjänsten börjar om</span>
+        <span class="lf-countdown__label" id="countdown-label"></span>
         <span class="lf-countdown__value" id="countdown-value">–</span>
-        <span class="lf-countdown__sub" id="countdown-sub"></span>
-      </div>
-      <div class="lf-milestones" aria-hidden="true">
-        <div class="lf-milestones__track"><div class="lf-milestones__fill" id="countdown-fill"></div><div class="lf-milestones__now" id="countdown-now"></div></div>
-        <div class="lf-milestones__mark lf-milestones__mark--20" id="mark-20"><span class="lf-milestones__dot"></span><span data-t="20 min · påminnelse">20 min · påminnelse</span></div>
-        <div class="lf-milestones__mark lf-milestones__mark--10" id="mark-10"><span class="lf-milestones__dot"></span><span data-t="10 min · körplanen öppnas">10 min · körplanen öppnas</span></div>
-        <div class="lf-milestones__mark lf-milestones__mark--0"><span class="lf-milestones__dot"></span><span id="mark-start"></span></div>
+        <span class="lf-countdown__unit-line" data-t="kvar på träffklockan">kvar på träffklockan</span>
+        <span class="lf-countdown__real" id="countdown-real" hidden></span>
       </div>
       <div class="lf-first">
-        <h2 class="lf-kicker" data-t="FÖRSTA MOMENTEN">FÖRSTA MOMENTEN</h2>
+        <h2 class="lf-kicker" data-t="DET HÄR HÄNDER">DET HÄR HÄNDER</h2>
         <ol class="lf-first__list" id="first-moments"></ol>
       </div>
       <button class="lf-button lf-button--quiet" type="button" id="show-korplan" data-t="Visa körplanen">Visa körplanen</button>
