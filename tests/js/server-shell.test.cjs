@@ -553,9 +553,9 @@ const web = path.resolve(__dirname, '../../src/tmbox_gateway/web');
     await page.locator('#overview-topology').dispatchEvent('click');
     await trainPanel.waitFor({ state: 'hidden', timeout: 1500 });
     assert.equal(await page.locator('#overview-graph .pl.sel').count(), 0);
-    // The search in the header finds a train or a station, and Esc lets go.
-    await page.locator('#kr-search').fill('421');
-    await page.locator('#kr-search-results [role="option"]').first().click();
+    // There is no search in the header any more. Esc lets go of a chosen train.
+    assert.equal(await page.locator('#kr-search, .kr-search').count(), 0);
+    await page.locator('#overview-graph .tr-line[data-train-number="421"]').dispatchEvent('click');
     await trainPanel.locator('.kr-aside__now').waitFor({ timeout: 1500 });
     await page.keyboard.press('Escape');
     await trainPanel.waitFor({ state: 'hidden', timeout: 1500 });

@@ -550,45 +550,6 @@
     host.replaceChildren(...body);
   }
 
-  // ── Sök ───────────────────────────────────────────────────────────────
-  function wireSearch() {
-    const input = $("#kr-search"), list = $("#kr-search-results"); if (!input || !list) return;
-    const state = { results: [], active: -1 };
-    const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); state.active = -1; input.removeAttribute("aria-activedescendant"); };
-    const choose = (item) => {
-      if (!item) return;
-      close(); input.value = ""; input.blur();
-      if (item.kind === "train") hooks.selectTrain?.(item.id); else hooks.selectStation?.(item.id);
-    };
-    const paint = () => {
-      state.results = model.search(ctx.snapshot, input.value);
-      const empty = h("li", { class: "kr-search-empty" }, input.value.trim() ? t("Inga träffar.") : "");
-      list.replaceChildren(...(state.results.length ? state.results.map((item, index) => h("li", { role: "option", id: `kr-search-${index}`, class: `kr-search-item${index === state.active ? " on" : ""}`,
-        "aria-selected": String(index === state.active), on: { mousedown: (event) => { event.preventDefault(); choose(item); } } },
-      item.kind === "train" ? badge(item.label, { plain: true }) : h("b", {}, item.label), h("span", { class: "kr-c" }, item.detail), h("span", { class: "kr-sp" }),
-      h("span", { class: "kr-kind" }, t(item.kind === "train" ? "tåg" : "station")))) : [empty]));
-      const open = Boolean(input.value.trim());
-      list.hidden = !open; input.setAttribute("aria-expanded", String(open));
-    };
-    input.addEventListener("input", () => { state.active = -1; paint(); });
-    input.addEventListener("focus", () => { if (input.value.trim()) paint(); });
-    input.addEventListener("blur", close);
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        const count = state.results.length; if (!count) return;
-        state.active = (state.active + (event.key === "ArrowDown" ? 1 : -1) + count) % count; paint();
-        input.setAttribute("aria-activedescendant", `kr-search-${state.active}`);
-      } else if (event.key === "Enter") { event.preventDefault(); choose(state.results[Math.max(state.active, 0)]); }
-      else if (event.key === "Escape") { input.value = ""; close(); input.blur(); }
-    });
-    doc.addEventListener("keydown", (event) => {
-      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (/^(INPUT|TEXTAREA|SELECT)$/.test(doc.activeElement?.tagName || "") || doc.activeElement?.isContentEditable || input.offsetParent === null) return;
-      event.preventDefault(); input.focus();
-    });
-  }
-
   // ── Dialoger och popover ──────────────────────────────────────────────
   function openDialog(id, trigger) {
     const dialog = doc.getElementById(id); if (!dialog || dialog.open || doc.querySelector("dialog[open]")) return;
@@ -753,7 +714,7 @@
     if (!doc.hidden && clock?.running && Number(clock.speed || 1) > 1 && showsSeconds()) renderClockTime();
   }
 
-  function init() { wireChrome(); wireSearch(); wireDialogs(); scheduleRender(); setInterval(tick, 1000); setInterval(tickSeconds, 250); }
+  function init() { wireChrome(); wireDialogs(); scheduleRender(); setInterval(tick, 1000); setInterval(tickSeconds, 250); }
   if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", init); else init();
 
   globalThis.TrainMeetDrift = { hooks, update, render, theme, model, nowText, openDialog, formatTime, get context() { return ctx; } };

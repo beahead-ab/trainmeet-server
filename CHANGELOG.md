@@ -13,6 +13,13 @@ id skiljs de åt av bolag och tågslag mot Tellurians etikett ("DSB IC 116").
 Har två tåg samma id eller samma bolag och tågslag gissas fortfarande inget.
 Gäller bara skuggläget och förhandsrapporten; inget skrivs till Tellurian.
 
+### Sökrutan i sidhuvudet är borttagen
+
+Rutan *Sök tåg eller station* finns inte längre i sidhuvudet, och snabbtangenten
+`/` som flyttade dit är borta. Tåg och stationer väljs som förut på kartan, i
+diagrammet, under Nästa händelser och i stationslistan. På en telefon i Drift
+blir sidhuvudet därmed en rad i stället för två.
+
 ### Drift håller isär två tåg som delar nummer, och en rättelse från Cloud står som Clouds (Cloud #100)
 
 - **Två tåg med samma nummer** (DSB IC 116 och SJ X 116) är nu två tåg i

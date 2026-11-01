@@ -419,7 +419,6 @@
     ['Störd trafik', 'Disrupted traffic', 'Forstyrret trafik', 'Forstyrret trafikk', 'Gestörter Betrieb'],
     ['Störningsnivå', 'Disruption level', 'Forstyrrelsesniveau', 'Forstyrrelsesnivå', 'Störungsgrad'],
     ['Sök i tidtabellen', 'Search the timetable', 'Søg i køreplanen', 'Søk i rutetabellen', 'Im Fahrplan suchen'],
-    ['Sök tåg eller station', 'Search train or station', 'Søg tog eller station', 'Søk tog eller stasjon', 'Zug oder Bahnhof suchen'],
     ['Sök tågnummer eller station', 'Search train number or station', 'Søg tognummer eller station', 'Søk tognummer eller stasjon', 'Zugnummer oder Bahnhof suchen'],
     ['TMBOX-A7K2C3', 'TMBOX-A7K2C3', 'TMBOX-A7K2C3', 'TMBOX-A7K2C3', 'TMBOX-A7K2C3'],
     ['TMBox', 'TMBox', 'TMBox', 'TMBox', 'TMBox'],

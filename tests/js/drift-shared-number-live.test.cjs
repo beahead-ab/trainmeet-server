@@ -1,6 +1,6 @@
 // Två tåg som delar nummer på Drift (Cloud #100, resten på Server): DSB IC 116
 // står inne i Charlottendal och SJ X 116 är ute mot Vagnsta. Kartan, händelserna,
-// tågpanelen och sökningen håller isär dem: taggen visar "IC 116" och "X 116",
+// och tågpanelen håller isär dem: taggen visar "IC 116" och "X 116",
 // ett tryck på X 116 tänder bara det tåget och tågpanelen frågar efter just det
 // (service_key). Tidtabellen i Inställningar visar en rättelse från Cloud som
 // Clouds, inte som admins lokala ändringar. API:et är fixturen i kr-fixture.cjs.
@@ -70,14 +70,9 @@ const trainDetail = (request, url) => {
       assert.equal(await tag('DSB IC 116').count(), 0);
       if (shots) await page.screenshot({ path: path.join(shots, `drift-delat-nummer-${width}.png`), fullPage: false });
 
-      // Sök "ic": IC 116, och valet tänder det i stället.
+      // Välj IC 116 i stället: det tänds, och X 116 släpper.
       if (width >= 1024) {
-        await page.locator('#kr-search').fill('116');
-        await page.locator('#kr-search-results li').first().waitFor();
-        const found = await page.locator('#kr-search-results li').allInnerTexts();
-        assert.ok(found.some((text) => /IC 116/.test(text)) && found.some((text) => /X 116/.test(text)), JSON.stringify(found));
-        await page.locator('#kr-search').fill('ic');
-        await page.locator('#kr-search-results li', { hasText: 'IC 116' }).dispatchEvent('mousedown');
+        await page.evaluate(() => TrainMeetDrift.hooks.selectTrain('DSB IC 116'));
         await tag('DSB IC 116').waitFor({ state: 'attached' });
         assert.equal(await tag('DSB IC 116').locator('text.train-number').textContent(), 'IC 116');
         assert.match(await tag('DSB IC 116').getAttribute('class'), /\bselected\b/);
