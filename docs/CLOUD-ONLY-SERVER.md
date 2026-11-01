@@ -198,6 +198,22 @@ Reglerna gäller från den publicering som aktiveras med den här versionen av
 servern. En träff som redan pågick före uppdateringen kör som förut tills den
 publiceras på nytt, och ett äldre paket utan de nya fälten fungerar som förut.
 
+Cloud märker från och med trainmeet-cloud #112 själv sådana tåg med
+`manual: true`, `manual_reason`, `manual_reasons` och `manual_codes`
+(`missing_time`, `unknown_connection`, `negative_runtime`), med samma regler
+och texter som servern. Servern lägger ihop Clouds skäl och sina egna utan att
+visa något två gånger och läser inte koderna.
+
+**Planens id (#222).** Ett paket ur planeringsexporten har planens egna id som
+text: `source_station_id` på stationerna (`OperationLocation.Id`),
+`source_connection_id` och `source_dispatch_stretch_id` på sträckorna
+(`TrackStretch.Id` och `DispatchStretch.Id`), och `source_train_id` på
+tidtabellsraderna och tjänsterna (`Train.Id`). Servern kör och visar ingenting
+annorlunda av dem; bara Tellurian-adaptern läser `services[].source_train_id`
+(se [tellurian-dispatch.md](tellurian-dispatch.md)). Ett paket utan fälten
+fungerar som förut. Provet `tests/test_cloud_source_ids_contract.py` läser ett
+paket med Clouds fält.
+
 ### Sidan Tidtabell (`/tidtabell`)
 
 Admin ändrar på sidan Tidtabell, som nås med tabellikonen i sidhuvudet och

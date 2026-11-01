@@ -104,14 +104,28 @@ rapport har ingen skrivväg.
 | --- | --- | --- |
 | Station (`code`) | Dispatcher (`signature`) | Exakt matchning. Dubbletter på någon sida matchas aldrig. Skillnad bara i versaler visas som tips men räknas som omatchad. |
 | Sträcka (stationspar) | Sektionernas `from`/`to` | Matchas på stationsparet. Antal passager = `totalTrackStretches − 1`. En sträcka utan tåg i Tellurian just nu visas som "utan tåg", inte som fel. |
-| Tåg | `train` ("SJ IC 456"), `trainId` | 1) källans tåg-id om tågturen har `source_train_id` (antaget fältnamn, se nedan); 2) tågnummer om det är entydigt hos båda; 3) annars första avgångsstation. Tvetydigt = omatchat, aldrig gissat. |
+| Tåg | `train` ("SJ IC 456"), `trainId` | 1) källans tåg-id om tågturen har `source_train_id` (planens `Train.Id`, se nedan); 2) tågnummer om det är entydigt hos båda; 3) annars första avgångsstation. Tvetydigt = omatchat, aldrig gissat. |
 | Klocka | – | Rapporten varnar om TrainMeet inte följer FastClock. Tellurians klocka syns inte i API:t. |
 
-TrainMeets driftpaket har i dag inget bolag per tåg och inget källans id.
-**Cloud-delen i #222 återstår:** importen av Stefans planeringsexport ska bära
-källans id för `OperationLocation`, `DispatchStretch` och `Train` hela vägen till
-publicerad träffconfig. Adaptern läser `services[].source_train_id` om det finns;
-namnet är ett antagande tills Cloud-ändringen är gjord.
+### Källans id i driftpaketet
+
+Cloud läser planeringsexporten (planeringsprogrammets JSON) och bär planens
+egna id som text hela vägen till den publicerade träffconfigen
+(trainmeet-cloud #112, dokumenterat i Clouds `docs/CUMULATIVE-IMPORT.md`):
+
+| Fält i paketet | På | Ur planen |
+| --- | --- | --- |
+| `stations[].source_station_id` | station (eller driftplats) | `OperationLocation.Id` |
+| `connections[].source_connection_id` | sträcka | `TrackStretch.Id` |
+| `connections[].source_dispatch_stretch_id` | sträcka | `DispatchStretch.Id` för klareringssträckan sträckan ingår i (saknas för sidospår utan klarering) |
+| `trains[].source_train_id` | tidtabellsrad | `Train.Id` |
+| `services[].source_train_id` | tjänst | `Train.Id`, bara när alla tjänstens rader har samma |
+
+Adaptern använder i dag bara `services[].source_train_id`. Stationerna matchas
+fortfarande på signatur och sektionerna på stationspar; stationernas och
+sträckornas id finns för när Stefans server visar sig använda samma id (fråga
+12 nedan). Ett paket utan fälten (en äldre träff, eller ett underlag som inte
+är planen) matchas som förut. Driftpaketet har fortfarande inget bolag per tåg.
 
 ## Handlingar
 
@@ -230,7 +244,7 @@ adressen den skriver ut och kryssa i Testinstans.
 | Skuggläge med avvikelser, utan skrivning | verifierad | ej testad |
 | Raden på Drift i skugga (kontakt, skillnader, ingen kontakt) | verifierad (webbtest) | ej testad |
 | Auktoritetsläge | saknas (etapp 4) | saknas |
-| Källans id från Cloud | saknas (Cloud-delen) | – |
+| Källans id från Cloud | Cloud bär id för plats, sträcka och tåg (#112); adaptern läser tågets | – |
 
 ## Frågor till Stefan
 
