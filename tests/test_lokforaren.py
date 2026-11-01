@@ -24,7 +24,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from runtime_fixture import runtime_package_v3
 from session_fixture import sample_session
-from tmbox_gateway.driver import DEMO_DUTY, DriverError, DriverStore, normalize_duty
+from tmbox_gateway.driver import DEMO_DUTY, DriverError, DriverStore, game_age, meet_seconds, normalize_duty
 from tmbox_gateway.engine import TrafficEngine
 from tmbox_gateway.http_server import HTTPServerConfig, TrainMeetHTTPApplication, TrainMeetHTTPServer
 from tmbox_gateway.identity import AdminAccessError, IdentityStore, PairingService
@@ -115,6 +115,31 @@ class DutyShapeTests(unittest.TestCase):
         self.assertIsNone(normalize_duty({"events": [{"kind": "arrival", "time": "10:00"}]}))
 
 
+class InstructionShapeTests(unittest.TestCase):
+    def test_instructions_keep_known_kinds_valid_times_and_days(self) -> None:
+        from tmbox_gateway.driver import normalize_duty
+
+        duty = normalize_duty({"number": "39", "events": [{
+            "kind": "stop", "arrival": "13:41", "departure": "13:44", "station": "Steinsnes",
+            "instructions": [
+                {"kind": "crosses", "meets": [{"train": "NSB L 410", "from": "13:41", "to": "13:43", "days": [2, 4]},
+                                              {"train": "Utan tid", "from": "x", "to": "13:00"}]},
+                {"kind": "couple", "vehicles": ["NSB 02 Di4", ""], "days": [2, 4, 6, 9, True]},
+                {"kind": "fetch_from_track", "train": True, "track": "18", "usage": "Opstilling", "wagonset": "ja"},
+                {"kind": "pick_up_key", "key": "K16", "place": "Hammarlind"},
+                {"kind": "crosses", "meets": []},
+                {"kind": "script", "vehicles": ["<b>"]},
+                "inte en anvisning",
+            ],
+        }]})
+        self.assertEqual([
+            {"kind": "crosses", "meets": [{"train": "NSB L 410", "from": "13:41", "to": "13:43", "days": [2, 4]}]},
+            {"kind": "couple", "vehicles": ["NSB 02 Di4"], "days": [2, 4, 6]},
+            {"kind": "fetch_from_track", "track": "18", "usage": "Opstilling", "train": True},
+            {"kind": "pick_up_key", "key": "K16", "place": "Hammarlind"},
+        ], duty["events"][0]["instructions"])
+
+
 class DriverStoreTests(unittest.TestCase):
     def setUp(self) -> None:
         directory = tempfile.TemporaryDirectory()
@@ -122,12 +147,41 @@ class DriverStoreTests(unittest.TestCase):
         self.store = DriverStore(Path(directory.name) / "trainmeet.db")
         self.addCleanup(self.store.close)
 
-    def test_a_check_in_is_seen_for_fifteen_minutes_of_real_time(self) -> None:
+    def test_without_a_meet_clock_a_check_in_is_seen_for_fifteen_minutes_of_real_time(self) -> None:
         start = datetime(2026, 10, 31, 15, 0, tzinfo=timezone.utc)
         self.store.check_in("u1", "meet", {"station": "Tveiten"}, duty=None, meet_time="17:58:00", now=start)
         self.assertIn("u1", self.store.latest_checkins("meet", now=start + timedelta(minutes=14, seconds=59)))
         self.assertNotIn("u1", self.store.latest_checkins("meet", now=start + timedelta(minutes=15, seconds=1)))
         self.assertNotIn("u1", self.store.latest_checkins("another-meet", now=start))
+
+    def test_on_the_meet_clock_a_check_in_lasts_fifteen_game_minutes(self) -> None:
+        """Spelminuter (Casper 2026-11-01): en stoppad klocka håller kvar
+        incheckningen, och vid 4× är den borta efter knappt fyra riktiga minuter."""
+
+        start = datetime(2026, 10, 31, 15, 0, tzinfo=timezone.utc)
+        clock = lambda seconds: {"configured": True, "elapsed_seconds": seconds,
+                                 "time": f"{int(seconds // 3600) % 24:02d}:{int(seconds // 60) % 60:02d}:00"}
+        self.store.check_in("u1", "meet", {"station": "Tveiten"}, duty=None, meet_time="23:58:00",
+                            meet_seconds=86280, now=start)
+        # Klockan står: tre riktiga timmar senare syns incheckningen fortfarande, nyss.
+        latest = self.store.latest_checkins("meet", clock=clock(86280), now=start + timedelta(hours=3))
+        self.assertEqual(0.0, latest["u1"]["age_seconds"])
+        # Över midnatt: 00:12 nästa dygn är fjorton spelminuter senare.
+        self.assertEqual(840.0, self.store.latest_checkins("meet", clock=clock(87120), now=start)["u1"]["age_seconds"])
+        self.assertNotIn("u1", self.store.latest_checkins("meet", clock=clock(86280 + 901), now=start))
+        # Klockan ställd tillbaka förbi incheckningen: inte aktuell längre.
+        self.assertNotIn("u1", self.store.latest_checkins("meet", clock=clock(80000), now=start))
+        # Ett dygn i verklig tid är gränsen, vad klockan än gör.
+        self.assertNotIn("u1", self.store.latest_checkins("meet", clock=clock(86280), now=start + timedelta(days=1, minutes=1)))
+
+    def test_game_age_from_the_clock_time_when_the_seconds_are_missing(self) -> None:
+        clock = {"configured": True, "time": "00:04:00"}  # en extern klocka har bara klockslaget
+        self.assertEqual(480.0, game_age(None, "23:56:00", clock))
+        self.assertEqual(0.0, game_age(None, "00:04:30", clock))  # en halv minut fram: nyss
+        self.assertIsNone(game_age(None, "00:10:00", clock))
+        self.assertIsNone(game_age(None, None, clock))
+        self.assertEqual(86280.0, meet_seconds({"time": "23:58:00"}))
+        self.assertEqual(90000.5, meet_seconds({"elapsed_seconds": 90000.5, "time": "01:00:00"}))
 
     def test_only_the_latest_place_counts(self) -> None:
         start = datetime(2026, 10, 31, 15, 0, tzinfo=timezone.utc)
@@ -255,6 +309,48 @@ class LokforarenHTTPTests(unittest.TestCase):
         self.request("/v1/driver/active/end", {}, cookie=benny)
         self.assertIsNone(self.request("/v1/driver/session", cookie=benny)[1]["active"])
 
+    def test_the_maps_show_the_drivers_who_want_to_be_seen(self) -> None:
+        """/v1/display (Drift, storskärmarna, deltagarnas sida) har förarna som
+        checkat in och valt att synas. Ikonen är öppen bara för dem, bara medan
+        de står på kartan."""
+
+        benny, maja = self.login("benny"), self.login("maja")
+        station = runtime_package_v3()["stations"][0]
+        self.request("/v1/driver/avatar", {"image": data_url("image/png", PNG)}, cookie=benny)
+        self.request("/v1/driver/avatar", {"image": data_url("image/png", PNG)}, cookie=maja)
+        self.assertEqual([], self.request("/v1/display")[1]["drivers"])
+        self.request("/v1/driver/active", {"duty_id": "demo-132"}, cookie=benny)
+        self.request("/v1/driver/checkins", {"station": station["name"], "station_id": station["id"]}, cookie=benny)
+        drivers = self.request("/v1/display")[1]["drivers"]
+        self.assertEqual([("Benny", "BE", station["id"], "132")],
+                         [(d["name"], d["initials"], d["station_id"], d["duty_number"]) for d in drivers])
+        self.assertLess(drivers[0]["age_seconds"], 60)
+        status, payload, headers = self.request(drivers[0]["avatar_url"])  # utan inloggning
+        self.assertEqual((200, PNG, "private, max-age=300"), (status, payload["raw"], headers["Cache-Control"]))
+        maja_id = next(user["user_id"] for user in self.identities.list_admin_users() if user["display_name"] == "Maja")
+        self.assertEqual(404, self.request(f"/v1/display/driver-avatars/{maja_id}?v=1")[0])  # inte incheckad
+        # Synligheten av: borta från kartorna, och ikonen lämnas inte ut.
+        self.request("/v1/driver/profile", {"visible": False}, cookie=benny)
+        self.assertEqual([], self.request("/v1/display")[1]["drivers"])
+        self.assertEqual(404, self.request(drivers[0]["avatar_url"])[0])
+
+    def test_what_moves_a_driver_on_the_map_is_announced(self) -> None:
+        """Banan i Drift hämtar förarna igen när /v1/events säger "drivers":
+        en tjänst, en incheckning, synligheten och ikonen. Bara namnet går ut."""
+
+        benny = self.login("benny")
+        for path, body in (("/v1/driver/active", {"duty_id": "demo-132"}),
+                           ("/v1/driver/checkins", {"station": "Tveiten"}),
+                           ("/v1/driver/profile", {"visible": False}),
+                           ("/v1/driver/avatar", {"image": data_url("image/png", PNG)}),
+                           ("/v1/driver/avatar/remove", {}),
+                           ("/v1/account/avatar", {"image": data_url("image/png", PNG)}),
+                           ("/v1/driver/active/end", {})):
+            with self.subTest(path=path):
+                since = self.app.changes.seq
+                self.assertEqual(200, self.request(path, body, cookie=benny)[0])
+                self.assertIn("drivers", self.app.changes.wait(since, 0)[1])
+
     def test_icons_are_served_to_drivers_only(self) -> None:
         benny, maja = self.login("benny"), self.login("maja")
         user = self.request("/v1/driver/avatar", {"image": data_url("image/png", PNG)}, cookie=benny)[1]["user"]
@@ -263,6 +359,39 @@ class LokforarenHTTPTests(unittest.TestCase):
         self.assertEqual((200, PNG, "image/png"), (status, payload["raw"], payload["type"]))
         self.assertEqual(401, self.request(user["avatar_url"])[0])
         self.assertEqual(400, self.request("/v1/driver/avatar", {"image": "data:text/html;base64,PGI+"}, cookie=benny)[0])
+
+    def test_the_icon_is_the_same_in_lokforaren_and_in_the_account(self) -> None:
+        anna, benny, maja = self.login("anna"), self.login("benny"), self.login("maja")
+        # Lagd i Lokföraren: syns i användarlistan och i det egna kontot.
+        driver = self.request("/v1/driver/avatar", {"image": data_url("image/png", PNG)}, cookie=benny)[1]["user"]
+        listed = {user["display_name"]: user for user in self.request("/v1/admin/users", cookie=anna)[1]["users"]}
+        self.assertTrue(listed["Benny"]["avatar_url"].startswith(f"/v1/account/avatars/{driver['user_id']}?v="))
+        self.assertIsNone(listed["Anna"]["avatar_url"])
+        self.assertEqual("AN", listed["Anna"]["initials"])
+        own = self.request("/v1/account", cookie=benny)[1]["user"]
+        self.assertEqual(listed["Benny"]["avatar_url"], own["avatar_url"])
+        status, payload, _ = self.request(own["avatar_url"], cookie=benny)
+        self.assertEqual((200, PNG), (status, payload["raw"]))
+        # Administratören ser allas ikoner, en annan förare inte här.
+        self.assertEqual(200, self.request(own["avatar_url"], cookie=anna)[0])
+        self.assertEqual(404, self.request(own["avatar_url"], cookie=maja)[0])
+        self.assertEqual(401, self.request(own["avatar_url"])[0])
+        # Byt i kontot: Lokföraren får samma, med ny version.
+        jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+        changed = self.request("/v1/account/avatar", {"image": data_url("image/jpeg", jpeg)}, cookie=benny)[1]["user"]
+        self.assertNotEqual(own["avatar_url"], changed["avatar_url"])
+        session = self.request("/v1/driver/session", cookie=benny)[1]["user"]
+        status, payload, _ = self.request(session["avatar_url"], cookie=maja)
+        self.assertEqual((200, jpeg, "image/jpeg"), (status, payload["raw"], payload["type"]))
+        self.assertEqual(400, self.request("/v1/account/avatar", {"image": "data:text/html;base64,PGI+"}, cookie=benny)[0])
+        self.assertEqual(403, self.request("/v1/account/avatar", {"image": data_url("image/png", PNG)}, cookie=benny,
+                                           headers={"Origin": "https://evil.example"})[0])
+        # Ta bort i kontot: borta i Lokföraren också.
+        removed = self.request("/v1/account/avatar/remove", {}, cookie=benny)[1]["user"]
+        self.assertIsNone(removed["avatar_url"])
+        self.assertIsNone(self.request("/v1/driver/session", cookie=benny)[1]["user"]["avatar_url"])
+        # Administratören byter sin egen på samma sätt.
+        self.assertTrue(self.request("/v1/account/avatar", {"image": data_url("image/png", PNG)}, cookie=anna)[1]["user"]["avatar_url"])
 
     def test_a_driver_post_from_another_site_is_refused(self) -> None:
         benny = self.login("benny")

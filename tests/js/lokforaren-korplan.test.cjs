@@ -70,3 +70,31 @@ test('a check-in is full for ten real minutes and gone after fifteen', () => {
   assert.ok(halfway.opacity > 0.4 && halfway.opacity < 0.6);
   assert.equal(K.fade(900).opacity, 0);
 });
+
+test('every message of the driver app exists in English, Danish, Norwegian and German', () => {
+  require('../../src/tmbox_gateway/web/lokforaren/messages.js');
+  const missing = Object.entries(globalThis.LokforarenMessages)
+    .filter(([, row]) => ['en', 'da', 'nb', 'de'].some((language) => !row[language]))
+    .map(([source]) => source);
+  assert.deepEqual(missing, []);
+  // Anvisningarna ur planeringsfilen skrivs med de här mallarna i app.js.
+  const fs = require('node:fs');
+  const app = fs.readFileSync(require.resolve('../../src/tmbox_gateway/web/lokforaren/app.js'), 'utf8');
+  const block = app.slice(app.indexOf('const MEET_TEXT'), app.indexOf('function instructionLines'));
+  const templates = [...block.matchAll(/"([^"]*[a-zåäö][^"]*)"/g)].map((match) => match[1]).filter((text) => /\s/.test(text));
+  assert.ok(templates.length >= 25, `found ${templates.length} templates`);
+  assert.deepEqual(templates.filter((text) => !globalThis.LokforarenMessages[text]), []);
+});
+
+test('instruction lines give the run plan room', () => {
+  const plan = K.build({events: [
+    {kind: 'departure', time: '10:00', station: 'A', train: 'G 1'},
+    {kind: 'stop', arrival: '10:02', departure: '10:03', station: 'B', train: 'G 1', instructions: [
+      {kind: 'crosses', meets: [{train: 'RE 1', from: '10:02', to: '10:03'}, {train: 'RE 3', from: '10:02', to: '10:03'}]},
+      {kind: 'couple', vehicles: ['CN 02 Di4'], days: [1, 3, 5]}]},
+    {kind: 'arrival', time: '10:04', station: 'C', train: 'G 1'},
+  ]});
+  assert.equal(K.noteLines(plan.rows[1]), 4);
+  // Mellan B:s ankomst och avgång står fyra rader anvisningar: mer än en minut.
+  assert.ok(plan.y(10 * 60 + 3) - plan.y(10 * 60 + 2) >= 44 + 8 + 4 * 18);
+});

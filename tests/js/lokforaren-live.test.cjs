@@ -1,6 +1,7 @@
 // Lokföraren against a real TrainMeet Server: a driver signs in, chooses
 // duty 132, follows the NOW line at 4×, checks in, sees the others on the
-// layout, saves an icon and sees a stopped clock.
+// layout, saves an icon, shows on the maps (Drift, big screen, participants)
+// and sees a stopped clock.
 const { chromium } = require('playwright');
 const { spawn } = require('node:child_process');
 const readline = require('node:readline');
@@ -39,7 +40,7 @@ function png(size) {
   let stderr = '', browser;
   fixture.stderr.on('data', (value) => { stderr += value; });
   try {
-    const { base } = await new Promise((resolve, reject) => {
+    const { base, stations } = await new Promise((resolve, reject) => {
       const lines = readline.createInterface({ input: fixture.stdout });
       const timeout = setTimeout(() => reject(new Error('Backend start timeout: ' + stderr)), 15000);
       lines.once('line', (line) => { clearTimeout(timeout); resolve(JSON.parse(line)); });
@@ -84,6 +85,21 @@ function png(size) {
     assert.ok(second - first < 3, 'at 4× the line moves under a pixel a second');
     assert.match(await page.locator('#next-title').innerText(), /Tveiten/);
 
+    // 3b. Seconds: a tap on the clock hides them in the header and on the NOW chip, and
+    //     the same choice is under Me; another tap brings them back.
+    await page.locator('#clock').click();
+    await page.waitForFunction(() => /^\d{2}:\d{2}$/.test(document.querySelector('#clock').textContent));
+    assert.match(await page.locator('.tl-nowchip').innerText(), /^\d{2}:\d{2}$/);
+    await page.locator('.lf-tab[data-tab="me"]').click();
+    assert.equal(await page.locator('#me-seconds').isChecked(), false);
+    await page.locator('#me-seconds').check();
+    await page.waitForFunction(() => /^\d{2}:\d{2}:\d{2}$/.test(document.querySelector('#clock').textContent));
+    await page.locator('.lf-tab[data-tab="duty"]').click();
+    await page.locator('.tl-nowchip').dispatchEvent('click'); // den rör sig hela tiden
+    await page.waitForFunction(() => /^\d{2}:\d{2}$/.test(document.querySelector('#clock').textContent));
+    await page.locator('#clock').click();
+    await page.waitForFunction(() => /^\d{2}:\d{2}:\d{2}$/.test(document.querySelector('#clock').textContent));
+
     // 4. Check in at the suggested station; it shows on the run plan and on the layout.
     await page.locator('#open-checkin').click();
     await page.locator('#sheet-checkin').waitFor({ state: 'visible' });
@@ -104,7 +120,77 @@ function png(size) {
     await page.locator('#icon-save').click();
     await page.locator('#sheet-icon').waitFor({ state: 'hidden' });
     await page.locator('#me-avatar img').waitFor();
+
+    // 5b. The same icon in the account: the owner sees it among the users and
+    //     changes his own there.
+    const admin = await owner.newPage();
+    admin.on('pageerror', (error) => errors.push(error.message));
+    await admin.goto(base + '/installningar#anvandare');
+    const bennyRow = admin.locator('#users-rows tr', { hasText: 'Benny' });
+    await bennyRow.locator('.users-avatar img').waitFor();
+    assert.match(await bennyRow.locator('.users-avatar img').getAttribute('src'), /^\/v1\/account\/avatars\/.+\?v=\d+$/);
+    const casperRow = admin.locator('#users-rows tr', { hasText: 'Casper' });
+    assert.equal(await casperRow.locator('.users-avatar').innerText(), 'CA');
+    await casperRow.locator('td.r button').click(); // Redigera, på adminens språk
+    await admin.locator('#user-edit-icon').waitFor({ state: 'visible' });
+    await admin.locator('#user-edit-icon-file').setInputFiles(image);
+    await admin.locator('#user-edit-icon-preview img').waitFor();
+    await casperRow.locator('.users-avatar img').waitFor();
+    await admin.close();
     fs.unlinkSync(image);
+
+    // 5c. The drivers on the layout in Drift: the owner sees Benny's icon and Maja's
+    //     initials at the stations they checked in at, and Maja moves at once when she
+    //     checks in somewhere else (/v1/events, "drivers").
+    const checkIn = (on, station) => on.evaluate(async (name) => {
+      const response = await fetch('/v1/driver/checkins', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ station: name }) });
+      if (!response.ok) throw new Error(await response.text());
+    }, station);
+    await checkIn(page, stations[1]);
+    const maja = await browser.newContext({ locale: 'sv-SE' });
+    await maja.request.post(base + '/v1/auth/login', { data: { email: 'maja@example.se', password: 'forarens-losenord' } });
+    const majaPage = await maja.newPage();
+    await majaPage.goto(base + '/lokforaren/');
+    await checkIn(majaPage, stations[0]);
+    const drift = await owner.newPage();
+    drift.on('pageerror', (error) => errors.push(error.message));
+    await drift.goto(base + '/drift');
+    const mark = (who) => drift.locator('#overview-topology .topology-driver', { has: drift.locator('title', { hasText: who }) });
+    await mark('Benny').locator('image').waitFor({ state: 'attached' });
+    assert.match(await mark('Benny').locator('image').getAttribute('href'), /^\/v1\/display\/driver-avatars\/.+\?v=\d+$/);
+    assert.equal(await mark('Maja').locator('text').textContent(), 'MA');
+    const stationOf = (who) => mark(who).evaluate((element) => element.closest('.topology-node').getAttribute('aria-label'));
+    assert.match(await stationOf('Benny'), new RegExp('^' + stations[1]));
+    assert.match(await stationOf('Maja'), new RegExp('^' + stations[0]));
+    await checkIn(majaPage, stations[stations.length - 1]);
+    await drift.waitForFunction((name) => [...document.querySelectorAll('#overview-topology .topology-driver')]
+      .some((element) => element.querySelector('title')?.textContent.startsWith('Maja') && element.closest('.topology-node').getAttribute('aria-label').startsWith(name)),
+    stations[stations.length - 1], { timeout: 8000 });
+    await drift.close();
+
+    // 5d. The same on the big screen and the participants' page, without signing in:
+    //     Benny with his icon; Maja, who turns "Show my icon on the layout" off, is gone.
+    const guest = await browser.newContext({ locale: 'sv-SE', viewport: { width: 1600, height: 900 } });
+    const screen = await guest.newPage();
+    screen.on('pageerror', (error) => errors.push(error.message));
+    await screen.goto(base + '/display/topology');
+    const onScreen = (who) => screen.locator('#topology-svg .topology-driver', { has: screen.locator('title', { hasText: who }) });
+    await onScreen('Benny').locator('image').waitFor({ state: 'attached' });
+    assert.equal(await onScreen('Benny').locator('image').evaluate((image) => image.getBBox().width > 0), true);
+    assert.equal(await screen.evaluate(async (url) => (await fetch(url)).status, await onScreen('Benny').locator('image').getAttribute('href')), 200);
+    await onScreen('Maja').waitFor({ state: 'attached' });
+    await majaPage.evaluate(async () => {
+      const response = await fetch('/v1/driver/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visible: false }) });
+      if (!response.ok) throw new Error(await response.text());
+    });
+    await onScreen('Maja').waitFor({ state: 'detached', timeout: 8000 });
+    const participant = await guest.newPage();
+    participant.on('pageerror', (error) => errors.push(error.message));
+    await participant.goto(base + '/');
+    await participant.locator('#pv-topology .topology-driver title', { hasText: 'Benny' }).waitFor({ state: 'attached' });
+    assert.equal(await participant.locator('#pv-topology .topology-driver title', { hasText: 'Maja' }).count(), 0);
+    await guest.close();
+    await maja.close();
 
     // 6. A stopped clock stops the line and says so.
     await page.locator('.lf-tab[data-tab="duty"]').click();
@@ -121,7 +207,7 @@ function png(size) {
     const html = fs.readFileSync(path.join(root, 'src/tmbox_gateway/web/lokforaren/index.html'), 'utf8');
     assert.equal(/\sstyle=/.test(html), false);
     assert.deepEqual(errors, []);
-    console.log('lokforaren-live: ok (sign-in, duty 132, NOW line, check-in, layout, icon, stopped clock, English)');
+    console.log('lokforaren-live: ok (sign-in, duty 132, NOW line, seconds, check-in, layout, icon in app and account, drivers on the Drift map, big screen and participants page, stopped clock, English)');
   } finally {
     if (browser) await browser.close();
     fixture.stdin.end();

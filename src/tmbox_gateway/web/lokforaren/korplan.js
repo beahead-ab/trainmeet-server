@@ -18,7 +18,6 @@
   const POST_ROLL = 30;           // minuter efter tjänsten
   const TOP = 30;
   const ROW_MIN = 44;
-  const CHIPS_EXTRA = 30;
   const TRAIN_EXTRA = 42;
   const DAY = 1440;
 
@@ -46,7 +45,7 @@
     };
     for (const event of duty.events || []) {
       const row = {kind: event.kind, station: event.station || "", track: event.track || "", train: event.train || "",
-        notes: event.notes || [], stationId: event.station_id || ""};
+        notes: event.notes || [], instructions: event.instructions || [], stationId: event.station_id || ""};
       if (event.kind === "stop") {
         row.t = onAxis(event.arrival);
         row.t2 = onAxis(event.departure);
@@ -58,6 +57,20 @@
       rows.push(row);
     }
     return rows;
+  }
+
+  // Hur många textrader anvisningarna under en rad ungefär tar på en telefon
+  // (ett möte per rad, en längre anvisning två, fri text efter längden).
+  const NOTE_LINE = 18;
+  function noteLines(row) {
+    let lines = 0;
+    for (const text of row.notes) lines += Math.max(1, Math.ceil(String(text).length / 38));
+    for (const item of row.instructions || []) lines += item.meets ? item.meets.length : ["no_exchange", "circulate", "turn", "push_wagons"].includes(item.kind) ? 1 : 2;
+    return lines;
+  }
+  function notesSpace(row) {
+    const lines = noteLines(row);
+    return lines ? 8 + lines * NOTE_LINE : 0;
   }
 
   // Var tågbrickorna ska stå: före den första raden med ett nytt tåg.
@@ -95,8 +108,8 @@
       const minutesBetween = Math.max(0, point.t - previous.t);
       let need = ROW_MIN;
       const previousRow = rows[previous.row];
-      if (previous.first && previousRow.notes.length && point.row !== previous.row) need += CHIPS_EXTRA;
-      if (point.row === previous.row) need = previousRow.notes.length ? ROW_MIN + CHIPS_EXTRA : ROW_MIN;
+      if (previous.first && point.row !== previous.row) need += notesSpace(previousRow);
+      if (point.row === previous.row) need = ROW_MIN + notesSpace(previousRow);
       if (point.first && starts.has(point.row)) need += TRAIN_EXTRA;
       let dy;
       if (minutesBetween > COMPRESS_AFTER && point.row !== previous.row) {
@@ -203,5 +216,5 @@
     return {opacity: 1 - eased, gray: eased};
   }
 
-  return {build, yAt, axisMinutes, next, nearestStation, stations, fade, minutes, label, PX_PER_MINUTE};
+  return {build, yAt, axisMinutes, next, nearestStation, stations, fade, minutes, label, noteLines, PX_PER_MINUTE};
 });

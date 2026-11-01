@@ -12,33 +12,63 @@ const { tinyPdf, tinyPlan } = require("./lokforaren-fixtures.cjs");
 const PDFJS = path.join(__dirname, "../../src/tmbox_gateway/web/pdfjs");
 const PDFLib = require("../../src/tmbox_gateway/web/pdflib/pdf-lib.min.js");
 
-test("tjänsterna i planeringsfilen blir Lokförarens tjänster", () => {
-  const plan = tinyPlan();
-  const result = reader.fromPlan(JSON.parse(JSON.stringify(plan)));
+test("tjänsterna i planeringsfilen blir Lokförarens tjänster, med anvisningar", () => {
+  const result = reader.fromPlan(JSON.parse(JSON.stringify(tinyPlan())));
   assert.equal(result.name, "Grimslöv 2027");
   assert.deepEqual(result.duties.map((duty) => duty.number), ["211", "212", "213"]);
   assert.deepEqual(result.warnings, ["Tjänst 214 har inga tåg med tider och togs inte med"]);
   const [d211, d212, d213] = result.duties;
+  // Tjänsten börjar när föraren infinner sig (första tågets ankomsttid) och
+  // slutar vid sista tågets avgångstid.
   assert.deepEqual(
-    { operator: d211.operator, vehicle: d211.vehicle, vmax: d211.vmax, start: d211.start, end: d211.end, trains: d211.trains },
-    { operator: "CargoNet AS", vehicle: "CD312", vmax: 80, start: "17:10", end: "21:02", trains: [
-      { number: "G 5453", from: "Spiten", to: "Kjøllstad", vmax: 80 }, { number: "G 5456", from: "Kjøllstad", to: "Spiten", vmax: 80 }] });
-  assert.deepEqual(d211.events, [
-    { kind: "duty_start", time: "17:10", station: "Spiten", notes: ["Förberedelse"] },
-    { station: "Spiten", train: "G 5453", track: "1", kind: "departure", time: "17:30", notes: ["Före avgång: hämta fordonet från spår 5"] },
-    { station: "Tveiten", train: "G 5453", track: "2", kind: "stop", arrival: "17:58", departure: "18:14", notes: ["Rundgång", "Skjut vagnar"] },
-    { station: "Kjøllstad", train: "G 5453", track: "1", kind: "arrival", time: "18:25" },
-    { station: "Kjøllstad", train: "G 5456", track: "1", kind: "departure", time: "19:35" },
-    { station: "Tveiten", train: "G 5456", track: "2", kind: "pass", time: "20:02" },
-    { station: "Spiten", train: "G 5456", track: "1", kind: "arrival", time: "20:42" },
-    { kind: "duty_end", time: "21:02", station: "Spiten", notes: ["Avslutning"] },
+    { operator: d211.operator, vehicle: d211.vehicle, start: d211.start, end: d211.end, trains: d211.trains.map((train) => train.number) },
+    { operator: "CargoNet AS", vehicle: "Di4", start: "17:10", end: "21:02", trains: ["G 5453", "G 5456"] });
+  const days = { mo_we_fr: [1, 3, 5], tu_th_sa: [2, 4, 6] };
+  assert.deepEqual(d211.events.map(({ kind, station, time, arrival, track, instructions }) => [kind, station, time || arrival, track || "", instructions || []]), [
+    ["duty_start", "Spiten", "17:10", "", []],
+    ["departure", "Spiten", "17:30", "1", [
+      { kind: "from_parking", vehicles: ["CN 02 Di4"], days: days.mo_we_fr },
+      { kind: "from_parking", vehicles: ["CN 03 Di4"], days: days.tu_th_sa }]],
+    // Möte med persontåget i motsatt riktning, rundgång (planen säger alltid),
+    // nyckeln till Kjøllstad och skjut vagnarna.
+    ["stop", "Tveiten", "17:58", "2", [
+      { kind: "crosses", meets: [{ train: "VY RE 2511", from: "18:00", to: "18:05" }] },
+      { kind: "circulate" },
+      { kind: "pick_up_key", key: "K16", place: "Kjøllstad" },
+      { kind: "push_wagons" }]],
+    // Tåget vänder i Kjøllstad: koppla loss och gör rundgång.
+    ["arrival", "Kjøllstad", "18:25", "1", [
+      { kind: "uncouple", vehicles: ["CN 02 Di4"], days: days.mo_we_fr },
+      { kind: "uncouple", vehicles: ["CN 03 Di4"], days: days.tu_th_sa },
+      { kind: "circulate" }]],
+    ["departure", "Kjøllstad", "19:35", "1", [
+      { kind: "couple", vehicles: ["CN 02 Di4"], days: days.mo_we_fr },
+      { kind: "couple", vehicles: ["CN 03 Di4"], days: days.tu_th_sa }]],
+    ["pass", "Tveiten", "20:02", "2", []],
+    ["arrival", "Spiten", "20:42", "1", [
+      { kind: "to_parking", vehicles: ["CN 02 Di4"], days: days.mo_we_fr },
+      { kind: "to_parking", vehicles: ["CN 03 Di4"], days: days.tu_th_sa }]],
+    ["duty_end", "Spiten", "21:02", "", []],
   ]);
-  // Växling på en station: hela tiden där, tågslagets namn och förberedelse.
-  assert.deepEqual([d212.start, d212.end, d212.vehicle, d212.trains, d212.events.map((event) => event.kind)],
-    ["08:20", "11:40", "", [{ number: "Växling", from: "Tveiten", to: "Tveiten", vmax: 80 }], ["duty_start", "stop", "duty_end"]]);
-  // Tjänstens egen starttid, och över midnatt.
-  assert.deepEqual([d213.start, d213.end], ["23:15", "00:45"]);
-  assert.deepEqual(d213.events.at(-2).notes, ["Ring tågklareraren"]);
+  assert.deepEqual([d211.events[0].notes, d211.events.at(-1).notes], [["Förberedelse"], ["Avslutning"]]);
+  // Växling på en station: hela tiden där och tågslagets namn, inget tågnummer.
+  assert.deepEqual([d212.start, d212.end, d212.trains, d212.events.map((event) => event.kind)],
+    ["08:30", "11:30", [{ number: "Växling", from: "Tveiten", to: "Tveiten", vmax: 80 }], ["stop"]]);
+  // Tjänstens egen starttid, och tider efter midnatt ("1.00:25:00").
+  assert.deepEqual([d213.start, d213.end, d213.events.map((event) => event.time)], ["23:00", "00:45", ["23:00", "23:40", "00:25", "00:45"]]);
+  assert.deepEqual(d213.events[2].notes, ["Ring tågklareraren"]);
+});
+
+test("samma anvisning för fordon som tillsammans går alla dagar sägs en gång", () => {
+  const plan = tinyPlan();
+  // Lok 03 går nu måndag, onsdag och fredag också: tillsammans alla dagar.
+  const loco = plan.ScheduledObjects.$values[1];
+  loco.ScheduleAssignments.$values[0].Sessions = 0x8000 | 0x3fff;
+  const [d211] = reader.fromPlan(JSON.parse(JSON.stringify(plan))).duties;
+  assert.deepEqual(d211.events[1].instructions, [
+    { kind: "from_parking", vehicles: ["CN 02 Di4"], days: [1, 3, 5] },
+    { kind: "from_parking", vehicles: ["CN 03 Di4"] },
+  ]);
 });
 
 test("en fil som inte är en planeringsfil säger det", () => {

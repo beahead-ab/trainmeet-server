@@ -1,5 +1,6 @@
 """Three-role permission matrix, real HTTP isolation and legacy SQLite migration."""
 import ast
+import base64
 import inspect
 import json
 from pathlib import Path
@@ -166,9 +167,11 @@ class DriverHTTPTests(unittest.TestCase):
             paths = {node.value for node in ast.walk(source) if isinstance(node, ast.Constant)
                      and isinstance(node.value, str) and node.value.startswith("/v1/")}
             for path in sorted(paths):
-                if path.startswith("/v1/driver/"):
+                # Förarens egna vägar: Lokföraren och det egna kontots ikon.
+                # Att de bara når det egna kontot prövas i testet nedan.
+                if path.startswith("/v1/driver/") or path.startswith("/v1/account/"):
                     continue
-                if method == "GET" and (path in public or path.startswith("/v1/clock-faces/")):
+                if method == "GET" and (path in public or path.startswith(("/v1/clock-faces/", "/v1/display/driver-avatars/"))):
                     continue
                 if method == "POST" and path in {"/v1/account", "/v1/auth/login", "/v1/auth/logout"}:
                     continue
@@ -187,6 +190,30 @@ class DriverHTTPTests(unittest.TestCase):
         self.assertEqual(200, self.request("/v1/admin/users")[0])
         self.identities.set_admin_user_role(self.driver["user_id"], "user")
         self.assertEqual(403, self.request("/v1/admin/users")[0])
+
+    def test_the_account_icon_reaches_only_the_drivers_own_account(self):
+        """Kontots ikon är öppen för föraren, men bara för hens eget konto:
+        en annans ikon finns inte för hen, och hen kan inte byta någon annans."""
+
+        image = "data:image/png;base64," + base64.b64encode(
+            bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000") + b"\0" * 16).decode()
+        owner = next(user for user in self.identities.list_admin_users() if user["role"] == "owner")
+        # Ett annat konto i begäran spelar ingen roll: ikonen hamnar på det egna.
+        status, payload = self.request("/v1/account/avatar", "POST", {"image": image, "user_id": owner["user_id"]})
+        self.assertEqual(200, status)
+        own = payload["user"]
+        self.assertEqual(self.driver["user_id"], own["user_id"])
+        self.assertEqual(200, self._raw(own["avatar_url"]))
+        self.assertEqual(404, self._raw(f"/v1/account/avatars/{owner['user_id']}"))
+        self.assertEqual(200, self.request("/v1/account/avatar/remove", "POST")[0])
+        self.assertEqual(404, self._raw(own["avatar_url"]))
+
+    def _raw(self, path):
+        try:
+            with urlopen(Request(self.base + path, headers={"Cookie": self.cookie}), timeout=5) as response:
+                return response.status
+        except HTTPError as error:
+            return error.code
 
 
 class LegacyRoleMigrationTests(unittest.TestCase):

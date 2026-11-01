@@ -2581,7 +2581,8 @@ function bindAdminLive() {
     if (any("runtime")) refreshServerContextSerially();
     if (any("runtime")) refreshRuntimeSerially();
     if (any("devices")) refreshDevicesSerially();
-    if (any("traffic", "clock", "runtime", "automatic")) refreshLocalClockSerially();
+    // "drivers": en förare checkade in; banan i Drift får förarna med /v1/display.
+    if (any("traffic", "clock", "runtime", "automatic", "drivers")) refreshLocalClockSerially();
     if (any("automatic", "runtime", "devices", "traffic")) refreshAutomaticSerially();
   });
   live.onStatus(() => {
@@ -4245,7 +4246,7 @@ function placeTopologyLabels(items, segments, viewBox, options = {}) {
       if (labels > 0) cost += 1000 + labels;
       if (node > 0) cost += 1000 + node;
     }
-    for (const other of items) if (other.badge && overlap(spot.box, other.badge) > 0) cost += 1000;
+    for (const other of items) for (const box of [other.badge, ...(other.avoid || [])]) if (box && overlap(spot.box, box) > 0) cost += 1000;
     for (const segment of segments) if (crosses(spot.box, segment)) cost += 300;
     if (!options.refit && Number.isFinite(viewWidth)
       && (spot.box.x1 < viewX || spot.box.x2 > viewX + viewWidth || spot.box.y1 < viewY || spot.box.y2 > viewY + viewHeight)) cost += 600;
@@ -4275,6 +4276,67 @@ function placeTopologyLabels(items, segments, viewBox, options = {}) {
       element.classList.toggle("label-end", spot.anchor === "end");
     }
   }
+}
+
+// Förarna på kartorna (snapshot.drivers i /v1/display): de som checkat in i
+// Lokföraren och valt att synas, på Drift, storskärmarna och deltagarnas sida.
+// Åldern är i spelsekunder när bilden hämtades och räknas vidare på
+// träffklockan, som tågen: fulla i tio spelminuter, sedan tonar de ut under fem.
+function topologyDriverMarks(snapshot) {
+  const drivers = Array.isArray(snapshot?.drivers) ? snapshot.drivers : [];
+  if (!drivers.length) return [];
+  if (!topologyReceivedAt.has(snapshot)) topologyReceivedAt.set(snapshot, performance.now());
+  const since = snapshot.clock?.running
+    ? (performance.now() - topologyReceivedAt.get(snapshot)) / 1000 * Number(snapshot.clock?.speed || 1) : 0;
+  const visible = Number(snapshot.driver_checkin_seconds?.visible) || 600;
+  const fade = Number(snapshot.driver_checkin_seconds?.fade) || 300;
+  const ids = new Set((snapshot.stations || []).map((station) => station.id));
+  const byName = new Map((snapshot.stations || []).map((station) => [String(station.name || "").toLowerCase(), station.id]));
+  const marks = [];
+  for (const driver of drivers) {
+    const age = Number(driver.age_seconds || 0) + since;
+    if (age > visible + fade) continue;
+    const station = ids.has(driver.station_id) ? driver.station_id : byName.get(String(driver.station || "").toLowerCase());
+    if (!station) continue;
+    const k = Math.min(1, Math.max(0, (age - visible) / fade)), eased = k * k * (3 - 2 * k);
+    const title = [driver.name, driver.duty_number ? t("Tjänst {number}", { number: driver.duty_number }) : "", driver.train || "",
+      driver.meet_time ? t("incheckad {time}", { time: String(driver.meet_time).slice(0, 5) }) : ""];
+    marks.push({ station_id: station, user_id: driver.user_id, initials: driver.initials || "", avatar_url: driver.avatar_url || null,
+      title: title.filter(Boolean).join(" · "), opacity: 1 - eased * 0.85, gray: eased, age });
+  }
+  return marks.sort((a, b) => a.age - b.age);
+}
+
+// En förare på banan: ikonen i en cirkel, annars initialerna; "+N" för fler.
+// Bilden klipps med en cirkel som läggs en gång per karta.
+let topologyClipCount = 0;
+function topologyDriverMark(svg, mark, cy, r) {
+  const group = svgElement("g", { class: `topology-driver${mark.more ? " more" : ""}` });
+  group.append(svgElement("circle", { cx: mark.cx, cy, r: r + 1.5, class: "topology-driver-ring" }),
+    svgElement("circle", { cx: mark.cx, cy, r, class: "topology-driver-face" }));
+  const driver = mark.driver;
+  if (driver?.avatar_url) {
+    let clip = svg.querySelector("clipPath.topology-driver-clip");
+    if (!clip) {
+      clip = svgElement("clipPath", { id: `topology-driver-clip-${++topologyClipCount}`, class: "topology-driver-clip", clipPathUnits: "objectBoundingBox" });
+      clip.append(svgElement("circle", { cx: 0.5, cy: 0.5, r: 0.5 }));
+      const defs = svgElement("defs");
+      defs.append(clip);
+      svg.prepend(defs);
+    }
+    group.append(svgElement("image", { href: driver.avatar_url, x: mark.cx - r, y: cy - r, width: r * 2, height: r * 2,
+      preserveAspectRatio: "xMidYMid slice", "clip-path": `url(#${clip.id})` }));
+  } else {
+    group.append(svgElement("text", { x: mark.cx, y: cy + r * 0.34, class: "topology-driver-initials" }, mark.more ? `+${mark.more}` : driver?.initials || ""));
+  }
+  if (driver) {
+    group.append(svgElement("title", {}, driver.title || driver.initials || ""));
+    group.setAttribute("opacity", String(Math.round((driver.opacity ?? 1) * 1000) / 1000));
+    group.dataset.user = driver.user_id || "";
+    // Gråskalan sätts med CSSOM: serverns CSP tillåter inga stilattribut.
+    if (driver.gray > 0) group.style.filter = `grayscale(${Math.round(driver.gray * 1000) / 1000})`;
+  }
+  return group;
 }
 
 function renderTopology(snapshot, target = document.querySelector("#topology-svg"), options = {}) {
@@ -4316,6 +4378,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
     if (event.target === target) options.onClear?.();
   };
   const stateByID = new Map((snapshot.connection_states || []).map((state) => [state.id, state]));
+  const drivers = options.drivers ?? topologyDriverMarks(snapshot);
   const activeStationIDs = new Set((snapshot.train_positions || []).filter((p) => p.status === "station").map((p) => p.station_id));
   const selectedService = serviceForTrain(snapshot, options.selectedTrainNumber);
   const routeStops = [...(selectedService?.stops || [])].sort((a, b) => Number(a.stop_order) - Number(b.stop_order));
@@ -4436,11 +4499,27 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
       group.append(count);
       badge = { x1: cx - width / 2 - 1, y1: cy - r - 1, x2: cx + width / 2 + 1, y2: cy + r + 1 };
     }
+    // Förarna som checkat in här (snapshot.drivers, från Lokföraren): kontots
+    // ikon på stationens övre vänstra hörn, mitt emot antalsbrickan, sida vid
+    // sida. Den senaste närmast stationen; fler än tre blir två och "+N".
+    const avoid = [];
+    const here = kr ? drivers.filter((driver) => driver.station_id === station.id) : [];
+    if (here.length) {
+      const r = screen ? 16 : 14, step = r * 2 + 3; // sida vid sida, så att alla går att känna igen
+      const shown = here.length > 3 ? here.slice(0, 2) : here;
+      const cy = point.y - halfH - r + 2, first = point.x - halfW - r + 5;
+      const marks = shown.map((driver, index) => ({ driver, cx: first - index * step }));
+      if (here.length > shown.length) marks.push({ more: here.length - shown.length, cx: first - shown.length * step });
+      const stack = svgElement("g", { class: "topology-drivers" });
+      for (const mark of [...marks].reverse()) stack.append(topologyDriverMark(target, mark, cy, r));
+      group.append(stack);
+      avoid.push({ x1: marks[marks.length - 1].cx - r - 2, y1: cy - r - 2, x2: first + r + 2, y2: cy + r + 2 });
+    }
     // Bara namnet: koden står i stationens etikett för skärmläsare, och på kartan blev namn och kod plottrigt.
     const nameGap = kr ? (screen ? 21 : 17) : autonomous ? 11 : 13;
     const name = svgElement("text", { x: point.x, y: point.y + halfH + nameGap, class: "topology-name", "font-style": autonomous ? "italic" : "normal" }, station.name);
     group.append(name);
-    labels.push({ point, radius, rx: halfW, ry: halfH, name, code: null, badge });
+    labels.push({ point, radius, rx: halfW, ry: halfH, name, code: null, badge, avoid });
     bricks.set(station.id, { x: halfW, y: halfH });
     const activate = (event) => {
       event.stopPropagation();
@@ -4485,7 +4564,7 @@ function renderTopology(snapshot, target = document.querySelector("#topology-svg
   const names = labels.flatMap((label) => [label.name, label.code].filter(Boolean)).flatMap((text) => {
     // A map not on screen has no measured text (and some browsers throw).
     try { const box = text.getBBox(); return [{ x1: box.x, y1: box.y, x2: box.x + box.width, y2: box.y + box.height }]; } catch { return []; }
-  }).concat(labels.map((label) => label.badge).filter(Boolean)); // antalsbrickorna är också i vägen
+  }).concat(labels.flatMap((label) => [label.badge, ...(label.avoid || [])]).filter(Boolean)); // antalsbrickorna och förarna är också i vägen
   const overlaps = (box, list, margin = 0) => list.some((o) => box.x1 < o.x2 + margin && o.x1 - margin < box.x2 && box.y1 < o.y2 + margin && o.y1 - margin < box.y2);
   for (const train of trains.onLine) {
     const from = positions.get(train.from), to = positions.get(train.to);
@@ -5641,7 +5720,7 @@ async function initDisplay() {
   window.addEventListener("online", pollDisplay);
   window.addEventListener("pageshow", pollDisplay);
   globalThis.TrainMeetLive?.subscribe((topics) => {
-    if (["traffic", "clock", "runtime", "automatic"].some((name) => topics.has(name))) pollDisplay();
+    if (["traffic", "clock", "runtime", "automatic", "drivers"].some((name) => topics.has(name))) pollDisplay();
   });
   globalThis.TrainMeetLive?.onStatus(() => { if (!displayRequest) scheduleDisplayPoll(); });
   document.addEventListener("visibilitychange", () => {
@@ -6053,6 +6132,8 @@ function renderUsers() {
     const pending = Boolean(user.invitation_pending);
 
     const name = document.createElement("td");
+    name.className = "users-name";
+    name.append(userAvatar(user));
     const strong = document.createElement("b");
     if (canEditUser(user)) {
       const nameButton = usersButton("Redigera", () => editUser(user));
@@ -6223,9 +6304,71 @@ async function removeUser(user) {
   if (result) finishModal(document.querySelector("#user-edit-form"), t("{name} är borttagen", { name: user.display_name }));
 }
 
+// Kontots ikon, samma som i Lokföraren: bild om det finns en, annars initialerna.
+function userAvatar(user, large = false) {
+  const element = document.createElement("span");
+  element.className = "users-avatar" + (large ? " users-avatar--l" : "");
+  element.setAttribute("aria-hidden", "true");
+  fillUserAvatar(element, user);
+  return element;
+}
+
+function fillUserAvatar(element, user) {
+  element.replaceChildren();
+  if (user?.avatar_url) {
+    const image = document.createElement("img");
+    image.src = user.avatar_url;
+    image.alt = "";
+    element.append(image);
+  } else {
+    element.dataset.noI18n = "";
+    element.textContent = user?.initials || "";
+  }
+}
+
+// En egen bild blir en fyrkantig ikon på 256 px, beskuren från mitten som i Lokföraren.
+async function iconFromFile(file) {
+  const bitmap = await createImageBitmap(file);
+  const side = Math.min(bitmap.width, bitmap.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 256;
+  canvas.getContext("2d").drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 256, 256);
+  bitmap.close?.();
+  for (const quality of [0.86, 0.75, 0.6]) {
+    const data = canvas.toDataURL("image/jpeg", quality);
+    if (data.length * 0.75 < 90 * 1024) return data;
+  }
+  return canvas.toDataURL("image/jpeg", 0.5);
+}
+
+async function saveOwnIcon(file) {
+  const feedback = document.querySelector("#user-edit-modal .modal-feedback");
+  let body = {};
+  try {
+    if (file) body = { image: await iconFromFile(file) };
+  } catch {
+    setMessage(feedback, "Bilden gick inte att läsa. Välj en PNG, JPEG eller WebP.", "error");
+    return;
+  }
+  const result = await usersPost(file ? "/v1/account/avatar" : "/v1/account/avatar/remove", body);
+  if (result?.user) {
+    users.editing = { ...users.editing, ...result.user };
+    renderOwnIcon(users.editing);
+    setMessage(feedback, file ? "Ikonen är sparad. Den syns också i Lokföraren." : "Ikonen är borttagen.", "success");
+  }
+}
+
+function renderOwnIcon(user) {
+  const self = user.user_id === users.userId;
+  document.querySelector("#user-edit-icon").hidden = !self;
+  fillUserAvatar(document.querySelector("#user-edit-icon-preview"), user);
+  document.querySelector("#user-edit-icon-remove").hidden = !user.avatar_url;
+}
+
 function editUser(user) {
   if (!canEditUser(user)) return;
   users.editing = user;
+  renderOwnIcon(user);
   document.querySelector("#user-edit-name").textContent = user.email || t("Saknar e-post – kan inte logga in");
   document.querySelector("#user-edit-display-name").value = user.display_name || "";
   const self = user.user_id === users.userId;
@@ -6244,6 +6387,12 @@ function editUser(user) {
 
 function bindUsersSection() {
   usersEl("invite-form")?.addEventListener("submit", inviteUser);
+  document.querySelector("#user-edit-icon-file")?.addEventListener("change", (event) => {
+    const file = event.target.files[0];
+    event.target.value = "";
+    if (file) saveOwnIcon(file);
+  });
+  document.querySelector("#user-edit-icon-remove")?.addEventListener("click", () => saveOwnIcon(null));
   document.querySelector("#user-edit-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;

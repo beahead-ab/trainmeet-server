@@ -56,10 +56,11 @@
     return { deref, list, nodes };
   }
 
-  /** "06:41:00" → minuter efter midnatt. */
+  /** "06:41:00" → minuter efter midnatt. Efter midnatt skriver planen dygnet
+   *  först: "1.00:01:00" är 00:01 dygnet efter. */
   function clock(value) {
-    const match = /^(\d{1,2}):(\d{2})/.exec(String(value || ""));
-    return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+    const match = /^(?:(\d+)\.)?(\d{1,2}):(\d{2})/.exec(String(value || ""));
+    return match ? Number(match[1] || 0) * DAY + Number(match[2]) * 60 + Number(match[3]) : null;
   }
 
   function hhmm(total) {
@@ -79,66 +80,398 @@
     return "";
   }
 
+  // Planens pass eller dagar: 14 bitar, i dagläge veckodagarna från planens
+  // första dag (StartDay, 0 = söndag) och upprepade i de övre sju.
+  const SESSION_BITS = 0x3fff;
+
   /** Tjänsterna i planeringsfilen, i samma form som Clouds driver_duties:
    *  { name, duties, warnings }. Kastar ett fel om filen inte är en plan
-   *  med tjänster. */
+   *  med tjänster.
+   *
+   *  Varje händelse får sina anvisningar som uppgifter (instructions), inte
+   *  som färdig text, så att Lokföraren skriver dem på förarens språk:
+   *  möten och förbigångar, omstigande resande, inget utbyte, koppla till och
+   *  från (med veckodagar där fordonen växlar), uppställning, lyft, spår och
+   *  rundgång. Reglerna följer planeringsprogrammets köruppdrag. */
   function fromPlan(plan) {
     if (!plan || typeof plan !== "object" || Array.isArray(plan)) throw new Error("Filen är ingen planeringsfil.");
     const { deref, list, nodes } = graph(plan);
     if (!("DriverDuties" in plan)) throw new Error("Filen saknar köruppdrag (DriverDuties). Är det planeringsfilen?");
     const timetable = deref(plan.Timetable) || {};
     const layout = deref(timetable.Layout) || {};
+    const general = deref(deref(layout.Settings)?.General) || {};
+    const useDays = general.UseDays !== false;
+    const startDay = Number.isInteger(general.StartDay) ? general.StartDay : 1;
+    const period = Math.max(1, Math.min(Number(general.MaxSessions) || 14, useDays ? 7 : 14));
+    const tickets = general.UsePassengerTickets !== false;
     const byKey = (items) => new Map(items.filter((item) => item.Id !== undefined).map((item) => [item.Id, item]));
     const categories = byKey(list(timetable.TrainCategories));
     const companies = byKey(list(layout.Companies));
     const trains = byKey(nodes.filter((node) => node.Calls && node.Number !== undefined && "CategoryId" in node));
     const tracks = byKey(nodes.filter((node) => "StationId" in node && "IsScheduled" in node));
     const stations = byKey(nodes.filter((node) => node.Name && "Signature" in node && "Tracks" in node));
-    // Vilka fordon som går i varje omlopp (planeringsprogrammets Schedules).
-    const vehicles = new Map();
-    for (const object of list(plan.ScheduledObjects)) {
-      for (const assignment of list(object.ScheduleAssignments)) {
-        const id = assignment.ScheduleId ?? deref(assignment.Schedule)?.Id;
-        if (id === undefined || !object.Class) continue;
-        if (!vehicles.has(id)) vehicles.set(id, new Set());
-        vehicles.get(id).add(text(object.Class));
-      }
-    }
 
     const stationOf = (track) => deref(track?.Station) || stations.get(track?.StationId) || null;
     const trackOf = (call) => deref(call?.Track) || tracks.get(call?.TrackId) || null;
     const trainOf = (call) => deref(call?.Train) || trains.get(call?.TrainId) || null;
-    const callsOf = (train) => list(train?.Calls).sort((a, b) => (a.Sequence ?? 0) - (b.Sequence ?? 0));
+    const locationOf = (call) => stationOf(trackOf(call));
+    const categoryOf = (train) => categories.get(train?.CategoryId) || deref(train?.Category) || {};
+    const companyOf = (train) => companies.get(train?.CompanyId) || companies.get(categoryOf(train).CompanyId) || null;
+    const sessionsOf = (item) => (Number.isInteger(item?.Sessions) ? item.Sessions : SESSION_BITS);
+    const runs = new Map();
+    const callsOf = (train) => {
+      if (!runs.has(train)) runs.set(train, list(train?.Calls).sort((a, b) => (a.Sequence ?? 0) - (b.Sequence ?? 0)));
+      return runs.get(train);
+    };
     const labelOf = (train) => {
-      const category = categories.get(train.CategoryId) || deref(train.Category) || {};
+      const category = categoryOf(train);
       // Växling har inget tågnummer i köruppdraget, bara tågslagets namn.
       if (category.IsShunting) return text(category.Name) || "Växling";
       return text(`${text(category.Prefix)} ${train.Number}${text(category.Suffix)}`);
     };
-    const notesOf = (call) => {
-      const notes = [];
-      if (call.TurnLoco) notes.push("Vänd loket");
-      if (Number(call.Runaround) > 0) notes.push("Rundgång");
-      if (call.PushWagons) notes.push("Skjut vagnar");
-      for (const note of list(call.Notes)) { const value = noteText(note); if (value) notes.push(value); }
-      return notes;
+    // Ett annat tåg som det står i köruppdraget: bolag, tågslag och nummer.
+    const otherTrainName = (train) => text(`${text(companyOf(train)?.Signature)} ${labelOf(train)}`);
+
+    // Pass eller dagar som uppgift: null = alla, undefined = inga inom planens period.
+    const qualifier = (flags) => {
+      if (flags === null) return null;
+      const numbers = [];
+      for (let index = 0; index < period; index += 1) if (flags & (1 << index)) numbers.push(index + 1);
+      if (!numbers.length) return undefined;
+      if (numbers.length === period) return null;
+      return useDays ? { days: numbers.map((number) => ((startDay + number - 1) % 7) || 7) } : { sessions: numbers };
+    };
+    const sharedPart = (flags, whole) => {
+      const running = whole & SESSION_BITS;
+      const shared = running & flags;
+      return shared === running ? null : shared;
+    };
+
+    // Riktning: sträckorna har en början och ett slut, och åt vilket håll tåget
+    // kör över dem skiljer ett möte från en förbigång.
+    const stretches = new Map();
+    for (const stretch of list(layout.TrackStretches)) {
+      const start = stretch.StartId ?? deref(stretch.Start)?.Id;
+      const end = stretch.EndId ?? deref(stretch.End)?.Id;
+      if (start === undefined || end === undefined) continue;
+      stretches.set(`${start}>${end}`, "forward");
+      if (!stretches.has(`${end}>${start}`)) stretches.set(`${end}>${start}`, "backward");
+    }
+    const between = (from, to) => stretches.get(`${locationOf(from)?.Id}>${locationOf(to)?.Id}`) || null;
+    const neighbours = (call, train) => {
+      const calls = callsOf(train);
+      const index = calls.indexOf(call);
+      return { before: index > 0 ? calls[index - 1] : null, after: index >= 0 && index < calls.length - 1 ? calls[index + 1] : null, index, calls };
+    };
+    const arrivesWay = (call, train) => { const { before } = neighbours(call, train); return before ? between(before, call) : null; };
+    const leavesWay = (call, train) => { const { after } = neighbours(call, train); return after ? between(call, after) : null; };
+    const directionInto = (call, train) => arrivesWay(call, train) || leavesWay(call, train);
+    const isEnd = (call, train) => { const calls = callsOf(train); return calls[0] === call || calls[calls.length - 1] === call; };
+    const minutesOf = (value) => clock(value);
+
+    // Uppehåll: tåget ankommer eller avgår här, och tågslaget får stanna här.
+    const isStop = (call, train) => {
+      const location = locationOf(call);
+      if (!location || location.$type === "SignalControlled" || !(call.IsArrival || call.IsDeparture)) return false;
+      const content = Number(categoryOf(train).Content) || 0;
+      if (!content) return true;
+      return Boolean(((content & 1) && location.HasPassengerExchange) || ((content & 2) && location.HasCargoExchange));
+    };
+
+    // Alla anrop per station, för möten och förbigångar.
+    const byStation = new Map();
+    for (const train of trains.values()) {
+      for (const call of callsOf(train)) {
+        const id = locationOf(call)?.Id;
+        if (id === undefined) continue;
+        if (!byStation.has(id)) byStation.set(id, []);
+        byStation.get(id).push({ call, train });
+      }
+    }
+
+    // Omloppen: vilka delar som börjar och slutar vid varje anrop, och vilka
+    // omlopp som håller samma del (samma två anrop).
+    const callIds = new Map();
+    const callId = (call) => { if (!callIds.has(call)) callIds.set(call, callIds.size + 1); return callIds.get(call); };
+    const partKey = (part) => `${callId(deref(part.From))}|${callId(deref(part.To))}`;
+    const holding = new Map();
+    const departing = new Map();
+    const arriving = new Map();
+    const add = (map, key, value) => { if (!map.has(key)) map.set(key, []); map.get(key).push(value); };
+    const schedules = list(plan.Schedules);
+    for (const schedule of schedules) {
+      for (const part of list(schedule.Parts)) {
+        const from = deref(part.From);
+        const to = deref(part.To);
+        if (!from || !to) continue;
+        add(holding, partKey(part), schedule.Id);
+        add(departing, from, { part, schedule });
+        add(arriving, to, { part, schedule });
+      }
+    }
+    const vehicles = list(plan.ScheduledObjects).map((object) => ({
+      object,
+      assignments: list(object.ScheduleAssignments).map((assignment) => ({
+        schedule: assignment.ScheduleId ?? deref(assignment.Schedule)?.Id,
+        sessions: Number(assignment.Sessions) || 0,
+        role: Number(assignment.Role) || 0,
+      })),
+    }));
+    const LOCO = 1, TRAINSET = 2, WAGONSET = 3, CARGO_FLOW = 4;
+    const isTraction = (object) => object.ObjectType === LOCO || object.ObjectType === TRAINSET;
+    const turnsWithoutRunaround = (object) => object.ObjectType === TRAINSET || (object.ObjectType === LOCO && object.IsReversibleTrain);
+    const vehicleName = (object) => text(object.ExternalId) || text(`${text((deref(object.Company) || companies.get(object.CompanyId) || {}).Signature)} ${String(object.Number ?? "").padStart(2, "0")} ${text(object.Class)}`);
+    const onSchedules = (ids) => vehicles.filter((entry) => entry.assignments.some((assignment) => ids.has(assignment.schedule)));
+    const assigned = (entry, ids, train) => sharedPart(
+      entry.assignments.filter((assignment) => ids.has(assignment.schedule)).reduce((all, assignment) => all | assignment.sessions, 0),
+      sessionsOf(train));
+    const working = (entries, ids, train) => entries
+      .map((entry) => ({ entry, when: qualifier(assigned(entry, ids, train)) }))
+      .filter((worked) => worked.when !== undefined);
+    const roleOf = (entry, ids) => (entry.assignments.find((assignment) => ids.has(assignment.schedule)) || {}).role || 0;
+    const moves = (object, scheduleId) => object.ObjectType === LOCO && object.IsReversibleTrain
+      && vehicles.some((entry) => entry.object.ObjectType === WAGONSET && entry.assignments.some((assignment) => assignment.schedule === scheduleId));
+    const otherTrack = (reference, call) => {
+      const track = deref(reference);
+      const own = trackOf(call);
+      if (!track || track === own || (own && track.Id === own.Id)) return null;
+      return (track.StationId ?? stationOf(track)?.Id) === locationOf(call)?.Id ? track : null;
+    };
+    const instruction = (kind, extra = {}, when = null) => ({ kind, ...extra, ...(when || {}) });
+    // Fordon med samma anvisning samma dagar delar en rad.
+    const together = (worked, kind, scheduleId, wagonset = false) => {
+      const groups = new Map();
+      for (const { entry, when } of worked) {
+        const movesTrain = moves(entry.object, scheduleId);
+        const key = JSON.stringify([movesTrain, when]);
+        if (!groups.has(key)) groups.set(key, { movesTrain, when, names: [] });
+        groups.get(key).names.push(vehicleName(entry.object));
+      }
+      return [...groups.values()].map(({ movesTrain, when, names }) =>
+        instruction(kind, movesTrain ? { train: true } : { vehicles: names, ...(wagonset ? { wagonset: true } : {}) }, when));
+    };
+    const joining = (layover, couple, use, worked, scheduleId, onArrival, wagonset = false) => {
+      if (layover === 1) return together(worked, onArrival ? "to_parking" : "from_parking", scheduleId, wagonset);
+      if (layover === 2) return together(worked, onArrival ? "lift_off" : "lift_on", scheduleId);
+      if (couple) {
+        // Ett motorvagnståg är tåget självt; det finns inget att koppla.
+        return worked.filter(({ entry }) => entry.object.ObjectType !== TRAINSET)
+          .map(({ entry, when }) => instruction(onArrival ? "uncouple" : "couple", { vehicles: [vehicleName(entry.object)] }, when));
+      }
+      if (use && !onArrival) return worked.map(({ entry, when }) => instruction("use", { vehicles: [vehicleName(entry.object)] }, when));
+      return [];
+    };
+    const trackNotes = (track, schedule, train, onArrival) => {
+      const own = working(onSchedules(new Set([schedule.Id])), new Set([schedule.Id]), train);
+      const movedWithTrain = own.some(({ entry }) => moves(entry.object, schedule.Id));
+      const where = { track: text(track.Number), ...(text(track.Usage) ? { usage: text(track.Usage) } : {}) };
+      const out = own.filter(({ entry }) => entry.object.ObjectType !== WAGONSET).map(({ entry, when }) =>
+        instruction(onArrival ? "put_on_track" : "fetch_from_track",
+          { ...(moves(entry.object, schedule.Id) ? { train: true } : { vehicles: [vehicleName(entry.object)] }), ...where }, when));
+      const wagons = movedWithTrain ? [] : own.filter(({ entry }) => entry.object.ObjectType === WAGONSET);
+      if (wagons.length) out.push(instruction(onArrival ? "shunt_wagons_to_arrival" : "shunt_wagons_to_departure"));
+      return out;
+    };
+    const partContext = (part, schedule) => {
+      const ids = new Set(holding.get(partKey(part)) || [schedule.Id]);
+      const train = trainOf(deref(part.From));
+      const here = onSchedules(ids);
+      return { ids, train, here, traction: here.filter((entry) => isTraction(entry.object)), wagons: here.filter((entry) => entry.object.ObjectType === WAGONSET) };
+    };
+    const needsRunaround = ({ ids, train, here, traction }) => {
+      if (!traction.length) return !train?.IsReversible;
+      const carries = list(train?.CargoFlows).length > 0 || here.some((entry) => [WAGONSET, CARGO_FLOW].includes(entry.object.ObjectType));
+      const roles = traction.map((entry) => ({ object: entry.object, role: roleOf(entry, ids) }));
+      if (!carries && roles.every(({ object }) => object.ObjectType === LOCO)) return false;
+      if (roles.some(({ role }) => role === 1)) return false;
+      const leading = roles.filter(({ role }) => role === 0);
+      if (leading.length && leading.every(({ object }) => turnsWithoutRunaround(object))) return false;
+      return !roles.some(({ object, role }) => role === 2 && turnsWithoutRunaround(object));
+    };
+    const scheduleHasTraction = (scheduleId) => vehicles.some((entry) => isTraction(entry.object) && entry.assignments.some((assignment) => assignment.schedule === scheduleId));
+    // Tågets egna fordon, för om tåget som helhet behöver rundgång där det vänder.
+    const trainNeeds = new Map();
+    const trainNeedsRunaround = (train) => {
+      if (trainNeeds.has(train)) return trainNeeds.get(train);
+      const ids = new Set();
+      for (const schedule of schedules) if (list(schedule.Parts).some((part) => trainOf(deref(part.From)) === train)) ids.add(schedule.Id);
+      const here = onSchedules(ids);
+      const result = needsRunaround({ ids, train, here, traction: here.filter((entry) => isTraction(entry.object)) });
+      trainNeeds.set(train, result);
+      return result;
+    };
+    const endsTractionPart = (call) => (arriving.get(call) || []).some(({ schedule }) => scheduleHasTraction(schedule.Id));
+    const reversesHere = (call, train) => {
+      const arrives = arrivesWay(call, train);
+      const leaves = leavesWay(call, train);
+      return Boolean(arrives && leaves && arrives !== leaves);
+    };
+    const reversesAtEnd = (part, schedule) => {
+      const ordered = list(schedule.Parts).sort((a, b) => (minutesOf(deref(a.From)?.Departure) ?? 0) - (minutesOf(deref(b.From)?.Departure) ?? 0));
+      const next = ordered[ordered.indexOf(part) + 1];
+      if (!next || locationOf(deref(next.From))?.Id !== locationOf(deref(part.To))?.Id) return false;
+      if ([1, 2].includes(deref(part.TractionOptions)?.ToLayover)) return false;
+      if ([1, 2].includes(deref(next.TractionOptions)?.FromLayover)) return false;
+      const arrives = arrivesWay(deref(part.To), trainOf(deref(part.To)));
+      const leaves = leavesWay(deref(next.From), trainOf(deref(next.From)));
+      return Boolean(arrives && leaves && arrives !== leaves);
+    };
+
+    // Nycklar: ett godståg som stannar där nyckeln hålls hämtar den före
+    // avgång om det sedan stannar på platsen nyckeln låser upp, och lämnar den
+    // vid ankomsten tillbaka.
+    const keyed = (call, train, step) => {
+      const { calls, index } = neighbours(call, train);
+      const holder = locationOf(call);
+      const out = [];
+      for (let at = index + step; at >= 0 && at < calls.length; at += step) {
+        const other = calls[at];
+        if (!isStop(other, train)) continue;
+        const location = locationOf(other);
+        if (!location || location === holder || location.Id === holder?.Id) break;
+        const key = deref(location.LockKey);
+        const heldAt = deref(key?.HeldAt);
+        if (key && heldAt && (heldAt === holder || heldAt.Id === holder?.Id)) {
+          out.push({ ...(text(key.Name) ? { key: text(key.Name) } : {}), place: text(location.Name) });
+        }
+      }
+      return out;
+    };
+    const keyInstructions = (call, train, pickUp) => {
+      if (!(Number(categoryOf(train).Content) & 2) || !isStop(call, train)) return [];
+      return keyed(call, train, pickUp ? 1 : -1).map((item) => instruction(pickUp ? "pick_up_key" : "leave_key", item));
+    };
+
+    const departureInstructions = (call, train) => {
+      const out = [...keyInstructions(call, train, true)];
+      for (const { part, schedule } of departing.get(call) || []) {
+        const context = partContext(part, schedule);
+        const options = deref(part.TractionOptions);
+        const wagonOptions = deref(part.WagonSetOptions);
+        const other = otherTrack(part.FromTrack, call);
+        if (options && !other) out.push(...joining(options.FromLayover, options.HasCoupleNote, options.DisplayUseNote, working(context.traction, context.ids, context.train), schedule.Id, false));
+        if (wagonOptions && !other) out.push(...joining(wagonOptions.FromLayover, wagonOptions.HasCoupleNote, false, working(context.wagons, context.ids, context.train), schedule.Id, false, true));
+        if (other) out.push(...trackNotes(other, schedule, context.train, false));
+      }
+      if (call.PushWagons && !isEnd(call, train)) out.push(instruction("push_wagons"));
+      return out;
+    };
+
+    const arrivalInstructions = (call, train, readerSessions) => {
+      const out = [];
+      const location = locationOf(call);
+      const stop = isStop(call, train);
+      const arrival = minutesOf(call.Arrival);
+      const departure = minutesOf(call.Departure);
+      if (!stop && arrival !== departure) out.push(instruction("no_exchange"));
+      out.push(...keyInstructions(call, train, false));
+      if (stop && tickets && (Number(categoryOf(train).Content) & 1) && location?.IsPassengerInterchange && location?.HasPassengerExchange) {
+        out.push(instruction("exchange_passengers"));
+      }
+      // Möten och förbigångar, inte där stationen döljer dem och inte vid
+      // tågens första eller sista station (där står de, de kör inte).
+      if (location && !location.HideMeets && !isEnd(call, train)) {
+        const way = directionInto(call, train);
+        const found = { crosses: [], overtakes: [], overtaken_by: [] };
+        for (const { call: other, train: otherTrain } of way ? byStation.get(location.Id) || [] : []) {
+          if (otherTrain === train || isEnd(other, otherTrain)) continue;
+          const otherWay = directionInto(other, otherTrain);
+          if (!otherWay) continue;
+          const [a1, d1, a2, d2] = [arrival, departure, minutesOf(other.Arrival), minutesOf(other.Departure)];
+          if ([a1, d1, a2, d2].some((value) => value === null)) continue;
+          const kind = otherWay !== way ? (a2 < d1 && d2 > a1 ? "crosses" : null)
+            : a2 < a1 && d2 > d1 ? "overtakes"
+            : a1 < a2 && d1 > d2 ? "overtaken_by" : null;
+          if (!kind) continue;
+          const shared = sessionsOf(train) & sessionsOf(otherTrain) & SESSION_BITS;
+          if (!shared) continue;
+          const when = shared === (readerSessions & SESSION_BITS) ? null : qualifier(shared);
+          if (when === undefined) continue;
+          found[kind].push({ train: otherTrainName(otherTrain), from: hhmm(Math.max(a1, a2)), to: hhmm(Math.min(d1, d2)), ...(when || {}) });
+        }
+        for (const [kind, meets] of Object.entries(found)) {
+          if (!meets.length) continue;
+          meets.sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to) || a.train.localeCompare(b.train, "sv", { numeric: true }));
+          out.push(instruction(kind, { meets }));
+        }
+      }
+      for (const { part, schedule } of arriving.get(call) || []) {
+        const context = partContext(part, schedule);
+        const options = deref(part.TractionOptions);
+        const wagonOptions = deref(part.WagonSetOptions);
+        const other = otherTrack(part.ToTrack, call);
+        const traction = working(context.traction, context.ids, context.train);
+        if (options && !other) out.push(...joining(options.ToLayover, options.HasUncoupleNote, false, traction, schedule.Id, true));
+        if (wagonOptions && !other) out.push(...joining(wagonOptions.ToLayover, wagonOptions.HasUncoupleNote, false, working(context.wagons, context.ids, context.train), schedule.Id, true, true));
+        if (other) out.push(...trackNotes(other, schedule, context.train, true));
+        if (options || scheduleHasTraction(schedule.Id)) {
+          const needed = needsRunaround(context);
+          const turn = Boolean(options?.TurnLoco) && needed;
+          const mode = Number(options?.Runaround) || 0;
+          const circulate = needed && (mode === 2 ? true : mode === 1 ? false : reversesAtEnd(part, schedule));
+          const kind = turn && circulate ? "turn_and_circulate" : turn ? "turn" : circulate ? "circulate" : null;
+          if (kind) {
+            const when = traction.length ? qualifier(sharedPart(traction.reduce((all, { entry }) => all | (assigned(entry, context.ids, context.train) ?? SESSION_BITS), 0), sessionsOf(context.train))) : null;
+            out.push(instruction(kind, {}, when === undefined ? null : when));
+          }
+        }
+      }
+      // Rundgång där tåget vänder på vägen, och det som står på anropet.
+      if (trainNeedsRunaround(train)) {
+        const turning = out.filter((item) => ["turn", "circulate", "turn_and_circulate"].includes(item.kind));
+        const fromParts = turning.some((item) => item.kind !== "turn");
+        const mode = Number(call.Runaround) || 0;
+        const circulate = mode === 2 ? true : mode === 1 ? false
+          : fromParts || (reversesHere(call, train) && !endsTractionPart(call));
+        if (call.TurnLoco || circulate !== fromParts) {
+          const turn = Boolean(call.TurnLoco) || turning.some((item) => item.kind.startsWith("turn"));
+          const kind = turn && circulate ? "turn_and_circulate" : turn ? "turn" : circulate ? "circulate" : null;
+          const when = turning.find((item) => item.days || item.sessions) || null;
+          const rest = out.filter((item) => !turning.includes(item));
+          out.length = 0;
+          out.push(...rest);
+          if (kind) out.push(instruction(kind, {}, when ? (when.days ? { days: when.days } : { sessions: when.sessions }) : null));
+        }
+      }
+      return out;
+    };
+
+    // Samma anvisning för olika fordon olika dagar sägs en gång, med dagarna
+    // tillsammans; täcker de hela perioden behövs inga dagar alls.
+    const unique = (items) => {
+      const groups = new Map();
+      for (const item of items) {
+        const { days, sessions, ...rest } = item;
+        const key = JSON.stringify(rest);
+        if (!groups.has(key)) groups.set(key, { rest, sets: [] });
+        groups.get(key).sets.push(days || sessions || null);
+      }
+      return [...groups.values()].map(({ rest, sets }) => {
+        if (sets.some((set) => set === null)) return rest;
+        const union = [...new Set(sets.flat())].sort((a, b) => a - b);
+        return union.length >= period ? rest : { ...rest, [useDays ? "days" : "sessions"]: union };
+      });
     };
 
     const warnings = [];
     const duties = [];
     for (const raw of list(plan.DriverDuties)) {
       const number = text(raw.Identity ?? raw.Number ?? raw.Id);
+      const readerSessions = sessionsOf(raw);
       const events = [];
       const trainsOut = [];
       const classes = new Set();
-      let firstTrain = null;
-      let lastTrain = null;
+      let firstCall = null;
+      let lastCall = null;
       for (const part of list(raw.Parts)) {
         const from = deref(part.From);
         const to = deref(part.To);
         const train = trainOf(from);
         if (!from || !to || !train) continue;
-        for (const vehicle of vehicles.get(part.ScheduleId ?? deref(part.Schedule)?.Id) || []) classes.add(vehicle);
+        const scheduleId = part.ScheduleId ?? deref(part.Schedule)?.Id;
+        for (const entry of vehicles) {
+          if (entry.object.Class && entry.assignments.some((assignment) => assignment.schedule === scheduleId)) classes.add(text(entry.object.Class));
+        }
         // Ett tåg i taget; en del som slutar på ett annat tåg (tåget byter
         // nummer) tar resten av det första och början av det andra.
         const segments = [[train, from.Sequence, Infinity]];
@@ -149,43 +482,45 @@
           const calls = callsOf(segmentTrain).filter((call) => call.Sequence >= first && call.Sequence <= last);
           if (!calls.length) continue;
           const label = labelOf(segmentTrain);
-          firstTrain = firstTrain || segmentTrain;
-          lastTrain = segmentTrain;
-          const name = (call) => text(stationOf(trackOf(call))?.Name);
-          trainsOut.push({
-            number: label, from: name(calls[0]), to: name(calls[calls.length - 1]),
-            ...(Number.isInteger(segmentTrain.MaxSpeed) && segmentTrain.MaxSpeed > 0 ? { vmax: segmentTrain.MaxSpeed } : {}),
-          });
-          // Delens FromTrack/ToTrack är uppställningsspåret där fordonet hämtas
-          // eller lämnas, inte avgångs- eller ankomstspåret.
-          const fromTrack = segmentTrain === train ? deref(part.FromTrack) : null;
-          const toTrack = segmentTrain === (other || train) ? deref(part.ToTrack) : null;
-          const where = (track) => `spår ${text(track.Number)}${text(track.Usage) ? ` (${text(track.Usage)})` : ""}`;
+          const name = (call) => text(locationOf(call)?.Name);
+          firstCall = firstCall || calls[0];
+          lastCall = calls[calls.length - 1];
+          const previous = trainsOut[trainsOut.length - 1];
+          if (previous && previous.number === label && previous.to === name(calls[0])) {
+            previous.to = name(calls[calls.length - 1]); // samma tåg vidare i nästa del
+          } else {
+            trainsOut.push({
+              number: label, from: name(calls[0]), to: name(calls[calls.length - 1]),
+              ...(Number.isInteger(segmentTrain.MaxSpeed) && segmentTrain.MaxSpeed > 0 ? { vmax: segmentTrain.MaxSpeed } : {}),
+            });
+          }
           calls.forEach((call, index) => {
             const track = trackOf(call);
-            const event = { station: text(stationOf(track)?.Name || name(call)), train: label };
+            const event = { station: name(call), train: label };
             if (track?.Number !== undefined && text(track.Number)) event.track = text(track.Number);
             const arrival = clock(call.Arrival);
             const departure = clock(call.Departure);
-            if (calls.length === 1) {
-              // Ett pass på en station, till exempel växling: hela tiden där.
-              Object.assign(event, arrival !== null && departure !== null && arrival !== departure
-                ? { kind: "stop", arrival: hhmm(arrival), departure: hhmm(departure) }
-                : { kind: "pass", time: hhmm(departure ?? arrival) });
-            } else if (index === 0) {
+            if (arrival === null && departure === null) return;
+            const single = calls.length === 1;
+            const firstOfPart = index === 0 && !single;
+            const lastOfPart = index === calls.length - 1 && !single;
+            const stop = isStop(call, segmentTrain);
+            if (firstOfPart) {
               Object.assign(event, { kind: "departure", time: hhmm(departure ?? arrival) });
-            } else if (index === calls.length - 1) {
+            } else if (lastOfPart) {
               Object.assign(event, { kind: "arrival", time: hhmm(arrival ?? departure) });
-            } else if (arrival !== null && departure !== null && arrival !== departure) {
+            } else if (arrival !== null && departure !== null && (stop || arrival !== departure)) {
               Object.assign(event, { kind: "stop", arrival: hhmm(arrival), departure: hhmm(departure) });
             } else {
               Object.assign(event, { kind: "pass", time: hhmm(departure ?? arrival) });
             }
-            const notes = notesOf(call);
-            if (index === 0 && fromTrack) notes.unshift(`Före avgång: hämta fordonet från ${where(fromTrack)}`);
-            if (index === calls.length - 1 && toTrack) notes.push(`Efter ankomst: ställ fordonet på ${where(toTrack)}`);
+            const instructions = unique([
+              ...(firstOfPart ? [] : arrivalInstructions(call, segmentTrain, readerSessions)),
+              ...(lastOfPart ? [] : departureInstructions(call, segmentTrain)),
+            ]);
+            if (instructions.length) event.instructions = instructions;
+            const notes = list(call.Notes).map(noteText).filter(Boolean);
             if (notes.length) event.notes = notes;
-            if (departure === null && arrival === null) return;
             events.push(event);
           });
         }
@@ -194,19 +529,20 @@
         warnings.push(number ? `Tjänst ${number} har inga tåg med tider och togs inte med` : "En tjänst utan nummer togs inte med");
         continue;
       }
-      // Förberedelse och avslutning: tjänstens egna tider om planen har dem,
-      // annars tågslagets standard före första och efter sista tåget.
-      const firstCategory = categories.get(firstTrain?.CategoryId) || {};
-      const lastCategory = categories.get(lastTrain?.CategoryId) || {};
+      // Tjänsten börjar vid första tågets ankomsttid (då föraren infinner sig)
+      // och slutar vid sista tågets avgångstid, om planen inte anger egna tider.
+      const firstAt = clock(firstCall.Arrival) ?? clock(firstCall.Departure);
+      const lastAt = clock(lastCall.Departure) ?? clock(lastCall.Arrival);
+      const startAt = clock(raw.OverriddenStartTime) ?? firstAt;
+      const endAt = clock(raw.OverriddenEndTime) ?? lastAt;
       const firstEvent = events[0];
       const lastEvent = events[events.length - 1];
-      const firstAt = clock(firstEvent.time ?? firstEvent.arrival);
-      const lastAt = clock(lastEvent.time ?? lastEvent.departure);
-      const startAt = clock(raw.OverriddenStartTime) ?? (firstAt - (Number(firstCategory.DefaultPreparationMinutes) || 0));
-      const endAt = clock(raw.OverriddenEndTime) ?? (lastAt + (Number(lastCategory.DefaultFinishingMinutes) || 0));
-      if (hhmm(startAt) !== hhmm(firstAt)) events.unshift({ kind: "duty_start", time: hhmm(startAt), station: firstEvent.station, notes: ["Förberedelse"] });
-      if (hhmm(endAt) !== hhmm(lastAt)) events.push({ kind: "duty_end", time: hhmm(endAt), station: lastEvent.station, notes: ["Avslutning"] });
-      const company = companies.get(raw.CompanyId) || companies.get(firstTrain?.CompanyId) || companies.get(firstCategory.CompanyId) || {};
+      const eventStart = clock(firstEvent.time ?? firstEvent.arrival);
+      const eventEnd = clock(lastEvent.time ?? lastEvent.departure);
+      if (hhmm(startAt) !== hhmm(eventStart)) events.unshift({ kind: "duty_start", time: hhmm(startAt), station: firstEvent.station, notes: ["Förberedelse"] });
+      if (hhmm(endAt) !== hhmm(eventEnd)) events.push({ kind: "duty_end", time: hhmm(endAt), station: lastEvent.station, notes: ["Avslutning"] });
+      const firstTrain = trainOf(firstCall);
+      const company = companies.get(raw.CompanyId) || companyOf(firstTrain) || {};
       const vmax = trainsOut.map((item) => item.vmax).filter(Boolean);
       duties.push({
         number,
