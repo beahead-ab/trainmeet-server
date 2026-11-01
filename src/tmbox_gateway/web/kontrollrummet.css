@@ -74,7 +74,7 @@ dialog.kr-dialog, dialog.admin-modal, .kr-pop, .kr-asides {
 }
 
 /* ── Knappar, piller, taggar ────────────────────────────────────────── */
-.kr-btn, .kr-pill, .kr-ibtn, .kr-select, .kr-search { box-sizing: border-box; }
+.kr-btn, .kr-pill, .kr-ibtn, .kr-select { box-sizing: border-box; }
 .kr-btn { height: 34px; min-height: 34px; padding: 0 13px; border-radius: var(--kr-r-sm); border: 1px solid var(--kr-line-2); background: var(--kr-panel-2); color: var(--kr-ink); font: 600 13px/1 var(--kr-sans); display: inline-flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap; box-shadow: none; text-decoration: none; }
 .kr-btn:hover { background: var(--kr-panel-3); color: var(--kr-ink); }
 .kr-btn.primary { background: var(--kr-blue); border-color: var(--kr-blue); color: var(--kr-blue-ink); }
@@ -83,8 +83,7 @@ dialog.kr-dialog, dialog.admin-modal, .kr-pop, .kr-asides {
 .kr-btn.danger:hover { background: var(--kr-red-soft); }
 .kr-btn.sm { height: 28px; min-height: 28px; padding: 0 10px; font-size: 12.5px; }
 .kr-btn:disabled { opacity: .38; cursor: default; }
-.kr-btn:focus-visible, .kr-ibtn:focus-visible, .kr-textbtn:focus-visible, .kr-linkbtn:focus-visible, .kr-rowlink:focus-visible, .kr-ev:focus-visible, .kr-select:focus-visible,
-.kr-search input:focus-visible { outline: 2px solid var(--kr-blue); outline-offset: 2px; }
+.kr-btn:focus-visible, .kr-ibtn:focus-visible, .kr-textbtn:focus-visible, .kr-linkbtn:focus-visible, .kr-rowlink:focus-visible, .kr-ev:focus-visible, .kr-select:focus-visible { outline: 2px solid var(--kr-blue); outline-offset: 2px; }
 .kr-ibtn { width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: var(--kr-r-sm); border: 1px solid transparent; background: transparent; color: var(--kr-ink-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: none; }
 .kr-ibtn:hover { background: var(--kr-panel-3); color: var(--kr-ink); }
 .kr-pill { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--kr-line-2); background: var(--kr-panel-2); color: var(--kr-ink-2); font: 600 12.5px/1 var(--kr-sans); white-space: nowrap; box-shadow: none; min-height: 0; text-decoration: none; }
@@ -176,18 +175,6 @@ body[data-mode="kor"] #app-chrome #app-clock { display: none; }
 #app-chrome .kr-ico-sun, #app-chrome .kr-ico-moon { display: none; }
 :root:not([data-kr-theme="light"]) #app-chrome .kr-ico-sun { display: block; }
 :root[data-kr-theme="light"] #app-chrome .kr-ico-moon { display: block; }
-
-/* Sök i sidhuvudet */
-.kr-search { position: relative; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border: 1px solid var(--kr-line-2); border-radius: var(--kr-r-sm); background: var(--kr-panel-2); color: var(--kr-mute); min-width: 240px; }
-#app-chrome .kr-search input { border: 0; background: transparent; outline: 0; width: 100%; min-height: 0; padding: 0; color: var(--kr-ink); font: 13px var(--kr-sans); border-radius: 0; box-shadow: none; }
-#app-chrome .kr-search input::placeholder { color: var(--kr-mute); }
-#app-chrome .kr-search input:focus, #app-chrome .kr-search input:focus-visible { outline: 0; }
-.kr-search:focus-within { border-color: var(--kr-blue); }
-.kr-search-results { position: absolute; left: 0; right: 0; top: 40px; margin: 0; padding: 6px; list-style: none; z-index: 40; background: var(--kr-panel); border: 1px solid var(--kr-line-2); border-radius: var(--kr-r-sm); box-shadow: var(--kr-shadow); max-height: 60vh; overflow: auto; color: var(--kr-ink); min-width: 280px; }
-.kr-search-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-.kr-search-item.on, .kr-search-item:hover { background: var(--kr-panel-3); }
-.kr-search-item .kr-kind { font-size: 11px; color: var(--kr-faint); text-transform: uppercase; letter-spacing: .06em; }
-.kr-search-empty { padding: 8px 10px; color: var(--kr-mute); font-size: 12.5px; }
 
 /* ── Start ──────────────────────────────────────────────────────────────
  * Tills app.js har valt vy (setMode) visas inget av appen: annars syntes
@@ -836,11 +823,10 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
  * vänsterkant. På en telefon blir knappen en ikon och loggan står utan text. */
 #app-chrome .screen-menu__icon { display: none; }
 /* Mellan 900 och 1200 px trängdes träffens namn ihop till ingenting under
- * versionsmärket. Sökfältet ger nu efter först, och namnet behåller en bredd. */
+ * versionsmärket. Namnet behåller nu en bredd. */
 @media (min-width: 901px) {
   #app-chrome .tm-switch { flex: 0 0 auto; min-width: 96px; max-width: 30vw; }
   #app-chrome #app-meet-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #app-chrome .kr-search { flex: 0 4 240px; min-width: 140px; }
 }
 /* Där raden är full säger statusmärket bara något när det finns en nyare
  * version eller ingen kontakt, som på telefonen. "Version 9" får vika. */
@@ -871,8 +857,6 @@ body:has(#login:not(.hidden)) { color-scheme: dark; }
   #app-chrome #logout { order: 7; }
   #app-chrome #app-clock { order: 10; }
   #app-chrome #header-cloud-status { order: 11; }
-  #app-chrome .kr-search { order: 13; flex: 1 1 160px; min-width: 0; }
-  #app-chrome .kr-search input { text-overflow: ellipsis; }
 }
 @media (max-width: 600px) {
   body:not([data-signed-in="no"]) #app-chrome .tm-logo__lines { display: none; }
