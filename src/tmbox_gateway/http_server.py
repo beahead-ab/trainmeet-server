@@ -24,7 +24,7 @@ from importlib.resources import files
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 from uuid import uuid4
 
 from . import backup, pi_network
@@ -39,6 +39,7 @@ from .central_sync import (
     CentralRuntimeManifest,
     CentralSyncError,
     canonical_runtime_url,
+    fetch_driver_part,
     fetch_linked_runtime,
     fetch_runtime_download,
 )
@@ -54,7 +55,7 @@ from .driver import (
     meet_seconds,
     normalize_duty,
 )
-from .driver_documents import MAX_PDF_BYTES, DriverDocuments
+from .driver_documents import DriverDocuments
 from .cloud_live import LiveChannel
 from .identity import (
     AdminAccessError,
@@ -181,6 +182,23 @@ def _device_state(age: float, heard: bool) -> str:
 #: tidsmaskinen går att hitta.
 BACKUP_KINDS = {"tidsmaskinen": "tidsmaskin", "nollställning": "nollstallning", "ny startdag": "startdag", "nytt dygn": "nytt-dygn",
                 "lokala ändringar kastas": "lokala-andringar", "Cloud-versionen tas": "cloud"}
+
+
+_CLOUD_PART = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _cloud_source(raw: Any) -> dict[str, Any] | None:
+    """Förlagan för en tjänst ur Clouds köruppdrag: sidorna och PDF-delen
+    (``source.part.sha256``) som servern hämtar med sin serverkoppling."""
+    source = raw.get("source") if isinstance(raw, dict) else None
+    part = source.get("part") if isinstance(source, dict) else None
+    sha = str(part.get("sha256") or "") if isinstance(part, dict) else ""
+    if not _CLOUD_PART.match(sha):
+        return None
+    pages = source.get("pages")
+    valid = (isinstance(pages, list) and len(pages) == 2
+             and all(isinstance(page, int) and not isinstance(page, bool) and page > 0 for page in pages))
+    return {"pages": list(pages) if valid else [], "part": True, "cloud": sha}
 
 
 def announces(*topics):
@@ -477,6 +495,12 @@ class TrainMeetHTTPApplication:
         # databas som kontona (och därmed i säkerhetskopiorna).
         self.drivers = DriverStore(identities.path)
         self.driver_documents = DriverDocuments(identities.path)
+        # Köruppdragen från Cloud: tjänsternas egna sidor hämtas med
+        # serverkopplingen, i bakgrunden en gång per publicering och annars när
+        # en förare öppnar dem. Utbytbar i testerna.
+        self.driver_part_fetcher = fetch_driver_part
+        self._driver_parts_lock = threading.Lock()
+        self._driver_parts_state: dict[str, Any] = {"done_for": None, "running": False, "failed_for": None, "failed_at": 0.0}
 
         if self.runtime_store is not None and self.runtime_store.central_url():
             saved_url = self.runtime_store.central_url() or ""
@@ -901,15 +925,19 @@ class TrainMeetHTTPApplication:
         return str(publication.meet_id), {"id": publication.meet_id, "name": publication.meet_name}, publication
 
     def driver_catalog(self) -> list[dict[str, Any]]:
-        """Förartjänsterna förarna väljer bland: köruppdragen som gjorts
-        tillgängliga under Inställningar → Lokförare, tjänsterna i träffens
-        paket från Cloud och övningstjänsten."""
+        """Förartjänsterna förarna väljer bland: köruppdragen i träffens paket
+        från Cloud och övningstjänsten. Köruppdrag som lagts in på servern
+        före Cloud (4.20–4.21) gäller bara så länge träffen inte har egna."""
         meet_key, _, publication = self._driver_meet()
-        duties: list[dict[str, Any]] = list(self.driver_documents.published_duties(meet_key))
-        for raw in (publication.payload.get("driver_duties") or []) if publication is not None else []:
+        cloud = (publication.payload.get("driver_duties") or []) if publication is not None else []
+        duties: list[dict[str, Any]] = [] if cloud else list(self.driver_documents.published_duties(meet_key))
+        for raw in cloud:
             duty = normalize_duty(raw)
             if duty is not None:
                 duty["demo"] = False
+                source = _cloud_source(raw)
+                if source:
+                    duty["source"] = source
                 duties.append(duty)
         demo = normalize_duty(DEMO_DUTY)
         if demo is not None:
@@ -1082,12 +1110,107 @@ class TrainMeetHTTPApplication:
         return path
 
     def driver_duty_pdf(self, duty_id: str) -> Path:
-        """Bara tjänstens egna sidor ur förlagan, för föraren."""
+        """Bara tjänstens egna sidor ur förlagan, för föraren: ur ett
+        köruppdrag som lagts in här, eller ur Clouds köruppdrag (hämtas om de
+        inte redan finns på servern)."""
         meet_key, _, _ = self._driver_meet()
         path = self.driver_documents.part_path(duty_id, meet_key)
         if path is None:
+            duty = next((item for item in self.driver_catalog() if item["id"] == duty_id), None)
+            sha = (duty or {}).get("source", {}).get("cloud")
+            if sha:
+                try:
+                    path = self._cloud_driver_part(sha)
+                except (CentralSyncError, DriverError, OSError):
+                    path = None  # Cloud nås inte nu; föraren kan försöka igen
+        if path is None:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "document_not_found", "Tjänstens sidor finns inte på servern")
         return path
+
+    def _cloud_driver_part(self, sha: str) -> Path | None:
+        """En tjänsts egna sidor från Cloud: på servern om de finns, annars
+        hämtade med serverkopplingen."""
+        path = self.driver_documents.cloud_part_path(sha)
+        if path is not None:
+            return path
+        token = self.runtime_store.link_token() if self.runtime_store is not None else None
+        if not token:
+            return None
+        url = canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url)
+        return self.driver_documents.store_cloud_part(sha, self.driver_part_fetcher(token, url, sha))
+
+    @staticmethod
+    def _cloud_parts(payload: dict[str, Any] | None) -> list[str]:
+        found = (_cloud_source(raw) for raw in (payload or {}).get("driver_duties") or [])
+        return sorted({source["cloud"] for source in found if source})
+
+    def sync_driver_parts(self, publication: Any = None, *, package: dict[str, Any] | None = None) -> dict[str, int]:
+        """Hämtar de tjänstesidor från Cloud som saknas, för den aktiva träffen
+        eller för ett paket som just kommit från Cloud. Ett fel stoppar inte de
+        andra; det som inte kom fram försöks igen."""
+        if package is None:
+            publication = publication if publication is not None else (
+                self.runtime_store.active() if self.runtime_store is not None else None)
+        payload = package if package is not None else (publication.payload if publication is not None else None)
+        parts = self._cloud_parts(payload)
+        fetched = failed = 0
+        for sha in parts:
+            if self.driver_documents.cloud_part_path(sha) is not None:
+                continue
+            try:
+                fetched += self._cloud_driver_part(sha) is not None
+            except (CentralSyncError, DriverError, OSError):
+                failed += 1
+        missing = sum(1 for sha in parts if self.driver_documents.cloud_part_path(sha) is None)
+        return {"parts": len(parts), "fetched": fetched, "failed": failed, "missing": missing}
+
+    def fetch_driver_parts_soon(self, package: dict[str, Any]) -> None:
+        """Hämtar tjänstesidorna för ett paket som just kommit från Cloud, i
+        bakgrunden medan servern är uppkopplad, så att föraren har dem också
+        utan internet på träffen. Gäller också en version som väntar på att
+        aktiveras."""
+        if not self._cloud_parts(package):
+            return
+
+        def work() -> None:
+            try:
+                self.sync_driver_parts(package=package)
+            except Exception:  # noqa: BLE001 - bakgrund: hämtas igen när sidorna behövs
+                LOGGER.warning("Tjänstesidorna från Cloud kunde inte hämtas", exc_info=True)
+
+        threading.Thread(target=work, name="driver-parts-package", daemon=True).start()
+
+    def _prefetch_driver_parts(self) -> None:
+        """Startar hämtningen av tjänstesidorna i bakgrunden när den aktiva
+        träffen har köruppdrag från Cloud som saknas här. En gång per
+        publicering; misslyckas den (ingen anslutning) försöks den igen efter en minut."""
+        if self.runtime_store is None:
+            return
+        publication = self.runtime_store.active()
+        if publication is None or not publication.payload.get("driver_duties"):
+            return
+        state, publication_id = self._driver_parts_state, publication.publication_id
+        with self._driver_parts_lock:
+            if (state["done_for"] == publication_id or state["running"]
+                    or (state["failed_for"] == publication_id and time.monotonic() - state["failed_at"] < 60)):
+                return
+            state["running"] = True
+
+        def work() -> None:
+            done = False
+            try:
+                done = self.sync_driver_parts(publication)["missing"] == 0
+            except Exception:  # noqa: BLE001 - bakgrund: nästa försök kommer om en minut
+                LOGGER.warning("Tjänstesidorna från Cloud kunde inte hämtas", exc_info=True)
+            finally:
+                with self._driver_parts_lock:
+                    state["running"] = False
+                    if done:
+                        state["done_for"] = publication_id
+                    else:
+                        state.update(failed_for=publication_id, failed_at=time.monotonic())
+
+        threading.Thread(target=work, name="driver-parts", daemon=True).start()
 
     # ── Inställningar → Lokförare (#225) ────────────────────────────────
     def driver_admin_overview(self, client: PairedClient) -> dict[str, Any]:
@@ -1114,30 +1237,34 @@ class TrainMeetHTTPApplication:
         drivers.sort(key=lambda item: (item["duty_number"] is None, item["name"].lower()))
         documents = [document | {"current": document["meet_key"] == meet_key}
                      for document in self.driver_documents.documents()]
+        self._prefetch_driver_parts()
         return {
             "meet": meet, "path": "/lokforaren/", "drivers": drivers, "documents": documents,
-            "limits": {"pdf_bytes": MAX_PDF_BYTES},
+            "cloud": self._cloud_duties_summary(),
             "checkin_visible_seconds": int(CHECKIN_VISIBLE.total_seconds()),
             "checkin_fade_seconds": int(CHECKIN_FADE.total_seconds()),
         }
 
-    def driver_admin_create(self, client: PairedClient, payload: dict[str, Any]) -> dict[str, Any]:
-        """Ett köruppdrag ur planeringsfilens tjänster (lästa i webbläsaren)."""
-        self._require_admin(client)
-        meet_key, _, _ = self._driver_meet()
-        if meet_key == "none":
-            raise HTTPAPIError(HTTPStatus.CONFLICT, "meet_required", "Välj träff under Träff och Cloud innan du lägger in köruppdrag")
-        return {"document": self.driver_documents.create(payload, meet_key=meet_key, user_id=client.admin_user_id)}
-
-    def driver_admin_attach_pdf(self, client: PairedClient, document_id: str, stream: Any, length: int,
-                                filename: str) -> dict[str, Any]:
-        self._require_admin(client)
-        return {"document": self.driver_documents.attach_pdf(document_id, stream, length, filename=filename)}
-
-    def driver_admin_store_part(self, client: PairedClient, document_id: str, number: str, stream: Any,
-                                length: int) -> dict[str, Any]:
-        self._require_admin(client)
-        return {"part": self.driver_documents.store_part(document_id, number, stream, length)}
+    def _cloud_duties_summary(self) -> dict[str, Any] | None:
+        """Köruppdragen som kom med träffen från Cloud, för Inställningar.
+        None när servern inte kör någon träff från Cloud."""
+        publication = self.runtime_store.active() if self.runtime_store is not None else None
+        if publication is None:
+            return None
+        duties = [raw for raw in publication.payload.get("driver_duties") or [] if normalize_duty(raw) is not None]
+        parts = self._cloud_parts(publication.payload)
+        central = canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url)
+        origin = urlparse(central)
+        meet = publication.payload.get("meet") or {}
+        slug = str(meet.get("slug") or meet.get("id") or "")
+        return {
+            "meet": publication.meet_name, "published_at": publication.published_at,
+            "duties": len(duties), "with_pages": sum(1 for raw in duties if (raw.get("source") or {}).get("pages")),
+            "parts": len(parts), "parts_here": sum(1 for sha in parts if self.driver_documents.cloud_part_path(sha)),
+            "linked": bool(self.runtime_store.link_token()),
+            "url": (f"{origin.scheme}://{origin.netloc}/traff/{quote(slug)}/lokforare"
+                    if origin.scheme in {"http", "https"} and origin.netloc and slug else None),
+        }
 
     def driver_admin_duty_pdf(self, client: PairedClient, duty_id: str) -> Path:
         self._require_admin(client)
@@ -1162,8 +1289,6 @@ class TrainMeetHTTPApplication:
 
     def driver_admin_action(self, client: PairedClient, document_id: str, action: str, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_admin(client)
-        if action == "pages":
-            return {"document": self.driver_documents.set_pages(document_id, payload)}
         if action == "publish":
             if not isinstance(payload.get("published"), bool):
                 raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_published", "Ange om köruppdraget ska vara tillgängligt")
@@ -2121,6 +2246,7 @@ class TrainMeetHTTPApplication:
         calendar = self.calendar_state() if publication is not None and not (selected and selected["region"] == "us") else None
         trains, services, manual = self._identified(publication, timetable)
         drivers = self._map_drivers() if not (selected and selected["region"] == "us") else []
+        self._prefetch_driver_parts()
         return {
             "protocol_version": 1,
             "revision": self.engine.revision,
@@ -5684,10 +5810,6 @@ class TrainMeetHTTPApplication:
             "/assets/about-view.js": "about-view.js",
             "/assets/settings.js": "settings.js",
             "/assets/lokforare-admin.js": "lokforare-admin.js",
-            "/assets/lokforaren-koruppdrag.js": "lokforaren-koruppdrag.js",
-            "/assets/pdfjs/pdf.min.mjs": "pdfjs/pdf.min.mjs",
-            "/assets/pdfjs/pdf.worker.min.mjs": "pdfjs/pdf.worker.min.mjs",
-            "/assets/pdflib/pdf-lib.min.js": "pdflib/pdf-lib.min.js",
             "/assets/pi-network.js": "pi-network.js",
             "/assets/tellurian-settings.js": "tellurian-settings.js",
             "/assets/tellurian-messages.js": "tellurian-messages.js",
@@ -6180,9 +6302,14 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             if path.startswith("/tmbox-lab/"):
                 from .terminal16_embedded import serve
                 return serve(self, "POST")
-            if re.fullmatch(r"/v1/driver-admin/documents/[0-9a-f]{12}/(pdf|parts)", path):
-                self._driver_admin_upload(path.split("/")[4], part=path.endswith("/parts"))
-                return
+            if path == "/v1/driver-admin/documents" or re.fullmatch(r"/v1/driver-admin/documents/[0-9a-f]{12}/(pdf|parts|pages)", path):
+                # Köruppdragen läggs in i Cloud (en träff är en träff); här
+                # fanns uppladdningen i 4.20–4.21. Kroppen läses aldrig.
+                self._driver_admin_same_origin()
+                self.server.application._require_admin(self._authenticated_client())
+                self.close_connection = True
+                raise HTTPAPIError(HTTPStatus.GONE, "cloud_authoring_only",
+                                   "Köruppdragen läggs in i TrainMeet Cloud, under Lokförare på träffen.")
             payload = self._read_json()
             if path.startswith("/v1/driver/"):
                 self._driver_post(path, payload)
@@ -6797,9 +6924,9 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                                                 "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")})
             elif path == "/v1/driver/duties":
                 self._send_json(HTTPStatus.OK, application.driver_duties(parse_qs(query).get("q", [""])[0]))
-            elif re.fullmatch(r"/v1/driver/duties/k[0-9a-f]{12}-[0-9a-z-]+\.pdf", path):
+            elif re.fullmatch(r"/v1/driver/duties/[0-9A-Za-z][0-9A-Za-z-]{0,80}\.pdf", path):
                 duty_id = path.removeprefix("/v1/driver/duties/").removesuffix(".pdf")
-                self._send_pdf(application.driver_duty_pdf(duty_id), f"Tjanst-{duty_id.split('-', 1)[1]}.pdf")
+                self._send_pdf(application.driver_duty_pdf(duty_id), f"Tjanst-{duty_id.split('-', 1)[-1]}.pdf")
             elif path.startswith("/v1/driver/duties/"):
                 self._send_json(HTTPStatus.OK, {"duty": application.driver_duty(path.removeprefix("/v1/driver/duties/"))})
             elif path == "/v1/driver/presence":
@@ -6863,44 +6990,12 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get("Sec-Fetch-Site") == "cross-site":
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "same_origin_required", "Öppna Inställningar från denna TrainMeet Server")
 
-    def _driver_admin_upload(self, document_id: str, part: bool = False) -> None:
-        """PDF:en kommer som den är (Content-Type application/pdf), inte som
-        JSON: den kan vara tiotals MB och skrivs direkt till disk. En del
-        (part) är en tjänsts egna sidor, med tjänstens nummer i X-Duty."""
-        self._driver_admin_same_origin()
-        client = self._authenticated_client()
-        self.server.application._require_admin(client)
-        if self.headers.get("Content-Type", "").split(";", 1)[0].strip() != "application/pdf":
-            raise HTTPAPIError(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "pdf_required", "Ladda upp en PDF")
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError as error:
-            raise HTTPAPIError(HTTPStatus.BAD_REQUEST, "invalid_body", "Felaktig datalängd") from error
-        filename = unquote(self.headers.get("X-Filename", ""))
-        try:
-            if part:
-                number = unquote(self.headers.get("X-Duty", "")).strip()
-                if not number:
-                    raise DriverError(400, "duty_required", "Tjänstens nummer saknas")
-                result = self.server.application.driver_admin_store_part(client, document_id, number, self.rfile, length)
-            else:
-                result = self.server.application.driver_admin_attach_pdf(client, document_id, self.rfile, length, filename)
-        except DriverError as error:
-            if error.status in {HTTPStatus.REQUEST_ENTITY_TOO_LARGE, HTTPStatus.NOT_FOUND}:
-                self.close_connection = True  # resten av filen läses aldrig
-            raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error)) from None
-        self._send_json(HTTPStatus.OK, result)
-
     def _driver_admin_post(self, path: str, payload: dict[str, Any]) -> None:
         self._driver_admin_same_origin()
         client = self._authenticated_client()
         application = self.server.application
         try:
-            if path == "/v1/driver-admin/documents":
-                result = application.driver_admin_create(client, payload)
-                self._send_json(HTTPStatus.OK if result["document"].get("duplicate") else HTTPStatus.CREATED, result)
-                return
-            match = re.fullmatch(r"/v1/driver-admin/documents/([0-9a-f]{12})/(pages|publish|remove)", path)
+            match = re.fullmatch(r"/v1/driver-admin/documents/([0-9a-f]{12})/(publish|remove)", path)
             if match is None:
                 raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
             self._send_json(HTTPStatus.OK, application.driver_admin_action(client, match.group(1), match.group(2), payload))

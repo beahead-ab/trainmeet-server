@@ -656,9 +656,21 @@
   function render() {
     renderClock();
     // US-träffar har ingen bana, inga stationer och inget diagram i Drift: bara klockan och trafiken i Dispatcher.
-    for (const selector of ["#drift-map", ".kr-split", "#drift-graph", "#drift-stats"]) { const el = $(selector); if (el) el.hidden = ctx.us; }
+    // En träff med bara lokförarna (köruppdrag men ännu ingen bana) har inget
+    // att rita på kartan eller i diagrammet: då visas klockan och förarna.
+    const driversOnly = !ctx.us && Boolean(ctx.snapshot) && !(ctx.snapshot.stations || []).length;
+    for (const selector of ["#drift-map", ".kr-split", "#drift-graph", "#drift-stats"]) { const el = $(selector); if (el) el.hidden = ctx.us || driversOnly; }
     $("#us-runtime-summary")?.classList.toggle("hidden", !ctx.us);
-    if (ctx.us || !ctx.snapshot) return;
+    const only = $("#drivers-only-summary");
+    if (only) {
+      only.hidden = !driversOnly;
+      const drivers = ctx.snapshot?.drivers || [];
+      const names = drivers.map((driver) => driver.name).join(", ");
+      if (driversOnly) $("#drivers-only-detail").textContent = drivers.length
+        ? t(drivers.length === 1 ? "{count} förare incheckad: {names}" : "{count} förare incheckade: {names}", { count: drivers.length, names })
+        : t("Ingen förare har checkat in än.");
+    }
+    if (ctx.us || !ctx.snapshot || driversOnly) return;
     const rows = model.stationRows({ snapshot: ctx.snapshot, devices: ctx.devices, presentation: ctx.presentation, automatic: ctx.automatic });
     renderStats(rows); renderStations(rows); renderEvents(); renderMap(); renderGraph();
     trainAside(); stationAside(); placeAsides();

@@ -199,6 +199,8 @@ class CloudConfiguration:
                 result = self._deliver(download.package, allow_switch=payload.get("confirm_meet_change") is True)
                 self.store.save_central_url(url)
                 self.store.save_link_token(download.link_token)
+                # Köruppdragens sidor hämtas medan servern är uppkopplad (Cloud #113).
+                self._fetch_driver_parts(download.package)
                 # Automatic fetching starts on with the first link. Coupling
                 # again, to switch meet for instance, keeps the administrator's
                 # choice (#128).
@@ -281,6 +283,7 @@ class CloudConfiguration:
                     if (region, meet_id) != (selected["region"], selected["meet_id"]):
                         raise CentralSyncError("Cloud skickade en annan träff. Byt träff uttryckligen under Inställningar.")
                     result = self._deliver(download.package)
+                self._fetch_driver_parts(download.package)
                 if result.get("correction_possible"):
                     # Rättelse under pågående spel (Cloud #100 B6): tågen som
                     # rättelsen rör får den nu, om de inte är på väg. Utanför
@@ -292,6 +295,12 @@ class CloudConfiguration:
                 self.state, self.message = "error", str(error)
                 self.message_template, self.message_values = "", {}
                 raise
+
+    def _fetch_driver_parts(self, package):
+        """Varje tjänsts egna sidor ur köruppdragen, i bakgrunden."""
+        fetch = getattr(self.app, "fetch_driver_parts_soon", None)
+        if fetch is not None:
+            fetch(package)
 
     def _correct_during_play(self, package):
         """Lägg en väntande Cloud-version på de tåg den rör, utan att nollställa något.

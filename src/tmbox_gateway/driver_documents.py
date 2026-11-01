@@ -1,26 +1,25 @@
-"""Köruppdrag som administratören lägger in i Inställningar → Lokförare (#225).
+"""Köruppdragens filer på servern (#225).
 
-Ett köruppdrag är träffens alla förartjänster, och det kommer från två filer
-med var sin uppgift:
+Köruppdragen läggs in och görs tillgängliga i TrainMeet Cloud, under
+Lokförare på träffen, och kommer med träffens paket (``driver_duties``). Här
+sparas varje tjänsts egna sidor som servern hämtat från Cloud, under sin
+sha256 i ``lokforaren/cloud/`` bredvid ``trainmeet.db``
+(:meth:`DriverDocuments.store_cloud_part`).
 
-* **Planeringsfilen** (JSON ur planeringsprogrammet, samma fil som går till
-  Cloud) ger tjänsterna: tåg, stationer, spår och tider. Den läses i
-  administratörens webbläsare och hit kommer färdiga tjänster i samma form som
-  Clouds ``driver_duties``. Servern tolkar alltså ingen plan; den kontrollerar
-  formen med :func:`normalize_duty`, precis som för Cloud.
-* **PDF:en** (utskriften av samma tjänster, gärna 600 sidor) är förlagan.
-  Den sparas oförändrad i serverns datakatalog, i mappen ``lokforaren/``
-  bredvid ``trainmeet.db``, under sin sha256. Webbläsaren hittar vilka sidor
-  som hör till vilken tjänst, skickar sidnumren hit och delar PDF:en i en
-  liten PDF per tjänst (``lokforaren/delar/<sha256>.pdf``), så att föraren
-  bara får sin tjänsts sidor.
+Före Cloud (4.20–4.21) lades köruppdragen in på varje server, från två filer:
 
-Förarna ser tjänsterna först när administratören uttryckligen gjort
-köruppdraget tillgängligt, och bara på den träff det lades in för.
+* **Planeringsfilen** (JSON ur planeringsprogrammet) gav tjänsterna, lästa i
+  administratörens webbläsare och kontrollerade med :func:`normalize_duty`.
+* **PDF:en** var förlagan, sparad oförändrad i ``lokforaren/`` med en liten
+  PDF per tjänst i ``lokforaren/delar/``.
+
+De köruppdragen ligger kvar i databasen och kan granskas, dras tillbaka och
+tas bort; uppladdningen finns inte längre i HTTP-gränssnittet. De gäller bara
+så länge träffens paket saknar köruppdrag.
 
 Tjänsterna ligger i databasen och följer med i säkerhetskopiorna. PDF-filerna
 gör det inte (de kan vara stora); försvinner en fil finns tjänsterna kvar och
-bara förlagan saknas.
+bara förlagan saknas, och Clouds delar hämtas igen.
 """
 
 from __future__ import annotations
@@ -46,6 +45,7 @@ WARNINGS_MAX = 200
 _CHUNK = 1024 * 1024
 _SLUG = re.compile(r"[^0-9A-Za-z]+")
 _FINGERPRINT = re.compile(r"^[0-9a-f]{8,64}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _now() -> str:
@@ -75,6 +75,10 @@ class DriverDocuments:
     def __init__(self, database: str | Path, folder: str | Path | None = None):
         self.database = Path(database)
         self.folder = Path(folder) if folder else self.database.parent / "lokforaren"
+        # Tjänsternas egna sidor ur köruppdragen i Cloud, innehållsadresserade
+        # och hämtade med serverkopplingen. Egen katalog: de hör inte till
+        # något köruppdrag som lagts in här och städas aldrig bort av dem.
+        self.cloud_folder = self.folder / "cloud"
         self._lock = threading.RLock()
         self._connection = sqlite3.connect(self.database, timeout=10, isolation_level=None, check_same_thread=False)
         self._connection.execute("PRAGMA journal_mode=WAL")
@@ -316,6 +320,27 @@ class DriverDocuments:
                 "SELECT 1 FROM driver_plan_duties WHERE part_sha256 = ?", (sha,)).fetchone()
         if not still_used:
             (self.parts_folder / f"{sha}.pdf").unlink(missing_ok=True)
+
+    def cloud_part_path(self, sha: str) -> Path | None:
+        """En tjänsts egna sidor från Cloud, om de redan finns på servern."""
+        if not _SHA256.match(sha):
+            return None
+        path = self.cloud_folder / f"{sha}.pdf"
+        return path if path.is_file() else None
+
+    def store_cloud_part(self, sha: str, data: bytes) -> Path:
+        """Sparar en del från Cloud efter att ha kontrollerat att den är den
+        PDF paketet hänvisar till."""
+        if not _SHA256.match(sha) or hashlib.sha256(data).hexdigest() != sha:
+            raise DriverError(502, "part_mismatch", "Tjänstens sidor från Cloud stämmer inte med paketet")
+        if not data.startswith(b"%PDF-"):
+            raise DriverError(502, "part_not_pdf", "Tjänstens sidor från Cloud är ingen PDF")
+        self.cloud_folder.mkdir(parents=True, exist_ok=True)
+        target = self.cloud_folder / f"{sha}.pdf"
+        temporary = self.cloud_folder / f".{sha}.{secrets.token_hex(4)}.tmp"
+        temporary.write_bytes(data)
+        temporary.replace(target)
+        return target
 
     def part_path(self, duty_id: str, meet_key: str | None = None) -> Path | None:
         """Tjänstens egna sidor. Med meet_key bara om köruppdraget är

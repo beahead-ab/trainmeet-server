@@ -5,6 +5,30 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Köruppdragen kommer från Cloud, och en träff kan börja med bara lokförarna (#225)
+
+En träff är en träff, och den definieras i Cloud. Köruppdragen är träffens
+första lager: planeringsfilen och PDF:en läggs in och görs tillgängliga i
+Cloud, under **Lokförare** på träffen, och kommer till servern med träffen.
+Servern hämtar varje tjänsts egna sidor med serverkopplingen så fort träffen
+kommit från Cloud, så föraren har sina sidor också utan internet på träffen.
+
+- **Inställningar → Lokförare och köruppdrag** är enklare: en rad med de två
+  filerna, träffen, antalet tjänster, **Tillgängligt för förarna** och
+  **Ändra i Cloud**. Uppladdningen på servern är borta, och läsaren och
+  PDF-biblioteken med den.
+- **En träff med bara lokförarna** går att köra: köruppdrag men ännu ingen
+  bana, alltså inga stationer, tåg eller TMBoxar. Klockan, Lokföraren och
+  incheckningarna fungerar, och Drift visar klockan och vilka förare som
+  checkat in i stället för en tom karta. Bana, tidtabell och tågklarering
+  läggs till i Cloud, och då visas de.
+- Köruppdrag som redan lagts in på en server (4.20–4.21) ligger kvar och kan
+  granskas, dras tillbaka och tas bort. När träffen har köruppdrag från Cloud
+  är det de som gäller.
+
+Kräver TrainMeet Cloud med Lokförare (Cloud #113). En äldre server tar inte
+emot en träff som bara har lokförarna.
+
 ### Sökrutan i sidhuvudet är borttagen
 
 Rutan *Sök tåg eller station* finns inte längre i sidhuvudet, och snabbtangenten

@@ -43,32 +43,71 @@ appen. Samma stämpel laddas bara om en gång, så det kan aldrig bli en loop.
 
 Förarna väljer bland, i den här ordningen:
 
-1. Köruppdragen som gjorts tillgängliga under **Inställningar → Lokförare och
-   köruppdrag** (nedan), för träffen som körs.
-2. Tjänsterna i träffens paket från Cloud, under `driver_duties`.
-3. Övningstjänsten **132 DEMO** (fakta ur #225, tiderna i Tveiten är exempel).
+1. Tjänsterna i träffens paket från Cloud, under `driver_duties`.
+2. Övningstjänsten **132 DEMO** (fakta ur #225, tiderna i Tveiten är exempel).
 
-### Köruppdrag i Inställningar
+### Köruppdragen kommer från Cloud
 
-Köruppdragen läggs in på varje server för sig, separat från Clouds paket, och
-kommer från två filer med var sin uppgift:
+En träff är en träff, och den definieras i TrainMeet Cloud. Köruppdragen är
+träffens första lager: de läggs in och görs tillgängliga i Cloud, under
+**Lokförare** på träffen (Cloud #113, se `docs/LOKFORARE.md` där), och kommer
+till servern med träffens paket. Servern läser inga planeringsfiler och tar
+inte emot några PDF:er.
 
-1. **Planeringsfilen (JSON)**, samma fil ur planeringsprogrammet som går till
-   Cloud, ger tjänsterna. Den läses i administratörens webbläsare
-   (`lokforaren-koruppdrag.js`, `fromPlan`) och servern får färdiga tjänster i
-   formen ovan. Servern tolkar ingen plan; den kontrollerar formen med
-   `normalize_duty`, som för Cloud. Samma fil igen för samma träff (känns igen
-   på en kontrollsumma) uppdaterar samma köruppdrag.
-2. **Köruppdragens PDF** (högst 80 MB, gärna alla 600 sidorna) är förlagan.
-   Den sparas oförändrad i serverns datakatalog, `lokforaren/<sha256>.pdf`
-   bredvid `trainmeet.db`. Webbläsaren läser texten med pdf.js (`web/pdfjs/`,
-   Apache-2.0) och hittar sidorna för varje tjänst (`matchPages`); servern får
-   bara sidnumren.
-3. **Gör tillgängligt för förarna.** Först då syns tjänsterna under Välj
-   tjänst, och bara på träffen köruppdraget lades in för. **Dra tillbaka**
-   tar bort dem ur listan; den som redan kör behåller sin tjänst.
+1. **Planeringsfilen (JSON)**, samma fil ur planeringsprogrammet som ger
+   träffens tidtabell, ger tjänsterna. Den läses i administratörens webbläsare
+   i Cloud. Servern kontrollerar formen med `normalize_duty` och visar resten.
+2. **Köruppdragens PDF** är förlagan. Cloud hittar sidorna för varje tjänst
+   och delar PDF:en i en liten PDF per tjänst. I paketet har tjänsten
+   `source.pages` (första och sista sidan) och `source.part` med delens
+   `sha256` och storlek. Hela PDF:en följer inte med.
+3. **Tillgängligt för förarna** slås på i Cloud. Först då kommer tjänsterna
+   med i paketet; utan dem har paketet inga `driver_duties`.
 
-Ur planeringsfilen (`DriverDuties`, med planeringsprogrammets `$id`/`$ref`):
+Servern hämtar varje tjänsts egna sidor med sin serverkoppling,
+`GET <Clouds config-adress>/driver-parts/<sha256>?token=…`, och sparar dem i
+`lokforaren/cloud/<sha256>.pdf` i datakatalogen. Delarna hämtas i bakgrunden
+så fort paketet har kommit från Cloud, medan servern är uppkopplad, också för
+en version som väntar på att aktiveras. Föraren har alltså sina sidor utan
+internet på träffen. Saknas något hämtas det igen när Drift, en storskärm
+eller Inställningar frågar (en gång per publicering, och efter en minut om det
+inte gick), och när en förare öppnar sina sidor. Delarna är adresserade efter
+innehållet, så en ny version med samma PDF hämtar ingenting nytt. Servern tar bara emot en PDF vars summa stämmer, och Cloud
+lämnar bara ut en del som någon av träffens publicerade versioner hänvisar
+till, och bara till en kopplad server.
+
+**Inställningar → Lokförare och köruppdrag** visar vad träffen har: de två
+filerna som ikoner, träffen, antalet tjänster och när den publicerades,
+**Tillgängligt för förarna** och **Ändra i Cloud**, som öppnar träffens
+Lokförare i Cloud. Saknas något står det på en rad under: att sidorna hämtas,
+att servern inte är kopplad, eller att Cloud inte har någon PDF.
+
+### En träff med bara lokförarna
+
+En träff kan börja som bara köruppdrag, utan bana. Paketet har då inga
+stationer, sträckor, tåg eller TMBox-paneler, och servern tar emot det
+(`RuntimePublication.parse`: panelerna får saknas när paketet har köruppdrag
+men ingen bana). Klockan, Lokföraren och incheckningarna fungerar som vanligt.
+Drift visar klockan och raden **Lokförarna** med vilka som checkat in, i
+stället för en tom karta och ett tomt diagram. Storskärmarna och deltagarnas
+sida visar det träffen har. Bana, tidtabell och tågklarering läggs till i
+Cloud, och då visas de här.
+
+### Köruppdrag som lades in på servern (4.20–4.21)
+
+Före Cloud lades köruppdragen in under Inställningar på varje server. De som
+redan finns ligger kvar under **Köruppdrag på servern** och kan granskas,
+dras tillbaka och tas bort. De gäller bara så länge träffens paket saknar
+köruppdrag; när träffen har köruppdrag från Cloud är det de som gäller.
+Uppladdningen är borta: `POST /v1/driver-admin/documents` och
+`…/documents/{id}/pdf`, `/parts` och `/pages` svarar 410
+(`cloud_authoring_only`).
+
+### Planeringsfilen
+
+Så läser Cloud planeringsfilen (`DriverDuties`, med planeringsprogrammets
+`$id`/`$ref`):
+
 
 | Planen | Lokföraren |
 |---|---|
@@ -83,7 +122,7 @@ Ur planeringsfilen (`DriverDuties`, med planeringsprogrammets `$id`/`$ref`):
 | tågslagets bolag, omloppets fordon (`ScheduledObjects`) | bolag och fordon |
 | ett ensamt anrop (till exempel växling 08:30–11:30) | hela tiden på stationen |
 
-Sidorna i PDF:en: varje sida ägs av tjänsten vars nummer står på den, i en
+Sidorna i PDF:en (Cloud läser dem): varje sida ägs av tjänsten vars nummer står på den, i en
 rubrik eller sidfot (`Tjänst 39 – Dagl – Sida 2`, `Tjeneste 48 – Dagl – Side 4`)
 eller på planeringsprogrammets omslag (ordet Tjänst/Tjeneste och numret ensamt
 på en rad). Mittsidan med tidtabellen saknar nummer och hör till tjänsten den
@@ -93,12 +132,9 @@ som inte hittas och sidor som inte nämner tjänstens tåg blir avvikelser i
 granskningen. Värnamos häfte (612 sidor, 131 tjänster på 4 sidor och 11 på 8)
 ger 142 av 142 utan avvikelser.
 
-Sedan delas förlagan i en liten PDF per tjänst med pdf-lib (`web/pdflib/`,
-MIT) i webbläsaren, och delarna sparas i `lokforaren/delar/<sha256>.pdf`.
-Föraren får bara sin tjänsts sidor (i Värnamo ungefär 125 kB i stället för
-hela häftet på 2,9 MB) och öppnar dem i telefonens egen PDF-visare. Går det
-inte att dela får föraren hela PDF:en på rätt sida. Nya sidor eller en ny PDF
-tar bort de gamla delarna.
+Sedan delas förlagan i en liten PDF per tjänst. Föraren får bara sin tjänsts
+sidor (i Värnamo ungefär 125 kB i stället för hela häftet på 2,9 MB) och
+öppnar dem i telefonens egen PDF-visare.
 
 Uppställningsspår: delens `FromTrack`/`ToTrack` i planen är spåret där
 fordonet hämtas eller lämnas, inte avgångs- eller ankomstspåret. De blir
@@ -144,8 +180,8 @@ för en norsk. Värnamos 142 tjänster stämmer med häftet.
 sort hoppas över (`normalize_instruction` i `driver.py`), så en äldre server
 visar resten. Fri text ur planen (`notes`) visas som den står.
 
-Tjänsterna ligger i databasen och följer med i säkerhetskopiorna; PDF-filerna
-gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
+Tjänsterna kommer med paketet; tjänstesidorna hämtas igen från Cloud om de
+saknas. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
 
 ```json
 {
@@ -252,8 +288,8 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
 | POST | `/v1/driver/avatar` | `{image: "data:image/jpeg;base64,…"}` |
 | POST | `/v1/driver/avatar/remove` | ta bort ikonen |
 | GET | `/v1/driver/avatars/{user_id}` | ikonen |
-| GET | `/v1/driver/duties/{tjänst-id}.pdf` | tjänstens egna sidor, om köruppdraget är tillgängligt |
-| GET | `/v1/driver/documents/{id}.pdf` | hela förlagan, om tjänsten saknar egna sidor |
+| GET | `/v1/driver/duties/{tjänst-id}.pdf` | tjänstens egna sidor (`duty-81`); hämtas från Cloud första gången |
+| GET | `/v1/driver/documents/{id}.pdf` | hela förlagan, för köruppdrag som lades in på servern |
 
 Öppna, utan inloggning:
 
@@ -277,13 +313,9 @@ För administratörer (ägare och administratörer, aldrig förare):
 
 | Metod | Väg | Vad |
 |---|---|---|
-| GET | `/v1/driver-admin/overview` | förarna och vad de kör, köruppdragen |
-| POST | `/v1/driver-admin/documents` | `{filename, fingerprint, name, duties, warnings}` ur planeringsfilen |
-| GET | `/v1/driver-admin/documents/{id}` | köruppdraget och dess tjänster med sidor |
-| POST | `/v1/driver-admin/documents/{id}/pdf` | PDF:en som den är (`Content-Type: application/pdf`, `X-Filename`) |
-| GET | `/v1/driver-admin/documents/{id}.pdf` | PDF:en, för att läsa sidorna igen |
-| POST | `/v1/driver-admin/documents/{id}/pages` | `{pages: {"39": [12, 15]}, total, warnings}` |
-| POST | `/v1/driver-admin/documents/{id}/parts` | en tjänsts egna sidor som PDF (`X-Duty: 39`) |
+| GET | `/v1/driver-admin/overview` | förarna och vad de kör; `cloud` (träffens köruppdrag från Cloud: `duties`, `parts`, `parts_here`, `linked`, `url`) och `documents` (de som lades in på servern) |
+| GET | `/v1/driver-admin/documents/{id}` | ett köruppdrag som lades in på servern, med tjänster och sidor |
+| GET | `/v1/driver-admin/documents/{id}.pdf` | dess PDF |
 | GET | `/v1/driver-admin/duties/{tjänst-id}.pdf` | en tjänsts egna sidor, för granskningen |
 | POST | `/v1/driver-admin/documents/{id}/publish` | `{published: true/false}` |
-| POST | `/v1/driver-admin/documents/{id}/remove` | ta bort köruppdraget och filen |
+| POST | `/v1/driver-admin/documents/{id}/remove` | ta bort köruppdraget och filerna |
