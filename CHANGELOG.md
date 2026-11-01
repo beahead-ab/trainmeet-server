@@ -5,6 +5,16 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Lokföraren: en tjänst är aktiv på en telefon i taget (#225)
+
+Samma förarkonto kan vara inloggat på flera telefoner. Förut bytte en annan
+telefon tyst ut tjänsten, och båda visade varsin körplan. Nu frågar den andra
+telefonen *Tjänst 132 är aktiv på en annan telefon – ta över här?*. Tar den
+över får den första telefonen veta det inom ett par sekunder: *Tjänsten har
+tagits över på en annan telefon · tryck för att ta tillbaka*. Bara telefonen
+tjänsten är aktiv på kan avsluta den. Incheckningar, ikon och synlighet följer
+kontot. Äldre appar fungerar som förut.
+
 ### Drift håller isär två tåg som delar nummer, och en rättelse från Cloud står som Clouds (Cloud #100)
 
 - **Två tåg med samma nummer** (DSB IC 116 och SJ X 116) är nu två tåg i

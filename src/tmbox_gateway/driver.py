@@ -88,12 +88,14 @@ _TIME = re.compile(r"^(\d{1,2}):([0-5]\d)$")
 
 
 class DriverError(ValueError):
-    """Något föraren skickade gick inte att använda. Bär HTTP-status och kod."""
+    """Något föraren skickade gick inte att använda. Bär HTTP-status och kod,
+    och ibland uppgifter som appen behöver för att fråga föraren (``details``)."""
 
-    def __init__(self, status: int, code: str, message: str):
+    def __init__(self, status: int, code: str, message: str, *, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.status = status
         self.code = code
+        self.details = details or {}
 
 
 def _now() -> datetime:
@@ -299,6 +301,23 @@ def duty_summary(duty: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+#: Telefonens id i Lokföraren: slumpat en gång och sparat i telefonen.
+DEVICE_ID = re.compile(r"^[0-9a-f]{16,64}$")
+
+
+def device_id(value: Any) -> str | None:
+    """Telefonens id ur anropet, eller None om appen inte skickar något."""
+    text = str(value or "").strip().lower()
+    return text if DEVICE_ID.fullmatch(text) else None
+
+
+def _same_phone(active_device: str | None, asking: str | None) -> bool:
+    """Är tjänsten aktiv på telefonen som frågar? Saknas id på någon sida
+    (äldre app, äldre rad) går det inte att skilja telefonerna åt, och då
+    gäller kontot som förut."""
+    return active_device is None or asking is None or active_device == asking
+
+
 def _sniff_image(data: bytes) -> str | None:
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"
@@ -366,6 +385,12 @@ class DriverStore:
         columns = {row[1] for row in self._connection.execute("PRAGMA table_info(driver_checkins)")}
         if "meet_seconds" not in columns:
             self._connection.execute("ALTER TABLE driver_checkins ADD COLUMN meet_seconds REAL")
+        # Telefonen tjänsten är aktiv på (#225). Ett konto kan vara inloggat på
+        # flera telefoner, men en tjänst är aktiv på en i taget. Äldre rader och
+        # äldre appar har ingen telefon och styr ingenting.
+        columns = {row[1] for row in self._connection.execute("PRAGMA table_info(driver_active)")}
+        if "device_id" not in columns:
+            self._connection.execute("ALTER TABLE driver_active ADD COLUMN device_id TEXT")
 
     def close(self) -> None:
         with self._lock:
@@ -453,29 +478,61 @@ class DriverStore:
 
     # ------------------------------------------------------------ tjänst
 
-    def active(self, user_id: str, meet_key: str) -> dict[str, Any] | None:
+    def active(self, user_id: str, meet_key: str, device_id: str | None = None) -> dict[str, Any] | None:
+        """Kontots aktiva tjänst på träffen. ``on_this_phone`` säger om den är
+        aktiv på telefonen som frågar (``device_id``); okänt räknas som ja."""
         with self._lock:
             row = self._connection.execute(
-                "SELECT duty_json, activated_at FROM driver_active WHERE user_id = ? AND meet_key = ?",
+                "SELECT duty_json, activated_at, device_id FROM driver_active WHERE user_id = ? AND meet_key = ?",
                 (user_id, meet_key),
             ).fetchone()
         if row is None:
             return None
-        return {"duty": json.loads(row[0]), "activated_at": row[1]}
+        return {"duty": json.loads(row[0]), "activated_at": row[1], "on_this_phone": _same_phone(row[2], device_id)}
 
-    def activate(self, user_id: str, meet_key: str, duty: dict[str, Any]) -> dict[str, Any]:
+    def activate(self, user_id: str, meet_key: str, duty: dict[str, Any], *,
+                 device_id: str | None = None, take_over: bool = False) -> dict[str, Any]:
+        """Aktivera en tjänst på telefonen ``device_id``.
+
+        Är kontots tjänst redan aktiv på en annan telefon byts den aldrig tyst:
+        utan ``take_over`` svarar servern 409 ``active_on_other_device`` med
+        tjänstens nummer, och appen frågar föraren. Med ``take_over`` flyttar
+        tjänsten hit, och den andra telefonen får veta det nästa gång den
+        frågar efter klockan.
+        """
         now = _iso(_now())
         with self._lock:
+            row = self._connection.execute(
+                "SELECT duty_json, device_id FROM driver_active WHERE user_id = ? AND meet_key = ?",
+                (user_id, meet_key),
+            ).fetchone()
+            if row is not None and not take_over and not _same_phone(row[1], device_id):
+                current = json.loads(row[0])
+                raise DriverError(409, "active_on_other_device",
+                                  f"Tjänst {current.get('number')} är aktiv på en annan telefon",
+                                  details={"duty_number": current.get("number"), "duty_id": current.get("id")})
             self._connection.execute(
-                "INSERT INTO driver_active(user_id, meet_key, duty_id, duty_json, activated_at) VALUES (?, ?, ?, ?, ?)"
+                "INSERT INTO driver_active(user_id, meet_key, duty_id, duty_json, activated_at, device_id)"
+                " VALUES (?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT(user_id, meet_key) DO UPDATE SET duty_id = excluded.duty_id,"
-                " duty_json = excluded.duty_json, activated_at = excluded.activated_at",
-                (user_id, meet_key, duty["id"], json.dumps(duty, ensure_ascii=False), now),
+                " duty_json = excluded.duty_json, activated_at = excluded.activated_at, device_id = excluded.device_id",
+                (user_id, meet_key, duty["id"], json.dumps(duty, ensure_ascii=False), now, device_id),
             )
-        return {"duty": copy.deepcopy(duty), "activated_at": now}
+        return {"duty": copy.deepcopy(duty), "activated_at": now, "on_this_phone": True}
 
-    def end(self, user_id: str, meet_key: str) -> None:
+    def end(self, user_id: str, meet_key: str, device_id: str | None = None) -> None:
+        """Avsluta tjänsten. Bara telefonen den är aktiv på kan avsluta den;
+        en annan telefon tar först tillbaka den."""
         with self._lock:
+            row = self._connection.execute(
+                "SELECT duty_json, device_id FROM driver_active WHERE user_id = ? AND meet_key = ?",
+                (user_id, meet_key),
+            ).fetchone()
+            if row is not None and not _same_phone(row[1], device_id):
+                current = json.loads(row[0])
+                raise DriverError(409, "active_on_other_device",
+                                  f"Tjänst {current.get('number')} är aktiv på en annan telefon. Ta tillbaka den här först.",
+                                  details={"duty_number": current.get("number"), "duty_id": current.get("id")})
             self._connection.execute(
                 "DELETE FROM driver_active WHERE user_id = ? AND meet_key = ?", (user_id, meet_key)
             )

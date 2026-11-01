@@ -82,6 +82,9 @@ button { cursor: pointer; }
 .lf-banner.is-stopped { color: var(--red); background: var(--red-soft); }
 .lf-banner.is-lost { color: var(--amber); background: var(--amber-soft); }
 .lf-banner.is-update { color: var(--green); background: var(--green-soft); cursor: pointer; }
+/* Tjänsten är aktiv på en annan telefon med samma konto (#225): tryck för att ta tillbaka. */
+.lf-banner.is-elsewhere { color: var(--amber); background: var(--amber-soft); cursor: pointer; }
+.lf-note--warn { color: var(--amber); font-weight: 600; }
 
 .lf-main { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .view { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }

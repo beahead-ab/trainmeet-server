@@ -53,6 +53,7 @@ from .driver import (
     initials,
     meet_seconds,
     normalize_duty,
+    device_id as driver_device_id,
 )
 from .driver_documents import MAX_PDF_BYTES, DriverDocuments
 from .cloud_live import LiveChannel
@@ -982,12 +983,12 @@ class TrainMeetHTTPApplication:
                            if profile["has_avatar"] else None),
         }
 
-    def driver_session(self, user: dict[str, Any]) -> dict[str, Any]:
+    def driver_session(self, user: dict[str, Any], device: str | None = None) -> dict[str, Any]:
         meet_key, meet, publication = self._driver_meet()
         return {
             "user": self._driver_person(user),
             "meet": meet,
-            "active": self.drivers.active(str(user["user_id"]), meet_key),
+            "active": self.drivers.active(str(user["user_id"]), meet_key, device),
             "clock": self.driver_clock(),
             "stations": self._driver_stations(publication),
             "checkin_visible_seconds": int(CHECKIN_VISIBLE.total_seconds()),
@@ -1011,17 +1012,28 @@ class TrainMeetHTTPApplication:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "duty_not_found", "Tjänsten finns inte i träffens köruppdrag")
         return duty
 
+    def driver_active_here(self, user: dict[str, Any], device: str | None) -> dict[str, Any] | None:
+        """Kort om kontots aktiva tjänst, för telefonen som frågar efter
+        klockan: så märker en telefon att tjänsten tagits över på en annan."""
+        meet_key, _, _ = self._driver_meet()
+        active = self.drivers.active(str(user["user_id"]), meet_key, device)
+        if active is None:
+            return None
+        return {"duty_id": active["duty"].get("id"), "number": active["duty"].get("number"),
+                "activated_at": active["activated_at"], "on_this_phone": active["on_this_phone"]}
+
     @announces("drivers")  # förarna på banan i Drift
-    def driver_activate(self, user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    def driver_activate(self, user: dict[str, Any], payload: dict[str, Any], device: str | None = None) -> dict[str, Any]:
         duty = self.driver_duty(str(payload.get("duty_id") or ""))
         meet_key, _, _ = self._driver_meet()
-        active = self.drivers.activate(str(user["user_id"]), meet_key, duty)
+        active = self.drivers.activate(str(user["user_id"]), meet_key, duty, device_id=device,
+                                       take_over=payload.get("take_over") is True)
         return {"active": active}
 
     @announces("drivers")
-    def driver_end(self, user: dict[str, Any]) -> dict[str, Any]:
+    def driver_end(self, user: dict[str, Any], device: str | None = None) -> dict[str, Any]:
         meet_key, _, _ = self._driver_meet()
-        self.drivers.end(str(user["user_id"]), meet_key)
+        self.drivers.end(str(user["user_id"]), meet_key, device)
         return {"active": None}
 
     @announces("drivers")
@@ -6788,11 +6800,13 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
     def _driver_get(self, path: str, query: str) -> None:
         application = self.server.application
         user = self._driver_user()
+        device = driver_device_id(self.headers.get("X-Lokforaren-Device"))
         try:
             if path == "/v1/driver/session":
-                self._send_json(HTTPStatus.OK, application.driver_session(user))
+                self._send_json(HTTPStatus.OK, application.driver_session(user, device))
             elif path == "/v1/driver/clock":
                 self._send_json(HTTPStatus.OK, {"clock": application.driver_clock(),
+                                                "active": application.driver_active_here(user, device),
                                                 "build": application.driver_build(),
                                                 "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")})
             elif path == "/v1/driver/duties":
@@ -6812,7 +6826,7 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             else:
                 raise HTTPAPIError(HTTPStatus.NOT_FOUND, "not_found", "Sidan finns inte")
         except DriverError as error:
-            raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error)) from None
+            raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error), details=error.details) from None
 
     def _driver_post(self, path: str, payload: dict[str, Any]) -> None:
         origin = self.headers.get("Origin")
@@ -6820,9 +6834,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
             raise HTTPAPIError(HTTPStatus.FORBIDDEN, "same_origin_required", "Öppna Lokföraren från TrainMeet Server")
         application = self.server.application
         user = self._driver_user()
+        device = driver_device_id(self.headers.get("X-Lokforaren-Device"))
         actions = {
-            "/v1/driver/active": lambda: application.driver_activate(user, payload),
-            "/v1/driver/active/end": lambda: application.driver_end(user),
+            "/v1/driver/active": lambda: application.driver_activate(user, payload, device),
+            "/v1/driver/active/end": lambda: application.driver_end(user, device),
             "/v1/driver/checkins": lambda: application.driver_check_in(user, payload),
             "/v1/driver/profile": lambda: application.driver_profile(user, payload),
             "/v1/driver/avatar": lambda: application.driver_set_avatar(user, payload),
@@ -6834,7 +6849,7 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
         try:
             self._send_json(HTTPStatus.OK, action())
         except DriverError as error:
-            raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error)) from None
+            raise HTTPAPIError(HTTPStatus(error.status), error.code, str(error), details=error.details) from None
 
     def _driver_admin_get(self, path: str) -> None:
         application = self.server.application
