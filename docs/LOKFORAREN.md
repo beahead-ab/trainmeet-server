@@ -196,6 +196,53 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
 - En aktiverad tjänst sparas som den såg ut vid aktiveringen, så att en ny
   publicering inte byter körplan under någon som kör.
 
+### Rätta en tjänst efter pappret
+
+Pappret förarna har i handen och köruppdraget på servern kan komma från olika
+versioner av planen. Den 1 november hade Värnamos häfte på papper (utskrivet
+26 oktober) tjänst 24 som G 4007 Spiten 03:01–05:36, medan planeringsfilen och
+PDF:en på servern (utskrivna 31 oktober) hade tjänst 24 som Kp 8230–8232
+Steinsnes 05:00–08:21. Tjänsterna hade fått nya nummer emellan.
+
+Då fotar en **ägare eller administratör** pappret i Lokföraren, och det som
+står där blir en ny version av tjänsten. Förare (rollen `user`) ser inga
+knappar, och servern svarar 403 på allt under `/v1/driver-admin/`.
+
+1. **Uppdrag → välj tjänsten → Rätta efter pappret.** Fota en bild per sida i
+   ordning, omslaget först (högst tolv sidor). Telefonen förminskar varje foto
+   till ungefär 2000 px och högst 2 MB och ritar om det, så att plats och annan
+   data i bildfilen inte följer med.
+2. **Läs av fotona.** Servern skickar sidorna till TrainMeet Cloud med
+   kopplingsnyckeln; servern tolkar inga bilder själv. AI skriver av exakt det
+   som står och Cloud bygger tjänsten efter fasta regler (Cloud
+   `cloud/duty_scan.py`). Det tar en minut eller två. Utan koppling till Cloud
+   går fotona inte att läsa av, och sidan säger det.
+3. **Jämför.** Pappret visas bredvid tjänsten som den är nu: tider, tåg, bolag
+   och fordon, och pappret rad för rad med det som är nytt eller ändrat
+   markerat. Varningar från avläsningen (en suddig sida, ett annat
+   tjänstnummer på pappret än det som valdes) står överst.
+4. **Spara som ny version.** Först då ändras något. Versionen gäller från och
+   med nu, och fotona blir dess förlaga: föraren öppnar *Fotona av pappret*
+   som en PDF med en sida per foto. Sparas inget tas fotona bort, senast efter
+   ett dygn.
+
+En förare som redan kör tjänsten byts aldrig mitt i. Lokföraren visar
+*Tjänst 24 har rättats efter pappret · tryck för att se*, med tiderna hen kör
+och tiderna som gäller nu, och föraren väljer *Byt till den versionen* eller
+*Behåll den jag har*.
+
+**Versioner** under tjänsten visar alla versioner och vem som sparade dem.
+Ägaren eller administratören väljer vilken som gäller, även *Som i
+köruppdraget* (version 0: planeringsfilen eller paketet från Cloud). Det gäller
+tjänster ur både köruppdraget i Inställningar och Clouds paket, men inte
+övningstjänsten.
+
+Versionerna hör till träffen och ligger i serverns databas
+(`driver_scans`, `driver_duty_versions`, `driver_duty_current` i
+`driver_versions.py`); fotona ligger i `lokforaren/foton/` tills de sparats och
+som PDF i `lokforaren/versioner/`. Följer en säkerhetskopia med utan PDF:erna
+gäller versionen ändå, men utan fotona som förlaga.
+
 ## Körplanen och NU-linjen
 
 - Tidsaxel: en träffminut är 7 px, uppehåll längre än 40 minuter ritas 160 px
@@ -306,3 +353,16 @@ För administratörer (ägare och administratörer, aldrig förare):
 | GET | `/v1/driver-admin/duties/{tjänst-id}.pdf` | en tjänsts egna sidor, för granskningen |
 | POST | `/v1/driver-admin/documents/{id}/publish` | `{published: true/false}` |
 | POST | `/v1/driver-admin/documents/{id}/remove` | ta bort köruppdraget och filen |
+| POST | `/v1/driver-admin/scans` | `{duty_id}`: börja fota en tjänst; svarar `{scan, cloud_linked}` |
+| POST | `/v1/driver-admin/scans/{id}/pages` | en sida som JPEG (`Content-Type: image/jpeg`, `X-Width`, `X-Height`) |
+| POST | `/v1/driver-admin/scans/{id}/read` | skicka sidorna till Cloud (202); fråga sedan efter fotograferingen |
+| GET | `/v1/driver-admin/scans/{id}` | `{scan: {status: draft/reading/done/failed, message, result: {duty, warnings}}, current}` |
+| POST | `/v1/driver-admin/scans/{id}/save` | förslaget som en ny version som gäller nu |
+| POST | `/v1/driver-admin/scans/{id}/discard` | låt bli; fotona tas bort |
+| GET | `/v1/driver-admin/duties/{tjänst-id}/versions` | `{current, versions: [{version, created_at, created_by_name, pages, has_pdf, warnings}]}` |
+| POST | `/v1/driver-admin/duties/{tjänst-id}/versions/use` | `{version}`: låt en version gälla, 0 är köruppdragets |
+
+En tjänst som fått en version bär `version` (och `version_info` med vem och
+när) i `/v1/driver/duties/{id}`; `/v1/driver/session` och `/v1/driver/presence`
+bär `duty_update` (`{duty_id, number, version, changed_at}`) när förarens
+aktiva tjänst har en annan version än den som gäller, annars `null`.

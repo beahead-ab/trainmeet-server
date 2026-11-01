@@ -38,6 +38,15 @@ Cloud → server. Aldrig tillbaka.
 > upp, och D1 gäller fortfarande för allt annat. Se
 > [Cloud förbereder, Server kör](CLOUD-ONLY-SERVER.md#livetrafik-från-klockan-via-cloud)
 > och [kontraktet](apple-watch-relay-push.md).
+>
+> **Undantag (Casper, 1 november 2026):** fotona av ett köruppdrag på papper,
+> för att rätta en tjänst efter pappret förarna har (#225). En ägare eller
+> administratör fotar sidorna; servern skickar dem med kopplingsnyckeln till
+> `POST /api/server-duty-scan` och får tillbaka ett förslag. Begäran bär bara
+> sidorna, tjänstens nummer, stationernas namn som stavningshjälp och språket
+> (`SCAN_FIELDS` i `cloud_duty_scan.py`); ingen konfiguration, historik eller
+> konton. Cloud sparar varken bilderna eller förslaget. Se
+> [Lokföraren](LOKFORAREN.md#rätta-en-tjänst-efter-pappret).
 
 Servern föreslår inga ändringar uppströms, och Cloud tar inte emot några.
 Förslagskön är **borttagen ur båda repona** — det här är alltså inte längre

@@ -115,10 +115,12 @@ class SyncGoesOneWayTests(unittest.TestCase):
 class MailIsTheOnlyWriteTests(unittest.TestCase):
     """Undantagen från D1, och hur smala de är.
 
-    Två saker får gå uppåt, var och en i sin egen modul med ett enda anrop:
-    ett brev (cloud_mail.py: en inbjudan eller en kod för nytt lösenord) och
+    Tre saker får gå uppåt, var och en i sin egen modul med ett enda anrop:
+    ett brev (cloud_mail.py: en inbjudan eller en kod för nytt lösenord),
     livetrafiken från klockan (cloud_live.py, Caspers beslut 29 oktober, se
-    LiveTrafficIsNarrowTests). Inga träffdata, ingen konfiguration och ingen
+    LiveTrafficIsNarrowTests) och fotona av ett köruppdrag på papper
+    (cloud_duty_scan.py, Caspers beslut 1 november, se
+    DutyPhotosAreNarrowTests). Inga träffdata, ingen konfiguration och ingen
     historik.
     """
 
@@ -133,7 +135,8 @@ class MailIsTheOnlyWriteTests(unittest.TestCase):
         # loopbackbegränsade simulatorn. Matcha exakt sökväg, inte bara filnamn.
         # cloud_live.py är det smala undantaget från D1 för klockans livetrafik (#205/#206).
         not_cloud = {"software_update.py", "external_clock.py", "integrations/http_sandbox.py"}
-        self.assertEqual(["cloud_live.py", "cloud_mail.py"], [name for name in writers if name not in not_cloud])
+        self.assertEqual(["cloud_duty_scan.py", "cloud_live.py", "cloud_mail.py"],
+                         sorted(name for name in writers if name not in not_cloud))
 
     def test_the_sandbox_writer_rejects_cloud_and_other_external_origins(self):
         from tmbox_gateway.integrations.http_sandbox import HttpSandboxAdapter
@@ -151,6 +154,24 @@ class MailIsTheOnlyWriteTests(unittest.TestCase):
         text = (SOURCE / "cloud_mail.py").read_text(encoding="utf-8")
         self.assertIn("if key in MAIL_FIELDS", text)
         self.assertIn('"/api/server-mail"', text.replace("{path}", ""))
+
+
+class DutyPhotosAreNarrowTests(unittest.TestCase):
+    """Det tredje undantaget från D1: fotona av ett köruppdrag (#225).
+
+    Casper beslutade den 1 november att en administratör ska kunna fota
+    pappret förarna har och låta AI läsa av det. Servern tolkar inga bilder,
+    så sidorna går till Cloud. Bara sidorna, tjänstens nummer, stationernas
+    namn och språket; inget annat ur träffen.
+    """
+
+    def test_the_request_has_a_fixed_set_of_fields(self):
+        from tmbox_gateway.cloud_duty_scan import SCAN_FIELDS
+
+        self.assertEqual({"pages", "number", "stations", "language"}, set(SCAN_FIELDS))
+        text = (SOURCE / "cloud_duty_scan.py").read_text(encoding="utf-8")
+        self.assertIn("if key in SCAN_FIELDS", text)
+        self.assertIn("/api/server-duty-scan", text)
 
 
 class LiveTrafficIsNarrowTests(unittest.TestCase):

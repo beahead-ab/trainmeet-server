@@ -58,6 +58,28 @@ with tempfile.TemporaryDirectory(prefix="trainmeet-lokforaren-") as directory:
         HTTPServerConfig(local_development=True, state_dir=directory),
         runtime_store=runtime, operations_store=operations,
     )
+    if os.environ.get("LOKFORAREN_PAPER"):
+        # Rätta efter pappret (#225): kopplad till en Cloud som inte finns. Läsaren
+        # svarar med tjänst 7 som den står på pappret, efter en kort stund.
+        import time
+        runtime.save_link_token("provnyckel")
+        paper = {
+            "duty": {"number": "7", "operator": "Green Cargo fjärr", "vehicle": "GC 07 185 Br", "start": "03:01", "end": "05:36",
+                     "trains": [{"number": "G 4007", "from": stations[0], "to": stations[-1], "vmax": 100}],
+                     "events": [
+                         {"kind": "duty_start", "time": "03:01", "station": stations[0], "notes": ["Förberedelse"]},
+                         {"kind": "departure", "time": "03:21", "station": stations[0], "track": "6", "train": "G 4007"},
+                         {"kind": "arrival", "time": "05:06", "station": stations[-1], "track": "4", "train": "G 4007"},
+                         {"kind": "duty_end", "time": "05:36", "station": stations[-1], "notes": ["Avslutning"]},
+                     ]},
+            "warnings": ["Sida 2 är lite suddig vid Ank 05:06"],
+        }
+
+        def read(token, url, payload):
+            time.sleep(1.5)
+            return paper
+
+        app.duty_photo_reader = read
     server = TrainMeetHTTPServer(("127.0.0.1", 0), app)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

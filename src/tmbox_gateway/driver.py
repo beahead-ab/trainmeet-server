@@ -296,6 +296,8 @@ def duty_summary(duty: dict[str, Any]) -> dict[str, Any]:
         "id": duty["id"], "number": duty["number"], "demo": duty["demo"], "operator": duty["operator"],
         "vehicle": duty["vehicle"], "vmax": duty["vmax"], "start": duty["start"], "end": duty["end"],
         "trains": [train["number"] for train in duty["trains"]], "route": stations,
+        # En ny version från fotona av pappret (driver_versions.py).
+        **({"version": duty["version"]} if duty.get("version") else {}),
     }
 
 

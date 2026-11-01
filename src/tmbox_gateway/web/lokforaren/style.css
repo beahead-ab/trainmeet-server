@@ -345,3 +345,36 @@ button { cursor: pointer; }
 .lf-resultbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--mute); font-size: 13px; }
 .view--choose .lf-actions { margin-top: 0; }
 @media (max-width: 360px) { .lf-result { gap: 8px; padding: 8px; } .lf-result__time { font-size: 12px; } }
+
+/* Rätta en tjänst efter pappret: version, foton och jämförelse (#225). */
+.lf-version { margin: 10px 0 0; font-size: 13px; color: var(--amber); }
+.lf-paper-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.lf-button--small { min-height: 40px; padding: 0 12px; font-size: 14px; }
+.lf-button--small svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.lf-paper { display: flex; flex-direction: column; gap: 12px; }
+.lf-paper .lf-row--buttons { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; }
+.lf-paper .lf-row--buttons .lf-button { flex: 1 1 140px; }
+.lf-pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.lf-pages:empty { display: none; }
+.lf-page { position: relative; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--mute); }
+.lf-page img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 10px; border: 1px solid var(--line2); background: var(--panel2); }
+.lf-page.is-sending img { opacity: .5; }
+.lf-page__remove { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .65); color: #ffffff; font-size: 16px; line-height: 28px; }
+.lf-reading { display: flex; align-items: center; gap: 14px; padding: 22px 4px; font-size: 15px; color: var(--ink2); }
+.lf-spinner { flex: 0 0 26px; width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--line2); border-top-color: var(--blue); animation: lf-spin 1s linear infinite; }
+@keyframes lf-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .lf-spinner { animation: none; } }
+.lf-warnings { margin: 0; padding: 10px 14px 10px 30px; border-radius: 12px; background: var(--amber-soft); color: var(--amber); font-size: 13.5px; line-height: 1.45; }
+.lf-compare { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
+.lf-compare th { padding: 0 6px 6px; text-align: left; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; color: var(--mute); text-transform: uppercase; }
+.lf-compare th:first-child { width: 22%; }
+.lf-compare td { padding: 9px 6px; border-top: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+.lf-compare td:first-child { color: var(--mute); }
+.lf-compare tr.is-changed td:last-child { color: var(--amber); font-weight: 650; }
+.lf-paper__head { margin: 6px 0 0; font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--mute); }
+.lf-paper-rows { margin: 0; padding: 0; list-style: none; }
+.lf-paper-rows li { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 4px 10px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.lf-paper-rows .lf-paper-rows__time { font-weight: 650; }
+.lf-paper-rows .lf-paper-rows__what { min-width: 0; overflow-wrap: anywhere; }
+.lf-paper-rows .lf-paper-rows__sub { grid-column: 2; font-size: 12.5px; color: var(--mute); }
+.lf-paper-rows li.is-added .lf-paper-rows__time, .lf-paper-rows li.is-changed .lf-paper-rows__time { color: var(--amber); }

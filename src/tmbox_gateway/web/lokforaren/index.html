@@ -19,6 +19,7 @@
 <script src="/lokforaren/messages.js?v=__LF_BUILD__" defer></script>
 <script src="/lokforaren/korplan.js?v=__LF_BUILD__" defer></script>
 <script src="/lokforaren/duties.js?v=__LF_BUILD__" defer></script>
+<script src="/lokforaren/papper.js?v=__LF_BUILD__" defer></script>
 <script src="/lokforaren/app.js?v=__LF_BUILD__" defer></script>
 </head>
 <body>
@@ -84,7 +85,14 @@
         <div class="lf-found__head"><span class="lf-found__title" id="found-title"></span><span class="lf-tag" id="found-demo" hidden>DEMO</span></div>
         <dl class="lf-facts" id="found-facts"></dl>
         <p class="lf-note" id="found-note" hidden></p>
+        <p class="lf-version" id="found-version" hidden></p>
         <a class="lf-source" id="found-source" target="_blank" rel="noopener" hidden></a>
+        <div class="lf-paper-actions" id="found-admin" hidden>
+          <button class="lf-button lf-button--secondary lf-button--small" type="button" id="paper-open">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h3l1.6-2.5h6.8L17 8.5h3v10.5H4z"></path><circle cx="12" cy="13.5" r="3.4"></circle></svg>
+            <span data-t="Rätta efter pappret">Rätta efter pappret</span></button>
+          <button class="lf-button lf-button--quiet lf-button--small" type="button" id="versions-open" hidden data-t="Versioner">Versioner</button>
+        </div>
       </div>
       <div class="lf-actions">
         <button class="lf-button lf-button--primary" type="button" id="duty-activate" disabled data-t="Aktivera tjänsten">Aktivera tjänsten</button>
@@ -258,6 +266,73 @@
         <button class="lf-button lf-button--primary" type="button" id="icon-save" disabled data-t="Spara ikonen">Spara ikonen</button>
         <button class="lf-button lf-button--quiet" type="button" id="icon-remove" data-t="Ta bort ikonen">Ta bort ikonen</button>
         <button class="lf-button lf-button--quiet" type="button" data-close data-t="Avbryt">Avbryt</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="sheet" id="sheet-paper" hidden>
+    <div class="sheet__backdrop" data-close></div>
+    <section class="sheet__panel sheet__panel--tall" role="dialog" aria-modal="true" aria-labelledby="paper-title">
+      <div class="sheet__grabber"></div>
+      <h2 id="paper-title"></h2>
+      <div class="lf-paper" id="paper-step-photos">
+        <p class="lf-note" data-t="Fota pappret som förarna har, en bild per sida i ordning, omslaget först. AI i TrainMeet Cloud läser av fotona och du jämför innan något sparas.">Fota pappret som förarna har, en bild per sida i ordning, omslaget först. AI i TrainMeet Cloud läser av fotona och du jämför innan något sparas.</p>
+        <ol class="lf-pages" id="paper-pages" aria-live="polite"></ol>
+        <div class="lf-row--buttons">
+          <label class="lf-button lf-button--secondary lf-file" id="paper-camera-label"><span id="paper-camera-text"></span><input type="file" id="paper-camera" accept="image/*" capture="environment"></label>
+          <label class="lf-button lf-button--quiet lf-file"><span data-t="Välj bilder">Välj bilder</span><input type="file" id="paper-files" accept="image/*" multiple></label>
+        </div>
+      </div>
+      <div class="lf-paper" id="paper-step-reading" hidden>
+        <div class="lf-reading"><span class="lf-spinner" aria-hidden="true"></span><span data-t="AI läser pappret. Det tar en minut eller två.">AI läser pappret. Det tar en minut eller två.</span></div>
+      </div>
+      <div class="lf-paper" id="paper-step-result" hidden>
+        <ul class="lf-warnings" id="paper-warnings" hidden></ul>
+        <p class="lf-note" id="paper-summary"></p>
+        <table class="lf-compare" id="paper-facts">
+          <thead><tr><th></th><th data-t="Nu">Nu</th><th data-t="På pappret">På pappret</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <h3 class="lf-paper__head" data-t="Pappret rad för rad">Pappret rad för rad</h3>
+        <ol class="lf-paper-rows" id="paper-rows"></ol>
+        <p class="lf-note" id="paper-gone" hidden></p>
+      </div>
+      <p class="lf-message" id="paper-message" role="status"></p>
+      <div class="sheet__actions">
+        <button class="lf-button lf-button--primary" type="button" id="paper-read" disabled data-t="Läs av fotona">Läs av fotona</button>
+        <button class="lf-button lf-button--primary" type="button" id="paper-save" hidden data-t="Spara som ny version">Spara som ny version</button>
+        <button class="lf-button lf-button--quiet" type="button" id="paper-retake" hidden data-t="Fota om">Fota om</button>
+        <button class="lf-button lf-button--quiet" type="button" id="paper-cancel" data-t="Avbryt">Avbryt</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="sheet" id="sheet-versions" hidden>
+    <div class="sheet__backdrop" data-close></div>
+    <section class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="versions-title">
+      <div class="sheet__grabber"></div>
+      <h2 id="versions-title"></h2>
+      <p class="lf-note" data-t="Den version som gäller är den förarna väljer. Den som redan kör får frågan om att byta.">Den version som gäller är den förarna väljer. Den som redan kör får frågan om att byta.</p>
+      <div class="lf-choices" id="versions-list" role="radiogroup"></div>
+      <p class="lf-message" id="versions-message" role="status"></p>
+      <div class="sheet__actions">
+        <button class="lf-button lf-button--primary" type="button" id="versions-use" disabled data-t="Låt den gälla">Låt den gälla</button>
+        <button class="lf-button lf-button--quiet" type="button" data-close data-t="Stäng">Stäng</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="sheet" id="sheet-update" hidden>
+    <div class="sheet__backdrop" data-close></div>
+    <section class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="update-title">
+      <div class="sheet__grabber"></div>
+      <h2 id="update-title"></h2>
+      <p class="lf-note" id="update-text"></p>
+      <dl class="lf-facts" id="update-facts"></dl>
+      <p class="lf-message" id="update-message" role="status"></p>
+      <div class="sheet__actions">
+        <button class="lf-button lf-button--primary" type="button" id="update-switch" data-t="Byt till den versionen">Byt till den versionen</button>
+        <button class="lf-button lf-button--quiet" type="button" id="update-keep" data-t="Behåll den jag har">Behåll den jag har</button>
       </div>
     </section>
   </div>
