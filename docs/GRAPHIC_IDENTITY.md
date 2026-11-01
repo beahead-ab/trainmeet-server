@@ -146,7 +146,6 @@ Utan eget val följer vyn enhetens ljus eller mörker; väljaren finns i Drift.
   stationslistan är vald överallt: rutten tänds i banöversikten och diagrammet
   och en flytande panel visar tåget eller stationen. Panelen byter sida så att
   det valda aldrig hamnar bakom den.
-- Sökrutan i sidhuvudet hittar tåg och stationer.
 - Är servern i US-läge visas inga Drift-paneler, bara US-sammanfattningen.
 
 ## Typografi

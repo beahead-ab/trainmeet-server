@@ -1,11 +1,11 @@
-// Sidhuvudet på smal skärm: två rader, inte fyra eller fem. Rad 1 är loggan,
-// träffen och knapparna, rad 2 är klockan, kontrolluppgifterna och sökfältet.
-// Inget sticker ut i sidled, och menyn "Öppna på skärm" ryms på skärmen. På en
+// Sidhuvudet på smal skärm: högst två rader, inte fyra eller fem. Rad 1 är loggan,
+// träffen och knapparna, rad 2 är klockan och kontrolluppgifterna. Sökfältet
+// i sidhuvudet är borttaget. Inget sticker ut i sidled, och menyn "Öppna på skärm" ryms på skärmen. På en
 // dator är sidhuvudet en rad som förut. API:et är fixturen i kr-fixture.cjs.
 const assert = require('node:assert/strict');
 const { open } = require('./kr-fixture.cjs');
 
-const ITEMS = ['#workspace-home', '#app-chrome .tm-switch', '#header-cloud-status', '#app-chrome .kr-search',
+const ITEMS = ['#workspace-home', '#app-chrome .tm-switch', '#header-cloud-status',
   '#app-clock', '#app-chrome .screen-menu', '#header-data', '#header-settings', '#header-help', '#kr-theme-toggle', '#logout'];
 
 const measure = (page) => page.evaluate((items) => {
@@ -40,7 +40,11 @@ const sameRow = (a, b) => Math.abs(a.middle - b.middle) <= 12;
       await page.locator('#app-chrome #logout').waitFor({ state: 'visible' });
       await page.waitForTimeout(600);
       const m = await measure(page);
-      assert.equal(m.rows, 2, `${where}: two rows in the header, not ${m.rows}`);
+      // Rad 2 finns bara när klockan eller statusmärket syns där. I Drift på en
+      // telefon var sökfältet ensamt på rad 2; nu är sidhuvudet en rad.
+      const second = Boolean(m.boxes['#app-clock'] || m.boxes['#header-cloud-status']);
+      assert.equal(m.rows, second ? 2 : 1, `${where}: ${second ? 'two rows' : 'one row'} in the header, not ${m.rows}`);
+      if (!second) assert.ok(m.height <= 57, `${where}: one row is no higher than before (${m.height})`);
       assert.ok(m.height <= 100, `${where}: the header is at most 100 px high (${m.height})`);
       assert.equal(m.overflow, false, `${where}: no sideways scrolling`);
       assert.equal(m.nameCut, false, `${where}: the meet name is shown in full`);
@@ -50,8 +54,9 @@ const sameRow = (a, b) => Math.abs(a.middle - b.middle) <= 12;
       const b = m.boxes;
       assert.ok(sameRow(b['#workspace-home'], b['#logout']) && sameRow(b['#workspace-home'], b['#app-chrome .screen-menu']),
         `${where}: logo, screens menu and log out share the first row`);
-      assert.ok(b['#app-chrome .kr-search'].top > b['#logout'].bottom, `${where}: the search is on the second row`);
-      if (b['#app-clock']) assert.ok(sameRow(b['#app-clock'], b['#app-chrome .kr-search']) && b['#app-clock'].right <= b['#app-chrome .kr-search'].left,
+      assert.equal(await page.locator('#kr-search, .kr-search').count(), 0, `${where}: no search field in the header`);
+      if (b['#app-clock']) assert.ok(b['#app-clock'].top > b['#logout'].bottom, `${where}: the clock is on the second row`);
+      if (b['#app-clock'] && b['#header-cloud-status']) assert.ok(sameRow(b['#app-clock'], b['#header-cloud-status']) && b['#app-clock'].right <= b['#header-cloud-status'].left,
         `${where}: the clock sits first on the second row`);
       const summary = page.locator('#app-chrome .screen-menu summary');
       assert.match(await summary.innerText(), /Öppna på skärm/, `${where}: the screens button keeps its name`);
@@ -62,7 +67,7 @@ const sameRow = (a, b) => Math.abs(a.middle - b.middle) <= 12;
     } finally { await h.browser.close(); }
   }
   // Mellan 900 och 1200 px trängdes träffens namn förut ihop till 16 px under
-  // versionsmärket. Nu ger sökfältet efter först.
+  // versionsmärket.
   for (const [width, route] of [[1280, '/drift'], [1280, '/installningar'], [1024, '/drift'], [1024, '/installningar']]) {
     const h = await open({ route, width, height: 800, theme: 'dark' });
     try {
@@ -81,9 +86,8 @@ const sameRow = (a, b) => Math.abs(a.middle - b.middle) <= 12;
   const out = await open({ route: '/login', width: 390, height: 800, theme: 'dark', loggedOut: true });
   try {
     await out.page.locator('#login').waitFor({ state: 'visible' });
-    const shown = await out.page.evaluate(() => [document.querySelector('#app-chrome .tm-logo__lines'), document.querySelector('#app-chrome .kr-search')]
-      .map((element) => element.getBoundingClientRect().width > 0));
-    assert.deepEqual(shown, [true, true], 'logged out on a phone: the name TrainMeet SERVER and the search stay');
+    const shown = await out.page.evaluate(() => document.querySelector('#app-chrome .tm-logo__lines').getBoundingClientRect().width > 0);
+    assert.equal(shown, true, 'logged out on a phone: the name TrainMeet SERVER stays');
   } finally { await out.browser.close(); }
   console.log('header-mobile: ok');
 })().catch((error) => { console.error(error); process.exit(1); });
