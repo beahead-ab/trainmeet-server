@@ -494,6 +494,11 @@
             </div>
           </section>
 
+          <section id="drivers-only-summary" class="kr-panel" hidden>
+            <div class="kr-ph"><span>Lokförarna</span><span class="kr-c">träffen har bara köruppdragen än</span><span class="kr-sp"></span><a class="kr-link" href="/lokforaren/" target="_blank" rel="noopener">Öppna Lokföraren ↗</a></div>
+            <div class="kr-body"><p id="drivers-only-detail" class="lf-only__detail"></p><p class="kr-m">Förarna kör efter träffklockan och checkar in i Lokföraren. Bana, tidtabell och tågklarering läggs till i Cloud; då visas de här.</p></div>
+          </section>
+
           <section id="us-runtime-summary" class="kr-panel hidden">
             <div class="kr-ph"><span>Pågående trafik</span></div>
             <div class="kr-body"><p id="us-runtime-detail"></p><p>Trafiken hanteras i arbetsytan Dispatcher. Byt arbetsyta i menyn för att öppna den.</p></div>
@@ -1049,7 +1054,7 @@
 
             <!-- Lokförare och köruppdrag (#225). Förarnas egen app heter
                  Lokföraren och ligger på /lokforaren/. Här hittar man dit,
-                 ser vilka som kör och lägger in träffens köruppdrag. -->
+                 ser träffens köruppdrag från Cloud och vilka som kör. -->
             <section id="lokforare" class="kr-setsec" data-section="lokforare" aria-labelledby="lokforare-title" hidden>
               <div class="kr-sectitle"><h1 id="lokforare-title">Lokförare och köruppdrag</h1><span>förarnas app Lokföraren · körplan, träffklocka och incheckning</span></div>
 
@@ -1069,31 +1074,35 @@
                 </div>
               </section>
 
-              <section class="kr-panel" aria-labelledby="lf-docs-title">
-                <div class="kr-ph"><span id="lf-docs-title">Köruppdrag</span><span class="kr-c">förarna ser tjänsterna först när du gjort köruppdraget tillgängligt</span></div>
-                <ol class="lf-docs__steps">
-                  <li><b>Planeringsfilen (JSON)</b> – samma fil som går till Cloud. Den ger tjänsterna: tåg, stationer, spår och tider.</li>
-                  <li><b>Köruppdragens PDF</b> – utskriften, gärna alla 600 sidorna. Den blir förlagan som föraren kan öppna från sin tjänst.</li>
-                  <li><b>Granska</b> och gör köruppdraget tillgängligt för förarna.</li>
-                </ol>
-                <div id="lf-drop" class="kr-drop">
-                  <span class="kr-drop__title">Släpp planeringsfilen och PDF:en här</span>
-                  <span class="kr-m">en i taget eller båda på en gång · allt läses här i webbläsaren och du granskar innan förarna får något</span>
-                  <label class="kr-btn sm kr-drop__pick"><input id="lf-file" class="kr-visually-hidden" type="file" accept="application/json,.json,application/pdf,.pdf"><span>Välj fil</span></label>
-                  <input id="lf-pdf-file" class="kr-visually-hidden" type="file" accept="application/pdf,.pdf" tabindex="-1" aria-hidden="true">
+              <!-- Köruppdragen kommer med träffen från Cloud: planeringsfilen
+                   och PDF:en läggs in och görs tillgängliga där (en träff är
+                   en träff). Servern visar vad den fått och hämtar varje
+                   tjänsts egna sidor med serverkopplingen. -->
+              <section id="lf-cloud" class="kr-panel lf-cloud" aria-labelledby="lf-cloud-title">
+                <div class="lf-cloud__row">
+                  <div class="lf-cloud__files" aria-hidden="true"><span class="lf-file lf-file--json" data-no-i18n>{ }</span><span class="lf-file lf-file--pdf" data-no-i18n>PDF</span></div>
+                  <div class="lf-cloud__text">
+                    <h2 id="lf-cloud-title" class="lf-cloud__title">Köruppdragen från Cloud</h2>
+                    <span id="lf-cloud-facts" class="lf-cloud__facts"></span>
+                    <span id="lf-cloud-note" class="kr-m lf-cloud__note" hidden></span>
+                  </div>
+                  <span id="lf-cloud-status" class="kr-pill" hidden></span>
+                  <a id="lf-cloud-link" class="lf-cloud__link" target="_blank" rel="noopener" hidden><span id="lf-cloud-link-text">Ändra i Cloud</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"></path><path d="M8 7h9v9"></path></svg></a>
                 </div>
-                <div id="lf-progress" class="lf-progress" hidden>
-                  <span id="lf-progress-text" class="lf-progress__text" role="status"></span>
-                  <progress id="lf-progress-bar" class="lf-progress__bar" max="1" value="0"></progress>
-                </div>
+                <p class="kr-pf">Köruppdragen läggs in och görs tillgängliga i Cloud, under Lokförare på träffen. Servern hämtar dem med träffen.</p>
+              </section>
+
+              <!-- Köruppdrag som lades in här i 4.20–4.21, innan de flyttade
+                   till Cloud. Bara det som behövs för att avsluta dem. -->
+              <section id="lf-local" class="kr-panel" aria-labelledby="lf-local-title" hidden>
+                <div class="kr-ph"><span id="lf-local-title">Köruppdrag på servern</span><span class="kr-c">inlagda här innan köruppdragen flyttade till Cloud</span></div>
                 <p id="lf-docs-message" class="form-message" role="status"></p>
                 <div class="kr-scroll-x">
                   <table class="kr-tbl lf-docs">
-                    <thead><tr><th>Köruppdrag</th><th class="r">Tjänster</th><th>Förlaga (PDF)</th><th>Förarna</th><th></th></tr></thead>
+                    <thead><tr><th>Köruppdrag</th><th class="r">Tjänster</th><th>Förarna</th><th></th></tr></thead>
                     <tbody id="lf-docs-rows"></tbody>
                   </table>
                 </div>
-                <p id="lf-docs-empty" class="kr-empty" hidden>Inga köruppdrag på servern än. Förarna kan öva med tjänst 132 tills du laddat upp träffens.</p>
               </section>
 
               <section id="lf-review" class="kr-panel" aria-labelledby="lf-review-title" hidden>
@@ -1586,7 +1595,6 @@
     <script src="/assets/drift.js" defer></script>
     <script src="/assets/server-ui.js" defer></script>
     <script src="/assets/settings.js" defer></script>
-    <script src="/assets/lokforaren-koruppdrag.js" defer></script>
     <script src="/assets/lokforare-admin.js" defer></script>
     <script src="/assets/data-page.js" defer></script>
     <script src="/assets/app.js?v=20261006-1" defer></script>

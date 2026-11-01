@@ -157,6 +157,35 @@ def wait_for_runtime_change(link_token: str, endpoint_url: str, publication_id: 
                                  str(payload.get("package_checksum", "")), payload.get("wait_supported") is True)
 
 
+#: En tjänsts egna sidor ur köruppdragen (Värnamo: omkring 25 kB).
+DRIVER_PART_MAX_BYTES = 8 * 1024 * 1024
+
+
+def fetch_driver_part(link_token: str, endpoint_url: str, sha256: str, *, timeout: float = 20) -> bytes:
+    """En tjänsts egna sidor som PDF ur köruppdragen i Cloud (Cloud #113).
+
+    Delarna är innehållsadresserade: Cloud lämnar bara ut en del som någon av
+    träffens publicerade versioner hänvisar till, och bara till en kopplad server.
+    """
+    token = link_token.strip()
+    if not token:
+        raise CentralSyncError("Servern är inte kopplad till en central träff")
+    endpoint_url = canonical_runtime_url(endpoint_url).split("?", 1)[0].rstrip("/")
+    request = Request(f"{endpoint_url}/driver-parts/{sha256}?{urlencode({'token': token})}",
+                      headers={"Accept": "application/pdf", "User-Agent": "TrainMeet-Server/0.6"})
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            data = response.read(DRIVER_PART_MAX_BYTES + 1)
+    except HTTPError as error:
+        raise CentralSyncError("Tjänstens sidor finns inte i Cloud" if error.code == 404
+                               else "Tjänstens sidor kunde inte hämtas från Cloud") from error
+    except (URLError, TimeoutError) as error:
+        raise CentralSyncError("TrainMeet kunde inte nås. Kontrollera internetanslutningen.") from error
+    if len(data) > DRIVER_PART_MAX_BYTES:
+        raise CentralSyncError("Tjänstens sidor är för stora")
+    return data
+
+
 def _heartbeat(name: str | None, running_version: str | None) -> dict[str, str]:
     # The running publication ID is deliberately NOT the notification cursor,
     # device config generation or software version. Cloud resolves its ordinal.

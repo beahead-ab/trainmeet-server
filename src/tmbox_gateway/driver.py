@@ -75,7 +75,8 @@ DEMO_DUTY: dict[str, Any] = {
 
 EVENT_KINDS = {"duty_start", "duty_end", "departure", "arrival", "stop", "pass", "note"}
 #: Anvisningarna i ett köruppdrag, som uppgifter Lokföraren skriver på
-#: förarens språk (se lokforaren-koruppdrag.js och docs/LOKFORAREN.md).
+#: förarens språk. Planeringsfilen läses i TrainMeet Cloud (src/driver/koruppdrag.js
+#: där); se docs/LOKFORAREN.md.
 INSTRUCTION_KINDS = {
     "crosses", "overtakes", "overtaken_by", "exchange_passengers", "no_exchange",
     "couple", "uncouple", "use", "from_parking", "to_parking", "lift_on", "lift_off",

@@ -4352,6 +4352,12 @@ function topologyDriverMark(svg, mark, cy, r) {
 function renderTopology(snapshot, target = document.querySelector("#topology-svg"), options = {}) {
   if (!target) return;
   let { positions, edges, viewBox } = topologyLayout(snapshot, options.kr?.wide ? "wide" : "");
+  // En träff med bara lokförarna har ingen bana än: kartan är tom, inte trasig.
+  if (!positions.size) {
+    target.setAttribute("viewBox", `0 0 ${Math.max(280, Math.round(options.kr?.width || 400))} 40`);
+    target.replaceChildren();
+    return;
+  }
   // kr = Kontrollrummet: ritas i riktiga pixlar på rutans bredd, med egna storlekar.
   // kr.screen = en skärm på helskärm (Banöversikt, Översikt): samma ritning, större,
   // och kr.height låter grenarna använda höjden i stället för att lämna den tom.
