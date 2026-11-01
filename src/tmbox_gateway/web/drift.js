@@ -79,6 +79,14 @@
     const value = ((Math.floor(minute + 1e-9) % 1440) + 1440) % 1440;
     return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
   };
+  // Diagrammets tidsspann. Hela dagen går ofta förbi midnatt (00:00 till 01:00
+  // nästa dygn); utan dygnet stod det "00:00–01:00", som om bara en timme visades.
+  /** Tågdiagrammets minsta bredd per timme i Drift. */
+  const GRAPH_HOUR_PX = 40;
+  const rangeLabel = (start, end) => {
+    const nextDay = Math.floor((end - 1e-9) / 1440) > Math.floor((start + 1e-9) / 1440);
+    return `${clockLabel(start)}–${clockLabel(end)}${nextDay ? ` (${t("+1 dygn")})` : ""}`;
+  };
 
   function formatTime(value, us, seconds = false) {
     const text = String(value || "").slice(0, seconds ? 8 : 5);
@@ -396,25 +404,42 @@
   function renderGraph() {
     const target = $("#overview-graph"), snapshot = ctx.snapshot, lib = graphs(); if (!target || !snapshot || !lib) return;
     const live = liveSeconds();
-    const width = Math.max(280, contentWidth(target.parentElement) || 1200);
+    const box = target.parentElement;
+    const available = Math.max(280, contentWidth(box) || 1200);
     // Namnen när det finns plats, annars koderna: aldrig båda, det blev plottrigt.
-    const showNames = width >= 640;
+    const showNames = available >= 640;
     const longest = Math.max(0, ...(snapshot.stations || []).map((station) => String(station.name || "").length));
     const left = showNames ? Math.min(210, Math.max(96, Math.round(longest * 7.2) + 24)) : 64;
     const lines = lib.lines(snapshot);
     // Förvalet är huvudlinjen, som planeringsprogrammets blad; "Alla linjer" ritar dem ovanpå varandra.
     if (ctx.graphLine && ctx.graphLine !== "all" && !lines.some((line) => line.id === ctx.graphLine)) ctx.graphLine = "";
     const line = ctx.graphLine === "all" ? null : ctx.graphLine || lines[0]?.id || null;
-    const g = lib.layout(snapshot, { width, windowMinutes: ctx.graphWindow, train: ctx.selection.train, now: live === null ? null : live / 60,
-      line, tracks: graphTracks(), minutes: showNames, left, right: 18, gap: showNames ? 22 : 16, trackStep: showNames ? 14 : 11 });
+    const options = { windowMinutes: ctx.graphWindow, train: ctx.selection.train, now: live === null ? null : live / 60,
+      line, tracks: graphTracks(), minutes: showNames, left, right: 18, gap: showNames ? 22 : 16, trackStep: showNames ? 14 : 11 };
+    // Minst 40 px per timme. Hela dagen på en telefon blev annars tolv pixlar
+    // per timme och klockslagen skrevs över varandra; nu rullas diagrammet i
+    // sidled i panelen i stället, som Clouds tågdiagram på 390 px.
+    let g = lib.layout(snapshot, { ...options, width: available });
+    const width = Math.max(available, Math.ceil(left + 18 + (g.end - g.start) / 60 * GRAPH_HOUR_PX));
+    if (width > available) g = lib.layout(snapshot, { ...options, width });
+    const wide = width > available;
+    box.classList.toggle("is-wide", wide);
+    if (wide) target.style.width = `${width}px`; else target.style.removeProperty("width");
     const lives = levelNow() >= 5 ? model.trainLive(ctx.snapshot, liveSeconds()) : null;
     lib.render(target, g, { cls: lib.DRIFT, codes: !showNames, clip: "overview-graph-clip", onSelect: (number) => hooks.selectTrain?.(number),
       onStation: (stationId) => { ctx.graphTracks = "some"; if (ctx.graphExpanded.has(stationId)) ctx.graphExpanded.delete(stationId); else ctx.graphExpanded.add(stationId); store.set("trainmeet.driftGraphTracks", ctx.graphTracks); renderGraph(); },
       label: (number) => t("Tåg {number}", { number }), marks: lives ? (number) => model.deviationView(5, lives.get(String(number)))?.mark || null : null });
-    target.setAttribute("aria-label", t("Tågdiagram {from} till {to}", { from: clockLabel(g.start), to: clockLabel(g.end) }));
+    target.setAttribute("aria-label", t("Tågdiagram {from} till {to}", { from: clockLabel(g.start), to: rangeLabel(g.start, g.end).split("–")[1] }));
     target.onclick = (event) => { if (event.target === target) hooks.clear?.(); };
+    // Ett rullbart diagram visar klockan när det ritas för ett nytt fönster
+    // eller en ny linje, men flyttar sig inte medan någon tittar längre bort.
+    const view = `${ctx.graphWindow}|${line}|${available}`;
+    if (wide && box.dataset.view !== view) {
+      box.dataset.view = view;
+      box.scrollLeft = Math.max(0, (g.nowX ?? g.left) - box.clientWidth * 0.3);
+    } else if (!wide) delete box.dataset.view;
     const meta = $("#drift-graph-meta");
-    if (meta) meta.textContent = `${clockLabel(g.start)}–${clockLabel(g.end)} · ${t("tryck på ett tåg för att tända rutten")}`;
+    if (meta) meta.textContent = `${rangeLabel(g.start, g.end)} · ${t("tryck på ett tåg för att tända rutten")}`;
     // Linjevalet finns bara när banan har mer än en linje.
     const select = $("#drift-graph-line");
     if (select) {
@@ -629,7 +654,10 @@
       pdoc.body.className = "kr-print";
       const heading = pdoc.createElement("h1"); heading.textContent = title;
       const holder = pdoc.createElement("div"); holder.className = "kr-graph";
-      holder.append(pdoc.importNode(svg, true));
+      // Papperets bredd, inte den rullbara bredden från en smal skärm.
+      const copy = pdoc.importNode(svg, true);
+      copy.style.removeProperty("width");
+      holder.append(copy);
       pdoc.body.append(heading, holder);
       link.addEventListener("load", () => { page.focus(); page.print(); });
     });

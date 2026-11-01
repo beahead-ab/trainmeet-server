@@ -477,7 +477,11 @@
     for (let minute = Math.ceil(start / 60) * 60; minute <= end; minute += 60) hours.push({ minute, x: x(minute), label: clockLabel(minute), major: end - start <= 360 || (minute / 60) % 2 === 0 });
     const halves = [];
     if (end - start <= 360) for (let minute = Math.ceil(start / 30) * 30; minute <= end; minute += 30) if (minute % 60) halves.push({ minute, x: x(minute) });
-    return { width: o.width, height, left: o.left, right: o.right, top: o.top, bottom: o.bottom, start, end, now, nowX: now === null ? null : x(now), x, panels, trains, hours, halves,
+    // Det minsta avståndet mellan två stationers rader. På skärmen ryms allt
+    // alltid, och med många linjer kan raderna bli tätare än namnens höjd.
+    const spacing = panels.flatMap((panel) => panel.stations.slice(1).map((entry, index) => entry.y - (panel.stations[index].tracks.at(-1)?.y ?? panel.stations[index].y)));
+    const rowSpacing = spacing.length ? Math.min(...spacing) : Infinity;
+    return { width: o.width, height, left: o.left, right: o.right, top: o.top, bottom: o.bottom, start, end, now, nowX: now === null ? null : x(now), x, panels, trains, hours, halves, rowSpacing,
       lines: all, options: o };
   }
 
@@ -487,6 +491,15 @@
     const node = document.createElementNS(SVG, tag);
     for (const [key, value] of Object.entries(attrs)) if (value !== undefined && value !== null) node.setAttribute(key, String(value));
     if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  /** Tågslagets färg på linjen eller numret. Aldrig som style-attribut: serverns
+   *  CSP (style-src 'self') stoppar det, och Drift och storskärmen fick då bara
+   *  två färger. Elementets egen stil (CSSOM) släpps igenom och väger lika
+   *  tungt, så Cloud ser ut som förut. */
+  function paint(node, property, color) {
+    if (color) node.style.setProperty(property, color);
     return node;
   }
 
@@ -507,7 +520,8 @@
     tagBoxCleared: "sc-graph-tag is-cleared", tagTextCleared: "sc-graph-tag-text is-cleared", now: "sc-graph-now", nowBox: "sc-graph-now-tag", nowText: "sc-graph-now-text", tagHeight: 18, labelDy: 5.5,
     // Storskärmens tågnummer, minuter och klocka är 15 % större än Drifts (4.12.0); skarmar.css har storlekarna.
     // Spårens namn står i en egen kolumn, så att stationens namn inte skrivs över.
-    text: 1.15, trackColumn: 24, colors: true };
+    // labelSize: stationsnamnens höjd (skarmar.css); tätare rader krymper namnen och rubrikerna.
+    text: 1.15, trackColumn: 24, colors: true, labelSize: 16 };
 
   /**
    * Ritar geometrin i en SVG. `cls` är klassnamnen (DRIFT eller SCREEN),
@@ -529,8 +543,18 @@
       defs.append(clipPath); parts.push(defs);
     }
     if (g.nowX !== null) parts.push(el("rect", { class: cls.past, x: left, y: areaTop, width: Math.max(0, Math.min(g.nowX, right) - left), height: areaBottom - areaTop }));
+    // Alla nio linjer på en skärm gav rader tätare än namnen, som skrevs över
+    // varandra. Då krymper namnen och rubrikerna lika mycket som raderna (dock
+    // högst till hälften); skarmar.css läser skalan.
+    // Linjernas rubriker ritas sist, ovanpå tågen, så att ett tågnummer vid
+    // fönstrets början inte skriver över linjens namn.
+    const titles = [];
+    const squeeze = cls.labelSize && Number.isFinite(g.rowSpacing) ? Math.max(0.5, Math.min(1, g.rowSpacing / (cls.labelSize * 1.1))) : 1;
+    if (squeeze < 1) svg.style.setProperty("--graph-label-scale", squeeze.toFixed(3)); else svg.style.removeProperty("--graph-label-scale");
     for (const panel of g.panels) {
-      if (panel.title) parts.push(el("text", { class: cls.title, x: left, y: panel.y0 + 13 }, panel.title));
+      // Rubriken står i sitt eget band ovanför linjens första station, också när bandet är hoptryckt.
+      const band = panel.stations.length ? panel.stations[0].y - panel.y0 : 26;
+      if (panel.title) titles.push(el("text", { class: cls.title, x: left, y: panel.y0 + Math.min(13, band * 0.62) }, panel.title));
       for (const entry of panel.stations) {
         parts.push(el("line", { class: cls.grid, x1: left, y1: entry.y, x2: right, y2: entry.y }));
         const name = el("text", { class: codes ? cls.code : cls.label, x: left - 10 - (entry.tracks.length ? cls.trackColumn || 0 : 0), y: entry.y + cls.labelDy, "text-anchor": "end", "data-station-id": entry.station.id },
@@ -565,7 +589,9 @@
       const node = group(train, `${cls.train} is-${train.type}`);
       for (const run of train.runs) {
         const points = run.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
-        node.append(el("polyline", { class: `${cls.line} is-${train.type}${train.selected ? " lit sel" : ""}`, points, ...(train.color && cls.colors ? { style: `stroke:${train.color}` } : {}) }), el("polyline", { class: cls.hit, points }));
+        // Ett valt tåg behåller valets färg (.pl.lit.sel), inte tågslagets.
+        node.append(paint(el("polyline", { class: `${cls.line} is-${train.type}${train.selected ? " lit sel" : ""}`, points }), "stroke", cls.colors && !train.selected ? train.color : null),
+          el("polyline", { class: cls.hit, points }));
       }
       for (const dwell of train.dwells) node.append(el("line", { class: `${cls.dwell} is-${train.type}`, x1: dwell.x1.toFixed(1), y1: dwell.y.toFixed(1), x2: dwell.x2.toFixed(1), y2: dwell.y.toFixed(1) }));
       for (const leg of train.legs) {
@@ -574,7 +600,8 @@
           const mx = (leg.x1 + leg.x2) / 2, my = (leg.y1 + leg.y2) / 2, degrees = angle(leg);
           // Ovanför linjen, vinkelrätt mot den.
           const radians = degrees * Math.PI / 180, ox = Math.sin(radians) * 7 * k, oy = -Math.cos(radians) * 7 * k;
-          node.append(el("text", { class: `${cls.name} is-${train.type}`, x: 0, y: 0, "text-anchor": "middle", transform: `translate(${(mx + ox).toFixed(1)} ${(my + oy).toFixed(1)}) rotate(${degrees.toFixed(1)})`, ...(train.color && cls.colors ? { style: `fill:${train.color}` } : {}) }, train.label || train.number));
+          node.append(paint(el("text", { class: `${cls.name} is-${train.type}`, x: 0, y: 0, "text-anchor": "middle", transform: `translate(${(mx + ox).toFixed(1)} ${(my + oy).toFixed(1)}) rotate(${degrees.toFixed(1)})` }, train.label || train.number),
+            "fill", cls.colors ? train.color : null));
         }
         if (g.options.minutes && Math.abs(leg.y2 - leg.y1) >= 14) {
           const down = leg.y2 > leg.y1;
@@ -601,7 +628,7 @@
     }
     const trainsLayer = el("g", clip ? { "clip-path": `url(#${clip})` } : {});
     trainsLayer.append(...gray, ...chosen, ...lit);
-    parts.push(trainsLayer);
+    parts.push(trainsLayer, ...titles);
     if (g.nowX !== null) {
       parts.push(el("line", { class: cls.now, x1: g.nowX, y1: areaTop, x2: g.nowX, y2: areaBottom }), el("rect", { class: cls.nowBox, x: g.nowX - 24 * k, y: 0, width: 48 * k, height: 18 * k, rx: 5 }),
         el("text", { class: cls.nowText, x: g.nowX, y: 13 * k, "text-anchor": "middle" }, clockLabel(g.now)));

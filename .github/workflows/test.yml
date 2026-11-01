@@ -71,3 +71,4 @@ jobs:
           node tests/js/station-automatic-live.test.cjs
           node tests/js/tellurian-settings.test.cjs
           node tests/js/screen-graph-fill.test.cjs
+          node tests/js/graph-colours-live.test.cjs
