@@ -133,27 +133,42 @@ button { cursor: pointer; }
 .lf-facts dd { margin: 0; font-weight: 600; text-align: right; }
 
 /* ── Nedräkning ───────────────────────────────────────────────────── */
-.lf-countdown { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 18px; }
-.lf-countdown__label { font-size: 15px; font-weight: 500; color: var(--mute); }
-.lf-countdown__value { font-size: 88px; font-weight: 650; letter-spacing: -.04em; line-height: 92px; }
-.lf-countdown__value.is-soon { color: var(--amber); }
-.lf-countdown__sub { font-size: 15px; color: var(--ink2); text-align: center; }
-.lf-milestones { position: relative; flex: 0 0 auto; height: 84px; margin: 8px 44px 0; }
-.lf-milestones__track { position: absolute; left: 0; right: 0; top: 9px; height: 2px; background: var(--line2); }
-.lf-milestones__fill { position: absolute; left: 0; top: 0; height: 2px; width: 0; background: var(--mute); }
-.lf-milestones__now { position: absolute; top: -9px; width: 2px; height: 20px; margin-left: -1px; left: 0; background: var(--now); box-shadow: var(--now-glow); }
-.lf-milestones__mark { position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 600; line-height: 15px; color: var(--mute); text-align: center; width: 96px; }
-.lf-milestones__mark--20 { left: 33.33%; }
-.lf-milestones__mark--10 { left: 66.67%; }
-.lf-milestones__mark--0 { left: 100%; color: var(--ink); }
-.lf-milestones__mark.is-done { color: var(--ink); }
-.lf-milestones__dot { width: 10px; height: 10px; margin-top: 5px; border-radius: 50%; border: 2px solid var(--line2); background: var(--bg); }
-.lf-milestones__mark.is-done .lf-milestones__dot, .lf-milestones__mark--0 .lf-milestones__dot { border-color: var(--ink); }
-.lf-first__list { list-style: none; margin: 6px 0 0; padding: 0; }
-.lf-first__list li { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--line); }
-.lf-first__time { font-size: 14px; font-weight: 600; }
-.lf-first__what { display: flex; flex-direction: column; gap: 2px; font-size: 15px; font-weight: 600; }
-.lf-first__what small { font-size: 12.5px; font-weight: 400; color: var(--mute); }
+/* Lugn före start: timmar och minuter i stället för rusande sekunder, och
+ * samma rälsspråk som körplanen för det som händer fram till start. */
+.lf-countdown { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 14px; text-align: center; }
+.lf-countdown__label { font-size: 15px; font-weight: 600; line-height: 20px; color: var(--ink2); }
+.lf-countdown__value { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; margin-top: 2px; font-size: 64px; font-weight: 600; letter-spacing: -.03em; line-height: 66px; }
+.lf-countdown__num { color: var(--ink); }
+.lf-countdown__unit { margin: 0 14px 0 6px; font-size: 22px; font-weight: 500; letter-spacing: 0; color: var(--mute); }
+.lf-countdown__unit:last-child { margin-right: 0; }
+.lf-countdown__unit-line { font-size: 14.5px; line-height: 20px; color: var(--mute); }
+.lf-countdown__real { margin-top: 14px; padding: 7px 14px; border-radius: 15px; background: var(--panel2); border: 1px solid var(--line); font-size: 14px; font-weight: 500; line-height: 19px; color: var(--ink2); }
+.lf-countdown__real.is-stopped { color: var(--mute); }
+.lf-first { display: flex; flex-direction: column; gap: 12px; }
+.lf-first__list { list-style: none; margin: 0; padding: 0; }
+.lf-step { position: relative; display: grid; grid-template-columns: 46px 14px minmax(0, 1fr); column-gap: 14px; align-items: start; padding-bottom: 14px; }
+.lf-step:last-child { padding-bottom: 0; }
+/* Rälsen ner till nästa steg: streckad medan föraren väntar, heldragen i tjänsten. */
+.lf-step::before { content: ""; position: absolute; left: 66px; top: 10px; bottom: -10px; width: 2px; background: var(--rail); }
+.lf-step:last-child::before { display: none; }
+.lf-step.is-wait::before { background: repeating-linear-gradient(to bottom, var(--rail) 0 4px, transparent 4px 9px); }
+.lf-step.is-past::before { background: var(--rail-past); }
+.lf-step.is-past.is-wait::before { background: repeating-linear-gradient(to bottom, var(--rail-past) 0 4px, transparent 4px 9px); }
+.lf-step__time { font-size: 14px; font-weight: 600; line-height: 20px; text-align: right; color: var(--ink); }
+.lf-step__node { position: relative; z-index: 1; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 2.5px solid var(--node); background: var(--bg); }
+.lf-step__what { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 15px; font-weight: 600; line-height: 20px; color: var(--ink); }
+.lf-step__what small { font-size: 12.5px; font-weight: 400; line-height: 17px; color: var(--mute); }
+.lf-step.is-now .lf-step__time { color: var(--now); }
+.lf-step.is-now .lf-step__node { border-color: var(--now); background: var(--now); box-shadow: var(--now-glow); }
+/* Som NU-linjen: utan sken när klockan står, ihålig utan kontakt. */
+.lf.is-stopped .lf-step.is-now .lf-step__node { box-shadow: none; }
+.lf.is-lost .lf-step.is-now .lf-step__node { box-shadow: none; background: var(--bg); border-style: dashed; }
+.lf-step.is-reminder .lf-step__node, .lf-step.is-opens .lf-step__node, .lf-step.is-off .lf-step__node { width: 10px; height: 10px; margin: 5px 2px 0; border-width: 2px; border-color: var(--mute); }
+.lf-step.is-off .lf-step__node { border-style: dashed; }
+.lf-step.is-off .lf-step__what { color: var(--mute); }
+.lf-step.is-start .lf-step__node { border-radius: 3px; }
+.lf-step.is-past .lf-step__time, .lf-step.is-past .lf-step__what { color: var(--mute); }
+.lf-step.is-past .lf-step__node { border-color: var(--rail-past); }
 
 /* ── Körplanen ────────────────────────────────────────────────────── */
 .view--korplan { overflow: hidden; display: flex; flex-direction: column; }
@@ -328,7 +343,16 @@ button { cursor: pointer; }
   .lf-next { flex: 0 0 280px; margin: 10px 12px 10px 0; align-self: flex-start; }
   .lf-tabs { padding-top: 4px; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4px); }
   .lf-tab { flex-direction: row; justify-content: center; gap: 8px; font-size: 13px; }
-  .lf-countdown__value { font-size: 64px; line-height: 68px; }
+  /* Nedräkningen bredvid det som händer, så att allt syns utan att scrolla. */
+  .view--countdown { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; align-content: start; column-gap: 28px; row-gap: 12px; max-width: 900px; padding-top: 14px; }
+  .view--countdown > * { grid-column: 1; }
+  .view--countdown > .lf-first { grid-column: 2; grid-row: 1 / 5; }
+  .lf-countdown { padding-top: 0; }
+  .lf-countdown__value { font-size: 50px; line-height: 56px; }
+  /* Liggande räcker väntan fram till start; resten står i körplanen. */
+  .lf-step.is-moment { display: none; }
+  .lf-step.is-start { padding-bottom: 0; }
+  .lf-step.is-start::before { display: none; }
 }
 
 /* Förlagan: originalsidorna i köruppdragets PDF. */

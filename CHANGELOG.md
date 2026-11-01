@@ -5,6 +5,14 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Lugnare nedräkning före tjänsten i Lokföraren
+
+Nedräkningen visar tid kvar i timmar och minuter, till exempel *2 tim 34 min
+kvar på träffklockan*, i stället för sekunder som rusar vid 4×. Under står vad
+det blir i verklig tid (*≈ 39 min · klockan går ×4*), eller att tiden väntar
+när klockan står. **Det här händer** visar i tidsordning NU, påminnelsen,
+körplanen som öppnas av sig själv och tjänstens första moment.
+
 ### Lokföraren visar hela uppdragslistan med smarta filter
 
 Alla tjänster visas direkt, även när katalogen har fler än 30 uppdrag.

@@ -169,6 +169,18 @@
     const h = Math.floor(total / 3600), m = Math.floor(total / 60) % 60, s = total % 60;
     return h > 0 ? h + ":" + pad(m) + ":" + pad(s) : m + ":" + pad(s);
   }
+  // Lång tid kvar, lugnt: timmar och minuter, aldrig sekunder som rusar vid
+  // 4×. Minuterna räknas uppåt, så att det aldrig står "0 min" före start.
+  function calmParts(minutes) {
+    const total = Math.max(1, Math.ceil(minutes - 1e-6));
+    const h = Math.floor(total / 60), m = total % 60;
+    const parts = [];
+    if (h) parts.push([h, t("tim")]);
+    if (m || !h) parts.push([m, t("min")]);
+    return parts;
+  }
+  const calm = (minutes) => calmParts(minutes).map(([value, unit]) => value + " " + unit).join(" ");
+  const speedLabel = (speed) => (Number.isInteger(speed) ? String(speed) : speed.toFixed(1));
 
   // ── Ikoner ─────────────────────────────────────────────────────────
   const AVATAR_COLORS = ["#475569", "#0f5d57", "#7c3aed", "#b45309", "#1d4ed8", "#be123c", "#3f6212"];
@@ -293,7 +305,7 @@
     } else if (duty && state.plan && seconds !== null && app.dataset.screen === "korplan"
                && K.axisMinutes(seconds, state.plan) < state.plan.start) {
       const now = K.axisMinutes(seconds, state.plan);
-      text = state.plan.start - now <= 10 ? t("10 min kvar · körplanen öppnades av sig själv") : t("Tjänsten börjar om {time}", {time: left(state.plan.start - now)});
+      text = state.plan.start - now <= 10 ? t("10 min kvar · körplanen öppnades av sig själv") : t("Tjänsten börjar om {time}", {time: calm(state.plan.start - now)});
       kind = "is-info"; icon = "M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0";
     } else if (state.newBuild) {
       text = t("Ny version av Lokföraren · tryck för att uppdatera");
@@ -843,42 +855,106 @@
   }
 
   // ── Nedräkning ─────────────────────────────────────────────────────
+  // Före start ska föraren kunna lägga undan telefonen. Därför: tid kvar i
+  // timmar och minuter på träffklockan (inga sekunder som rusar vid 4×), vad
+  // det blir i verklig tid, och i tidsordning vad som händer fram till och
+  // med tjänstens första moment: påminnelsen, körplanen som öppnas av sig
+  // själv och starten.
   function renderCountdown(seconds) {
     const plan = state.plan;
     if (!plan) return;
-    const duty = activeDuty();
     const now = seconds === null ? null : K.axisMinutes(seconds, plan);
     const remaining = now === null ? null : plan.start - now;
-    const value = $("#countdown-value");
-    value.textContent = remaining === null ? "–" : left(remaining);
-    value.classList.toggle("is-soon", remaining !== null && remaining <= 10);
     const first = plan.rows[0];
-    $("#countdown-sub").textContent = t("{time} träfftid · {station}", {time: K.label(plan.start), station: first.station}) + (noteLines(first).length ? " · " + noteLines(first)[0].toLowerCase() : "");
-    $("#mark-start").textContent = t("Start {time}", {time: K.label(plan.start)});
-    const pct = remaining === null ? 0 : Math.max(0, Math.min(1, (30 - remaining) / 30));
-    $("#countdown-fill").style.width = (pct * 100) + "%";
-    $("#countdown-now").style.left = (pct * 100) + "%";
-    $("#mark-20").classList.toggle("is-done", remaining !== null && remaining <= 20);
-    $("#mark-10").classList.toggle("is-done", remaining !== null && remaining <= 10);
-    const list = $("#first-moments");
-    if (list.dataset.duty !== duty.id) {
-      list.dataset.duty = duty.id;
-      list.replaceChildren();
-      for (const row of plan.rows.slice(0, 3)) {
-        const item = document.createElement("li");
-        const time = document.createElement("span");
-        time.className = "lf-first__time";
-        time.textContent = K.label(row.t);
-        const what = document.createElement("span");
-        what.className = "lf-first__what";
-        const isDuty = row.kind.startsWith("duty");
-        what.textContent = isDuty ? KIND[row.kind]() : (row.train && row.kind === "departure" ? t("{train} avgår", {train: row.train}) : KIND[row.kind]() + " " + row.station);
-        const small = document.createElement("small");
-        small.textContent = [row.station, ...noteLines(row)].filter(Boolean).join(" · ");
-        what.append(small);
-        item.append(time, what);
-        list.append(item);
+    const label = first.station
+      ? t("Tjänsten börjar {time} i {station}", {time: K.label(plan.start), station: first.station})
+      : t("Tjänsten börjar {time}", {time: K.label(plan.start)});
+    if ($("#countdown-label").textContent !== label) $("#countdown-label").textContent = label;
+
+    const value = $("#countdown-value");
+    const shown = remaining === null ? "–" : calm(remaining);
+    if (value.dataset.shown !== shown) {
+      value.dataset.shown = shown;
+      value.replaceChildren();
+      if (remaining === null) value.textContent = "–";
+      else for (const [number, unit] of calmParts(remaining)) {
+        const digits = document.createElement("span");
+        digits.className = "lf-countdown__num";
+        digits.textContent = number;
+        const word = document.createElement("span");
+        word.className = "lf-countdown__unit";
+        word.textContent = unit;
+        value.append(digits, word);
       }
+    }
+
+    // Samma tid i verkligheten: vid 4× är två och en halv timme på
+    // träffklockan knappt 40 minuter. En stoppad klocka väntar, och då
+    // väntar tiden kvar också.
+    const mode = clockMode();
+    const speed = state.clock && Number(state.clock.speed) > 0 ? Number(state.clock.speed) : 1;
+    let real = "";
+    if (remaining !== null && mode === "running") {
+      real = Math.abs(speed - 1) < 0.01 ? t("Träffklockan går i vanlig takt")
+        : t("≈ {time} i verklig tid · klockan går ×{speed}", {time: calm(remaining / speed), speed: speedLabel(speed)});
+    } else if (remaining !== null && mode === "stopped") {
+      real = t("Klockan står still, så tiden kvar väntar");
+    }
+    const realLine = $("#countdown-real");
+    realLine.hidden = !real;
+    realLine.classList.toggle("is-stopped", mode === "stopped");
+    if (realLine.textContent !== real) realLine.textContent = real;
+
+    renderSteps(plan, now);
+  }
+
+  // Det här händer, på träffklockan: nu, påminnelsen 20 min före, körplanen
+  // som öppnas 10 min före, och tjänstens tre första moment. Det som redan
+  // hänt är grått; väntan fram till start är streckad, tjänsten heldragen.
+  function renderSteps(plan, now) {
+    const reminders = store.get("reminders", true);
+    const steps = [];
+    if (now !== null) steps.push({t: now, kind: "now", title: t("Nu"), sub: ""});
+    steps.push(reminders
+      ? {t: plan.start - 20, kind: "reminder", title: t("Påminnelse"),
+        sub: store.get("sound", true) ? t("med ljud och vibration, om appen är öppen") : t("om appen är öppen")}
+      : {t: plan.start - 20, kind: "off", title: t("Ingen påminnelse"), sub: t("Påminnelserna är avstängda under Jag")});
+    steps.push({t: plan.start - 10, kind: "opens", title: t("Körplanen öppnas"), sub: t("av sig själv, du behöver inte göra något")});
+    plan.rows.slice(0, 3).forEach((row, index) => {
+      const isDuty = row.kind.startsWith("duty");
+      steps.push({
+        t: row.t, kind: index === 0 ? "start" : "moment",
+        title: isDuty ? KIND[row.kind]() : (row.train && row.kind === "departure" ? t("{train} avgår", {train: row.train}) : KIND[row.kind]() + " " + row.station),
+        sub: [row.station, ...noteLines(row)].filter(Boolean).join(" · "),
+      });
+    });
+    // Nu står efter det som händer i samma minut: då har det redan hänt.
+    steps.sort((a, b) => a.t - b.t || (a.kind === "now") - (b.kind === "now"));
+    const list = $("#first-moments");
+    const key = language + "|" + steps.map((step) => step.kind + K.label(step.t) + step.title + step.sub
+      + (now !== null && step.kind !== "now" && step.t <= now ? "·" : "")).join("|");
+    if (list.dataset.key === key) return;
+    list.dataset.key = key;
+    list.replaceChildren();
+    for (const step of steps) {
+      const past = now !== null && step.kind !== "now" && step.t <= now;
+      const item = document.createElement("li");
+      item.className = "lf-step is-" + step.kind + (past ? " is-past" : "") + (step.t < plan.start ? " is-wait" : "");
+      const time = document.createElement("span");
+      time.className = "lf-step__time";
+      time.textContent = K.label(step.t);
+      const node = document.createElement("span");
+      node.className = "lf-step__node";
+      const what = document.createElement("span");
+      what.className = "lf-step__what";
+      what.textContent = step.title;
+      if (step.sub) {
+        const small = document.createElement("small");
+        small.textContent = step.sub;
+        what.append(small);
+      }
+      item.append(time, node, what);
+      list.append(item);
     }
   }
 
@@ -1584,7 +1660,7 @@
       renderDutyFilters();
       lastNextKey = "";
       state.planFor = null;
-      $("#first-moments").dataset.duty = "";
+      $("#first-moments").dataset.key = "";
       route();
     });
     $("#me-theme").addEventListener("change", (event) => { store.set("theme", event.target.value); applyTheme(); });

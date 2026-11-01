@@ -1,7 +1,7 @@
 // Lokföraren against a real TrainMeet Server: a driver signs in, chooses
-// duty 132, follows the NOW line at 4×, checks in, sees the others on the
-// layout, saves an icon, shows on the maps (Drift, big screen, participants)
-// and sees a stopped clock.
+// duty 132, waits through a calm countdown, follows the NOW line at 4×,
+// checks in, sees the others on the layout, saves an icon, shows on the maps
+// (Drift, big screen, participants) and sees a stopped clock.
 const { chromium } = require('playwright');
 const { spawn } = require('node:child_process');
 const readline = require('node:readline');
@@ -69,6 +69,21 @@ function png(size) {
     await page.locator('#duty-found').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#found-demo').isVisible(), true);
     await page.locator('#duty-activate').click();
+
+    // 2b. Before start: a calm countdown in hours and minutes (no racing
+    // seconds at 4×), what it is in real time, and what happens until start.
+    await clock({ action: 'set', time: '14:36:04', speed: 4 });
+    await page.locator('#view-countdown').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#countdown-label').innerText(), 'Tjänsten börjar 17:10 i Spiten');
+    assert.match((await page.locator('#countdown-value').innerText()).replace(/\s+/g, ' '), /^2 tim 3[34] min$/);
+    assert.match(await page.locator('#countdown-real').innerText(), /^≈ (38|39) min i verklig tid · klockan går ×4$/);
+    const steps = (await page.locator('#first-moments li .lf-step__what').allInnerTexts()).map((text) => text.split('\n')[0]);
+    assert.deepEqual(steps.slice(0, 4), ['Nu', 'Påminnelse', 'Körplanen öppnas', 'Tjänsten börjar']);
+    await clock({ action: 'stop' });
+    await page.locator('#countdown-real.is-stopped').waitFor({ state: 'visible', timeout: 8000 });
+    assert.equal(await page.locator('#countdown-real').innerText(), 'Klockan står still, så tiden kvar väntar');
+    await clock({ action: 'start' });
+
     await clock({ action: 'set', time: '17:51:00', speed: 4 });
     await page.locator('#view-korplan').waitFor({ state: 'visible' });
 
@@ -207,7 +222,7 @@ function png(size) {
     const html = fs.readFileSync(path.join(root, 'src/tmbox_gateway/web/lokforaren/index.html'), 'utf8');
     assert.equal(/\sstyle=/.test(html), false);
     assert.deepEqual(errors, []);
-    console.log('lokforaren-live: ok (sign-in, duty 132, NOW line, seconds, check-in, layout, icon in app and account, drivers on the Drift map, big screen and participants page, stopped clock, English)');
+    console.log('lokforaren-live: ok (sign-in, duty 132, countdown, NOW line, seconds, check-in, layout, icon in app and account, drivers on the Drift map, big screen and participants page, stopped clock, English)');
   } finally {
     if (browser) await browser.close();
     fixture.stdin.end();

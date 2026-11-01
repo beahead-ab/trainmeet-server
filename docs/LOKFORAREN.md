@@ -212,9 +212,17 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
   telefonen; sekunderna visas från början.
 - Anvisningarna står under raden de hör till, så att NU-linjen aldrig går
   rakt genom texten.
-- Före start visas en nedräkning. Vid 20 och 10 träffminuter kommer en
-  påminnelse i appen (ljud och vibration om det är på); vid 10 öppnas
-  körplanen. Push när appen är stängd ingår inte än (kräver VAPID-nycklar).
+- Före start visas en lugn nedräkning: tid kvar i timmar och minuter på
+  träffklockan, aldrig sekunder (vid 4× skulle de rusa). Minuterna räknas
+  uppåt, så det står aldrig "0 min" före start. Under står vad det blir i
+  verklig tid (≈ 39 min vid ×4), eller att tiden kvar väntar när klockan står.
+  Listan **Det här händer** visar i tidsordning NU, påminnelsen, att körplanen
+  öppnas av sig själv och tjänstens tre första moment. Väntan är streckad och
+  tjänsten heldragen, som i körplanen. Liggande telefon visar bara väntan
+  fram till start.
+- Vid 20 och 10 träffminuter kommer en påminnelse i appen (ljud och vibration
+  om det är på); vid 10 öppnas körplanen. Push när appen är stängd ingår inte
+  än (kräver VAPID-nycklar).
 
 ## Incheckning och ikon
 
