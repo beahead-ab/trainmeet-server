@@ -8,6 +8,9 @@ const { open } = require('./kr-fixture.cjs');
 
 const WORKED = { backup: 'trainmeet-20261003-060000.db', taken_at: '2026-10-03T06:00:00+00:00', attempted_at: '2026-10-03T06:12:18+00:00', restored: true, problem: null };
 const FAILED = { ...WORKED, restored: false, problem: 'kopian går inte att läsa - filen är skadad eller inte en databas' };
+// Kopian är tillbaka men ett köruppdrags förlaga saknades (#225): aldrig tyst.
+const NOTE = 'Förlagan till köruppdraget Grimslöv 2027 saknas, och det är inte tillgängligt för förarna. Lägg in PDF:en igen och läs sidorna under Inställningar → Lokförare och köruppdrag.';
+const WITH_NOTES = { ...WORKED, notes: [NOTE] };
 
 const line = (page, id) => page.evaluate((id) => {
   const element = document.getElementById(id);
@@ -62,6 +65,18 @@ async function farozon(lastRestore) {
     await h.page.evaluate(() => globalThis.TrainMeetI18n.setLanguage('en', false));
     const english = await line(h.page, 'restore-last-farozon');
     assert.match(english.text, /^The last restore .+ failed: kopian går inte att läsa - filen är skadad eller inte en databas\. The database is as it was before the attempt\.$/);
+    assert.deepEqual(h.errors, []);
+  } finally { await h.browser.close(); }
+
+  // Lyckad, men en förlaga saknades: raden säger det i felfärg.
+  h = await farozon(WITH_NOTES);
+  try {
+    const shown = await line(h.page, 'restore-last-farozon');
+    assert.equal(shown.kind, 'form-message error');
+    assert.ok(shown.text.startsWith('Senaste återställningen '), shown.text);
+    assert.ok(shown.text.includes(', men: ' + NOTE), shown.text);
+    await h.page.evaluate(() => globalThis.TrainMeetI18n.setLanguage('en', false));
+    assert.ok((await line(h.page, 'restore-last-farozon')).text.includes(', but: ' + NOTE));
     assert.deepEqual(h.errors, []);
   } finally { await h.browser.close(); }
 

@@ -323,7 +323,7 @@ def _restore_from_backup(backup_path: Path, database_path: Path) -> None:
     """
 
     try:
-        backup.restore(backup_path, database_path)
+        notes = backup.restore(backup_path, database_path)
     except Exception as error:  # noqa: BLE001 - se nedan
         # Brett med flit, och bara här. Det här är sista koden som kör innan
         # os.execv startar om tjänsten: ett undantag som slipper förbi lämnar
@@ -334,7 +334,9 @@ def _restore_from_backup(backup_path: Path, database_path: Path) -> None:
         _record_restore(backup_path, database_path, _restore_problem(error, backup_path))
         return
     LOGGER.warning("TrainMeet Server är återställd från %s och startar om", backup_path.name)
-    _record_restore(backup_path, database_path, None)
+    for note in notes:
+        LOGGER.warning("%s", note)
+    _record_restore(backup_path, database_path, None, notes)
 
 
 def _restore_problem(error: Exception, backup_path: Path) -> str:
@@ -350,12 +352,13 @@ def _restore_problem(error: Exception, backup_path: Path) -> str:
     return f"oväntat fel ({type(error).__name__})"
 
 
-def _record_restore(backup_path: Path, database_path: Path, problem: str | None) -> None:
+def _record_restore(backup_path: Path, database_path: Path, problem: str | None,
+                    notes: list[str] | None = None) -> None:
     """Utfallet till statuskatalogen, där databasen ligger. Går det inte att
     skriva startar servern om ändå - det är bara beskedet som uteblir."""
 
     try:
-        backup.record_restore(database_path.parent, backup_path, problem)
+        backup.record_restore(database_path.parent, backup_path, problem, notes=notes)
     except OSError as error:
         LOGGER.error("Utfallet av återställningen kunde inte sparas: %s", error)
 

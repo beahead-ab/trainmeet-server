@@ -1608,7 +1608,12 @@ function renderLastRestore(record) {
       continue;
     }
     const values = { when: restoreClock(record.attempted_at), time: restoreClock(record.taken_at) };
-    if (record.restored) {
+    if (record.restored && record.notes?.length) {
+      // Kopian är tillbaka, men något ur den gick inte att lägga tillbaka, till
+      // exempel ett köruppdrags förlaga (#225). Serverns egen text, som problem.
+      setMessage(element, "Senaste återställningen {when} lade tillbaka kopian från {time}, men: {notes}", "error",
+        { ...values, notes: record.notes.join(" ") });
+    } else if (record.restored) {
       setMessage(element, "Senaste återställningen {when} lade tillbaka kopian från {time}.", "success", values);
     } else {
       // Skälet är serverns egen text och översätts inte, som item.problem i listan.
