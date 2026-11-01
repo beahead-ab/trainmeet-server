@@ -1,5 +1,12 @@
 [
   {
+    "version": "4.20.0",
+    "date": "2026-11-01",
+    "notes": [
+      "Lokföraren: köruppdragens anvisningar på förarens språk, sekunder av och på, ikonen följer kontot och förarna syns på kartorna (#225)"
+    ]
+  },
+  {
     "version": "4.19.1",
     "date": "2026-10-31",
     "notes": [
