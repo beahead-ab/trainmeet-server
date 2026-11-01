@@ -9,7 +9,7 @@
   const compact = (value) => normalize(value).replace(/[^a-z0-9]/g, "");
   function minutes(value) {
     const match = /^(\d{1,2}):([0-5]\d)$/.exec(String(value || ""));
-    return match && Number(match[1]) < 24 ? Number(match[1]) * 60 + Number(match[2]) : null;
+    return match && Number(match[1]) < 48 ? Number(match[1]) * 60 + Number(match[2]) : null;
   }
   function filter(duties, options = {}) {
     const terms = normalize(options.query).trim().split(/\s+/).filter(Boolean);
@@ -22,12 +22,14 @@
         || (compact(term) && compact(field).includes(compact(term)))))) return false;
       if (options.time && options.time !== "all") {
         if (!Number.isFinite(options.now)) return false;
-        const start = minutes(duty.start), end = minutes(duty.end);
+        const start = minutes(duty.start);
+        let end = minutes(duty.end);
         const now = ((options.now % 1440) + 1440) % 1440;
         if (start === null) return false;
         if (options.time === "soon" && (start - now + 1440) % 1440 > 60) return false;
-        if (options.time === "ongoing" && (end === null || (start <= end
-          ? now < start || now >= end : now < start && now >= end))) return false;
+        if (end !== null) while (end < start) end += 1440;
+        const elapsed = (now - start % 1440 + 1440) % 1440;
+        if (options.time === "ongoing" && (end === null || elapsed >= end - start)) return false;
       }
       return true;
     });
@@ -36,7 +38,7 @@
     return result.sort((a, b) => {
       if (options.sort === "start") {
         const difference = (minutes(a.start) ?? Infinity) - (minutes(b.start) ?? Infinity);
-        if (difference && Number.isFinite(difference)) return difference;
+        if (difference && !Number.isNaN(difference)) return difference;
       } else if (rank(a) !== rank(b)) return rank(a) - rank(b);
       return collator.compare(a.number, b.number) || collator.compare(a.id, b.id);
     });

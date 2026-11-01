@@ -45,3 +45,11 @@ test('no time filter is inferred from a lost clock or missing times', () => {
   assert.equal(D.filter([{id: 'x', number: '1'}], {time: 'ongoing', now: 0}).length, 0);
   assert.equal(ids({now: null}).length, 4);
 });
+
+test('extended meet hours (24–47) describe the same overnight service', () => {
+  const catalogue = [{id: 'overnight', number: '1', start: '23:40', end: '24:20'},
+    {id: 'next', number: '2', start: '24:10', end: '25:00'}];
+  assert.deepEqual(D.filter(catalogue, {time: 'ongoing', now: 5}).map((d) => d.id), ['overnight']);
+  assert.deepEqual(D.filter(catalogue, {time: 'soon', now: 23 * 60 + 50}).map((d) => d.id), ['next']);
+  assert.deepEqual(D.filter(catalogue, {time: 'ongoing', now: 30}).map((d) => d.id), ['next']);
+});
