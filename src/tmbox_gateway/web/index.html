@@ -401,6 +401,17 @@
             <p id="overview-clock-message" class="form-message" role="status"></p>
           </section>
 
+          <!-- Klarering · Tellurian Dispatch (#222): en rad bara när träffen läser Tellurian i skugga.
+               Samma status som Inställningar → Klarering, ritad av tellurian-settings.js. Läget Av syns inte. -->
+          <section id="drift-clearance" class="kr-panel kr-clearrow" aria-label="Klarering" data-tm-aria-label="Klarering" hidden>
+            <b class="kr-clearrow__label">Klarering</b>
+            <span class="kr-clearrow__who">TrainMeet klarerar. Tellurian Dispatch läses bredvid.</span>
+            <span id="drift-clearance-status" class="kr-tag off"><span class="kr-dot"></span><span id="drift-clearance-text">Skugga · ansluter …</span></span>
+            <span id="drift-clearance-note" class="kr-c"></span>
+            <span class="kr-sp"></span>
+            <a class="kr-link" href="/installningar#klarering">Visa i Inställningar →</a>
+          </section>
+
           <!-- Träffens tid (Casper 2026-10-12): dygnen på rad. Admin drar i tidslinjen, ser hur
                tågen kommer att stå och hoppar först när hon trycker Hoppa. Ritas av meet-timeline.js. -->
           <section id="drift-timeline" class="kr-panel kr-tl" aria-labelledby="drift-timeline-title">
