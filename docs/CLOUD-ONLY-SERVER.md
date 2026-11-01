@@ -200,9 +200,26 @@ publiceras på nytt, och ett äldre paket utan de nya fälten fungerar som föru
 
 Cloud märker från och med trainmeet-cloud #112 själv sådana tåg med
 `manual: true`, `manual_reason`, `manual_reasons` och `manual_codes`
-(`missing_time`, `unknown_connection`, `negative_runtime`), med samma regler
-och texter som servern. Servern lägger ihop Clouds skäl och sina egna utan att
-visa något två gånger och läser inte koderna.
+(`missing_time`, `unknown_connection`, `ambiguous_route`,
+`passage_without_time`, `negative_runtime`), med samma regler och texter som
+servern. Servern lägger ihop Clouds skäl och sina egna utan att visa något två
+gånger och läser inte koderna.
+
+**Passager som underlaget inte skriver ut** (Caspers beslut 1 november). Ett
+tåg som går A → C utan rad i B, där banan går en enda väg A–B–C, ska köras som
+vanligt. Trafikmotorn kör tåg sträcka för sträcka: varje avgång leder till
+nästa stopp över en publicerad sträcka (`train_routes.resolve_departure`), och
+automatiken, boxarna, TKL och skärmarna bygger på det. Cloud lägger därför en
+vanlig passage (`no_stop`, utan spår, `derived: "passage"`) i B i paketet, med
+gångtiden delad lika på sträckorna, och servern kör tåget som vilket tåg som
+helst: automatiken tar A–B och B–C, en box i B ser tåget passera, och spåret
+blir stationens standardspår för passerande tåg. Servern skapar inga passager
+själv. Två stopp i följd utan egen sträcka kan den inte köra, så de förblir
+manuella, med skäl efter vad banan säger: *Tåget passerar B utan tid* (en enda
+väg, men paketet har ingen passage), *Vägen A–C är inte entydig* (flera lika
+korta vägar) eller *Sträckan A–C finns inte på banan* (ingen väg, eller luckan
+är inte en färd). Mängden manuella tåg i ett paket är densamma som förut; bara
+skälen säger mer.
 
 **Planens id (#222).** Ett paket ur planeringsexporten har planens egna id som
 text: `source_station_id` på stationerna (`OperationLocation.Id`),

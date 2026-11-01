@@ -81,6 +81,58 @@ class SharedNumberTests(unittest.TestCase):
         self.assertEqual({}, shared_labels(services[:1]), "a number nobody shares gets no label")
 
 
+def line(*, ambiguous=False, passage=False, arrival="10:24"):
+    """Charlottendal 10:00 → Salsborg utan rad i Vagnsta, på banan Charlottendal–Vagnsta–Salsborg.
+
+    `ambiguous` lägger en andra lika kort väg över Övrum; `passage` är paketet
+    som Cloud skriver det, med en härledd passage i Vagnsta.
+    """
+    stations = [{"id": "cda", "name": "Charlottendal"}, {"id": "vst", "name": "Vagnsta"},
+                {"id": "sal", "name": "Salsborg"}, {"id": "ovr", "name": "Övrum"}]
+    connections = [{"id": "cda-vst", "station_a_id": "cda", "station_b_id": "vst"},
+                   {"id": "vst-sal", "station_a_id": "vst", "station_b_id": "sal"}]
+    if ambiguous:
+        connections += [{"id": "cda-ovr", "station_a_id": "cda", "station_b_id": "ovr"},
+                        {"id": "ovr-sal", "station_a_id": "ovr", "station_b_id": "sal"}]
+    stops = [{"station_id": "cda", "stop_order": 0, "arrival_time": None, "departure_time": "10:00", "service_day_offset": 0},
+             {"station_id": "sal", "stop_order": 1, "arrival_time": arrival, "departure_time": None, "service_day_offset": 0}]
+    rows = [{"id": "r-cda", "service_id": "service-95", "station_id": "cda", "departure_time": "10:00"},
+            {"id": "r-sal", "service_id": "service-95", "station_id": "sal", "arrival_time": arrival}]
+    if passage:
+        stops = [stops[0], {"station_id": "vst", "stop_order": 1, "arrival_time": "10:12", "departure_time": "10:12",
+                            "service_day_offset": 0}, {**stops[1], "stop_order": 2}]
+        rows.insert(1, {"id": "passage-1", "service_id": "service-95", "station_id": "vst", "arrival_time": "10:12",
+                        "departure_time": "10:12", "no_stop": True, "derived": "passage"})
+    return {"stations": stations, "connections": connections, "trains": rows,
+            "services": [{"id": "service-95", "train_number": "95", "days": "Dagl", "stops": stops}]}
+
+
+class OnlyWayTests(unittest.TestCase):
+    """Caspers beslut 1 november: ett tåg utan rad i en mellanstation följer banans enda väg."""
+
+    def test_a_package_with_the_passage_cloud_writes_has_no_manual_train(self):
+        self.assertEqual({}, manual_trains(line(passage=True)))
+
+    def test_without_the_passage_the_reason_says_the_station_it_passes(self):
+        self.assertEqual({"service-95": ["Tåget passerar Vagnsta utan tid"]}, manual_trains(line()))
+
+    def test_two_equally_short_ways_are_not_guessed(self):
+        self.assertEqual({"service-95": ["Vägen Charlottendal–Salsborg är inte entydig"]}, manual_trains(line(ambiguous=True)))
+
+    def test_without_a_way_the_stretch_is_missing(self):
+        package = line()
+        package["connections"] = package["connections"][:1]
+        self.assertEqual({"service-95": ["Sträckan Charlottendal–Salsborg finns inte på banan"]}, manual_trains(package))
+
+    def test_a_gap_that_is_not_a_journey_keeps_the_old_reason(self):
+        """Ankomst i ett stopp och avgång från nästa: två tåg som delar nummer, ingen färd."""
+        package = line()
+        stops = package["services"][0]["stops"]
+        stops[0].update(arrival_time="09:00", departure_time=None)
+        stops[1].update(arrival_time=None, departure_time="12:00")
+        self.assertEqual({"service-95": ["Sträckan Charlottendal–Salsborg finns inte på banan"]}, manual_trains(package))
+
+
 def broken(package, *, untimed=False, flagged=False):
     """Paketet med ett tredje tåg, 303, som inte kan köras som planen säger."""
     package = copy.deepcopy(package)
