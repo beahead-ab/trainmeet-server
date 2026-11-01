@@ -211,7 +211,11 @@ class RuntimePublication:
 
         panels = _required_list(payload, "panels")
         _unique_ids(panels, "panel")
-        if not panels:
+        # En träff kan börja med bara lokförarna (Cloud #113): köruppdragen men
+        # ännu ingen bana. Då finns inga stationer och därmed inga TMBoxar;
+        # servern kör klockan och Lokföraren. Med en bana krävs paneler som förut.
+        drivers_only = not stations and not connections and bool(payload.get("driver_duties"))
+        if not panels and not drivers_only:
             raise RuntimePublicationError("Driftpaketet innehåller inga TMBox-paneler")
         for panel in panels:
             if panel.get("slot_layout", "rows") not in ("rows", "columns"):

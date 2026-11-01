@@ -5,6 +5,24 @@ Versionsnumret sätts automatiskt vid merge till main. Se
 
 ## Nästa version
 
+### Köruppdrag från Cloud och en träff med bara lokförarna (Cloud #113)
+
+- **Köruppdragen kan komma från Cloud.** När arrangören lagt in
+  planeringsfilen och köruppdragens PDF under fliken Lokförare i Cloud följer
+  tjänsterna med träffpaketet, och varje tjänst har sina egna sidor som en
+  liten PDF. Servern hämtar sidorna med sin serverkoppling innan den tar emot
+  paketet och kontrollerar att de stämmer. Efter synken behövs inte Cloud:
+  föraren får sidorna från servern också utan internet. Går en del inte att
+  hämta tas versionen inte emot, och den som körs är oförändrad; nästa
+  kontroll försöker igen.
+- **En träff kan börja med bara lokförarna**, utan bana och utan TMBoxar.
+  Servern tar emot den och kör klockan, Lokföraren och storskärmarna. Med en
+  bana krävs TMBoxar som förut.
+- Köruppdrag som lagts in under Inställningar → Lokförare kommer först, som
+  förut, sedan Clouds och sist övningstjänsten.
+- Läsaren av köruppdragen (`lokforaren-koruppdrag.js`) är samma fil i
+  Cloud och kopieras dit med `tools/sync-i18n.mjs --siblings`.
+
 ### Drift håller isär två tåg som delar nummer, och en rättelse från Cloud står som Clouds (Cloud #100)
 
 - **Två tåg med samma nummer** (DSB IC 116 och SJ X 116) är nu två tåg i

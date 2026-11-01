@@ -45,8 +45,48 @@ Förarna väljer bland, i den här ordningen:
 
 1. Köruppdragen som gjorts tillgängliga under **Inställningar → Lokförare och
    köruppdrag** (nedan), för träffen som körs.
-2. Tjänsterna i träffens paket från Cloud, under `driver_duties`.
+2. Tjänsterna i träffens paket från Cloud, under `driver_duties` (se
+   *Köruppdrag från Cloud* nedan).
 3. Övningstjänsten **132 DEMO** (fakta ur #225, tiderna i Tveiten är exempel).
+
+### Köruppdrag från Cloud
+
+Köruppdragen kan också läggas in under fliken **Lokförare** i Cloud
+(trainmeet-cloud #113). Cloud läser planeringsfilen och PDF:en med samma modul
+(`lokforaren-koruppdrag.js`, i Cloud `src/driver/koruppdrag.js`, byte för byte
+samma fil; servern äger den och `tools/sync-i18n.mjs --siblings` kopierar den).
+När köruppdragen är tillgängliga för förarna och träffen publiceras följer
+tjänsterna med paketet, och varje tjänst hänvisar till sina egna sidor:
+
+```json
+"source": {"pages": [349, 352], "part": {"sha256": "…", "size": 25811}}
+```
+
+- **Servern hämtar delarna innan paketet tas emot**, både när servern kopplas
+  med koden och vid varje ny version, med serverkopplingen:
+  `GET <Cloud>/config/driver-parts/<sha256>?token=<serverns token>`. En del
+  godtas bara om storleken, sha256 och PDF-huvudet stämmer med paketet
+  (högst 10 MB). Delarna sparas under sin sha256 i `lokforaren/cloud/` bredvid
+  databasen, skilda från serverns egna köruppdrag.
+- **Allt eller inget.** Går en del inte att hämta tas paketet inte emot: den
+  aktiva träffen är oförändrad och Inställningar säger varför. Nästa kontroll
+  försöker igen, och delar som redan kommit fram hämtas inte en gång till.
+- **Utan internet efter synken** får föraren sidorna från servern
+  (`/v1/driver/duties/{id}.pdf`). Saknas en del ändå, till exempel efter en
+  återställning, hämtas den igen vid nästa kontroll av samma version eller när
+  föraren öppnar sidorna och servern når Cloud.
+- I tjänsten står `source` som `{"cloud": true, "pages": [349, 352], "part": true}`,
+  och Lokföraren visar *Förlagan i köruppdraget · sida 349–352*.
+
+**En träff med bara lokförarna.** En träff kan börja med köruppdragen och få
+bana och tidtabell senare. Paketet har då inga stationer, sträckor, tågrörelser
+eller TMBox-paneler, bara `driver_duties`, och servern tar emot det: klockan,
+Lokföraren, förarnas incheckningar och storskärmarna fungerar. Med en bana
+krävs TMBox-paneler som förut, och ett paket utan både bana och köruppdrag
+avvisas som förut.
+
+Inget av detta påverkar en träff som redan körs: delarna och fälten följer med
+först i en ny publicering från Cloud.
 
 ### Köruppdrag i Inställningar
 
@@ -252,7 +292,7 @@ gör det inte. Föraren kan öppna förlagan (originalsidorna) från tjänsten.
 | POST | `/v1/driver/avatar` | `{image: "data:image/jpeg;base64,…"}` |
 | POST | `/v1/driver/avatar/remove` | ta bort ikonen |
 | GET | `/v1/driver/avatars/{user_id}` | ikonen |
-| GET | `/v1/driver/duties/{tjänst-id}.pdf` | tjänstens egna sidor, om köruppdraget är tillgängligt |
+| GET | `/v1/driver/duties/{tjänst-id}.pdf` | tjänstens egna sidor: ur serverns köruppdrag när det är tillgängligt, annars ur Clouds paket |
 | GET | `/v1/driver/documents/{id}.pdf` | hela förlagan, om tjänsten saknar egna sidor |
 
 Öppna, utan inloggning:

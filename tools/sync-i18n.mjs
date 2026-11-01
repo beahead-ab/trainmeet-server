@@ -10,7 +10,10 @@ await import('./build-i18n.mjs');
 export const SHARED = [['i18n.js', 'src/i18n/core.js'], ['i18n-messages.js', 'src/i18n/messages.js'],
   ['drift-model.js', 'src/graph/drift-model.js'], ['train-graph.js', 'src/graph/train-graph.js'],
   // Träffens texter (Om trafikspelet) ritas av samma Markdown-delmängd överallt.
-  ['markdown.js', 'src/text/markdown.js']];
+  ['markdown.js', 'src/text/markdown.js'],
+  // Köruppdragen läses av samma modul i serverns Inställningar och i Clouds
+  // flik Lokförare (Cloud #113).
+  ['lokforaren-koruppdrag.js', 'src/driver/koruppdrag.js']];
 for (const project of process.argv.includes('--siblings') ? ['trainmeet-cloud', 'trainmeet-tkl'] : []) {
   for (const [source, target] of SHARED) {
     const dest = path.join(repo, '..', project, target);

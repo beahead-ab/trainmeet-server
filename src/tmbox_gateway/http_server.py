@@ -39,6 +39,7 @@ from .central_sync import (
     CentralRuntimeManifest,
     CentralSyncError,
     canonical_runtime_url,
+    fetch_driver_part,
     fetch_linked_runtime,
     fetch_runtime_download,
 )
@@ -55,6 +56,7 @@ from .driver import (
     normalize_duty,
 )
 from .driver_documents import MAX_PDF_BYTES, DriverDocuments
+from .driver_parts import CloudDriverParts, part_reference, source_pages
 from .cloud_live import LiveChannel
 from .identity import (
     AdminAccessError,
@@ -477,6 +479,10 @@ class TrainMeetHTTPApplication:
         # databas som kontona (och därmed i säkerhetskopiorna).
         self.drivers = DriverStore(identities.path)
         self.driver_documents = DriverDocuments(identities.path)
+        # Köruppdragens sidor som kommer med Clouds paket (Cloud #113), skilda
+        # från serverns egna köruppdrag ovan. Hämtningen är utbytbar i prov.
+        self.cloud_driver_parts = CloudDriverParts(Path(identities.path).parent / "lokforaren" / "cloud")
+        self.driver_part_fetcher: Callable[[str, str, str, int], bytes] = fetch_driver_part
 
         if self.runtime_store is not None and self.runtime_store.central_url():
             saved_url = self.runtime_store.central_url() or ""
@@ -910,6 +916,11 @@ class TrainMeetHTTPApplication:
             duty = normalize_duty(raw)
             if duty is not None:
                 duty["demo"] = False
+                # Sidorna i förlagan och tjänstens egen PDF, som servern hämtade
+                # med paketet (Cloud #113).
+                reference, pages = part_reference(raw), source_pages(raw)
+                if reference or pages:
+                    duty["source"] = {"cloud": True, "pages": pages, "part": reference is not None}
                 duties.append(duty)
         demo = normalize_duty(DEMO_DUTY)
         if demo is not None:
@@ -1082,11 +1093,38 @@ class TrainMeetHTTPApplication:
         return path
 
     def driver_duty_pdf(self, duty_id: str) -> Path:
-        """Bara tjänstens egna sidor ur förlagan, för föraren."""
+        """Bara tjänstens egna sidor ur förlagan, för föraren: ur serverns egna
+        köruppdrag, annars ur träffens paket från Cloud."""
         meet_key, _, _ = self._driver_meet()
-        path = self.driver_documents.part_path(duty_id, meet_key)
+        path = self.driver_documents.part_path(duty_id, meet_key) or self._cloud_duty_part(duty_id)
         if path is None:
             raise HTTPAPIError(HTTPStatus.NOT_FOUND, "document_not_found", "Tjänstens sidor finns inte på servern")
+        return path
+
+    def _cloud_duty_part(self, duty_id: str) -> Path | None:
+        """Tjänstens PDF-del från Cloud, för den aktiva träffens paket.
+
+        Delen hämtades med paketet. Saknas den ändå (en återställning, en
+        äldre hämtväg) och servern är kopplad görs ett försök att hämta den nu.
+        """
+        _, _, publication = self._driver_meet()
+        if publication is None:
+            return None
+        raw = next((item for item in publication.payload.get("driver_duties") or []
+                    if (normalize_duty(item) or {}).get("id") == duty_id), None)
+        reference = part_reference(raw)
+        if reference is None:
+            return None
+        path = self.cloud_driver_parts.path(reference["sha256"])
+        token = self.runtime_store.link_token() if self.runtime_store is not None else None
+        if path is None and token:
+            url = canonical_runtime_url(self.runtime_store.central_url() or self.config.central_runtime_url)
+            try:
+                self.cloud_driver_parts.ensure({"driver_duties": [raw]},
+                                               lambda sha, size: self.driver_part_fetcher(token, url, sha, size))
+            except CentralSyncError as error:
+                LOGGER.warning("Tjänstens sidor kunde inte hämtas från Cloud: %s", error)
+            path = self.cloud_driver_parts.path(reference["sha256"])
         return path
 
     # ── Inställningar → Lokförare (#225) ────────────────────────────────
@@ -6797,9 +6835,10 @@ class TrainMeetRequestHandler(BaseHTTPRequestHandler):
                                                 "server_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")})
             elif path == "/v1/driver/duties":
                 self._send_json(HTTPStatus.OK, application.driver_duties(parse_qs(query).get("q", [""])[0]))
-            elif re.fullmatch(r"/v1/driver/duties/k[0-9a-f]{12}-[0-9a-z-]+\.pdf", path):
+            elif re.fullmatch(r"/v1/driver/duties/[0-9A-Za-z][0-9A-Za-z_-]{0,79}\.pdf", path):
+                # Serverns egna köruppdrag (k…-81) och Clouds (duty-81).
                 duty_id = path.removeprefix("/v1/driver/duties/").removesuffix(".pdf")
-                self._send_pdf(application.driver_duty_pdf(duty_id), f"Tjanst-{duty_id.split('-', 1)[1]}.pdf")
+                self._send_pdf(application.driver_duty_pdf(duty_id), f"Tjanst-{duty_id.split('-', 1)[-1]}.pdf")
             elif path.startswith("/v1/driver/duties/"):
                 self._send_json(HTTPStatus.OK, {"duty": application.driver_duty(path.removeprefix("/v1/driver/duties/"))})
             elif path == "/v1/driver/presence":
